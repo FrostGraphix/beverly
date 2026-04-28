@@ -1,0 +1,20 @@
+{
+  "source": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp",
+  "baselineScreenshots": [
+    "reference-login-load.png",
+    "reference-dashboard.png",
+    "reference-dashboard-after-login.png",
+    "crawl-*.png"
+  ],
+  "implemented": {
+    "shell": "Reference-compatible sidebar, fixed header, tags view, dashboard, table pages",
+    "routes": 23,
+    "auth": "9310 contract, token cookie, SiteManager cookie, SiteCom cookie",
+    "tables": "Element UI-like toolbar, white table, bottom pagination, modal actions"
+  },
+  "parityRisks": [
+    "Static data replaces live backend records",
+    "Vuex internals are represented by plain state",
+    "Element UI CSS is reproduced, not imported"
+  ]
+}

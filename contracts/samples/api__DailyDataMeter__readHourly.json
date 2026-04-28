@@ -1,0 +1,915 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/api/DailyDataMeter/readHourly",
+  "method": "GET",
+  "capturedAt": "2026-04-28T15:43:47.124Z",
+  "body": {
+    "total": 38563,
+    "offset": 0,
+    "pageLimit": 100,
+    "readings": [
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306627",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306643",
+        "energyBalanceKwh": 3.02,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.98,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306684",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306726",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306817",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306858",
+        "energyBalanceKwh": 1.79,
+        "energyConsumptionKwh": 0.02,
+        "energyReadingKwh": 3.21,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306908",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005306999",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307021",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307047",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307153",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307294",
+        "energyBalanceKwh": 4.55,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 0.45,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307336",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307666",
+        "energyBalanceKwh": 3.8,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.2,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307716",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307724",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307740",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307765",
+        "energyBalanceKwh": 3.46,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.54,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307773",
+        "energyBalanceKwh": 3.74,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.26,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307781",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307807",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307815",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307823",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307831",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307856",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307930",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307963",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307971",
+        "energyBalanceKwh": 4.07,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0.93,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005307989",
+        "energyBalanceKwh": 3.58,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.42,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308011",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308052",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308292",
+        "energyBalanceKwh": 4,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308318",
+        "energyBalanceKwh": 3.67,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.33,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308326",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308334",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308342",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308359",
+        "energyBalanceKwh": 3.47,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.53,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308367",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308383",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": null,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308391",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308417",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308763",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308797",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308839",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": null,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308847",
+        "energyBalanceKwh": 1.21,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 3.79,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308862",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308870",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308888",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005308987",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309126",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309159",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309175",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309209",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309233",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309258",
+        "energyBalanceKwh": 3.44,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.56,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309522",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309530",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309563",
+        "energyBalanceKwh": 3.52,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.48,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309571",
+        "energyBalanceKwh": 4.2,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0.8,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309589",
+        "energyBalanceKwh": 3.61,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.39,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309613",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309647",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309662",
+        "energyBalanceKwh": 3.71,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.29,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309696",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309845",
+        "energyBalanceKwh": 3.3,
+        "energyConsumptionKwh": 0.03,
+        "energyReadingKwh": 1.7,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309878",
+        "energyBalanceKwh": 0.29,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 4.71,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309886",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309902",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309910",
+        "energyBalanceKwh": 3.11,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.89,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309928",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309936",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309944",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005309951",
+        "energyBalanceKwh": 3.12,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.88,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310066",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310082",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310108",
+        "energyBalanceKwh": 3.35,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.65,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310116",
+        "energyBalanceKwh": 4.18,
+        "energyConsumptionKwh": 0.02,
+        "energyReadingKwh": 0.82,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310124",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310132",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310140",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310157",
+        "energyBalanceKwh": 0.97,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 4.03,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310181",
+        "energyBalanceKwh": 3.43,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.57,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310207",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310231",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310249",
+        "energyBalanceKwh": 3.79,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.21,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310355",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310421",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310454",
+        "energyBalanceKwh": 3.53,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.47,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310462",
+        "energyBalanceKwh": 4.54,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0.46,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310470",
+        "energyBalanceKwh": 3.29,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 1.71,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005310496",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313508",
+        "energyBalanceKwh": 4.08,
+        "energyConsumptionKwh": 0.01,
+        "energyReadingKwh": 0.92,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313672",
+        "energyBalanceKwh": 0.72,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 4.28,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313680",
+        "energyBalanceKwh": 3.94,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.06,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313698",
+        "energyBalanceKwh": 3.13,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.87,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313714",
+        "energyBalanceKwh": 4.06,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0.94,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313722",
+        "energyBalanceKwh": 3.51,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.49,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313730",
+        "energyBalanceKwh": 0,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 5,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313755",
+        "energyBalanceKwh": 5,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 0,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      },
+      {
+        "timestamp": "2026-01-10T00:00:00.000Z",
+        "meterId": "47005313789",
+        "energyBalanceKwh": 3.78,
+        "energyConsumptionKwh": 0,
+        "energyReadingKwh": 1.22,
+        "timeIntervalMinutes": 60,
+        "customerAccountId": "N/A"
+      }
+    ],
+    "errors": []
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "endpoint": "/api/DailyDataMeter/readHourly",
+  "capturedFrom": "observed-shape",
+  "capturedAt": "2026-04-28T12:30:00.000Z",
+  "status": 200,
+  "body": [
+    {
+      "meterId": "470005342689",
+      "gatewayId": "GW-01",
+      "collectionDate": "2026-04-28 09:00:00",
+      "customerId": "470005342689",
+      "customerName": "HARUNA ADAMU",
+      "stationId": "TUNGA",
+      "totalEnergy": 128.6,
+      "lastHourUsage": 1.2,
+      "creditBalance": 49.8,
+      "maximumDemand": 8.3,
+      "power": 1.1,
+      "relayStatus": "Open",
+      "batteryStatus": "Normal",
+      "magneticStatus": "Normal",
+      "terminalCover": "Closed",
+      "upperOpen": "No",
+      "currentReverse": "No",
+      "currentUnbalance": "No",
+      "updateTime": "2026-04-28 09:47:55"
+    },
+    {
+      "meterId": "470005343091",
+      "gatewayId": "GW-02",
+      "collectionDate": "2026-04-28 09:00:00",
+      "customerId": "470005343091",
+      "customerName": "ALI MUHAMMAD",
+      "stationId": "TUNGA",
+      "totalEnergy": 112.4,
+      "lastHourUsage": 1,
+      "creditBalance": 31.1,
+      "maximumDemand": 7.4,
+      "power": 1,
+      "relayStatus": "Closed",
+      "batteryStatus": "Normal",
+      "magneticStatus": "Normal",
+      "terminalCover": "Closed",
+      "upperOpen": "No",
+      "currentReverse": "No",
+      "currentUnbalance": "No",
+      "updateTime": "2026-04-28 09:47:55"
+    }
+  ]
+}

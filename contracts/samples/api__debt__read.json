@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/api/debt/read",
+  "method": "POST",
+  "capturedAt": "2026-04-28T15:51:55.806Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "total": 0,
+      "data": []
+    }
+  }
+}

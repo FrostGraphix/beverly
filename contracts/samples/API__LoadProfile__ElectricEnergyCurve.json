@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/API/LoadProfile/ElectricEnergyCurve",
+  "method": "POST",
+  "capturedAt": "2026-04-28T16:09:28.982Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "total": 0,
+      "data": []
+    }
+  }
+}

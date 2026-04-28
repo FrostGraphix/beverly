@@ -1,0 +1,56 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/api/role/read",
+  "method": "POST",
+  "capturedAt": "2026-04-28T15:51:59.357Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "total": 4,
+      "data": [
+        {
+          "roleId": "0001",
+          "name": "role0001",
+          "content": "Token,Token.CreditToken,Token.ClearTamperToken,Token.ClearCreditToken,Token.SetMaximumPowerLimitToken,Token.SetMaximumOverdraftToken,Token.SetMaximumPhasePowerUnbalanceLimitToken,Token.MeterTestToken,Token.UpdateMeterKey,Token.ChangeMeterKeyToken,TokenRecord,TokenRecord.CreditTokenRecord,TokenRecord.CreditTokenCancelRecord,TokenRecord.CancelCreditTokenRecord,TokenRecord.ClearTamperTokenRecord,TokenRecord.ClearCreditTokenRecord,TokenRecord.SetMaximumPowerLimitTokenRecord,TokenRecord.SetMaximumOverdraftTokenRecord,TokenRecord.SetMaximumPhasePowerUnbalanceLimitTokenRecord,TokenRecord.ChangeMeterKeyTokenRecord,RemoteMeterTask,RemoteMeterTask.CreateReadingTask,RemoteMeterTask.CreateSettingTask,RemoteMeterTask.CreateControlTask,RemoteMeterTask.CreateTokenTask,RemoteMeterTask.CreateTransparentForwardingTask,RemoteMeterTask.CreateUpdateFirmwareTask,RemoteMeterTaskRecord.GetReadingTask+RemoteMeterTaskRecord.UpdateReadingTask,RemoteMeterTaskRecord.GetSettingTask+RemoteMeterTaskRecord.UpdateSettingTask,RemoteMeterTaskRecord.GetControlTask+RemoteMeterTaskRecord.UpdateControlTask,RemoteMeterTaskRecord.GetTokenTask+RemoteMeterTaskRecord.UpdateTokenTask,PrepayReport.LongNonpurchaseSituation,PrepayReport.LowPurchaseSituation,PrepayReport.ConsumptionStatistics,AutomaticMeterReading.DailyDataMeter,Management,Management.Gateway,Management.Meter,Management.Customer,Management.Tariff,Management.Debt,Management.Account,Setting,Setting.Station,Setting.Role,Setting.User,Setting.Log,Setting.Item,Setting.Image",
+          "createId": "0001",
+          "createDate": "2022-10-28 09:54:47",
+          "updateId": "0001",
+          "updateDate": "2026-04-11 16:12:22",
+          "remark": "System"
+        },
+        {
+          "roleId": "admin",
+          "name": "admin",
+          "content": "Token.CreditToken,Token.ClearTamperToken,Token.ClearCreditToken,Token.SetMaximumPowerLimitToken,TokenRecord.CreditTokenRecord,TokenRecord.ClearTamperTokenRecord,TokenRecord.ClearCreditTokenRecord,TokenRecord.SetMaximumPowerLimitTokenRecord,RemoteMeterTask.CreateReadingTask,RemoteMeterTask.CreateControlTask,RemoteMeterTask.CreateTokenTask,RemoteMeterTaskRecord.GetReadingTask+RemoteMeterTaskRecord.UpdateReadingTask,RemoteMeterTaskRecord.GetControlTask+RemoteMeterTaskRecord.UpdateControlTask,RemoteMeterTaskRecord.GetTokenTask+RemoteMeterTaskRecord.UpdateTokenTask,PrepayReport.LongNonpurchaseSituation,PrepayReport.LowPurchaseSituation,PrepayReport.ConsumptionStatistics,AutomaticMeterReading.DailyDataMeter,Management.Gateway,Management.Customer,Management.Tariff,Management.Account",
+          "createId": null,
+          "createDate": "2024-04-09 12:15:53",
+          "updateId": "0001",
+          "updateDate": "2025-11-06 04:22:12",
+          "remark": null
+        },
+        {
+          "roleId": "Odyssey",
+          "name": "Odyssey",
+          "content": "TokenRecord.CreditTokenRecord,AutomaticMeterReading.DailyDataMeter",
+          "createId": "0001",
+          "createDate": "2025-07-11 04:09:09",
+          "updateId": "0001",
+          "updateDate": "2026-01-16 08:29:40",
+          "remark": null
+        },
+        {
+          "roleId": "VENDOR",
+          "name": "VENDOR",
+          "content": "Token.CreditToken,TokenRecord.CreditTokenRecord,RemoteMeterTask.CreateTokenTask,RemoteMeterTaskRecord.GetTokenTask+RemoteMeterTaskRecord.UpdateTokenTask",
+          "createId": "0001",
+          "createDate": "2025-11-10 09:08:57",
+          "updateId": "0001",
+          "updateDate": "2026-03-26 08:57:27",
+          "remark": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "loginState": {
+    "title": "Dashboard - Meter System",
+    "url": "http://8.208.16.168:9311/#/login?redirect=%2Fdashboard",
+    "text": "Meter System\n \n \n \n Login"
+  },
+  "failedShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\authenticated\\live-login-failed-after-answer.png",
+  "network": [
+    {
+      "method": "POST",
+      "url": "http://8.208.16.168:9310/api/user/login",
+      "postData": "{\"userId\":\"admin\",\"password\":\"ACOB_ADMIN\"}"
+    },
+    {
+      "status": 200,
+      "url": "http://8.208.16.168:9310/api/user/login"
+    },
+    {
+      "method": "POST",
+      "url": "http://8.208.16.168:9310/api/user/info",
+      "postData": null
+    },
+    {
+      "status": 200,
+      "url": "http://8.208.16.168:9310/api/user/info"
+    }
+  ],
+  "consoleLogs": []
+}

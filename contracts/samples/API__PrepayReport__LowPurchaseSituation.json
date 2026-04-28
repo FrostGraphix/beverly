@@ -1,0 +1,216 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/API/PrepayReport/LowPurchaseSituation",
+  "method": "POST",
+  "capturedAt": "2026-04-28T15:38:23.884Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "total": 27,
+      "data": [
+        {
+          "customerId": "47005367538",
+          "customerName": "JATAU OJAH",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005367538",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005359972",
+          "customerName": "DANIEL G. PETER",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005359972",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005363529",
+          "customerName": "LUKA ISAIAH",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005363529",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005373957",
+          "customerName": "JONATHAN AZIGE",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005373957",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005310124",
+          "customerName": "SAMAILA IBRAHIM",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005310124",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005310231",
+          "customerName": "AUGUSTINEAGWADU",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005310231",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005329462",
+          "customerName": "MATHIAS YAKUBU",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005329462",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005308417",
+          "customerName": "CHURCH OF BANNER MINISTRY",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005308417",
+          "tariffId": "PUBLIC",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005341616",
+          "customerName": "MAKANA EZEKIEL",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005341616",
+          "tariffId": "COMMERCIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 2.8,
+          "purchaseTotalPaid": 1000
+        },
+        {
+          "customerId": "47005310082",
+          "customerName": "CHIEF'S PALACE",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005310082",
+          "tariffId": "PUBLIC",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005308870",
+          "customerName": "JONATHAN M. GBADO",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005308870",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005330973",
+          "customerName": "AMOS DAUDA",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005330973",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005330437",
+          "customerName": "IBRAHIM ZAKA",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005330437",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005309647",
+          "customerName": "AZIGI UNANA",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005309647",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005341699",
+          "customerName": "BULUS AGWADU",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005341699",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 5.7,
+          "purchaseTotalPaid": 2000
+        },
+        {
+          "customerId": "47005307930",
+          "customerName": "ILIYA AZIGI",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005307930",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 6.2,
+          "purchaseTotalPaid": 2200
+        },
+        {
+          "customerId": "47005308821",
+          "customerName": "EMMANUELGIMBA",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005308821",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 6.8,
+          "purchaseTotalPaid": 2400
+        },
+        {
+          "customerId": "47005308326",
+          "customerName": "DANIEL JEREMIAH",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005308326",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 7.1,
+          "purchaseTotalPaid": 2500
+        },
+        {
+          "customerId": "47005307724",
+          "customerName": "SAMIALA AUDU",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005307724",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 8.5,
+          "purchaseTotalPaid": 3000
+        },
+        {
+          "customerId": "47005307047",
+          "customerName": "GIMBA JOSEPH",
+          "customerAddress": "KYAKALE",
+          "meterId": "47005307047",
+          "tariffId": "RESIDENTIAL",
+          "stationId": null,
+          "purchaseTotalUnit": 8.5,
+          "purchaseTotalPaid": 3000
+        }
+      ]
+    }
+  }
+}

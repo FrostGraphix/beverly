@@ -1,0 +1,15 @@
+{
+  "endpoint": "/api/token/creditToken/generate",
+  "capturedFrom": "observed-shape",
+  "capturedAt": "2026-04-28T12:30:00.000Z",
+  "status": 200,
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "receiptId": "1745843400000",
+      "token": "0021 2636 8628 4408 6688",
+      "createTime": "2026-04-28 09:47:55"
+    }
+  }
+}

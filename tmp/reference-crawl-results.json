@@ -1,0 +1,1413 @@
+[
+  {
+    "group": "Dashboard",
+    "title": "Dashboard",
+    "href": "#/dashboard",
+    "hrefNow": "http://8.208.16.168:9311/#/dashboard",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-dashboard-dashboard.png",
+    "api": [],
+    "summary": {
+      "routeNow": "/dashboard",
+      "titleText": "",
+      "columns": [],
+      "labels": [],
+      "buttons": [],
+      "inputs": [],
+      "pageText": "Account Count 2,420 Purchase Times 7,305 Purchase Unit 100,369 Purchase Money 35,253,085 more > Daily",
+      "hasTable": false
+    }
+  },
+  {
+    "group": "Token Generate",
+    "title": "Credit Token",
+    "href": "#/token-generate/credit-token",
+    "hrefNow": "http://8.208.16.168:9311/#/token-generate/credit-token",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-generate-credit-token.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/item/readItemList",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/item/readItemList",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/user/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/user/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-generate/credit-token",
+      "titleText": "Customer IdCustomer NameMeter IdMeter TypeCommunication WayTariff IdProtocol VersionRemarkCreate TimeStation Id Ascending Descending Sort Search Reset Quota(kwh): No Limit Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchProtocol VersionSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232.22025-07-21 11:48:100001 Recharge 123test47300482016ElectricityLoraWan1232.22025-07-21 10:04:290001 Recharge 123test47005346136ElectricityLoraWan1232.22025-07-21 11:47:500001 Recharge 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:24:31TUNGA Recharge 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:25:14TUNGA Recharge 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:26:17TUNGA Recharge 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:26:57TUNGA Recharge 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:28:27TUNGA Recharge 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:29:48TUNGA Recharge 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:30:37TUNGA Recharge 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:31:08TUNGA Recharge 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:31:42TUNGA Recharge 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:33:10TUNGA Recharge 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:33:54TUNGA Recharge 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:34:24TUNGA Recharge 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2.22026-03-18 16:02:30MUSHA Recharge 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2.22026-01-03 18:26:56KYAKALE Recharge 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2.22026-01-03 18:27:51KYAKALE Recharge 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2.22026-02-11 11:03:34TUNGA Recharge 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2.22026-01-17 20:49:59MUSHA Recharge Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchProtocol VersionSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232.22025-07-21 11:48:100001 Recharge 123test47300482016ElectricityLoraWan1232.22025-07-21 10:04:290001 Recharge 123test47005346136ElectricityLoraWan1232.22025-07-21 11:47:500001 Recharge 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:24:31TUNGA Recharge 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:25:14TUNGA Recharge 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:26:17TUNGA Recharge 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:26:57TUNGA Recharge 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:28:27TUNGA Recharge 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:29:48TUNGA Recharge 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:30:37TUNGA Recharge 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:31:08TUNGA Recharge 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:31:42TUNGA Recharge 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:33:10TUNGA Recharge 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:33:54TUNGA Recharge 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2.22026-02-11 10:34:24TUNGA Recharge 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2.22026-03-18 16:02:30MUSHA Recharge 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2.22026-01-03 18:26:56KYAKALE Recharge 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2.22026-01-03 18:27:51KYAKALE Recharge 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2.22026-02-11 11:03:34TUNGA Recharge 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2.22026-01-17 20:49:59MUSHA Recharge Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Recharge Cancel Confirm Transaction Confirmation Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "Communication WayGPRSLoraWanSearch",
+        "Tariff IdSearch",
+        "Protocol VersionSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Recharge",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Communication Way",
+        "Tariff Id",
+        "Protocol Version",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Quota(kwh): No Limit Customer Id Customer Name Meter Id Meter Type Communication Way Tariff Id Protocol Version Remark Create Time Station Id 123 test 47005346144 Electricity LoraWan 123 2.2 2025-07-21 11:48:10 0001 123 test 47300482016 Electricity LoraWan 123 2.2 2025-07-21 10:04:29 0001 123 test 47005346136 Electricity LoraWan 123 2.2 2025-07-21 11:47:50 0001 470005342689 HARUNA ADAMU 470005342689 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:24:31 TUNGA 470005343091 ALI MUHAMMAD 470005343091 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:25:14 TUNGA 470005343133 AHJBU BUZA SANI 470005343133 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:26:17 TUNGA 470005362616 DAUDA MUSA 470005362616 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:26:57 TUNGA 470005367363 MUHAMMED SHUAIBU 470005367363 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:28:27 TUNGA 470005367397 SAIDUDAN BAKWAI 470005367397 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:29:48 TUNGA 470005367488 ADUYA SUNDAY 470005367488 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:30:37 TUNGA 470005367553 AUDU SALIHU 470005367553 Electricity LoraWan RESIDENTIAL 2.2 2026-02-11 10:31:08 TUNGA 47000536",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Generate",
+    "title": "Clear Tamper Token",
+    "href": "#/token-generate/clear-tamper-token",
+    "hrefNow": "http://8.208.16.168:9311/#/token-generate/clear-tamper-token",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-generate-clear-tamper-token.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-generate/clear-tamper-token",
+      "titleText": "Customer IdCustomer NameMeter IdMeter TypeCommunication WayTariff IdRemarkCreate TimeStation Id Ascending Descending Sort Search Reset Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Generate Token(Clear Tamper) Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "Communication WayGPRSLoraWanSearch",
+        "Tariff IdSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Communication Way",
+        "Tariff Id",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Customer Id Customer Name Meter Id Meter Type Communication Way Tariff Id Remark Create Time Station Id 123 test 47005346144 Electricity LoraWan 123 2025-07-21 11:48:10 0001 123 test 47300482016 Electricity LoraWan 123 2025-07-21 10:04:29 0001 123 test 47005346136 Electricity LoraWan 123 2025-07-21 11:47:50 0001 470005342689 HARUNA ADAMU 470005342689 Electricity LoraWan RESIDENTIAL 2026-02-11 10:24:31 TUNGA 470005343091 ALI MUHAMMAD 470005343091 Electricity LoraWan RESIDENTIAL 2026-02-11 10:25:14 TUNGA 470005343133 AHJBU BUZA SANI 470005343133 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:17 TUNGA 470005362616 DAUDA MUSA 470005362616 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:57 TUNGA 470005367363 MUHAMMED SHUAIBU 470005367363 Electricity LoraWan RESIDENTIAL 2026-02-11 10:28:27 TUNGA 470005367397 SAIDUDAN BAKWAI 470005367397 Electricity LoraWan RESIDENTIAL 2026-02-11 10:29:48 TUNGA 470005367488 ADUYA SUNDAY 470005367488 Electricity LoraWan RESIDENTIAL 2026-02-11 10:30:37 TUNGA 470005367553 AUDU SALIHU 470005367553 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:08 TUNGA 470005367702 ADAMU SAIDU 470005367702 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:42 ",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Generate",
+    "title": "Clear Credit Token",
+    "href": "#/token-generate/clear-credit-token",
+    "hrefNow": "http://8.208.16.168:9311/#/token-generate/clear-credit-token",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-generate-clear-credit-token.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-generate/clear-credit-token",
+      "titleText": "Customer IdCustomer NameMeter IdMeter TypeCommunication WayTariff IdRemarkCreate TimeStation Id Ascending Descending Sort Search Reset Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Generate Token(Clear Credit) Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "Communication WayGPRSLoraWanSearch",
+        "Tariff IdSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Communication Way",
+        "Tariff Id",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Customer Id Customer Name Meter Id Meter Type Communication Way Tariff Id Remark Create Time Station Id 123 test 47005346144 Electricity LoraWan 123 2025-07-21 11:48:10 0001 123 test 47300482016 Electricity LoraWan 123 2025-07-21 10:04:29 0001 123 test 47005346136 Electricity LoraWan 123 2025-07-21 11:47:50 0001 470005342689 HARUNA ADAMU 470005342689 Electricity LoraWan RESIDENTIAL 2026-02-11 10:24:31 TUNGA 470005343091 ALI MUHAMMAD 470005343091 Electricity LoraWan RESIDENTIAL 2026-02-11 10:25:14 TUNGA 470005343133 AHJBU BUZA SANI 470005343133 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:17 TUNGA 470005362616 DAUDA MUSA 470005362616 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:57 TUNGA 470005367363 MUHAMMED SHUAIBU 470005367363 Electricity LoraWan RESIDENTIAL 2026-02-11 10:28:27 TUNGA 470005367397 SAIDUDAN BAKWAI 470005367397 Electricity LoraWan RESIDENTIAL 2026-02-11 10:29:48 TUNGA 470005367488 ADUYA SUNDAY 470005367488 Electricity LoraWan RESIDENTIAL 2026-02-11 10:30:37 TUNGA 470005367553 AUDU SALIHU 470005367553 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:08 TUNGA 470005367702 ADAMU SAIDU 470005367702 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:42 ",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Generate",
+    "title": "Set Maximum Power Limit Token",
+    "href": "#/token-generate/set-maximum-power-limit-token",
+    "hrefNow": "http://8.208.16.168:9311/#/token-generate/set-maximum-power-limit-token",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-generate-set-maximum-power-limit-token.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-generate/set-maximum-power-limit-token",
+      "titleText": "Customer IdCustomer NameMeter IdMeter TypeCommunication WayTariff IdRemarkCreate TimeStation Id Ascending Descending Sort Search Reset Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Customer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchCommunication WayGPRSLoraWanSearchTariff IdSearchRemarkSearchCreate TimeToSearchStation IdSearchActions123test47005346144ElectricityLoraWan1232025-07-21 11:48:100001 Generate Token 123test47300482016ElectricityLoraWan1232025-07-21 10:04:290001 Generate Token 123test47005346136ElectricityLoraWan1232025-07-21 11:47:500001 Generate Token 470005342689HARUNA ADAMU470005342689ElectricityLoraWanRESIDENTIAL2026-02-11 10:24:31TUNGA Generate Token 470005343091ALI MUHAMMAD470005343091ElectricityLoraWanRESIDENTIAL2026-02-11 10:25:14TUNGA Generate Token 470005343133AHJBU BUZA SANI470005343133ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:17TUNGA Generate Token 470005362616DAUDA MUSA470005362616ElectricityLoraWanRESIDENTIAL2026-02-11 10:26:57TUNGA Generate Token 470005367363MUHAMMED SHUAIBU470005367363ElectricityLoraWanRESIDENTIAL2026-02-11 10:28:27TUNGA Generate Token 470005367397SAIDUDAN BAKWAI470005367397ElectricityLoraWanRESIDENTIAL2026-02-11 10:29:48TUNGA Generate Token 470005367488ADUYA SUNDAY470005367488ElectricityLoraWanRESIDENTIAL2026-02-11 10:30:37TUNGA Generate Token 470005367553AUDU SALIHU470005367553ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:08TUNGA Generate Token 470005367702ADAMU SAIDU470005367702ElectricityLoraWanRESIDENTIAL2026-02-11 10:31:42TUNGA Generate Token 470005370201AHJ .DAUDA470005370201ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:10TUNGA Generate Token 470005380051ALH GAMBO470005380051ElectricityLoraWanRESIDENTIAL2026-02-11 10:33:54TUNGA Generate Token 470005380069ALH GAMBO470005380069ElectricityLoraWanRESIDENTIAL2026-02-11 10:34:24TUNGA Generate Token 47005306593BAKA AJEH47005306593ElectricityLoraWanRESIDENTIAL2026-03-18 16:02:30MUSHA Generate Token 47005306627AUGUSTINE MICHAEL47005306627ElectricityLoraWanRESIDENTIAL2026-01-03 18:26:56KYAKALE Generate Token 47005306643LUKA IWA47005306643ElectricityLoraWanRESIDENTIAL2026-01-03 18:27:51KYAKALE Generate Token 47005306650MIRACLE JOEL47005306650ElectricityLoraWanRESIDENTIAL2026-02-11 11:03:34TUNGA Generate Token 47005306668HABILA ABAKA47005306668ElectricityLoraWanRESIDENTIAL2026-01-17 20:49:59MUSHA Generate Token Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Generate Token(Set Maximum Power Limit) Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "Communication WayGPRSLoraWanSearch",
+        "Tariff IdSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Communication Way",
+        "Tariff Id",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Customer Id Customer Name Meter Id Meter Type Communication Way Tariff Id Remark Create Time Station Id 123 test 47005346144 Electricity LoraWan 123 2025-07-21 11:48:10 0001 123 test 47300482016 Electricity LoraWan 123 2025-07-21 10:04:29 0001 123 test 47005346136 Electricity LoraWan 123 2025-07-21 11:47:50 0001 470005342689 HARUNA ADAMU 470005342689 Electricity LoraWan RESIDENTIAL 2026-02-11 10:24:31 TUNGA 470005343091 ALI MUHAMMAD 470005343091 Electricity LoraWan RESIDENTIAL 2026-02-11 10:25:14 TUNGA 470005343133 AHJBU BUZA SANI 470005343133 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:17 TUNGA 470005362616 DAUDA MUSA 470005362616 Electricity LoraWan RESIDENTIAL 2026-02-11 10:26:57 TUNGA 470005367363 MUHAMMED SHUAIBU 470005367363 Electricity LoraWan RESIDENTIAL 2026-02-11 10:28:27 TUNGA 470005367397 SAIDUDAN BAKWAI 470005367397 Electricity LoraWan RESIDENTIAL 2026-02-11 10:29:48 TUNGA 470005367488 ADUYA SUNDAY 470005367488 Electricity LoraWan RESIDENTIAL 2026-02-11 10:30:37 TUNGA 470005367553 AUDU SALIHU 470005367553 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:08 TUNGA 470005367702 ADAMU SAIDU 470005367702 Electricity LoraWan RESIDENTIAL 2026-02-11 10:31:42 ",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Record",
+    "title": "Credit Token Record",
+    "href": "#/token-record/credit-token-record",
+    "hrefNow": "http://8.208.16.168:9311/#/token-record/credit-token-record",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-record-credit-token-record.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/item/readItemList",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/token/creditTokenRecord/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-record/credit-token-record",
+      "titleText": "Receipt IdCustomer IdCustomer NameMeter IdMeter TypeTariff IdVAT ChargeTotal UnitTotal PaidToken(Recharge)VendTimeRemarkStation Id Ascending Descending Sort Search Reset Export Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchTariff IdSearchVAT ChargeSearchTotal UnitSearchTotal PaidSearchToken(Recharge)SearchVendToSearchTimeToSearchRemarkSearchStation IdSearchActions831147005372686Mohammed Kaura47005372686ElectricityRESIDENTIAL01.45000021 2636 8628 4408 6688TUNGA_VENDOR 22026-04-28 10:29:12TUNGA Print Cancel 831047005358180NASS COMMUNICATION47005358180ElectricityRESIDENTIAL05.720001701 7852 2405 7134 5604TUNGA_VENDOR 22026-04-28 09:09:55TUNGA Print Cancel 830947005335303Mohammed Aminu47005335303ElectricityCOMMERCIAL05.720003960 0973 5781 2509 2391UMAISHA_VENDOR 32026-04-28 09:05:48UMAISHA Print Cancel 830847005331989alhaji musa47005331989ElectricityCOMMERCIAL01035007292 3419 5869 9507 4347UMAISHA_VENDOR 32026-04-28 09:01:40UMAISHA Print Cancel 830747005319968CATHOLIC CHURCH47005319968ElectricityPUBLIC011.440006304 3381 0292 3512 2422TUNGA_VENDOR 22026-04-28 09:00:38TUNGA Print Cancel 830647005309597DOGO COMMUNICATION47005309597ElectricityCOMMERCIAL02.810001021 5293 6134 7651 4244MUSHA_VENDOR 22026-04-28 08:30:12MUSHA Print Cancel 830547005368098DINGA GURI47005368098ElectricityCOMMERCIAL08.530000807 0589 1314 3189 4117TUNGA_VENDOR 22026-04-28 08:14:52TUNGA Print Cancel 830447005372785RUTH MARTHA47005372785ElectricityRESIDENTIAL05.720006183 9330 5744 4580 8102TUNGA_VENDOR 22026-04-28 07:51:15TUNGA Print Cancel 830347005334140SHAIBU AWWAL47005334140ElectricityRESIDENTIAL05.118004438 3375 0579 3605 5640UMAISHA_VENDOR 32026-04-28 07:31:27UMAISHA Print Cancel 830247005372843Alhaji Usman Badamsi47005372843ElectricityCOMMERCIAL08.530003980 8640 2585 7952 1323TUNGA_VENDOR 22026-04-28 07:21:44TUNGA Print Cancel 830147005371092HAJIYA MADINA47005371092ElectricityRESIDENTIAL014.250000137 8049 2694 4421 7398UMAISHA_VENDOR 32026-04-28 07:17:39UMAISHA Print Cancel 830047005372926ISSAC ZAKA47005372926ElectricityRESIDENTIAL08.530005522 7519 9699 3736 2759TUNGA_VENDOR 22026-04-27 23:32:17TUNGA Print Cancel 829947005371407AKANON SARKIN TUNGA47005371407ElectricityRESIDENTIAL05.720004578 8792 2598 9678 0091TUNGA_VENDOR 22026-04-27 22:58:46TUNGA Print Cancel 829847005324745MUSTAPHA ABDULSALAM47005324745ElectricityRESIDENTIAL05.720003092 1951 4178 0791 6299TUNGA_VENDOR 12026-04-27 22:52:34TUNGA Print Cancel 829747005371662MUSA ABUBAKAR47005371662ElectricityRESIDENTIAL05.720004264 2548 9927 0679 3970UMAISHA_VENDOR 32026-04-27 22:31:12UMAISHA Print Cancel 829647005365250MUSA ONAIRO47005365250ElectricityRESIDENTIAL05.720006057 0546 6061 0218 0052UMAISHA_VENDOR 32026-04-27 21:59:05UMAISHA Print Cancel 829547005331948shesudeen47005331948ElectricityCOMMERCIAL0414007080 5777 4985 4257 1763UMAISHA_VENDOR 32026-04-27 21:52:27UMAISHA Print Cancel 829447005368288NO NAME 3147005368288ElectricityRESIDENTIAL027006547 9776 8036 7123 2563UMAISHA_VENDOR 32026-04-27 21:43:54UMAISHA Print Cancel 829347005365649RASHI PELE47005365649ElectricityRESIDENTIAL028.5100002340 8193 8173 4395 6225TUNGA_VENDOR 22026-04-27 21:03:21TUNGA Print Cancel 829247005344164HABIBU ILIYASU47005344164ElectricityRESIDENTIAL02.810005978 6792 7850 8050 6571TUNGA_VENDOR 22026-04-27 21:01:23TUNGA Print Cancel Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchTariff IdSearchVAT ChargeSearchTotal UnitSearchTotal PaidSearchToken(Recharge)SearchVendToSearchTimeToSearchRemarkSearchStation IdSearchActions831147005372686Mohammed Kaura47005372686ElectricityRESIDENTIAL01.45000021 2636 8628 4408 6688TUNGA_VENDOR 22026-04-28 10:29:12TUNGA Print Cancel 831047005358180NASS COMMUNICATION47005358180ElectricityRESIDENTIAL05.720001701 7852 2405 7134 5604TUNGA_VENDOR 22026-04-28 09:09:55TUNGA Print Cancel 830947005335303Mohammed Aminu47005335303ElectricityCOMMERCIAL05.720003960 0973 5781 2509 2391UMAISHA_VENDOR 32026-04-28 09:05:48UMAISHA Print Cancel 830847005331989alhaji musa47005331989ElectricityCOMMERCIAL01035007292 3419 5869 9507 4347UMAISHA_VENDOR 32026-04-28 09:01:40UMAISHA Print Cancel 830747005319968CATHOLIC CHURCH47005319968ElectricityPUBLIC011.440006304 3381 0292 3512 2422TUNGA_VENDOR 22026-04-28 09:00:38TUNGA Print Cancel 830647005309597DOGO COMMUNICATION47005309597ElectricityCOMMERCIAL02.810001021 5293 6134 7651 4244MUSHA_VENDOR 22026-04-28 08:30:12MUSHA Print Cancel 830547005368098DINGA GURI47005368098ElectricityCOMMERCIAL08.530000807 0589 1314 3189 4117TUNGA_VENDOR 22026-04-28 08:14:52TUNGA Print Cancel 830447005372785RUTH MARTHA47005372785ElectricityRESIDENTIAL05.720006183 9330 5744 4580 8102TUNGA_VENDOR 22026-04-28 07:51:15TUNGA Print Cancel 830347005334140SHAIBU AWWAL47005334140ElectricityRESIDENTIAL05.118004438 3375 0579 3605 5640UMAISHA_VENDOR 32026-04-28 07:31:27UMAISHA Print Cancel 830247005372843Alhaji Usman Badamsi47005372843ElectricityCOMMERCIAL08.530003980 8640 2585 7952 1323TUNGA_VENDOR 22026-04-28 07:21:44TUNGA Print Cancel 830147005371092HAJIYA MADINA47005371092ElectricityRESIDENTIAL014.250000137 8049 2694 4421 7398UMAISHA_VENDOR 32026-04-28 07:17:39UMAISHA Print Cancel 830047005372926ISSAC ZAKA47005372926ElectricityRESIDENTIAL08.530005522 7519 9699 3736 2759TUNGA_VENDOR 22026-04-27 23:32:17TUNGA Print Cancel 829947005371407AKANON SARKIN TUNGA47005371407ElectricityRESIDENTIAL05.720004578 8792 2598 9678 0091TUNGA_VENDOR 22026-04-27 22:58:46TUNGA Print Cancel 829847005324745MUSTAPHA ABDULSALAM47005324745ElectricityRESIDENTIAL05.720003092 1951 4178 0791 6299TUNGA_VENDOR 12026-04-27 22:52:34TUNGA Print Cancel 829747005371662MUSA ABUBAKAR47005371662ElectricityRESIDENTIAL05.720004264 2548 9927 0679 3970UMAISHA_VENDOR 32026-04-27 22:31:12UMAISHA Print Cancel 829647005365250MUSA ONAIRO47005365250ElectricityRESIDENTIAL05.720006057 0546 6061 0218 0052UMAISHA_VENDOR 32026-04-27 21:59:05UMAISHA Print Cancel 829547005331948shesudeen47005331948ElectricityCOMMERCIAL0414007080 5777 4985 4257 1763UMAISHA_VENDOR 32026-04-27 21:52:27UMAISHA Print Cancel 829447005368288NO NAME 3147005368288ElectricityRESIDENTIAL027006547 9776 8036 7123 2563UMAISHA_VENDOR 32026-04-27 21:43:54UMAISHA Print Cancel 829347005365649RASHI PELE47005365649ElectricityRESIDENTIAL028.5100002340 8193 8173 4395 6225TUNGA_VENDOR 22026-04-27 21:03:21TUNGA Print Cancel 829247005344164HABIBU ILIYASU47005344164ElectricityRESIDENTIAL02.810005978 6792 7850 8050 6571TUNGA_VENDOR 22026-04-27 21:01:23TUNGA Print Cancel Total 730510/page20/page50/page100/page200/page500/page1000/page123456366Go to Cancel Cancel Confirm Export Cancel Confirm",
+      "columns": [
+        "Receipt IdSearch",
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "Tariff IdSearch",
+        "VAT ChargeSearch",
+        "Total UnitSearch",
+        "Total PaidSearch",
+        "Token(Recharge)Search",
+        "VendToSearch",
+        "TimeToSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Print",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Receipt Id",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Tariff Id",
+        "VAT Charge",
+        "Total Unit",
+        "Total Paid",
+        "Token(Recharge)",
+        "Start Date",
+        "End Date",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Receipt Id Customer Id Customer Name Meter Id Meter Type Tariff Id VAT Charge Total Unit Total Paid Token(Recharge) Vend Time Remark Station Id 8311 47005372686 Mohammed Kaura 47005372686 Electricity RESIDENTIAL 0 1.4 500 0021 2636 8628 4408 6688 TUNGA_VENDOR 2 2026-04-28 10:29:12 TUNGA 8310 47005358180 NASS COMMUNICATION 47005358180 Electricity RESIDENTIAL 0 5.7 2000 1701 7852 2405 7134 5604 TUNGA_VENDOR 2 2026-04-28 09:09:55 TUNGA 8309 47005335303 Mohammed Aminu 47005335303 Electricity COMMERCIAL 0 5.7 2000 3960 0973 5781 2509 2391 UMAISHA_VENDOR 3 2026-04-28 09:05:48 UMAISHA 8308 47005331989 alhaji musa 47005331989 Electricity COMMERCIAL 0 10 3500 7292 3419 5869 9507 4347 UMAISHA_VENDOR 3 2026-04-28 09:01:40 UMAISHA 8307 47005319968 CATHOLIC CHURCH 47005319968 Electricity PUBLIC 0 11.4 4000 6304 3381 0292 3512 2422 TUNGA_VENDOR 2 2026-04-28 09:00:38 TUNGA 8306 47005309597 DOGO COMMUNICATION 47005309597 Electricity COMMERCIAL 0 2.8 1000 1021 5293 6134 7651 4244 MUSHA_VENDOR 2 2026-04-28 08:30:12 MUSHA 8305 47005368098 DINGA GURI 47005368098 Electricity COMMERCIAL 0 8.5 3000 0807 0589 1314 3189 4117 TUNGA_VENDOR 2 2026-04-28 08:14:52 TUNGA 8304 47005372785 RUTH",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Record",
+    "title": "Clear Tamper Token Record",
+    "href": "#/token-record/clear-tamper-token-record",
+    "hrefNow": "http://8.208.16.168:9311/#/token-record/clear-tamper-token-record",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-record-clear-tamper-token-record.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-record/clear-tamper-token-record",
+      "titleText": "Receipt IdCustomer IdCustomer NameMeter IdTokenCreate TimeUpdate TimeRemarkStation Id Ascending Descending Sort Search Reset Export Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchTokenSearchCreate TimeToSearchUpdate TimeToSearchRemarkSearchStation IdSearchActionsNo DataReceipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchTokenSearchCreate TimeToSearchUpdate TimeToSearchRemarkSearchStation IdSearchActions Total 010/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm",
+      "columns": [
+        "Receipt IdSearch",
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "TokenSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Receipt Id",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Token",
+        "Start Date",
+        "End Date",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Receipt Id Customer Id Customer Name Meter Id Token Create Time Update Time Remark Station Id No Data Actions",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Record",
+    "title": "Clear Credit Token Record",
+    "href": "#/token-record/clear-credit-token-record",
+    "hrefNow": "http://8.208.16.168:9311/#/token-record/clear-credit-token-record",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-record-clear-credit-token-record.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/token/clearCreditTokenRecord/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-record/clear-credit-token-record",
+      "titleText": "Receipt IdCustomer IdCustomer NameMeter IdTokenCreate TimeUpdate TimeRemarkStation Id Ascending Descending Sort Search Reset Export Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchTokenSearchCreate TimeToSearchUpdate TimeToSearchRemarkSearchStation IdSearchActions2047005378477EHI SABO 2470053784773989 5108 1746 2930 32602026-04-20 16:56:512026-04-20 16:56:51OGUFA Print 1947005372496HALADU KHALID470053724963428 2543 4232 6325 67472026-04-07 18:09:252026-04-07 18:09:25TUNGA Print 1847005308995IWALA JONNAH M.470053089950949 9642 1508 3909 74492026-03-16 16:30:212026-03-16 16:30:21MUSHA Print 1747005380234ADMIN GATEWAY TESTING470053802342142 7234 4543 0396 86682026-03-06 16:30:502026-03-06 16:30:500001 Print 1647005380234ADMIN GATEWAY TESTING470053802340250 9180 0429 2578 80442026-03-06 14:28:402026-03-06 14:28:400001 Print 1547005380234ADMIN GATEWAY TESTING470053802347172 1440 2677 2353 38712026-03-06 14:27:182026-03-06 14:27:180001 Print 1447005367439JOHN JOSEPH470053674392986 2902 1858 9604 28302026-03-03 18:27:002026-03-03 18:27:00OGUFA Print 1347005364691ZAKERI MUSA470053646916309 6173 3222 1590 54632026-03-03 18:25:522026-03-03 18:25:52OGUFA Print 1247005367439JOHN JOSEPH470053674393158 0473 4325 3775 01342026-03-03 09:34:272026-03-03 09:34:27OGUFA Print 1147005364691ZAKERI MUSA470053646912145 7792 5710 2732 50932026-03-03 09:33:102026-03-03 09:33:10OGUFA Print 1047005368563ALHAJI ISAH DOSI470053685636407 9969 9759 5588 33842026-02-24 13:41:572026-02-24 13:41:57UMAISHA Print 947005317657VPC SECRETARY470053176573609 4234 3003 2702 18472026-02-24 11:24:062026-02-24 11:24:06OGUFA Print 847005376372DAUDA MUSA DAUDA470053763726727 6058 1742 7470 62032026-02-05 20:07:532026-02-05 20:07:53TUNGA Print 747005376372DAUDA MUSA DAUDA470053763720898 6760 7663 0584 71602026-02-03 19:47:002026-02-03 19:47:00TUNGA Print 647300482206MATHEW EZEKIEL473004822060734 8067 6543 9925 77532026-02-02 16:38:302026-02-02 16:38:30KYAKALE Print 547005309415JOSHUA AGIVO470053094154729 7562 1781 1473 44572026-01-28 20:03:202026-01-28 20:03:20MUSHA Print 447005368452USENI UMAR470053684527329 2840 3232 9946 33502026-01-20 09:47:522026-01-20 09:47:52UMAISHA Print 347005376034Mallam Ayuba470053760341286 7301 2863 2024 11022025-12-24 20:25:282025-12-24 20:25:28OGUFA Print 247005376034Mallam Ayuba470053760347227 2826 7803 7317 48792025-12-22 14:08:192025-12-22 14:08:19OGUFA Print Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchTokenSearchCreate TimeToSearchUpdate TimeToSearchRemarkSearchStation IdSearchActions2047005378477EHI SABO 2470053784773989 5108 1746 2930 32602026-04-20 16:56:512026-04-20 16:56:51OGUFA Print 1947005372496HALADU KHALID470053724963428 2543 4232 6325 67472026-04-07 18:09:252026-04-07 18:09:25TUNGA Print 1847005308995IWALA JONNAH M.470053089950949 9642 1508 3909 74492026-03-16 16:30:212026-03-16 16:30:21MUSHA Print 1747005380234ADMIN GATEWAY TESTING470053802342142 7234 4543 0396 86682026-03-06 16:30:502026-03-06 16:30:500001 Print 1647005380234ADMIN GATEWAY TESTING470053802340250 9180 0429 2578 80442026-03-06 14:28:402026-03-06 14:28:400001 Print 1547005380234ADMIN GATEWAY TESTING470053802347172 1440 2677 2353 38712026-03-06 14:27:182026-03-06 14:27:180001 Print 1447005367439JOHN JOSEPH470053674392986 2902 1858 9604 28302026-03-03 18:27:002026-03-03 18:27:00OGUFA Print 1347005364691ZAKERI MUSA470053646916309 6173 3222 1590 54632026-03-03 18:25:522026-03-03 18:25:52OGUFA Print 1247005367439JOHN JOSEPH470053674393158 0473 4325 3775 01342026-03-03 09:34:272026-03-03 09:34:27OGUFA Print 1147005364691ZAKERI MUSA470053646912145 7792 5710 2732 50932026-03-03 09:33:102026-03-03 09:33:10OGUFA Print 1047005368563ALHAJI ISAH DOSI470053685636407 9969 9759 5588 33842026-02-24 13:41:572026-02-24 13:41:57UMAISHA Print 947005317657VPC SECRETARY470053176573609 4234 3003 2702 18472026-02-24 11:24:062026-02-24 11:24:06OGUFA Print 847005376372DAUDA MUSA DAUDA470053763726727 6058 1742 7470 62032026-02-05 20:07:532026-02-05 20:07:53TUNGA Print 747005376372DAUDA MUSA DAUDA470053763720898 6760 7663 0584 71602026-02-03 19:47:002026-02-03 19:47:00TUNGA Print 647300482206MATHEW EZEKIEL473004822060734 8067 6543 9925 77532026-02-02 16:38:302026-02-02 16:38:30KYAKALE Print 547005309415JOSHUA AGIVO470053094154729 7562 1781 1473 44572026-01-28 20:03:202026-01-28 20:03:20MUSHA Print 447005368452USENI UMAR470053684527329 2840 3232 9946 33502026-01-20 09:47:522026-01-20 09:47:52UMAISHA Print 347005376034Mallam Ayuba470053760341286 7301 2863 2024 11022025-12-24 20:25:282025-12-24 20:25:28OGUFA Print 247005376034Mallam Ayuba470053760347227 2826 7803 7317 48792025-12-22 14:08:192025-12-22 14:08:19OGUFA Print Total 1910/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm",
+      "columns": [
+        "Receipt IdSearch",
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "TokenSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Print",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Receipt Id",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Token",
+        "Start Date",
+        "End Date",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Receipt Id Customer Id Customer Name Meter Id Token Create Time Update Time Remark Station Id 20 47005378477 EHI SABO 2 47005378477 3989 5108 1746 2930 3260 2026-04-20 16:56:51 2026-04-20 16:56:51 OGUFA 19 47005372496 HALADU KHALID 47005372496 3428 2543 4232 6325 6747 2026-04-07 18:09:25 2026-04-07 18:09:25 TUNGA 18 47005308995 IWALA JONNAH M. 47005308995 0949 9642 1508 3909 7449 2026-03-16 16:30:21 2026-03-16 16:30:21 MUSHA 17 47005380234 ADMIN GATEWAY TESTING 47005380234 2142 7234 4543 0396 8668 2026-03-06 16:30:50 2026-03-06 16:30:50 0001 16 47005380234 ADMIN GATEWAY TESTING 47005380234 0250 9180 0429 2578 8044 2026-03-06 14:28:40 2026-03-06 14:28:40 0001 15 47005380234 ADMIN GATEWAY TESTING 47005380234 7172 1440 2677 2353 3871 2026-03-06 14:27:18 2026-03-06 14:27:18 0001 14 47005367439 JOHN JOSEPH 47005367439 2986 2902 1858 9604 2830 2026-03-03 18:27:00 2026-03-03 18:27:00 OGUFA 13 47005364691 ZAKERI MUSA 47005364691 6309 6173 3222 1590 5463 2026-03-03 18:25:52 2026-03-03 18:25:52 OGUFA 12 47005367439 JOHN JOSEPH 47005367439 3158 0473 4325 3775 0134 2026-03-03 09:34:27 2026-03-03 09:34:27 OGUFA 11 47005364691 ZAKERI MUSA 47005364691 2145 7792 5710 2732 5093 ",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Token Record",
+    "title": "Set Maximum Power Limit Token Record",
+    "href": "#/token-record/set-maximum-power-limit-token-record",
+    "hrefNow": "http://8.208.16.168:9311/#/token-record/set-maximum-power-limit-token-record",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-token-record-set-maximum-power-limit-token-record.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/token/setMaximumPowerLimitTokenRecord/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/token-record/set-maximum-power-limit-token-record",
+      "titleText": "Receipt IdCustomer IdCustomer NameMeter IdMaximum Power(W)TokenCreate TimeRemarkStation Id Ascending Descending Sort Search Reset Export Receipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchMaximum Power(W)SearchTokenSearchCreate TimeToSearchRemarkSearchStation IdSearchActionsNo DataReceipt IdSearchCustomer IdSearchCustomer NameSearchMeter IdSearchMaximum Power(W)SearchTokenSearchCreate TimeToSearchRemarkSearchStation IdSearchActions Total 010/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm",
+      "columns": [
+        "Receipt IdSearch",
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Maximum Power(W)Search",
+        "TokenSearch",
+        "Create TimeToSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Receipt Id",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Maximum Power(W)",
+        "Token",
+        "Start Date",
+        "End Date",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Receipt Id Customer Id Customer Name Meter Id Maximum Power(W) Token Create Time Remark Station Id No Data Actions",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation",
+    "title": "Meter Reading",
+    "href": "#/remote-operation/remote-meter-reading",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation/remote-meter-reading",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-meter-reading.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation/remote-meter-reading",
+      "titleText": "Customer NameMeter IdMeter TypeRemarkStation Id Ascending Descending Sort Search Reset Add Batch Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Add Task(Meter Reading) Cancel Confirm",
+      "columns": [
+        "Status",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Batch Task Status Customer Name Meter Id Meter Type Remark Station Id Online test 47005346144 Electricity 0001 Offline test 47300482016 Electricity 0001 Offline test 47005346136 Electricity 0001 Offline HARUNA ADAMU 470005342689 Electricity TUNGA Offline ALI MUHAMMAD 470005343091 Electricity TUNGA Offline AHJBU BUZA SANI 470005343133 Electricity TUNGA Offline DAUDA MUSA 470005362616 Electricity TUNGA Offline MUHAMMED SHUAIBU 470005367363 Electricity TUNGA Offline SAIDUDAN BAKWAI 470005367397 Electricity TUNGA Offline ADUYA SUNDAY 470005367488 Electricity TUNGA Offline AUDU SALIHU 470005367553 Electricity TUNGA Offline ADAMU SAIDU 470005367702 Electricity TUNGA Offline AHJ .DAUDA 470005370201 Electricity TUNGA Offline ALH GAMBO 470005380051 Electricity TUNGA Offline ALH GAMBO 470005380069 Electricity TUNGA Online BAKA AJEH 47005306593 Electricity MUSHA Online AUGUSTINE MICHAEL 47005306627 Electricity KYAKALE Online LUKA IWA 47005306643 Electricity KYAKALE Online MIRACLE JOEL 47005306650 Electricity TUNGA Online HABILA ABAKA 47005306668 Electricity MUSHA Actions Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Tas",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation",
+    "title": "Meter Control",
+    "href": "#/remote-operation/remote-meter-control",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation/remote-meter-control",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-meter-control.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation/remote-meter-control",
+      "titleText": "Customer NameMeter IdMeter TypeRemarkStation Id Ascending Descending Sort Search Reset Add Batch Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Add Task(Meter Control) Cancel Confirm",
+      "columns": [
+        "Status",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Batch Task Status Customer Name Meter Id Meter Type Remark Station Id Online test 47005346144 Electricity 0001 Offline test 47300482016 Electricity 0001 Offline test 47005346136 Electricity 0001 Offline HARUNA ADAMU 470005342689 Electricity TUNGA Offline ALI MUHAMMAD 470005343091 Electricity TUNGA Offline AHJBU BUZA SANI 470005343133 Electricity TUNGA Offline DAUDA MUSA 470005362616 Electricity TUNGA Offline MUHAMMED SHUAIBU 470005367363 Electricity TUNGA Offline SAIDUDAN BAKWAI 470005367397 Electricity TUNGA Offline ADUYA SUNDAY 470005367488 Electricity TUNGA Offline AUDU SALIHU 470005367553 Electricity TUNGA Offline ADAMU SAIDU 470005367702 Electricity TUNGA Offline AHJ .DAUDA 470005370201 Electricity TUNGA Offline ALH GAMBO 470005380051 Electricity TUNGA Offline ALH GAMBO 470005380069 Electricity TUNGA Online BAKA AJEH 47005306593 Electricity MUSHA Online AUGUSTINE MICHAEL 47005306627 Electricity KYAKALE Online LUKA IWA 47005306643 Electricity KYAKALE Online MIRACLE JOEL 47005306650 Electricity TUNGA Online HABILA ABAKA 47005306668 Electricity MUSHA Actions Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Tas",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation",
+    "title": "Meter Token",
+    "href": "#/remote-operation/remote-meter-token",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation/remote-meter-token",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-meter-token.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation/remote-meter-token",
+      "titleText": "Customer NameMeter IdMeter TypeRemarkStation Id Ascending Descending Sort Search Reset Add Batch Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task StatusCustomer NameSearchMeter IdSearchMeter TypeElectricityWaterGasSearchRemarkSearchStation IdSearchActionsOnlinetest47005346144Electricity0001 Add Task Offlinetest47300482016Electricity0001 Add Task Offlinetest47005346136Electricity0001 Add Task OfflineHARUNA ADAMU470005342689ElectricityTUNGA Add Task OfflineALI MUHAMMAD470005343091ElectricityTUNGA Add Task OfflineAHJBU BUZA SANI470005343133ElectricityTUNGA Add Task OfflineDAUDA MUSA470005362616ElectricityTUNGA Add Task OfflineMUHAMMED SHUAIBU470005367363ElectricityTUNGA Add Task OfflineSAIDUDAN BAKWAI470005367397ElectricityTUNGA Add Task OfflineADUYA SUNDAY470005367488ElectricityTUNGA Add Task OfflineAUDU SALIHU470005367553ElectricityTUNGA Add Task OfflineADAMU SAIDU470005367702ElectricityTUNGA Add Task OfflineAHJ .DAUDA470005370201ElectricityTUNGA Add Task OfflineALH GAMBO470005380051ElectricityTUNGA Add Task OfflineALH GAMBO470005380069ElectricityTUNGA Add Task OnlineBAKA AJEH47005306593ElectricityMUSHA Add Task OnlineAUGUSTINE MICHAEL47005306627ElectricityKYAKALE Add Task OnlineLUKA IWA47005306643ElectricityKYAKALE Add Task OnlineMIRACLE JOEL47005306650ElectricityTUNGA Add Task OnlineHABILA ABAKA47005306668ElectricityMUSHA Add Task Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Add Task(Meter Token) Cancel Confirm",
+      "columns": [
+        "Status",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Meter TypeElectricityWaterGasSearch",
+        "RemarkSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Name",
+        "Meter Id",
+        "Meter Type",
+        "Remark",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Batch Task Status Customer Name Meter Id Meter Type Remark Station Id Online test 47005346144 Electricity 0001 Offline test 47300482016 Electricity 0001 Offline test 47005346136 Electricity 0001 Offline HARUNA ADAMU 470005342689 Electricity TUNGA Offline ALI MUHAMMAD 470005343091 Electricity TUNGA Offline AHJBU BUZA SANI 470005343133 Electricity TUNGA Offline DAUDA MUSA 470005362616 Electricity TUNGA Offline MUHAMMED SHUAIBU 470005367363 Electricity TUNGA Offline SAIDUDAN BAKWAI 470005367397 Electricity TUNGA Offline ADUYA SUNDAY 470005367488 Electricity TUNGA Offline AUDU SALIHU 470005367553 Electricity TUNGA Offline ADAMU SAIDU 470005367702 Electricity TUNGA Offline AHJ .DAUDA 470005370201 Electricity TUNGA Offline ALH GAMBO 470005380051 Electricity TUNGA Offline ALH GAMBO 470005380069 Electricity TUNGA Online BAKA AJEH 47005306593 Electricity MUSHA Online AUGUSTINE MICHAEL 47005306627 Electricity KYAKALE Online LUKA IWA 47005306643 Electricity KYAKALE Online MIRACLE JOEL 47005306650 Electricity TUNGA Online HABILA ABAKA 47005306668 Electricity MUSHA Actions Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Task Add Tas",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation Task",
+    "title": "Meter Reading Task",
+    "href": "#/remote-operation-record/remote-meter-reading-task",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation-record/remote-meter-reading-task",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-task-meter-reading-task.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/remoteMeterTask/getReadingTask",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation-record/remote-meter-reading-task",
+      "titleText": "Customer IdMeter IdCreate TimeUpdate Time Ascending Descending Sort Search Reset Export Customer IdSearchCustomer NameSearchMeter IdSearchData ItemSearchStation IdSearchData ValueStatusStandBySuccessFailureSearchCreate TimeToSearchUpdate TimeToSearch123test47005346144Total Consumption0001Success 2026-04-28 09:47:492026-04-28 09:47:55123test47005346144Total Consumption0001Success 2026-04-27 07:38:392026-04-27 07:38:4947005372504MARAFA BABA MAI GIDA47005372504PowerTUNGASuccess 2026-04-26 17:38:092026-04-26 17:38:1447005379178HOSPITAL APT 5 ROOM 247005379178Credit balanceUMAISHASuccess 2026-04-17 19:08:052026-04-17 19:08:0947005325817JOSHUA47005325817Total ConsumptionMUSHASuccess 2026-04-16 16:45:002026-04-16 16:45:0447005365706JOSHUA AGIVO47005365706Credit balanceMUSHASuccess 2026-04-16 16:12:562026-04-16 16:13:3347005365706JOSHUA AGIVO47005365706Credit balanceMUSHASuccess 2026-04-16 16:09:212026-04-16 16:09:2447005335337Umar Aliyu Mai Gno47005335337Credit balanceUMAISHASuccess 2026-04-11 16:34:472026-04-11 16:35:2547005335337Umar Aliyu Mai Gno47005335337Credit balanceUMAISHASuccess 2026-04-11 16:31:482026-04-11 16:32:1047005372306MUSA ABDULLAHI47005372306Total ConsumptionUMAISHASuccess 2026-04-07 18:25:512026-04-07 18:25:5447005372496HALADU KHALID47005372496Total ConsumptionTUNGASuccess 2026-04-07 18:25:232026-04-07 20:13:0147005372496HALADU KHALID47005372496Credit balanceTUNGASuccess 2026-04-07 18:25:172026-04-07 20:13:4447005372306MUSA ABDULLAHI47005372306Credit balanceUMAISHASuccess 2026-04-07 18:23:372026-04-07 18:23:4147005372496HALADU KHALID47005372496Credit balanceTUNGASuccess 2026-04-07 18:10:592026-04-07 18:11:0447005372496HALADU KHALID47005372496Credit balanceTUNGASuccess 2026-04-07 18:06:042026-04-07 18:06:1047005375465YAKUBU SULEMAN47005375465Credit balanceUMAISHASuccess 2026-04-03 22:28:522026-04-03 22:29:0847005332524Habiba Baby47005332524Credit balanceUMAISHASuccess 2026-04-03 22:27:502026-04-03 22:27:5647005365250MUSA ONAIRO47005365250Credit balanceUMAISHASuccess 2026-04-03 22:27:212026-04-03 22:27:2747005365250MUSA ONAIRO47005365250Credit balanceUMAISHASuccess 2026-04-03 22:25:242026-04-03 22:25:2847005379277ABUBAKAR47005379277Credit balanceUMAISHASuccess 2026-04-03 22:23:292026-04-03 22:23:33 Total 18110/page20/page50/page100/page200/page500/page1000/page12345610Go to Close Export Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Data ItemSearch",
+        "Station IdSearch",
+        "Data Value",
+        "StatusStandBySuccessFailureSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Data Item",
+        "Station Id",
+        "Status",
+        "Start Date",
+        "End Date",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Customer Id Customer Name Meter Id Data Item Station Id Data Value Status Create Time Update Time 123 test 47005346144 Total Consumption 0001 Success 2026-04-28 09:47:49 2026-04-28 09:47:55 123 test 47005346144 Total Consumption 0001 Success 2026-04-27 07:38:39 2026-04-27 07:38:49 47005372504 MARAFA BABA MAI GIDA 47005372504 Power TUNGA Success 2026-04-26 17:38:09 2026-04-26 17:38:14 47005379178 HOSPITAL APT 5 ROOM 2 47005379178 Credit balance UMAISHA Success 2026-04-17 19:08:05 2026-04-17 19:08:09 47005325817 JOSHUA 47005325817 Total Consumption MUSHA Success 2026-04-16 16:45:00 2026-04-16 16:45:04 47005365706 JOSHUA AGIVO 47005365706 Credit balance MUSHA Success 2026-04-16 16:12:56 2026-04-16 16:13:33 47005365706 JOSHUA AGIVO 47005365706 Credit balance MUSHA Success 2026-04-16 16:09:21 2026-04-16 16:09:24 47005335337 Umar Aliyu Mai Gno 47005335337 Credit balance UMAISHA Success 2026-04-11 16:34:47 2026-04-11 16:35:25 47005335337 Umar Aliyu Mai Gno 47005335337 Credit balance UMAISHA Success 2026-04-11 16:31:48 2026-04-11 16:32:10 47005372306 MUSA ABDULLAHI 47005372306 Total Consumption UMAISHA Success 2026-04-07 18:25:51 2026-04-07 18:25:54 47005372496 HALADU K",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation Task",
+    "title": "Meter Control Task",
+    "href": "#/remote-operation-record/remote-meter-control-task",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation-record/remote-meter-control-task",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-task-meter-control-task.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/remoteMeterTask/getControlTask",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation-record/remote-meter-control-task",
+      "titleText": "Customer IdMeter IdCreate TimeUpdate Time Ascending Descending Sort Search Reset Export Customer IdSearchCustomer NameSearchMeter IdSearchData ItemSearchStation IdSearchStatusStandBySuccessFailureSearchCreate TimeToSearchUpdate TimeToSearch47005372496HALADU KHALID47005372496Switch OffTUNGASuccess 2026-04-07 18:06:332026-04-07 18:07:1247005330635MUSA ONAIRO47005330635Switch OffUMAISHAFailure 2026-03-24 09:33:482026-03-24 09:35:2847005371241Wasiu Liman47005371241Switch OnTUNGAFailure 2026-03-23 05:33:092026-03-23 05:34:5247005371241Wasiu Liman47005371241Switch OffTUNGAFailure 2026-03-23 05:31:092026-03-23 05:32:1147005307856SAMUEL AZIGI47005307856Switch OffKYAKALEFailure 2026-03-22 19:39:112026-03-22 19:40:5447005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 16:25:162026-03-06 16:27:3447005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Success 2026-03-06 16:24:172026-03-06 16:26:5547005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 16:22:432026-03-06 16:26:3947005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 16:22:032026-03-06 16:26:3847005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Success 2026-03-06 16:21:482026-03-06 16:27:1247005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Failure 2026-03-06 16:21:322026-03-06 16:26:0147005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Failure 2026-03-06 16:21:262026-03-06 16:25:3147005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 16:21:152026-03-06 16:22:5547005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 16:19:572026-03-06 16:22:2047005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Success 2026-03-06 16:19:302026-03-06 16:22:4847005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Success 2026-03-06 16:19:062026-03-06 16:22:0847005380234ADMIN GATEWAY TESTING47005380234Switch On0001Failure 2026-03-06 14:40:252026-03-06 14:42:0547005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Failure 2026-03-06 14:32:332026-03-06 14:34:0647005380234ADMIN GATEWAY TESTING47005380234Switch On0001Success 2026-03-06 14:32:122026-03-06 14:32:2047005380234ADMIN GATEWAY TESTING47005380234Switch Off0001Failure 2026-03-06 14:22:232026-03-06 14:23:45 Total 5510/page20/page50/page100/page200/page500/page1000/page123Go to Close Export Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Data ItemSearch",
+        "Station IdSearch",
+        "StatusStandBySuccessFailureSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Data Item",
+        "Station Id",
+        "Status",
+        "Start Date",
+        "End Date",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Customer Id Customer Name Meter Id Data Item Station Id Status Create Time Update Time 47005372496 HALADU KHALID 47005372496 Switch Off TUNGA Success 2026-04-07 18:06:33 2026-04-07 18:07:12 47005330635 MUSA ONAIRO 47005330635 Switch Off UMAISHA Failure 2026-03-24 09:33:48 2026-03-24 09:35:28 47005371241 Wasiu Liman 47005371241 Switch On TUNGA Failure 2026-03-23 05:33:09 2026-03-23 05:34:52 47005371241 Wasiu Liman 47005371241 Switch Off TUNGA Failure 2026-03-23 05:31:09 2026-03-23 05:32:11 47005307856 SAMUEL AZIGI 47005307856 Switch Off KYAKALE Failure 2026-03-22 19:39:11 2026-03-22 19:40:54 47005380234 ADMIN GATEWAY TESTING 47005380234 Switch On 0001 Success 2026-03-06 16:25:16 2026-03-06 16:27:34 47005380234 ADMIN GATEWAY TESTING 47005380234 Switch Off 0001 Success 2026-03-06 16:24:17 2026-03-06 16:26:55 47005380234 ADMIN GATEWAY TESTING 47005380234 Switch On 0001 Success 2026-03-06 16:22:43 2026-03-06 16:26:39 47005380234 ADMIN GATEWAY TESTING 47005380234 Switch On 0001 Success 2026-03-06 16:22:03 2026-03-06 16:26:38 47005380234 ADMIN GATEWAY TESTING 47005380234 Switch Off 0001 Success 2026-03-06 16:21:48 2026-03-06 16:27:12 47005380234 ADMIN GATEWAY TESTING 4",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Remote Operation Task",
+    "title": "Meter Token Task",
+    "href": "#/remote-operation-record/remote-meter-token-task",
+    "hrefNow": "http://8.208.16.168:9311/#/remote-operation-record/remote-meter-token-task",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-remote-operation-task-meter-token-task.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/remoteMeterTask/getTokenTask",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/remote-operation-record/remote-meter-token-task",
+      "titleText": "Customer IdMeter IdCreate TimeUpdate Time Ascending Descending Sort Search Reset Export Customer IdSearchCustomer NameSearchMeter IdSearchData ItemSearchTokenSearchStation IdSearchStatusStandBySuccessFailureSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearch47005372686Mohammed Kaura47005372686Send Token0021 2636 8628 4408 6688TUNGASuccess 2026-04-28 10:29:232026-04-28 10:29:2947005358180NASS COMMUNICATION47005358180Send Token1701 7852 2405 7134 5604TUNGASuccess 2026-04-28 09:10:032026-04-28 09:10:0547005335303Mohammed Aminu47005335303Send Token3960 0973 5781 2509 2391UMAISHASuccess 2026-04-28 09:05:592026-04-28 09:06:0447005331989alhaji musa47005331989Send Token7292 3419 5869 9507 4347UMAISHASuccess 2026-04-28 09:01:522026-04-28 09:01:5847005309597DOGO COMMUNICATION47005309597Send Token1021 5293 6134 7651 4244MUSHAFailure 2026-04-28 08:30:352026-04-28 08:32:1847005368098DINGA GURI47005368098Send Token0807 0589 1314 3189 4117TUNGASuccess 2026-04-28 08:14:572026-04-28 08:15:0047005372785RUTH MARTHA47005372785Send Token6183 9330 5744 4580 8102TUNGASuccess 2026-04-28 07:51:252026-04-28 07:51:2847005334140SHAIBU AWWAL47005334140Send Token4438 3375 0579 3605 5640UMAISHASuccess 2026-04-28 07:31:382026-04-28 07:31:4347005372843Alhaji Usman Badamsi47005372843Send Token3980 8640 2585 7952 1323TUNGASuccess 2026-04-28 07:21:522026-04-28 07:21:5747005371092HAJIYA MADINA47005371092Send Token0137 8049 2694 4421 7398UMAISHASuccess 2026-04-28 07:17:532026-04-28 07:18:1547005372926ISSAC ZAKA47005372926Send Token5522 7519 9699 3736 2759TUNGAFailure 2026-04-27 23:32:222026-04-27 23:34:0547005371407AKANON SARKIN TUNGA47005371407Send Token4578 8792 2598 9678 0091TUNGASuccess 2026-04-27 22:58:512026-04-27 22:58:5447005324745MUSTAPHA ABDULSALAM47005324745Send Token3092 1951 4178 0791 6299TUNGASuccess 2026-04-27 22:52:552026-04-27 22:53:0047005371662MUSA ABUBAKAR47005371662Send Token4264 2548 9927 0679 3970UMAISHASuccess 2026-04-27 22:31:242026-04-27 22:31:3247005365250MUSA ONAIRO47005365250Send Token6057 0546 6061 0218 0052UMAISHASuccess 2026-04-27 21:59:182026-04-27 21:59:2347005331948shesudeen47005331948Send Token7080 5777 4985 4257 1763UMAISHASuccess 2026-04-27 21:52:392026-04-27 21:52:4747005368288NO NAME 3147005368288Send Token6547 9776 8036 7123 2563UMAISHASuccess 2026-04-27 21:44:092026-04-27 21:44:1647005365649RASHI PELE47005365649Send Token2340 8193 8173 4395 6225TUNGASuccess 2026-04-27 21:03:292026-04-27 21:03:3147005344164HABIBU ILIYASU47005344164Send Token5978 6792 7850 8050 6571TUNGASuccess 2026-04-27 21:01:312026-04-27 21:01:3547005326476AJEYI AGIDI47005326476Send Token5719 1425 6115 9854 4986MUSHASuccess 2026-04-27 20:59:352026-04-27 20:59:39 Total 243710/page20/page50/page100/page200/page500/page1000/page123456122Go to Close Export Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Meter IdSearch",
+        "Data ItemSearch",
+        "TokenSearch",
+        "Station IdSearch",
+        "StatusStandBySuccessFailureSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Data Item",
+        "Token",
+        "Station Id",
+        "Status",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Customer Id Customer Name Meter Id Data Item Token Station Id Status Remark Create Time Update Time 47005372686 Mohammed Kaura 47005372686 Send Token 0021 2636 8628 4408 6688 TUNGA Success 2026-04-28 10:29:23 2026-04-28 10:29:29 47005358180 NASS COMMUNICATION 47005358180 Send Token 1701 7852 2405 7134 5604 TUNGA Success 2026-04-28 09:10:03 2026-04-28 09:10:05 47005335303 Mohammed Aminu 47005335303 Send Token 3960 0973 5781 2509 2391 UMAISHA Success 2026-04-28 09:05:59 2026-04-28 09:06:04 47005331989 alhaji musa 47005331989 Send Token 7292 3419 5869 9507 4347 UMAISHA Success 2026-04-28 09:01:52 2026-04-28 09:01:58 47005309597 DOGO COMMUNICATION 47005309597 Send Token 1021 5293 6134 7651 4244 MUSHA Failure 2026-04-28 08:30:35 2026-04-28 08:32:18 47005368098 DINGA GURI 47005368098 Send Token 0807 0589 1314 3189 4117 TUNGA Success 2026-04-28 08:14:57 2026-04-28 08:15:00 47005372785 RUTH MARTHA 47005372785 Send Token 6183 9330 5744 4580 8102 TUNGA Success 2026-04-28 07:51:25 2026-04-28 07:51:28 47005334140 SHAIBU AWWAL 47005334140 Send Token 4438 3375 0579 3605 5640 UMAISHA Success 2026-04-28 07:31:38 2026-04-28 07:31:43 47005372843 Alhaji Usman Badamsi 47005372843 S",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Data Report",
+    "title": "Long Nonpurchase Situation",
+    "href": "#/prepay-report/long-nonpurchase-situation",
+    "hrefNow": "http://8.208.16.168:9311/#/prepay-report/long-nonpurchase-situation",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-data-report-long-nonpurchase-situation.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/customer/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/meter/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/prepay-report/long-nonpurchase-situation",
+      "titleText": "Customer Id Meter Id Nonpurchase Days Start Nonpurchase Days End Customer IdMeter IdNonpurchase Days Ascending Descending Sort Search Reset Export Customer IdCustomer NameMeter IdTariff IdLast Purchase UnitLast Purchase PaidLast Purchase DateNonpurchase DaysCustomer Address47005376034Mallam Ayuba47005376034RESIDENTIAL1040002025-12-22 11:39:40127OGUFA47005333878SAMUEL AKUBA47005333878RESIDENTIAL14.250002026-01-07 17:18:55111MUSHA47005370672Mohammed Ibrahim47005370672COMMERCIAL14.250002026-01-08 16:11:57110TUNGA47005369351MUKTAR MUSA47005369351COMMERCIAL2.810002026-01-10 11:30:22108TUNGA47005371845NUHU .D. NUHU47005371845COMMERCIAL2.810002026-01-14 11:47:15104UMAISHA47005371787SALIHU HUSSENI DIU 247005371787RESIDENTIAL2.810002026-01-14 10:58:53104UMAISHA47005375697ALHAJI SALE47005375697RESIDENTIAL2.810002026-01-13 21:11:55104UMAISHA47300482156Alhaji musa47300482156COMMERCIAL5.720002026-01-14 21:01:51103Umaisha47300480952BARR YENUSA ISHA47300480952RESIDENTIAL2.810002026-01-14 20:31:23103UMAISHA47300480945DR HAUWA ABDULAZIZ47300480945RESIDENTIAL11.440002026-01-14 19:43:40103UMAISHA47005333514ISHAKU ILEYA47005333514RESIDENTIAL14.250002026-01-16 12:11:55102KYAKALE47005371142ABDUSALEM47005371142RESIDENTIAL0.83002026-01-17 15:11:05101UMAISHA47005379266ABUBAKAR S. MOHAMMED47005379266RESIDENTIAL27002026-01-17 15:08:51101UMAISHA47005333399LUKA OZHAN47005333399RESIDENTIAL5.720002026-01-17 13:38:21101KYAKALE47005339803DAKABA SAMUEL47005339803RESIDENTIAL2.810002026-01-17 07:44:11101MUSHA47005365045Adamu47005365045RESIDENTIAL1.45002026-01-16 18:57:09101umaisha47005377222MONDAY YAKUBU47005377222RESIDENTIAL2.810002026-01-17 18:53:39100UMAISHA47300481786ALHAJI HUSSANI47300481786COMMERCIAL2.810002026-01-19 09:45:5799UMAISHA47300482206MATHEW EZEKIEL47300482206RESIDENTIAL5.720002026-01-19 08:01:0599KYAKALE47005359972DANIEL G. PETER47005359972RESIDENTIAL4.215002026-01-19 19:41:4398KYAKALE Total 122110/page20/page50/page100/page200/page500/page1000/page12345662Go to Export Cancel Confirm Meter Cancel Confirm Tariff Cancel Confirm Customer Cancel Confirm",
+      "columns": [
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Tariff Id",
+        "Last Purchase Unit",
+        "Last Purchase Paid",
+        "Last Purchase Date",
+        "Nonpurchase Days",
+        "Customer Address"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Select"
+      ],
+      "pageText": "Customer Id Meter Id Nonpurchase Days Start Nonpurchase Days End Search Reset Export Customer Id Customer Name Meter Id Tariff Id Last Purchase Unit Last Purchase Paid Last Purchase Date Nonpurchase Days Customer Address 47005376034 Mallam Ayuba 47005376034 RESIDENTIAL 10 4000 2025-12-22 11:39:40 127 OGUFA 47005333878 SAMUEL AKUBA 47005333878 RESIDENTIAL 14.2 5000 2026-01-07 17:18:55 111 MUSHA 47005370672 Mohammed Ibrahim 47005370672 COMMERCIAL 14.2 5000 2026-01-08 16:11:57 110 TUNGA 47005369351 MUKTAR MUSA 47005369351 COMMERCIAL 2.8 1000 2026-01-10 11:30:22 108 TUNGA 47005371845 NUHU .D. NUHU 47005371845 COMMERCIAL 2.8 1000 2026-01-14 11:47:15 104 UMAISHA 47005371787 SALIHU HUSSENI DIU 2 47005371787 RESIDENTIAL 2.8 1000 2026-01-14 10:58:53 104 UMAISHA 47005375697 ALHAJI SALE 47005375697 RESIDENTIAL 2.8 1000 2026-01-13 21:11:55 104 UMAISHA 47300482156 Alhaji musa 47300482156 COMMERCIAL 5.7 2000 2026-01-14 21:01:51 103 Umaisha 47300480952 BARR YENUSA ISHA 47300480952 RESIDENTIAL 2.8 1000 2026-01-14 20:31:23 103 UMAISHA 47300480945 DR HAUWA ABDULAZIZ 47300480945 RESIDENTIAL 11.4 4000 2026-01-14 19:43:40 103 UMAISHA 47005333514 ISHAKU ILEYA 47005333514 RESIDENTIAL 14.2 5000 2026-01-16",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Data Report",
+    "title": "Low Purchase Situation",
+    "href": "#/prepay-report/low-purchase-situation",
+    "hrefNow": "http://8.208.16.168:9311/#/prepay-report/low-purchase-situation",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-data-report-low-purchase-situation.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/customer/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/meter/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/prepay-report/low-purchase-situation",
+      "titleText": "Customer Id Meter Id Date Range Low Limit To Customer IdMeter IdTotal Unit Ascending Descending Sort Search Reset Export Customer IdCustomer NameMeter IdTariff IdTotal UnitTotal PaidCustomer Address47005371142ABDUSALEM47005371142RESIDENTIAL0.8300UMAISHA47005307245IBRAHIM AJE47005307245RESIDENTIAL1350KYAKALE47005375366OLOJE MOSES47005375366RESIDENTIAL1.1400OGUFA47005367165OSAYI IKAKA47005367165RESIDENTIAL1.1400OGUFA47005357562SHIMEGYE AMOS47005357562RESIDENTIAL1.140047005377339ABERCHEN OSAP47005377339RESIDENTIAL1.1400OGUFA47005351540ALLAMANA ABEL47005351540RESIDENTIAL1.140047005329579IDRIS SUMAYI47005329579RESIDENTIAL1.140047005368353JOHN ASADU47005368353RESIDENTIAL1.1400OGUFA47005367116INGBEDE ODOBA 247005367116RESIDENTIAL1.140047005307393AMINA USMAN47005307393RESIDENTIAL1.140047005318127DANLADI OSU47005318127RESIDENTIAL1.1400OGUFA47005307588USMAN ENOCH47005307588RESIDENTIAL1.1400OGUFA47005343505ODOBA PRINCE47005343505RESIDENTIAL1.1400OGUFA47005375226ABDUL47005375226RESIDENTIAL1.1400OGUFA47005329611MOMUNA MOHAMMED47005329611RESIDENTIAL1.140047005375333SALOME ABRAHAM47005375333RESIDENTIAL1.1400OGUFA47005363339EDEH JONATHAN47005363339RESIDENTIAL1.140047005330148OKO OMBOSHI47005330148RESIDENTIAL1.140047005379640JOSHUA ISHAKPA47005379640RESIDENTIAL1.1400OGUFA Total 122410/page20/page50/page100/page200/page500/page1000/page12345662Go to Export Cancel Confirm Meter Cancel Confirm Tariff Cancel Confirm Customer Cancel Confirm",
+      "columns": [
+        "Customer Id",
+        "Customer Name",
+        "Meter Id",
+        "Tariff Id",
+        "Total Unit",
+        "Total Paid",
+        "Customer Address"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "Start Date",
+        "End Date",
+        "$t('common.pleaseSelect')",
+        "Select"
+      ],
+      "pageText": "Customer Id Meter Id Date Range Low Limit To Search Reset Export Customer Id Customer Name Meter Id Tariff Id Total Unit Total Paid Customer Address 47005371142 ABDUSALEM 47005371142 RESIDENTIAL 0.8 300 UMAISHA 47005307245 IBRAHIM AJE 47005307245 RESIDENTIAL 1 350 KYAKALE 47005375366 OLOJE MOSES 47005375366 RESIDENTIAL 1.1 400 OGUFA 47005367165 OSAYI IKAKA 47005367165 RESIDENTIAL 1.1 400 OGUFA 47005357562 SHIMEGYE AMOS 47005357562 RESIDENTIAL 1.1 400 47005377339 ABERCHEN OSAP 47005377339 RESIDENTIAL 1.1 400 OGUFA 47005351540 ALLAMANA ABEL 47005351540 RESIDENTIAL 1.1 400 47005329579 IDRIS SUMAYI 47005329579 RESIDENTIAL 1.1 400 47005368353 JOHN ASADU 47005368353 RESIDENTIAL 1.1 400 OGUFA 47005367116 INGBEDE ODOBA 2 47005367116 RESIDENTIAL 1.1 400 47005307393 AMINA USMAN 47005307393 RESIDENTIAL 1.1 400 47005318127 DANLADI OSU 47005318127 RESIDENTIAL 1.1 400 OGUFA 47005307588 USMAN ENOCH 47005307588 RESIDENTIAL 1.1 400 OGUFA 47005343505 ODOBA PRINCE 47005343505 RESIDENTIAL 1.1 400 OGUFA 47005375226 ABDUL 47005375226 RESIDENTIAL 1.1 400 OGUFA 47005329611 MOMUNA MOHAMMED 47005329611 RESIDENTIAL 1.1 400 47005375333 SALOME ABRAHAM 47005375333 RESIDENTIAL 1.1 400 OGUFA 47005363339 EDEH JONA",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Data Report",
+    "title": "Consumption Statistics",
+    "href": "#/prepay-report/consumption-statistics",
+    "hrefNow": "http://8.208.16.168:9311/#/prepay-report/consumption-statistics",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-data-report-consumption-statistics.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/customer/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/meter/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/prepay-report/consumption-statistics",
+      "titleText": "Customer Id Meter Id Date Range ToDaily Monthly Collection DateConsumption Ascending Descending Sort Search Reset Export DataChart Collection DateConsumptionNo Data Total 010/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm Meter Cancel Confirm Tariff Cancel Confirm Customer Cancel Confirm",
+      "columns": [
+        "Collection Date",
+        "Consumption"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "Start Date",
+        "End Date",
+        "$t('common.pleaseSelect')",
+        "Select"
+      ],
+      "pageText": "Customer Id Meter Id Date Range To Daily Monthly Search Reset Export DataChart",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Data Report",
+    "title": "Interval Data",
+    "href": "#/prepay-report/daily-data-meter",
+    "hrefNow": "http://8.208.16.168:9311/#/prepay-report/daily-data-meter",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-data-report-interval-data.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/prepay-report/daily-data-meter",
+      "titleText": "Customer IdMeter IdCollection Date Ascending Descending Sort Search Reset Export //start updata //继电器断开 //电池电量低 //磁场干扰 //开端盖 //开上盖 //反向 //电流不平衡 //关键状态位结束 Meter IdSearchGateway IdSearchCollection DateToSearchCustomer IdSearchCustomer NameSearchStation IdSearchTotal EnergyLast Hour UsageCredit BalanceMaximum DemandPowerRelay StatusBattery StatusMagnetic StatusTerminal CoverUpper Open Current ReverseCurrent UnbalanceUpdate TimeActionsNo DataMeter IdSearchGateway IdSearchCollection DateToSearchCustomer IdSearchCustomer NameSearchStation IdSearchTotal EnergyLast Hour UsageCredit BalanceMaximum DemandPowerRelay StatusBattery StatusMagnetic StatusTerminal CoverUpper Open Current ReverseCurrent UnbalanceUpdate TimeActionsMeter IdSearchGateway IdSearchCollection DateToSearchCustomer IdSearchCustomer NameSearchStation IdSearchTotal EnergyLast Hour UsageCredit BalanceMaximum DemandPowerRelay StatusBattery StatusMagnetic StatusTerminal CoverUpper Open Current ReverseCurrent UnbalanceUpdate TimeActions Total 010/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm Close",
+      "columns": [
+        "Meter IdSearch",
+        "Gateway IdSearch",
+        "Collection DateToSearch",
+        "Customer IdSearch",
+        "Customer NameSearch",
+        "Station IdSearch",
+        "Total Energy",
+        "Last Hour Usage",
+        "Credit Balance",
+        "Maximum Demand",
+        "Power",
+        "Relay Status",
+        "Battery Status",
+        "Magnetic Status",
+        "Terminal Cover",
+        "Upper Open",
+        "Current Reverse",
+        "Current Unbalance",
+        "Update Time",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm",
+        "Close"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Meter Id",
+        "Gateway Id",
+        "Start Date",
+        "End Date",
+        "Customer Id",
+        "Customer Name",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Export Customer Id Customer Name Station Id Total Energy Last Hour Usage Credit Balance Maximum Demand Power Relay Status Battery Status Magnetic Status Terminal Cover Upper Open Current Reverse Current Unbalance Update Time No Data Meter Id Gateway Id Collection Date Actions",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Management",
+    "title": "Gateway",
+    "href": "#/management/gateway",
+    "hrefNow": "http://8.208.16.168:9311/#/management/gateway",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-gateway.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/DailyDataMeter/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/management/gateway",
+      "titleText": "IdNameRemarkCreate TimeUpdate TimeStation Id Ascending Descending Sort Search Reset Add Import Export Delete StatusSuccess RateIdSearchNameSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActionsNo DataStatusSuccess RateIdSearchNameSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActions 10/page20/page50/page100/page200/page500/page1000/pageGo to Cancel Confirm Export Cancel Confirm Import Cancel Confirm Export Cancel Confirm",
+      "columns": [
+        "Status",
+        "Success Rate",
+        "IdSearch",
+        "NameSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Id",
+        "Name",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Import Export Delete Status Success Rate Id Name Remark Create Time Update Time Station Id No Data Actions",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Management",
+    "title": "Customer",
+    "href": "#/management/customer",
+    "hrefNow": "http://8.208.16.168:9311/#/management/customer",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-customer.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/DailyDataMeter/readMore",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/gateway/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/customer/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/management/customer",
+      "titleText": "IdNamePhoneAddressCertifiNameCertifiNoRemarkCreate TimeUpdate TimeStation Id Ascending Descending Sort Search Reset Add Import Export Delete IdSearchNameSearchPhoneSearchAddressSearchCertifiNameSearchCertifiNoSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActions123test2025-07-21 09:25:572025-07-21 09:25:570001 Edit Delete 470005342689HARUNA ADAMUTUNGA1672026-01-27 13:11:102026-01-27 13:11:10TUNGA Edit Delete 470005343091ALI MUHAMMADTUNGAG_2712026-01-27 13:06:562026-01-27 13:06:56TUNGA Edit Delete 470005343133AHJBU BUZA SANITUNGAG_2712026-01-27 12:57:062026-01-27 12:57:06TUNGA Edit Delete 470005362616DAUDA MUSATUNGA2542026-01-27 12:37:112026-01-27 12:37:11TUNGA Edit Delete 470005367363MUHAMMED SHUAIBUTUNGAG_2122026-01-27 12:33:262026-01-27 12:33:26TUNGA Edit Delete 470005367397SAIDUDAN BAKWAITUNGAG_2122026-01-27 12:35:272026-01-27 12:35:27TUNGA Edit Delete 470005367488ADUYA SUNDAYTUNGA1862026-01-27 13:25:572026-01-27 13:25:57TUNGA Edit Delete 470005367553AUDU SALIHUTUNGAG_2132026-01-27 12:32:312026-01-27 12:32:31TUNGA Edit Delete 470005367702ADAMU SAIDUTUNGAG_2132026-01-27 12:31:382026-01-27 12:31:38TUNGA Edit Delete 470005370201AHJ .DAUDATUNGA1662026-01-27 12:53:462026-01-27 12:53:46TUNGA Edit Delete 470005371449MUSA H SHEHUTUNGAP_1732026-01-07 09:47:112026-01-07 09:47:11TUNGA Edit Delete 470005380051ALH GAMBOTUNGA1682026-01-27 13:23:042026-01-27 13:23:04TUNGA Edit Delete 470005380069ALH GAMBOTUNGA1682026-01-27 13:23:392026-01-27 13:23:39TUNGA Edit Delete 47005306593BAKA AJEHMUSHAP_G412026-03-18 15:55:572026-03-18 15:55:57MUSHA Edit Delete 47005306627AUGUSTINE MICHAELKYAKALEP_942026-01-02 14:02:222026-01-02 15:58:16KYAKALE Edit Delete 47005306643LUKA IWAKYAKALEP_0302026-01-02 14:03:352026-01-02 15:58:25KYAKALE Edit Delete 47005306650MIRACLE JOELTUNGAP_2052026-01-27 13:28:462026-01-27 13:28:46TUNGA Edit Delete 47005306668HABILA ABAKAMUSHAP-1992026-01-17 20:47:092026-01-17 20:47:09MUSHA Edit Delete 47005306676AUDU AGIDIMUSHAP_1432026-01-02 04:16:252026-01-02 04:19:52MUSHA Edit Delete IdSearchNameSearchPhoneSearchAddressSearchCertifiNameSearchCertifiNoSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActions123test2025-07-21 09:25:572025-07-21 09:25:570001 Edit Delete 470005342689HARUNA ADAMUTUNGA1672026-01-27 13:11:102026-01-27 13:11:10TUNGA Edit Delete 470005343091ALI MUHAMMADTUNGAG_2712026-01-27 13:06:562026-01-27 13:06:56TUNGA Edit Delete 470005343133AHJBU BUZA SANITUNGAG_2712026-01-27 12:57:062026-01-27 12:57:06TUNGA Edit Delete 470005362616DAUDA MUSATUNGA2542026-01-27 12:37:112026-01-27 12:37:11TUNGA Edit Delete 470005367363MUHAMMED SHUAIBUTUNGAG_2122026-01-27 12:33:262026-01-27 12:33:26TUNGA Edit Delete 470005367397SAIDUDAN BAKWAITUNGAG_2122026-01-27 12:35:272026-01-27 12:35:27TUNGA Edit Delete 470005367488ADUYA SUNDAYTUNGA1862026-01-27 13:25:572026-01-27 13:25:57TUNGA Edit Delete 470005367553AUDU SALIHUTUNGAG_2132026-01-27 12:32:312026-01-27 12:32:31TUNGA Edit Delete 470005367702ADAMU SAIDUTUNGAG_2132026-01-27 12:31:382026-01-27 12:31:38TUNGA Edit Delete 470005370201AHJ .DAUDATUNGA1662026-01-27 12:53:462026-01-27 12:53:46TUNGA Edit Delete 470005371449MUSA H SHEHUTUNGAP_1732026-01-07 09:47:112026-01-07 09:47:11TUNGA Edit Delete 470005380051ALH GAMBOTUNGA1682026-01-27 13:23:042026-01-27 13:23:04TUNGA Edit Delete 470005380069ALH GAMBOTUNGA1682026-01-27 13:23:392026-01-27 13:23:39TUNGA Edit Delete 47005306593BAKA AJEHMUSHAP_G412026-03-18 15:55:572026-03-18 15:55:57MUSHA Edit Delete 47005306627AUGUSTINE MICHAELKYAKALEP_942026-01-02 14:02:222026-01-02 15:58:16KYAKALE Edit Delete 47005306643LUKA IWAKYAKALEP_0302026-01-02 14:03:352026-01-02 15:58:25KYAKALE Edit Delete 47005306650MIRACLE JOELTUNGAP_2052026-01-27 13:28:462026-01-27 13:28:46TUNGA Edit Delete 47005306668HABILA ABAKAMUSHAP-1992026-01-17 20:47:092026-01-17 20:47:09MUSHA Edit Delete 47005306676AUDU AGIDIMUSHAP_1432026-01-02 04:16:252026-01-02 04:19:52MUSHA Edit Delete Total 245610/page20/page50/page100/page200/page500/page1000/page123456123Go to Cancel Confirm Export Cancel Confirm Import Cancel Confirm Export Cancel Confirm",
+      "columns": [
+        "IdSearch",
+        "NameSearch",
+        "PhoneSearch",
+        "AddressSearch",
+        "CertifiNameSearch",
+        "CertifiNoSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Id",
+        "Name",
+        "Phone",
+        "Address",
+        "CertifiName",
+        "CertifiNo",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Import Export Delete Id Name Phone Address CertifiName CertifiNo Remark Create Time Update Time Station Id 123 test 2025-07-21 09:25:57 2025-07-21 09:25:57 0001 470005342689 HARUNA ADAMU TUNGA 167 2026-01-27 13:11:10 2026-01-27 13:11:10 TUNGA 470005343091 ALI MUHAMMAD TUNGA G_271 2026-01-27 13:06:56 2026-01-27 13:06:56 TUNGA 470005343133 AHJBU BUZA SANI TUNGA G_271 2026-01-27 12:57:06 2026-01-27 12:57:06 TUNGA 470005362616 DAUDA MUSA TUNGA 254 2026-01-27 12:37:11 2026-01-27 12:37:11 TUNGA 470005367363 MUHAMMED SHUAIBU TUNGA G_212 2026-01-27 12:33:26 2026-01-27 12:33:26 TUNGA 470005367397 SAIDUDAN BAKWAI TUNGA G_212 2026-01-27 12:35:27 2026-01-27 12:35:27 TUNGA 470005367488 ADUYA SUNDAY TUNGA 186 2026-01-27 13:25:57 2026-01-27 13:25:57 TUNGA 470005367553 AUDU SALIHU TUNGA G_213 2026-01-27 12:32:31 2026-01-27 12:32:31 TUNGA 470005367702 ADAMU SAIDU TUNGA G_213 2026-01-27 12:31:38 2026-01-27 12:31:38 TUNGA 470005370201 AHJ .DAUDA TUNGA 166 2026-01-27 12:53:46 2026-01-27 12:53:46 TUNGA 470005371449 MUSA H SHEHU TUNGA P_173 2026-01-07 09:47:11 2026-01-07 09:47:11 TUNGA 470005380051 ALH GAMBO TUNGA 168 2026-01-27 13:23:04 2026-01-27 13:23:04 TUNGA 470005380069 ALH GAMBO ",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Management",
+    "title": "Tariff",
+    "href": "#/management/tariff",
+    "hrefNow": "http://8.208.16.168:9311/#/management/tariff",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-tariff.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/item/readItemList",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/management/tariff",
+      "titleText": "IdNamePriceRemarkCreate TimeUpdate Time Ascending Descending Sort Search Reset Add Import Export Delete IdSearchNameSearchPriceSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchActions123test3502025-07-21 09:26:192025-11-07 11:08:24 Edit Delete COMMERCIALCOMMERCIAL3502025-11-10 13:53:382026-01-06 07:46:20 Edit Delete PRODUCTIVEPRODUCTIVE3502025-11-10 13:54:102026-01-06 07:46:28 Edit Delete PUBLICPUBLIC3502025-11-10 13:54:452026-01-06 07:46:38 Edit Delete RESIDENTIALRESIDENTIAL3502025-11-10 13:53:052026-01-06 07:46:45 Edit Delete IdSearchNameSearchPriceSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchActions123test3502025-07-21 09:26:192025-11-07 11:08:24 Edit Delete COMMERCIALCOMMERCIAL3502025-11-10 13:53:382026-01-06 07:46:20 Edit Delete PRODUCTIVEPRODUCTIVE3502025-11-10 13:54:102026-01-06 07:46:28 Edit Delete PUBLICPUBLIC3502025-11-10 13:54:452026-01-06 07:46:38 Edit Delete RESIDENTIALRESIDENTIAL3502025-11-10 13:53:052026-01-06 07:46:45 Edit Delete Total 510/page20/page50/page100/page200/page500/page1000/page1Go to Export Cancel Confirm Import Cancel Confirm Export Cancel Confirm",
+      "columns": [
+        "IdSearch",
+        "NameSearch",
+        "PriceSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Id",
+        "Name",
+        "Price",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Import Export Delete Id Name Price Remark Create Time Update Time 123 test 350 2025-07-21 09:26:19 2025-11-07 11:08:24 COMMERCIAL COMMERCIAL 350 2025-11-10 13:53:38 2026-01-06 07:46:20 PRODUCTIVE PRODUCTIVE 350 2025-11-10 13:54:10 2026-01-06 07:46:28 PUBLIC PUBLIC 350 2025-11-10 13:54:45 2026-01-06 07:46:38 RESIDENTIAL RESIDENTIAL 350 2025-11-10 13:53:05 2026-01-06 07:46:45 Actions Edit Delete Edit Delete Edit Delete Edit Delete Edit Delete Total 5 1 Go to",
+      "hasTable": true
+    }
+  },
+  {
+    "group": "Management",
+    "title": "Account",
+    "href": "#/management/account",
+    "hrefNow": "http://8.208.16.168:9311/#/management/account",
+    "screenshot": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-account.png",
+    "api": [
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/tariff/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/account/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/customer/read",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/station/read",
+        "status": 200
+      }
+    ],
+    "summary": {
+      "routeNow": "/management/account",
+      "titleText": "Customer IdMeter IdTariff IdCommunication WayCT RatioRemarkCreate TimeUpdate TimeStation Id Ascending Descending Sort Search Reset Add Import Export Delete Customer IdSearchMeter IdSearchTariff IdSearchCommunication WayGPRSLoraWanSearchCT RatioSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActions12347005346144123LoraWan2025-07-21 11:48:102025-07-21 11:48:100001 Edit Delete 12347300482016123LoraWan2025-07-21 10:04:292025-07-21 10:04:290001 Edit Delete 12347005346136123LoraWan2025-07-21 11:47:502025-07-21 11:47:500001 Edit Delete 470005342689470005342689RESIDENTIALLoraWan12026-02-11 10:24:312026-02-11 10:24:31TUNGA Edit Delete 470005343091470005343091RESIDENTIALLoraWan12026-02-11 10:25:142026-02-11 10:25:14TUNGA Edit Delete 470005343133470005343133RESIDENTIALLoraWan12026-02-11 10:26:172026-02-11 10:26:17TUNGA Edit Delete 470005362616470005362616RESIDENTIALLoraWan12026-02-11 10:26:572026-02-11 10:26:57TUNGA Edit Delete 470005367363470005367363RESIDENTIALLoraWan12026-02-11 10:28:272026-02-11 10:28:27TUNGA Edit Delete 470005367397470005367397RESIDENTIALLoraWan12026-02-11 10:29:482026-02-11 10:29:48TUNGA Edit Delete 470005367488470005367488RESIDENTIALLoraWan12026-02-11 10:30:372026-02-11 10:30:37TUNGA Edit Delete 470005367553470005367553RESIDENTIALLoraWan12026-02-11 10:31:082026-02-11 10:31:08TUNGA Edit Delete 470005367702470005367702RESIDENTIALLoraWan12026-02-11 10:31:422026-02-11 10:31:42TUNGA Edit Delete 470005370201470005370201RESIDENTIALLoraWan12026-02-11 10:33:102026-02-11 10:33:10TUNGA Edit Delete 470005380051470005380051RESIDENTIALLoraWan12026-02-11 10:33:542026-02-11 10:33:54TUNGA Edit Delete 470005380069470005380069RESIDENTIALLoraWan12026-02-11 10:34:242026-02-11 10:34:24TUNGA Edit Delete 4700530659347005306593RESIDENTIALLoraWan12026-03-18 16:02:302026-03-18 16:02:30MUSHA Edit Delete 4700530662747005306627RESIDENTIALLoraWan2026-01-03 18:26:562026-01-03 18:26:56KYAKALE Edit Delete 4700530664347005306643RESIDENTIALLoraWan2026-01-03 18:27:512026-01-03 18:27:51KYAKALE Edit Delete 4700530665047005306650RESIDENTIALLoraWan12026-02-11 11:03:342026-02-11 11:03:34TUNGA Edit Delete 4700530666847005306668RESIDENTIALLoraWan2026-01-17 20:49:592026-01-17 20:49:59MUSHA Edit Delete Customer IdSearchMeter IdSearchTariff IdSearchCommunication WayGPRSLoraWanSearchCT RatioSearchRemarkSearchCreate TimeToSearchUpdate TimeToSearchStation IdSearchActions12347005346144123LoraWan2025-07-21 11:48:102025-07-21 11:48:100001 Edit Delete 12347300482016123LoraWan2025-07-21 10:04:292025-07-21 10:04:290001 Edit Delete 12347005346136123LoraWan2025-07-21 11:47:502025-07-21 11:47:500001 Edit Delete 470005342689470005342689RESIDENTIALLoraWan12026-02-11 10:24:312026-02-11 10:24:31TUNGA Edit Delete 470005343091470005343091RESIDENTIALLoraWan12026-02-11 10:25:142026-02-11 10:25:14TUNGA Edit Delete 470005343133470005343133RESIDENTIALLoraWan12026-02-11 10:26:172026-02-11 10:26:17TUNGA Edit Delete 470005362616470005362616RESIDENTIALLoraWan12026-02-11 10:26:572026-02-11 10:26:57TUNGA Edit Delete 470005367363470005367363RESIDENTIALLoraWan12026-02-11 10:28:272026-02-11 10:28:27TUNGA Edit Delete 470005367397470005367397RESIDENTIALLoraWan12026-02-11 10:29:482026-02-11 10:29:48TUNGA Edit Delete 470005367488470005367488RESIDENTIALLoraWan12026-02-11 10:30:372026-02-11 10:30:37TUNGA Edit Delete 470005367553470005367553RESIDENTIALLoraWan12026-02-11 10:31:082026-02-11 10:31:08TUNGA Edit Delete 470005367702470005367702RESIDENTIALLoraWan12026-02-11 10:31:422026-02-11 10:31:42TUNGA Edit Delete 470005370201470005370201RESIDENTIALLoraWan12026-02-11 10:33:102026-02-11 10:33:10TUNGA Edit Delete 470005380051470005380051RESIDENTIALLoraWan12026-02-11 10:33:542026-02-11 10:33:54TUNGA Edit Delete 470005380069470005380069RESIDENTIALLoraWan12026-02-11 10:34:242026-02-11 10:34:24TUNGA Edit Delete 4700530659347005306593RESIDENTIALLoraWan12026-03-18 16:02:302026-03-18 16:02:30MUSHA Edit Delete 4700530662747005306627RESIDENTIALLoraWan2026-01-03 18:26:562026-01-03 18:26:56KYAKALE Edit Delete 4700530664347005306643RESIDENTIALLoraWan2026-01-03 18:27:512026-01-03 18:27:51KYAKALE Edit Delete 4700530665047005306650RESIDENTIALLoraWan12026-02-11 11:03:342026-02-11 11:03:34TUNGA Edit Delete 4700530666847005306668RESIDENTIALLoraWan2026-01-17 20:49:592026-01-17 20:49:59MUSHA Edit Delete Total 242010/page20/page50/page100/page200/page500/page1000/page123456121Go to Cancel Confirm Export Cancel Confirm Import Cancel Confirm Export Cancel Confirm Meter Cancel Confirm Tariff Cancel Confirm Tariff Cancel Confirm Customer Cancel Confirm",
+      "columns": [
+        "Customer IdSearch",
+        "Meter IdSearch",
+        "Tariff IdSearch",
+        "Communication WayGPRSLoraWanSearch",
+        "CT RatioSearch",
+        "RemarkSearch",
+        "Create TimeToSearch",
+        "Update TimeToSearch",
+        "Station IdSearch",
+        "Actions"
+      ],
+      "labels": [],
+      "buttons": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "inputs": [
+        "$t('common.pleaseSelect')",
+        "Search Term",
+        "Customer Id",
+        "Meter Id",
+        "Tariff Id",
+        "Communication Way",
+        "CT Ratio",
+        "Remark",
+        "Start Date",
+        "End Date",
+        "Station Id",
+        "Select"
+      ],
+      "pageText": "Search Reset Add Import Export Delete Customer Id Meter Id Tariff Id Communication Way CT Ratio Remark Create Time Update Time Station Id 123 47005346144 123 LoraWan 2025-07-21 11:48:10 2025-07-21 11:48:10 0001 123 47300482016 123 LoraWan 2025-07-21 10:04:29 2025-07-21 10:04:29 0001 123 47005346136 123 LoraWan 2025-07-21 11:47:50 2025-07-21 11:47:50 0001 470005342689 470005342689 RESIDENTIAL LoraWan 1 2026-02-11 10:24:31 2026-02-11 10:24:31 TUNGA 470005343091 470005343091 RESIDENTIAL LoraWan 1 2026-02-11 10:25:14 2026-02-11 10:25:14 TUNGA 470005343133 470005343133 RESIDENTIAL LoraWan 1 2026-02-11 10:26:17 2026-02-11 10:26:17 TUNGA 470005362616 470005362616 RESIDENTIAL LoraWan 1 2026-02-11 10:26:57 2026-02-11 10:26:57 TUNGA 470005367363 470005367363 RESIDENTIAL LoraWan 1 2026-02-11 10:28:27 2026-02-11 10:28:27 TUNGA 470005367397 470005367397 RESIDENTIAL LoraWan 1 2026-02-11 10:29:48 2026-02-11 10:29:48 TUNGA 470005367488 470005367488 RESIDENTIAL LoraWan 1 2026-02-11 10:30:37 2026-02-11 10:30:37 TUNGA 470005367553 470005367553 RESIDENTIAL LoraWan 1 2026-02-11 10:31:08 2026-02-11 10:31:08 TUNGA 470005367702 470005367702 RESIDENTIAL LoraWan 1 2026-02-11 10:31:42 2026-02-11 10:31:42 TUN",
+      "hasTable": true
+    }
+  }
+]

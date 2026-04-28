@@ -1,0 +1,331 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/api/token/creditTokenRecord/readMore",
+  "method": "GET",
+  "capturedAt": "2026-04-28T15:38:24.736Z",
+  "body": {
+    "payments": [
+      {
+        "timestamp": "2026-01-16T15:36:19.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700534161643001566217944752065",
+        "customerId": "N/A",
+        "meterId": "47005341616",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T14:48:42.000Z",
+        "amount": 2500,
+        "transactionKwh": 7.1,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530832625549253204137352769",
+        "customerId": "N/A",
+        "meterId": "47005308326",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T13:29:12.000Z",
+        "amount": 2200,
+        "transactionKwh": 6.2,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530793051455472527698888461",
+        "customerId": "N/A",
+        "meterId": "47005307930",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T12:35:50.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530841770333661349887521533",
+        "customerId": "N/A",
+        "meterId": "47005308417",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T12:11:55.000Z",
+        "amount": 5000,
+        "transactionKwh": 14.2,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700533351409484042006882429956",
+        "customerId": "N/A",
+        "meterId": "47005333514",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T10:13:23.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700534169950060687336312834012",
+        "customerId": "N/A",
+        "meterId": "47005341699",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T09:42:03.000Z",
+        "amount": 5000,
+        "transactionKwh": 14.2,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530884742379013617171742381",
+        "customerId": "N/A",
+        "meterId": "47005308847",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T08:40:19.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530964741818659154329924541",
+        "customerId": "N/A",
+        "meterId": "47005309647",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T08:29:17.000Z",
+        "amount": 5000,
+        "transactionKwh": 14.2,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700536664757119105351944510489",
+        "customerId": "N/A",
+        "meterId": "47005366647",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T08:24:19.000Z",
+        "amount": 4000,
+        "transactionKwh": 11.4,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700532973651927825294010370488",
+        "customerId": "N/A",
+        "meterId": "47005329736",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-16T08:04:35.000Z",
+        "amount": 3000,
+        "transactionKwh": 8.5,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530685816139662594587246551",
+        "customerId": "N/A",
+        "meterId": "47005306858",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T20:51:24.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700532946222287020935966353682",
+        "customerId": "N/A",
+        "meterId": "47005329462",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T19:59:29.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700531023145080920650339261425",
+        "customerId": "N/A",
+        "meterId": "47005310231",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T19:50:03.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700533043720344551509357968420",
+        "customerId": "N/A",
+        "meterId": "47005330437",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T19:29:19.000Z",
+        "amount": 5000,
+        "transactionKwh": 14.2,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530996941075088868004826486",
+        "customerId": "N/A",
+        "meterId": "47005309969",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T19:03:03.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700531012459752218459346199014",
+        "customerId": "N/A",
+        "meterId": "47005310124",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T18:22:24.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700533097303494033127941922544",
+        "customerId": "N/A",
+        "meterId": "47005330973",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T17:56:42.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700537395749909696748492189901",
+        "customerId": "N/A",
+        "meterId": "47005373957",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T16:58:56.000Z",
+        "amount": 3000,
+        "transactionKwh": 8.5,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530704764106366223620158293",
+        "customerId": "N/A",
+        "meterId": "47005307047",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T16:39:22.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530887047492343384220988581",
+        "customerId": "N/A",
+        "meterId": "47005308870",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T16:31:12.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700536352964279123161304386967",
+        "customerId": "N/A",
+        "meterId": "47005363529",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T16:05:02.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700531008249368447410398313801",
+        "customerId": "N/A",
+        "meterId": "47005310082",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T15:42:58.000Z",
+        "amount": 2400,
+        "transactionKwh": 6.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530882157824042690958934762",
+        "customerId": "N/A",
+        "meterId": "47005308821",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T15:26:50.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700535997215733430710223228883",
+        "customerId": "N/A",
+        "meterId": "47005359972",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T10:01:08.000Z",
+        "amount": 3000,
+        "transactionKwh": 8.5,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700530772451198750325252721765",
+        "customerId": "N/A",
+        "meterId": "47005307724",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-15T09:48:46.000Z",
+        "amount": 1000,
+        "transactionKwh": 2.8,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700536753834220827558331573692",
+        "customerId": "N/A",
+        "meterId": "47005367538",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-12T14:21:04.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700532977769190974537608193341",
+        "customerId": "N/A",
+        "meterId": "47005329777",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-12T14:19:39.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700532977755775193137038765795",
+        "customerId": "N/A",
+        "meterId": "47005329777",
+        "serialNumber": "N/A"
+      },
+      {
+        "timestamp": "2026-01-12T14:14:42.000Z",
+        "amount": 2000,
+        "transactionKwh": 5.7,
+        "currency": "MMK",
+        "transactionType": "FULL_PAYMENT",
+        "transactionId": "transaction-4700532977720295724963960789729",
+        "customerId": "N/A",
+        "meterId": "47005329777",
+        "serialNumber": "N/A"
+      }
+    ],
+    "errors": ""
+  }
+}

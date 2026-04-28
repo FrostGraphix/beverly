@@ -1,0 +1,65 @@
+{
+  "endpoint": "/api/account/read",
+  "capturedFrom": "observed-shape",
+  "capturedAt": "2026-04-28T12:30:00.000Z",
+  "status": 200,
+  "body": {
+    "code": 200,
+    "msg": "success",
+    "data": {
+      "records": [
+        {
+          "customerId": "470005342689",
+          "customerName": "HARUNA ADAMU",
+          "meterId": "470005342689",
+          "tariffId": "RESIDENTIAL",
+          "communicationWay": "LoraWan",
+          "ctRatio": 1,
+          "remark": "",
+          "createTime": "2026-02-11 10:24:31",
+          "updateTime": "2026-02-11 10:24:31",
+          "stationId": "TUNGA"
+        },
+        {
+          "customerId": "470005343091",
+          "customerName": "ALI MUHAMMAD",
+          "meterId": "470005343091",
+          "tariffId": "RESIDENTIAL",
+          "communicationWay": "LoraWan",
+          "ctRatio": 1,
+          "remark": "",
+          "createTime": "2026-02-11 10:25:14",
+          "updateTime": "2026-02-11 10:25:14",
+          "stationId": "TUNGA"
+        }
+      ],
+      "list": [
+        {
+          "customerId": "470005342689",
+          "customerName": "HARUNA ADAMU",
+          "meterId": "470005342689",
+          "tariffId": "RESIDENTIAL",
+          "communicationWay": "LoraWan",
+          "ctRatio": 1,
+          "remark": "",
+          "createTime": "2026-02-11 10:24:31",
+          "updateTime": "2026-02-11 10:24:31",
+          "stationId": "TUNGA"
+        },
+        {
+          "customerId": "470005343091",
+          "customerName": "ALI MUHAMMAD",
+          "meterId": "470005343091",
+          "tariffId": "RESIDENTIAL",
+          "communicationWay": "LoraWan",
+          "ctRatio": 1,
+          "remark": "",
+          "createTime": "2026-02-11 10:25:14",
+          "updateTime": "2026-02-11 10:25:14",
+          "stationId": "TUNGA"
+        }
+      ],
+      "total": 2420
+    }
+  }
+}

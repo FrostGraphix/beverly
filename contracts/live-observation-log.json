@@ -1,0 +1,271 @@
+{
+  "generatedAt": "2026-04-28T16:10:49.727Z",
+  "observations": [
+    {
+      "hash": "#/dashboard",
+      "endpoint": "/api/dashboard/readLineChart",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__dashboard__readLineChart.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-generate/credit-token",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-generate/clear-tamper-token",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-generate/clear-credit-token",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-generate/set-maximum-power-limit-token",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-record/credit-token-record",
+      "endpoint": "/api/token/creditTokenRecord/readMore",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__creditTokenRecord__readMore.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-record/clear-tamper-token-record",
+      "endpoint": "/api/token/clearTamperTokenRecord/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__clearTamperTokenRecord__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-record/clear-credit-token-record",
+      "endpoint": "/api/token/clearCreditTokenRecord/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__clearCreditTokenRecord__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/token-record/set-maximum-power-limit-token-record",
+      "endpoint": "/api/token/setMaximumPowerLimitTokenRecord/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__setMaximumPowerLimitTokenRecord__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation/remote-meter-reading",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation/remote-meter-control",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation/remote-meter-token",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation-record/remote-meter-reading-task",
+      "endpoint": "/API/RemoteMeterTask/GetReadingTask",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetReadingTask.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation-record/remote-meter-control-task",
+      "endpoint": "/API/RemoteMeterTask/GetControlTask",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetControlTask.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-operation-record/remote-meter-token-task",
+      "endpoint": "/API/RemoteMeterTask/GetTokenTask",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetTokenTask.json",
+      "note": ""
+    },
+    {
+      "hash": "#/prepay-report/long-nonpurchase-situation",
+      "endpoint": "/API/PrepayReport/LongNonpurchaseSituation",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__PrepayReport__LongNonpurchaseSituation.json",
+      "note": ""
+    },
+    {
+      "hash": "#/prepay-report/low-purchase-situation",
+      "endpoint": "/API/PrepayReport/LowPurchaseSituation",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__PrepayReport__LowPurchaseSituation.json",
+      "note": ""
+    },
+    {
+      "hash": "#/prepay-report/consumption-statistics",
+      "endpoint": "/api/DailyDataMeter/readHourly",
+      "source": "live-derived",
+      "sample": "contracts/samples/api__DailyDataMeter__readHourly.json",
+      "note": "Direct PrepayReport endpoint returns code 99, so live hourly readings are aggregated."
+    },
+    {
+      "hash": "#/prepay-report/daily-data-meter",
+      "endpoint": "/api/DailyDataMeter/readHourly",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__DailyDataMeter__readHourly.json",
+      "note": ""
+    },
+    {
+      "hash": "#/management/gateway",
+      "endpoint": "/api/gateway/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__gateway__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/management/customer",
+      "endpoint": "/api/customer/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__customer__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/management/tariff",
+      "endpoint": "/api/tariff/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__tariff__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/management/account",
+      "endpoint": "/api/account/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/user",
+      "endpoint": "/api/user/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__user__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/role",
+      "endpoint": "/api/role/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__role__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/log",
+      "endpoint": "/api/Log/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__Log__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/station",
+      "endpoint": "/api/station/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__station__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/item",
+      "endpoint": "/api/item/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__item__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/meter",
+      "endpoint": "/api/meter/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__meter__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/admin/debt",
+      "endpoint": "/api/debt/read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__debt__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/protocol/dlms",
+      "endpoint": "/api/dlms/Read",
+      "source": "live-ready",
+      "sample": "contracts/samples/api__dlms__Read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/protocol/dlt645",
+      "endpoint": "/api/dlt645/read",
+      "source": "blocked",
+      "sample": "contracts/samples/api__dlt645__read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/gprs-tasks",
+      "endpoint": "/API/GPRSMeterTask/GPRSGetReadingTask",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__GPRSMeterTask__GPRSGetReadingTask.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/gprs-online-status",
+      "endpoint": "/API/GPRSOnlineStatus/Read",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__GPRSOnlineStatus__Read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/load-profile",
+      "endpoint": "/API/LoadProfile/ElectricEnergyCurve",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__LoadProfile__ElectricEnergyCurve.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/event-notification",
+      "endpoint": "/API/EventNotification/Read",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__EventNotification__Read.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/firmware-update",
+      "endpoint": "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
+      "source": "live-ready",
+      "sample": "contracts/samples/API__UpdateFirmwareTask__GetUpdateFirmwareTask.json",
+      "note": ""
+    },
+    {
+      "hash": "#/remote-support/file-upload",
+      "endpoint": "/API/File/Upload",
+      "source": "guarded-write",
+      "sample": null,
+      "note": ""
+    }
+  ]
+}

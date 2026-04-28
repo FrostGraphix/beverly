@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://8.208.16.168:9311",
+      "localStorage": [
+        {
+          "name": "lastActivityTime",
+          "value": "1777125713768"
+        }
+      ]
+    }
+  ]
+}

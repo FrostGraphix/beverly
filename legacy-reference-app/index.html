@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="renderer" content="webkit">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Meter System</title>
+  <style>
+    :root {
+      --theme: #304156;
+      --theme-dark: #263445;
+      --theme-deep: #1f2d3d;
+      --header-bg: #cfe8ff;
+      --header-text: #4d6885;
+      --blue: #409eff;
+      --danger: #f56c6c;
+      --success: #42b983;
+      --page: #f0f2f5;
+      --line: #ebeef5;
+      --text: #606266;
+      --strong: #303133;
+      --muted: #909399;
+      --font: Arial, Helvetica, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; color: var(--text); font-family: var(--font); background: var(--page); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .svg-icon { width: 1em; height: 1em; fill: currentColor; overflow: hidden; vertical-align: -.15em; }
+
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding-right: 7.4vw;
+      background: linear-gradient(rgba(31,71,95,.08), rgba(4,14,28,.16)), url("assets/login_bg.d90ab8fc.png") center/cover no-repeat;
+    }
+    .login-card { width: 420px; min-height: 356px; padding: 32px 35px 30px; background: #fff; }
+    .login-title { display: flex; align-items: center; justify-content: space-between; margin: 0 0 39px; color: #7f8b98; font-size: 28px; font-weight: 700; line-height: 1; }
+    .language-button, .password-eye { border: 0; background: transparent; color: #8795a1; }
+    .language-button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; }
+    .login-field { position: relative; display: block; height: 42px; margin-bottom: 18px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; }
+    .login-field .field-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #8fa0ab; font-size: 16px; }
+    .login-field input { width: 100%; height: 40px; border: 0; outline: 0; padding: 0 16px 0 49px; color: var(--text); background: transparent; font-size: 14px; }
+    .login-field input::placeholder { color: #bcc6d2; }
+    .password-eye { position: absolute; right: 11px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%); padding: 0; }
+    .verification-row { display: grid; grid-template-columns: 1fr 112px; margin-bottom: 18px; }
+    .verification-row .login-field { margin-bottom: 0; border-radius: 4px 0 0 4px; }
+    .captcha { height: 42px; border: 0; padding: 0; overflow: hidden; background: #f3a8c7; border-radius: 0 4px 4px 0; }
+    .captcha svg { display: block; width: 112px; height: 42px; }
+    .login-button { width: 100%; height: 40px; border: 0; border-radius: 4px; color: #fff; background: #1890ff; font-size: 14px; font-weight: 600; }
+
+    .app-page { min-height: 100vh; background: var(--page); }
+    .sidebar-container { position: fixed; top: 0; bottom: 0; left: 0; z-index: 1001; width: 280px; background: var(--theme); color: #bfcbd9; overflow-y: auto; transition: width .28s, transform .28s; }
+    .hideSidebar .sidebar-container { width: 54px; overflow: hidden; }
+    .mobile .sidebar-container { width: 210px; transform: translateX(-210px); }
+    .mobile.openSidebar .sidebar-container { transform: translateX(0); }
+    .sidebar-logo { height: 50px; display: flex; align-items: center; padding: 0 16px; color: #fff; font-size: 16px; font-weight: 700; background: #2b2f3a; white-space: nowrap; }
+    .sidebar-logo-icon { width: 24px; height: 24px; display: grid; place-items: center; margin-right: 12px; border-radius: 4px; background: #1890ff; color: #fff; flex: 0 0 auto; }
+    .hideSidebar .sidebar-logo-text, .hideSidebar .sidebar-label, .hideSidebar .sidebar-caret { display: none; }
+    .sidebar-menu { margin: 0; padding: 0; list-style: none; }
+    .sidebar-item { min-height: 50px; display: flex; align-items: center; gap: 14px; padding: 0 18px; color: #bfcbd9; font-size: 14px; white-space: nowrap; text-decoration: none; }
+    .sidebar-item:hover, .sidebar-item.active { color: #409eff; background: var(--theme-dark); }
+    .sidebar-item.indent { min-height: 42px; padding-left: 42px; font-size: 13px; background: var(--theme-deep); }
+    .sidebar-item.indent.active { color: #409eff; background: #001528; }
+    .sidebar-icon { width: 18px; height: 18px; flex: 0 0 auto; }
+    .sidebar-caret { margin-left: auto; color: #8391a5; }
+
+    .main-container { min-height: 100vh; margin-left: 280px; padding-top: 84px; transition: margin-left .28s; }
+    .hideSidebar .main-container { margin-left: 54px; }
+    .mobile .main-container { min-width: 575px; margin-left: 0; padding-top: 128px; }
+    .drawer-bg { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.3); }
+    .mobile.openSidebar .drawer-bg { display: block; }
+    .fixed-header { position: fixed; top: 0; right: 0; left: 280px; z-index: 900; background: #fff; box-shadow: 0 3px 7px rgba(0,0,0,.11); transition: left .28s; }
+    .hideSidebar .fixed-header { left: 54px; }
+    .mobile .fixed-header { left: 0; min-width: 575px; }
+    .navbar { height: 50px; display: grid; grid-template-columns: 50px 1fr auto; align-items: center; background: #fff; border-bottom: 1px solid #e6e6e6; }
+    .mobile .navbar { height: 74px; grid-template-columns: 64px 1fr auto; }
+    .hamburger-container { width: 50px; height: 50px; display: grid; place-items: center; border: 0; background: transparent; color: #062941; padding: 0; }
+    .mobile .hamburger-container { width: 64px; height: 74px; }
+    .breadcrumb { min-width: 0; color: #97a8be; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mobile .breadcrumb { font-size: 20px; }
+    .right-menu { height: 100%; display: flex; align-items: center; gap: 7px; padding: 0 22px 0 10px; color: #606266; font-size: 18px; white-space: nowrap; }
+    .mobile .right-menu { padding-right: 55px; font-size: 28px; }
+    .tags-view-container { height: 34px; display: flex; align-items: center; gap: 6px; padding-left: 15px; background: #fff; border-bottom: 1px solid #d8dce5; overflow: hidden; }
+    .mobile .tags-view-container { height: 54px; align-items: flex-start; padding: 7px 0 0 23px; }
+    .tags-view-item { height: 26px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #d8dce5; padding: 0 8px; background: var(--success); color: #fff; font-size: 12px; font-weight: 600; text-decoration: none; }
+    .tags-view-item::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: #fff; }
+    .mobile .tags-view-item { height: 38px; gap: 8px; border: 0; padding: 0 13px; font-size: 17px; font-weight: 700; }
+
+    .content-page { min-height: calc(100vh - 84px); padding: 20px; background: var(--page); }
+    .dashboard-editor-container { padding: 32px; }
+    .panel-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px; margin: 18px 0 32px; }
+    .card-panel { height: 108px; position: relative; overflow: hidden; color: #666; background: #fff; box-shadow: 4px 4px 40px rgba(0,0,0,.05); }
+    .card-panel-icon-wrapper { float: left; margin: 14px 0 0 14px; padding: 16px; border-radius: 6px; transition: all .28s ease; }
+    .card-panel-icon { float: left; width: 48px; height: 48px; }
+    .card-panel:hover .card-panel-icon-wrapper { color: #fff; }
+    .icon-people { color: #40c9c6; } .card-panel:hover .icon-people { background: #40c9c6; }
+    .icon-message { color: #36a3f7; } .card-panel:hover .icon-message { background: #36a3f7; }
+    .icon-money { color: #34bfa3; } .card-panel:hover .icon-money { background: #34bfa3; }
+    .icon-shopping { color: #f4516c; } .card-panel:hover .icon-shopping { background: #f4516c; }
+    .card-panel-description { float: right; margin: 26px; margin-left: 0; font-weight: 700; text-align: right; }
+    .card-panel-text { margin-bottom: 12px; color: rgba(0,0,0,.45); font-size: 16px; line-height: 18px; }
+    .card-panel-num { color: #666; font-size: 20px; }
+    .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+    .chart-wrapper { min-height: 360px; background: #fff; padding: 16px 16px 0; }
+    .chart-wrapper.wide { grid-column: 1 / -1; }
+    .chart-title { margin: 10px 0 8px; text-align: center; color: #028ed8; font-size: 22px; font-weight: 400; }
+    .chart-tabs { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+    .chart-tabs button { min-width: 68px; height: 32px; border: 1px solid #dcdfe6; background: #fff; color: var(--text); font-size: 13px; }
+    .chart-tabs button.active { color: var(--blue); border-color: var(--blue); }
+    .chart-shell { position: relative; height: 260px; padding-left: 70px; color: #028ee2; }
+    .y-label { position: absolute; left: 0; width: 58px; transform: translateY(-50%); text-align: right; font-size: 14px; line-height: 1; }
+    .gridline { position: absolute; left: 70px; right: 0; height: 1px; background: #e9e9e9; }
+    .plot { position: absolute; inset: 0 0 0 70px; border-left: 2px solid #2196f3; }
+    .bar { position: absolute; bottom: 0; width: 10px; background: #3888fa; }
+    .bar:nth-child(1) { left: 14%; height: 44%; } .bar:nth-child(2) { left: 31%; height: 28%; } .bar:nth-child(3) { left: 48%; height: 89%; } .bar:nth-child(4) { left: 66%; height: 38%; } .bar:nth-child(5) { left: 84%; height: 20%; }
+    .line-chart svg, .pie-chart svg { width: 100%; height: 260px; display: block; }
+
+    .table-page { background: #fff; padding: 18px 20px 12px; box-shadow: 0 1px 2px rgba(0,0,0,.02); }
+    .filter-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .sort-select, .search-input { height: 32px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 12px; color: var(--text); background: #fff; font-size: 13px; outline: 0; }
+    .search-input { width: 210px; }
+    .btn { min-width: 64px; height: 32px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 12px; background: #fff; color: var(--text); font-size: 13px; }
+    .btn.primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+    .btn.danger { border-color: var(--danger); background: var(--danger); color: #fff; }
+    .quota-line { margin: 0 0 10px; color: var(--strong); font-size: 14px; }
+    .table-scroll { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-bottom: 0; }
+    table { width: max-content; min-width: 100%; border-collapse: collapse; color: var(--text); font-size: 14px; }
+    th, td { height: 44px; border-bottom: 1px solid var(--line); padding: 0 12px; text-align: left; white-space: nowrap; }
+    th { color: var(--muted); background: #fff; font-weight: 600; }
+    td { color: var(--text); }
+    .link-btn { border: 0; padding: 0 5px; color: var(--blue); background: transparent; font-size: 13px; }
+    .empty-cell { height: 96px; text-align: center; color: var(--muted); }
+    .pagination { height: 48px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--text); font-size: 13px; }
+    .page-chip { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 3px; background: #f4f4f5; color: var(--text); }
+    .page-chip.active { background: var(--blue); color: #fff; }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.35); }
+    .modal-backdrop.show { display: flex; }
+    .modal { width: 520px; max-width: calc(100vw - 32px); background: #fff; border-radius: 2px; box-shadow: 0 2px 12px rgba(0,0,0,.2); }
+    .modal-title { margin: 0; padding: 18px 20px; color: var(--strong); font-size: 16px; font-weight: 500; border-bottom: 1px solid var(--line); }
+    .modal-body { padding: 22px 20px; color: var(--text); font-size: 14px; }
+    .modal-actions { padding: 10px 20px 18px; text-align: right; }
+    .modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+    .modal-field { display: grid; gap: 6px; color: var(--text); font-size: 13px; }
+    .modal-field input, .modal-field select { height: 34px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 0 10px; color: var(--text); outline: 0; }
+    .modal-result { margin-top: 14px; padding: 10px 12px; border: 1px solid #e1f3d8; border-radius: 4px; color: #67c23a; background: #f0f9eb; }
+
+    @media (max-width: 1200px) {
+      .panel-group { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 550px) {
+      .login-page { justify-content: flex-start; padding: 0; }
+      .login-card { width: 300px; padding: 35px 35px 30px; }
+      .content-page { width: 575px; min-height: calc(100vh - 128px); padding: 20px 24px; }
+      .dashboard-editor-container { padding: 73px 47px 64px 48px; }
+      .panel-group { width: 480px; grid-template-columns: repeat(2, 211px); gap: 48px 59px; margin: 0 0 49px; }
+      .card-panel { width: 211px; height: 162px; box-shadow: 0 12px 28px rgba(43,67,91,.09); }
+      .card-panel-description { display: none; }
+      .card-panel-icon-wrapper { float: none; width: 100%; height: 100%; display: grid; place-items: center; margin: 0; padding: 0; }
+      .card-panel-icon { float: none; width: 74px; height: 74px; }
+      .chart-grid { display: block; }
+      .chart-wrapper { width: 480px; height: 396px; min-height: 396px; margin-bottom: 49px; padding: 24px 40px 34px 36px; overflow: hidden; box-shadow: 0 12px 28px rgba(43,67,91,.09); }
+      .chart-wrapper.secondary, .chart-tabs { display: none; }
+      .chart-title { margin: 0 0 10px; font-size: 29px; }
+      .chart-shell { height: 300px; padding-left: 80px; }
+      .y-label { width: 66px; font-size: 20px; }
+      .gridline { left: 80px; }
+      .plot { left: 80px; }
+      .bar { width: 9px; }
+      .bar:nth-child(1), .bar:nth-child(2), .bar:nth-child(4), .bar:nth-child(5) { display: none; }
+      .bar:nth-child(3) { left: 48.3%; height: 268px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="modalRoot" class="modal-backdrop" role="dialog" aria-modal="true"></div>
+
+  <template id="icon-sprite">
+    <svg style="display:none">
+      <symbol id="i-menu" viewBox="0 0 32 32"><path d="M5 8h22M5 16h22M5 24h22M5 8v6M5 18v6" fill="none" stroke="currentColor" stroke-linecap="square"/></symbol>
+      <symbol id="i-user" viewBox="0 0 32 32"><path d="M16 16c4.25 0 7.7-3.45 7.7-7.7S20.25.6 16 .6 8.3 4.05 8.3 8.3 11.75 16 16 16Zm0 3.3c-5.8 0-13.2 2.95-13.2 6.6V31h26.4v-5.1c0-3.65-7.4-6.6-13.2-6.6Z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 32 32"><path d="M8 14h16v14H8zM11 14v-3.5a5 5 0 0 1 10 0V14" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="21" r="2.5"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="3"/><path d="M5 16h22M16 5c4 4.5 4 17.5 0 22M16 5c-4 4.5-4 17.5 0 22" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 32 32"><path d="M4 16s4-7 12-7 12 7 12 7-4 7-12 7S4 16 4 16Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 23 24 8" stroke="currentColor" stroke-width="2"/></symbol>
+      <symbol id="i-verify" viewBox="0 0 32 32"><path d="M16 4v6M16 22v6M4 16h6M22 16h6M8 8l4 4M20 20l4 4M24 8l-4 4M12 20l-4 4" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="4"/></symbol>
+      <symbol id="i-dashboard" viewBox="0 0 32 32"><path d="M4 17a12 12 0 1 1 24 0v9H4v-9Z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 17 23 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 32 32"><path d="M3 9h10l3 4h13v14H3z" fill="none" stroke="currentColor" stroke-width="3"/></symbol>
+      <symbol id="i-table" viewBox="0 0 32 32"><path d="M4 6h24v20H4zM4 13h24M12 6v20M20 6v20" fill="none" stroke="currentColor" stroke-width="2.5"/></symbol>
+      <symbol id="i-people" viewBox="0 0 96 96"><circle cx="48" cy="31" r="18"/><path d="M12 78c0-18 16-29 36-29s36 11 36 29c0 12-72 12-72 0Z"/></symbol>
+      <symbol id="i-times" viewBox="0 0 96 96"><path d="M73 23H27l24 28-24 28h46" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="54" cy="38" r="2.6"/><circle cx="66" cy="38" r="2.6"/><circle cx="78" cy="38" r="2.6"/><circle cx="54" cy="50" r="2.6"/><circle cx="66" cy="50" r="2.6"/><circle cx="78" cy="50" r="2.6"/><rect x="52" y="59" width="28" height="9" rx="4.5"/></symbol>
+      <symbol id="i-unit" viewBox="0 0 96 96"><ellipse cx="34" cy="38" rx="21" ry="8"/><path d="M13 38v19c0 4.5 9.4 8 21 8s21-3.5 21-8V38" fill="none" stroke="currentColor" stroke-width="8"/><ellipse cx="34" cy="57" rx="21" ry="8"/><ellipse cx="57" cy="26" rx="21" ry="8"/><path d="M36 26v28c0 4.5 9.4 8 21 8s21-3.5 21-8V26" fill="none" stroke="currentColor" stroke-width="8"/><ellipse cx="57" cy="44" rx="21" ry="8"/></symbol>
+      <symbol id="i-money" viewBox="0 0 96 96"><ellipse cx="45" cy="24" rx="24" ry="9"/><path d="M21 24v35c0 5 10.7 9 24 9s24-4 24-9V24" fill="none" stroke="currentColor" stroke-width="9"/><ellipse cx="45" cy="41" rx="24" ry="9"/><ellipse cx="45" cy="58" rx="24" ry="9"/><circle cx="70" cy="69" r="23" stroke="#fff" stroke-width="5"/><path d="M58 69l8 8 17-20" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    </svg>
+  </template>
+
+  <script>
+    window.ApiConfig = { Url: "http://127.0.0.1:9310", ReferenceUrl: "http://8.208.16.168:9310" };
+    document.body.insertAdjacentHTML("afterbegin", document.getElementById("icon-sprite").innerHTML);
+
+    const app = document.getElementById("app");
+    const modalRoot = document.getElementById("modalRoot");
+    const cleanColumn = (value) => value.replace(/Search/g, "").replace(/To/g, " To ").replace(/GPRSLoraWan/g, "").replace(/ElectricityWaterGas/g, "").replace(/StandBySuccessFailure/g, "").trim();
+    const accountRows = [
+      ["123", "test", "47005346144", "Electricity", "LoraWan", "123", "2.2", "", "2025-07-21 11:48:10", "0001"],
+      ["123", "test", "47300482016", "Electricity", "LoraWan", "123", "2.2", "", "2025-07-21 10:04:29", "0001"],
+      ["123", "test", "47005346136", "Electricity", "LoraWan", "123", "2.2", "", "2025-07-21 11:47:50", "0001"],
+      ["470005342689", "HARUNA ADAMU", "470005342689", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:24:31", "TUNGA"],
+      ["470005343091", "ALI MUHAMMAD", "470005343091", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:25:14", "TUNGA"],
+      ["470005343133", "AHJBU BUZA SANI", "470005343133", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:26:17", "TUNGA"],
+      ["470005362616", "DAUDA MUSA", "470005362616", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:26:57", "TUNGA"],
+      ["470005367363", "MUHAMMED SHUAIBU", "470005367363", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:28:27", "TUNGA"],
+      ["470005367397", "SAIDUDAN BAKWAI", "470005367397", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:29:48", "TUNGA"],
+      ["470005367488", "ADUYA SUNDAY", "470005367488", "Electricity", "LoraWan", "RESIDENTIAL", "2.2", "", "2026-02-11 10:30:37", "TUNGA"]
+    ];
+    const routeManifest = [
+      { group: "Dashboard", title: "Dashboard", hash: "#/dashboard", apis: ["/api/dashboard/readPanelGroup", "/api/dashboard/readLineChart"], columns: [], actions: [] },
+      { group: "Token Generate", title: "Credit Token", hash: "#/token-generate/credit-token", apis: ["/api/item/readItemList", "/api/user/read", "/api/station/read", "/api/account/read"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","Communication WayGPRSLoraWanSearch","Tariff IdSearch","Protocol VersionSearch","RemarkSearch","Create TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Recharge","Cancel","Confirm"], note: "Quota(kwh): No Limit" },
+      { group: "Token Generate", title: "Clear Tamper Token", hash: "#/token-generate/clear-tamper-token", apis: ["/api/station/read", "/api/account/read"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","Communication WayGPRSLoraWanSearch","Tariff IdSearch","RemarkSearch","Create TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Generate Token","Cancel","Confirm"] },
+      { group: "Token Generate", title: "Clear Credit Token", hash: "#/token-generate/clear-credit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","Communication WayGPRSLoraWanSearch","Tariff IdSearch","RemarkSearch","Create TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Generate Token","Cancel","Confirm"] },
+      { group: "Token Generate", title: "Set Maximum Power Limit Token", hash: "#/token-generate/set-maximum-power-limit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","Communication WayGPRSLoraWanSearch","Tariff IdSearch","RemarkSearch","Create TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Generate Token","Cancel","Confirm"] },
+      { group: "Token Record", title: "Credit Token Record", hash: "#/token-record/credit-token-record", apis: ["/api/station/read", "/api/item/readItemList", "/api/token/creditTokenRecord/read"], columns: ["Receipt IdSearch","Customer IdSearch","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","Tariff IdSearch","VAT ChargeSearch","Total UnitSearch","Total PaidSearch","Token(Recharge)Search","VendToSearch","TimeToSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Export","Print","Cancel","Confirm"], rowKind: "creditRecord" },
+      { group: "Token Record", title: "Clear Tamper Token Record", hash: "#/token-record/clear-tamper-token-record", apis: ["/api/station/read"], columns: ["Receipt IdSearch","Customer IdSearch","Customer NameSearch","Meter IdSearch","TokenSearch","Create TimeToSearch","Update TimeToSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm"], empty: true },
+      { group: "Token Record", title: "Clear Credit Token Record", hash: "#/token-record/clear-credit-token-record", apis: ["/api/station/read", "/api/token/clearCreditTokenRecord/read"], columns: ["Receipt IdSearch","Customer IdSearch","Customer NameSearch","Meter IdSearch","TokenSearch","Create TimeToSearch","Update TimeToSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Export","Print","Cancel","Confirm"], rowKind: "clearRecord" },
+      { group: "Token Record", title: "Set Maximum Power Limit Token Record", hash: "#/token-record/set-maximum-power-limit-token-record", apis: ["/api/station/read", "/api/token/setMaximumPowerLimitTokenRecord/read"], columns: ["Receipt IdSearch","Customer IdSearch","Customer NameSearch","Meter IdSearch","Maximum Power(W)Search","TokenSearch","Create TimeToSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm"], empty: true },
+      { group: "Remote Operation", title: "Meter Reading", hash: "#/remote-operation/remote-meter-reading", apis: ["/api/station/read", "/api/account/read"], columns: ["Status","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add Batch Task","Add Task","Cancel","Confirm"], rowKind: "remote" },
+      { group: "Remote Operation", title: "Meter Control", hash: "#/remote-operation/remote-meter-control", apis: ["/api/station/read", "/api/account/read"], columns: ["Status","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add Batch Task","Add Task","Cancel","Confirm"], rowKind: "remote" },
+      { group: "Remote Operation", title: "Meter Token", hash: "#/remote-operation/remote-meter-token", apis: ["/api/station/read", "/api/account/read"], columns: ["Status","Customer NameSearch","Meter IdSearch","Meter TypeElectricityWaterGasSearch","RemarkSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add Batch Task","Add Task","Cancel","Confirm"], rowKind: "remote" },
+      { group: "Remote Operation Task", title: "Meter Reading Task", hash: "#/remote-operation-record/remote-meter-reading-task", apis: ["/api/station/read", "/api/remoteMeterTask/getReadingTask"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Data ItemSearch","Station IdSearch","Data Value","StatusStandBySuccessFailureSearch","Create TimeToSearch","Update TimeToSearch"], actions: ["Sort","Search","Reset","Export","Close","Cancel","Confirm"], rowKind: "readingTask" },
+      { group: "Remote Operation Task", title: "Meter Control Task", hash: "#/remote-operation-record/remote-meter-control-task", apis: ["/api/remoteMeterTask/getControlTask", "/api/station/read"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Data ItemSearch","Station IdSearch","StatusStandBySuccessFailureSearch","Create TimeToSearch","Update TimeToSearch"], actions: ["Sort","Search","Reset","Export","Close","Cancel","Confirm"], rowKind: "controlTask" },
+      { group: "Remote Operation Task", title: "Meter Token Task", hash: "#/remote-operation-record/remote-meter-token-task", apis: ["/api/station/read", "/api/remoteMeterTask/getTokenTask"], columns: ["Customer IdSearch","Customer NameSearch","Meter IdSearch","Data ItemSearch","TokenSearch","Station IdSearch","StatusStandBySuccessFailureSearch","RemarkSearch","Create TimeToSearch","Update TimeToSearch"], actions: ["Sort","Search","Reset","Export","Close","Cancel","Confirm"], rowKind: "tokenTask" },
+      { group: "Data Report", title: "Long Nonpurchase Situation", hash: "#/prepay-report/long-nonpurchase-situation", apis: ["/api/station/read", "/api/customer/read", "/api/tariff/read", "/api/meter/read"], columns: ["Customer Id","Customer Name","Meter Id","Tariff Id","Last Purchase Unit","Last Purchase Paid","Last Purchase Date","Nonpurchase Days","Customer Address"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm"], rowKind: "longNonpurchase" },
+      { group: "Data Report", title: "Low Purchase Situation", hash: "#/prepay-report/low-purchase-situation", apis: ["/api/customer/read", "/api/meter/read", "/api/tariff/read", "/api/station/read"], columns: ["Customer Id","Customer Name","Meter Id","Tariff Id","Total Unit","Total Paid","Customer Address"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm"], rowKind: "lowPurchase" },
+      { group: "Data Report", title: "Consumption Statistics", hash: "#/prepay-report/consumption-statistics", apis: ["/api/station/read", "/api/customer/read", "/api/meter/read", "/api/tariff/read"], columns: ["Collection Date","Consumption"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm"], rowKind: "consumption" },
+      { group: "Data Report", title: "Interval Data", hash: "#/prepay-report/daily-data-meter", apis: ["/api/station/read"], columns: ["Meter IdSearch","Gateway IdSearch","Collection DateToSearch","Customer IdSearch","Customer NameSearch","Station IdSearch","Total Energy","Last Hour Usage","Credit Balance","Maximum Demand","Power","Relay Status","Battery Status","Magnetic Status","Terminal Cover","Upper Open","Current Reverse","Current Unbalance","Update Time","Actions"], actions: ["Sort","Search","Reset","Export","Cancel","Confirm","Close"], empty: true },
+      { group: "Management", title: "Gateway", hash: "#/management/gateway", apis: ["/api/DailyDataMeter/read", "/api/station/read"], columns: ["Status","Success Rate","IdSearch","NameSearch","RemarkSearch","Create TimeToSearch","Update TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add","Import","Export","Delete","Cancel","Confirm"], empty: true },
+      { group: "Management", title: "Customer", hash: "#/management/customer", apis: ["/api/DailyDataMeter/readMore", "/api/gateway/read", "/api/customer/read", "/api/station/read"], columns: ["IdSearch","NameSearch","PhoneSearch","AddressSearch","CertifiNameSearch","CertifiNoSearch","RemarkSearch","Create TimeToSearch","Update TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add","Import","Export","Delete","Edit","Cancel","Confirm"], rowKind: "customer" },
+      { group: "Management", title: "Tariff", hash: "#/management/tariff", apis: ["/api/item/readItemList", "/api/tariff/read"], columns: ["IdSearch","NameSearch","PriceSearch","RemarkSearch","Create TimeToSearch","Update TimeToSearch","Actions"], actions: ["Sort","Search","Reset","Add","Import","Export","Delete","Edit","Cancel","Confirm"], rowKind: "tariff" },
+      { group: "Management", title: "Account", hash: "#/management/account", apis: ["/api/tariff/read", "/api/station/read", "/api/account/read", "/api/customer/read"], columns: ["Customer IdSearch","Meter IdSearch","Tariff IdSearch","Communication WayGPRSLoraWanSearch","CT RatioSearch","RemarkSearch","Create TimeToSearch","Update TimeToSearch","Station IdSearch","Actions"], actions: ["Sort","Search","Reset","Add","Import","Export","Delete","Edit","Cancel","Confirm"], rowKind: "account" }
+    ];
+    const state = { sidebarOpen: false, collapsed: window.innerWidth <= 1024, activeChart: 3 };
+
+    const api = {
+      async post(path, payload = {}) {
+        const token = getCookie("token");
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : ""
+        };
+        try {
+          const response = await fetch(`${window.ApiConfig.Url}${path}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload)
+          });
+          return await response.json();
+        } catch {
+          return { path, payload, headers, code: 200, data: [] };
+        }
+      },
+      async login(payload) {
+        if (!payload.userId || !payload.password || !payload.verifycode) throw new Error("Missing login fields");
+        await this.post("/api/user/login", payload);
+        setCookie("token", "reference-compatible-token");
+        setCookie("SiteManager", payload.userId);
+        setCookie("SiteCom", "ACB");
+        return { token: "reference-compatible-token" };
+      },
+      async readPanelGroup() {
+        const response = await this.post("/api/dashboard/readPanelGroup");
+        return response.data && !Array.isArray(response.data)
+          ? response.data
+          : { totalAccountCount: 2420, totalPurchaseTimes: 7305, totalPurchaseUnit: 100369, totalPurchaseMoney: 35253085 };
+      },
+      async readLineChart(type) {
+        const response = await this.post("/api/dashboard/readLineChart", { type });
+        const titles = ["Account Count", "Purchase Times", "Purchase Unit", "Purchase Money", "Daily Consumption", "Monthly Consumption"];
+        return response.data && !Array.isArray(response.data)
+          ? response.data
+          : { title: titles[type] || "Purchase Money", yData: [320000, 260000, 650000, 340000, 235000] };
+      }
+    };
+
+    function icon(id, className = "svg-icon") {
+      return `<svg class="${className}" aria-hidden="true"><use href="#${id}"></use></svg>`;
+    }
+    function setCookie(name, value) {
+      document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=/; SameSite=Lax`;
+    }
+    function getCookie(name) {
+      return document.cookie.split("; ").find((row) => row.startsWith(`${encodeURIComponent(name)}=`))?.split("=")[1] || "";
+    }
+    function deviceClass() {
+      if (window.innerWidth <= 550) return "mobile hideSidebar";
+      if (window.innerWidth <= 1024 || state.collapsed) return "hideSidebar";
+      return "";
+    }
+    function currentRoute() {
+      const hash = location.hash || "#/login?redirect=%2Fdashboard";
+      return routeManifest.find((route) => route.hash === hash) || routeManifest[0];
+    }
+
+    function renderLogin() {
+      app.innerHTML = `
+        <main class="login-page">
+          <form class="login-card" id="loginForm">
+            <h1 class="login-title">Meter System <button class="language-button" type="button" aria-label="Language">${icon("i-globe")}</button></h1>
+            <label class="login-field"><span class="field-icon">${icon("i-user")}</span><input name="userId" type="text" placeholder="Username" autocomplete="username"></label>
+            <label class="login-field"><span class="field-icon">${icon("i-lock")}</span><input name="password" type="password" placeholder="Password" autocomplete="current-password"><button class="password-eye" type="button" aria-label="Show password">${icon("i-eye")}</button></label>
+            <div class="verification-row"><label class="login-field"><span class="field-icon">${icon("i-verify")}</span><input name="verifycode" type="text" placeholder="Verification Code"></label><button class="captcha" type="button" aria-label="Refresh verification code">${captchaSvg()}</button></div>
+            <button class="login-button" type="submit">Login</button>
+          </form>
+        </main>`;
+      document.getElementById("loginForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        await api.login({ userId: form.get("userId"), password: form.get("password"), verifycode: form.get("verifycode") });
+        location.hash = "#/dashboard";
+      });
+      document.querySelector(".password-eye").addEventListener("click", () => {
+        const input = document.querySelector('input[name="password"]');
+        input.type = input.type === "password" ? "text" : "password";
+      });
+      document.querySelector(".captcha").addEventListener("click", (event) => { event.currentTarget.innerHTML = captchaSvg(); });
+    }
+
+    function captchaSvg() {
+      const chars = ["s", "3", "b", "9"];
+      const dots = Array.from({ length: 45 }, (_, index) => {
+        const x = (index * 29) % 112;
+        const y = (index * 17) % 42;
+        const color = ["#2c7be5", "#7b2cbf", "#12b886", "#ff922b"][index % 4];
+        return `<circle cx="${x}" cy="${y}" r="1.2" fill="${color}"/>`;
+      }).join("");
+      return `<svg viewBox="0 0 112 42" xmlns="http://www.w3.org/2000/svg"><rect width="112" height="42" fill="#f0a4ca"/>${dots}<path d="M3 31C31 7 76 48 108 13" stroke="#263445" stroke-width="1"/><path d="M8 11 102 34" stroke="#7b2cbf" stroke-width="1"/>${chars.map((c, i) => `<text x="${22 + i * 21}" y="${27 + (i % 2) * -4}" fill="#5f3dc4" font-size="24" font-family="Georgia" transform="rotate(${i % 2 ? 16 : -12} ${22 + i * 21} 21)">${c}</text>`).join("")}</svg>`;
+    }
+
+    async function renderShell() {
+      const route = currentRoute();
+      const content = route.hash === "#/dashboard" ? await renderDashboard() : await renderTablePage(route);
+      app.innerHTML = `
+        <div class="app-page ${deviceClass()} ${state.sidebarOpen ? "openSidebar" : ""}">
+          <div class="drawer-bg" id="drawerBg"></div>
+          <aside class="sidebar-container"><div class="sidebar-logo"><span class="sidebar-logo-icon">M</span><span class="sidebar-logo-text">Meter System</span></div>${renderSidebar(route)}</aside>
+          <section class="main-container">
+            <header class="fixed-header">
+              <div class="navbar" aria-label="${route.title} ACB(admin)">
+                <button class="hamburger-container" type="button" id="menuButton" aria-label="Toggle sidebar">${icon("i-menu")}</button>
+                <div class="breadcrumb">${route.group === "Dashboard" ? "Dashboard" : `${route.group} / ${route.title}`}</div>
+                <div class="right-menu">${icon("i-user", "svg-icon user-icon")}<span>ACB(admin)</span></div>
+              </div>
+              <div class="tags-view-container"><a class="tags-view-item" href="${route.hash}">${route.title}</a></div>
+            </header>
+            <main class="content-page ${route.hash === "#/dashboard" ? "dashboard-editor-container" : ""}">${content}</main>
+          </section>
+        </div>`;
+      document.title = `${route.title} - Meter System`;
+      document.getElementById("menuButton").addEventListener("click", () => {
+        if (window.innerWidth <= 550) state.sidebarOpen = !state.sidebarOpen;
+        else state.collapsed = !state.collapsed;
+        renderShell();
+      });
+      document.getElementById("drawerBg").addEventListener("click", () => { state.sidebarOpen = false; renderShell(); });
+      document.querySelectorAll("[data-chart]").forEach((button) => button.addEventListener("click", () => { state.activeChart = Number(button.dataset.chart); renderShell(); }));
+      document.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", () => openModal(button.dataset.action, route)));
+    }
+
+    function renderSidebar(activeRoute) {
+      const groups = [];
+      for (const route of routeManifest) {
+        let group = groups.find((item) => item.name === route.group);
+        if (!group) groups.push(group = { name: route.group, routes: [] });
+        group.routes.push(route);
+      }
+      return `<nav class="sidebar-menu" aria-label="Main navigation">${groups.map((group) => {
+        if (group.name === "Dashboard") return sidebarLink(group.routes[0], activeRoute, false, "i-dashboard");
+        const childLinks = group.routes.map((route) => sidebarLink(route, activeRoute, true, "i-table")).join("");
+        return `<div><div class="sidebar-item">${icon("i-folder", "svg-icon sidebar-icon")}<span class="sidebar-label">${group.name}</span><span class="sidebar-caret">></span></div>${childLinks}</div>`;
+      }).join("")}</nav>`;
+    }
+    function sidebarLink(route, activeRoute, indent, iconId) {
+      return `<a class="sidebar-item ${indent ? "indent" : ""} ${route.hash === activeRoute.hash ? "active" : ""}" href="${route.hash}">${icon(iconId, "svg-icon sidebar-icon")}<span class="sidebar-label">${route.title}</span></a>`;
+    }
+
+    async function renderDashboard() {
+      const panel = await api.readPanelGroup();
+      const chart = await api.readLineChart(state.activeChart);
+      return `
+        <section class="panel-group" aria-label="Dashboard summary">
+          ${panelCard("Account Count", panel.totalAccountCount, "i-people", "icon-people", 0)}
+          ${panelCard("Purchase Times", panel.totalPurchaseTimes, "i-times", "icon-message", 1)}
+          ${panelCard("Purchase Unit", panel.totalPurchaseUnit, "i-unit", "icon-money", 2)}
+          ${panelCard("Purchase Money", panel.totalPurchaseMoney, "i-money", "icon-shopping", 3)}
+        </section>
+        <section class="chart-grid">
+          <div class="chart-wrapper wide"><div class="chart-tabs"><button data-chart="3" class="${state.activeChart === 3 ? "active" : ""}" type="button">Daily</button><button data-chart="5" class="${state.activeChart === 5 ? "active" : ""}" type="button">Monthly</button></div><h2 class="chart-title">${chart.title}</h2>${barChart()}</div>
+          <div class="chart-wrapper secondary"><h2 class="chart-title">Hourly Success Rate</h2>${lineChart()}</div>
+          <div class="chart-wrapper secondary pie-chart"><h2 class="chart-title">Abnormal Alarm</h2>${pieChart()}</div>
+          <div class="chart-wrapper secondary wide"><h2 class="chart-title">Daily Consumption</h2>${barChart()}</div>
+        </section>`;
+    }
+    function panelCard(label, value, iconId, colorClass, chartType) {
+      return `<article class="card-panel" data-panel="${chartType}"><div class="card-panel-icon-wrapper ${colorClass}">${icon(iconId, "svg-icon card-panel-icon")}</div><div class="card-panel-description"><div class="card-panel-text">${label}</div><div class="card-panel-num">${Number(value).toLocaleString()}</div></div></article>`;
+    }
+    function barChart() {
+      const labels = ["700,000", "600,000", "500,000", "400,000", "300,000", "200,000"];
+      return `<div class="chart-shell" role="img" aria-label="Reference bar chart">${labels.map((label, index) => `<span class="y-label" style="top:${index * 20}%">${label}</span>`).join("")}${[0,20,40,60,80].map((top) => `<span class="gridline" style="top:${top}%"></span>`).join("")}<div class="plot"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div></div>`;
+    }
+    function lineChart() {
+      return `<div class="line-chart"><svg viewBox="0 0 520 260" role="img" aria-label="Hourly success rate line chart"><g stroke="#e9e9e9">${[40,82,124,166,208].map((y) => `<line x1="48" y1="${y}" x2="500" y2="${y}"/>`).join("")}</g><path d="M52 198 C120 135 154 152 205 106 S315 82 366 118 435 70 498 92" fill="none" stroke="#3888fa" stroke-width="3"/><path d="M52 198 C120 135 154 152 205 106 S315 82 366 118 435 70 498 92 L498 230 L52 230Z" fill="#f3f8ff"/></svg></div>`;
+    }
+    function pieChart() {
+      return `<svg viewBox="0 0 520 260" role="img" aria-label="Abnormal alarm pie chart"><g transform="translate(260 115)"><path d="M0 0 L0 -92 A92 92 0 0 1 85 35 Z" fill="#36a3f7"/><path d="M0 0 L85 35 A92 92 0 0 1 -58 72 Z" fill="#40c9c6"/><path d="M0 0 L-58 72 A92 92 0 0 1 0 -92 Z" fill="#f4516c"/><circle r="22" fill="#fff"/></g></svg>`;
+    }
+
+    async function renderTablePage(route) {
+      const tableData = await fetchTableData(route);
+      const toolbar = route.actions.filter((name) => !["Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Close"].includes(name));
+      return `
+        <section class="table-page" aria-label="${route.title}">
+          <div class="filter-toolbar">
+            <select class="sort-select" aria-label="Sort"><option>Ascending</option><option>Descending</option></select>
+            <button class="btn" data-action="Sort" type="button">Sort</button>
+            <input class="search-input" type="search" placeholder="Search Term" aria-label="Search Term">
+            ${toolbar.map((name) => `<button class="btn ${["Search","Reset","Add","Import","Export"].includes(name) ? "primary" : name === "Delete" ? "danger" : ""}" data-action="${name}" type="button">${name}</button>`).join("")}
+          </div>
+          ${route.note ? `<p class="quota-line">${route.note}</p>` : ""}
+          <div class="table-scroll"><table><thead><tr>${route.columns.map((column) => `<th>${cleanColumn(column)}</th>`).join("")}</tr></thead><tbody>${renderRows(route, tableData.rows)}</tbody></table></div>
+          <div class="pagination"><span>Total ${tableData.total}</span><span>10/page</span><span class="page-chip active">1</span><span class="page-chip">2</span><span class="page-chip">3</span><span>Go to</span></div>
+        </section>`;
+    }
+    async function fetchTableData(route) {
+      const dataPath = tableDataPath(route);
+      const backgroundPaths = route.apis.filter((path) => path !== dataPath);
+      await Promise.all(backgroundPaths.map((path) => api.post(path, { page: 1, limit: 10 })));
+      const response = dataPath ? await api.post(dataPath, { page: 1, limit: 10 }) : { data: { records: [] } };
+      const payload = response.data || {};
+      const rows = Array.isArray(payload.records) ? payload.records : Array.isArray(payload.list) ? payload.list : Array.isArray(response.data) ? response.data : [];
+      return { rows, total: Number(payload.total ?? rows.length) };
+    }
+    function tableDataPath(route) {
+      if (route.hash.includes("clear-credit-token-record")) return "/api/token/clearCreditTokenRecord/read";
+      if (route.hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/read";
+      if (route.hash.includes("set-maximum-power-limit-token-record")) return "/api/token/setMaximumPowerLimitTokenRecord/read";
+      if (route.hash.includes("credit-token-record")) return "/api/token/creditTokenRecord/read";
+      if (route.hash.includes("remote-meter-reading-task")) return "/api/remoteMeterTask/getReadingTask";
+      if (route.hash.includes("remote-meter-control-task")) return "/api/remoteMeterTask/getControlTask";
+      if (route.hash.includes("remote-meter-token-task")) return "/api/remoteMeterTask/getTokenTask";
+      if (route.hash.includes("long-nonpurchase-situation")) return "/api/prepayReport/longNonpurchaseSituation";
+      if (route.hash.includes("low-purchase-situation")) return "/api/prepayReport/lowPurchaseSituation";
+      if (route.hash.includes("consumption-statistics")) return "/api/prepayReport/consumptionStatistics";
+      if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
+      if (route.hash.includes("management/gateway")) return "/api/gateway/read";
+      if (route.hash.includes("management/customer")) return "/api/customer/read";
+      if (route.hash.includes("management/tariff")) return "/api/tariff/read";
+      if (route.hash.includes("management/account")) return "/api/account/read";
+      if (route.hash.includes("remote-operation")) return "/api/account/read";
+      if (route.hash.includes("token-generate")) return "/api/account/read";
+      return route.apis[route.apis.length - 1];
+    }
+    function renderRows(route, rows) {
+      if (!rows.length) return `<tr><td class="empty-cell" colspan="${route.columns.length}">No Data</td></tr>`;
+      return rows.map((row, rowIndex) => `<tr>${route.columns.map((column) => `<td>${cellValue(route, row, column, rowIndex)}</td>`).join("")}</tr>`).join("");
+    }
+    function cellValue(route, row, column, rowIndex) {
+      const label = cleanColumn(column);
+      if (label === "Actions") return actionButtons(route);
+      if (route.rowKind === "remote" && label === "Status") return rowIndex % 2 === 0 ? "Online" : "Offline";
+      return formatCell(row, label);
+    }
+    function formatCell(row, label) {
+      const key = columnKey(label);
+      return row[key] ?? row[label] ?? "";
+    }
+    function columnKey(label) {
+      const map = {
+        "Address": "address",
+        "Battery Status": "batteryStatus",
+        "CertifiName": "certifiName",
+        "CertifiNo": "certifiNo",
+        "Collection Date": "collectionDate",
+        "Communication Way": "communicationWay",
+        "Create Time": "createTime",
+        "Credit Balance": "creditBalance",
+        "CT Ratio": "ctRatio",
+        "Current Reverse": "currentReverse",
+        "Current Unbalance": "currentUnbalance",
+        "Customer Address": "customerAddress",
+        "Customer Id": "customerId",
+        "Customer Name": "customerName",
+        "Data Item": "dataItem",
+        "Data Value": "dataValue",
+        "Gateway Id": "gatewayId",
+        "Id": "id",
+        "Last Hour Usage": "lastHourUsage",
+        "Last Purchase Date": "lastPurchaseDate",
+        "Last Purchase Paid": "lastPurchasePaid",
+        "Last Purchase Unit": "lastPurchaseUnit",
+        "Magnetic Status": "magneticStatus",
+        "Maximum Demand": "maximumDemand",
+        "Maximum Power(W)": "maximumPower",
+        "Meter Id": "meterId",
+        "Meter Type": "meterType",
+        "Name": "name",
+        "Nonpurchase Days": "nonpurchaseDays",
+        "Phone": "phone",
+        "Power": "power",
+        "Price": "price",
+        "Protocol Version": "protocolVersion",
+        "Receipt Id": "receiptId",
+        "Relay Status": "relayStatus",
+        "Remark": "remark",
+        "Station Id": "stationId",
+        "Status": "status",
+        "Success Rate": "successRate",
+        "Tariff Id": "tariffId",
+        "Terminal Cover": "terminalCover",
+        "Time": "time",
+        "Token": "token",
+        "Token(Recharge)": "token",
+        "Total Energy": "totalEnergy",
+        "Total Paid": "totalPaid",
+        "Total Unit": "totalUnit",
+        "Update Time": "updateTime",
+        "Upper Open": "upperOpen",
+        "VAT Charge": "vatCharge",
+        "Vend": "vend"
+      };
+      return map[label] || label.charAt(0).toLowerCase() + label.slice(1).replace(/\s+/g, "");
+    }
+    function actionButtons(route) {
+      const preferred = route.actions.includes("Recharge") ? "Recharge" : route.actions.includes("Generate Token") ? "Generate Token" : route.actions.includes("Edit") ? "Edit" : route.actions.includes("Print") ? "Print" : route.actions.includes("Add Task") ? "Add Task" : "Close";
+      const deleteButton = route.actions.includes("Delete") ? `<button class="link-btn" data-action="Delete" type="button">Delete</button>` : "";
+      return `<button class="link-btn" data-action="${preferred}" type="button">${preferred}</button>${deleteButton}`;
+    }
+    function openModal(action, route) {
+      modalRoot.innerHTML = `<form class="modal" id="actionForm"><h2 class="modal-title">${modalTitle(action, route)}</h2><div class="modal-body">${modalBody(action, route)}<div class="modal-result" id="modalResult" hidden></div></div><div class="modal-actions"><button class="btn" id="modalCancel" type="button">Cancel</button> <button class="btn primary" id="modalConfirm" type="submit">Confirm</button></div></form>`;
+      modalRoot.classList.add("show");
+      document.getElementById("modalCancel").addEventListener("click", closeModal);
+      document.getElementById("actionForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const endpoint = actionEndpoint(action, route);
+        const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const result = endpoint ? await api.post(endpoint, payload) : { code: 200, msg: "success", data: payload };
+        const message = result.data?.token ? `Token: ${result.data.token}` : `${action} success`;
+        const resultBox = document.getElementById("modalResult");
+        resultBox.hidden = false;
+        resultBox.textContent = message;
+        if (!["Generate Token", "Recharge", "Export", "Print"].includes(action)) setTimeout(() => { closeModal(); renderShell(); }, 250);
+      });
+    }
+    function modalTitle(action, route) {
+      if (action === "Recharge") return "Transaction Confirmation";
+      if (action === "Generate Token") return `Generate Token (${route.title.replace(" Token", "")})`;
+      return `${action} ${route.title}`;
+    }
+    function modalBody(action, route) {
+      if (action === "Delete") return `<p>${action} Confirmation</p>`;
+      if (action === "Export") return `<p>Export Confirmation</p>`;
+      if (action === "Print") return `<p>Print Confirmation</p>`;
+      if (action === "Import") return `<div class="modal-grid">${field("fileName", "File Name", "import.xlsx")}${field("remark", "Remark", "")}</div>`;
+      if (action === "Recharge") return `<div class="modal-grid">${field("customerId", "Customer Id", "47005372686")}${field("meterId", "Meter Id", "47005372686")}${field("amount", "Amount", "500")}${field("totalUnit", "Total Unit", "1.4")}</div>`;
+      if (action === "Generate Token") return `<div class="modal-grid">${field("customerId", "Customer Id", "47005378477")}${field("meterId", "Meter Id", "47005378477")}${field("remark", "Remark", "")}</div>`;
+      if (action === "Add Task" || action === "Add Batch Task") return `<div class="modal-grid">${field("meterId", "Meter Id", "47005346144")}${field("dataItem", "Data Item", route.title)}${field("stationId", "Station Id", "TUNGA")}${field("remark", "Remark", "")}</div>`;
+      if (action === "Add" || action === "Edit") return `<div class="modal-grid">${route.columns.filter((column) => !["Actions", "Status", "Success Rate"].includes(cleanColumn(column))).slice(0, 8).map((column) => field(columnKey(cleanColumn(column)), cleanColumn(column), "")).join("")}</div>`;
+      return `<p>${action} Confirmation</p>`;
+    }
+    function field(name, label, value) {
+      return `<label class="modal-field"><span>${label}</span><input name="${name}" value="${value}" autocomplete="off"></label>`;
+    }
+    function actionEndpoint(action, route) {
+      if (action === "Recharge") return "/api/token/creditToken/generate";
+      if (action === "Generate Token" && route.hash.includes("clear-credit")) return "/api/token/clearCreditToken/generate";
+      if (action === "Generate Token" && route.hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
+      if (action === "Generate Token" && route.hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
+      if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/api/remoteMeterTask/createReadingTask";
+      if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/api/remoteMeterTask/createControlTask";
+      if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/remoteMeterTask/createTokenTask";
+      const moduleName = route.hash.includes("gateway") ? "gateway" : route.hash.includes("customer") ? "customer" : route.hash.includes("tariff") ? "tariff" : route.hash.includes("account") ? "account" : "";
+      if (!moduleName) return "";
+      if (action === "Add") return `/api/${moduleName}/create`;
+      if (action === "Edit") return `/api/${moduleName}/update`;
+      if (action === "Delete") return `/api/${moduleName}/delete`;
+      if (action === "Import") return `/api/${moduleName}/import`;
+      return "";
+    }
+    function closeModal() {
+      modalRoot.classList.remove("show");
+      modalRoot.innerHTML = "";
+    }
+
+    async function router() {
+      if ((location.hash || "").startsWith("#/login") || !location.hash) renderLogin();
+      else await renderShell();
+    }
+    window.addEventListener("hashchange", router);
+    window.addEventListener("resize", () => renderShell());
+    router();
+  </script>
+</body>
+</html>

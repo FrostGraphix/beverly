@@ -1,0 +1,4194 @@
+{
+  "name": "Beverly by ACOB",
+  "source": {
+    "swaggerReference": "docs/AMR_API_REFERENCE.md",
+    "crawlResults": "tmp/reference-crawl-results.json",
+    "routeManifest": "reference-route-manifest.json",
+    "endpointRegistry": "backend/src/services/endpoint-registry.ts"
+  },
+  "generatedAt": "2026-04-28T12:08:23.296Z",
+  "documentedTotal": 144,
+  "endpointCount": 144,
+  "endpointCountNote": "matches overview",
+  "observedEndpointCount": 16,
+  "visibleEndpointCount": 18,
+  "liveWriteEndpointCount": 83,
+  "coverage": {
+    "crawlUniqueEndpointCount": 16,
+    "crawlMissingEndpointCount": 0,
+    "crawlMissingEndpoints": [],
+    "routeCount": 23,
+    "fullyMappedRouteCount": 23,
+    "routeCoverage": [
+      {
+        "group": "Dashboard",
+        "title": "Dashboard",
+        "hash": "#/dashboard",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Generate",
+        "title": "Credit Token",
+        "hash": "#/token-generate/credit-token",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Generate",
+        "title": "Clear Tamper Token",
+        "hash": "#/token-generate/clear-tamper-token",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Generate",
+        "title": "Clear Credit Token",
+        "hash": "#/token-generate/clear-credit-token",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Generate",
+        "title": "Set Maximum Power Limit Token",
+        "hash": "#/token-generate/set-maximum-power-limit-token",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Record",
+        "title": "Credit Token Record",
+        "hash": "#/token-record/credit-token-record",
+        "apiCount": 3,
+        "coveredApiCount": 3,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Record",
+        "title": "Clear Tamper Token Record",
+        "hash": "#/token-record/clear-tamper-token-record",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Record",
+        "title": "Clear Credit Token Record",
+        "hash": "#/token-record/clear-credit-token-record",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Token Record",
+        "title": "Set Maximum Power Limit Token Record",
+        "hash": "#/token-record/set-maximum-power-limit-token-record",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation",
+        "title": "Meter Reading",
+        "hash": "#/remote-operation/remote-meter-reading",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation",
+        "title": "Meter Control",
+        "hash": "#/remote-operation/remote-meter-control",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation",
+        "title": "Meter Token",
+        "hash": "#/remote-operation/remote-meter-token",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation Task",
+        "title": "Meter Reading Task",
+        "hash": "#/remote-operation-record/remote-meter-reading-task",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation Task",
+        "title": "Meter Control Task",
+        "hash": "#/remote-operation-record/remote-meter-control-task",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Operation Task",
+        "title": "Meter Token Task",
+        "hash": "#/remote-operation-record/remote-meter-token-task",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Long Nonpurchase Situation",
+        "hash": "#/prepay-report/long-nonpurchase-situation",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Low Purchase Situation",
+        "hash": "#/prepay-report/low-purchase-situation",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Consumption Statistics",
+        "hash": "#/prepay-report/consumption-statistics",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Interval Data",
+        "hash": "#/prepay-report/daily-data-meter",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Management",
+        "title": "Gateway",
+        "hash": "#/management/gateway",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Management",
+        "title": "Customer",
+        "hash": "#/management/customer",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Management",
+        "title": "Tariff",
+        "hash": "#/management/tariff",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Management",
+        "title": "Account",
+        "hash": "#/management/account",
+        "apiCount": 4,
+        "coveredApiCount": 4,
+        "fullyMapped": true
+      }
+    ]
+  },
+  "endpoints": [
+    {
+      "module": "Account",
+      "path": "/api/account/create",
+      "operationId": "CreateAccount",
+      "method": "POST",
+      "requestSchema": "Array<AccountRequest>",
+      "responseSchema": "AccountInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/account/create",
+        "/API/account/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/account/create",
+        "/API/account/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Account",
+      "path": "/api/account/delete",
+      "operationId": "DeleteAccount",
+      "method": "POST",
+      "requestSchema": "Array<AccountDeleteRequest>",
+      "responseSchema": "AccountInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/account/delete",
+        "/API/account/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/account/delete",
+        "/API/account/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Account",
+      "path": "/api/account/import",
+      "operationId": "ImportAccount",
+      "method": "POST",
+      "requestSchema": "Array<AccountRequest>",
+      "responseSchema": "AccountInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/account/import",
+        "/API/account/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/account/import",
+        "/API/account/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Account",
+      "path": "/api/account/read",
+      "operationId": "ReadAccount",
+      "method": "POST",
+      "requestSchema": "AccountReadRequest",
+      "responseSchema": "AccountResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Tamper Token",
+          "hash": "#/token-generate/clear-tamper-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Credit Token",
+          "hash": "#/token-generate/clear-credit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Set Maximum Power Limit Token",
+          "hash": "#/token-generate/set-maximum-power-limit-token",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Reading",
+          "hash": "#/remote-operation/remote-meter-reading",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Control",
+          "hash": "#/remote-operation/remote-meter-control",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Token",
+          "hash": "#/remote-operation/remote-meter-token",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/account/read",
+        "/API/account/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/account/read",
+        "/API/account/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Tamper Token",
+          "hash": "#/token-generate/clear-tamper-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Credit Token",
+          "hash": "#/token-generate/clear-credit-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Set Maximum Power Limit Token",
+          "hash": "#/token-generate/set-maximum-power-limit-token"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Reading",
+          "hash": "#/remote-operation/remote-meter-reading"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Control",
+          "hash": "#/remote-operation/remote-meter-control"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Token",
+          "hash": "#/remote-operation/remote-meter-token"
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Account",
+      "path": "/api/account/update",
+      "operationId": "UpdateAccount",
+      "method": "POST",
+      "requestSchema": "Array<AccountRequest>",
+      "responseSchema": "AccountInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/account/update",
+        "/API/account/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/account/update",
+        "/API/account/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Customer",
+      "path": "/api/customer/create",
+      "operationId": "CreateCustomer",
+      "method": "POST",
+      "requestSchema": "Array<CustomerRequest>",
+      "responseSchema": "CustomerInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/customer/create",
+        "/API/customer/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/customer/create",
+        "/API/customer/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Customer",
+      "path": "/api/customer/delete",
+      "operationId": "DeleteCustomer",
+      "method": "POST",
+      "requestSchema": "Array<CustomerDeleteRequest>",
+      "responseSchema": "CustomerInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/customer/delete",
+        "/API/customer/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/customer/delete",
+        "/API/customer/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Customer",
+      "path": "/api/customer/import",
+      "operationId": "ImportCustomer",
+      "method": "POST",
+      "requestSchema": "Array<CustomerRequest>",
+      "responseSchema": "CustomerInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/customer/import",
+        "/API/customer/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/customer/import",
+        "/API/customer/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Customer",
+      "path": "/api/customer/read",
+      "operationId": "ReadCustomer",
+      "method": "POST",
+      "requestSchema": "CustomerReadRequest",
+      "responseSchema": "CustomerResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/customer/read",
+        "/API/customer/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/customer/read",
+        "/API/customer/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics"
+        },
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer"
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Customer",
+      "path": "/api/customer/update",
+      "operationId": "UpdateCustomer",
+      "method": "POST",
+      "requestSchema": "Array<CustomerRequest>",
+      "responseSchema": "CustomerInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/customer/update",
+        "/API/customer/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/customer/update",
+        "/API/customer/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DailyData",
+      "path": "/api/DailyData/read",
+      "operationId": "ReadDailyData",
+      "method": "POST",
+      "requestSchema": "DailyDataReadRequest",
+      "responseSchema": "DailyDataResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DailyData/read",
+        "/API/DailyData/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/DailyData/read",
+        "/API/DailyData/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DailyData",
+      "path": "/api/DailyData/readMonthly",
+      "operationId": "ReadDailyDataMonthly",
+      "method": "POST",
+      "requestSchema": "DailyDataReadRequest",
+      "responseSchema": "DailyDataResponseResponseDto",
+      "operation": "drilldown",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DailyData/readMonthly",
+        "/API/DailyData/readMonthly"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/DailyData/readMonthly",
+        "/API/DailyData/readMonthly"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DailyData",
+      "path": "/api/DailyData/readMore",
+      "operationId": "ReadDailyDataMore",
+      "method": "POST",
+      "requestSchema": "DailyDataReadRequest",
+      "responseSchema": "DailyDataResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DailyData/readMore",
+        "/API/DailyData/readMore"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/DailyData/readMore",
+        "/API/DailyData/readMore"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DailyDataMeter",
+      "path": "/api/DailyDataMeter/read",
+      "operationId": "ReadDailyDataMeter",
+      "method": "POST",
+      "requestSchema": "DailyDataMeterReadRequest",
+      "responseSchema": "DailyDataMeterResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/DailyDataMeter/read",
+        "/API/DailyDataMeter/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/DailyDataMeter/read",
+        "/API/DailyDataMeter/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DailyDataMeter",
+      "path": "/api/DailyDataMeter/readMonthly",
+      "operationId": "ReadDailyDataMeterMonthly",
+      "method": "POST",
+      "requestSchema": "DailyDataMeterReadRequest",
+      "responseSchema": "DailyDataMeterResponseResponseDto",
+      "operation": "drilldown",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DailyDataMeter/readMonthly",
+        "/API/DailyDataMeter/readMonthly"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/DailyDataMeter/readMonthly",
+        "/API/DailyDataMeter/readMonthly"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DailyDataMeter",
+      "path": "/api/DailyDataMeter/readMore",
+      "operationId": "ReadDailyDataMoreMeter",
+      "method": "POST",
+      "requestSchema": "DailyDataMeterReadRequest",
+      "responseSchema": "DailyDataMeterResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/DailyDataMeter/readMore",
+        "/API/DailyDataMeter/readMore"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/DailyDataMeter/readMore",
+        "/API/DailyDataMeter/readMore"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Dashboard",
+      "path": "/api/dashboard/readLineChart",
+      "operationId": "ReadLineChart",
+      "method": "POST",
+      "requestSchema": "LineChartRequest",
+      "responseSchema": "LineChartResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Dashboard",
+          "title": "Dashboard",
+          "hash": "#/dashboard",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/dashboard/readLineChart",
+        "/API/dashboard/readLineChart"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/dashboard/readLineChart",
+        "/API/dashboard/readLineChart"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Dashboard",
+          "title": "Dashboard",
+          "hash": "#/dashboard"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Dashboard",
+      "path": "/api/dashboard/readPanelGroup",
+      "operationId": "ReadPanelGroup",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "PanelGroupResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Dashboard",
+          "title": "Dashboard",
+          "hash": "#/dashboard",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/dashboard/readPanelGroup",
+        "/API/dashboard/readPanelGroup"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/dashboard/readPanelGroup",
+        "/API/dashboard/readPanelGroup"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Dashboard",
+          "title": "Dashboard",
+          "hash": "#/dashboard"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Debt",
+      "path": "/api/debt/create",
+      "operationId": "CreateDebt",
+      "method": "POST",
+      "requestSchema": "Array<DebtRequest>",
+      "responseSchema": "DebtInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/debt/create",
+        "/API/debt/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/debt/create",
+        "/API/debt/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Debt",
+      "path": "/api/debt/delete",
+      "operationId": "DeleteDebt",
+      "method": "POST",
+      "requestSchema": "Array<DebtDeleteRequest>",
+      "responseSchema": "DebtInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/debt/delete",
+        "/API/debt/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/debt/delete",
+        "/API/debt/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Debt",
+      "path": "/api/debt/import",
+      "operationId": "ImportDebt",
+      "method": "POST",
+      "requestSchema": "Array<DebtRequest>",
+      "responseSchema": "DebtInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/debt/import",
+        "/API/debt/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/debt/import",
+        "/API/debt/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Debt",
+      "path": "/api/debt/read",
+      "operationId": "ReadDebt",
+      "method": "POST",
+      "requestSchema": "DebtReadRequest",
+      "responseSchema": "DebtResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/debt/read",
+        "/API/debt/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/debt/read",
+        "/API/debt/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Debt",
+      "path": "/api/debt/update",
+      "operationId": "UpdateDebt",
+      "method": "POST",
+      "requestSchema": "Array<DebtRequest>",
+      "responseSchema": "DebtInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/debt/update",
+        "/API/debt/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/debt/update",
+        "/API/debt/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/Create",
+      "operationId": "CreateDLMS",
+      "method": "POST",
+      "requestSchema": "Array<DLMSRequest>",
+      "responseSchema": "DLMSInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/Create",
+        "/API/dlms/Create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/Create",
+        "/API/dlms/Create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/Delete",
+      "operationId": "DeleteDLMS",
+      "method": "POST",
+      "requestSchema": "Array<DLMSDeleteRequest>",
+      "responseSchema": "DLMSInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/Delete",
+        "/API/dlms/Delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/Delete",
+        "/API/dlms/Delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/Import",
+      "operationId": "ImportDLMS",
+      "method": "POST",
+      "requestSchema": "Array<DLMSRequest>",
+      "responseSchema": "DLMSInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/Import",
+        "/API/dlms/Import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/Import",
+        "/API/dlms/Import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/Read",
+      "operationId": "ReadDLMS",
+      "method": "POST",
+      "requestSchema": "DLMSReadRequest",
+      "responseSchema": "DLMSResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/Read",
+        "/API/dlms/Read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/Read",
+        "/API/dlms/Read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/ReadDLMSTree",
+      "operationId": "ReadDLMSTree",
+      "method": "POST",
+      "requestSchema": "DLMSTreeRequest",
+      "responseSchema": "DLMSTreeResponseListResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/ReadDLMSTree",
+        "/API/dlms/ReadDLMSTree"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/ReadDLMSTree",
+        "/API/dlms/ReadDLMSTree"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DLMS",
+      "path": "/api/dlms/Update",
+      "operationId": "UpdateDLMS",
+      "method": "POST",
+      "requestSchema": "Array<DLMSRequest>",
+      "responseSchema": "DLMSInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlms/Update",
+        "/API/dlms/Update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlms/Update",
+        "/API/dlms/Update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/create",
+      "operationId": "CreateDLT645",
+      "method": "POST",
+      "requestSchema": "Array<DLT645Request>",
+      "responseSchema": "DLT645InfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/create",
+        "/API/dlt645/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/create",
+        "/API/dlt645/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/delete",
+      "operationId": "DeleteDLT645",
+      "method": "POST",
+      "requestSchema": "Array<DLT645DeleteRequest>",
+      "responseSchema": "DLT645InfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/delete",
+        "/API/dlt645/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/delete",
+        "/API/dlt645/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/import",
+      "operationId": "ImportDLT645",
+      "method": "POST",
+      "requestSchema": "Array<DLT645Request>",
+      "responseSchema": "DLT645InfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/import",
+        "/API/dlt645/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/import",
+        "/API/dlt645/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/read",
+      "operationId": "ReadDLT645",
+      "method": "POST",
+      "requestSchema": "DLT645ReadRequest",
+      "responseSchema": "DLT645ResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/read",
+        "/API/dlt645/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/read",
+        "/API/dlt645/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/readDLT645Tree",
+      "operationId": "ReadDLT645Tree",
+      "method": "POST",
+      "requestSchema": "DLT645TreeRequest",
+      "responseSchema": "DLT645TreeResponseListResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/readDLT645Tree",
+        "/API/dlt645/readDLT645Tree"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/readDLT645Tree",
+        "/API/dlt645/readDLT645Tree"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "DLT645",
+      "path": "/api/dlt645/update",
+      "operationId": "UpdateDLT645",
+      "method": "POST",
+      "requestSchema": "Array<DLT645Request>",
+      "responseSchema": "DLT645InfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/dlt645/update",
+        "/API/dlt645/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/dlt645/update",
+        "/API/dlt645/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "DLT645Task",
+      "path": "/api/DLT645Task/read",
+      "operationId": "ReadDLT645Task",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TaskResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DLT645Task/read",
+        "/API/DLT645Task/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/DLT645Task/read",
+        "/API/DLT645Task/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "EventNotification",
+      "path": "/API/EventNotification/Read",
+      "operationId": "ReadEventNotification",
+      "method": "POST",
+      "requestSchema": "EventNotificationReadRequest",
+      "responseSchema": "EventNotificationResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/EventNotification/Read",
+        "/api/EventNotification/Read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/EventNotification/Read",
+        "/api/EventNotification/Read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "File",
+      "path": "/API/File/ConcentratorUploadBin",
+      "operationId": "FileConcentratorUploadBin",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "StringResponseDto",
+      "operation": "file-upload",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/File/ConcentratorUploadBin",
+        "/api/File/ConcentratorUploadBin"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/File/ConcentratorUploadBin",
+        "/api/File/ConcentratorUploadBin"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "File",
+      "path": "/API/File/Upload",
+      "operationId": "FileUpload",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "StringResponseDto",
+      "operation": "file-upload",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/File/Upload",
+        "/api/File/Upload"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/File/Upload",
+        "/api/File/Upload"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "File",
+      "path": "/API/File/UploadBin",
+      "operationId": "FileUploadBin",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "StringResponseDto",
+      "operation": "file-upload",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/File/UploadBin",
+        "/api/File/UploadBin"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/File/UploadBin",
+        "/api/File/UploadBin"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Gateway",
+      "path": "/api/gateway/create",
+      "operationId": "CreateGateway",
+      "method": "POST",
+      "requestSchema": "Array<GatewayWriteRequest>",
+      "responseSchema": "GatewayInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/gateway/create",
+        "/API/gateway/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/gateway/create",
+        "/API/gateway/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Gateway",
+      "path": "/api/gateway/delete",
+      "operationId": "DeleteGateway",
+      "method": "POST",
+      "requestSchema": "Array<GatewayDeleteRequest>",
+      "responseSchema": "GatewayInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/gateway/delete",
+        "/API/gateway/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/gateway/delete",
+        "/API/gateway/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Gateway",
+      "path": "/api/gateway/import",
+      "operationId": "ImportGateway",
+      "method": "POST",
+      "requestSchema": "Array<GatewayWriteRequest>",
+      "responseSchema": "GatewayInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/gateway/import",
+        "/API/gateway/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/gateway/import",
+        "/API/gateway/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Gateway",
+      "path": "/api/gateway/read",
+      "operationId": "ReadGateway",
+      "method": "POST",
+      "requestSchema": "GatewayReadRequest",
+      "responseSchema": "GatewayResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/gateway/read",
+        "/API/gateway/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/gateway/read",
+        "/API/gateway/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Gateway",
+      "path": "/api/gateway/update",
+      "operationId": "UpdateGateway",
+      "method": "POST",
+      "requestSchema": "Array<GatewayWriteRequest>",
+      "responseSchema": "GatewayInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/gateway/update",
+        "/API/gateway/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/gateway/update",
+        "/API/gateway/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSCreateControlTask",
+      "operationId": "GPRSCreateControlTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSCreateControlTask",
+        "/api/GPRSMeterTask/GPRSCreateControlTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSCreateControlTask",
+        "/api/GPRSMeterTask/GPRSCreateControlTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSCreateReadingTask",
+      "operationId": "GPRSCreateReadingTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSCreateReadingTask",
+        "/api/GPRSMeterTask/GPRSCreateReadingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSCreateReadingTask",
+        "/api/GPRSMeterTask/GPRSCreateReadingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSCreateSettingTask",
+      "operationId": "GPRSCreateSettingTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSCreateSettingTask",
+        "/api/GPRSMeterTask/GPRSCreateSettingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSCreateSettingTask",
+        "/api/GPRSMeterTask/GPRSCreateSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSCreateTokenTask",
+      "operationId": "GPRSCreateTokenTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSCreateTokenTask",
+        "/api/GPRSMeterTask/GPRSCreateTokenTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSCreateTokenTask",
+        "/api/GPRSMeterTask/GPRSCreateTokenTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSGetControlTask",
+      "operationId": "GPRSGetControlTask",
+      "method": "POST",
+      "requestSchema": "ProtocolTaskReadRequest",
+      "responseSchema": "ProtocolTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSGetControlTask",
+        "/api/GPRSMeterTask/GPRSGetControlTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSGetControlTask",
+        "/api/GPRSMeterTask/GPRSGetControlTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSGetReadingTask",
+      "operationId": "GPRSGetReadingTask",
+      "method": "POST",
+      "requestSchema": "ProtocolTaskReadRequest",
+      "responseSchema": "ProtocolTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSGetReadingTask",
+        "/api/GPRSMeterTask/GPRSGetReadingTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSGetReadingTask",
+        "/api/GPRSMeterTask/GPRSGetReadingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSGetSettingTask",
+      "operationId": "GPRSGetSettingTask",
+      "method": "POST",
+      "requestSchema": "ProtocolTaskReadRequest",
+      "responseSchema": "ProtocolTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSGetSettingTask",
+        "/api/GPRSMeterTask/GPRSGetSettingTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSGetSettingTask",
+        "/api/GPRSMeterTask/GPRSGetSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSGetTokenTask",
+      "operationId": "GPRSGetTokenTask",
+      "method": "POST",
+      "requestSchema": "ProtocolTaskReadRequest",
+      "responseSchema": "ProtocolTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSGetTokenTask",
+        "/api/GPRSMeterTask/GPRSGetTokenTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSGetTokenTask",
+        "/api/GPRSMeterTask/GPRSGetTokenTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSUpdateControlTask",
+      "operationId": "GPRSUpdateControlTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskUpdateRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSUpdateControlTask",
+        "/api/GPRSMeterTask/GPRSUpdateControlTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSUpdateControlTask",
+        "/api/GPRSMeterTask/GPRSUpdateControlTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSUpdateReadingTask",
+      "operationId": "GPRSUpdateReadingTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskUpdateRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSUpdateReadingTask",
+        "/api/GPRSMeterTask/GPRSUpdateReadingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSUpdateReadingTask",
+        "/api/GPRSMeterTask/GPRSUpdateReadingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSUpdateSettingTask",
+      "operationId": "GPRSUpdateSettingTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskUpdateRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSUpdateSettingTask",
+        "/api/GPRSMeterTask/GPRSUpdateSettingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSUpdateSettingTask",
+        "/api/GPRSMeterTask/GPRSUpdateSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSMeterTask",
+      "path": "/API/GPRSMeterTask/GPRSUpdateTokenTask",
+      "operationId": "GPRSUpdateTokenTask",
+      "method": "POST",
+      "requestSchema": "Array<ProtocolTaskUpdateRequest>",
+      "responseSchema": "ProtocolTaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSMeterTask/GPRSUpdateTokenTask",
+        "/api/GPRSMeterTask/GPRSUpdateTokenTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSMeterTask/GPRSUpdateTokenTask",
+        "/api/GPRSMeterTask/GPRSUpdateTokenTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "GPRSOnlineStatus",
+      "path": "/API/GPRSOnlineStatus/Read",
+      "operationId": "ReadGPRSOnlineStatus",
+      "method": "POST",
+      "requestSchema": "GPRSOnlineStatusReadRequest",
+      "responseSchema": "GPRSOnlineStatusResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSOnlineStatus/Read",
+        "/api/GPRSOnlineStatus/Read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSOnlineStatus/Read",
+        "/api/GPRSOnlineStatus/Read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "GPRSOnlineStatus",
+      "path": "/API/GPRSOnlineStatus/Update",
+      "operationId": "UpdateGPRSOnlineStatus",
+      "method": "POST",
+      "requestSchema": "Array<GPRSOnlineStatusRequest>",
+      "responseSchema": "GPRSOnlineStatusInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSOnlineStatus/Update",
+        "/api/GPRSOnlineStatus/Update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSOnlineStatus/Update",
+        "/api/GPRSOnlineStatus/Update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "GPRSOnlineStatus",
+      "path": "/API/GPRSOnlineStatus/View",
+      "operationId": "ViewGPRSOnlineStatus",
+      "method": "POST",
+      "requestSchema": "GPRSOnlineStatusDetailsRequest",
+      "responseSchema": "GPRSOnlineStatusInfoResponseListResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/GPRSOnlineStatus/View",
+        "/api/GPRSOnlineStatus/View"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/GPRSOnlineStatus/View",
+        "/api/GPRSOnlineStatus/View"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/create",
+      "operationId": "CreateItem",
+      "method": "POST",
+      "requestSchema": "Array<ItemRequest>",
+      "responseSchema": "ItemInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/item/create",
+        "/API/item/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/item/create",
+        "/API/item/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/delete",
+      "operationId": "DeleteItem",
+      "method": "POST",
+      "requestSchema": "Array<ItemDeleteRequest>",
+      "responseSchema": "ItemInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/item/delete",
+        "/API/item/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/item/delete",
+        "/API/item/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/import",
+      "operationId": "ImportItem",
+      "method": "POST",
+      "requestSchema": "Array<ItemRequest>",
+      "responseSchema": "ItemInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/item/import",
+        "/API/item/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/item/import",
+        "/API/item/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/read",
+      "operationId": "ReadItem",
+      "method": "POST",
+      "requestSchema": "ItemReadRequest",
+      "responseSchema": "ItemResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/item/read",
+        "/API/item/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/item/read",
+        "/API/item/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/readItemList",
+      "operationId": "ReadItemList",
+      "method": "POST",
+      "requestSchema": "ItemListRequest",
+      "responseSchema": "ItemListResponseListResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Tariff",
+          "hash": "#/management/tariff",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/item/readItemList",
+        "/API/item/readItemList"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/item/readItemList",
+        "/API/item/readItemList"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token"
+        },
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record"
+        },
+        {
+          "group": "Management",
+          "title": "Tariff",
+          "hash": "#/management/tariff"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Item",
+      "path": "/api/item/update",
+      "operationId": "UpdateItem",
+      "method": "POST",
+      "requestSchema": "Array<ItemRequest>",
+      "responseSchema": "ItemInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/item/update",
+        "/API/item/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/item/update",
+        "/API/item/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "LoadProfile",
+      "path": "/API/LoadProfile/DailyData",
+      "operationId": "ReadLoadProfileDailyData",
+      "method": "POST",
+      "requestSchema": "LoadProfileDailyDataReadRequest",
+      "responseSchema": "LoadProfileDailyDataResponseResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/LoadProfile/DailyData",
+        "/api/LoadProfile/DailyData"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/LoadProfile/DailyData",
+        "/api/LoadProfile/DailyData"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "LoadProfile",
+      "path": "/API/LoadProfile/ElectricEnergyCurve",
+      "operationId": "ReadLoadProfile",
+      "method": "POST",
+      "requestSchema": "LoadProfileReadRequest",
+      "responseSchema": "LoadProfileResponseResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/LoadProfile/ElectricEnergyCurve",
+        "/api/LoadProfile/ElectricEnergyCurve"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/LoadProfile/ElectricEnergyCurve",
+        "/api/LoadProfile/ElectricEnergyCurve"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "LoadProfile",
+      "path": "/API/LoadProfile/InstantaneousValueCurve",
+      "operationId": "ReadLoadProfileInstantaneousValue",
+      "method": "POST",
+      "requestSchema": "LoadProfileInstantaneousValueReadRequest",
+      "responseSchema": "LoadProfileInstantaneousValueResponseResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/LoadProfile/InstantaneousValueCurve",
+        "/api/LoadProfile/InstantaneousValueCurve"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/LoadProfile/InstantaneousValueCurve",
+        "/api/LoadProfile/InstantaneousValueCurve"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "LoadProfile",
+      "path": "/API/LoadProfile/MonthlyData",
+      "operationId": "ReadLoadProfileMonthlyData",
+      "method": "POST",
+      "requestSchema": "LoadProfileMonthlyDataReadRequest",
+      "responseSchema": "LoadProfileMonthlyDataResponseResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/LoadProfile/MonthlyData",
+        "/api/LoadProfile/MonthlyData"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/LoadProfile/MonthlyData",
+        "/api/LoadProfile/MonthlyData"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Log",
+      "path": "/api/Log/read",
+      "operationId": "ReadLog",
+      "method": "POST",
+      "requestSchema": "LogReadRequest",
+      "responseSchema": "LogResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/Log/read",
+        "/API/Log/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/Log/read",
+        "/API/Log/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/addread",
+      "operationId": "AddReadMeter",
+      "method": "POST",
+      "requestSchema": "MeterReadRequest",
+      "responseSchema": "MeterResponse2ResponseDto",
+      "operation": "generic",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/meter/addread",
+        "/API/meter/addread"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/meter/addread",
+        "/API/meter/addread"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/create",
+      "operationId": "CreateMeter",
+      "method": "POST",
+      "requestSchema": "Array<MeterWriteRequest>",
+      "responseSchema": "MeterInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/meter/create",
+        "/API/meter/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/meter/create",
+        "/API/meter/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/delete",
+      "operationId": "DeleteMeter",
+      "method": "POST",
+      "requestSchema": "Array<MeterDeleteRequest>",
+      "responseSchema": "MeterInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/meter/delete",
+        "/API/meter/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/meter/delete",
+        "/API/meter/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/import",
+      "operationId": "ImportMeter",
+      "method": "POST",
+      "requestSchema": "Array<MeterWriteRequest>",
+      "responseSchema": "MeterInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/meter/import",
+        "/API/meter/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/meter/import",
+        "/API/meter/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/read",
+      "operationId": "ReadMeter",
+      "method": "POST",
+      "requestSchema": "MeterReadRequest",
+      "responseSchema": "MeterResponse2ResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/meter/read",
+        "/API/meter/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/meter/read",
+        "/API/meter/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Meter",
+      "path": "/api/meter/update",
+      "operationId": "UpdateMeter",
+      "method": "POST",
+      "requestSchema": "Array<MeterWriteRequest>",
+      "responseSchema": "MeterInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/meter/update",
+        "/API/meter/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/meter/update",
+        "/API/meter/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "PrepayReport",
+      "path": "/API/PrepayReport/ConsumptionStatistics",
+      "operationId": "ConsumptionStatistics",
+      "method": "POST",
+      "requestSchema": "ConsumptionStatisticsReadRequest",
+      "responseSchema": "ConsumptionStatisticsResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/PrepayReport/ConsumptionStatistics",
+        "/api/PrepayReport/ConsumptionStatistics"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/PrepayReport/ConsumptionStatistics",
+        "/api/PrepayReport/ConsumptionStatistics"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "PrepayReport",
+      "path": "/API/PrepayReport/LongNonpurchaseSituation",
+      "operationId": "LongNonpurchaseSituation",
+      "method": "POST",
+      "requestSchema": "LongNonpurchaseSituationReadRequest",
+      "responseSchema": "LongNonpurchaseSituationResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/PrepayReport/LongNonpurchaseSituation",
+        "/api/PrepayReport/LongNonpurchaseSituation"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/PrepayReport/LongNonpurchaseSituation",
+        "/api/PrepayReport/LongNonpurchaseSituation"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "PrepayReport",
+      "path": "/API/PrepayReport/LowPurchaseSituation",
+      "operationId": "LowPurchaseSituation",
+      "method": "POST",
+      "requestSchema": "LowPurchaseSituationReadRequest",
+      "responseSchema": "LowPurchaseSituationResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/PrepayReport/LowPurchaseSituation",
+        "/api/PrepayReport/LowPurchaseSituation"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/PrepayReport/LowPurchaseSituation",
+        "/api/PrepayReport/LowPurchaseSituation"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/CreateControlTask",
+      "operationId": "CreateControlTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/CreateControlTask",
+        "/api/RemoteMeterTask/CreateControlTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/CreateControlTask",
+        "/api/RemoteMeterTask/CreateControlTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/CreateReadingTask",
+      "operationId": "CreateReadingTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/CreateReadingTask",
+        "/api/RemoteMeterTask/CreateReadingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/CreateReadingTask",
+        "/api/RemoteMeterTask/CreateReadingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/CreateSettingTask",
+      "operationId": "CreateSettingTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/CreateSettingTask",
+        "/api/RemoteMeterTask/CreateSettingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/CreateSettingTask",
+        "/api/RemoteMeterTask/CreateSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/CreateTokenTask",
+      "operationId": "CreateTokenTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/CreateTokenTask",
+        "/api/RemoteMeterTask/CreateTokenTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/CreateTokenTask",
+        "/api/RemoteMeterTask/CreateTokenTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/CreateTransparentForwardingTask",
+      "operationId": "CreateTransparentForwardingTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TFTaskRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/CreateTransparentForwardingTask",
+        "/api/RemoteMeterTask/CreateTransparentForwardingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/CreateTransparentForwardingTask",
+        "/api/RemoteMeterTask/CreateTransparentForwardingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/GetControlTask",
+      "operationId": "GetControlTask",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Control Task",
+          "hash": "#/remote-operation-record/remote-meter-control-task",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/API/RemoteMeterTask/GetControlTask",
+        "/api/RemoteMeterTask/GetControlTask",
+        "/api/remoteMeterTask/getControlTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/API/RemoteMeterTask/GetControlTask",
+        "/api/RemoteMeterTask/GetControlTask",
+        "/api/remoteMeterTask/getControlTask"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Control Task",
+          "hash": "#/remote-operation-record/remote-meter-control-task"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/GetReadingTask",
+      "operationId": "GetReadingTask",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Reading Task",
+          "hash": "#/remote-operation-record/remote-meter-reading-task",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/API/RemoteMeterTask/GetReadingTask",
+        "/api/RemoteMeterTask/GetReadingTask",
+        "/api/remoteMeterTask/getReadingTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/API/RemoteMeterTask/GetReadingTask",
+        "/api/RemoteMeterTask/GetReadingTask",
+        "/api/remoteMeterTask/getReadingTask"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Reading Task",
+          "hash": "#/remote-operation-record/remote-meter-reading-task"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/GetSettingTask",
+      "operationId": "GetSettingTask",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/GetSettingTask",
+        "/api/RemoteMeterTask/GetSettingTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/GetSettingTask",
+        "/api/RemoteMeterTask/GetSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/GetTokenTask",
+      "operationId": "GetTokenTask",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Token Task",
+          "hash": "#/remote-operation-record/remote-meter-token-task",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/API/RemoteMeterTask/GetTokenTask",
+        "/api/RemoteMeterTask/GetTokenTask",
+        "/api/remoteMeterTask/getTokenTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/API/RemoteMeterTask/GetTokenTask",
+        "/api/RemoteMeterTask/GetTokenTask",
+        "/api/remoteMeterTask/getTokenTask"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Token Task",
+          "hash": "#/remote-operation-record/remote-meter-token-task"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/GetTransparentForwardingTask",
+      "operationId": "GetTransparentForwardingTask",
+      "method": "POST",
+      "requestSchema": "DLT645TaskReadRequest",
+      "responseSchema": "DLT645TFTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/GetTransparentForwardingTask",
+        "/api/RemoteMeterTask/GetTransparentForwardingTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/GetTransparentForwardingTask",
+        "/api/RemoteMeterTask/GetTransparentForwardingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/UpdateControlTask",
+      "operationId": "UpdateControlTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskUpdateRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/UpdateControlTask",
+        "/api/RemoteMeterTask/UpdateControlTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/UpdateControlTask",
+        "/api/RemoteMeterTask/UpdateControlTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/UpdateReadingTask",
+      "operationId": "UpdateReadingTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskUpdateRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/UpdateReadingTask",
+        "/api/RemoteMeterTask/UpdateReadingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/UpdateReadingTask",
+        "/api/RemoteMeterTask/UpdateReadingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/UpdateSettingTask",
+      "operationId": "UpdateSettingTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskUpdateRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/UpdateSettingTask",
+        "/api/RemoteMeterTask/UpdateSettingTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/UpdateSettingTask",
+        "/api/RemoteMeterTask/UpdateSettingTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "RemoteMeterTask",
+      "path": "/API/RemoteMeterTask/UpdateTokenTask",
+      "operationId": "UpdateTokenTask",
+      "method": "POST",
+      "requestSchema": "Array<DLT645TaskUpdateRequest>",
+      "responseSchema": "DLT645TaskInfoResponseListResponseDto",
+      "operation": "task-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/RemoteMeterTask/UpdateTokenTask",
+        "/api/RemoteMeterTask/UpdateTokenTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/RemoteMeterTask/UpdateTokenTask",
+        "/api/RemoteMeterTask/UpdateTokenTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/create",
+      "operationId": "CreateRole",
+      "method": "POST",
+      "requestSchema": "Array<RoleCreateRequest>",
+      "responseSchema": "RoleInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/create",
+        "/API/role/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/create",
+        "/API/role/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/delete",
+      "operationId": "DeleteRole",
+      "method": "POST",
+      "requestSchema": "Array<RoleDeleteRequest>",
+      "responseSchema": "RoleInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/delete",
+        "/API/role/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/delete",
+        "/API/role/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/import",
+      "operationId": "ImportRole",
+      "method": "POST",
+      "requestSchema": "Array<RoleImportRequest>",
+      "responseSchema": "RoleInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/import",
+        "/API/role/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/import",
+        "/API/role/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/read",
+      "operationId": "ReadRole",
+      "method": "POST",
+      "requestSchema": "RoleReadRequest",
+      "responseSchema": "RoleResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/read",
+        "/API/role/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/read",
+        "/API/role/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/ReadDataRole",
+      "operationId": "ReadRoleData",
+      "method": "POST",
+      "requestSchema": "RoleReadRequest",
+      "responseSchema": "RoleDataResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/ReadDataRole",
+        "/API/role/ReadDataRole"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/ReadDataRole",
+        "/API/role/ReadDataRole"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Role",
+      "path": "/api/role/update",
+      "operationId": "UpdateRole",
+      "method": "POST",
+      "requestSchema": "Array<RoleUpdateRequest>",
+      "responseSchema": "RoleInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/role/update",
+        "/API/role/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/role/update",
+        "/API/role/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Station",
+      "path": "/api/station/create",
+      "operationId": "CreateStation",
+      "method": "POST",
+      "requestSchema": "Array<StationRequest>",
+      "responseSchema": "StationInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/station/create",
+        "/API/station/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/station/create",
+        "/API/station/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Station",
+      "path": "/api/station/delete",
+      "operationId": "DeleteStation",
+      "method": "POST",
+      "requestSchema": "Array<StationDeleteRequest>",
+      "responseSchema": "StationInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/station/delete",
+        "/API/station/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/station/delete",
+        "/API/station/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Station",
+      "path": "/api/station/import",
+      "operationId": "ImportStation",
+      "method": "POST",
+      "requestSchema": "Array<StationRequest>",
+      "responseSchema": "StationInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/station/import",
+        "/API/station/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/station/import",
+        "/API/station/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Station",
+      "path": "/api/station/read",
+      "operationId": "ReadStation",
+      "method": "POST",
+      "requestSchema": "StationReadRequest",
+      "responseSchema": "StationResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Tamper Token",
+          "hash": "#/token-generate/clear-tamper-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Credit Token",
+          "hash": "#/token-generate/clear-credit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Generate",
+          "title": "Set Maximum Power Limit Token",
+          "hash": "#/token-generate/set-maximum-power-limit-token",
+          "status": 200
+        },
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record",
+          "status": 200
+        },
+        {
+          "group": "Token Record",
+          "title": "Clear Tamper Token Record",
+          "hash": "#/token-record/clear-tamper-token-record",
+          "status": 200
+        },
+        {
+          "group": "Token Record",
+          "title": "Clear Credit Token Record",
+          "hash": "#/token-record/clear-credit-token-record",
+          "status": 200
+        },
+        {
+          "group": "Token Record",
+          "title": "Set Maximum Power Limit Token Record",
+          "hash": "#/token-record/set-maximum-power-limit-token-record",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Reading",
+          "hash": "#/remote-operation/remote-meter-reading",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Control",
+          "hash": "#/remote-operation/remote-meter-control",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Token",
+          "hash": "#/remote-operation/remote-meter-token",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Reading Task",
+          "hash": "#/remote-operation-record/remote-meter-reading-task",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Control Task",
+          "hash": "#/remote-operation-record/remote-meter-control-task",
+          "status": 200
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Token Task",
+          "hash": "#/remote-operation-record/remote-meter-token-task",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/station/read",
+        "/API/station/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/station/read",
+        "/API/station/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Tamper Token",
+          "hash": "#/token-generate/clear-tamper-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Clear Credit Token",
+          "hash": "#/token-generate/clear-credit-token"
+        },
+        {
+          "group": "Token Generate",
+          "title": "Set Maximum Power Limit Token",
+          "hash": "#/token-generate/set-maximum-power-limit-token"
+        },
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record"
+        },
+        {
+          "group": "Token Record",
+          "title": "Clear Tamper Token Record",
+          "hash": "#/token-record/clear-tamper-token-record"
+        },
+        {
+          "group": "Token Record",
+          "title": "Clear Credit Token Record",
+          "hash": "#/token-record/clear-credit-token-record"
+        },
+        {
+          "group": "Token Record",
+          "title": "Set Maximum Power Limit Token Record",
+          "hash": "#/token-record/set-maximum-power-limit-token-record"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Reading",
+          "hash": "#/remote-operation/remote-meter-reading"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Control",
+          "hash": "#/remote-operation/remote-meter-control"
+        },
+        {
+          "group": "Remote Operation",
+          "title": "Meter Token",
+          "hash": "#/remote-operation/remote-meter-token"
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Reading Task",
+          "hash": "#/remote-operation-record/remote-meter-reading-task"
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Control Task",
+          "hash": "#/remote-operation-record/remote-meter-control-task"
+        },
+        {
+          "group": "Remote Operation Task",
+          "title": "Meter Token Task",
+          "hash": "#/remote-operation-record/remote-meter-token-task"
+        },
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics"
+        },
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter"
+        },
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway"
+        },
+        {
+          "group": "Management",
+          "title": "Customer",
+          "hash": "#/management/customer"
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Station",
+      "path": "/api/station/update",
+      "operationId": "UpdateStation",
+      "method": "POST",
+      "requestSchema": "Array<StationRequest>",
+      "responseSchema": "StationInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/station/update",
+        "/API/station/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/station/update",
+        "/API/station/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Tariff",
+      "path": "/api/tariff/create",
+      "operationId": "CreateTariff",
+      "method": "POST",
+      "requestSchema": "Array<TariffCreateRequest>",
+      "responseSchema": "TariffInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/tariff/create",
+        "/API/tariff/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/tariff/create",
+        "/API/tariff/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Tariff",
+      "path": "/api/tariff/delete",
+      "operationId": "DeleteTariff",
+      "method": "POST",
+      "requestSchema": "Array<TariffDeleteRequest>",
+      "responseSchema": "TariffInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/tariff/delete",
+        "/API/tariff/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/tariff/delete",
+        "/API/tariff/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Tariff",
+      "path": "/api/tariff/import",
+      "operationId": "ImportTariff",
+      "method": "POST",
+      "requestSchema": "Array<TariffImportRequest>",
+      "responseSchema": "TariffInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/tariff/import",
+        "/API/tariff/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/tariff/import",
+        "/API/tariff/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Tariff",
+      "path": "/api/tariff/read",
+      "operationId": "ReadTariff",
+      "method": "POST",
+      "requestSchema": "TariffReadRequest",
+      "responseSchema": "TariffResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation",
+          "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Tariff",
+          "hash": "#/management/tariff",
+          "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/tariff/read",
+        "/API/tariff/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/tariff/read",
+        "/API/tariff/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Long Nonpurchase Situation",
+          "hash": "#/prepay-report/long-nonpurchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Low Purchase Situation",
+          "hash": "#/prepay-report/low-purchase-situation"
+        },
+        {
+          "group": "Data Report",
+          "title": "Consumption Statistics",
+          "hash": "#/prepay-report/consumption-statistics"
+        },
+        {
+          "group": "Management",
+          "title": "Tariff",
+          "hash": "#/management/tariff"
+        },
+        {
+          "group": "Management",
+          "title": "Account",
+          "hash": "#/management/account"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Tariff",
+      "path": "/api/tariff/update",
+      "operationId": "UpdateTariff",
+      "method": "POST",
+      "requestSchema": "Array<TariffUpdateRequest>",
+      "responseSchema": "TariffInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/tariff/update",
+        "/API/tariff/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/tariff/update",
+        "/API/tariff/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/changeMeterKeyToken/generate",
+      "operationId": "GenerateChangeMeterKeyToken",
+      "method": "POST",
+      "requestSchema": "ChangeMeterKeyTokenRequest",
+      "responseSchema": "ChangeMeterKeyTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/changeMeterKeyToken/generate",
+        "/API/token/changeMeterKeyToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/changeMeterKeyToken/generate",
+        "/API/token/changeMeterKeyToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/changeMeterKeyTokenRecord/read",
+      "operationId": "ReadChangeMeterKeyTokenRecord",
+      "method": "POST",
+      "requestSchema": "ChangeMeterKeyTokenRecordReadRequest",
+      "responseSchema": "ChangeMeterKeyTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/changeMeterKeyTokenRecord/read",
+        "/API/token/changeMeterKeyTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/changeMeterKeyTokenRecord/read",
+        "/API/token/changeMeterKeyTokenRecord/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/clearCreditToken/generate",
+      "operationId": "GenerateClearCreditToken",
+      "method": "POST",
+      "requestSchema": "ClearCreditTokenRequest",
+      "responseSchema": "ClearCreditTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/clearCreditToken/generate",
+        "/API/token/clearCreditToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/clearCreditToken/generate",
+        "/API/token/clearCreditToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/clearCreditTokenRecord/read",
+      "operationId": "ReadClearCreditTokenRecord",
+      "method": "POST",
+      "requestSchema": "ClearCreditTokenRecordReadRequest",
+      "responseSchema": "ClearCreditTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Record",
+          "title": "Clear Credit Token Record",
+          "hash": "#/token-record/clear-credit-token-record",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/token/clearCreditTokenRecord/read",
+        "/API/token/clearCreditTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/token/clearCreditTokenRecord/read",
+        "/API/token/clearCreditTokenRecord/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Record",
+          "title": "Clear Credit Token Record",
+          "hash": "#/token-record/clear-credit-token-record"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/clearTamperToken/generate",
+      "operationId": "GenerateClearTamperToken",
+      "method": "POST",
+      "requestSchema": "ClearTamperTokenRequest",
+      "responseSchema": "ClearTamperTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/clearTamperToken/generate",
+        "/API/token/clearTamperToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/clearTamperToken/generate",
+        "/API/token/clearTamperToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/clearTamperTokenRecord/read",
+      "operationId": "ReadClearTamperTokenRecord",
+      "method": "POST",
+      "requestSchema": "ClearTamperTokenRecordReadRequest",
+      "responseSchema": "ClearTamperTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/clearTamperTokenRecord/read",
+        "/API/token/clearTamperTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/clearTamperTokenRecord/read",
+        "/API/token/clearTamperTokenRecord/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/creditToken/generate",
+      "operationId": "GenerateCreditToken",
+      "method": "POST",
+      "requestSchema": "CreditTokenRequest",
+      "responseSchema": "CreditTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/creditToken/generate",
+        "/API/token/creditToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/creditToken/generate",
+        "/API/token/creditToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/creditTokenCancelRecord/read",
+      "operationId": "ReadCreditTokenCancelRecord",
+      "method": "POST",
+      "requestSchema": "CreditTokenRecordReadRequest",
+      "responseSchema": "CreditTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/creditTokenCancelRecord/read",
+        "/API/token/creditTokenCancelRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/creditTokenCancelRecord/read",
+        "/API/token/creditTokenCancelRecord/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/creditTokenRecord/cancel",
+      "operationId": "CancelCreditTokenRecord",
+      "method": "POST",
+      "requestSchema": "CreditTokenRecordCancelRequest",
+      "responseSchema": "CreditTokenRecordInfoResponseListResponseDto",
+      "operation": "token-cancel",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/creditTokenRecord/cancel",
+        "/API/token/creditTokenRecord/cancel"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/creditTokenRecord/cancel",
+        "/API/token/creditTokenRecord/cancel"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/creditTokenRecord/read",
+      "operationId": "ReadCreditTokenRecord",
+      "method": "POST",
+      "requestSchema": "CreditTokenRecordReadRequest",
+      "responseSchema": "CreditTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/token/creditTokenRecord/read",
+        "/API/token/creditTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/token/creditTokenRecord/read",
+        "/API/token/creditTokenRecord/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Record",
+          "title": "Credit Token Record",
+          "hash": "#/token-record/credit-token-record"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/meterKey/update",
+      "operationId": "UpdateMeterKey",
+      "method": "POST",
+      "requestSchema": "Array<UpdateMeterKeyRequest>",
+      "responseSchema": "UpdateMeterKeyResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/meterKey/update",
+        "/API/token/meterKey/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/meterKey/update",
+        "/API/token/meterKey/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/meterTestToken/read",
+      "operationId": "ReadMeterTestToken",
+      "method": "POST",
+      "requestSchema": "MeterTestReadRequest",
+      "responseSchema": "MeterTestResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/meterTestToken/read",
+        "/API/token/meterTestToken/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/meterTestToken/read",
+        "/API/token/meterTestToken/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumOverdraftLimitToken/generate",
+      "operationId": "GenerateSetMaximumOverdraftLimitToken",
+      "method": "POST",
+      "requestSchema": "SetMaximumOverdraftLimitTokenRequest",
+      "responseSchema": "SetMaximumOverdraftLimitTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/setMaximumOverdraftLimitToken/generate",
+        "/API/token/setMaximumOverdraftLimitToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/setMaximumOverdraftLimitToken/generate",
+        "/API/token/setMaximumOverdraftLimitToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumOverdraftLimitTokenRecord/read",
+      "operationId": "ReadSetMaximumOverdraftLimitTokenRecord",
+      "method": "POST",
+      "requestSchema": "SetMaximumOverdraftLimitTokenRecordReadRequest",
+      "responseSchema": "SetMaximumOverdraftLimitTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/setMaximumOverdraftLimitTokenRecord/read",
+        "/API/token/setMaximumOverdraftLimitTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/setMaximumOverdraftLimitTokenRecord/read",
+        "/API/token/setMaximumOverdraftLimitTokenRecord/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumPhasePowerUnbalanceLimitToken/generate",
+      "operationId": "GenerateSetMaximumPhasePowerUnbalanceLimitToken",
+      "method": "POST",
+      "requestSchema": "SetMaximumPhasePowerUnbalanceLimitTokenRequest",
+      "responseSchema": "SetMaximumPhasePowerUnbalanceLimitTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/setMaximumPhasePowerUnbalanceLimitToken/generate",
+        "/API/token/setMaximumPhasePowerUnbalanceLimitToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/setMaximumPhasePowerUnbalanceLimitToken/generate",
+        "/API/token/setMaximumPhasePowerUnbalanceLimitToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumPhasePowerUnbalanceLimitTokenRecord/read",
+      "operationId": "ReadSetMaximumPhasePowerUnbalanceLimitTokenRecord",
+      "method": "POST",
+      "requestSchema": "SetMaximumPhasePowerUnbalanceLimitTokenRecordReadRequest",
+      "responseSchema": "SetMaximumPhasePowerUnbalanceLimitTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/setMaximumPhasePowerUnbalanceLimitTokenRecord/read",
+        "/API/token/setMaximumPhasePowerUnbalanceLimitTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/setMaximumPhasePowerUnbalanceLimitTokenRecord/read",
+        "/API/token/setMaximumPhasePowerUnbalanceLimitTokenRecord/read"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumPowerLimitToken/generate",
+      "operationId": "GenerateSetMaximumPowerLimitToken",
+      "method": "POST",
+      "requestSchema": "SetMaximumPowerLimitTokenRequest",
+      "responseSchema": "SetMaximumPowerLimitTokenRecordInfoResponseResponseDto",
+      "operation": "token-generate",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/setMaximumPowerLimitToken/generate",
+        "/API/token/setMaximumPowerLimitToken/generate"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/token/setMaximumPowerLimitToken/generate",
+        "/API/token/setMaximumPowerLimitToken/generate"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "Token",
+      "path": "/api/token/setMaximumPowerLimitTokenRecord/read",
+      "operationId": "ReadSetMaximumPowerLimitTokenRecord",
+      "method": "POST",
+      "requestSchema": "SetMaximumPowerLimitTokenRecordReadRequest",
+      "responseSchema": "SetMaximumPowerLimitTokenRecordResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Record",
+          "title": "Set Maximum Power Limit Token Record",
+          "hash": "#/token-record/set-maximum-power-limit-token-record",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/token/setMaximumPowerLimitTokenRecord/read",
+        "/API/token/setMaximumPowerLimitTokenRecord/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/token/setMaximumPowerLimitTokenRecord/read",
+        "/API/token/setMaximumPowerLimitTokenRecord/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Record",
+          "title": "Set Maximum Power Limit Token Record",
+          "hash": "#/token-record/set-maximum-power-limit-token-record"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "UpdateFirmwareTask",
+      "path": "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask",
+      "operationId": "CreateUpdateFirmwareTask",
+      "method": "POST",
+      "requestSchema": "Array<UpdateFirmwareTaskRequest>",
+      "responseSchema": "UpdateFirmwareTaskInfoResponseListResponseDto",
+      "operation": "task-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask",
+        "/api/UpdateFirmwareTask/CreateUpdateFirmwareTask"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask",
+        "/api/UpdateFirmwareTask/CreateUpdateFirmwareTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "UpdateFirmwareTask",
+      "path": "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
+      "operationId": "GetUpdateFirmwareTask",
+      "method": "POST",
+      "requestSchema": "UpdateFirmwareTaskReadRequest",
+      "responseSchema": "UpdateFirmwareTaskResponseResponseDto",
+      "operation": "task-read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
+        "/api/UpdateFirmwareTask/GetUpdateFirmwareTask"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
+        "/api/UpdateFirmwareTask/GetUpdateFirmwareTask"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/create",
+      "operationId": "CreateUser",
+      "method": "POST",
+      "requestSchema": "Array<UserCreateRequest>",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-create",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/create",
+        "/API/user/create"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/create",
+        "/API/user/create"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/delete",
+      "operationId": "DeleteUser",
+      "method": "POST",
+      "requestSchema": "Array<UserDeleteRequest>",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-delete",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/delete",
+        "/API/user/delete"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/delete",
+        "/API/user/delete"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "high"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/import",
+      "operationId": "ImportUser",
+      "method": "POST",
+      "requestSchema": "Array<UserImportRequest>",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "import",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/import",
+        "/API/user/import"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/import",
+        "/API/user/import"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/info",
+      "operationId": "GetUserLoginInfo",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "UserInfoResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/info",
+        "/API/user/info"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/info",
+        "/API/user/info"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/login",
+      "operationId": "Login",
+      "method": "POST",
+      "requestSchema": "UserLoginRequest",
+      "responseSchema": "UserLoginResponseResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/login",
+        "/API/user/login"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/login",
+        "/API/user/login"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/logout",
+      "operationId": "Logout",
+      "method": "POST",
+      "requestSchema": "None/Other",
+      "responseSchema": "ObjectResponseDto",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/logout",
+        "/API/user/logout"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/logout",
+        "/API/user/logout"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/modifyAuthorizationPassword",
+      "operationId": "ModifyAuthorizationPassword",
+      "method": "POST",
+      "requestSchema": "UserPasswordRequest",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/modifyAuthorizationPassword",
+        "/API/user/modifyAuthorizationPassword"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/modifyAuthorizationPassword",
+        "/API/user/modifyAuthorizationPassword"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/modifyLoginPassword",
+      "operationId": "ModifyLoginPassword",
+      "method": "POST",
+      "requestSchema": "UserPasswordRequest",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/modifyLoginPassword",
+        "/API/user/modifyLoginPassword"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/modifyLoginPassword",
+        "/API/user/modifyLoginPassword"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/read",
+      "operationId": "ReadUser",
+      "method": "POST",
+      "requestSchema": "UserReadRequest",
+      "responseSchema": "UserResponseResponseDto",
+      "operation": "read",
+      "consumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token",
+          "status": 200
+        }
+      ],
+      "observed": true,
+      "aliases": [
+        "/api/user/read",
+        "/API/user/read"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "casingVariants": [
+        "/api/user/read",
+        "/API/user/read"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Generate",
+          "title": "Credit Token",
+          "hash": "#/token-generate/credit-token"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/reset",
+      "operationId": "ResetPassword",
+      "method": "POST",
+      "requestSchema": "UserResetRequest",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/reset",
+        "/API/user/reset"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/reset",
+        "/API/user/reset"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/update",
+      "operationId": "UpdateUser",
+      "method": "POST",
+      "requestSchema": "Array<UserUpdateRequest>",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/update",
+        "/API/user/update"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/update",
+        "/API/user/update"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "User",
+      "path": "/api/user/updateInfo",
+      "operationId": "UpdateUserInfo",
+      "method": "POST",
+      "requestSchema": "UserInfoRequest",
+      "responseSchema": "UserInfoResponseListResponseDto",
+      "operation": "crud-update",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/user/updateInfo",
+        "/API/user/updateInfo"
+      ],
+      "liveWrite": true,
+      "visibleRoute": false,
+      "casingVariants": [
+        "/api/user/updateInfo",
+        "/API/user/updateInfo"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "RegistryOnly",
+      "path": "/api/token/creditTokenRecord/readMore",
+      "operationId": "",
+      "method": "GET_OR_POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/token/creditTokenRecord/readMore",
+        "/API/token/creditTokenRecord/readMore"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "registryOnly": true,
+      "casingVariants": [
+        "/api/token/creditTokenRecord/readMore",
+        "/API/token/creditTokenRecord/readMore"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "RegistryOnly",
+      "path": "/api/DailyDataMeter/readHourly",
+      "operationId": "",
+      "method": "GET_OR_POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "drilldown",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/DailyDataMeter/readHourly",
+        "/API/DailyDataMeter/readHourly"
+      ],
+      "liveWrite": false,
+      "visibleRoute": false,
+      "registryOnly": true,
+      "casingVariants": [
+        "/api/DailyDataMeter/readHourly",
+        "/API/DailyDataMeter/readHourly"
+      ],
+      "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    }
+  ]
+}

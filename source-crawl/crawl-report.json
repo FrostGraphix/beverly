@@ -1,0 +1,239 @@
+[
+  {
+    "viewport": {
+      "name": "mobile",
+      "width": 399,
+      "height": 557
+    },
+    "nav": {
+      "title": "Dashboard - Meter System",
+      "url": "http://8.208.16.168:9311/#/login?redirect=%2Fdashboard",
+      "bodyText": "Meter System\n \n \n \nLogin",
+      "fields": [
+        {
+          "type": "text",
+          "placeholder": "Username",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "password",
+          "placeholder": "Password",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "text",
+          "placeholder": "Verification Code",
+          "className": "el-input__inner"
+        }
+      ]
+    },
+    "requests": [
+      "http://8.208.16.168:9311/",
+      "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css",
+      "http://8.208.16.168:9311/static/css/app.e3f005e0.css",
+      "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js",
+      "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js",
+      "http://8.208.16.168:9311/static/js/app.11575024.js",
+      "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css",
+      "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js",
+      "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+    ],
+    "responses": [
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/app.e3f005e0.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/app.11575024.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+      }
+    ],
+    "consoleLogs": [],
+    "screenshots": {
+      "login": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-login-mobile-399x557.png",
+      "dashboardRedirect": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-dashboard-redirect-mobile-399x557.png"
+    }
+  },
+  {
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "nav": {
+      "title": "Dashboard - Meter System",
+      "url": "http://8.208.16.168:9311/#/login?redirect=%2Fdashboard",
+      "bodyText": "Meter System\n \n \n \nLogin",
+      "fields": [
+        {
+          "type": "text",
+          "placeholder": "Username",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "password",
+          "placeholder": "Password",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "text",
+          "placeholder": "Verification Code",
+          "className": "el-input__inner"
+        }
+      ]
+    },
+    "requests": [
+      "http://8.208.16.168:9311/",
+      "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css",
+      "http://8.208.16.168:9311/static/css/app.e3f005e0.css",
+      "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js",
+      "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js",
+      "http://8.208.16.168:9311/static/js/app.11575024.js",
+      "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css",
+      "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js",
+      "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+    ],
+    "responses": [
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/app.e3f005e0.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/app.11575024.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+      }
+    ],
+    "consoleLogs": [],
+    "screenshots": {
+      "login": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-login-tablet-768x1024.png",
+      "dashboardRedirect": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-dashboard-redirect-tablet-768x1024.png"
+    }
+  },
+  {
+    "viewport": {
+      "name": "desktop",
+      "width": 1365,
+      "height": 768
+    },
+    "nav": {
+      "title": "Dashboard - Meter System",
+      "url": "http://8.208.16.168:9311/#/login?redirect=%2Fdashboard",
+      "bodyText": "Meter System\n \n \n \nLogin",
+      "fields": [
+        {
+          "type": "text",
+          "placeholder": "Username",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "password",
+          "placeholder": "Password",
+          "className": "el-input__inner"
+        },
+        {
+          "type": "text",
+          "placeholder": "Verification Code",
+          "className": "el-input__inner"
+        }
+      ]
+    },
+    "requests": [
+      "http://8.208.16.168:9311/",
+      "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css",
+      "http://8.208.16.168:9311/static/css/app.e3f005e0.css",
+      "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js",
+      "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js",
+      "http://8.208.16.168:9311/static/js/app.11575024.js",
+      "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css",
+      "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js",
+      "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+    ],
+    "responses": [
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-libs.f22c819a.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/app.e3f005e0.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/app.11575024.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-libs.e467f7d2.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-elementUI.5ead3f0c.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/css/chunk-4ea1cc5e.3705999e.css"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/js/chunk-4ea1cc5e.97575adb.js"
+      },
+      {
+        "status": 200,
+        "url": "http://8.208.16.168:9311/static/img/login_bg.d90ab8fc.png"
+      }
+    ],
+    "consoleLogs": [],
+    "screenshots": {
+      "login": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-login-desktop-1365x768.png",
+      "dashboardRedirect": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\source-crawl\\screenshots\\source-dashboard-redirect-desktop-1365x768.png"
+    }
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "name": "acob-reference-crm",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "contract:generate": "node tools/generate-reference-contract.cjs",
+    "samples:capture": "node tools/capture-live-samples.cjs",
+    "route-matrix:capture": "node tools/capture-live-route-matrix.cjs",
+    "live:report": "node tools/live-read-report.cjs",
+    "test": "node tests/reference-contract.test.cjs && node tests/reference-facade.test.cjs && node tests/live-proxy.test.cjs && node tests/rate-limit-cors.test.cjs && node tests/response-shapes.test.mjs && node tests/live-normalization-regression.test.mjs && node tests/dashboard-adapters.test.mjs && node tests/live-route-smoke.test.cjs && node tests/table-interactions.test.mjs && node tests/hidden-modules.test.mjs && node tests/write-helpers.test.mjs && node tests/upload-policy.test.mjs && node tests/import-export.test.mjs && node tests/receipt-tools.test.mjs && node tests/local-database.test.cjs && node tests/visual-parity.test.cjs && node tests/vercel-production.test.cjs && node tools/reference-parity-checker.cjs",
+    "test:facade": "node tests/reference-facade.test.cjs",
+    "test:browser": "node tests/vue-app.browser.test.cjs",
+    "diff": "node tools/visual-parity.cjs",
+    "smoke:vercel": "node tools/vercel-smoke.cjs"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "vue": "2.7.16",
+    "vue-router": "3.6.5",
+    "vuex": "3.6.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue2": "^2.3.3",
+    "pixelmatch": "^7.1.0",
+    "playwright": "^1.59.1",
+    "pngjs": "^7.0.0",
+    "vite": "^5.4.11"
+  }
+}

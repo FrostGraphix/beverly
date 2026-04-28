@@ -1,0 +1,36 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/API/PrepayReport/ConsumptionStatistics",
+  "method": "POST",
+  "capturedAt": "2026-04-28T15:43:43.897Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "msg": "success",
+    "result": {
+      "total": 1,
+      "data": [
+        {
+          "collectionDate": "2026-01-10",
+          "consumption": 0.21
+        }
+      ]
+    },
+    "data": {
+      "total": 1,
+      "data": [
+        {
+          "collectionDate": "2026-01-10",
+          "consumption": 0.21
+        }
+      ]
+    }
+  },
+  "derivedFrom": "/api/DailyDataMeter/readHourly",
+  "upstreamFailure": {
+    "code": 99,
+    "reason": "Value does not fall within the expected range.",
+    "result": null
+  }
+}

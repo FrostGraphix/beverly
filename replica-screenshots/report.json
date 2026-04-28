@@ -1,0 +1,122 @@
+[
+  {
+    "viewport": {
+      "name": "mobile",
+      "width": 399,
+      "height": 557
+    },
+    "loginShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-login-mobile-399x557.png",
+    "dashShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-dashboard-mobile-399x557.png",
+    "metrics": {
+      "pageClass": "app-page mobile hideSidebar ",
+      "body": {
+        "w": 575,
+        "h": 1131
+      },
+      "header": {
+        "x": 0,
+        "y": 0,
+        "w": 575,
+        "h": 128
+      },
+      "firstPanel": {
+        "x": 48,
+        "y": 201,
+        "w": 211,
+        "h": 162
+      },
+      "secondPanel": {
+        "x": 318,
+        "y": 201,
+        "w": 211,
+        "h": 162
+      },
+      "chart": {
+        "x": 48,
+        "y": 622,
+        "w": 480,
+        "h": 396
+      }
+    }
+  },
+  {
+    "viewport": {
+      "name": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    "loginShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-login-tablet-768x1024.png",
+    "dashShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-dashboard-tablet-768x1024.png",
+    "metrics": {
+      "pageClass": "app-page hideSidebar ",
+      "body": {
+        "w": 768,
+        "h": 1990
+      },
+      "header": {
+        "x": 54,
+        "y": 0,
+        "w": 714,
+        "h": 84
+      },
+      "firstPanel": {
+        "x": 86,
+        "y": 134,
+        "w": 305,
+        "h": 108
+      },
+      "secondPanel": {
+        "x": 431,
+        "y": 134,
+        "w": 305,
+        "h": 108
+      },
+      "chart": {
+        "x": 86,
+        "y": 422,
+        "w": 650,
+        "h": 360
+      }
+    }
+  },
+  {
+    "viewport": {
+      "name": "desktop",
+      "width": 1365,
+      "height": 768
+    },
+    "loginShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-login-desktop-1365x768.png",
+    "dashShot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\replica-dashboard-desktop-1365x768.png",
+    "metrics": {
+      "pageClass": "app-page  ",
+      "body": {
+        "w": 1365,
+        "h": 1058
+      },
+      "header": {
+        "x": 210,
+        "y": 0,
+        "w": 1155,
+        "h": 84
+      },
+      "firstPanel": {
+        "x": 242,
+        "y": 134,
+        "w": 243,
+        "h": 108
+      },
+      "secondPanel": {
+        "x": 525,
+        "y": 134,
+        "w": 243,
+        "h": 108
+      },
+      "chart": {
+        "x": 242,
+        "y": 274,
+        "w": 530,
+        "h": 360
+      }
+    }
+  }
+]

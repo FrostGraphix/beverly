@@ -1,0 +1,987 @@
+{
+  "generatedAt": "2026-04-28T16:10:49.724Z",
+  "routes": [
+    {
+      "group": "Dashboard",
+      "title": "Dashboard",
+      "hash": "#/dashboard",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/dashboard/readLineChart",
+      "declaredEndpoints": [
+        "/api/dashboard/readPanelGroup",
+        "/api/dashboard/readLineChart"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__dashboard__readLineChart.json",
+      "actions": [],
+      "roles": [
+        "super-admin",
+        "operations-manager",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Generate",
+      "title": "Credit Token",
+      "hash": "#/token-generate/credit-token",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/item/readItemList",
+        "/api/user/read",
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Recharge",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Generate",
+      "title": "Clear Tamper Token",
+      "hash": "#/token-generate/clear-tamper-token",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Generate",
+      "title": "Clear Credit Token",
+      "hash": "#/token-generate/clear-credit-token",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Generate",
+      "title": "Set Maximum Power Limit Token",
+      "hash": "#/token-generate/set-maximum-power-limit-token",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Generate Token",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Record",
+      "title": "Credit Token Record",
+      "hash": "#/token-record/credit-token-record",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/token/creditTokenRecord/readMore",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/item/readItemList",
+        "/api/token/creditTokenRecord/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__creditTokenRecord__readMore.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Print",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Record",
+      "title": "Clear Tamper Token Record",
+      "hash": "#/token-record/clear-tamper-token-record",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/token/clearTamperTokenRecord/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/token/clearTamperTokenRecord/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__clearTamperTokenRecord__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Record",
+      "title": "Clear Credit Token Record",
+      "hash": "#/token-record/clear-credit-token-record",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/token/clearCreditTokenRecord/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/token/clearCreditTokenRecord/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__clearCreditTokenRecord__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Print",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Token Record",
+      "title": "Set Maximum Power Limit Token Record",
+      "hash": "#/token-record/set-maximum-power-limit-token-record",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/token/setMaximumPowerLimitTokenRecord/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/token/setMaximumPowerLimitTokenRecord/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__token__setMaximumPowerLimitTokenRecord__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Remote Operation",
+      "title": "Meter Reading",
+      "hash": "#/remote-operation/remote-meter-reading",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Operation",
+      "title": "Meter Control",
+      "hash": "#/remote-operation/remote-meter-control",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Operation",
+      "title": "Meter Token",
+      "hash": "#/remote-operation/remote-meter-token",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/account/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add Batch Task",
+        "Add Task",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Operation Task",
+      "title": "Meter Reading Task",
+      "hash": "#/remote-operation-record/remote-meter-reading-task",
+      "visibleReference": true,
+      "primaryEndpoint": "/API/RemoteMeterTask/GetReadingTask",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/remoteMeterTask/getReadingTask"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetReadingTask.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Operation Task",
+      "title": "Meter Control Task",
+      "hash": "#/remote-operation-record/remote-meter-control-task",
+      "visibleReference": true,
+      "primaryEndpoint": "/API/RemoteMeterTask/GetControlTask",
+      "declaredEndpoints": [
+        "/api/remoteMeterTask/getControlTask",
+        "/api/station/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetControlTask.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Operation Task",
+      "title": "Meter Token Task",
+      "hash": "#/remote-operation-record/remote-meter-token-task",
+      "visibleReference": true,
+      "primaryEndpoint": "/API/RemoteMeterTask/GetTokenTask",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/remoteMeterTask/getTokenTask"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__RemoteMeterTask__GetTokenTask.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Data Report",
+      "title": "Long Nonpurchase Situation",
+      "hash": "#/prepay-report/long-nonpurchase-situation",
+      "visibleReference": true,
+      "primaryEndpoint": "/API/PrepayReport/LongNonpurchaseSituation",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/customer/read",
+        "/api/tariff/read",
+        "/api/meter/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__PrepayReport__LongNonpurchaseSituation.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager",
+        "account"
+      ]
+    },
+    {
+      "group": "Data Report",
+      "title": "Low Purchase Situation",
+      "hash": "#/prepay-report/low-purchase-situation",
+      "visibleReference": true,
+      "primaryEndpoint": "/API/PrepayReport/LowPurchaseSituation",
+      "declaredEndpoints": [
+        "/api/customer/read",
+        "/api/meter/read",
+        "/api/tariff/read",
+        "/api/station/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__PrepayReport__LowPurchaseSituation.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager",
+        "account"
+      ]
+    },
+    {
+      "group": "Data Report",
+      "title": "Consumption Statistics",
+      "hash": "#/prepay-report/consumption-statistics",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/DailyDataMeter/readHourly",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/customer/read",
+        "/api/meter/read",
+        "/api/tariff/read"
+      ],
+      "source": "live-derived",
+      "sample": "contracts/samples/api__DailyDataMeter__readHourly.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager",
+        "account"
+      ]
+    },
+    {
+      "group": "Data Report",
+      "title": "Interval Data",
+      "hash": "#/prepay-report/daily-data-meter",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/DailyDataMeter/readHourly",
+      "declaredEndpoints": [
+        "/api/station/read",
+        "/api/DailyDataMeter/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__DailyDataMeter__readHourly.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Cancel",
+        "Confirm",
+        "Close"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager",
+        "account"
+      ]
+    },
+    {
+      "group": "Management",
+      "title": "Gateway",
+      "hash": "#/management/gateway",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/gateway/read",
+      "declaredEndpoints": [
+        "/api/DailyDataMeter/read",
+        "/api/station/read",
+        "/api/gateway/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__gateway__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Management",
+      "title": "Customer",
+      "hash": "#/management/customer",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/customer/read",
+      "declaredEndpoints": [
+        "/api/DailyDataMeter/readMore",
+        "/api/gateway/read",
+        "/api/customer/read",
+        "/api/station/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__customer__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Management",
+      "title": "Tariff",
+      "hash": "#/management/tariff",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/tariff/read",
+      "declaredEndpoints": [
+        "/api/item/readItemList",
+        "/api/tariff/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__tariff__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Management",
+      "title": "Account",
+      "hash": "#/management/account",
+      "visibleReference": true,
+      "primaryEndpoint": "/api/account/read",
+      "declaredEndpoints": [
+        "/api/tariff/read",
+        "/api/station/read",
+        "/api/account/read",
+        "/api/customer/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__account__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "account"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "User",
+      "hash": "#/admin/user",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/user/read",
+      "declaredEndpoints": [
+        "/api/user/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__user__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Import",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Role",
+      "hash": "#/admin/role",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/role/read",
+      "declaredEndpoints": [
+        "/api/role/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__role__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Log",
+      "hash": "#/admin/log",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/Log/read",
+      "declaredEndpoints": [
+        "/api/log/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__Log__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Station",
+      "hash": "#/admin/station",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/station/read",
+      "declaredEndpoints": [
+        "/api/station/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__station__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Item",
+      "hash": "#/admin/item",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/item/read",
+      "declaredEndpoints": [
+        "/api/item/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__item__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Add",
+        "Export",
+        "Delete",
+        "Edit",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Meter",
+      "hash": "#/admin/meter",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/meter/read",
+      "declaredEndpoints": [
+        "/api/meter/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__meter__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Administration",
+      "title": "Debt",
+      "hash": "#/admin/debt",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/debt/read",
+      "declaredEndpoints": [
+        "/api/debt/read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__debt__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Protocol",
+      "title": "DLMS",
+      "hash": "#/protocol/dlms",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/dlms/Read",
+      "declaredEndpoints": [
+        "/api/dlms/Read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/api__dlms__Read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Protocol",
+      "title": "DLT645",
+      "hash": "#/protocol/dlt645",
+      "visibleReference": false,
+      "primaryEndpoint": "/api/dlt645/read",
+      "declaredEndpoints": [
+        "/api/dlt645/read"
+      ],
+      "source": "blocked",
+      "sample": "contracts/samples/api__dlt645__read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "GPRS Tasks",
+      "hash": "#/remote-support/gprs-tasks",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/GPRSMeterTask/GPRSGetReadingTask",
+      "declaredEndpoints": [
+        "/API/GPRSMeterTask/GPRSGetReadingTask"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__GPRSMeterTask__GPRSGetReadingTask.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "GPRS Online Status",
+      "hash": "#/remote-support/gprs-online-status",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/GPRSOnlineStatus/Read",
+      "declaredEndpoints": [
+        "/API/GPRSOnlineStatus/Read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__GPRSOnlineStatus__Read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "Load Profile",
+      "hash": "#/remote-support/load-profile",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/LoadProfile/ElectricEnergyCurve",
+      "declaredEndpoints": [
+        "/API/LoadProfile/ElectricEnergyCurve"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__LoadProfile__ElectricEnergyCurve.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "Event Notification",
+      "hash": "#/remote-support/event-notification",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/EventNotification/Read",
+      "declaredEndpoints": [
+        "/API/EventNotification/Read"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__EventNotification__Read.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "Firmware Update",
+      "hash": "#/remote-support/firmware-update",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
+      "declaredEndpoints": [
+        "/API/UpdateFirmwareTask/GetUpdateFirmwareTask"
+      ],
+      "source": "live-ready",
+      "sample": "contracts/samples/API__UpdateFirmwareTask__GetUpdateFirmwareTask.json",
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin",
+        "operations-manager"
+      ]
+    },
+    {
+      "group": "Remote Support",
+      "title": "File Upload",
+      "hash": "#/remote-support/file-upload",
+      "visibleReference": false,
+      "primaryEndpoint": "/API/File/Upload",
+      "declaredEndpoints": [
+        "/API/File/Upload"
+      ],
+      "source": "guarded-write",
+      "sample": null,
+      "actions": [
+        "Sort",
+        "Search",
+        "Reset",
+        "Import",
+        "Export",
+        "Close",
+        "Cancel",
+        "Confirm"
+      ],
+      "roles": [
+        "super-admin"
+      ]
+    }
+  ]
+}

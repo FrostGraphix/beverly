@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-04-28T16:58:36.820Z",
+  "targets": 2,
+  "mobileSkipped": true,
+  "summary": {
+    "desktopCount": 2,
+    "mobileCount": 0,
+    "desktopCompared": 2,
+    "mobileOverflowCount": 0,
+    "keyPagesUnder5Percent": false,
+    "allDesktopUnder10Percent": false,
+    "worstDesktopDiff": {
+      "title": "Dashboard",
+      "hash": "#/dashboard",
+      "mode": "desktop",
+      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-dashboard-dashboard.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\dashboard-dashboard.png",
+      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\dashboard-dashboard.png",
+      "percentDifferent": 14.5,
+      "pixelsDifferent": 322782
+    }
+  },
+  "results": [
+    {
+      "title": "Dashboard",
+      "hash": "#/dashboard",
+      "mode": "desktop",
+      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-dashboard-dashboard.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\dashboard-dashboard.png",
+      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\dashboard-dashboard.png",
+      "percentDifferent": 14.5,
+      "pixelsDifferent": 322782
+    },
+    {
+      "title": "Account",
+      "hash": "#/management/account",
+      "mode": "desktop",
+      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-account.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\management-account.png",
+      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\management-account.png",
+      "percentDifferent": 7.88,
+      "pixelsDifferent": 136626
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+backend/data/*.sqlite
+tmp-*.log
+tmp-*.err.log
+replica-screenshots/diffs/

@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "ok": false,
+  "endpoint": "/api/dlt645/read",
+  "method": "POST",
+  "capturedAt": "2026-04-28T16:09:27.882Z",
+  "body": {
+    "raw": ""
+  }
+}

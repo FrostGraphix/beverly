@@ -1,0 +1,79 @@
+{
+  "status": 200,
+  "ok": true,
+  "endpoint": "/api/station/read",
+  "method": "POST",
+  "capturedAt": "2026-04-28T15:51:59.538Z",
+  "body": {
+    "code": 0,
+    "reason": "success",
+    "result": {
+      "total": 7,
+      "data": [
+        {
+          "stationId": "0001",
+          "name": "Station0001",
+          "createId": "System",
+          "createDate": "2022-10-28 09:54:47",
+          "updateId": "System",
+          "updateDate": "2022-10-28 09:54:47",
+          "remark": "System"
+        },
+        {
+          "stationId": "admin",
+          "name": "admin",
+          "createId": "0001",
+          "createDate": "2025-07-01 19:18:40",
+          "updateId": "0001",
+          "updateDate": "2025-07-01 19:18:40",
+          "remark": null
+        },
+        {
+          "stationId": "KYAKALE",
+          "name": "KYAKALE",
+          "createId": "0001",
+          "createDate": "2025-11-05 12:10:21",
+          "updateId": "0001",
+          "updateDate": "2025-11-05 12:10:21",
+          "remark": null
+        },
+        {
+          "stationId": "MUSHA",
+          "name": "MUSHA",
+          "createId": "0001",
+          "createDate": "2025-11-05 12:07:43",
+          "updateId": "0001",
+          "updateDate": "2025-11-05 12:07:43",
+          "remark": null
+        },
+        {
+          "stationId": "OGUFA",
+          "name": "OGUFA",
+          "createId": "0001",
+          "createDate": "2025-11-05 12:07:35",
+          "updateId": "0001",
+          "updateDate": "2025-11-05 12:07:35",
+          "remark": null
+        },
+        {
+          "stationId": "TUNGA",
+          "name": "TUNGA",
+          "createId": "0001",
+          "createDate": "2025-11-05 12:07:27",
+          "updateId": "0001",
+          "updateDate": "2025-11-05 12:07:27",
+          "remark": null
+        },
+        {
+          "stationId": "UMAISHA",
+          "name": "UMAISHA",
+          "createId": "0001",
+          "createDate": "2025-11-05 12:07:16",
+          "updateId": "0001",
+          "updateDate": "2025-11-05 12:07:16",
+          "remark": null
+        }
+      ]
+    }
+  }
+}
