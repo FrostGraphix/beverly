@@ -12,6 +12,16 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/echarts")) return "vendor-echarts";
+          if (id.includes("node_modules/zrender")) return "vendor-zrender";
+          if (id.includes("node_modules/vue")) return "vendor-vue";
+          return undefined;
+        }
+      }
+    }
   }
 });

@@ -1,0 +1,97 @@
+[
+  {
+    "route": "#/remote-support/gprs-tasks",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\gprs-tasks.png",
+    "network": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/user/read"
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/API/GPRSMeterTask/GPRSGetReadingTask"
+      }
+    ],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / GPRS Tasks\nACB(admin)\nGPRS Tasks\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nExport\nid\tgatewayId\tstatus\tremark\tcreateDate\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  },
+  {
+    "route": "#/remote-support/gprs-online-status",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\gprs-online-status.png",
+    "network": [],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / GPRS Online Status\nACB(admin)\nGPRS Online Status\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nExport\nstatus\tsuccessRate\tid\tname\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  },
+  {
+    "route": "#/remote-support/load-profile",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\load-profile.png",
+    "network": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/API/GPRSOnlineStatus/Read"
+      }
+    ],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / Load Profile\nACB(admin)\nLoad Profile\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nExport\ncustomerId\tmeterId\ttotalEnergy\tpower\tcreateDate\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  },
+  {
+    "route": "#/remote-support/event-notification",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\event-notification.png",
+    "network": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/API/LoadProfile/ElectricEnergyCurve"
+      }
+    ],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / Event Notification\nACB(admin)\nEvent Notification\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nExport\nid\tcustomerId\tmeterId\tstatus\tremark\tcreateDate\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  },
+  {
+    "route": "#/remote-support/firmware-update",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\firmware-update.png",
+    "network": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/API/EventNotification/Read"
+      }
+    ],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / Firmware Update\nACB(admin)\nFirmware Update\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nExport\nid\tgatewayId\tstatus\tremark\tcreateDate\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  },
+  {
+    "route": "#/remote-support/file-upload",
+    "screenshot": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\remote-support-verification\\file-upload.png",
+    "network": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:9311/api/API/UpdateFirmwareTask/GetUpdateFirmwareTask"
+      }
+    ],
+    "state": {
+      "text": "M\nMeter System\nDashboard\nToken Generate\n›\nToken Record\n›\nRemote Operation\n›\nRemote Operation Task\n›\nData Report\n›\nManagement\n›\nAdministration\n›\nProtocol\n›\nRemote Support\n›\nGPRS Tasks\nGPRS Online Status\nLoad Profile\nEvent Notification\nFirmware Update\nFile Upload\nRemote Support / File Upload\nACB(admin)\nFile Upload\nAscending\nDescending\nSort\nSearch\nReset\nSort\nSearch\nReset\nImport\nExport\nid\tname\tstatus\tremark\tcreateDate\tupdateDate\tstationId\tActions\nNo Data\nTotal 0\n10/page\n20/page\n50/page\n100/page\n<\n1\n>\nGo to",
+      "hasError": false,
+      "emptyText": "No Data",
+      "rows": 1
+    }
+  }
+]

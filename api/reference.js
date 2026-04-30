@@ -1,14 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
-const { dispatch, routes } = require("../backend/reference-facade/handlers");
 const {
-  cacheApiResponse,
   ensureDatabase,
-  readCachedApiResponse,
   recordAuditLog,
   recordExportJob,
   recordImportJob,
+  listImportJobs,
   recordPrintJob,
   recordWriteConfirmation,
   resetForTests,
@@ -160,9 +158,12 @@ function readRequest(request) {
 }
 
 function normalizeRequestPath(urlValue) {
-  return String(urlValue || "/")
+  const pathname = String(urlValue || "/")
     .replace(/^\/api\/reference(?:\.js)?/i, "/api")
     .split("?")[0];
+  if (/^\/api\/API\//.test(pathname)) return pathname.replace(/^\/api\/API\//, "/API/");
+  if (/^\/api\/api\//.test(pathname)) return pathname.replace(/^\/api\/api\//, "/api/");
+  return pathname;
 }
 
 function querySuffix(urlValue) {
@@ -188,6 +189,15 @@ function candidatePaths(pathname) {
 function isWriteRequest(pathname, method) {
   if (String(method || "GET").toUpperCase() === "GET") return false;
   return writePattern.test(pathname);
+}
+
+function isPreviewRequest(requestData) {
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] : requestData?.parsedBody;
+  return payload?.isPreview === true;
+}
+
+function isGuardedWriteRequest(pathname, method, requestData) {
+  return isWriteRequest(pathname, method) && !isPreviewRequest(requestData);
 }
 
 function isCacheableRequest(pathname, method) {
@@ -263,72 +273,15 @@ function hasBusinessFailure(payload) {
   return Number.isFinite(code) && code !== 0 && code !== 200 && emptyPayload;
 }
 
-function normalizeFacadePayload(payload, pathname) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    return {
-      ...payload,
-      _proxy: {
-        source: "facade",
-        pathname
-      }
-    };
-  }
-  return payload;
-}
-
 function logProxyFailure(details) {
   console.error("[live-proxy]", JSON.stringify(details));
 }
 
-function normalizeCachePayload(payload, pathname) {
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    return {
-      ...payload,
-      _proxy: {
-        source: "cache",
-        pathname
-      }
-    };
-  }
-  return {
-    code: 200,
-    msg: "success",
-    reason: "success",
-    data: payload,
-    result: payload,
-    _proxy: {
-      source: "cache",
-      pathname
-    }
-  };
-}
-
 function cacheResponseIfNeeded(request, pathname, requestData, result) {
-  if (!isCacheableRequest(pathname, request.method)) return;
-  if (!result || result.status >= 400) return;
-  if (hasBusinessFailure(result.body)) return;
-  cacheApiResponse({
-    method: request.method || "GET",
-    path: pathname,
-    requestKey: buildCacheKey(request, requestData),
-    status: result.status,
-    source: result.body?._proxy?.source || "unknown",
-    body: result.body
-  });
-}
-
-function cachedResponseFor(request, pathname, requestData) {
-  if (!isCacheableRequest(pathname, request.method)) return null;
-  const cached = readCachedApiResponse({
-    method: request.method || "GET",
-    path: pathname,
-    requestKey: buildCacheKey(request, requestData)
-  });
-  if (!cached) return null;
-  return {
-    status: cached.status,
-    body: normalizeCachePayload(cached.body, pathname)
-  };
+  void request;
+  void pathname;
+  void requestData;
+  void result;
 }
 
 function recordWriteArtifacts(pathname, requestData, status) {
@@ -417,6 +370,13 @@ function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
+  if (pathname === "/api/local/importJobs/read") {
+    return localJobResponse(listImportJobs({
+      routeHash: payload.routeHash || "",
+      pageSize: payload.pageSize || 500,
+      offset: payload.offset || 0
+    }));
+  }
   if (pathname === "/api/local/exportJob/create") {
     recordExportJob({
       routeHash: payload.routeHash || "",
@@ -468,7 +428,7 @@ async function tryLivePath(request, liveUrl, requestData, token) {
 async function proxyLive(request, pathname, requestData) {
   const env = getEnv();
   if (!env.liveProxyEnabled) return null;
-  if (isWriteRequest(pathname, request.method) && !env.allowLiveWrites) {
+  if (isGuardedWriteRequest(pathname, request.method, requestData) && !env.allowLiveWrites) {
     return {
       status: 403,
       body: {
@@ -508,7 +468,7 @@ async function proxyLive(request, pathname, requestData) {
           };
           continue;
         }
-        if (isWriteRequest(candidate, request.method)) {
+        if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
           logWriteEvent("response", { pathname: candidate, payload: liveResult.payload, status: liveResult.status });
         }
@@ -536,44 +496,6 @@ async function proxyLive(request, pathname, requestData) {
   return null;
 }
 
-function dispatchFacade(request, pathname, requestData) {
-  if (isWriteRequest(pathname, request.method) && !getEnv().allowLiveWrites) {
-    return {
-      status: 403,
-      body: {
-        code: 403,
-        msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "guard",
-          pathname
-        }
-      }
-    };
-  }
-  const candidates = candidatePaths(pathname);
-  for (const candidate of candidates) {
-    if (!routes.has(`${request.method || "GET"} ${candidate}`)) continue;
-    const result = dispatch(request.method || "GET", candidate, requestData.parsedBody);
-    if (isWriteRequest(candidate, request.method)) {
-      logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
-      logWriteEvent("response", { pathname: candidate, payload: result.body, status: result.status });
-    }
-    return {
-      status: result.status,
-      body: normalizeFacadePayload(result.body, candidate)
-    };
-  }
-
-  const result = dispatch(request.method || "GET", pathname, requestData.parsedBody);
-  return {
-    status: result.status,
-    body: normalizeFacadePayload(result.body, pathname)
-  };
-}
-
 async function handler(request, response) {
   ensureDatabase();
   applyCorsHeaders(request, response);
@@ -591,22 +513,46 @@ async function handler(request, response) {
   const requestData = await readRequest(request);
   result = dispatchLocalDatabaseAction(request, pathname, requestData);
 
+  if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
+    result = {
+      status: 403,
+      body: {
+        code: 403,
+        msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+        reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+        data: null,
+        result: null,
+        _proxy: {
+          source: "guard",
+          pathname
+        }
+      }
+    };
+  }
+
   if (!result) {
     result = await proxyLive(request, pathname, requestData);
   }
 
   if (!result) {
-    result = cachedResponseFor(request, pathname, requestData);
-    if (result) console.error("[fallback-cache]", JSON.stringify({ pathname, status: result.status }));
-  }
-
-  if (!result) {
-    result = dispatchFacade(request, pathname, requestData);
-    console.error("[fallback-facade]", JSON.stringify({ pathname, status: result.status }));
+    result = {
+      status: 502,
+      body: {
+        code: 502,
+        msg: "Live API unavailable",
+        reason: "Live API unavailable",
+        data: null,
+        result: null,
+        _proxy: {
+          source: "live-required",
+          pathname
+        }
+      }
+    };
   }
 
   cacheResponseIfNeeded(request, pathname, requestData, result);
-  if (isWriteRequest(pathname, request.method) && !pathname.startsWith("/api/local/")) {
+  if (isGuardedWriteRequest(pathname, request.method, requestData) && !pathname.startsWith("/api/local/")) {
     recordWriteArtifacts(pathname, requestData, result.status);
   }
   auditResult(request, pathname, result);

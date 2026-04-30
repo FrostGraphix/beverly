@@ -3,15 +3,15 @@
   "ok": true,
   "endpoint": "/api/dashboard/readPanelGroup",
   "method": "POST",
-  "capturedAt": "2026-04-28T15:51:55.503Z",
+  "capturedAt": "2026-04-28T17:50:47.678Z",
   "body": {
     "code": 0,
     "reason": "success",
     "result": {
       "totalAccountCount": 2420,
-      "totalPurchaseTimes": 7324,
-      "totalPurchaseUnit": 100530.29999999594,
-      "totalPurchaseMoney": 35309785
+      "totalPurchaseTimes": 7338,
+      "totalPurchaseUnit": 100605.29999999593,
+      "totalPurchaseMoney": 35336285
     }
   }
 }

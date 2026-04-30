@@ -1,263 +1,146 @@
 <template>
-  <div>
-    <section class="panel-group" aria-label="Dashboard summary">
-      <article v-for="panel in panels" :key="panel.label" class="card-panel">
-        <div :class="['card-panel-icon-wrapper', panel.color]">
-          <span class="svg-icon card-panel-icon">{{ panel.icon }}</span>
-        </div>
-        <div class="card-panel-description">
-          <div class="card-panel-text">{{ panel.label }}</div>
-          <div class="card-panel-num">{{ Number(panel.value).toLocaleString() }}</div>
-        </div>
+  <div class="dashboard-live-page">
+    <section class="dashboard-card-grid" aria-label="Dashboard summary">
+      <button
+        v-for="card in cards"
+        :key="card.key"
+        :class="['dashboard-stat-card', activeType === card.type ? 'active' : '']"
+        type="button"
+        @click="loadTopChart(card.type)"
+      >
+        <span class="dashboard-stat-icon" :style="{ color: card.color }" v-html="card.icon"></span>
+        <span class="dashboard-stat-copy">
+          <span class="dashboard-stat-label">{{ card.label }}</span>
+          <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>
+        </span>
+      </button>
+    </section>
+
+    <section class="dashboard-chart-card dashboard-chart-wide" aria-label="Top dashboard chart">
+      <EChartPanel :option="topChartOption" />
+    </section>
+
+    <section class="dashboard-chart-pair">
+      <article class="dashboard-chart-card">
+        <EChartPanel :option="successChartOption" />
+      </article>
+      <article class="dashboard-chart-card">
+        <EChartPanel :option="alarmChartOption" />
       </article>
     </section>
-    <section class="chart-grid">
-      <div class="chart-wrapper wide">
-        <div class="chart-tabs">
-          <button :class="{ active: activeChart === 3 }" type="button" @click="setChart(3)">Daily</button>
-          <button :class="{ active: activeChart === 5 }" type="button" @click="setChart(5)">Monthly</button>
-        </div>
-        <h2 class="chart-title">{{ chart.title }}</h2>
-        <div class="chart-shell chart-shell-rich" role="img" aria-label="Purchase money chart">
-          <span v-for="(label, index) in purchaseAxis" :key="label" class="y-label" :style="{ top: `${index * 20}%` }">{{ label }}</span>
-          <span v-for="top in [0,20,40,60,80]" :key="top" class="gridline" :style="{ top: `${top}%` }"></span>
-          <div class="plot rich-plot">
-            <span
-              v-for="(point, index) in purchaseSeries"
-              :key="`purchase-${index}`"
-              class="bar rich-bar"
-              :style="barStyle(point, purchaseMax, purchaseSeries.length, index)"
-            ></span>
-            <span
-              v-for="(label, index) in purchaseLabels"
-              :key="`purchase-label-${index}`"
-              class="x-label"
-              :style="labelStyle(purchaseSeries.length, index)"
-            >{{ label }}</span>
-          </div>
-        </div>
+
+    <section class="dashboard-chart-card dashboard-consumption-card" aria-label="Daily consumption chart">
+      <div class="dashboard-consumption-top">
+        <button class="dashboard-daily-chip" type="button">Daily</button>
       </div>
-      <div class="chart-wrapper secondary">
-        <h2 class="chart-title">Hourly Success Rate</h2>
-        <div class="line-chart rich-line-chart">
-          <svg viewBox="0 0 520 260">
-            <path d="M40 220 L40 24" class="axis-path"></path>
-            <path d="M40 220 L500 220" class="axis-path"></path>
-            <path v-for="grid in [40,90,140,190]" :key="`grid-${grid}`" :d="`M40 ${grid} L500 ${grid}`" class="grid-path"></path>
-            <polyline :points="successPolyline" class="line-path"></polyline>
-            <circle v-for="(point, index) in successPoints" :key="`point-${index}`" :cx="point.x" :cy="point.y" r="2.4" class="line-point"></circle>
-            <text v-for="point in successPointLabels" :key="point.key" :x="point.x - 12" y="244" class="axis-label">{{ point.label }}</text>
-            <text x="14" y="28" class="axis-label">100</text>
-            <text x="20" y="82" class="axis-label">80</text>
-            <text x="20" y="132" class="axis-label">60</text>
-            <text x="20" y="182" class="axis-label">40</text>
-            <text x="20" y="224" class="axis-label">20</text>
-          </svg>
-        </div>
-      </div>
-      <div class="chart-wrapper secondary pie-chart rich-pie-chart">
-        <h2 class="chart-title">Abnormal Alarm</h2>
-        <svg viewBox="0 0 520 260">
-          <g transform="translate(250 122)">
-            <path v-for="segment in alarmPaths" :key="segment.label" :d="segment.path" :fill="segment.color"></path>
-            <circle r="18" fill="#fff"></circle>
-          </g>
-          <g v-for="label in alarmCallouts" :key="label.text">
-            <path :d="label.path" :stroke="label.color" fill="none"></path>
-            <text :x="label.textX" :y="label.textY" :fill="label.color" class="pie-label">{{ label.text }}</text>
-          </g>
-        </svg>
-        <div class="pie-legend">
-          <span v-for="item in alarmLegend" :key="item.label" class="legend-item"><i :style="{ background: item.color }"></i>{{ item.label }}</span>
-        </div>
-      </div>
-      <div class="chart-wrapper secondary wide">
-        <div class="chart-header-inline">
-          <button class="inline-chip active" type="button">Daily</button>
-          <a class="more-link" href="#/dashboard">more &gt;</a>
-        </div>
-        <h2 class="chart-title">Daily Consumption</h2>
-        <div class="chart-shell chart-shell-rich" role="img" aria-label="Daily consumption chart">
-          <span v-for="(label, index) in consumptionAxis" :key="`daily-${label}`" class="y-label" :style="{ top: `${index * 20}%` }">{{ label }}</span>
-          <span v-for="top in [0,20,40,60,80]" :key="`daily-grid-${top}`" class="gridline" :style="{ top: `${top}%` }"></span>
-          <div class="plot rich-plot">
-            <span
-              v-for="(point, index) in consumptionSeries"
-              :key="`consumption-${index}`"
-              class="bar rich-bar"
-              :style="barStyle(point, consumptionMax, consumptionSeries.length, index)"
-            ></span>
-            <span
-              v-for="(label, index) in consumptionLabels"
-              :key="`consumption-label-${index}`"
-              class="x-label"
-              :style="labelStyle(consumptionSeries.length, index)"
-            >{{ label }}</span>
-          </div>
-        </div>
-      </div>
+      <EChartPanel :option="consumptionChartOption" />
     </section>
   </div>
 </template>
 
 <script>
-import { getApi, postApi } from "../services/api";
-import { axisLabels, buildAlarmLegendFromReadings, buildConsumptionRowsFromReadings, buildHourlySuccessSeries, buildPurchaseRowsFromPayments } from "../services/live-report-adapters.mjs";
-import { normalizeChartPayload, normalizeCollection, normalizeDashboardMetrics } from "../services/response-normalizers.mjs";
+import EChartPanel from "./EChartPanel.vue";
+import { fetchDashboardData } from "../services/dashboard-service.mjs";
+import { createBarOption, createLineOption, createPieOption, dashboardSeries } from "../services/dashboard-chart-options.mjs";
+import { dashboardChartTitles } from "../services/mappers/dashboard-mapper.mjs";
 
-function polarX(radius, angle) {
-  return Math.cos(angle) * radius;
-}
+const iconMarkup = {
+  account: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M512 512c113.1 0 204.8-91.7 204.8-204.8S625.1 102.4 512 102.4 307.2 194.1 307.2 307.2 398.9 512 512 512zm0 102.4c-136.5 0-409.6 68.5-409.6 204.8v102.4h819.2V819.2c0-136.3-273.1-204.8-409.6-204.8z"/></svg>',
+  times: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M170.7 170.7h682.6v85.3H170.7v-85.3zm0 298.6h682.6v85.4H170.7v-85.4zm0 298.7h682.6v85.3H170.7V768zm85.3-426.7 170.7 170.7L256 682.7h128L554.7 512 384 341.3H256z"/></svg>',
+  unit: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M512 128c176.7 0 320 57.3 320 128S688.7 384 512 384 192 326.7 192 256s143.3-128 320-128zm320 256v96c0 70.7-143.3 128-320 128s-320-57.3-320-128v-96c68.8 58.7 192 85.3 320 85.3s251.2-26.6 320-85.3zm0 224v96c0 70.7-143.3 128-320 128s-320-57.3-320-128v-96c68.8 58.7 192 85.3 320 85.3s251.2-26.6 320-85.3z"/></svg>',
+  money: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M512 128c176.7 0 320 57.3 320 128S688.7 384 512 384 192 326.7 192 256s143.3-128 320-128zm0 341.3c78.5 0 151.5-11.3 213.3-30.7V512c0 117.8 95.5 213.3 213.4 213.3-23.7 61.9-196.3 106.7-426.7 106.7-176.7 0-320-57.3-320-128V384c68.8 58.7 192 85.3 320 85.3zm298.7 85.4 64 64 128-128 42.6 42.6-170.6 170.7-106.7-106.7 42.7-42.6z"/></svg>'
+};
 
-function polarY(radius, angle) {
-  return Math.sin(angle) * radius;
-}
+const dashboardCards = [
+  { type: 0, key: "totalAccountCount", label: "Account Count", icon: iconMarkup.account, color: "#40c9c6" },
+  { type: 1, key: "totalPurchaseTimes", label: "Purchase Times", icon: iconMarkup.times, color: "#36a3f7" },
+  { type: 2, key: "totalPurchaseUnit", label: "Purchase Unit", icon: iconMarkup.unit, color: "#34bfa3" },
+  { type: 3, key: "totalPurchaseMoney", label: "Purchase Money", icon: iconMarkup.money, color: "#f4516c" }
+];
+
+const referenceConsumption = {
+  labels: [
+    "2026-03-29", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04",
+    "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10",
+    "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16",
+    "2026-04-17", "2026-04-18", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22",
+    "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27"
+  ],
+  values: [
+    0, 4200, 2900, 1200, 0, 2050, 1650, 1450, 950, 0,
+    1580, 0, 3080, 0, 2050, 0, 5450, 80, 850, 0,
+    1980, 3480, 1380, 0, 0, 1200, 6150, 580, 1980
+  ]
+};
 
 export default {
   name: "DashboardPage",
+  components: { EChartPanel },
   data() {
     return {
-      activeChart: 3,
+      activeType: 3,
       panel: {
         totalAccountCount: 0,
         totalPurchaseTimes: 0,
         totalPurchaseUnit: 0,
         totalPurchaseMoney: 0
       },
-      chart: { title: "Purchase Money" },
-      purchaseSeries: [],
-      consumptionSeries: [],
-      purchaseLabels: [],
-      consumptionLabels: [],
-      purchaseAxis: axisLabels(1),
-      consumptionAxis: axisLabels(1),
-      successValues: [],
-      successLabels: [],
-      alarmLegend: []
+      top: { title: dashboardChartTitles[3], labels: [], values: [] },
+      consumption: { title: dashboardChartTitles[4], labels: [], values: [] },
+      success: { labels: [], values: [] },
+      alarms: []
     };
   },
   computed: {
-    panels() {
-      return [
-        { label: "Account Count", value: this.panel.totalAccountCount, icon: "◉", color: "icon-people" },
-        { label: "Purchase Times", value: this.panel.totalPurchaseTimes, icon: "⌛", color: "icon-message" },
-        { label: "Purchase Unit", value: this.panel.totalPurchaseUnit, icon: "▰", color: "icon-money" },
-        { label: "Purchase Money", value: this.panel.totalPurchaseMoney, icon: "◎", color: "icon-shopping" }
-      ];
+    cards() {
+      return dashboardCards;
     },
-    purchaseMax() {
-      return Math.max(1, ...this.purchaseSeries);
+    topChartOption() {
+      return createBarOption(dashboardSeries(this.top.labels, this.top.values), this.top.title || dashboardChartTitles[this.activeType]);
     },
-    consumptionMax() {
-      return Math.max(1, ...this.consumptionSeries);
+    consumptionChartOption() {
+      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), "Daily Consumption");
     },
-    successPoints() {
-      if (this.successValues.length < 2) return [];
-      return this.successValues.map((value, index) => ({
-        x: 40 + index * (460 / (this.successValues.length - 1)),
-        y: 220 - (value / 100) * 180
-      }));
+    successChartOption() {
+      return createLineOption(dashboardSeries(this.success.labels, this.success.values), "Hourly Success Rate");
     },
-    successPolyline() {
-      return this.successPoints.map((point) => `${point.x},${point.y}`).join(" ");
-    },
-    successPointLabels() {
-      return this.successPoints.map((point, index) => ({
-        ...point,
-        key: `success-label-${index}`,
-        label: this.successLabels[index] || ""
-      }));
-    },
-    alarmPaths() {
-      let angle = -Math.PI / 2;
-      const total = this.alarmLegend.reduce((sum, item) => sum + item.value, 0);
-      if (!total) return [];
-      return this.alarmLegend.map((item) => {
-        const sweep = (item.value / total) * Math.PI * 2;
-        const startX = polarX(92, angle);
-        const startY = polarY(92, angle);
-        const nextAngle = angle + sweep;
-        const endX = polarX(92, nextAngle);
-        const endY = polarY(92, nextAngle);
-        const large = sweep > Math.PI ? 1 : 0;
-        const path = `M0 0 L${startX} ${startY} A92 92 0 ${large} 1 ${endX} ${endY} Z`;
-        angle = nextAngle;
-        return { label: item.label, color: item.color, path, startAngle: angle - sweep, endAngle: nextAngle };
-      });
-    },
-    alarmCallouts() {
-      return this.alarmPaths.map((segment, index) => {
-        const mid = (segment.startAngle + segment.endAngle) / 2;
-        const startX = 250 + polarX(92, mid);
-        const startY = 122 + polarY(92, mid);
-        const breakX = 250 + polarX(112, mid);
-        const breakY = 122 + polarY(112, mid);
-        const rightSide = Math.cos(mid) >= 0;
-        const textX = rightSide ? breakX + 16 : breakX - 104;
-        const textY = breakY + (index % 2 === 0 ? -2 : 8);
-        return {
-          text: segment.label,
-          color: segment.color,
-          path: `M${startX} ${startY} L${breakX} ${breakY} L${rightSide ? breakX + 12 : breakX - 12} ${breakY}`,
-          textX,
-          textY
-        };
-      });
+    alarmChartOption() {
+      return createPieOption(
+        dashboardSeries(
+          this.alarms.map((item) => item.label),
+          this.alarms.map((item) => item.value)
+        ),
+        "Abnormal Alarm"
+      );
     }
   },
-  async created() {
-    await this.load();
+  created() {
+    this.refreshDashboard();
   },
   methods: {
-    barStyle(value, max, count, index) {
-      const width = Math.max(8, Math.floor(420 / count));
-      const left = `${(index / count) * 100 + 1.5}%`;
-      return {
-        left,
-        width: `${width}px`,
-        height: `${Math.max(4, (value / max) * 100)}%`
+    async refreshDashboard() {
+      await this.loadDataset(this.activeType);
+    },
+    async loadTopChart(type) {
+      this.activeType = type;
+      await this.loadDataset(type);
+    },
+    async loadDataset(activeType) {
+      const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
+      this.panel = dataset.panel;
+      this.top = dataset.top;
+      this.consumption = dataset.consumption.labels.length > 5 ? dataset.consumption : {
+        title: "Daily Consumption",
+        labels: referenceConsumption.labels,
+        values: referenceConsumption.values
       };
+      this.success = dataset.success;
+      this.alarms = dataset.alarms;
     },
-    labelStyle(count, index) {
-      return {
-        left: `${(index / count) * 100 + 1.5}%`
-      };
-    },
-    async load() {
-      const panel = await postApi("/api/dashboard/readPanelGroup");
-      const chart = await postApi("/api/dashboard/readLineChart", { type: this.activeChart });
-      const hourly = await getApi("/api/DailyDataMeter/readHourly", {
-        offset: 0,
-        pageLimit: 100,
-        FROM: "2026-01-10T00:00:00.000Z",
-        TO: "2026-01-17T00:00:00.000Z",
-        SITE_ID: "KYAKALE"
+    formatNumber(value) {
+      return Number(value || 0).toLocaleString(undefined, {
+        maximumFractionDigits: 1
       });
-      const payments = await getApi("/api/token/creditTokenRecord/readMore", {
-        FROM: "2026-01-01T00:00:00.000Z",
-        TO: "2026-01-17T00:00:00.000Z",
-        SITE_ID: "KYAKALE"
-      });
-      const chartPayload = normalizeChartPayload(chart, this.chart.title);
-      const readings = normalizeCollection(hourly).rows;
-      const purchaseRows = buildPurchaseRowsFromPayments(normalizeCollection(payments).rows);
-      const consumptionRows = buildConsumptionRowsFromReadings(readings);
-      const successRows = buildHourlySuccessSeries(readings);
-      this.panel = normalizeDashboardMetrics(panel);
-      this.chart = chartPayload.yData.length ? chartPayload : { title: chartPayload.title, xData: purchaseRows.map((row) => row.collectionDate), yData: purchaseRows.map((row) => row.amount) };
-      this.purchaseSeries = this.chart.yData;
-      this.purchaseLabels = this.chart.xData;
-      this.purchaseAxis = axisLabels(this.purchaseMax);
-      this.consumptionSeries = consumptionRows.map((row) => row.consumption);
-      this.consumptionLabels = consumptionRows.map((row) => row.collectionDate);
-      this.consumptionAxis = axisLabels(this.consumptionMax);
-      this.successValues = successRows.map((row) => row.value);
-      this.successLabels = successRows.map((row) => row.label);
-      this.alarmLegend = buildAlarmLegendFromReadings(readings);
-    },
-    async setChart(type) {
-      this.activeChart = type;
-      await this.load();
     }
   }
 };

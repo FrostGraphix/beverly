@@ -3,7 +3,7 @@
   "ok": true,
   "endpoint": "/api/dashboard/readLineChart",
   "method": "POST",
-  "capturedAt": "2026-04-28T15:51:55.114Z",
+  "capturedAt": "2026-04-28T17:50:47.328Z",
   "body": {
     "code": 0,
     "reason": "success",

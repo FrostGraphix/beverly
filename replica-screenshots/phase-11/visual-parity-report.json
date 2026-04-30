@@ -1,45 +1,152 @@
 {
-  "generatedAt": "2026-04-28T16:58:36.820Z",
-  "targets": 2,
-  "mobileSkipped": true,
+  "generatedAt": "2026-04-30T07:56:00.736Z",
+  "targets": 8,
+  "mobileSkipped": false,
   "summary": {
-    "desktopCount": 2,
-    "mobileCount": 0,
-    "desktopCompared": 2,
+    "desktopCount": 8,
+    "mobileCount": 8,
+    "desktopCompared": 0,
     "mobileOverflowCount": 0,
-    "keyPagesUnder5Percent": false,
-    "allDesktopUnder10Percent": false,
-    "worstDesktopDiff": {
-      "title": "Dashboard",
-      "hash": "#/dashboard",
-      "mode": "desktop",
-      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-dashboard-dashboard.png",
-      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\dashboard-dashboard.png",
-      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\dashboard-dashboard.png",
-      "percentDifferent": 14.5,
-      "pixelsDifferent": 322782
-    }
+    "keyPagesUnder5Percent": true,
+    "allDesktopUnder10Percent": true,
+    "worstDesktopDiff": null
   },
   "results": [
     {
-      "title": "Dashboard",
-      "hash": "#/dashboard",
+      "title": "DLMS",
+      "hash": "#/protocol/dlms",
       "mode": "desktop",
-      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-dashboard-dashboard.png",
-      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\dashboard-dashboard.png",
-      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\dashboard-dashboard.png",
-      "percentDifferent": 14.5,
-      "pixelsDifferent": 322782
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-protocol-dlms.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\protocol-dlms.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
     },
     {
-      "title": "Account",
-      "hash": "#/management/account",
+      "title": "DLMS",
+      "hash": "#/protocol/dlms",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\protocol-dlms.png",
+      "overflow": false
+    },
+    {
+      "title": "DLT645",
+      "hash": "#/protocol/dlt645",
       "mode": "desktop",
-      "reference": "C:/Users/ACOB/Desktop/VS Code/acob-crm3/tmp/crawl-management-account.png",
-      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\management-account.png",
-      "diff": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\diff\\management-account.png",
-      "percentDifferent": 7.88,
-      "pixelsDifferent": 136626
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-protocol-dlt645.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\protocol-dlt645.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "DLT645",
+      "hash": "#/protocol/dlt645",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\protocol-dlt645.png",
+      "overflow": false
+    },
+    {
+      "title": "GPRS Tasks",
+      "hash": "#/remote-support/gprs-tasks",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-gprs-tasks.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-gprs-tasks.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "GPRS Tasks",
+      "hash": "#/remote-support/gprs-tasks",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-gprs-tasks.png",
+      "overflow": false
+    },
+    {
+      "title": "GPRS Online Status",
+      "hash": "#/remote-support/gprs-online-status",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-gprs-online-status.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-gprs-online-status.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "GPRS Online Status",
+      "hash": "#/remote-support/gprs-online-status",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-gprs-online-status.png",
+      "overflow": false
+    },
+    {
+      "title": "Load Profile",
+      "hash": "#/remote-support/load-profile",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-load-profile.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-load-profile.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "Load Profile",
+      "hash": "#/remote-support/load-profile",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-load-profile.png",
+      "overflow": false
+    },
+    {
+      "title": "Event Notification",
+      "hash": "#/remote-support/event-notification",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-event-notification.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-event-notification.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "Event Notification",
+      "hash": "#/remote-support/event-notification",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-event-notification.png",
+      "overflow": false
+    },
+    {
+      "title": "Firmware Update",
+      "hash": "#/remote-support/firmware-update",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-firmware-update.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-firmware-update.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "Firmware Update",
+      "hash": "#/remote-support/firmware-update",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-firmware-update.png",
+      "overflow": false
+    },
+    {
+      "title": "File Upload",
+      "hash": "#/remote-support/file-upload",
+      "mode": "desktop",
+      "reference": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm3\\tmp\\crawl-remote-support-file-upload.png",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\desktop\\remote-support-file-upload.png",
+      "diff": null,
+      "percentDifferent": null,
+      "pixelsDifferent": null
+    },
+    {
+      "title": "File Upload",
+      "hash": "#/remote-support/file-upload",
+      "mode": "mobile",
+      "local": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\replica-screenshots\\phase-11\\mobile\\remote-support-file-upload.png",
+      "overflow": false
     }
   ]
 }

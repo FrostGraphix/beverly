@@ -19,7 +19,8 @@ Implemented
 - Live normalization regression guards the derived report.
 - Live route smoke guards the first cutover wave.
 - Dashboard panels now use live dashboard payloads.
-- Dashboard charts now use live chart and hourly reading payloads.
+- Dashboard charts now use `GET /api/dashboard/hourly`, `GET /api/dashboard/gprs`, `GET /api/dashboard/events`, and `POST /api/dashboard/readLineChart`.
+- Dashboard route inventory now includes `GET /api/dashboard` and `POST /api/dashboard/readPanelGroup`.
 - Static dashboard placeholder arrays were removed from production state.
 - Account, station, tariff, customer, gateway, and dashboard samples were captured.
 - Every visible route is now `live-ready` or `live-derived`.
@@ -42,6 +43,8 @@ Verified locally
 Current route state
 - visible routes: 23 live-ready/live-derived of 23
 - all routes: 35 live-ready, 1 live-derived, 1 upstream-blocked, 1 guarded write
+- contract endpoints: 148
+- manifest-only dashboard reads are now locked in contract output
 
 Remaining external items
 - `/api/dlt645/read` returns HTTP 403 from upstream.

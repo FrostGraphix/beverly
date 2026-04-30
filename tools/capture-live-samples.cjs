@@ -14,6 +14,13 @@ const bearerToken = process.env.UPSTREAM_BEARER_TOKEN || process.env.LIVE_API_BE
 const allowWrites = process.env.ALLOW_LIVE_WRITES === "true";
 
 const defaultQueries = {
+  "/api/dashboard": "",
+  "/api/dashboard/hourly": "",
+  "/api/dashboard/gprs": "",
+  "/api/dashboard/events": "",
+  "/api/dashboard/risk-overlay": "",
+  "/api/dashboard/revenue-vs-usage": "",
+  "/api/dashboard/portfolio-health": "",
   "/api/token/creditTokenRecord/readMore": "FROM=2026-01-01T00:00:00.000Z&TO=2026-01-17T00:00:00.000Z&SITE_ID=KYAKALE",
   "/api/DailyDataMeter/readHourly": "offset=0&pageLimit=100&FROM=2026-01-10T00:00:00.000Z&TO=2026-01-17T00:00:00.000Z&SITE_ID=KYAKALE"
 };

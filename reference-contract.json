@@ -6,19 +6,19 @@
     "routeManifest": "reference-route-manifest.json",
     "endpointRegistry": "backend/src/services/endpoint-registry.ts"
   },
-  "generatedAt": "2026-04-28T12:08:23.296Z",
+  "generatedAt": "2026-04-29T05:15:15.261Z",
   "documentedTotal": 144,
   "endpointCount": 144,
   "endpointCountNote": "matches overview",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 18,
+  "visibleEndpointCount": 31,
   "liveWriteEndpointCount": 83,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
     "crawlMissingEndpointCount": 0,
     "crawlMissingEndpoints": [],
-    "routeCount": 23,
-    "fullyMappedRouteCount": 23,
+    "routeCount": 38,
+    "fullyMappedRouteCount": 38,
     "routeCoverage": [
       {
         "group": "Dashboard",
@@ -72,8 +72,8 @@
         "group": "Token Record",
         "title": "Clear Tamper Token Record",
         "hash": "#/token-record/clear-tamper-token-record",
-        "apiCount": 1,
-        "coveredApiCount": 1,
+        "apiCount": 2,
+        "coveredApiCount": 2,
         "fullyMapped": true
       },
       {
@@ -168,16 +168,16 @@
         "group": "Data Report",
         "title": "Interval Data",
         "hash": "#/prepay-report/daily-data-meter",
-        "apiCount": 1,
-        "coveredApiCount": 1,
+        "apiCount": 2,
+        "coveredApiCount": 2,
         "fullyMapped": true
       },
       {
         "group": "Management",
         "title": "Gateway",
         "hash": "#/management/gateway",
-        "apiCount": 2,
-        "coveredApiCount": 2,
+        "apiCount": 3,
+        "coveredApiCount": 3,
         "fullyMapped": true
       },
       {
@@ -202,6 +202,126 @@
         "hash": "#/management/account",
         "apiCount": 4,
         "coveredApiCount": 4,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "User",
+        "hash": "#/admin/user",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Role",
+        "hash": "#/admin/role",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Log",
+        "hash": "#/admin/log",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Station",
+        "hash": "#/admin/station",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Item",
+        "hash": "#/admin/item",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Meter",
+        "hash": "#/admin/meter",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Administration",
+        "title": "Debt",
+        "hash": "#/admin/debt",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Protocol",
+        "title": "DLMS",
+        "hash": "#/protocol/dlms",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Protocol",
+        "title": "DLT645",
+        "hash": "#/protocol/dlt645",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "GPRS Tasks",
+        "hash": "#/remote-support/gprs-tasks",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "GPRS Online Status",
+        "hash": "#/remote-support/gprs-online-status",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "Load Profile",
+        "hash": "#/remote-support/load-profile",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "Event Notification",
+        "hash": "#/remote-support/event-notification",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "Firmware Update",
+        "hash": "#/remote-support/firmware-update",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "Remote Support",
+        "title": "File Upload",
+        "hash": "#/remote-support/file-upload",
+        "apiCount": 1,
+        "coveredApiCount": 1,
         "fullyMapped": true
       }
     ]
@@ -667,6 +787,12 @@
           "title": "Gateway",
           "hash": "#/management/gateway",
           "status": 200
+        },
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter",
+          "status": null
         }
       ],
       "observed": true,
@@ -685,6 +811,11 @@
           "group": "Management",
           "title": "Gateway",
           "hash": "#/management/gateway"
+        },
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter"
         }
       ],
       "writeRiskLevel": "none"
@@ -897,19 +1028,32 @@
       "requestSchema": "DebtReadRequest",
       "responseSchema": "DebtResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Administration",
+          "title": "Debt",
+          "hash": "#/admin/debt",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/debt/read",
         "/API/debt/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/debt/read",
         "/API/debt/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Administration",
+          "title": "Debt",
+          "hash": "#/admin/debt"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1012,19 +1156,32 @@
       "requestSchema": "DLMSReadRequest",
       "responseSchema": "DLMSResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Protocol",
+          "title": "DLMS",
+          "hash": "#/protocol/dlms",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/dlms/Read",
         "/API/dlms/Read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/dlms/Read",
         "/API/dlms/Read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Protocol",
+          "title": "DLMS",
+          "hash": "#/protocol/dlms"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1150,19 +1307,32 @@
       "requestSchema": "DLT645ReadRequest",
       "responseSchema": "DLT645ResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Protocol",
+          "title": "DLT645",
+          "hash": "#/protocol/dlt645",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/dlt645/read",
         "/API/dlt645/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/dlt645/read",
         "/API/dlt645/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Protocol",
+          "title": "DLT645",
+          "hash": "#/protocol/dlt645"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1242,19 +1412,32 @@
       "requestSchema": "EventNotificationReadRequest",
       "responseSchema": "EventNotificationResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "Event Notification",
+          "hash": "#/remote-support/event-notification",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/EventNotification/Read",
         "/api/EventNotification/Read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/EventNotification/Read",
         "/api/EventNotification/Read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "Event Notification",
+          "hash": "#/remote-support/event-notification"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1288,19 +1471,32 @@
       "requestSchema": "None/Other",
       "responseSchema": "StringResponseDto",
       "operation": "file-upload",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "File Upload",
+          "hash": "#/remote-support/file-upload",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/File/Upload",
         "/api/File/Upload"
       ],
       "liveWrite": true,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/File/Upload",
         "/api/File/Upload"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "File Upload",
+          "hash": "#/remote-support/file-upload"
+        }
+      ],
       "writeRiskLevel": "high"
     },
     {
@@ -1409,6 +1605,12 @@
           "title": "Customer",
           "hash": "#/management/customer",
           "status": 200
+        },
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway",
+          "status": null
         }
       ],
       "observed": true,
@@ -1427,6 +1629,11 @@
           "group": "Management",
           "title": "Customer",
           "hash": "#/management/customer"
+        },
+        {
+          "group": "Management",
+          "title": "Gateway",
+          "hash": "#/management/gateway"
         }
       ],
       "writeRiskLevel": "none"
@@ -1577,19 +1784,32 @@
       "requestSchema": "ProtocolTaskReadRequest",
       "responseSchema": "ProtocolTaskResponseResponseDto",
       "operation": "task-read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "GPRS Tasks",
+          "hash": "#/remote-support/gprs-tasks",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/GPRSMeterTask/GPRSGetReadingTask",
         "/api/GPRSMeterTask/GPRSGetReadingTask"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/GPRSMeterTask/GPRSGetReadingTask",
         "/api/GPRSMeterTask/GPRSGetReadingTask"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "GPRS Tasks",
+          "hash": "#/remote-support/gprs-tasks"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1738,19 +1958,32 @@
       "requestSchema": "GPRSOnlineStatusReadRequest",
       "responseSchema": "GPRSOnlineStatusResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "GPRS Online Status",
+          "hash": "#/remote-support/gprs-online-status",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/GPRSOnlineStatus/Read",
         "/api/GPRSOnlineStatus/Read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/GPRSOnlineStatus/Read",
         "/api/GPRSOnlineStatus/Read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "GPRS Online Status",
+          "hash": "#/remote-support/gprs-online-status"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -1876,19 +2109,32 @@
       "requestSchema": "ItemReadRequest",
       "responseSchema": "ItemResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Administration",
+          "title": "Item",
+          "hash": "#/admin/item",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/item/read",
         "/API/item/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/item/read",
         "/API/item/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Administration",
+          "title": "Item",
+          "hash": "#/admin/item"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -2003,19 +2249,32 @@
       "requestSchema": "LoadProfileReadRequest",
       "responseSchema": "LoadProfileResponseResponseDto",
       "operation": "generic",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "Load Profile",
+          "hash": "#/remote-support/load-profile",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/LoadProfile/ElectricEnergyCurve",
         "/api/LoadProfile/ElectricEnergyCurve"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/LoadProfile/ElectricEnergyCurve",
         "/api/LoadProfile/ElectricEnergyCurve"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "Load Profile",
+          "hash": "#/remote-support/load-profile"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -2072,19 +2331,34 @@
       "requestSchema": "LogReadRequest",
       "responseSchema": "LogResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Administration",
+          "title": "Log",
+          "hash": "#/admin/log",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/Log/read",
-        "/API/Log/read"
+        "/API/Log/read",
+        "/api/log/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/Log/read",
-        "/API/Log/read"
+        "/API/Log/read",
+        "/api/log/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Administration",
+          "title": "Log",
+          "hash": "#/admin/log"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -2205,6 +2479,12 @@
           "title": "Consumption Statistics",
           "hash": "#/prepay-report/consumption-statistics",
           "status": 200
+        },
+        {
+          "group": "Administration",
+          "title": "Meter",
+          "hash": "#/admin/meter",
+          "status": null
         }
       ],
       "observed": true,
@@ -2233,6 +2513,11 @@
           "group": "Data Report",
           "title": "Consumption Statistics",
           "hash": "#/prepay-report/consumption-statistics"
+        },
+        {
+          "group": "Administration",
+          "title": "Meter",
+          "hash": "#/admin/meter"
         }
       ],
       "writeRiskLevel": "none"
@@ -2773,19 +3058,32 @@
       "requestSchema": "RoleReadRequest",
       "responseSchema": "RoleResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Administration",
+          "title": "Role",
+          "hash": "#/admin/role",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/role/read",
         "/API/role/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/role/read",
         "/API/role/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Administration",
+          "title": "Role",
+          "hash": "#/admin/role"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -3037,6 +3335,12 @@
           "title": "Account",
           "hash": "#/management/account",
           "status": 200
+        },
+        {
+          "group": "Administration",
+          "title": "Station",
+          "hash": "#/admin/station",
+          "status": null
         }
       ],
       "observed": true,
@@ -3155,6 +3459,11 @@
           "group": "Management",
           "title": "Account",
           "hash": "#/management/account"
+        },
+        {
+          "group": "Administration",
+          "title": "Station",
+          "hash": "#/admin/station"
         }
       ],
       "writeRiskLevel": "none"
@@ -3490,19 +3799,32 @@
       "requestSchema": "ClearTamperTokenRecordReadRequest",
       "responseSchema": "ClearTamperTokenRecordResponseResponseDto",
       "operation": "read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Token Record",
+          "title": "Clear Tamper Token Record",
+          "hash": "#/token-record/clear-tamper-token-record",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/token/clearTamperTokenRecord/read",
         "/API/token/clearTamperTokenRecord/read"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/api/token/clearTamperTokenRecord/read",
         "/API/token/clearTamperTokenRecord/read"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Token Record",
+          "title": "Clear Tamper Token Record",
+          "hash": "#/token-record/clear-tamper-token-record"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -3838,19 +4160,32 @@
       "requestSchema": "UpdateFirmwareTaskReadRequest",
       "responseSchema": "UpdateFirmwareTaskResponseResponseDto",
       "operation": "task-read",
-      "consumers": [],
+      "consumers": [
+        {
+          "group": "Remote Support",
+          "title": "Firmware Update",
+          "hash": "#/remote-support/firmware-update",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
         "/api/UpdateFirmwareTask/GetUpdateFirmwareTask"
       ],
       "liveWrite": false,
-      "visibleRoute": false,
+      "visibleRoute": true,
       "casingVariants": [
         "/API/UpdateFirmwareTask/GetUpdateFirmwareTask",
         "/api/UpdateFirmwareTask/GetUpdateFirmwareTask"
       ],
-      "uiRouteConsumers": [],
+      "uiRouteConsumers": [
+        {
+          "group": "Remote Support",
+          "title": "Firmware Update",
+          "hash": "#/remote-support/firmware-update"
+        }
+      ],
       "writeRiskLevel": "none"
     },
     {
@@ -4051,6 +4386,12 @@
           "title": "Credit Token",
           "hash": "#/token-generate/credit-token",
           "status": 200
+        },
+        {
+          "group": "Administration",
+          "title": "User",
+          "hash": "#/admin/user",
+          "status": null
         }
       ],
       "observed": true,
@@ -4069,6 +4410,11 @@
           "group": "Token Generate",
           "title": "Credit Token",
           "hash": "#/token-generate/credit-token"
+        },
+        {
+          "group": "Administration",
+          "title": "User",
+          "hash": "#/admin/user"
         }
       ],
       "writeRiskLevel": "none"

@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-04-28T16:10:49.724Z",
+  "generatedAt": "2026-04-28T17:52:26.869Z",
   "routes": [
     {
       "group": "Dashboard",
       "title": "Dashboard",
       "hash": "#/dashboard",
       "visibleReference": true,
-      "primaryEndpoint": "/api/dashboard/readLineChart",
+      "primaryEndpoint": "/api/dashboard",
       "declaredEndpoints": [
         "/api/dashboard/readPanelGroup",
         "/api/dashboard/readLineChart"
       ],
       "source": "live-ready",
-      "sample": "contracts/samples/api__dashboard__readLineChart.json",
+      "sample": null,
       "actions": [],
       "roles": [
         "super-admin",

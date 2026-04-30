@@ -1,5 +1,9 @@
 <template>
   <section class="table-page" :aria-label="route.title">
+    <div v-if="errorMessage" class="table-error" role="alert">
+      <span>{{ errorMessage }}</span>
+      <button class="btn primary" type="button" @click="load">Refresh</button>
+    </div>
     <div class="filter-toolbar">
       <select v-model="sortDirection" class="sort-select" aria-label="Sort direction">
         <option value="asc">Ascending</option>
@@ -14,11 +18,11 @@
     <p v-if="route.note" class="quota-line">{{ route.note }}</p>
     <div class="table-scroll">
       <table>
-        <thead><tr><th v-for="column in route.columns" :key="column">{{ column }}</th></tr></thead>
+        <thead><tr><th v-for="column in route.columns" :key="column" :class="column === 'Actions' ? 'action-column' : ''">{{ column }}</th></tr></thead>
         <tbody>
-          <tr v-if="!visibleRows.length"><td class="empty-cell" :colspan="route.columns.length">No Data</td></tr>
+          <tr v-if="!visibleRows.length"><td class="empty-cell" :colspan="route.columns.length">{{ errorMessage ? "Load failed" : "No Data" }}</td></tr>
           <tr v-for="(row, rowIndex) in visibleRows" :key="rowIndex" :class="{ selected: row === selectedRow }" @click="selectedRow = row">
-            <td v-for="column in route.columns" :key="column">
+            <td v-for="column in route.columns" :key="column" :class="column === 'Actions' ? 'action-column' : ''">
               <span v-if="column !== 'Actions'">{{ cell(row, column, rowIndex) }}</span>
               <span v-else>
                 <button v-for="action in rowActions" :key="action" class="link-btn" type="button" @click.stop="openAction(action, row)">{{ action }}</button>
@@ -65,10 +69,14 @@ export default {
       sortDirection: "asc",
       modalAction: "",
       selectedRow: null,
-      activeRow: {}
+      activeRow: {},
+      errorMessage: ""
     };
   },
   computed: {
+    pageSizeOptions() {
+      return pageSizeOptions;
+    },
     toolbarActions() {
       return this.route.actions.filter((name) => !["Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name));
     },
@@ -92,10 +100,20 @@ export default {
   },
   methods: {
     async load() {
-      const table = await fetchTableData(this.route);
-      this.allRows = table.rows;
-      this.total = table.total;
-      this.applyControls();
+      this.errorMessage = "";
+      try {
+        const table = await fetchTableData(this.route);
+        this.allRows = table.rows;
+        this.total = table.total;
+        this.applyControls();
+      } catch (error) {
+        this.allRows = [];
+        this.filteredRows = [];
+        this.visibleRows = [];
+        this.filteredTotal = 0;
+        this.selectedRow = null;
+        this.errorMessage = error?.message || "Unable to load data";
+      }
     },
     applyControls() {
       const searchedRows = searchRows(this.route, this.allRows, this.searchTerm);
@@ -123,7 +141,6 @@ export default {
       this.applyControls();
     },
     cell(row, column, rowIndex) {
-      if (this.route.group === "Remote Operation" && column === "Status") return rowIndex % 2 === 0 ? "Online" : "Offline";
       return row[columnKey(column)] || "";
     },
     buttonClass(action) {

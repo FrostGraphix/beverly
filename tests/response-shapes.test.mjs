@@ -21,7 +21,7 @@ function columnKey(label) {
     "Communication Way": "communicationWay",
     "CT Ratio": "ctRatio",
     "Remark": "remark",
-    "Create Time": "createTime",
+    "Create Time": "createDate",
     "Update Time": "updateTime",
     "Station Id": "stationId",
     "Customer Name": "customerName",
@@ -91,7 +91,7 @@ assert.strictEqual(chartSample.title, "Purchase Money");
 const exportRows = mapExportRows(accountRoute, accountSample.rows, columnKey);
 const printModel = buildReceiptModel(remoteTaskRoute, remoteSample.rows[0], columnKey);
 assert.strictEqual(exportRows.length, 2);
-assert.strictEqual(exportRows[0]["Customer Id"], "470005342689");
+assert.strictEqual(exportRows[0].customerId, "470005342689");
 assert(printModel.fields.some((field) => field.label === "Meter Id" && field.value === "470005342689"));
 
 for (const route of manifest.filter((item) => item.hash !== "#/dashboard")) {

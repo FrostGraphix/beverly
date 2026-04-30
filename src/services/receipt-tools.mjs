@@ -33,9 +33,9 @@ export function buildReceiptModel(route, row, columnKey, explicitType = "") {
       { label: "Total Unit", value: stringValue(row[columnKey("Total Unit")] || row.totalUnit) },
       { label: "Maximum Power(W)", value: stringValue(row[columnKey("Maximum Power(W)")] || row.maximumPower) },
       { label: "Station Id", value: stringValue(row[columnKey("Station Id")] || row.stationId) },
-      { label: "Time", value: stringValue(row[columnKey("Time")] || row[columnKey("Create Time")] || row.createTime || row.time) }
+      { label: "Time", value: stringValue(row[columnKey("Time")] || row[columnKey("Create Time")] || row.createDate || row.createTime || row.time) }
     ].filter((field) => field.value),
-    footer: "Beverly by ACOB"
+    footer: "Beverly"
   };
   return model;
 }

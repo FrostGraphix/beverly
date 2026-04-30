@@ -1,10 +1,10 @@
 # Live Route Gap Audit
 
-Generated: 2026-04-28T16:10:49.728Z
+Generated: 2026-04-28T17:52:26.874Z
 
 | Route | Endpoint | Source | Gap |
 | --- | --- | --- | --- |
-| Dashboard | `/api/dashboard/readLineChart` | live-ready | none |
+| Dashboard | `/api/dashboard` | live-ready | none |
 | Credit Token | `/api/account/read` | live-ready | none |
 | Clear Tamper Token | `/api/account/read` | live-ready | none |
 | Clear Credit Token | `/api/account/read` | live-ready | none |

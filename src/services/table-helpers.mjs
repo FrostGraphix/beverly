@@ -8,7 +8,7 @@ export function columnKey(label) {
     "CertifiNo": "certifiNo",
     "Collection Date": "collectionDate",
     "Communication Way": "communicationWay",
-    "Create Time": "createTime",
+    "Create Time": "createDate",
     "Credit Balance": "creditBalance",
     "CT Ratio": "ctRatio",
     "Current Reverse": "currentReverse",
@@ -43,7 +43,7 @@ export function columnKey(label) {
     "Success Rate": "successRate",
     "Tariff Id": "tariffId",
     "Terminal Cover": "terminalCover",
-    "Time": "time",
+    "Time": "createDate",
     "Token": "token",
     "Token(Recharge)": "token",
     "Total Energy": "totalEnergy",
@@ -51,7 +51,7 @@ export function columnKey(label) {
     "Total Unit": "totalUnit",
     "Update Time": "updateTime",
     "Upper Open": "upperOpen",
-    "VAT Charge": "vatCharge",
+    "VAT Charge": "tax",
     "Vend": "vend"
   };
   return map[label] || label.charAt(0).toLowerCase() + label.slice(1).replace(/\s+/g, "");
@@ -66,7 +66,7 @@ export function searchRows(route, rows, searchTerm) {
 
 export function sortRows(route, rows, direction) {
   if (!direction) return rows.slice();
-  const firstColumn = route.columns.find((column) => !["Actions", "Status"].includes(column)) || route.columns[0];
+  const firstColumn = route.columns.find((column) => !["Actions", "Status", "status"].includes(column)) || route.columns[0];
   const key = columnKey(firstColumn);
   const factor = direction === "desc" ? -1 : 1;
   return rows.slice().sort((left, right) => {

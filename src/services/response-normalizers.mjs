@@ -1,10 +1,34 @@
-function isObject(value) {
+export function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function toNumber(value, fallback) {
+export function toFiniteNumber(value, fallback = 0) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
+export function firstDefinedValue(sources, keys, fallback = "") {
+  for (const source of sources || []) {
+    const record = isPlainObject(source) ? source : {};
+    for (const key of keys || []) {
+      if (record[key] !== null && typeof record[key] !== "undefined" && record[key] !== "") return record[key];
+    }
+  }
+  return fallback;
+}
+
+export function envelopeSources(payload) {
+  const envelope = normalizeEnvelope(payload);
+  return [
+    isPlainObject(payload) ? payload : {},
+    isPlainObject(envelope.data) ? envelope.data : {},
+    isPlainObject(envelope.result) ? envelope.result : {},
+    isPlainObject(envelope.raw) ? envelope.raw : {},
+    isPlainObject(envelope.data?.summary) ? envelope.data.summary : {},
+    isPlainObject(envelope.data?.metrics) ? envelope.data.metrics : {},
+    isPlainObject(envelope.result?.summary) ? envelope.result.summary : {},
+    isPlainObject(envelope.result?.metrics) ? envelope.result.metrics : {}
+  ];
 }
 
 const collectionFields = ["records", "list", "data", "items", "rows", "payments", "readings"];
@@ -21,7 +45,7 @@ export function normalizeEnvelope(payload) {
     };
   }
 
-  if (!isObject(payload)) {
+  if (!isPlainObject(payload)) {
     return {
       code: 0,
       msg: "success",
@@ -47,7 +71,7 @@ export function normalizeEnvelope(payload) {
 
 export function normalizeCollection(payload) {
   const envelope = normalizeEnvelope(payload);
-  const source = isObject(envelope.data) ? envelope.data : isObject(envelope.result) ? envelope.result : envelope.raw;
+  const source = isPlainObject(envelope.data) ? envelope.data : isPlainObject(envelope.result) ? envelope.result : envelope.raw;
 
   if (Array.isArray(envelope.data)) {
     return {
@@ -70,7 +94,7 @@ export function normalizeCollection(payload) {
       return {
         envelope,
         rows: source[field],
-        total: toNumber(source.total ?? source.count, source[field].length)
+        total: toFiniteNumber(source.total ?? source.count, source[field].length)
       };
     }
   }
@@ -79,7 +103,7 @@ export function normalizeCollection(payload) {
     return {
       envelope,
       rows: envelope.raw.payments,
-      total: toNumber(envelope.raw.total ?? envelope.raw.count, envelope.raw.payments.length)
+      total: toFiniteNumber(envelope.raw.total ?? envelope.raw.count, envelope.raw.payments.length)
     };
   }
 
@@ -87,7 +111,7 @@ export function normalizeCollection(payload) {
     return {
       envelope,
       rows: envelope.raw.readings,
-      total: toNumber(envelope.raw.total ?? envelope.raw.count, envelope.raw.readings.length)
+      total: toFiniteNumber(envelope.raw.total ?? envelope.raw.count, envelope.raw.readings.length)
     };
   }
 
@@ -100,18 +124,18 @@ export function normalizeCollection(payload) {
 
 export function normalizeDashboardMetrics(payload) {
   const envelope = normalizeEnvelope(payload);
-  const source = isObject(envelope.data) ? envelope.data : isObject(envelope.result) ? envelope.result : {};
+  const source = isPlainObject(envelope.data) ? envelope.data : isPlainObject(envelope.result) ? envelope.result : {};
   return {
-    totalAccountCount: toNumber(source.totalAccountCount, 0),
-    totalPurchaseTimes: toNumber(source.totalPurchaseTimes, 0),
-    totalPurchaseUnit: toNumber(source.totalPurchaseUnit, 0),
-    totalPurchaseMoney: toNumber(source.totalPurchaseMoney, 0)
+    totalAccountCount: toFiniteNumber(source.totalAccountCount, 0),
+    totalPurchaseTimes: toFiniteNumber(source.totalPurchaseTimes, 0),
+    totalPurchaseUnit: toFiniteNumber(source.totalPurchaseUnit, 0),
+    totalPurchaseMoney: toFiniteNumber(source.totalPurchaseMoney, 0)
   };
 }
 
 export function normalizeChartPayload(payload, fallbackTitle = "Purchase Money") {
   const envelope = normalizeEnvelope(payload);
-  const source = isObject(envelope.data) ? envelope.data : isObject(envelope.result) ? envelope.result : {};
+  const source = isPlainObject(envelope.data) ? envelope.data : isPlainObject(envelope.result) ? envelope.result : {};
   return {
     title: source.title || fallbackTitle,
     xData: Array.isArray(source.xData) ? source.xData : [],
@@ -121,7 +145,7 @@ export function normalizeChartPayload(payload, fallbackTitle = "Purchase Money")
 
 export function normalizeActionResult(payload) {
   const envelope = normalizeEnvelope(payload);
-  const source = isObject(envelope.data) ? envelope.data : {};
+  const source = isPlainObject(envelope.data) ? envelope.data : {};
   return {
     envelope,
     token: source.token || "",

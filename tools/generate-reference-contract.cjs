@@ -39,6 +39,23 @@ function buildPathVariants(endpointPath) {
   return Array.from(variants);
 }
 
+function methodFromPath(endpointPath) {
+  const lower = endpointPath.toLowerCase();
+  if ([
+    "/api/dashboard",
+    "/api/dashboard/hourly",
+    "/api/dashboard/gprs",
+    "/api/dashboard/events",
+    "/api/dashboard/risk-overlay",
+    "/api/dashboard/revenue-vs-usage",
+    "/api/dashboard/portfolio-health"
+  ].includes(lower)) {
+    return "GET";
+  }
+  if (lower.includes("readmore") || lower.includes("readhourly") || lower.includes("readmonthly")) return "GET_OR_POST";
+  return "POST";
+}
+
 function writeRiskLevelFromOperation(operation) {
   if (["read", "drilldown", "task-read", "generic"].includes(operation)) return "none";
   if (["crud-create", "crud-update", "import"].includes(operation)) return "medium";
@@ -187,6 +204,29 @@ function main() {
       };
       endpoints.push(registryOnly);
       endpointMap.set(item.path.toLowerCase(), registryOnly);
+    }
+  }
+
+  for (const route of manifest) {
+    for (const apiPath of route.apis || []) {
+      if (endpointMap.has(apiPath.toLowerCase())) continue;
+      const manifestOnly = {
+        module: route.group || "ManifestOnly",
+        path: apiPath,
+        operationId: "",
+        method: methodFromPath(apiPath),
+        requestSchema: "",
+        responseSchema: "",
+        operation: operationFromPath(apiPath),
+        consumers: [{ group: route.group, title: route.title, hash: route.hash, status: null }],
+        observed: false,
+        aliases: buildPathVariants(apiPath),
+        liveWrite: !["read", "drilldown", "task-read", "generic"].includes(operationFromPath(apiPath)),
+        visibleRoute: true,
+        manifestOnly: true
+      };
+      endpoints.push(manifestOnly);
+      endpointMap.set(apiPath.toLowerCase(), manifestOnly);
     }
   }
 

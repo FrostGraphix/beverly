@@ -9,6 +9,10 @@ Build a Vue 2 compatible remake clone of the reference Meter System.
 - `src/main.js` boots Vue 2.
 - `src/App.vue` owns the reference shell.
 - `src/services/api.js` handles the `9310` API contract.
+- `src/services/dashboard-service.mjs` owns dashboard read orchestration.
+- `src/services/table-service.js` owns route table read orchestration.
+- `src/services/action-service.mjs` owns guarded action/write submits.
+- `src/services/mappers/` owns response normalization by domain.
 - `src/data/route-manifest.js` owns visible routes.
 - `src/styles/reference.css` mirrors reference layout.
 

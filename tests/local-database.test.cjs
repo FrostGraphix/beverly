@@ -124,8 +124,8 @@ async function main() {
       ALLOW_LIVE_WRITES: "true"
     }, async () => {
       const cachedRead = await request(proxyPort, "POST", "/api/cache-only/read?scope=test", { page: 1 });
-      assert.strictEqual(cachedRead.status, 200);
-      assert.strictEqual(cachedRead.body._proxy.source, "cache");
+      assert.strictEqual(cachedRead.status, 502);
+      assert.strictEqual(cachedRead.body._proxy.source, "live-required");
 
       const exportJob = await request(proxyPort, "POST", "/api/local/exportJob/create", {
         routeHash: "#/management/account",
@@ -154,7 +154,16 @@ async function main() {
         authorizationProvided: true,
         action: "Import"
       }]);
-      assert.strictEqual(importWrite.status, 200);
+      assert.strictEqual(importWrite.status, 502);
+
+      const uploadLog = await request(proxyPort, "POST", "/api/local/importJobs/read", {
+        routeHash: "#/management/account",
+        pageSize: 10,
+        offset: 0
+      });
+      assert.strictEqual(uploadLog.status, 200);
+      assert.strictEqual(uploadLog.body.data.total, 1);
+      assert.strictEqual(uploadLog.body.data.rows[0].name, "accounts.csv");
     });
 
     await withEnv({
@@ -165,7 +174,7 @@ async function main() {
       assert(counts.users >= 3);
       assert(counts.roles >= 3);
       assert(counts.permissions >= 5);
-      assert(counts.api_cache >= 1);
+      assert.strictEqual(counts.api_cache, 0);
       assert(counts.audit_logs >= 4);
       assert(counts.import_jobs >= 1);
       assert(counts.export_jobs >= 1);

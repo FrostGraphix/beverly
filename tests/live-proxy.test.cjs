@@ -109,6 +109,12 @@ async function main() {
         return;
       }
 
+      if (req.url.startsWith("/API/GPRSMeterTask/GPRSGetReadingTask")) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 0, reason: "success", result: { records: [{ id: "GPRS-1", gatewayId: "GW-01" }], total: 1 } }));
+        return;
+      }
+
       if (req.url.startsWith("/api/account/read")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ code: 99, reason: "Query failed, please try again", result: null }));
@@ -174,15 +180,25 @@ async function main() {
       assert.deepStrictEqual(liveRead.body.data, liveRead.body.result);
       assert.strictEqual(liveRead.body._proxy.source, "live");
 
+      const gprsRead = await request(proxyPort, "POST", "/api/API/GPRSMeterTask/GPRSGetReadingTask", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 10 }))
+      });
+      assert.strictEqual(gprsRead.status, 200);
+      assert.strictEqual(gprsRead.body.reason, "success");
+      assert.strictEqual(gprsRead.body._proxy.pathname, "/API/GPRSMeterTask/GPRSGetReadingTask");
+      assert.strictEqual(gprsRead.body.result.records[0].gatewayId, "GW-01");
+
       const accountRead = await request(proxyPort, "POST", "/api/account/read", {
         headers: {
           "Content-Type": "application/json"
         },
         body: Buffer.from(JSON.stringify({ page: 1 }))
       });
-      assert.strictEqual(accountRead.status, 200);
-      assert.strictEqual(accountRead.body.code, 200);
-      assert.strictEqual(accountRead.body._proxy.source, "facade");
+      assert.strictEqual(accountRead.status, 502);
+      assert.strictEqual(accountRead.body._proxy.source, "live-required");
 
       const accountCreate = await request(proxyPort, "POST", "/api/account/create", {
         headers: {
@@ -211,12 +227,12 @@ async function main() {
         },
         body: Buffer.from(JSON.stringify({}))
       });
-      assert.strictEqual(fallback.status, 200);
-      assert.strictEqual(fallback.body._proxy.source, "facade");
+      assert.strictEqual(fallback.status, 502);
+      assert.strictEqual(fallback.body._proxy.source, "live-required");
 
       const readMore = await request(proxyPort, "GET", "/api/token/creditTokenRecord/readMore?FROM=2026-01-01T00:00:00.000Z&TO=2026-01-17T00:00:00.000Z&SITE_ID=KYAKALE");
-      assert.strictEqual(readMore.status, 200);
-      assert.strictEqual(readMore.body._proxy.source, "facade");
+      assert.strictEqual(readMore.status, 502);
+      assert.strictEqual(readMore.body._proxy.source, "live-required");
     });
 
     await withEnv({
@@ -237,6 +253,7 @@ async function main() {
     });
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");
+    assert(upstreamRequests.some((entry) => entry.url === "/API/GPRSMeterTask/GPRSGetReadingTask"), "uppercase API proxy prefix normalization failed");
     assert(upstreamRequests.some((entry) => entry.authorization === "Bearer caller-token"), "caller bearer token not forwarded");
     assert(upstreamRequests.some((entry) => entry.url === "/api/account/read" && entry.authorization === "Bearer env-token"), "env bearer token not used");
     assert(upstreamRequests.some((entry) => entry.url === "/API/File/Upload" && entry.contentType.includes("multipart/form-data") && entry.body.includes("hello")), "upload passthrough failed");

@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-04-28T16:10:49.727Z",
+  "generatedAt": "2026-04-28T17:52:26.873Z",
   "observations": [
     {
       "hash": "#/dashboard",
-      "endpoint": "/api/dashboard/readLineChart",
+      "endpoint": "/api/dashboard",
       "source": "live-ready",
-      "sample": "contracts/samples/api__dashboard__readLineChart.json",
-      "note": ""
+      "sample": null,
+      "note": "Dashboard uses panel group and line chart live endpoints."
     },
     {
       "hash": "#/token-generate/credit-token",

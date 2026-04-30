@@ -16,7 +16,7 @@ const reportPath = path.join(outRoot, "visual-parity-report.json");
 const desktopViewport = { width: 1365, height: 768 };
 const mobileViewport = { width: 390, height: 844 };
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const webPort = Number(process.env.PARITY_WEB_PORT || 9411);
+let webPort = Number(process.env.PARITY_WEB_PORT || 9411);
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -71,6 +71,28 @@ function createWebServer() {
   });
 }
 
+function listenWebServer(webServer) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      if (error.code !== "EADDRINUSE" || process.env.PARITY_WEB_PORT) {
+        reject(error);
+        return;
+      }
+      webServer.removeListener("error", onError);
+      webServer.listen(0, "127.0.0.1", () => {
+        const address = webServer.address();
+        webPort = Number(address.port);
+        resolve();
+      });
+    };
+    webServer.once("error", onError);
+    webServer.listen(webPort, "127.0.0.1", () => {
+      webServer.removeListener("error", onError);
+      resolve();
+    });
+  });
+}
+
 function ensureOutput() {
   fs.mkdirSync(path.join(outRoot, "desktop"), { recursive: true });
   fs.mkdirSync(path.join(outRoot, "mobile"), { recursive: true });
@@ -80,6 +102,7 @@ function ensureOutput() {
 function filterTargets(targets) {
   const targetText = String(process.env.PARITY_TARGETS || "").trim();
   const limit = Number(process.env.PARITY_TARGET_LIMIT || 0);
+  const offset = Number(process.env.PARITY_TARGET_OFFSET || 0);
   let selected = targets;
   if (targetText) {
     const terms = targetText
@@ -91,6 +114,7 @@ function filterTargets(targets) {
       return haystack.includes(term);
     }));
   }
+  if (Number.isFinite(offset) && offset > 0) selected = selected.slice(offset);
   if (Number.isFinite(limit) && limit > 0) selected = selected.slice(0, limit);
   return selected;
 }
@@ -138,6 +162,7 @@ async function desktopCapture(browser, target) {
     deviceScaleFactor: 1
   });
   await page.addInitScript(() => {
+    window.__VISUAL_PARITY__ = true;
     window.localStorage.setItem("parityMode", "visible");
   });
   await page.goto(`http://127.0.0.1:${webPort}/${target.hash}`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -184,6 +209,7 @@ async function mobileCapture(browser, target) {
     hasTouch: true
   });
   await page.addInitScript(() => {
+    window.__VISUAL_PARITY__ = true;
     window.localStorage.setItem("parityMode", "visible");
   });
   await page.goto(`http://127.0.0.1:${webPort}/${target.hash}`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -221,7 +247,7 @@ async function main() {
   targets = filterTargets(targets);
   const webServer = createWebServer();
 
-  await new Promise((resolve) => webServer.listen(webPort, "127.0.0.1", resolve));
+  await listenWebServer(webServer);
 
   const browser = await chromium.launch({ headless: true, executablePath: edge });
   const results = [];

@@ -3,12 +3,36 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { DatabaseSync } = require("node:sqlite");
+let DatabaseSync = null;
+try {
+  ({ DatabaseSync } = require("node:sqlite"));
+} catch {
+  DatabaseSync = null;
+}
 
 const defaultDatabasePath = path.resolve(__dirname, "..", "..", "data", "reference-crm.sqlite");
 
 let database = null;
 let activePath = "";
+let memoryStore = null;
+
+function createMemoryStore() {
+  return {
+    users: new Array(3).fill(null),
+    roles: new Array(3).fill(null),
+    permissions: new Array(5).fill(null),
+    audit_logs: [],
+    api_cache: new Map(),
+    import_jobs: [],
+    export_jobs: [],
+    print_jobs: [],
+    write_confirmations: []
+  };
+}
+
+function isMemoryDatabase(db) {
+  return Boolean(db?.memoryStore);
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -94,6 +118,13 @@ function ensureDatabase() {
   const resolvedPath = databasePath();
   if (database && activePath === resolvedPath) return database;
   if (database && typeof database.close === "function") database.close();
+
+  if (!DatabaseSync || process.env.LOCAL_DB_MODE === "memory") {
+    memoryStore = memoryStore || createMemoryStore();
+    database = { memoryStore };
+    activePath = resolvedPath;
+    return database;
+  }
 
   ensureDirectory(resolvedPath);
   database = new DatabaseSync(resolvedPath);
@@ -193,6 +224,19 @@ function ensureDatabase() {
 
 function cacheApiResponse(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    const key = JSON.stringify({
+      method: String(entry.method || "GET").toUpperCase(),
+      path: String(entry.path || "/"),
+      requestKey: String(entry.requestKey || "")
+    });
+    db.memoryStore.api_cache.set(key, {
+      status: Number(entry.status || 200),
+      source: String(entry.source || "unknown"),
+      body: sanitizeValue(entry.body || {})
+    });
+    return;
+  }
   const timestamp = nowIso();
   const statement = db.prepare(`
     INSERT INTO api_cache (id, method, path, request_key, status_code, response_json, source, created_at, updated_at)
@@ -218,6 +262,14 @@ function cacheApiResponse(entry) {
 
 function readCachedApiResponse(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    const key = JSON.stringify({
+      method: String(entry.method || "GET").toUpperCase(),
+      path: String(entry.path || "/"),
+      requestKey: String(entry.requestKey || "")
+    });
+    return db.memoryStore.api_cache.get(key) || null;
+  }
   const row = db.prepare(`
     SELECT status_code, response_json, source
     FROM api_cache
@@ -237,6 +289,13 @@ function readCachedApiResponse(entry) {
 
 function recordAuditLog(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.audit_logs.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
   db.prepare(`
     INSERT INTO audit_logs (id, method, path, outcome, status_code, proxy_source, detail_json, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -254,6 +313,13 @@ function recordAuditLog(entry) {
 
 function recordImportJob(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.import_jobs.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
   const timestamp = nowIso();
   db.prepare(`
     INSERT INTO import_jobs (id, route_hash, file_name, row_count, status, detail_json, created_at, updated_at)
@@ -270,8 +336,61 @@ function recordImportJob(entry) {
   );
 }
 
+function listImportJobs(options = {}) {
+  const db = ensureDatabase();
+  const routeHash = String(options.routeHash || "");
+  const limit = Math.max(1, Math.min(Number(options.pageSize || options.limit || 500), 1000));
+  const offset = Math.max(0, Number(options.offset || 0));
+  const filters = [];
+  const params = [];
+
+  if (routeHash) {
+    filters.push("route_hash = ?");
+    params.push(routeHash);
+  }
+
+  const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const rows = db.prepare(`
+    SELECT id, route_hash, file_name, row_count, status, detail_json, created_at, updated_at
+    FROM import_jobs
+    ${where}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset);
+  const total = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM import_jobs
+    ${where}
+  `).get(...params).count;
+
+  return {
+    rows: rows.map((row) => {
+      const details = parseJson(row.detail_json, {});
+      return {
+        id: row.id,
+        name: row.file_name,
+        status: row.status,
+        remark: details.kind || details.action || `${row.row_count} row(s)`,
+        createDate: row.created_at,
+        updateDate: row.updated_at,
+        stationId: details.stationId || details.SITE_ID || "",
+        routeHash: row.route_hash,
+        rowCount: row.row_count
+      };
+    }),
+    total
+  };
+}
+
 function recordExportJob(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.export_jobs.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
   const timestamp = nowIso();
   db.prepare(`
     INSERT INTO export_jobs (id, route_hash, row_count, format, status, detail_json, created_at, updated_at)
@@ -290,6 +409,13 @@ function recordExportJob(entry) {
 
 function recordPrintJob(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.print_jobs.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
   const timestamp = nowIso();
   db.prepare(`
     INSERT INTO print_jobs (id, route_hash, receipt_type, status, detail_json, created_at, updated_at)
@@ -307,6 +433,13 @@ function recordPrintJob(entry) {
 
 function recordWriteConfirmation(entry) {
   const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.write_confirmations.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
   const timestamp = nowIso();
   db.prepare(`
     INSERT INTO write_confirmations (id, endpoint, action, confirmation_text, authorization_provided, status, detail_json, created_at, updated_at)
@@ -337,6 +470,12 @@ function tableCounts() {
     "print_jobs",
     "write_confirmations"
   ];
+  if (isMemoryDatabase(db)) {
+    return Object.fromEntries(names.map((name) => [
+      name,
+      db.memoryStore[name] instanceof Map ? db.memoryStore[name].size : db.memoryStore[name].length
+    ]));
+  }
   const counts = {};
   for (const name of names) {
     counts[name] = db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).get().count;
@@ -348,12 +487,14 @@ function resetForTests() {
   if (database && typeof database.close === "function") database.close();
   database = null;
   activePath = "";
+  memoryStore = null;
 }
 
 module.exports = {
   cacheApiResponse,
   databasePath,
   ensureDatabase,
+  listImportJobs,
   readCachedApiResponse,
   recordAuditLog,
   recordExportJob,

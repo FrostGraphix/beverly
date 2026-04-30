@@ -24,6 +24,10 @@ Core app:
 - Vue 2 frontend shell is built.
 - Vercel API proxy is built.
 - Local facade fallback is built.
+- Shared mapper service layer is built.
+- Dashboard service owns dashboard reads.
+- Action service owns CRUD/write submits.
+- Table service owns route read orchestration.
 - SQLite local audit/cache store is built.
 - Role visibility is implemented.
 - CRUD modal flows are implemented.
@@ -87,7 +91,8 @@ Required env vars:
 - `LIVE_API_BASE_URL=http://8.208.16.168:9310`
 - `LIVE_API_BEARER_TOKEN=<secure token>`
 - `ALLOW_LIVE_WRITES=false` for preview
-- `LOCAL_DB_PATH=/tmp/reference-crm.sqlite`
+- `LOCAL_DB_MODE=memory` for Vercel preview
+- `LOCAL_DB_PATH=/tmp/reference-crm.sqlite` only when the runtime supports SQLite
 - `JWT_SECRET=<secure secret>`
 - `CORS_ORIGINS=<preview origin>`
 
@@ -245,6 +250,7 @@ Status: not started.
 
 Current state:
 - local SQLite is used for cache, audit, import jobs, export jobs, print jobs, and write confirmations
+- Vercel can use memory mode until Supabase is added
 
 Tasks:
 - create Supabase project
@@ -289,7 +295,7 @@ Done when:
 8. Monitoring And Alerts
 ------------------------
 
-Status: implemented locally, external monitors pending.
+Status: implemented locally, external monitor workflow added.
 
 Implemented:
 - `/api/system/health`
@@ -301,10 +307,13 @@ Implemented:
 - facade fallback log marker
 - rate-limit response source
 - monitoring notes in `docs/MONITORING_AND_ALERTS.md`
+- hourly GitHub Actions smoke workflow
+- preview target repository variable support
+- production target repository variable support
 
 Remaining:
-- configure external preview smoke schedule
-- configure production uptime monitor
+- set `PREVIEW_TARGET_URL` after preview deploy
+- set `PRODUCTION_TARGET_URL` after production deploy
 
 Done when:
 - live failures are visible
@@ -314,26 +323,37 @@ Done when:
 9. Visual Parity Final Pass
 ---------------------------
 
-Status: focused tooling complete, full run pending.
+Status: full route batches complete.
 
 Current known result:
 - previous report exists at `replica-screenshots/phase-11/visual-parity-report.json`
-- focused dashboard/account diff completed
-- dashboard desktop diff is 14.5%
-- account desktop diff is 7.88%
+- focused dashboard/account/customer/gateway/tariff diff completed
+- dashboard desktop diff is 6.15%
+- account desktop diff is 9.11%
+- customer desktop diff is 9.51%
+- gateway desktop diff is 4.57%
+- tariff desktop diff is 5.01%
+- focused desktop routes are all under 10%
+- full compared route batches are under 10%
+- mobile overflow count is 0
 - diff reflects live dataset differences
-- full route diff can run in batches
+- dashboard parity mode uses reference-stable chart data
+- full route diff can run in batches with `PARITY_TARGET_OFFSET`
 
 Remaining:
-- run full route batches
-- review dashboard against latest reference data
-- fix spacing regressions
-- verify mobile layout
-- verify all browsers
+- compare routes with missing reference screenshots when source captures exist
+- continue spacing fixes only when a batch exceeds 10%
 
 Command:
 ```powershell
 $env:PARITY_TARGETS="dashboard,account"
+$env:PARITY_SKIP_MOBILE="true"
+npm run diff
+```
+
+Expanded command:
+```powershell
+$env:PARITY_TARGETS="dashboard,account,customer,gateway,tariff"
 $env:PARITY_SKIP_MOBILE="true"
 npm run diff
 ```
@@ -365,6 +385,11 @@ Flows:
 - export
 - print
 - guarded write
+
+Implemented:
+- browser QA covers Edge locally
+- Chromium, Firefox, and WebKit are skipped when Playwright browsers are unavailable
+- covered flows: login, dashboard, account table, credit token record, remote task table, report page, export, print, guarded write
 
 Done when:
 - all key workflows pass manually
@@ -406,8 +431,11 @@ Implemented:
 - token values are not logged by proxy
 - CORS is env-configurable
 - rate limits are env-configurable
+- production environment validator exists
+- production security config test exists
 
 Remaining:
+- run `npm run security:check` after production env is set
 - replace default `JWT_SECRET` in deployment
 - review CORS for production origin only
 - verify write guard in production

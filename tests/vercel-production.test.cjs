@@ -83,6 +83,7 @@ async function main() {
     const port = server.address().port;
     await withEnv({
       LIVE_API_PROXY_ENABLED: "false",
+      LIVE_READ_MODE: "local",
       ALLOW_LIVE_WRITES: "false",
       LOCAL_DB_PATH: "./tmp/vercel-production-test.sqlite"
     }, async () => {
@@ -92,7 +93,7 @@ async function main() {
 
       assert.strictEqual(health.status, 200);
       assert.strictEqual(health.body.data.ok, true);
-      assert.strictEqual(read.status, 200);
+      assert.strictEqual(read.status, 502);
       assert.strictEqual(write.status, 403);
 
       console.log(JSON.stringify({

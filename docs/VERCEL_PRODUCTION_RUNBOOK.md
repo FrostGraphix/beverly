@@ -7,6 +7,7 @@ Required env vars
 - `LIVE_API_BASE_URL`
 - `LIVE_API_BEARER_TOKEN`
 - `ALLOW_LIVE_WRITES`
+- `LOCAL_DB_MODE`
 - `LOCAL_DB_PATH`
 
 Recommended values
@@ -14,7 +15,8 @@ Recommended values
 - `LIVE_READ_MODE=live`
 - `LIVE_API_BASE_URL=http://8.208.16.168:9310`
 - `ALLOW_LIVE_WRITES=false`
-- `LOCAL_DB_PATH=/tmp/reference-crm.sqlite`
+- `LOCAL_DB_MODE=memory`
+- `LOCAL_DB_PATH=/tmp/reference-crm.sqlite` only when the runtime supports SQLite
 
 Preview checks
 1. Deploy to Vercel preview.

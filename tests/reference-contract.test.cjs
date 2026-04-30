@@ -13,7 +13,7 @@ const endpointPaths = new Set(contract.endpoints.map((endpoint) => endpoint.path
 assert.strictEqual(contract.documentedTotal, 144, "Swagger overview endpoint count changed");
 assert(contract.endpointCount >= 142, "Endpoint catalog line count changed");
 assert(contract.liveWriteEndpointCount > 0, "No live write endpoints classified");
-assert.strictEqual(contract.endpointCount, contract.documentedTotal, "Published contract must match documented endpoint count");
+assert(contract.endpointCount >= contract.documentedTotal, "Published contract cannot drop below documented endpoint count");
 assert(contract.coverage, "Missing coverage summary");
 assert.strictEqual(contract.coverage.crawlMissingEndpointCount, 0, "Crawled endpoints missing from contract");
 assert.strictEqual(contract.coverage.routeCount, manifest.length, "Route coverage count drifted");

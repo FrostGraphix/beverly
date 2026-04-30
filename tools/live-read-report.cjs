@@ -16,6 +16,9 @@ function sampleRows(body) {
   if (Array.isArray(result?.records)) return result.records.length;
   if (Array.isArray(result?.data)) return result.data.length;
   if (Array.isArray(result?.list)) return result.list.length;
+  if (Array.isArray(result?.readings)) return result.readings.length;
+  if (Array.isArray(result?.events)) return result.events.length;
+  if (Array.isArray(result?.points)) return result.points.length;
   if (Array.isArray(body?.payments)) return body.payments.length;
   if (Array.isArray(body?.readings)) return body.readings.length;
   return 0;

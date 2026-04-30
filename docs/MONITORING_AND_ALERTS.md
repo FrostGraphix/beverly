@@ -39,6 +39,9 @@ Preview Schedule
 - run smoke after every deployment
 - run route matrix after token rotation
 - run live report daily during rollout
+- `.github/workflows/monitoring-smoke.yml` runs hourly when configured
+- set repository variable `PREVIEW_TARGET_URL` to enable preview smoke
+- manual runs can pass `target_url`
 
 Production Uptime Monitor
 -------------------------
@@ -46,6 +49,15 @@ Production Uptime Monitor
 - check `/api/system/live-report`
 - check dashboard page
 - check account read
+- `.github/workflows/monitoring-smoke.yml` runs hourly when configured
+- set repository variable `PRODUCTION_TARGET_URL` to enable production smoke
+- failures should page the release owner
+
+GitHub Variables
+----------------
+- `PREVIEW_TARGET_URL`: preview smoke target
+- `PRODUCTION_TARGET_URL`: production smoke target
+- leave unset until the matching deployment exists
 
 Done Criteria
 -------------

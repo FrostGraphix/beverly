@@ -2,7 +2,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findRoute, routeGroups, visibleRoutes } from "../src/data/route-manifest.js";
+import { findRoute, routeGroups, visibleRoutes } from "../src/data/route-manifest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const contract = JSON.parse(fs.readFileSync(path.join(root, "reference-contract.json"), "utf8"));

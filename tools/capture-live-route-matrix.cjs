@@ -11,6 +11,7 @@ const observationPath = path.join(root, "contracts", "live-observation-log.json"
 const sampleDir = path.join(root, "contracts", "samples");
 
 function tableDataPath(hash, apis) {
+  if (hash === "#/dashboard") return "/api/dashboard";
   if (hash.includes("clear-credit-token-record")) return "/api/token/clearCreditTokenRecord/read";
   if (hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/read";
   if (hash.includes("set-maximum-power-limit-token-record")) return "/api/token/setMaximumPowerLimitTokenRecord/read";
@@ -52,11 +53,18 @@ function sampleOk(endpointPath) {
   }
 }
 
+function dashboardSamplesReady() {
+  return [
+    "/api/dashboard/readPanelGroup",
+    "/api/dashboard/readLineChart"
+  ].every(sampleOk);
+}
+
 function sourceStatus(endpointPath, hash) {
   if (!endpointPath) return "unmapped";
   if (hash.includes("file-upload")) return "guarded-write";
   if (hash === "#/dashboard") {
-    return sampleOk("/api/dashboard/readPanelGroup") && sampleOk("/api/dashboard/readLineChart") && sampleOk("/api/DailyDataMeter/readHourly")
+    return dashboardSamplesReady()
       ? "live-ready"
       : "mixed";
   }
@@ -93,9 +101,11 @@ async function main() {
       endpoint: route.primaryEndpoint,
       source: route.source,
       sample: route.sample,
-      note: route.hash.includes("consumption-statistics")
-        ? "Direct PrepayReport endpoint returns code 99, so live hourly readings are aggregated."
-        : ""
+      note: route.hash === "#/dashboard"
+        ? "Dashboard uses panel group and line chart live endpoints."
+        : route.hash.includes("consumption-statistics")
+          ? "Direct PrepayReport endpoint returns code 99, so live hourly readings are aggregated."
+          : ""
     }))
   }, null, 2)}\n`);
 
@@ -121,7 +131,7 @@ async function main() {
     "",
     "`/API/PrepayReport/ConsumptionStatistics` returns code 99 with valid schema payloads.",
     "The app now derives that report from `/api/DailyDataMeter/readHourly`.",
-    "This keeps the route live-backed without using facade rows."
+    "This keeps the route live-backed without sampled rows."
   ];
   fs.writeFileSync(auditPath, `${lines.join("\n")}\n`);
 
