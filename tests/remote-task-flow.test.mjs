@@ -6,6 +6,7 @@ import {
   normalizeAccountStatus,
   normalizeRemoteStatus,
   remoteTaskEndpoint,
+  remoteTaskNeedsAuthorization,
   remoteTaskValidationError
 } from "../src/services/remote-task-flow.mjs";
 
@@ -16,6 +17,9 @@ const controlRoute = { hash: "#/remote-operation/remote-meter-control" };
 assert.equal(remoteTaskEndpoint(tokenRoute), "/API/RemoteMeterTask/CreateTokenTask");
 assert.equal(remoteTaskEndpoint(readingRoute), "/API/RemoteMeterTask/CreateReadingTask");
 assert.equal(remoteTaskEndpoint(controlRoute), "/API/RemoteMeterTask/CreateControlTask");
+assert.equal(remoteTaskNeedsAuthorization(readingRoute), false);
+assert.equal(remoteTaskNeedsAuthorization(controlRoute), false);
+assert.equal(remoteTaskNeedsAuthorization(tokenRoute), false);
 
 assert.equal(defaultRemoteDataItem(tokenRoute), "Send Token");
 assert.equal(defaultRemoteDataItem(controlRoute), "Switch On");
@@ -39,6 +43,10 @@ const form = {
 
 assert.equal(remoteTaskValidationError(tokenRoute, form), "");
 assert.equal(remoteTaskValidationError(tokenRoute, { ...form, token: "" }), "token is required");
+assert.equal(remoteTaskValidationError(readingRoute, { ...form, authorizationPassword: "", dataItem: "Credit balance" }), "");
+assert.equal(remoteTaskValidationError(controlRoute, { ...form, authorizationPassword: "", dataItem: "Switch On" }), "");
+assert.equal(remoteTaskValidationError(readingRoute, { ...form, meterId: "", stationId: "", authorizationPassword: "", dataItem: "Credit balance" }, { action: "Add Batch Task", rows: [{ meterId: "M1" }] }), "");
+assert.equal(remoteTaskValidationError(readingRoute, { ...form, meterId: "", stationId: "", authorizationPassword: "", dataItem: "Credit balance" }, { action: "Add Batch Task", rows: [] }), "rows are required");
 
 assert.deepEqual(buildRemoteTaskPayload(tokenRoute, "Add Task", form), [
   {
@@ -58,7 +66,14 @@ assert.deepEqual(buildRemoteTaskPayload(tokenRoute, "Add Task", form), [
 ]);
 
 assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].dataDefault, "0");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].flag, "0", "Switch Off flag must be '0'");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].data, "0", "Switch Off data must be '0'");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].flag, "1", "Switch On flag must be '1'");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].data, "1", "Switch On data must be '1'");
 assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Credit balance" })[0].dataPrefix, "Credit balance,,");
+assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Credit balance" })[0].flag, "E421");
+assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Total Consumption" })[0].flag, "901F");
+assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, customerId: "", dataItem: "Credit balance" })[0].customerId, "47005372686");
 
 const batch = buildRemoteTaskPayload(tokenRoute, "Add Batch Task", form, [
   { customerId: "1", customerName: "A", meterId: "M1", stationId: "S1", protocolVersion: "2.2" },

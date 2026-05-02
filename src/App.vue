@@ -11,28 +11,38 @@
         <template v-for="group in groups">
           <a
             v-if="group.name === 'Dashboard'"
-            :key="group.name"
+            :key="'dash-' + group.name"
             :class="sidebarClass(group.routes[0], false)"
             :href="group.routes[0].hash"
           >
             <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
             <span class="sidebar-label">Dashboard</span>
           </a>
-          <div v-else :key="group.name">
+          <div v-else :key="'group-' + group.name">
             <div class="sidebar-item" @click="toggleGroup(group.name)" style="cursor: pointer;">
               <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
               <span class="sidebar-label">{{ group.name }}</span>
               <span class="sidebar-caret" :style="{ transform: expandedGroups[group.name] ? 'rotate(90deg)' : 'rotate(0deg)' }">&#8250;</span>
             </div>
-            <div class="sidebar-submenu" v-show="expandedGroups[group.name]">
-              <a v-for="route in group.routes" :key="route.hash" :class="sidebarClass(route, true)" :href="route.hash">
-                <span class="sidebar-dot"></span>
-                <span class="sidebar-label">{{ route.title }}</span>
-              </a>
-            </div>
+            <transition name="collapse">
+              <div class="sidebar-submenu" v-show="expandedGroups[group.name]">
+                <a v-for="route in group.routes" :key="route.hash" :class="sidebarClass(route, true)" :href="route.hash">
+                  <span class="sidebar-dot"></span>
+                  <span class="sidebar-label">{{ route.title }}</span>
+                </a>
+              </div>
+            </transition>
           </div>
         </template>
       </nav>
+      <div class="sidebar-footer">
+        <button class="sidebar-signout" @click="handleSignOut">
+          <span class="sidebar-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </span>
+          <span class="sidebar-label">Sign Out</span>
+        </button>
+      </div>
     </aside>
     <section class="main-container">
       <header class="fixed-header">
@@ -59,6 +69,7 @@
         <TablePage v-else :route="route" />
       </main>
     </section>
+    <ToastNotification />
   </div>
 </template>
 
@@ -66,6 +77,7 @@
 import DashboardPage from "./components/DashboardPage.vue";
 import LoginPage from "./components/LoginPage.vue";
 import TablePage from "./components/TablePage.vue";
+import ToastNotification from "./components/ToastNotification.vue";
 import { currentUserInfo, getCookie, setCookie } from "./services/api";
 import { findRoute, routeGroups } from "./data/route-manifest";
 
@@ -87,7 +99,7 @@ const topbarIcons = {
 
 export default {
   name: "App",
-  components: { DashboardPage, LoginPage, TablePage },
+  components: { DashboardPage, LoginPage, TablePage, ToastNotification },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -173,6 +185,12 @@ export default {
     },
     sidebarClass(route, indent) {
       return ["sidebar-item", indent ? "indent" : "", route.hash === this.route.hash ? "active" : ""];
+    },
+    handleSignOut() {
+      document.cookie = "roleId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "userName=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      window.location.hash = "#/login";
+      this.syncHash();
     }
   }
 };

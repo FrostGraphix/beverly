@@ -8,7 +8,7 @@
         type="button"
         @click="loadTopChart(card.type)"
       >
-        <span class="dashboard-stat-icon" :style="{ color: card.color }" v-html="card.icon"></span>
+        <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
         <span class="dashboard-stat-copy">
           <span class="dashboard-stat-label">{{ card.label }}</span>
           <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>

@@ -49,10 +49,15 @@ export function columnKey(label) {
     "Total Energy": "totalEnergy",
     "Total Paid": "totalPaid",
     "Total Unit": "totalUnit",
-    "Update Time": "updateTime",
+    "Update Time": "updateDate",
     "Upper Open": "upperOpen",
+    "User Id": "userId",
     "VAT Charge": "tax",
-    "Vend": "vend"
+    "Vend": "vend",
+    "Version": "version",
+    "Class Id": "classId",
+    "OBIS": "obis",
+    "Type": "type"
   };
   return map[label] || label.charAt(0).toLowerCase() + label.slice(1).replace(/\s+/g, "");
 }
@@ -64,15 +69,73 @@ export function searchRows(route, rows, searchTerm) {
   return rows.filter((row) => searchableColumns.some((column) => String(row[columnKey(column)] || "").toLowerCase().includes(query)));
 }
 
+const fixedSortPolicies = [
+  [/token-generate\/credit-token/, "customerId", "asc"],
+  [/token-generate\/clear-tamper-token/, "customerId", "asc"],
+  [/token-generate\/clear-credit-token/, "customerId", "asc"],
+  [/token-generate\/set-maximum-power-limit-token/, "customerId", "asc"],
+  [/remote-operation\/remote-meter-(reading|control|token)/, "customerName", "asc"],
+  [/management\/customer/, "id", "asc"],
+  [/management\/tariff/, "id", "asc"],
+  [/management\/account/, "customerId", "asc"],
+  [/admin\/user/, "userId", "asc"],
+  [/admin\/role/, "id", "asc"],
+  [/admin\/station/, "id", "asc"],
+  [/admin\/item/, "id", "asc"],
+  [/admin\/meter/, "meterId", "asc"],
+  [/protocol\/dlms/, "id", "asc"],
+  [/protocol\/dlt645/, "id", "asc"],
+  [/token-record\/(credit-token-record|clear-tamper-token-record|clear-credit-token-record|set-maximum-power-limit-token-record)/, "createDate", "desc"],
+  [/remote-operation-record\/remote-meter-(reading|control|token)-task/, "createDate", "desc"],
+  [/admin\/log/, "createDate", "desc"],
+  [/admin\/debt/, "createDate", "desc"],
+  [/remote-support\/gprs-tasks/, "createDate", "desc"],
+  [/remote-support\/load-profile/, "createDate", "desc"],
+  [/remote-support\/event-notification/, "createDate", "desc"],
+  [/remote-support\/firmware-update/, "createDate", "desc"],
+  [/prepay-report\/long-nonpurchase-situation/, "nonpurchaseDays", "desc"],
+  [/prepay-report\/low-purchase-situation/, "totalUnit", "asc"],
+  [/prepay-report\/consumption-statistics/, "collectionDate", "desc"],
+  [/prepay-report\/daily-data-meter/, "collectionDate", "desc"],
+  [/management\/gateway/, "successRate", "desc"],
+  [/remote-support\/gprs-online-status/, "successRate", "desc"],
+  [/remote-support\/file-upload/, "createDate", "desc"]
+];
+
+export function routeSortPolicy(route = {}) {
+  const hash = String(route.hash || "");
+  const match = fixedSortPolicies.find(([pattern]) => pattern.test(hash));
+  if (match) return { key: match[1], direction: match[2], fixed: true };
+  const firstColumn = route.columns?.find((column) => !["Actions", "Status", "status"].includes(column)) || route.columns?.[0] || "";
+  return { key: columnKey(firstColumn), direction: "asc", fixed: false };
+}
+
+export function routeSortDirection(route = {}) {
+  return routeSortPolicy(route).direction;
+}
+
+function comparableValue(value) {
+  if (value === null || value === undefined) return "";
+  const text = String(value).trim();
+  if (!text) return "";
+  const numeric = Number(text.replace(/,/g, "").replace("%", ""));
+  if (Number.isFinite(numeric) && /^-?\d+(?:[,.]\d+)?%?$/.test(text)) return numeric;
+  const timestamp = Date.parse(text);
+  if (Number.isFinite(timestamp) && /\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(text)) return timestamp;
+  return text.toLowerCase();
+}
+
 export function sortRows(route, rows, direction) {
-  if (!direction) return rows.slice();
-  const firstColumn = route.columns.find((column) => !["Actions", "Status", "status"].includes(column)) || route.columns[0];
-  const key = columnKey(firstColumn);
-  const factor = direction === "desc" ? -1 : 1;
+  const policy = routeSortPolicy(route);
+  const sortDirection = policy.fixed ? policy.direction : direction;
+  if (!sortDirection) return rows.slice();
+  const key = policy.key;
+  const factor = sortDirection === "desc" ? -1 : 1;
   return rows.slice().sort((left, right) => {
-    const leftValue = String(left[key] || "");
-    const rightValue = String(right[key] || "");
-    return leftValue.localeCompare(rightValue, undefined, { numeric: true }) * factor;
+    const leftValue = comparableValue(left[key]);
+    const rightValue = comparableValue(right[key]);
+    if (typeof leftValue === "number" && typeof rightValue === "number") return (leftValue - rightValue) * factor;
+    return String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true }) * factor;
   });
 }
 
@@ -97,6 +160,9 @@ export function rowActionButtons(route) {
   const buttons = [];
   if (route.actions.includes("Recharge")) buttons.push("Recharge");
   if (route.actions.includes("Generate Token")) buttons.push("Generate Token");
+  if (route.actions.includes("Cancel") && String(route.hash || "").includes("credit-token-record") && !String(route.hash || "").includes("clear-credit")) buttons.push("Cancel");
+  if (route.actions.includes("Cancel") && String(route.hash || "").includes("clear-tamper-token-record")) buttons.push("Cancel");
+  if (route.actions.includes("Cancel") && String(route.hash || "").includes("set-maximum-power-limit-token-record")) buttons.push("Cancel");
   if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Edit")) buttons.push("Edit");
   if (route.actions.includes("Delete")) buttons.push("Delete");
@@ -109,14 +175,47 @@ export function createFormSeed(route, action, row = {}) {
   const seed = {};
   for (const column of route.columns.filter((item) => item !== "Actions")) {
     const key = columnKey(column);
-    seed[key] = row[key] || "";
+    let value = row[key];
+    if (value === undefined || value === null) {
+      // Case-insensitive lookup
+      const actualKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
+      if (actualKey) value = row[actualKey];
+    }
+    if (value === undefined || value === null) {
+      // Generic fallbacks for common IDs
+      if (key.toLowerCase().includes("id")) value = row.id || row.customerId || row.meterId || row.gatewayId || row.userId || row.tariffId;
+      if (key.toLowerCase().includes("name")) value = row.name || row.customerName || row.userName || row.gatewayName || row.tariffName;
+      if (key === "stationId") value = row.station || row.siteId || row.stationId || row.StationId;
+    }
+    if (key === "stationId" && typeof value === "string") {
+      value = value.toUpperCase();
+    }
+    seed[key] = value ?? "";
   }
   if (action === "Recharge") {
     seed.amount = seed.amount || "500";
     seed.totalUnit = seed.totalUnit || "1.4";
   }
+  if (action === "Cancel" && String(route.hash || "").includes("credit-token-record")) {
+    seed.receiptId = row.receiptId || seed.receiptId || "";
+    seed.customerId = row.customerId || seed.customerId || "";
+    seed.customerName = row.customerName || seed.customerName || "";
+    seed.meterId = row.meterId || seed.meterId || "";
+    seed.totalPaid = row.totalPaid || seed.totalPaid || "";
+    seed.totalUnit = row.totalUnit || seed.totalUnit || "";
+    seed.token = row.token || seed.token || "";
+    seed.stationId = row.stationId || seed.stationId || "";
+  }
   if (action === "Add Task" || action === "Add Batch Task") {
-    seed.dataItem = seed.dataItem || route.title;
+    if (String(route.hash || "").includes("remote-operation/remote-meter-")) {
+      seed.customerId = row.customerId || seed.customerId || row.meterId || seed.meterId || "";
+      seed.customerName = row.customerName || seed.customerName || "";
+      seed.meterId = row.meterId || seed.meterId || "";
+      seed.protocolVersion = row.protocolVersion || seed.protocolVersion || "2.2";
+      seed.stationId = row.stationId || seed.stationId || "";
+    } else {
+      seed.dataItem = seed.dataItem || route.title;
+    }
   }
   return seed;
 }

@@ -57,9 +57,10 @@ export function calculateTokenAmount(totalUnit, tariff) {
   return String(Math.round(units * unitPrice * 100) / 100);
 }
 
-export function tokenValidationError(route, form = {}, tariff = null) {
+export function tokenValidationError(route, form = {}, tariff = null, options = {}) {
+  const requireAuthorization = options.requireAuthorization !== false;
   if (!String(form.meterId || "").trim()) return "meterId is required";
-  if (!String(form.authorizationPassword || "").trim()) return "authorizationPassword is required";
+  if (requireAuthorization && !String(form.authorizationPassword || "").trim()) return "authorizationPassword is required";
   if (isCreditTokenRoute(route)) {
     if (!tariff) return "Tariff data is missing";
     if (!parseTariffUnitPrice(tariff.price)) return "Tariff price is invalid";
@@ -106,6 +107,7 @@ export function buildTokenPayload(route, form = {}, options = {}) {
 }
 
 export function tokenResultFields(payload = {}) {
+  if (!payload) return [];
   const source = payload.result || payload.data || payload;
   return [
     ["Receipt Id", source.receiptId || source.id],

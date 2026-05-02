@@ -109,6 +109,14 @@ async function main() {
         return;
       }
 
+      if (req.url.startsWith("/API/RemoteMeterTask/CreateControlTask")) {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "[]");
+        const row = Array.isArray(body) ? body[0] : body;
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 0, reason: "success", result: { created: true, echo: row } }));
+        return;
+      }
+
       if (req.url.startsWith("/API/GPRSMeterTask/GPRSGetReadingTask")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ code: 0, reason: "success", result: { records: [{ id: "GPRS-1", gatewayId: "GW-01" }], total: 1 } }));
@@ -179,6 +187,37 @@ async function main() {
       assert.strictEqual(liveRead.body.msg, "success");
       assert.deepStrictEqual(liveRead.body.data, liveRead.body.result);
       assert.strictEqual(liveRead.body._proxy.source, "live");
+
+      // --- Meter Control Task smoke tests ---
+      const controlSwitchOn = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/CreateControlTask", {
+        headers: { "Content-Type": "application/json", Authorization: "Bearer caller-token" },
+        body: Buffer.from(JSON.stringify([{
+          customerId: "C001", customerName: "Test", meterId: "M001",
+          version: "2.2", flag: "1", name: "Switch On",
+          dataItem: "Switch On", dataDefault: "1", dataPrefix: "",
+          data: "1", stationId: "0001", remark: ""
+        }]))
+      });
+      assert.strictEqual(controlSwitchOn.status, 200, "Switch On: expected 200");
+      assert.strictEqual(controlSwitchOn.body.reason, "success", "Switch On: expected success");
+      const echoOn = controlSwitchOn.body.result?.echo || controlSwitchOn.body.data?.result?.echo;
+      assert.strictEqual(echoOn?.flag, "1", "Switch On: flag must be '1', not label string");
+      assert.strictEqual(echoOn?.data, "1", "Switch On: data must be '1'");
+
+      const controlSwitchOff = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/CreateControlTask", {
+        headers: { "Content-Type": "application/json", Authorization: "Bearer caller-token" },
+        body: Buffer.from(JSON.stringify([{
+          customerId: "C001", customerName: "Test", meterId: "M001",
+          version: "2.2", flag: "0", name: "Switch Off",
+          dataItem: "Switch Off", dataDefault: "0", dataPrefix: "",
+          data: "0", stationId: "0001", remark: ""
+        }]))
+      });
+      assert.strictEqual(controlSwitchOff.status, 200, "Switch Off: expected 200");
+      assert.strictEqual(controlSwitchOff.body.reason, "success", "Switch Off: expected success");
+      const echoOff = controlSwitchOff.body.result?.echo || controlSwitchOff.body.data?.result?.echo;
+      assert.strictEqual(echoOff?.flag, "0", "Switch Off: flag must be '0', not label string");
+      assert.strictEqual(echoOff?.data, "0", "Switch Off: data must be '0'");
 
       const gprsRead = await request(proxyPort, "POST", "/api/API/GPRSMeterTask/GPRSGetReadingTask", {
         headers: {

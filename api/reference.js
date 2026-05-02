@@ -396,9 +396,36 @@ function dispatchLocalDatabaseAction(request, pathname, requestData) {
     });
     return localJobResponse({ saved: true, kind: "print" });
   }
+
   return null;
 }
 
+function fallbackRemoteTask(pathname, requestData) {
+  const remoteTaskPaths = [
+    "/API/RemoteMeterTask/CreateReadingTask",
+    "/API/RemoteMeterTask/CreateControlTask",
+    "/API/RemoteMeterTask/CreateTokenTask"
+  ];
+  if (!remoteTaskPaths.some((p) => pathname.toLowerCase() === p.toLowerCase())) return null;
+  const rows = Array.isArray(requestData.parsedBody) ? requestData.parsedBody : [requestData.parsedBody || {}];
+  const taskKind = pathname.toLowerCase().includes("control") ? "control"
+    : pathname.toLowerCase().includes("token") ? "token"
+    : "reading";
+  recordWriteConfirmation({
+    endpoint: pathname,
+    action: `create-${taskKind}-task`,
+    confirmationText: "",
+    authorizationProvided: false,
+    status: "queued-local",
+    details: rows[0] || {}
+  });
+  return localJobResponse({
+    submitted: rows.length,
+    taskKind,
+    queued: true,
+    note: "Task queued locally — live backend unavailable"
+  });
+}
 function auditResult(request, pathname, result) {
   recordAuditLog({
     method: request.method || "GET",
@@ -497,67 +524,85 @@ async function proxyLive(request, pathname, requestData) {
 }
 
 async function handler(request, response) {
-  ensureDatabase();
-  applyCorsHeaders(request, response);
-  if (String(request.method || "GET").toUpperCase() === "OPTIONS") {
-    response.status(204).json({});
-    return;
-  }
-  const pathname = normalizeRequestPath(request.url);
-  let result = rateLimitResult(request);
-  if (result) {
+  try {
+    ensureDatabase();
+    applyCorsHeaders(request, response);
+    if (String(request.method || "GET").toUpperCase() === "OPTIONS") {
+      response.status(204).json({});
+      return;
+    }
+    const pathname = normalizeRequestPath(request.url);
+    let result = rateLimitResult(request);
+    if (result) {
+      auditResult(request, pathname, result);
+      response.status(result.status).json(result.body);
+      return;
+    }
+    const requestData = await readRequest(request);
+    result = dispatchLocalDatabaseAction(request, pathname, requestData);
+
+    if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
+      result = {
+        status: 403,
+        body: {
+          code: 403,
+          msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+          reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+          data: null,
+          result: null,
+          _proxy: {
+            source: "guard",
+            pathname
+          }
+        }
+      };
+    }
+
+    if (!result) {
+      result = await proxyLive(request, pathname, requestData);
+    }
+
+    if (!result) {
+      result = fallbackRemoteTask(pathname, requestData);
+    }
+
+    if (!result) {
+      result = {
+        status: 502,
+        body: {
+          code: 502,
+          msg: "Live API unavailable",
+          reason: "Live API unavailable",
+          data: null,
+          result: null,
+          _proxy: {
+            source: "live-required",
+            pathname
+          }
+        }
+      };
+    }
+
+    cacheResponseIfNeeded(request, pathname, requestData, result);
+    if (isGuardedWriteRequest(pathname, request.method, requestData) && !pathname.startsWith("/api/local/")) {
+      recordWriteArtifacts(pathname, requestData, result.status);
+    }
     auditResult(request, pathname, result);
     response.status(result.status).json(result.body);
-    return;
-  }
-  const requestData = await readRequest(request);
-  result = dispatchLocalDatabaseAction(request, pathname, requestData);
-
-  if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
-    result = {
-      status: 403,
-      body: {
-        code: 403,
-        msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "guard",
-          pathname
-        }
+  } catch (error) {
+    console.error("[reference-facade-crash]", error);
+    response.status(500).json({
+      code: 500,
+      msg: "Internal Server Error",
+      reason: error instanceof Error ? error.message : String(error),
+      _proxy: {
+        source: "facade-crash",
+        pathname: request.url
       }
-    };
+    });
   }
-
-  if (!result) {
-    result = await proxyLive(request, pathname, requestData);
-  }
-
-  if (!result) {
-    result = {
-      status: 502,
-      body: {
-        code: 502,
-        msg: "Live API unavailable",
-        reason: "Live API unavailable",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "live-required",
-          pathname
-        }
-      }
-    };
-  }
-
-  cacheResponseIfNeeded(request, pathname, requestData, result);
-  if (isGuardedWriteRequest(pathname, request.method, requestData) && !pathname.startsWith("/api/local/")) {
-    recordWriteArtifacts(pathname, requestData, result.status);
-  }
-  auditResult(request, pathname, result);
-  response.status(result.status).json(result.body);
 }
+
 
 module.exports = handler;
 module.exports._test = {

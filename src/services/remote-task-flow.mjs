@@ -1,9 +1,9 @@
 export const remoteTaskOptions = {
   reading: [
-    { value: "Credit balance", label: "Credit balance", flag: "Credit balance", dataDefault: "", dataPrefix: "Credit balance,," },
-    { value: "Total Consumption", label: "Total Consumption", flag: "Total Consumption", dataDefault: "", dataPrefix: "Total Consumption(kWh)" },
-    { value: "Power", label: "Power", flag: "Power", dataDefault: "", dataPrefix: "Power" },
-    { value: "Relay Status", label: "Relay Status", flag: "Relay Status", dataDefault: "", dataPrefix: "Relay Status" }
+    { value: "Credit balance", label: "Credit balance", flag: "E421", dataDefault: "", dataPrefix: "Credit balance,," },
+    { value: "Total Consumption", label: "Total Consumption", flag: "901F", dataDefault: "", dataPrefix: "Total Consumption(kWh)" },
+    { value: "Power", label: "Power", flag: "B630", dataDefault: "", dataPrefix: "Power" },
+    { value: "Relay Status", label: "Relay Status", flag: "EFF5", dataDefault: "", dataPrefix: "Relay Status" }
   ],
   control: [
     { value: "Switch On", label: "Switch On", flag: "Switch On", dataDefault: "1", dataPrefix: "" },
@@ -35,6 +35,10 @@ export function remoteTaskEndpoint(route = {}) {
   if (kind === "token") return "/API/RemoteMeterTask/CreateTokenTask";
   if (kind === "control") return "/API/RemoteMeterTask/CreateControlTask";
   return "/API/RemoteMeterTask/CreateReadingTask";
+}
+
+export function remoteTaskNeedsAuthorization(route = {}) {
+  return false;
 }
 
 export function remoteTaskTitle(route = {}, action = "") {
@@ -77,29 +81,36 @@ export function normalizeAccountStatus(value) {
   return "Offline";
 }
 
-export function remoteTaskValidationError(route = {}, form = {}) {
-  if (!String(form.meterId || "").trim()) return "meterId is required";
-  if (!String(form.stationId || "").trim()) return "stationId is required";
+export function remoteTaskValidationError(route = {}, form = {}, options = {}) {
+  const isBatch = options.action === "Add Batch Task";
+  const rows = Array.isArray(options.rows) ? options.rows : [];
+  if (isBatch) {
+    if (!rows.some((row) => row?.meterId)) return "rows are required";
+  } else {
+    if (!String(form.meterId || "").trim()) return "meterId is required";
+    if (!String(form.stationId || "").trim()) return "stationId is required";
+  }
   if (!String(form.dataItem || "").trim()) return "dataItem is required";
   if (remoteTaskKind(route) === "token" && !cleanToken(form.token || form.data)) return "token is required";
-  if (!String(form.authorizationPassword || "").trim()) return "authorizationPassword is required";
+
   return "";
 }
 
 export function remoteTaskPayloadForRow(route = {}, row = {}, form = {}) {
   const option = findRemoteTaskOption(route, form.dataItem);
+  const kind = remoteTaskKind(route);
   const token = cleanToken(form.token || form.data);
   return {
-    customerId: row.customerId || form.customerId || "",
+    customerId: row.customerId || form.customerId || row.meterId || form.meterId || "",
     customerName: row.customerName || form.customerName || "",
     meterId: row.meterId || form.meterId || "",
     version: row.protocolVersion || form.protocolVersion || "2.2",
-    flag: option.flag,
+    flag: kind === "control" ? option.dataDefault : option.flag,
     name: option.label,
     dataItem: option.label,
     dataDefault: option.dataDefault,
     dataPrefix: option.dataPrefix,
-    data: remoteTaskKind(route) === "token" ? token : form.data || "",
+    data: kind === "token" ? token : kind === "control" ? option.dataDefault : (form.data || ""),
     stationId: row.stationId || form.stationId || "",
     remark: form.remark || ""
   };

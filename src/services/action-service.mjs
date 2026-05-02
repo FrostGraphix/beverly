@@ -1,11 +1,15 @@
 import { liveWritesAllowed, postApi, uploadApi } from "./api.js";
 import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
+import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
 import { validateUploadFile } from "./upload-policy.mjs";
 
 export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/API/File/Upload";
   if (action === "Recharge") return "/api/token/creditToken/generate";
+  if (action === "Cancel" && route.hash.includes("credit-token-record") && !route.hash.includes("clear-credit")) return "/api/token/creditTokenRecord/cancel";
+  if (action === "Cancel" && route.hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/cancel";
+  if (action === "Cancel" && route.hash.includes("set-maximum-power-limit-token-record")) return "/api/token/setMaximumPowerLimitTokenRecord/cancel";
   if (action === "Generate Token" && route.hash.includes("clear-credit")) return "/api/token/clearCreditToken/generate";
   if (action === "Generate Token" && route.hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
   if (action === "Generate Token" && route.hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
@@ -21,7 +25,15 @@ export function actionEndpoint(route, action, uploadMode = false) {
         ? "tariff"
         : route.hash.includes("account")
           ? "account"
-          : "";
+          : route.hash.includes("admin/user")
+            ? "user"
+            : route.hash.includes("admin/role")
+              ? "role"
+              : route.hash.includes("admin/station")
+                ? "station"
+                : route.hash.includes("admin/item")
+                  ? "item"
+                  : "";
   if (!moduleName) return "";
   if (action === "Add") return `/api/${moduleName}/create`;
   if (action === "Edit") return `/api/${moduleName}/update`;
@@ -53,13 +65,13 @@ export async function submitRouteAction(route, action, form, options = {}) {
   const uploadMode = Boolean(options.uploadMode);
   const endpoint = options.endpoint || actionEndpoint(route, action, uploadMode);
   const writeAction = isWriteEndpoint(endpoint);
-  const fields = options.fields || [];
+  const fields = options.fields?.length ? options.fields : managementFields(route, action);
   const importRows = options.importRows || [];
   const selectedFile = options.selectedFile || null;
   const meta = auditMeta(route, action, form);
 
   if (writeAction) {
-    const validationError = validateWriteForm(action, form, fields);
+    const validationError = validateWriteForm(action, route, form, fields);
     if (validationError) throw new Error(validationError);
   }
   if (uploadMode) {

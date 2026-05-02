@@ -314,6 +314,7 @@ Implemented:
 Remaining:
 - set `PREVIEW_TARGET_URL` after preview deploy
 - set `PRODUCTION_TARGET_URL` after production deploy
+- no deployed URL exists locally yet
 
 Done when:
 - live failures are visible
@@ -390,6 +391,7 @@ Implemented:
 - browser QA covers Edge locally
 - Chromium, Firefox, and WebKit are skipped when Playwright browsers are unavailable
 - covered flows: login, dashboard, account table, credit token record, remote task table, report page, export, print, guarded write
+- `npm run test:browser` records installed-browser coverage
 
 Done when:
 - all key workflows pass manually
@@ -433,6 +435,7 @@ Implemented:
 - rate limits are env-configurable
 - production environment validator exists
 - production security config test exists
+- production log review tool exists
 
 Remaining:
 - run `npm run security:check` after production env is set
@@ -440,6 +443,9 @@ Remaining:
 - review CORS for production origin only
 - verify write guard in production
 - complete log review after preview deployment
+
+Latest review:
+- `docs/OPERATIONS_EXECUTION_REPORT.md`
 
 Done when:
 - production env has secure secrets

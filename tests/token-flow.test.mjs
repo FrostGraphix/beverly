@@ -42,6 +42,7 @@ const form = {
 
 assert.equal(tokenValidationError(creditRoute, form, tariff), "");
 assert.equal(tokenValidationError(creditRoute, { ...form, authorizationPassword: "" }, tariff), "authorizationPassword is required");
+assert.equal(tokenValidationError(creditRoute, { ...form, authorizationPassword: "" }, tariff, { requireAuthorization: false }), "");
 assert.equal(tokenValidationError(creditRoute, form, null), "Tariff data is missing");
 
 assert.deepEqual(buildTokenPayload(creditRoute, form, { isPreview: true }), {

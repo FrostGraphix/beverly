@@ -7,6 +7,29 @@ const defaultJwtSecrets = new Set([
   "acob-crm3-jwt-secret-2026"
 ]);
 
+function parseDotEnv(content) {
+  const values = {};
+  for (const line of String(content || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+    const index = trimmed.indexOf("=");
+    const key = trimmed.slice(0, index).trim();
+    const value = trimmed.slice(index + 1).trim();
+    values[key] = value.replace(/^["']|["']$/g, "");
+  }
+  return values;
+}
+
+function localEnv() {
+  try {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    return parseDotEnv(fs.readFileSync(path.resolve(__dirname, "..", ".env"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 function splitOrigins(value) {
   return String(value || "")
     .split(",")
@@ -52,11 +75,18 @@ function checkProductionConfig(env = process.env) {
 }
 
 if (require.main === module) {
-  const result = checkProductionConfig(process.env);
+  const reviewProduction = process.argv.includes("--production");
+  const env = {
+    ...localEnv(),
+    ...process.env
+  };
+  if (reviewProduction) env.NODE_ENV = "production";
+  const result = checkProductionConfig(env);
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exit(1);
 }
 
 module.exports = {
-  checkProductionConfig
+  checkProductionConfig,
+  parseDotEnv
 };

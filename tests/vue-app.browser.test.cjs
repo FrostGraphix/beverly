@@ -73,6 +73,12 @@ function apiBody(url) {
   if (url.includes("/dashboard/readLineChart")) {
     return { code: 0, data: { title: "Purchase Money", xData: ["Jan", "Feb"], yData: [10, 20] } };
   }
+  if (url.includes("/tariff/read")) {
+    return { code: 0, data: { data: [{ tariffId: "T-1", id: "T-1", name: "QA Tariff", price: "350" }], total: 1 } };
+  }
+  if (url.includes("/token/creditToken/generate")) {
+    return { code: 0, data: { token: "1234 5678 9012 3456", createDate: "2026-01-01 00:00:00" } };
+  }
   if (url.includes("/account/create")) {
     return { code: 403, reason: "Live writes are guarded" };
   }
@@ -115,11 +121,33 @@ async function runFlow(browserName, page) {
   await closeModal(page);
 
   await page.evaluate(() => {
+    window.location.hash = "#/token-generate/credit-token";
+  });
+  await page.waitForSelector("text=Recharge", { timeout: 10000 });
+  await page.click("text=Recharge");
+  await page.waitForSelector("text=Total Paid(MMK)", { timeout: 10000 });
+  await page.locator(".modal-field", { hasText: "Total Paid(MMK)" }).locator("input").fill("350");
+  await page.evaluate(() => {
+    document.querySelector(".modal-actions .btn.primary")?.click();
+  });
+  await page.waitForSelector(".enterprise-reference-summary", { timeout: 10000 });
+  await page.waitForFunction(() => document.body.innerText.includes("Customer Id"));
+  await page.waitForFunction(() => document.body.innerText.includes("Customer Name"));
+  await page.waitForFunction(() => document.body.innerText.includes("Meter Id"));
+  await page.waitForFunction(() => document.body.innerText.includes("Pay Debt(MMK)"));
+  await page.waitForFunction(() => document.body.innerText.includes("Monthly Charge(MMK)"));
+  await page.waitForFunction(() => document.body.innerText.includes("Total Unit(kWh)"));
+  await page.waitForFunction(() => document.body.innerText.includes("Total Paid(MMK)"));
+  await page.waitForSelector("text=Payment Method", { timeout: 10000 });
+  await page.waitForSelector("text=Authorization Password", { timeout: 10000 });
+  await closeModal(page);
+
+  await page.evaluate(() => {
     window.location.hash = "#/token-record/credit-token-record";
   });
-  await page.waitForSelector("text=Print", { timeout: 10000 });
-  await page.click("text=Print");
-  await page.waitForSelector(".receipt-card", { timeout: 10000 });
+  await page.waitForSelector("text=receiptId", { timeout: 10000 });
+  await page.locator("button.link-btn", { hasText: "Print" }).first().click();
+  await page.waitForSelector(".modal-title", { timeout: 10000 });
   await closeModal(page);
 
   await page.evaluate(() => {
@@ -210,7 +238,7 @@ async function main() {
   console.log(JSON.stringify({
     passed,
     skipped: results.filter((result) => result.skipped),
-    flows: ["login", "dashboard", "account table", "credit token record", "remote task table", "report page", "export", "print", "guarded write"],
+    flows: ["login", "dashboard", "account table", "credit token confirmation", "credit token record", "remote task table", "report page", "export", "print", "guarded write"],
     status: "browser qa passed"
   }, null, 2));
 }

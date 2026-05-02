@@ -2,15 +2,23 @@ import { getApi, postApi } from "./api.js";
 import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapper.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
-import { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
+import { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
 const maxTableRows = 20000;
+export const tableSiteOptions = [
+  { value: "", label: "All sites" },
+  { value: "KYAKALE", label: "Kyakale" },
+  { value: "MUSHA", label: "Musha" },
+  { value: "UMAISHA", label: "Umaisha" },
+  { value: "TUNGA", label: "Tunga" },
+  { value: "OGUFA", label: "Ogufa" }
+];
 export const defaultTableOptions = {
-  siteId: "KYAKALE",
-  from: "2026-01-01T00:00:00.000Z",
-  to: "2026-01-17T00:00:00.000Z",
+  siteId: "",
+  get from() { return new Date(new Date().getFullYear(), 0, 1).toISOString(); },
+  get to()   { return new Date().toISOString(); },
   pageNumber: 1,
   pageSize: tableFetchPageSize
 };
@@ -26,8 +34,18 @@ function rangeParams(options) {
   return {
     FROM: options.from,
     TO: options.to,
-    SITE_ID: options.siteId
+    ...(options.siteId ? { SITE_ID: options.siteId } : {})
   };
+}
+
+function stationFilter(options) {
+  return options.siteId ? { stationId: options.siteId } : {};
+}
+
+export function routeSupportsSiteFilter(route) {
+  return route.hash.startsWith("#/remote-operation-record/")
+    || route.hash.startsWith("#/prepay-report/")
+    || route.hash.startsWith("#/remote-support/");
 }
 
 export function tableDataPath(route) {
@@ -38,10 +56,10 @@ export function tableDataPath(route) {
   if (route.hash.includes("remote-meter-reading-task")) return "/API/RemoteMeterTask/GetReadingTask";
   if (route.hash.includes("remote-meter-control-task")) return "/API/RemoteMeterTask/GetControlTask";
   if (route.hash.includes("remote-meter-token-task")) return "/API/RemoteMeterTask/GetTokenTask";
-  if (route.hash.includes("long-nonpurchase-situation")) return "/API/PrepayReport/LongNonpurchaseSituation";
-  if (route.hash.includes("low-purchase-situation")) return "/API/PrepayReport/LowPurchaseSituation";
-  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/readHourly";
-  if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/readHourly";
+  if (route.hash.includes("long-nonpurchase-situation")) return "/api/PrepayReport/LongNonpurchaseSituation";
+  if (route.hash.includes("low-purchase-situation")) return "/api/PrepayReport/LowPurchaseSituation";
+  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/read";
+  if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("remote-support/file-upload")) return "/api/local/importJobs/read";
   if (route.hash.includes("management/gateway")) return "/api/gateway/read";
   if (route.hash.includes("management/customer")) return "/api/customer/read";
@@ -67,18 +85,6 @@ export function tableRequest(route, options = {}) {
       pagination: "pageNumber"
     };
   }
-  if (path === "/api/DailyDataMeter/readHourly") {
-    return {
-      path,
-      method: "GET",
-      params: {
-        offset: 0,
-        pageLimit: requestOptions.pageSize,
-        ...rangeParams(requestOptions)
-      },
-      pagination: "offset"
-    };
-  }
   if (path === "/api/local/importJobs/read") {
     return {
       path,
@@ -91,20 +97,32 @@ export function tableRequest(route, options = {}) {
       pagination: "offset"
     };
   }
-  if (path.includes("/API/PrepayReport/LongNonpurchaseSituation")) {
-    return { path, method: "POST", payload: { lang: "en", stationId: requestOptions.siteId, pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  if (path.includes("/api/DailyDataMeter/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: requestOptions.pageSize,
+        ...rangeParams(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
   }
-  if (path.includes("/API/PrepayReport/LowPurchaseSituation")) {
-    return { path, method: "POST", payload: { lang: "en", stationId: requestOptions.siteId, dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  if (path.includes("/api/PrepayReport/LongNonpurchaseSituation")) {
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  }
+  if (path.includes("/api/PrepayReport/LowPurchaseSituation")) {
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   if (path.includes("/API/RemoteMeterTask/")) {
-    return { path, method: "POST", payload: { lang: "en", stationId: requestOptions.siteId, pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   if (path.includes("/API/GPRSMeterTask/") || path.includes("/API/GPRSOnlineStatus/") || path.includes("/API/UpdateFirmwareTask/")) {
-    return { path, method: "POST", payload: { lang: "en", stationId: requestOptions.siteId, pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   if (path.includes("/API/LoadProfile/") || path.includes("/API/EventNotification/")) {
-    return { path, method: "POST", payload: { lang: "en", stationId: requestOptions.siteId, dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   return { path, method: "POST", payload: { pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
 }
@@ -152,7 +170,7 @@ async function fetchAllTableRows(request, route) {
   const total = firstCollection.total;
   const requestedSize = pageSizeForRequest(request);
 
-  if (!request.pagination || rows.length >= total || rows.length < requestedSize || rows.length >= maxTableRows) {
+  if (!request.pagination || rows.length >= total || rows.length >= maxTableRows) {
     return { rows, total };
   }
 
@@ -192,8 +210,9 @@ export function exportRowsForRoute(route, rows) {
   return mapExportRows(route, rows, columnKey);
 }
 
-export function printModelForRoute(route, row, receiptType = "") {
-  return buildReceiptModel(route, row, columnKey, receiptType);
+export function printModelForRoute(route, row) {
+  return buildReceiptModel(route, row, columnKey);
 }
 
-export { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, rowActionButtons, searchRows, sortRows, totalPages };
+
+export { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };
