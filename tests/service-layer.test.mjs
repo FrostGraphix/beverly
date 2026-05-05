@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { actionEndpoint, submitRouteAction } from "../src/services/action-service.mjs";
+import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionStatisticsPayload, normalizeConsumptionStatisticsResponse } from "../src/services/consumption-statistics-service.mjs";
 import { fetchDashboardData } from "../src/services/dashboard-service.mjs";
 import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
@@ -32,11 +33,24 @@ const tariffRoute = {
   apis: ["/api/tariff/read"],
   columns: ["Id", "Name", "Actions"]
 };
+const dlmsRoute = {
+  hash: "#/protocol/dlms",
+  title: "DLMS",
+  apis: ["/api/dlms/read"],
+  columns: ["Id", "Version", "Type", "Class Id", "OBIS", "Name", "Remark", "Actions"]
+};
 const manifestGatewayRoute = routeManifest.find((route) => route.hash === "#/management/gateway");
+const manifestDlmsRoute = routeManifest.find((route) => route.hash === "#/protocol/dlms");
 
 assert.strictEqual(actionEndpoint(accountRoute, "Add"), "/api/account/create");
 assert.strictEqual(actionEndpoint(accountRoute, "Edit"), "/api/account/update");
 assert.strictEqual(actionEndpoint(accountRoute, "Delete"), "/api/account/delete");
+assert.strictEqual(actionEndpoint(dlmsRoute, "Edit"), "/api/dlms/update");
+assert.strictEqual(actionEndpoint(dlmsRoute, "Delete"), "/api/dlms/delete");
+assert.deepStrictEqual(
+  routeManifest.find((route) => route.hash === "#/management/customer").apis,
+  ["/api/customer/read", "/api/station/read"]
+);
 
 const creditTokenRecordRoute = {
   hash: "#/token-record/credit-token-record",
@@ -72,15 +86,19 @@ assert.strictEqual(customerTable.rows[0].name, "Binta");
 const gatewayTable = mapTableCollection({
   code: 0,
   result: {
-    data: [{ gatewayId: "GW-1", gatewayName: "North Hub", status: true }]
+    data: [{ gatewayId: "GW-1", gatewayName: "UMAISHA_2", status: true, stationId: "admin" }]
   }
 }, gatewayRoute);
 assert.strictEqual(gatewayTable.rows[0].id, "GW-1");
-assert.strictEqual(gatewayTable.rows[0].name, "North Hub");
+assert.strictEqual(gatewayTable.rows[0].name, "UMAISHA_2");
+assert.strictEqual(gatewayTable.rows[0].stationId, "UMAISHA");
 assert.strictEqual(gatewayTable.rows[0].status, "Online");
 assert(manifestGatewayRoute.actions.includes("Edit"));
 assert(manifestGatewayRoute.actions.includes("Delete"));
+assert(manifestDlmsRoute.actions.includes("Edit"));
+assert(manifestDlmsRoute.actions.includes("Delete"));
 assert.strictEqual(needsAuthorizationPassword("Delete", gatewayRoute), false);
+assert.strictEqual(needsAuthorizationPassword("Delete", dlmsRoute), false);
 
 const tariffTable = mapTableCollection({
   code: 0,
@@ -180,23 +198,106 @@ assert.deepStrictEqual(
   }
 );
 
+const consumptionRequest = tableRequest({
+  hash: "#/prepay-report/consumption-statistics",
+  title: "Consumption Statistics",
+  apis: ["/api/customer/read", "/api/meter/read", "/api/DailyDataMeter/read"],
+  columns: ["collectionDate", "consumption"]
+}, {
+  pageNumber: 1,
+  pageSize: 50
+});
+assert.strictEqual(consumptionRequest.path, "/api/DailyDataMeter/readHourly");
+assert.strictEqual(consumptionRequest.method, "GET");
+assert.strictEqual(consumptionRequest.params.offset, 0);
+assert.strictEqual(consumptionRequest.params.pageLimit, 50);
+assert.ok(consumptionRequest.params.FROM);
+assert.ok(consumptionRequest.params.TO);
+
 assert.deepStrictEqual(
-  tableRequest({
-    hash: "#/prepay-report/consumption-statistics",
-    title: "Consumption Statistics",
-    apis: ["/api/DailyDataMeter/readHourly"],
-    columns: ["collectionDate", "consumption"]
+  buildConsumptionStatisticsPayload({
+    customerId: "470005342689",
+    meterId: "470005342689",
+    stationId: "TUNGA",
+    dateFrom: "2026-04-01",
+    dateTo: "2026-04-30"
   }, {
-    pageNumber: 1,
-    pageSize: 50
-  }).params,
+    pageNumber: 2,
+    pageSize: 20
+  }),
   {
-    offset: 0,
-    pageLimit: 50,
-    FROM: "2026-01-01T00:00:00.000Z",
-    TO: "2026-01-17T00:00:00.000Z"
+    lang: "en",
+    pageNumber: 2,
+    pageSize: 20,
+    FROM: "2026-04-01T00:00:00.000Z",
+    TO: "2026-04-30T23:59:59.999Z",
+    customerId: "470005342689",
+    meterId: "470005342689",
+    stationId: "TUNGA"
   }
 );
+
+const normalizedConsumption = normalizeConsumptionStatisticsResponse({
+  code: 0,
+  result: {
+    total: 2,
+    data: [
+      { currentDate: "2026-04-05 00:00:00", usage1: "0.5", meterId: "A", customerId: "C" },
+      { currentDate: "2026-04-06 00:00:00", usage1: "-1", meterId: "A", customerId: "C" }
+    ]
+  }
+});
+assert.strictEqual(normalizedConsumption.total, 2);
+assert.strictEqual(normalizedConsumption.rows[0].consumption, 0.5);
+assert.strictEqual(normalizedConsumption.rows[1].consumption, 0);
+
+assert.deepStrictEqual(
+  aggregateConsumptionRows([
+    { collectionDate: "2026-04-05 00:00:00", consumption: 0.2 },
+    { collectionDate: "2026-04-05 12:00:00", consumption: 0.3 },
+    { collectionDate: "2026-05-01 00:00:00", consumption: 1.5 }
+  ], "daily").map((row) => ({ collectionDate: row.collectionDate, consumption: row.consumption })),
+  [
+    { collectionDate: "2026-04-05", consumption: 0.5 },
+    { collectionDate: "2026-05-01", consumption: 1.5 }
+  ]
+);
+
+assert.deepStrictEqual(
+  aggregateConsumptionRows([
+    { collectionDate: "2026-04-05 00:00:00", consumption: 0.2 },
+    { collectionDate: "2026-04-25 12:00:00", consumption: 0.3 },
+    { collectionDate: "2026-05-01 00:00:00", consumption: 1.5 }
+  ], "monthly").map((row) => ({ collectionDate: row.collectionDate, consumption: row.consumption })),
+  [
+    { collectionDate: "2026-04", consumption: 0.5 },
+    { collectionDate: "2026-05", consumption: 1.5 }
+  ]
+);
+
+const chartOption = buildConsumptionChartOption([
+  { collectionDate: "2026-04-05", consumption: 0.5 },
+  { collectionDate: "2026-04-06", consumption: 0 }
+], "daily");
+assert.strictEqual(chartOption.title.text, "Daily Consumption");
+assert.deepStrictEqual(chartOption.xAxis.data, ["2026-04-05", "2026-04-06"]);
+assert.deepStrictEqual(chartOption.series[0].data, [0.5, 0]);
+
+const dailyDataMeterRequest = tableRequest({
+  hash: "#/prepay-report/daily-data-meter",
+  title: "Interval Data",
+  apis: ["/api/station/read", "/api/DailyDataMeter/read"],
+  columns: ["customerId", "meterId"]
+}, {
+  siteId: "TUNGA",
+  from: "2026-01-01T00:00:00.000Z",
+  to: "2026-01-31T23:59:59.999Z",
+  pageNumber: 2,
+  pageSize: 25
+});
+assert.strictEqual(dailyDataMeterRequest.payload.stationId, "TUNGA");
+assert.strictEqual(dailyDataMeterRequest.payload.FROM, "2026-01-01T00:00:00.000Z");
+assert.strictEqual(dailyDataMeterRequest.payload.TO, "2026-01-31T23:59:59.999Z");
 
 const action = mapActionResponse({
   code: 0,
@@ -210,15 +311,15 @@ const action = mapActionResponse({
 
 assert.strictEqual(action.resultText, "Token: 123456");
 assert.strictEqual(action.envelope._proxy.source, "live");
-assert.deepStrictEqual(
-  managementFields(gatewayRoute, "Edit"),
-  [
-    { name: "gatewayId", label: "Gateway Id", required: true, readonly: true },
-    { name: "gatewayName", label: "Gateway Name", required: false, readonly: false },
-    { name: "stationId", label: "Station Id", required: false, readonly: false },
-    { name: "remark", label: "Remark", required: false, readonly: false }
-  ]
-);
+const gatewayEditFields = managementFields(gatewayRoute, "Edit");
+assert.strictEqual(gatewayEditFields.find((field) => field.name === "stationId").required, true);
+assert.strictEqual(gatewayEditFields.find((field) => field.name === "stationId").type, "select");
+const accountAddFields = managementFields(accountRoute, "Add");
+assert(accountAddFields.some((field) => field.name === "ctRatio"));
+assert(accountAddFields.some((field) => field.name === "stationId" && field.required));
+const dlmsEditFields = managementFields(dlmsRoute, "Edit");
+assert(dlmsEditFields.some((field) => field.name === "dlmsId" && field.readonly));
+assert(dlmsEditFields.some((field) => field.name === "nameEN"));
 assert.deepStrictEqual(
   managementFormSeed(accountRoute, "Edit", { customerId: "C-1", meterId: "M-1" }),
   {
@@ -229,6 +330,18 @@ assert.deepStrictEqual(
     remark: "",
     stationId: "",
     oldMeterId: "M-1"
+  }
+);
+assert.deepStrictEqual(
+  managementFormSeed(dlmsRoute, "Edit", { dlmsId: 17, nameEN: "Reconnect", obis: "0.0.96.3.10.255", version: "1.1", type: 2, classId: 70, remark: "System" }),
+  {
+    dlmsId: 17,
+    version: "1.1",
+    type: 2,
+    classId: 70,
+    obis: "0.0.96.3.10.255",
+    nameEN: "Reconnect",
+    remark: "System"
   }
 );
 assert.strictEqual(
@@ -263,6 +376,74 @@ await assert.rejects(
     fields: [{ name: "customerId", label: "Customer Id" }]
   }),
   /Writes are blocked/
+);
+
+const customerDeleteCalls = [];
+const customerDeleteApi = {
+  async postApi(path, payload = {}) {
+    customerDeleteCalls.push({ path, payload });
+    if (path === "/api/account/read") {
+      if (customerDeleteCalls.filter((call) => call.path === "/api/account/read").length === 1) {
+        return {
+          code: 0,
+          result: {
+            data: [{ customerId: "12345678", meterId: "47005306088" }]
+          }
+        };
+      }
+      return {
+        code: 0,
+        result: {
+          data: []
+        }
+      };
+    }
+    if (path === "/api/account/delete") return { code: 0, result: null };
+    if (path === "/api/customer/delete") return { code: 0, result: null };
+    if (path === "/api/customer/read") return { code: 0, result: { data: [] } };
+    throw new Error(`Unexpected path: ${path}`);
+  }
+};
+
+const customerDeleteResult = await submitRouteAction(customerRoute, "Delete", {
+  customerId: "12345678",
+  confirmDelete: true,
+  confirmationText: "Confirm delete for Customer"
+}, {
+  fields: managementFields(customerRoute, "Delete"),
+  liveWritesAllowed: true,
+  api: customerDeleteApi
+});
+
+assert.strictEqual(customerDeleteResult.resultText, "Delete success");
+assert.deepStrictEqual(customerDeleteCalls.map((call) => call.path), [
+  "/api/account/read",
+  "/api/account/delete",
+  "/api/account/read",
+  "/api/customer/delete",
+  "/api/customer/read"
+]);
+
+await assert.rejects(
+  () => submitRouteAction(customerRoute, "Delete", {
+    customerId: "12345678",
+    confirmDelete: true,
+    confirmationText: "Confirm delete for Customer"
+  }, {
+    fields: managementFields(customerRoute, "Delete"),
+    liveWritesAllowed: true,
+    api: {
+      async postApi(path) {
+        if (path === "/api/account/read") return { code: 0, result: { data: [] } };
+        if (path === "/api/customer/delete") return { code: 0, result: null };
+        if (path === "/api/customer/read") {
+          return { code: 0, result: { data: [{ customerId: "12345678" }] } };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+      }
+    }
+  }),
+  /record still exists/
 );
 
 const dashboard = await fetchDashboardData({

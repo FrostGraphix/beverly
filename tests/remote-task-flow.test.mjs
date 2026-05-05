@@ -29,6 +29,7 @@ assert.equal(normalizeAccountStatus(false), "Offline");
 assert.equal(normalizeRemoteStatus(0), "StandBy");
 assert.equal(normalizeRemoteStatus(1), "Success");
 assert.equal(normalizeRemoteStatus(2), "Failure");
+assert.equal(normalizeRemoteStatus(3), "Processing");
 
 const form = {
   customerId: "47005372686",
@@ -65,11 +66,11 @@ assert.deepEqual(buildRemoteTaskPayload(tokenRoute, "Add Task", form), [
   }
 ]);
 
-assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].dataDefault, "0");
-assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].flag, "0", "Switch Off flag must be '0'");
-assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].data, "0", "Switch Off data must be '0'");
-assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].flag, "1", "Switch On flag must be '1'");
-assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].data, "1", "Switch On data must be '1'");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].dataDefault, "335500000001");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].flag, "C03C", "Switch Off flag must be protocol command");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch Off" })[0].data, "335500000001", "Switch Off data must be protocol payload");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].flag, "C03D", "Switch On flag must be protocol command");
+assert.equal(buildRemoteTaskPayload(controlRoute, "Add Task", { ...form, dataItem: "Switch On" })[0].data, "996600000001", "Switch On data must be protocol payload");
 assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Credit balance" })[0].dataPrefix, "Credit balance,,");
 assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Credit balance" })[0].flag, "E421");
 assert.equal(buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Total Consumption" })[0].flag, "901F");

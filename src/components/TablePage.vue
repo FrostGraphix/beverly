@@ -260,7 +260,7 @@ export default {
       this.detailRow = row;
     },
     openAction(action, row) {
-      this.activeRow = createFormSeed(this.route, action, row);
+      this.activeRow = { ...(row || {}), ...createFormSeed(this.route, action, row) };
       this.selectedRow = row || null;
       this.modalAction = action;
     },

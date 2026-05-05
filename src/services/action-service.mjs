@@ -5,7 +5,7 @@ import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-h
 import { validateUploadFile } from "./upload-policy.mjs";
 
 export function actionEndpoint(route, action, uploadMode = false) {
-  if (uploadMode) return "/API/File/Upload";
+  if (uploadMode) return "/api/File/Upload";
   if (action === "Recharge") return "/api/token/creditToken/generate";
   if (action === "Cancel" && route.hash.includes("credit-token-record") && !route.hash.includes("clear-credit")) return "/api/token/creditTokenRecord/cancel";
   if (action === "Cancel" && route.hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/cancel";
@@ -13,9 +13,9 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if (action === "Generate Token" && route.hash.includes("clear-credit")) return "/api/token/clearCreditToken/generate";
   if (action === "Generate Token" && route.hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
   if (action === "Generate Token" && route.hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
-  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/API/RemoteMeterTask/CreateReadingTask";
-  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/API/RemoteMeterTask/CreateControlTask";
-  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/API/RemoteMeterTask/CreateTokenTask";
+  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/api/RemoteMeterTask/CreateReadingTask";
+  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/api/RemoteMeterTask/CreateControlTask";
+  if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/RemoteMeterTask/CreateTokenTask";
 
   const moduleName = route.hash.includes("gateway")
     ? "gateway"
@@ -25,6 +25,10 @@ export function actionEndpoint(route, action, uploadMode = false) {
         ? "tariff"
         : route.hash.includes("account")
           ? "account"
+          : route.hash.includes("protocol/dlms")
+            ? "dlms"
+            : route.hash.includes("protocol/dlt645")
+              ? "dlt645"
           : route.hash.includes("admin/user")
             ? "user"
             : route.hash.includes("admin/role")
@@ -61,6 +65,64 @@ function formDataPayload(route, action, form, selectedFile) {
   return formData;
 }
 
+function normalizeRows(response) {
+  const data = response?.data;
+  const result = response?.result;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.list)) return data.list;
+  if (Array.isArray(result)) return result;
+  if (Array.isArray(result?.data)) return result.data;
+  if (Array.isArray(result?.list)) return result.list;
+  return [];
+}
+
+function isCustomerDelete(route, action) {
+  return action === "Delete" && route?.hash === "#/management/customer";
+}
+
+async function deleteCustomerDependencies(form, api) {
+  const customerId = String(form.customerId || "").trim();
+  if (!customerId) return;
+  const linkedAccounts = normalizeRows(await api.postApi("/api/account/read", {
+    customerId,
+    pageNumber: 1,
+    pageSize: 500
+  }));
+
+  for (const account of linkedAccounts) {
+    const meterId = String(account?.meterId || "").trim();
+    if (!meterId) continue;
+    await api.postApi("/api/account/delete", [{
+      customerId,
+      meterId
+    }]);
+  }
+
+  const remainingAccounts = normalizeRows(await api.postApi("/api/account/read", {
+    customerId,
+    pageNumber: 1,
+    pageSize: 500
+  }));
+
+  if (remainingAccounts.length) {
+    throw new Error("Customer still has linked accounts. Delete the account binding first.");
+  }
+}
+
+async function verifyCustomerDeleted(form, api) {
+  const customerId = String(form.customerId || "").trim();
+  if (!customerId) return;
+  const remainingCustomers = normalizeRows(await api.postApi("/api/customer/read", {
+    customerId,
+    pageNumber: 1,
+    pageSize: 20
+  }));
+  if (remainingCustomers.some((row) => String(row?.customerId || row?.id || "").trim() === customerId)) {
+    throw new Error("Customer delete was accepted but the record still exists.");
+  }
+}
+
 export async function submitRouteAction(route, action, form, options = {}) {
   const uploadMode = Boolean(options.uploadMode);
   const endpoint = options.endpoint || actionEndpoint(route, action, uploadMode);
@@ -69,6 +131,11 @@ export async function submitRouteAction(route, action, form, options = {}) {
   const importRows = options.importRows || [];
   const selectedFile = options.selectedFile || null;
   const meta = auditMeta(route, action, form);
+  const api = {
+    postApi: options.api?.postApi || postApi,
+    uploadApi: options.api?.uploadApi || uploadApi
+  };
+  const writesAllowed = options.liveWritesAllowed ?? liveWritesAllowed();
 
   if (writeAction) {
     const validationError = validateWriteForm(action, route, form, fields);
@@ -81,8 +148,12 @@ export async function submitRouteAction(route, action, form, options = {}) {
   if (action === "Import" && !uploadMode && !importRows.length) {
     throw new Error("Import file is required");
   }
-  if (writeAction && !liveWritesAllowed()) {
+  if (writeAction && !writesAllowed) {
     throw new Error("Writes are blocked until VITE_ALLOW_LIVE_WRITES=true");
+  }
+
+  if (isCustomerDelete(route, action)) {
+    await deleteCustomerDependencies(form, api);
   }
 
   const payload = action === "Import"
@@ -92,10 +163,17 @@ export async function submitRouteAction(route, action, form, options = {}) {
       : form;
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
   const response = uploadMode
-    ? await uploadApi(endpoint, formDataPayload(route, action, form, selectedFile))
+    ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile))
     : endpoint
-      ? await postApi(endpoint, payload)
+      ? await api.postApi(endpoint, payload)
       : { data: {} };
+  const responseCode = Number(response?.code);
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200) {
+    throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
+  }
+  if (isCustomerDelete(route, action)) {
+    await verifyCustomerDeleted(form, api);
+  }
   const mapped = mapActionResponse(response, action);
 
   return {

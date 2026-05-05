@@ -183,9 +183,9 @@ export function createFormSeed(route, action, row = {}) {
     }
     if (value === undefined || value === null) {
       // Generic fallbacks for common IDs
-      if (key.toLowerCase().includes("id")) value = row.id || row.customerId || row.meterId || row.gatewayId || row.userId || row.tariffId;
+      if (key === "stationId") value = row.stationId || row.station || row.siteId || row.StationId;
+      else if (key.toLowerCase().includes("id")) value = row.id || row.customerId || row.meterId || row.gatewayId || row.userId || row.tariffId;
       if (key.toLowerCase().includes("name")) value = row.name || row.customerName || row.userName || row.gatewayName || row.tariffName;
-      if (key === "stationId") value = row.station || row.siteId || row.stationId || row.StationId;
     }
     if (key === "stationId" && typeof value === "string") {
       value = value.toUpperCase();

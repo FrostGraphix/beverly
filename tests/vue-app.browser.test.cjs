@@ -55,6 +55,66 @@ function sampleRow() {
   };
 }
 
+function dailyMeterRows() {
+  return [
+    {
+      customerId: "C-1001",
+      customerName: "QA Customer",
+      meterId: "M-1001",
+      gatewayId: "G-1001",
+      currentDate: "2026-01-01",
+      total1: 100,
+      remain1: 20,
+      power: 2.5,
+      status: "Online",
+      stationId: "KYAKALE"
+    },
+    {
+      customerId: "C-1001",
+      customerName: "QA Customer",
+      meterId: "M-1001",
+      gatewayId: "G-1001",
+      currentDate: "2026-01-02",
+      total1: 112,
+      remain1: 8,
+      power: 2.9,
+      status: "Online",
+      stationId: "KYAKALE"
+    }
+  ];
+}
+
+function creditTokenRows() {
+  return [
+    {
+      receiptId: "R-1001",
+      customerId: "C-1001",
+      customerName: "QA Customer",
+      meterId: "M-1001",
+      meterType: "Electricity",
+      tariffId: "T-1",
+      totalUnit: 10,
+      totalPaid: 3500,
+      token: "1234 5678 9012 3456",
+      vend: true,
+      stationId: "KYAKALE",
+      createDate: "2026-01-02"
+    }
+  ];
+}
+
+function accountRows() {
+  return [
+    {
+      customerId: "C-1001",
+      customerName: "QA Customer",
+      meterId: "M-1001",
+      tariffId: "T-1",
+      stationId: "KYAKALE"
+    }
+  ];
+}
+
 function apiBody(url) {
   if (url.includes("/user/login")) {
     return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)" } };
@@ -75,6 +135,15 @@ function apiBody(url) {
   }
   if (url.includes("/tariff/read")) {
     return { code: 0, data: { data: [{ tariffId: "T-1", id: "T-1", name: "QA Tariff", price: "350" }], total: 1 } };
+  }
+  if (url.includes("/token/creditTokenRecord/read")) {
+    return { code: 0, data: { data: creditTokenRows(), total: 1 }, result: { data: creditTokenRows(), total: 1 } };
+  }
+  if (url.includes("/DailyDataMeter/read")) {
+    return { code: 0, data: { data: dailyMeterRows(), total: 2 }, result: { data: dailyMeterRows(), total: 2 } };
+  }
+  if (url.includes("/account/read")) {
+    return { code: 0, data: { data: accountRows(), total: 1 }, result: { data: accountRows(), total: 1 } };
   }
   if (url.includes("/token/creditToken/generate")) {
     return { code: 0, data: { token: "1234 5678 9012 3456", createDate: "2026-01-01 00:00:00" } };
@@ -155,12 +224,15 @@ async function runFlow(browserName, page) {
   });
   await page.waitForSelector("text=Add", { timeout: 10000 });
   await page.click("text=Add");
-  await page.waitForSelector("text=Authorization Password", { timeout: 10000 });
-  await page.fill('input[name="authorizationPassword"]', "qa-password");
+  await page.waitForSelector(".modal-title", { timeout: 10000 });
+  await closeModal(page);
+
   await page.evaluate(() => {
-    document.querySelector(".modal-actions .btn.primary")?.click();
+    window.location.hash = "#/prepay-report/site-consumption";
   });
-  await page.waitForSelector(".modal-error", { timeout: 10000 });
+  await page.waitForSelector("text=Site Performance", { timeout: 10000 });
+  await page.waitForSelector("text=Revenue Shortfall", { timeout: 10000 });
+  await page.waitForSelector("text=Risk Investigation", { timeout: 10000 });
 
   return browserName;
 }

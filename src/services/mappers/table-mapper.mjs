@@ -2,6 +2,13 @@ import { buildConsumptionStatisticsPayload } from "../live-report-adapters.mjs";
 import { normalizeCollection } from "../response-normalizers.mjs";
 import { formatToken, normalizeAccountStatus, normalizeRemoteStatus } from "../remote-task-flow.mjs";
 
+const knownStationIds = ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA", "0001"];
+
+function stationFromName(value = "") {
+  const normalized = String(value || "").toUpperCase();
+  return knownStationIds.find((stationId) => stationId !== "0001" && normalized.includes(stationId)) || "";
+}
+
 export function normalizeTableResponse(rawResponse, route) {
   const response = route.hash.includes("consumption-statistics")
     ? buildConsumptionStatisticsPayload(normalizeCollection(rawResponse).rows)
@@ -26,6 +33,8 @@ function mapRowShape(row, route) {
   if (route.hash.includes("management/gateway")) {
     if (record.id == null && record.gatewayId != null) record.id = record.gatewayId;
     if (record.name == null && record.gatewayName != null) record.name = record.gatewayName;
+    const inferredStation = stationFromName(record.gatewayName || record.name);
+    if (inferredStation && (!record.stationId || String(record.stationId).toLowerCase() === "admin")) record.stationId = inferredStation;
     if (record.status === true) record.status = "Online";
     if (record.status === false) record.status = "Offline";
   }
@@ -74,13 +83,16 @@ function mapRowShape(row, route) {
 
   if (route.hash.includes("admin/role")) {
     if (record.id == null && record.roleId != null) record.id = record.roleId;
-    if (record.name == null && record.content != null) record.name = record.content;
+    // record.name is already the role name from the API — do NOT overwrite with record.content
+    // record.content is the comma-separated permission list; expose as remark if remark is empty
+    if (!record.remark && record.content) record.remark = record.content;
   }
 
   if (route.hash.includes("admin/log")) {
     if (record.id == null && record.logId != null) record.id = record.logId;
     if (record.userId == null && record.createId != null) record.userId = record.createId;
-    if (record.status == null) record.status = record.action || "";
+    // Expose action as its own field (operation name); keep status as HTTP status code
+    if (record.action == null) record.action = record.method || record.operationType || "";
   }
 
   if (route.hash.includes("admin/station")) {
@@ -115,6 +127,18 @@ function mapRowShape(row, route) {
   if (route.hash.includes("protocol/dlt645")) {
     if (record.id == null && record.dlt645Id != null) record.id = record.dlt645Id;
     if (record.name == null && record.nameEN != null) record.name = record.nameEN;
+  }
+
+  // Global normalization — convert numeric codes to labels everywhere
+  if (typeof record.meterType === "number" || /^[0-2]$/.test(String(record.meterType))) {
+    const mt = Number(record.meterType);
+    if (mt === 0) record.meterType = "Electricity";
+    else if (mt === 1) record.meterType = "Water";
+    else if (mt === 2) record.meterType = "Gas";
+  }
+  if (typeof record.communicationWay === "number") {
+    if (record.communicationWay === 0) record.communicationWay = "GPRS";
+    else if (record.communicationWay === 1) record.communicationWay = "LoraWan";
   }
 
   return record;

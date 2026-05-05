@@ -105,6 +105,8 @@ const managementForms = {
         pickerValueKey: "tariffId",
         pickerTitle: "Tariff"
       }),
+      field("ctRatio", "CT Ratio"),
+      field("stationId", "StationId", { required: true, type: "select" }),
       field("remark", "Remark")
     ],
     Edit: [
@@ -135,6 +137,8 @@ const managementForms = {
         pickerValueKey: "tariffId",
         pickerTitle: "Tariff"
       }),
+      field("ctRatio", "CT Ratio"),
+      field("stationId", "StationId", { required: true, type: "select" }),
       field("remark", "Remark")
     ],
     Delete: [
@@ -205,12 +209,61 @@ const managementForms = {
     Delete: [
       field("itemType", "Item Type", { required: true, readonly: true })
     ]
+  },
+  "#/admin/meter": {
+    Edit: [
+      field("meterId",       "Meter Id",     { required: true, readonly: true }),
+      field("stationId",     "StationId",    { required: true, type: "select" }),
+      field("remark",        "Remark")
+    ]
+  },
+  "#/protocol/dlms": {
+    Add: [
+      field("dlmsId", "Id", { required: true }),
+      field("version", "Version", { required: true }),
+      field("type", "Type", { required: true }),
+      field("classId", "Class Id", { required: true }),
+      field("obis", "OBIS", { required: true }),
+      field("nameEN", "Name", { required: true }),
+      field("remark", "Remark")
+    ],
+    Edit: [
+      field("dlmsId", "Id", { required: true, readonly: true }),
+      field("version", "Version", { required: true }),
+      field("type", "Type", { required: true }),
+      field("classId", "Class Id", { required: true }),
+      field("obis", "OBIS", { required: true }),
+      field("nameEN", "Name", { required: true }),
+      field("remark", "Remark")
+    ],
+    Delete: [
+      field("dlmsId", "Id", { required: true, readonly: true })
+    ]
+  },
+  "#/protocol/dlt645": {
+    Add: [
+      field("dlt645Id", "Id", { required: true }),
+      field("version", "Version", { required: true }),
+      field("type", "Type", { required: true }),
+      field("nameEN", "Name", { required: true }),
+      field("remark", "Remark")
+    ],
+    Edit: [
+      field("dlt645Id", "Id", { required: true, readonly: true }),
+      field("version", "Version", { required: true }),
+      field("type", "Type", { required: true }),
+      field("nameEN", "Name", { required: true }),
+      field("remark", "Remark")
+    ],
+    Delete: [
+      field("dlt645Id", "Id", { required: true, readonly: true })
+    ]
   }
 };
 
 export function isManagementRoute(route) {
   const hash = String(route?.hash || "");
-  return hash.startsWith("#/management/") || hash.startsWith("#/admin/");
+  return hash.startsWith("#/management/") || hash.startsWith("#/admin/") || hash.startsWith("#/protocol/");
 }
 
 export function managementFields(route, action) {
@@ -235,10 +288,13 @@ export function managementFormSeed(route, action, row = {}) {
       else if (currentField.name === "roleId") value = row.roleId || row.id;
       else if (currentField.name === "itemType") value = row.itemType || row.id;
       else if (currentField.name === "itemName") value = row.itemName || row.name;
+      else if (currentField.name === "dlmsId") value = row.dlmsId || row.id;
+      else if (currentField.name === "dlt645Id") value = row.dlt645Id || row.id;
+      else if (currentField.name === "nameEN") value = row.nameEN || row.name;
       else if (currentField.name === "nickName") value = row.nickName || row.fullName || row.name;
       else if (["gatewayId", "userId"].includes(currentField.name)) value = row.id || row.userId;
       else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name;
-      else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || row.id;
+      else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || "";
     }
     if (currentField.name === "stationId" && typeof value === "string") {
       value = value.toUpperCase();

@@ -1,31 +1,45 @@
 <template>
   <div class="dashboard-live-page">
     <section class="dashboard-card-grid" aria-label="Dashboard summary">
-      <button
-        v-for="card in cards"
-        :key="card.key"
-        :class="['dashboard-stat-card', activeType === card.type ? 'active' : '']"
-        type="button"
-        @click="loadTopChart(card.type)"
-      >
-        <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
-        <span class="dashboard-stat-copy">
-          <span class="dashboard-stat-label">{{ card.label }}</span>
-          <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>
-        </span>
-      </button>
+      <template v-if="loading">
+        <div v-for="i in 4" :key="'skel-card-'+i" class="dashboard-stat-card skeleton">
+          <div class="skeleton-avatar" style="margin-right: 16px;"></div>
+          <div style="flex: 1;">
+            <div class="skeleton-text" style="width: 60%;"></div>
+            <div class="skeleton-text" style="width: 40%;"></div>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <button
+          v-for="card in cards"
+          :key="card.key"
+          :class="['dashboard-stat-card', activeType === card.type ? 'active' : '']"
+          type="button"
+          @click="loadTopChart(card.type)"
+        >
+          <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
+          <span class="dashboard-stat-copy">
+            <span class="dashboard-stat-label">{{ card.label }}</span>
+            <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>
+          </span>
+        </button>
+      </template>
     </section>
 
     <section class="dashboard-chart-card dashboard-chart-wide" aria-label="Top dashboard chart">
-      <EChartPanel :option="topChartOption" />
+      <div v-if="loading" class="skeleton skeleton-card" style="height: 350px;"></div>
+      <EChartPanel v-else :option="topChartOption" />
     </section>
 
     <section class="dashboard-chart-pair">
       <article class="dashboard-chart-card">
-        <EChartPanel :option="successChartOption" />
+        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <EChartPanel v-else :option="successChartOption" />
       </article>
       <article class="dashboard-chart-card">
-        <EChartPanel :option="alarmChartOption" />
+        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <EChartPanel v-else :option="alarmChartOption" />
       </article>
     </section>
 
@@ -33,7 +47,8 @@
       <div class="dashboard-consumption-top">
         <button class="dashboard-daily-chip" type="button">Daily</button>
       </div>
-      <EChartPanel :option="consumptionChartOption" />
+      <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+      <EChartPanel v-else :option="consumptionChartOption" />
     </section>
   </div>
 </template>
@@ -78,6 +93,7 @@ export default {
   components: { EChartPanel },
   data() {
     return {
+      loading: true,
       activeType: 3,
       panel: {
         totalAccountCount: 0,
@@ -126,16 +142,21 @@ export default {
       await this.loadDataset(type);
     },
     async loadDataset(activeType) {
-      const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
-      this.panel = dataset.panel;
-      this.top = dataset.top;
-      this.consumption = dataset.consumption.labels.length > 5 ? dataset.consumption : {
-        title: "Daily Consumption",
-        labels: referenceConsumption.labels,
-        values: referenceConsumption.values
-      };
-      this.success = dataset.success;
-      this.alarms = dataset.alarms;
+      this.loading = true;
+      try {
+        const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
+        this.panel = dataset.panel;
+        this.top = dataset.top;
+        this.consumption = dataset.consumption.labels.length > 5 ? dataset.consumption : {
+          title: "Daily Consumption",
+          labels: referenceConsumption.labels,
+          values: referenceConsumption.values
+        };
+        this.success = dataset.success;
+        this.alarms = dataset.alarms;
+      } finally {
+        this.loading = false;
+      }
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {

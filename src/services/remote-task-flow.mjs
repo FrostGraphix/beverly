@@ -6,8 +6,8 @@ export const remoteTaskOptions = {
     { value: "Relay Status", label: "Relay Status", flag: "EFF5", dataDefault: "", dataPrefix: "Relay Status" }
   ],
   control: [
-    { value: "Switch On", label: "Switch On", flag: "Switch On", dataDefault: "1", dataPrefix: "" },
-    { value: "Switch Off", label: "Switch Off", flag: "Switch Off", dataDefault: "0", dataPrefix: "" }
+    { value: "Switch On", label: "Switch On", action: "on", dataPrefix: "" },
+    { value: "Switch Off", label: "Switch Off", action: "off", dataPrefix: "" }
   ],
   token: [
     { value: "Send Token", label: "Send Token", flag: "Send Token", dataDefault: "", dataPrefix: "" }
@@ -73,6 +73,7 @@ export function normalizeRemoteStatus(value) {
   if (value === 0 || value === "0") return "StandBy";
   if (value === 1 || value === "1") return "Success";
   if (value === 2 || value === "2") return "Failure";
+  if (value === 3 || value === "3") return "Processing";
   return value || "";
 }
 
@@ -100,20 +101,35 @@ export function remoteTaskPayloadForRow(route = {}, row = {}, form = {}) {
   const option = findRemoteTaskOption(route, form.dataItem);
   const kind = remoteTaskKind(route);
   const token = cleanToken(form.token || form.data);
+  const protocolVersion = String(row.protocolVersion || form.protocolVersion || "2.2");
+  const controlPayload = controlTaskFields(protocolVersion, option.action);
   return {
     customerId: row.customerId || form.customerId || row.meterId || form.meterId || "",
     customerName: row.customerName || form.customerName || "",
     meterId: row.meterId || form.meterId || "",
-    version: row.protocolVersion || form.protocolVersion || "2.2",
-    flag: kind === "control" ? option.dataDefault : option.flag,
+    version: protocolVersion,
+    flag: kind === "control" ? controlPayload.flag : option.flag,
     name: option.label,
     dataItem: option.label,
-    dataDefault: option.dataDefault,
+    dataDefault: kind === "control" ? controlPayload.dataDefault : option.dataDefault,
     dataPrefix: option.dataPrefix,
-    data: kind === "token" ? token : kind === "control" ? option.dataDefault : (form.data || ""),
+    data: kind === "token" ? token : kind === "control" ? controlPayload.dataDefault : (form.data || ""),
     stationId: row.stationId || form.stationId || "",
     remark: form.remark || ""
   };
+}
+
+function controlTaskFields(protocolVersion = "2.2", action = "on") {
+  const normalizedVersion = String(protocolVersion || "").trim();
+  const modernProtocol = /^(1|2|3)\./.test(normalizedVersion);
+  if (action === "off") {
+    return modernProtocol
+      ? { flag: "C03C", dataDefault: "335500000001" }
+      : { flag: "C03C", dataDefault: "3500000000" };
+  }
+  return modernProtocol
+    ? { flag: "C03D", dataDefault: "996600000001" }
+    : { flag: "C03D", dataDefault: "9600000000" };
 }
 
 export function buildRemoteTaskPayload(route = {}, action = "", form = {}, rows = []) {

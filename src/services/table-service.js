@@ -58,7 +58,7 @@ export function tableDataPath(route) {
   if (route.hash.includes("remote-meter-token-task")) return "/API/RemoteMeterTask/GetTokenTask";
   if (route.hash.includes("long-nonpurchase-situation")) return "/api/PrepayReport/LongNonpurchaseSituation";
   if (route.hash.includes("low-purchase-situation")) return "/api/PrepayReport/LowPurchaseSituation";
-  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/read";
+  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/readHourly";
   if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("remote-support/file-upload")) return "/api/local/importJobs/read";
   if (route.hash.includes("management/gateway")) return "/api/gateway/read";
@@ -73,6 +73,7 @@ export function tableDataPath(route) {
 export function tableRequest(route, options = {}) {
   const requestOptions = tableOptions(options);
   const path = tableDataPath(route);
+  const lowerPath = path.toLowerCase();
   if (path === "/api/token/creditTokenRecord/readMore") {
     return {
       path: "/api/token/creditTokenRecord/read",
@@ -97,31 +98,45 @@ export function tableRequest(route, options = {}) {
       pagination: "offset"
     };
   }
-  if (path.includes("/api/DailyDataMeter/read")) {
+  if (lowerPath.includes("/api/dailydatameter/readhourly")) {
+    return {
+      path,
+      method: "GET",
+      params: {
+        ...rangeParams(requestOptions),
+        offset: (requestOptions.pageNumber - 1) * requestOptions.pageSize,
+        pageLimit: requestOptions.pageSize
+      },
+      pagination: "offset"
+    };
+  }
+  if (lowerPath.includes("/api/dailydatameter/read")) {
     return {
       path,
       method: "POST",
       payload: {
+        lang: "en",
         pageNumber: requestOptions.pageNumber,
         pageSize: requestOptions.pageSize,
-        ...rangeParams(requestOptions)
+        ...rangeParams(requestOptions),
+        ...stationFilter(requestOptions)
       },
       pagination: "pageNumber"
     };
   }
-  if (path.includes("/api/PrepayReport/LongNonpurchaseSituation")) {
+  if (lowerPath.includes("/api/prepayreport/longnonpurchasesituation")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  if (path.includes("/api/PrepayReport/LowPurchaseSituation")) {
+  if (lowerPath.includes("/api/prepayreport/lowpurchasesituation")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  if (path.includes("/API/RemoteMeterTask/")) {
+  if (lowerPath.includes("/remotemetertask/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  if (path.includes("/API/GPRSMeterTask/") || path.includes("/API/GPRSOnlineStatus/") || path.includes("/API/UpdateFirmwareTask/")) {
+  if (lowerPath.includes("/gprstmetertask/") || lowerPath.includes("/gprsmetertask/") || lowerPath.includes("/gprsonlinestatus/") || lowerPath.includes("/updatefirmwaretask/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  if (path.includes("/API/LoadProfile/") || path.includes("/API/EventNotification/")) {
+  if (lowerPath.includes("/loadprofile/") || lowerPath.includes("/eventnotification/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   return { path, method: "POST", payload: { pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };

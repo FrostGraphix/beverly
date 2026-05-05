@@ -9,6 +9,11 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, "reference-route-man
 const routeByHash = (hash) => manifest.find((route) => route.hash === hash);
 const accountRoute = manifest.find((route) => route.hash === "#/management/account");
 const tokenRoute = manifest.find((route) => route.hash === "#/token-record/credit-token-record");
+const dlmsRoute = {
+  hash: "#/protocol/dlms",
+  title: "DLMS",
+  actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"]
+};
 const rows = [
   { customerId: "470005343091", meterId: "470005343091", stationId: "TUNGA", customerName: "ALI MUHAMMAD", tariffId: "RESIDENTIAL", communicationWay: "LoraWan", ctRatio: "1", remark: "", createTime: "2026-04-28", updateTime: "2026-04-28" },
   { customerId: "470005342689", meterId: "470005342689", stationId: "MUSHA", customerName: "HARUNA ADAMU", tariffId: "RESIDENTIAL", communicationWay: "LoraWan", ctRatio: "1", remark: "", createTime: "2026-04-27", updateTime: "2026-04-27" },
@@ -27,6 +32,7 @@ assert.strictEqual(totalPages(21, 10), 3);
 assert.deepStrictEqual(pageNumbers(2, 5), [1, 2, 3]);
 assert.deepStrictEqual(rowActionButtons(accountRoute), ["Edit", "Delete"]);
 assert.deepStrictEqual(rowActionButtons(tokenRoute), ["Cancel", "Print"]);
+assert.deepStrictEqual(rowActionButtons(dlmsRoute), ["Edit", "Delete"]);
 
 const recordRows = [
   { receiptId: 1, createDate: "2026-04-28 09:00:00" },

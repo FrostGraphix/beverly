@@ -161,12 +161,14 @@ export default {
       let value;
       if (row[col] !== undefined && row[col] !== null) {
         value = row[col];
+      } else if (col === 'meterType' && row['type'] !== undefined && row['type'] !== null) {
+        value = row['type'];
       } else {
         const key = Object.keys(row).find(k => k.toLowerCase() === col.toLowerCase());
         value = key ? row[key] : '';
       }
       // Normalize meterType numeric codes to human-readable labels
-      if (col === 'meterType') {
+      if (col === 'meterType' || col === 'type') {
         if (value === 0 || value === '0') return 'Electricity';
         if (value === 1 || value === '1') return 'Water';
         if (value === 2 || value === '2') return 'Gas';

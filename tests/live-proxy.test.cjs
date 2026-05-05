@@ -124,8 +124,24 @@ async function main() {
       }
 
       if (req.url.startsWith("/api/account/read")) {
+        if (req.headers.authorization !== "Bearer env-token") {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ code: 401, reason: "wrong token", result: null }));
+          return;
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ code: 99, reason: "Query failed, please try again", result: null }));
+        return;
+      }
+
+      if (req.url.startsWith("/api/item/read")) {
+        if (req.headers.authorization !== "Bearer env-token") {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ code: 401, reason: "wrong token", result: null }));
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 0, reason: "success", result: { total: 1, data: [{ itemType: "PAYMENT_METHOD", itemName: "Cash" }] } }));
         return;
       }
 
@@ -232,12 +248,25 @@ async function main() {
 
       const accountRead = await request(proxyPort, "POST", "/api/account/read", {
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
         },
         body: Buffer.from(JSON.stringify({ page: 1 }))
       });
-      assert.strictEqual(accountRead.status, 502);
-      assert.strictEqual(accountRead.body._proxy.source, "live-required");
+      assert.strictEqual(accountRead.status, 200);
+      assert.strictEqual(accountRead.body._proxy.source, "sample");
+      assert(accountRead.body.result.data.length > 0);
+
+      const itemRead = await request(proxyPort, "POST", "/api/item/read", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 20 }))
+      });
+      assert.strictEqual(itemRead.status, 200);
+      assert.strictEqual(itemRead.body.reason, "success");
+      assert.strictEqual(itemRead.body.result.data[0].itemType, "PAYMENT_METHOD");
 
       const accountCreate = await request(proxyPort, "POST", "/api/account/create", {
         headers: {
@@ -270,8 +299,22 @@ async function main() {
       assert.strictEqual(fallback.body._proxy.source, "live-required");
 
       const readMore = await request(proxyPort, "GET", "/api/token/creditTokenRecord/readMore?FROM=2026-01-01T00:00:00.000Z&TO=2026-01-17T00:00:00.000Z&SITE_ID=KYAKALE");
-      assert.strictEqual(readMore.status, 502);
-      assert.strictEqual(readMore.body._proxy.source, "live-required");
+      assert.strictEqual(readMore.status, 200);
+      assert.strictEqual(readMore.body._proxy.source, "sample");
+      const readMoreRows = readMore.body.result?.data || readMore.body.data?.data || readMore.body.payments || readMore.body.result || readMore.body.data || [];
+      assert(readMoreRows.length > 0);
+
+      const dashboardHourly = await request(proxyPort, "GET", "/api/dashboard/hourly?from=2026-03-29T00:00:00.000Z&to=2026-04-27T23:59:59.999Z&siteId=KYAKALE&pageNumber=1&pageSize=50");
+      assert.strictEqual(dashboardHourly.status, 200);
+      assert.strictEqual(dashboardHourly.body._proxy.pathname, "/api/dashboard/hourly");
+
+      const dashboardGprs = await request(proxyPort, "GET", "/api/dashboard/gprs?from=2026-03-29T00:00:00.000Z&to=2026-04-27T23:59:59.999Z&siteId=KYAKALE&pageNumber=1&pageSize=48");
+      assert.strictEqual(dashboardGprs.status, 200);
+      assert.strictEqual(dashboardGprs.body._proxy.pathname, "/api/dashboard/gprs");
+
+      const dashboardEvents = await request(proxyPort, "GET", "/api/dashboard/events?from=2026-03-29T00:00:00.000Z&to=2026-04-27T23:59:59.999Z&siteId=KYAKALE&pageNumber=1&pageSize=20");
+      assert.strictEqual(dashboardEvents.status, 200);
+      assert.strictEqual(dashboardEvents.body._proxy.pathname, "/api/dashboard/events");
     });
 
     await withEnv({
@@ -281,6 +324,16 @@ async function main() {
       LIVE_API_BEARER_TOKEN: "env-token",
       ALLOW_LIVE_WRITES: "false"
     }, async () => {
+      const localLogin = await request(proxyPort, "POST", "/api/user/login", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ userId: "admin", password: "ACOB_ADMIN" }))
+      });
+      assert.strictEqual(localLogin.status, 200);
+      assert.strictEqual(localLogin.body.data.userId, "admin");
+      assert.strictEqual(localLogin.body._proxy.source, "local-auth");
+
       const blockedWrite = await request(proxyPort, "POST", "/api/account/create", {
         headers: {
           "Content-Type": "application/json"
@@ -293,8 +346,9 @@ async function main() {
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");
     assert(upstreamRequests.some((entry) => entry.url === "/API/GPRSMeterTask/GPRSGetReadingTask"), "uppercase API proxy prefix normalization failed");
-    assert(upstreamRequests.some((entry) => entry.authorization === "Bearer caller-token"), "caller bearer token not forwarded");
-    assert(upstreamRequests.some((entry) => entry.url === "/api/account/read" && entry.authorization === "Bearer env-token"), "env bearer token not used");
+    assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE" && entry.authorization === "Bearer env-token"), "env bearer token not used for remote reads");
+    assert(upstreamRequests.some((entry) => entry.url === "/api/account/read" && entry.authorization === "Bearer env-token"), "env bearer token not used for account reads");
+    assert(upstreamRequests.some((entry) => entry.url === "/api/item/read" && entry.authorization === "Bearer env-token"), "env bearer token not used for item reads");
     assert(upstreamRequests.some((entry) => entry.url === "/API/File/Upload" && entry.contentType.includes("multipart/form-data") && entry.body.includes("hello")), "upload passthrough failed");
     assert(errors.some((entry) => entry.includes("[live-proxy]")), "proxy failures were not logged");
     assert(infos.some((entry) => entry.includes("[write-request]")), "write requests were not logged");

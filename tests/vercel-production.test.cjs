@@ -93,7 +93,8 @@ async function main() {
 
       assert.strictEqual(health.status, 200);
       assert.strictEqual(health.body.data.ok, true);
-      assert.strictEqual(read.status, 502);
+      assert.strictEqual(read.status, 200);
+      assert.strictEqual(read.body._proxy.source, "sample");
       assert.strictEqual(write.status, 403);
 
       console.log(JSON.stringify({

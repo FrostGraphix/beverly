@@ -16,6 +16,7 @@ const {
 const liveBaseUrlDefault = "http://8.208.16.168:9310";
 const root = path.resolve(__dirname, "..");
 const contractPath = path.join(root, "reference-contract.json");
+const samplesDir = path.join(root, "contracts", "samples");
 const jsonContentType = "application/json";
 const writePattern = /\/(create|update|delete|import|generate|cancel|reset|modify|addread|upload)\b/i;
 const defaultCorsOrigins = [
@@ -277,6 +278,113 @@ function logProxyFailure(details) {
   console.error("[live-proxy]", JSON.stringify(details));
 }
 
+function sampleName(endpointPath) {
+  return endpointPath.replace(/^\/+/, "").replace(/[/?&=:]+/g, "__").replace(/[^a-zA-Z0-9_.-]/g, "_");
+}
+
+function normalizeSamplePayload(payload, pathname) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const normalized = { ...payload };
+  if (!("msg" in normalized) && "reason" in normalized) normalized.msg = normalized.reason;
+  if (!("reason" in normalized) && "msg" in normalized) normalized.reason = normalized.msg;
+  if (!("data" in normalized) && "result" in normalized) normalized.data = normalized.result;
+  if (!("result" in normalized) && "data" in normalized) normalized.result = normalized.data;
+  normalized._proxy = {
+    source: "sample",
+    pathname
+  };
+  return normalized;
+}
+
+function collectionRowsFromPayload(payload) {
+  if (Array.isArray(payload?.result?.data)) return payload.result.data;
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.result)) return payload.result;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function setCollectionRows(payload, rows, total) {
+  if (payload?.result?.data && Array.isArray(payload.result.data)) {
+    payload.result = { ...payload.result, total, data: rows };
+  }
+  if (payload?.data?.data && Array.isArray(payload.data.data)) {
+    payload.data = { ...payload.data, total, data: rows };
+  }
+  if (Array.isArray(payload?.result)) payload.result = rows;
+  if (Array.isArray(payload?.data)) payload.data = rows;
+  return payload;
+}
+
+function filterSampleRows(pathname, rows, requestData) {
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  let filtered = rows.slice();
+
+  const stationId = payload.stationId || payload.SITE_ID || "";
+  if (stationId) {
+    filtered = filtered.filter((row) => String(row.stationId || row.station || "").toUpperCase() === String(stationId).toUpperCase());
+  }
+
+  if (pathname === "/api/item/read") {
+    const query = String(payload.itemType || payload.type || payload.keyword || "").trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((row) =>
+        String(row.itemType || "").toLowerCase().includes(query)
+        || String(row.itemName || "").toLowerCase().includes(query)
+        || String(row.en || "").toLowerCase().includes(query)
+      );
+    }
+  }
+
+  const pageNumber = Math.max(1, Number(payload.pageNumber || 1));
+  const pageSize = Math.max(1, Number(payload.pageSize || filtered.length || 20));
+  const start = (pageNumber - 1) * pageSize;
+  return {
+    rows: filtered.slice(start, start + pageSize),
+    total: filtered.length
+  };
+}
+
+function sampleReadResponse(pathname, requestData) {
+  for (const candidate of candidatePaths(pathname)) {
+    const filePath = path.join(samplesDir, `${sampleName(candidate)}.json`);
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const sampleFile = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      const normalized = normalizeSamplePayload(sampleFile.body, pathname);
+      if (!normalized) continue;
+      const rows = collectionRowsFromPayload(normalized);
+      if (rows.length) {
+        const page = filterSampleRows(pathname, rows, requestData);
+        setCollectionRows(normalized, page.rows, page.total);
+      }
+      return {
+        status: Number(sampleFile.status || 200),
+        body: normalized
+      };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function syntheticSampleResponse(sourcePathname, requestData, facadePathname) {
+  const sample = sampleReadResponse(sourcePathname, requestData);
+  if (!sample) return null;
+  return {
+    ...sample,
+    body: {
+      ...sample.body,
+      _proxy: {
+        ...(sample.body?._proxy || {}),
+        source: sample.body?._proxy?.source || "sample",
+        pathname: facadePathname
+      }
+    }
+  };
+}
+
 function cacheResponseIfNeeded(request, pathname, requestData, result) {
   void request;
   void pathname;
@@ -331,6 +439,52 @@ function localJobResponse(body) {
   };
 }
 
+function localLoginResponse(payload) {
+  const userId = String(payload.userId || payload.username || "").trim() || "admin";
+  const password = String(payload.password || "");
+  const normalizedUserId = userId === "admin@acoblighting.com" ? "admin" : userId;
+  const allowed = normalizedUserId === "admin" && (password === "ACOB_ADMIN" || password === "admin");
+  if (!allowed) {
+    return {
+      status: 401,
+      body: {
+        code: 401,
+        msg: "Invalid credentials",
+        reason: "Invalid credentials",
+        data: null,
+        result: null,
+        _proxy: {
+          source: "local-auth",
+          pathname: "/api/user/login"
+        }
+      }
+    };
+  }
+
+  return {
+    status: 200,
+    body: {
+      code: 0,
+      msg: "success",
+      reason: "success",
+      data: {
+        token: "local-dev-token",
+        userId: normalizedUserId,
+        userName: "ACB(admin)"
+      },
+      result: {
+        token: "local-dev-token",
+        userId: normalizedUserId,
+        userName: "ACB(admin)"
+      },
+      _proxy: {
+        source: "local-auth",
+        pathname: "/api/user/login"
+      }
+    }
+  };
+}
+
 function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/health") {
     return localJobResponse({
@@ -368,8 +522,22 @@ function dispatchLocalDatabaseAction(request, pathname, requestData) {
       storage: tableCounts()
     });
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/hourly") {
+    return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname);
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/gprs") {
+    return syntheticSampleResponse("/API/GPRSOnlineStatus/Read", requestData, pathname)
+      || localJobResponse({ total: 0, data: [] });
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/events") {
+    return syntheticSampleResponse("/API/EventNotification/Read", requestData, pathname)
+      || localJobResponse({ total: 0, data: [] });
+  }
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
+  if (pathname === "/api/user/login") {
+    return localLoginResponse(payload);
+  }
   if (pathname === "/api/local/importJobs/read") {
     return localJobResponse(listImportJobs({
       routeHash: payload.routeHash || "",
@@ -472,7 +640,7 @@ async function proxyLive(request, pathname, requestData) {
     };
   }
 
-  const token = request.headers.authorization || (env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : "");
+  const token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
   const candidates = candidatePaths(pathname);
   const query = querySuffix(request.url);
   let lastFailure = null;
@@ -485,7 +653,7 @@ async function proxyLive(request, pathname, requestData) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
       }
       if (liveResult.ok || (liveResult.status < 500 && liveResult.status !== 404)) {
-        if (hasBusinessFailure(liveResult.payload)) {
+        if (!isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
           console.error("[live-schema-drift]", JSON.stringify({ pathname, candidate, status: liveResult.status, payload: liveResult.payload }));
           lastFailure = {
             pathname,
@@ -494,6 +662,12 @@ async function proxyLive(request, pathname, requestData) {
             payload: liveResult.payload
           };
           continue;
+        }
+        if (isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
+          return {
+            status: liveResult.status,
+            body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
+          };
         }
         if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
@@ -560,6 +734,10 @@ async function handler(request, response) {
 
     if (!result) {
       result = await proxyLive(request, pathname, requestData);
+    }
+
+    if (!result && !isWriteRequest(pathname, request.method)) {
+      result = sampleReadResponse(pathname, requestData);
     }
 
     if (!result) {

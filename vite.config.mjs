@@ -7,7 +7,7 @@ export default defineConfig({
     port: 9311,
     strictPort: false,
     proxy: {
-      "/api": "http://127.0.0.1:9310"
+      "/api": process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:9310"
     }
   },
   build: {

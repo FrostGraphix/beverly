@@ -549,8 +549,11 @@ export default {
       const rowStationId = row.stationId || row.siteId || row.StationId || "";
       if (field.name === "customerId") {
         this.form.customerStationId = rowStationId;
+        if (!this.form.stationId && rowStationId) this.form.stationId = String(rowStationId).toUpperCase();
       } else if (field.name === "meterId") {
         this.form.meterStationId = rowStationId;
+        if (rowStationId) this.form.stationId = String(rowStationId).toUpperCase();
+        if (row.protocolVersion && !this.form.protocolVersion) this.form.protocolVersion = row.protocolVersion;
       }
       
       this.activePickerField = null;
