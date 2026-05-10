@@ -3,107 +3,159 @@
     <div class="consumption-filter-shell">
       <div class="consumption-filter-grid">
         <label class="consumption-field">
+          <span>Station Id</span>
+          <BaseSelect v-model="filters.stationId" class="consumption-input">
+            <option v-for="site in siteOptions" :key="site.value" :value="site.value">{{ site.label }}</option>
+          </BaseSelect>
+        </label>
+
+        <label class="consumption-field">
           <span>Customer Id</span>
           <div class="consumption-picker">
-            <input v-model="filters.customerId" readonly class="consumption-input input-readonly">
-            <button type="button" class="consumption-picker-btn" @click="activePicker = 'customer'">...</button>
+            <BaseInput v-model="filters.customerId" class="consumption-input" placeholder="All customers" />
+            <BaseButton class="consumption-picker-btn" size="sm" @click="activePicker = 'customer'">...</BaseButton>
           </div>
         </label>
 
         <label class="consumption-field">
           <span>Meter Id</span>
           <div class="consumption-picker">
-            <input v-model="filters.meterId" readonly class="consumption-input input-readonly">
-            <button type="button" class="consumption-picker-btn" @click="activePicker = 'meter'">...</button>
+            <BaseInput v-model="filters.meterId" class="consumption-input" placeholder="All meters" />
+            <BaseButton class="consumption-picker-btn" size="sm" @click="activePicker = 'meter'">...</BaseButton>
           </div>
         </label>
 
         <label class="consumption-field consumption-field-range">
           <span>Date Range</span>
           <div class="consumption-range">
-            <input v-model="filters.dateFrom" type="date" class="consumption-input">
+            <BaseInput v-model="filters.dateFrom" type="date" class="consumption-input" />
             <span class="consumption-range-separator">To</span>
-            <input v-model="filters.dateTo" type="date" class="consumption-input">
+            <BaseInput v-model="filters.dateTo" type="date" class="consumption-input" />
           </div>
         </label>
 
         <div class="consumption-granularity">
-          <button type="button" :class="granularityClass('daily')" @click="setGranularity('daily')">Daily</button>
-          <button type="button" :class="granularityClass('monthly')" @click="setGranularity('monthly')">Monthly</button>
+          <BaseButton :class="granularityClass('daily')" @click="setGranularity('daily')">Daily</BaseButton>
+          <BaseButton :class="granularityClass('monthly')" @click="setGranularity('monthly')">Monthly</BaseButton>
         </div>
       </div>
 
       <div class="consumption-toolbar">
-        <button type="button" class="consumption-toolbar-icon" @click="toggleSortDirection" :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'">
+        <BaseIconButton class="consumption-toolbar-icon" @click="toggleSortDirection" :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'" aria-label="Toggle sort direction">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l-4-4-1.4 1.4L9 23l6.4-6.6L14 15l-4 4V5zm8 14V5l4 4 1.4-1.4L15 1 8.6 7.6 10 9l4-4v14z"/></svg>
-        </button>
-        <button type="button" class="btn primary consumption-btn" @click="search">
+        </BaseIconButton>
+        <BaseButton class="consumption-btn" variant="primary" :disabled="loading" @click="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12a6 6 0 0 1 0-12z"/></svg>
-          Search
-        </button>
-        <button type="button" class="btn primary consumption-btn" @click="reset">
+          {{ loading ? "Loading" : "Search" }}
+        </BaseButton>
+        <BaseButton class="consumption-btn" variant="primary" @click="reset">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
           Reset
-        </button>
-        <button type="button" class="btn primary consumption-btn" @click="exportCsv">
+        </BaseButton>
+        <BaseButton class="consumption-btn" variant="primary" :disabled="!decoratedRows.length" @click="exportCsv">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 20h14v-2H5v2zm7-18l-5.5 5.5 1.42 1.42L11 5.84V16h2V5.84l3.08 3.08 1.42-1.42L12 2z"/></svg>
           Export
-        </button>
+        </BaseButton>
       </div>
     </div>
 
+    <div v-if="responseMeta.warning" class="consumption-warning" role="status">
+      {{ responseMeta.warning }}
+    </div>
+
+    <div class="consumption-summary-grid">
+      <article class="consumption-summary-card">
+        <span>Total Consumption</span>
+        <strong>{{ formatConsumption(summary.total) }} kWh</strong>
+      </article>
+      <article class="consumption-summary-card">
+        <span>Average</span>
+        <strong>{{ formatConsumption(summary.average) }} kWh</strong>
+      </article>
+      <article class="consumption-summary-card">
+        <span>Peak Period</span>
+        <strong>{{ summary.peakDate || "No data" }}</strong>
+        <small>{{ formatConsumption(summary.peakValue) }} kWh</small>
+      </article>
+      <article class="consumption-summary-card">
+        <span>Coverage</span>
+        <strong>{{ summary.reportingDays }}/{{ summary.expectedDays || summary.reportingDays }}</strong>
+        <small>{{ summary.missingDays }} missing, {{ summary.zeroDays }} zero</small>
+      </article>
+    </div>
+
     <div class="consumption-tabs">
-      <button type="button" :class="tabClass('data')" @click="activeTab = 'data'">Data</button>
-      <button type="button" :class="tabClass('chart')" @click="activeTab = 'chart'">Chart</button>
+      <BaseButton :class="tabClass('data')" @click="activeTab = 'data'">Data</BaseButton>
+      <BaseButton :class="tabClass('chart')" @click="activeTab = 'chart'">Chart</BaseButton>
+      <BaseButton :class="tabClass('insights')" @click="activeTab = 'insights'">Insights</BaseButton>
     </div>
 
     <div v-if="errorMessage" class="table-error" role="alert">
       <span>{{ errorMessage }}</span>
-      <button class="btn primary" type="button" @click="search">Refresh</button>
+      <BaseButton variant="primary" @click="search">Refresh</BaseButton>
     </div>
 
     <div v-if="activeTab === 'data'" class="consumption-table-card">
+      <div class="consumption-table-head">
+        <div>
+          <strong>Consumption ledger</strong>
+          <span>{{ decoratedRows.length }} periods</span>
+        </div>
+        <span>{{ filters.granularity }} view</span>
+      </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th class="selection-col"><input type="checkbox" disabled></th>
+              <th class="selection-col"><BaseCheckbox disabled aria-label="Select all rows" /></th>
               <th>Collection Date</th>
-              <th>Consumption</th>
+              <th>Consumption(kWh)</th>
+              <th>Change(kWh)</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="3" class="empty-cell">Loading...</td>
+              <td colspan="5" class="empty-cell">Loading...</td>
             </tr>
-            <tr v-else-if="!visibleRows.length">
-              <td colspan="3" class="empty-cell">No Data</td>
+            <tr v-else-if="!decoratedRows.length">
+              <td colspan="5" class="empty-cell">No consumption data</td>
             </tr>
             <tr v-for="row in visibleRows" :key="row.id">
-              <td class="selection-col"><input type="checkbox" disabled></td>
+              <td class="selection-col"><BaseCheckbox disabled aria-label="Select row" /></td>
               <td>{{ row.collectionDate }}</td>
               <td>{{ formatConsumption(row.consumption) }}</td>
+              <td :class="changeClass(row.change)">{{ formatChange(row.change) }}</td>
+              <td><span :class="statusClass(row.status)">{{ row.status }}</span></td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="pagination">
-        <span>Total {{ filteredRows.length }}</span>
-        <select v-model.number="pageSize" class="sort-select" aria-label="Page size" @change="changePageSize">
+        <span>Total {{ decoratedRows.length }}</span>
+        <BaseSelect v-model="pageSize" class="sort-select" aria-label="Page size" @change="changePageSize">
           <option :value="10">10/page</option>
           <option :value="20">20/page</option>
           <option :value="50">50/page</option>
-        </select>
-        <button class="page-chip" type="button" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">&lt;</button>
-        <button v-for="page in pages" :key="page" :class="['page-chip', page === currentPage ? 'active' : '']" type="button" @click="goToPage(page)">{{ page }}</button>
-        <button class="page-chip" type="button" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">&gt;</button>
+        </BaseSelect>
+        <BaseButton class="page-chip" size="sm" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">&lt;</BaseButton>
+        <BaseButton v-for="page in pages" :key="page" :class="['page-chip', page === currentPage ? 'active' : '']" size="sm" @click="goToPage(page)">{{ page }}</BaseButton>
+        <BaseButton class="page-chip" size="sm" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">&gt;</BaseButton>
         <span>Go to</span>
-        <input v-model="gotoPage" class="consumption-goto" type="number" min="1" :max="pageCount" @keyup.enter="applyGoto">
+        <BaseInput v-model="gotoPage" class="consumption-goto" type="number" min="1" :max="pageCount" @keyup.enter="applyGoto" />
       </div>
     </div>
 
-    <div v-else class="consumption-chart-card">
+    <div v-else-if="activeTab === 'chart'" class="consumption-chart-card">
       <EChartPanel :option="chartOption" />
+    </div>
+
+    <div v-else class="consumption-insight-grid">
+      <article v-for="insight in insights" :key="insight.label" class="consumption-insight">
+        <span>{{ insight.label }}</span>
+        <strong>{{ insight.value }}</strong>
+        <small>{{ insight.detail }}</small>
+      </article>
     </div>
 
     <PickerModal
@@ -112,6 +164,7 @@
       :columns="['customerId', 'customerName', 'stationId']"
       :column-labels="['Id', 'Name', 'Station Id']"
       label="Customer"
+      :auto-confirm="true"
       @close="activePicker = ''"
       @select="selectCustomer"
     />
@@ -122,6 +175,7 @@
       :columns="['meterId', 'meterType', 'stationId']"
       :column-labels="['Id', 'Type', 'Station Id']"
       label="Meter"
+      :auto-confirm="true"
       @close="activePicker = ''"
       @select="selectMeter"
     />
@@ -131,30 +185,44 @@
 <script>
 import EChartPanel from "./EChartPanel.vue";
 import PickerModal from "./PickerModal.vue";
-import { pageNumbers, totalPages } from "../services/table-service";
+import BaseButton from "./base/BaseButton.vue";
+import BaseCheckbox from "./base/BaseCheckbox.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import BaseSelect from "./base/BaseSelect.vue";
+import { postApi } from "../services/api.js";
+import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
+import { pageNumbers, tableSiteOptions, totalPages } from "../services/table-service";
 import {
   aggregateConsumptionRows,
   buildConsumptionChartOption,
+  buildConsumptionInsights,
+  decorateConsumptionRows,
   defaultConsumptionStatisticsFilters,
-  fetchConsumptionStatistics
+  fetchConsumptionStatistics,
+  summarizeConsumptionRows
 } from "../services/consumption-statistics-service.mjs";
 
 export default {
   name: "ConsumptionStatisticsPage",
-  components: { EChartPanel, PickerModal },
+  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput, BaseSelect, EChartPanel, PickerModal },
   data() {
     return {
       filters: defaultConsumptionStatisticsFilters(),
+      siteOptions: tableSiteOptions,
       activePicker: "",
       activeTab: "data",
       loading: false,
       errorMessage: "",
+      responseMeta: { source: "", endpoint: "", warning: "" },
       sortDirection: "desc",
       rawRows: [],
-      filteredRows: [],
+      searchRunId: 0,
       currentPage: 1,
       pageSize: 20,
-      gotoPage: "1"
+      gotoPage: "1",
+      chartTheme: null,
+      themeObserver: null
     };
   },
   computed: {
@@ -167,46 +235,70 @@ export default {
         return left.collectionDate.localeCompare(right.collectionDate) * direction;
       });
     },
+    decoratedRows() {
+      return decorateConsumptionRows(this.sortedRows);
+    },
+    summary() {
+      return summarizeConsumptionRows(this.sortedRows, this.filters);
+    },
+    insights() {
+      return buildConsumptionInsights(this.sortedRows, this.filters);
+    },
     pageCount() {
-      return totalPages(this.filteredRows.length, this.pageSize);
+      return totalPages(this.decoratedRows.length, this.pageSize);
     },
     pages() {
       return pageNumbers(this.currentPage, this.pageCount);
     },
     visibleRows() {
       const start = (this.currentPage - 1) * this.pageSize;
-      return this.filteredRows.slice(start, start + this.pageSize);
+      return this.decoratedRows.slice(start, start + this.pageSize);
     },
     chartOption() {
-      return buildConsumptionChartOption(this.sortedRows, this.filters.granularity);
+      return buildConsumptionChartOption(this.sortedRows, this.filters.granularity, this.chartTheme);
     }
   },
   mounted() {
+    this.syncThemePalette();
+    this.observeThemeChanges();
     this.search();
+  },
+  beforeDestroy() {
+    if (this.themeObserver) this.themeObserver.disconnect();
   },
   methods: {
     async search() {
+      const requestId = this.searchRunId + 1;
+      this.searchRunId = requestId;
       this.loading = true;
       this.errorMessage = "";
+      this.responseMeta = { source: "", endpoint: "", warning: "" };
       try {
         const response = await fetchConsumptionStatistics(this.filters, {
           pageNumber: 1,
           pageSize: 5000
         });
+        if (requestId !== this.searchRunId) return;
+        this.responseMeta = {
+          source: response.source || "",
+          endpoint: response.endpoint || "",
+          warning: response.warning || ""
+        };
         this.rawRows = response.rows.filter((row) => {
-          if (this.filters.customerId && String(row.customerId) !== String(this.filters.customerId)) return false;
-          if (this.filters.meterId && String(row.meterId) !== String(this.filters.meterId)) return false;
+          if (this.filters.customerId && String(row.customerId) && String(row.customerId) !== String(this.filters.customerId)) return false;
+          if (this.filters.meterId && String(row.meterId) && String(row.meterId) !== String(this.filters.meterId)) return false;
+          if (this.filters.stationId && String(row.stationId) && String(row.stationId) !== String(this.filters.stationId)) return false;
+          if (!this.rowWithinDateRange(row)) return false;
           return true;
         });
-        this.filteredRows = this.sortedRows;
         this.currentPage = 1;
         this.gotoPage = "1";
       } catch (error) {
+        if (requestId !== this.searchRunId) return;
         this.rawRows = [];
-        this.filteredRows = [];
-        this.errorMessage = error?.message || "Unable to load data";
+        this.errorMessage = error?.message || "Unable to load consumption data";
       } finally {
-        this.loading = false;
+        if (requestId === this.searchRunId) this.loading = false;
       }
     },
     reset() {
@@ -217,29 +309,102 @@ export default {
       this.gotoPage = "1";
       this.search();
     },
-    selectCustomer(row) {
-      this.filters.customerId = String(row.customerId || row.id || "");
-      if (!this.filters.meterId) this.filters.meterId = String(row.customerId || row.id || "");
+    async selectCustomer(row) {
+      const customerId = String(row.customerId || row.id || "");
+      this.filters.customerId = customerId;
+      if (row.stationId) this.filters.stationId = String(row.stationId);
+      if (row.meterId) {
+        this.filters.meterId = String(row.meterId);
+      } else {
+        const linked = await this.findLinkedAccount({ customerId });
+        if (linked?.meterId) this.filters.meterId = String(linked.meterId);
+        if (linked?.stationId) this.filters.stationId = String(linked.stationId);
+      }
       this.activePicker = "";
     },
-    selectMeter(row) {
-      this.filters.meterId = String(row.meterId || row.id || "");
+    async selectMeter(row) {
+      const meterId = String(row.meterId || row.id || "");
+      this.filters.meterId = meterId;
+      if (row.stationId) this.filters.stationId = String(row.stationId);
+      if (row.customerId) {
+        this.filters.customerId = String(row.customerId);
+      } else {
+        const linked = await this.findLinkedAccount({ meterId });
+        if (linked?.customerId) this.filters.customerId = String(linked.customerId);
+        if (linked?.stationId) this.filters.stationId = String(linked.stationId);
+      }
       this.activePicker = "";
+    },
+    async findLinkedAccount(criteria = {}) {
+      const customerId = String(criteria.customerId || "").trim();
+      const meterId = String(criteria.meterId || "").trim();
+      if (!customerId && !meterId) return null;
+      try {
+        const payload = {
+          lang: "en",
+          pageNumber: 1,
+          pageSize: 100,
+          searchTerm: customerId || meterId,
+          ...(customerId ? { customerId } : {}),
+          ...(meterId ? { meterId } : {})
+        };
+        const response = await postApi("/api/account/read", payload);
+        const result = response?.result || response?.data?.result || response?.data || response || {};
+        const rows = Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.rows)
+            ? result.rows
+            : Array.isArray(result.list)
+              ? result.list
+              : Array.isArray(result)
+                ? result
+                : [];
+        return rows.find((account) => {
+          const accountCustomerId = String(account.customerId || "");
+          const accountMeterId = String(account.meterId || "");
+          if (customerId && accountCustomerId === customerId) return true;
+          if (meterId && accountMeterId === meterId) return true;
+          return false;
+        }) || null;
+      } catch (error) {
+        console.error("ConsumptionStatisticsPage: linked account lookup failed", error);
+        return null;
+      }
+    },
+    rowWithinDateRange(row) {
+      const date = String(row.collectionDate || "").slice(0, 10);
+      if (!date) return true;
+      if (this.filters.dateFrom && date < this.filters.dateFrom) return false;
+      if (this.filters.dateTo && date > this.filters.dateTo) return false;
+      return true;
     },
     setGranularity(granularity) {
+      if (this.filters.granularity === granularity) return;
       this.filters.granularity = granularity;
-      this.filteredRows = this.sortedRows;
       this.currentPage = 1;
       this.gotoPage = "1";
+      this.search();
     },
     toggleSortDirection() {
       this.sortDirection = this.sortDirection === "asc" ? "desc" : "asc";
-      this.filteredRows = this.sortedRows;
+      this.currentPage = 1;
+      this.gotoPage = "1";
     },
     formatConsumption(value) {
       return Number(value || 0).toLocaleString(undefined, {
         maximumFractionDigits: 3
       });
+    },
+    formatChange(value) {
+      if (value === null || value === undefined) return "-";
+      const prefix = value > 0 ? "+" : "";
+      return `${prefix}${this.formatConsumption(value)}`;
+    },
+    statusClass(status) {
+      return ["consumption-status", status === "Recorded" ? "recorded" : "zero"];
+    },
+    changeClass(value) {
+      return ["consumption-change", value > 0 ? "up" : value < 0 ? "down" : ""];
     },
     tabClass(tab) {
       return ["consumption-tab", this.activeTab === tab ? "active" : ""];
@@ -258,25 +423,53 @@ export default {
     applyGoto() {
       this.goToPage(Number(this.gotoPage || 1));
     },
+    syncThemePalette() {
+      if (typeof window === "undefined" || typeof document === "undefined" || !document.documentElement) return;
+      const styles = window.getComputedStyle(document.documentElement);
+      const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+      this.chartTheme = {
+        primary: resolve("--primary", "#059669"),
+        primaryLight: resolve("--primary-light", "rgba(5, 150, 105, 0.12)"),
+        textStrong: resolve("--text-strong", "#0f172a"),
+        textMuted: resolve("--text-muted", "#64748b"),
+        border: resolve("--border-color", "#d1fae5"),
+        grid: resolve("--border-color", "#d1fae5")
+      };
+    },
+    observeThemeChanges() {
+      if (typeof MutationObserver === "undefined" || typeof document === "undefined" || !document.documentElement) return;
+      this.themeObserver = new MutationObserver(() => this.syncThemePalette());
+      this.themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme"]
+      });
+    },
     exportCsv() {
-      const header = ["Collection Date", "Consumption"];
-      const lines = this.filteredRows.map((row) => `${row.collectionDate},${row.consumption}`);
-      const content = [header.join(","), ...lines].join("\n");
-      const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `consumption-statistics-${this.filters.granularity}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-    }
-  },
-  watch: {
-    sortedRows: {
-      immediate: true,
-      handler(rows) {
-        this.filteredRows = rows;
-      }
+      const meta = [
+        ["Station Id", this.filters.stationId || "All"],
+        ["Customer Id", this.filters.customerId || "All"],
+        ["Meter Id", this.filters.meterId || "All"],
+        ["Date From", this.filters.dateFrom],
+        ["Date To", this.filters.dateTo],
+        ["Granularity", this.filters.granularity],
+        ["Source", this.responseMeta.source || "live"],
+        ["Total Consumption", this.summary.total],
+        ["Average Consumption", this.summary.average],
+        ["Peak Period", this.summary.peakDate || ""],
+        ["Missing Days", this.summary.missingDays],
+        []
+      ];
+      const columns = [
+        { label: "Collection Date", key: "collectionDate" },
+        { label: "Consumption (kWh)", key: "consumption" },
+        { label: "Change (kWh)", key: "change" },
+        { label: "Status", key: "status" }
+      ];
+      const content = exportReportCsvText("Consumption Statistics", columns, this.decoratedRows, meta);
+      const excel = exportReportExcelXml("Consumption Statistics", columns, this.decoratedRows, meta);
+      const baseName = `Beverly_consumption_statistics_${this.filters.granularity}`;
+      downloadTextFile(`${baseName}.csv`, content, "text/csv;charset=utf-8");
+      downloadTextFile(`${baseName}.xls`, excel, "application/vnd.ms-excel");
     }
   }
 };
@@ -286,23 +479,77 @@ export default {
 .consumption-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
-.consumption-filter-shell {
+.consumption-filter-shell,
+.consumption-table-card,
+.consumption-chart-card,
+.consumption-summary-card,
+.consumption-insight {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.consumption-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(90deg, var(--primary-light), var(--bg-card));
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.consumption-table-head strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.consumption-table-head div span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  text-transform: none;
+}
+
+.consumption-table-card .table-scroll {
+  border-right: 0;
+  border-left: 0;
+}
+
+.consumption-table-card table {
+  font-variant-numeric: tabular-nums;
+}
+
+.consumption-table-card tbody tr:hover {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.consumption-table-card tbody td:nth-child(3),
+.consumption-table-card tbody td:nth-child(4) {
+  font-weight: 700;
+  color: var(--text-strong);
 }
 
 .consumption-filter-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1.2fr 1.6fr 220px;
+  grid-template-columns: 1fr 1.1fr 1.1fr 1.7fr 180px;
   border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-page));
 }
 
 .consumption-field,
 .consumption-granularity {
-  padding: 14px;
+  padding: 12px;
   border-right: 1px solid var(--border-color);
 }
 
@@ -313,42 +560,58 @@ export default {
 
 .consumption-field span {
   display: block;
-  margin-bottom: 12px;
-  color: #7b8794;
+  margin-bottom: 10px;
+  color: var(--text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .consumption-picker,
 .consumption-range {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .consumption-input {
   width: 100%;
   height: 34px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   font-size: 14px;
-  background: #fff;
+  background: var(--bg-card);
+  color: var(--text-strong);
+  outline: 0;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.consumption-input:focus,
+.consumption-goto:focus,
+.sort-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .consumption-picker-btn {
-  width: 54px;
+  width: 46px;
   height: 34px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: #fff;
-  color: #7b8794;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-muted);
   cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.consumption-picker-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 .consumption-range-separator {
-  margin: 0 2px;
-  color: #111827;
+  color: var(--text-strong);
   font-size: 14px;
 }
 
@@ -356,16 +619,17 @@ export default {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 0;
 }
 
 .consumption-granularity-btn {
-  min-width: 78px;
+  min-width: 76px;
   height: 34px;
   border: 1px solid var(--border-color);
-  background: #fff;
-  color: #4b5563;
+  background: var(--bg-card);
+  color: var(--text-main);
   cursor: pointer;
+  font-weight: 700;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .consumption-granularity-btn:first-child {
@@ -377,16 +641,24 @@ export default {
 }
 
 .consumption-granularity-btn.active {
-  background: #1890ff;
-  border-color: #1890ff;
-  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-glow-sm);
+}
+
+.consumption-granularity-btn:hover:not(.active) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
 }
 
 .consumption-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 0;
+  gap: 14px;
+  padding: 12px;
+  background: var(--bg-card);
 }
 
 .consumption-toolbar-icon {
@@ -394,10 +666,17 @@ export default {
   height: 34px;
   border: none;
   border-radius: 50%;
-  background: #1276d1;
-  color: #fff;
+  background: var(--primary);
+  color: var(--text-inverse);
   cursor: pointer;
-  margin-left: 6px;
+  box-shadow: var(--shadow-glow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.consumption-toolbar-icon:hover {
+  background: var(--primary-hover);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
 }
 
 .consumption-toolbar-icon svg,
@@ -412,10 +691,67 @@ export default {
   gap: 8px;
 }
 
+.consumption-warning {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.consumption-summary-grid,
+.consumption-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.consumption-summary-card,
+.consumption-insight {
+  min-height: 94px;
+  padding: 16px;
+}
+
+.consumption-summary-card {
+  background:
+    linear-gradient(135deg, var(--primary-light), transparent 42%),
+    var(--bg-card);
+}
+
+.consumption-summary-card span,
+.consumption-insight span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.consumption-summary-card strong,
+.consumption-insight strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-strong);
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.consumption-summary-card small,
+.consumption-insight small {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
 .consumption-tabs {
   display: flex;
-  gap: 36px;
+  gap: 32px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+  padding: 0 2px;
 }
 
 .consumption-tab {
@@ -423,13 +759,14 @@ export default {
   padding: 0 0 12px;
   border: none;
   background: transparent;
-  color: #374151;
+  color: var(--text-main);
   font-size: 16px;
   cursor: pointer;
+  font-weight: 700;
 }
 
 .consumption-tab.active {
-  color: #1677ff;
+  color: var(--primary);
 }
 
 .consumption-tab.active::after {
@@ -439,33 +776,67 @@ export default {
   right: 0;
   bottom: -1px;
   height: 3px;
-  background: #1677ff;
-}
-
-.consumption-table-card,
-.consumption-chart-card {
-  background: #fff;
+  background: var(--primary);
 }
 
 .consumption-chart-card {
   min-height: 460px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 12% 0%, var(--primary-light), transparent 34%),
+    var(--bg-card);
 }
 
 .consumption-goto {
   width: 56px;
   height: 34px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   text-align: center;
+  background: var(--bg-card);
+  color: var(--text-strong);
+  outline: 0;
 }
 
 .selection-col {
   width: 32px;
 }
 
-@media (max-width: 1100px) {
-  .consumption-filter-grid {
-    grid-template-columns: 1fr 1fr;
+.consumption-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 76px;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.consumption-status.recorded {
+  border: 1px solid color-mix(in srgb, var(--success) 34%, transparent);
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.consumption-status.zero {
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.consumption-change.up {
+  color: var(--success);
+}
+
+.consumption-change.down {
+  color: var(--danger);
+}
+
+@media (max-width: 1180px) {
+  .consumption-filter-grid,
+  .consumption-summary-grid,
+  .consumption-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .consumption-granularity {
@@ -474,7 +845,9 @@ export default {
 }
 
 @media (max-width: 720px) {
-  .consumption-filter-grid {
+  .consumption-filter-grid,
+  .consumption-summary-grid,
+  .consumption-insight-grid {
     grid-template-columns: 1fr;
   }
 

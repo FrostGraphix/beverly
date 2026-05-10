@@ -6,15 +6,15 @@
         <span v-if="dateRange" class="chart-date-range">{{ dateRange }}</span>
       </div>
       <div class="chart-legend">
-        <span class="legend-dot" :style="{ background: mode === 'sales' && metric === 'revenue' ? '#34bfa3' : '#36a3f7' }"></span>
+        <span class="legend-dot" :style="{ background: mode === 'sales' && metric === 'revenue' ? '#34bfa3' : '#10b981' }"></span>
         <span>{{ legendText }}</span>
       </div>
     </div>
 
     <div v-if="mode === 'sales'" class="chart-metric-toggle">
-      <button :class="['metric-btn', metric === 'kwh' ? 'metric-btn--active' : '']" @click="metric = 'kwh'">Units</button>
-      <button :class="['metric-btn', metric === 'revenue' ? 'metric-btn--active' : '']" @click="metric = 'revenue'">Revenue</button>
-      <button :class="['metric-btn', metric === 'both' ? 'metric-btn--active' : '']" @click="metric = 'both'">Both</button>
+      <BaseButton :class="['metric-btn', metric === 'kwh' ? 'metric-btn--active' : '']" @click="metric = 'kwh'">Units</BaseButton>
+      <BaseButton :class="['metric-btn', metric === 'revenue' ? 'metric-btn--active' : '']" @click="metric = 'revenue'">Revenue</BaseButton>
+      <BaseButton :class="['metric-btn', metric === 'both' ? 'metric-btn--active' : '']" @click="metric = 'both'">Both</BaseButton>
     </div>
 
     <div v-if="loading" class="chart-loading">
@@ -28,9 +28,11 @@
 
 <script>
 import { loadECharts } from "../../services/echarts-loader.mjs";
+import BaseButton from "../base/BaseButton.vue";
 
 export default {
   name: "TemporalLineChart",
+  components: { BaseButton },
   props: {
     series: { type: Object, default: () => ({ labels: [], kwhSeries: [], revenueSeries: [] }) },
     granularity: { type: String, default: "daily" },
@@ -113,9 +115,9 @@ export default {
           smooth: true,
           yAxisIndex: 0,
           data: kwhSeries,
-          lineStyle: { color: "#36a3f7", width: 2.5 },
-          itemStyle: { color: "#36a3f7" },
-          areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#36a3f740" }, { offset: 1, color: "#36a3f700" }] } },
+          lineStyle: { color: "#10b981", width: 2.5 },
+          itemStyle: { color: "#10b981" },
+          areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(16, 185, 129, 0.25)" }, { offset: 1, color: "rgba(16, 185, 129, 0)" }] } },
           symbol: "circle",
           symbolSize: 5,
         });
@@ -183,9 +185,9 @@ export default {
             type: "line",
             smooth: true,
             data: kwhSeries,
-            lineStyle: { color: "#36a3f7", width: 2.5 },
-            itemStyle: { color: "#36a3f7" },
-            areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#36a3f740" }, { offset: 1, color: "#36a3f700" }] } },
+            lineStyle: { color: "#10b981", width: 2.5 },
+            itemStyle: { color: "#10b981" },
+            areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(16, 185, 129, 0.25)" }, { offset: 1, color: "rgba(16, 185, 129, 0)" }] } },
             symbol: "circle",
             symbolSize: 5,
           },

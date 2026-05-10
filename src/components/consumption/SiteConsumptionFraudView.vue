@@ -12,7 +12,7 @@
       </article>
       <article class="fraud-callout fraud-callout--neutral">
         <span class="fraud-callout-label">Credit Balance</span>
-        <strong class="fraud-callout-value">{{ formatMoney(kpiData.creditGap) }}</strong>
+        <strong class="fraud-callout-value">{{ formatMoney(kpiData.creditBalance) }}</strong>
       </article>
       <article class="fraud-callout fraud-callout--warn">
         <span class="fraud-callout-label">High-Risk Accounts</span>

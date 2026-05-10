@@ -26,7 +26,8 @@ function createMemoryStore() {
     import_jobs: [],
     export_jobs: [],
     print_jobs: [],
-    write_confirmations: []
+    write_confirmations: [],
+    automation_deliveries: []
   };
 }
 
@@ -38,8 +39,22 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function writableRoot() {
+  if (process.env.VERCEL || process.env.AWS_REGION) return process.env.TMPDIR || process.env.TEMP || "/tmp";
+  return path.resolve(__dirname, "..", "..", "tmp");
+}
+
 function databasePath() {
-  return process.env.LOCAL_DB_PATH ? path.resolve(process.env.LOCAL_DB_PATH) : defaultDatabasePath;
+  const runningOnServerless = Boolean(process.env.VERCEL || process.env.AWS_REGION);
+  if (process.env.LOCAL_DB_PATH) {
+    const configuredPath = path.resolve(process.env.LOCAL_DB_PATH);
+    if (!runningOnServerless) return configuredPath;
+    const writableBase = path.resolve(writableRoot());
+    if (configuredPath.startsWith(writableBase)) return configuredPath;
+    return path.join(writableBase, path.basename(configuredPath) || "reference-crm.sqlite");
+  }
+  if (runningOnServerless) return path.join(writableRoot(), "reference-crm.sqlite");
+  return defaultDatabasePath;
 }
 
 function ensureDirectory(filePath) {
@@ -215,6 +230,20 @@ function ensureDatabase() {
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS automation_deliveries (
+      id TEXT PRIMARY KEY,
+      incident_id TEXT NOT NULL,
+      incident_kind TEXT NOT NULL,
+      incident_title TEXT NOT NULL,
+      webhook_id TEXT NOT NULL,
+      webhook_name TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL,
+      ok INTEGER NOT NULL,
+      status_code INTEGER NOT NULL,
+      error_text TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -468,7 +497,8 @@ function tableCounts() {
     "import_jobs",
     "export_jobs",
     "print_jobs",
-    "write_confirmations"
+    "write_confirmations",
+    "automation_deliveries"
   ];
   if (isMemoryDatabase(db)) {
     return Object.fromEntries(names.map((name) => [
@@ -483,6 +513,86 @@ function tableCounts() {
   return counts;
 }
 
+function recordAutomationDelivery(entry) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.automation_deliveries.push({
+      ...entry,
+      details: sanitizeValue(entry.details || {})
+    });
+    return;
+  }
+  db.prepare(`
+    INSERT INTO automation_deliveries (id, incident_id, incident_kind, incident_title, webhook_id, webhook_name, attempt_number, ok, status_code, error_text, detail_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    String(entry.id || crypto.randomUUID()),
+    String(entry.incidentId || ""),
+    String(entry.incidentKind || ""),
+    String(entry.incidentTitle || ""),
+    String(entry.webhookId || ""),
+    String(entry.webhookName || ""),
+    Math.max(1, Number(entry.attemptNumber || 1)),
+    entry.ok ? 1 : 0,
+    Number(entry.status || 0),
+    String(entry.error || ""),
+    JSON.stringify(sanitizeValue(entry.details || {})),
+    String(entry.createdAt || nowIso())
+  );
+}
+
+function listAutomationDeliveries(options = {}) {
+  const db = ensureDatabase();
+  const limit = Math.max(1, Math.min(Number(options.limit || 50), 200));
+  if (isMemoryDatabase(db)) {
+    const rows = db.memoryStore.automation_deliveries
+      .slice()
+      .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))
+      .slice(0, limit);
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        incidentId: row.incidentId,
+        incidentKind: row.incidentKind,
+        incidentTitle: row.incidentTitle,
+        webhookId: row.webhookId,
+        webhookName: row.webhookName,
+        attemptNumber: Number(row.attemptNumber || 1),
+        ok: row.ok === true,
+        status: Number(row.status || 0),
+        error: String(row.error || ""),
+        createdAt: String(row.createdAt || ""),
+        details: sanitizeValue(row.details || {})
+      })),
+      total: db.memoryStore.automation_deliveries.length
+    };
+  }
+  const rows = db.prepare(`
+    SELECT id, incident_id, incident_kind, incident_title, webhook_id, webhook_name, attempt_number, ok, status_code, error_text, detail_json, created_at
+    FROM automation_deliveries
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM automation_deliveries`).get().count;
+  return {
+    rows: rows.map((row) => ({
+      id: row.id,
+      incidentId: row.incident_id,
+      incidentKind: row.incident_kind,
+      incidentTitle: row.incident_title,
+      webhookId: row.webhook_id,
+      webhookName: row.webhook_name,
+      attemptNumber: row.attempt_number,
+      ok: Boolean(row.ok),
+      status: row.status_code,
+      error: row.error_text,
+      createdAt: row.created_at,
+      details: parseJson(row.detail_json, {})
+    })),
+    total
+  };
+}
+
 function resetForTests() {
   if (database && typeof database.close === "function") database.close();
   database = null;
@@ -495,12 +605,15 @@ module.exports = {
   databasePath,
   ensureDatabase,
   listImportJobs,
+  listAutomationDeliveries,
   readCachedApiResponse,
+  recordAutomationDelivery,
   recordAuditLog,
   recordExportJob,
   recordImportJob,
   recordPrintJob,
   recordWriteConfirmation,
   resetForTests,
-  tableCounts
+  tableCounts,
+  writableRoot
 };

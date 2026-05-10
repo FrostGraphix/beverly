@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { actionEndpoint, submitRouteAction } from "../src/services/action-service.mjs";
-import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionStatisticsPayload, normalizeConsumptionStatisticsResponse } from "../src/services/consumption-statistics-service.mjs";
+import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionInsights, buildConsumptionStatisticsPayload, decorateConsumptionRows, fetchConsumptionStatistics, normalizeConsumptionStatisticsResponse, summarizeConsumptionRows } from "../src/services/consumption-statistics-service.mjs";
 import { fetchDashboardData } from "../src/services/dashboard-service.mjs";
 import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
@@ -41,12 +41,17 @@ const dlmsRoute = {
 };
 const manifestGatewayRoute = routeManifest.find((route) => route.hash === "#/management/gateway");
 const manifestDlmsRoute = routeManifest.find((route) => route.hash === "#/protocol/dlms");
+const manifestGprsRoute = routeManifest.find((route) => route.hash === "#/remote-support/gprs-tasks");
+const manifestEventRoute = routeManifest.find((route) => route.hash === "#/remote-support/event-notification");
+const manifestFirmwareRoute = routeManifest.find((route) => route.hash === "#/remote-support/firmware-update");
+const manifestFileUploadRoute = routeManifest.find((route) => route.hash === "#/remote-support/file-upload");
 
 assert.strictEqual(actionEndpoint(accountRoute, "Add"), "/api/account/create");
 assert.strictEqual(actionEndpoint(accountRoute, "Edit"), "/api/account/update");
 assert.strictEqual(actionEndpoint(accountRoute, "Delete"), "/api/account/delete");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Edit"), "/api/dlms/update");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Delete"), "/api/dlms/delete");
+assert.strictEqual(actionEndpoint({ hash: "#/remote-support/firmware-update" }, "Add"), "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask");
 assert.deepStrictEqual(
   routeManifest.find((route) => route.hash === "#/management/customer").apis,
   ["/api/customer/read", "/api/station/read"]
@@ -97,6 +102,16 @@ assert(manifestGatewayRoute.actions.includes("Edit"));
 assert(manifestGatewayRoute.actions.includes("Delete"));
 assert(manifestDlmsRoute.actions.includes("Edit"));
 assert(manifestDlmsRoute.actions.includes("Delete"));
+assert.deepStrictEqual(manifestGprsRoute.actions, ["Sort", "Search", "Reset", "Add Task", "Export"]);
+assert.strictEqual(manifestGprsRoute.columns.includes("Actions"), false);
+assert.deepStrictEqual(manifestEventRoute.apis, ["/API/EventNotification/Read"]);
+assert.deepStrictEqual(manifestEventRoute.actions, ["Sort", "Search", "Reset", "Export"]);
+assert.strictEqual(manifestEventRoute.columns.includes("Actions"), false);
+assert.deepStrictEqual(manifestEventRoute.columns, ["eventCode", "eventContent", "meterId", "currentDate", "remark", "createDate", "updateDate", "stationId"]);
+assert.deepStrictEqual(manifestFirmwareRoute.actions, ["Sort", "Search", "Reset", "Add", "Export"]);
+assert.strictEqual(manifestFirmwareRoute.columns.includes("Actions"), false);
+assert.deepStrictEqual(manifestFileUploadRoute.actions, ["Sort", "Search", "Reset", "Import", "Export"]);
+assert.strictEqual(manifestFileUploadRoute.columns.includes("Actions"), false);
 assert.strictEqual(needsAuthorizationPassword("Delete", gatewayRoute), false);
 assert.strictEqual(needsAuthorizationPassword("Delete", dlmsRoute), false);
 
@@ -159,6 +174,12 @@ const remoteSupportRoute = {
   apis: ["/API/GPRSMeterTask/GPRSGetReadingTask"],
   columns: ["id", "gatewayId", "status"]
 };
+const eventNotificationRoute = {
+  hash: "#/remote-support/event-notification",
+  title: "Event Notification",
+  apis: ["/API/EventNotification/Read"],
+  columns: ["eventCode", "eventContent", "meterId", "currentDate", "remark", "createDate", "updateDate", "stationId"]
+};
 
 assert.strictEqual(defaultTableOptions.siteId, "");
 
@@ -198,21 +219,47 @@ assert.deepStrictEqual(
   }
 );
 
+assert.deepStrictEqual(
+  tableRequest(eventNotificationRoute, {
+    siteId: "TUNGA",
+    from: "2026-04-01T00:00:00.000Z",
+    to: "2026-04-30T23:59:59.999Z",
+    pageNumber: 2,
+    pageSize: 15
+  }),
+  {
+    path: "/API/EventNotification/Read",
+    method: "POST",
+    payload: {
+      lang: "en",
+      stationId: "TUNGA",
+      currentDateRange: ["2026-04-01T00:00:00.000Z", "2026-04-30T23:59:59.999Z"],
+      pageNumber: 2,
+      pageSize: 15
+    },
+    pagination: "pageNumber"
+  }
+);
+
 const consumptionRequest = tableRequest({
   hash: "#/prepay-report/consumption-statistics",
   title: "Consumption Statistics",
   apis: ["/api/customer/read", "/api/meter/read", "/api/DailyDataMeter/read"],
   columns: ["collectionDate", "consumption"]
 }, {
+  siteId: "TUNGA",
+  from: "2026-04-01T00:00:00.000Z",
+  to: "2026-04-30T23:59:59.999Z",
   pageNumber: 1,
   pageSize: 50
 });
-assert.strictEqual(consumptionRequest.path, "/api/DailyDataMeter/readHourly");
-assert.strictEqual(consumptionRequest.method, "GET");
-assert.strictEqual(consumptionRequest.params.offset, 0);
-assert.strictEqual(consumptionRequest.params.pageLimit, 50);
-assert.ok(consumptionRequest.params.FROM);
-assert.ok(consumptionRequest.params.TO);
+assert.strictEqual(consumptionRequest.path, "/api/DailyDataMeter/read");
+assert.strictEqual(consumptionRequest.method, "POST");
+assert.strictEqual(consumptionRequest.payload.pageNumber, 1);
+assert.strictEqual(consumptionRequest.payload.pageSize, 50);
+assert.strictEqual(consumptionRequest.payload.stationId, "TUNGA");
+assert.strictEqual(consumptionRequest.payload.FROM, "2026-04-01T00:00:00.000Z");
+assert.strictEqual(consumptionRequest.payload.TO, "2026-04-30T23:59:59.999Z");
 
 assert.deepStrictEqual(
   buildConsumptionStatisticsPayload({
@@ -231,9 +278,9 @@ assert.deepStrictEqual(
     pageSize: 20,
     FROM: "2026-04-01T00:00:00.000Z",
     TO: "2026-04-30T23:59:59.999Z",
+    stationId: "TUNGA",
     customerId: "470005342689",
-    meterId: "470005342689",
-    stationId: "TUNGA"
+    meterId: "470005342689"
   }
 );
 
@@ -250,6 +297,16 @@ const normalizedConsumption = normalizeConsumptionStatisticsResponse({
 assert.strictEqual(normalizedConsumption.total, 2);
 assert.strictEqual(normalizedConsumption.rows[0].consumption, 0.5);
 assert.strictEqual(normalizedConsumption.rows[1].consumption, 0);
+
+const normalizedMonthlyConsumption = normalizeConsumptionStatisticsResponse({
+  code: 0,
+  result: {
+    total: 1,
+    data: [{ currentMonth: "2026-04", usage1: "4.2", meterId: "A", customerId: "C" }]
+  }
+});
+assert.strictEqual(normalizedMonthlyConsumption.rows[0].collectionDate, "2026-04");
+assert.strictEqual(normalizedMonthlyConsumption.rows[0].consumption, 4.2);
 
 assert.deepStrictEqual(
   aggregateConsumptionRows([
@@ -282,6 +339,144 @@ const chartOption = buildConsumptionChartOption([
 assert.strictEqual(chartOption.title.text, "Daily Consumption");
 assert.deepStrictEqual(chartOption.xAxis.data, ["2026-04-05", "2026-04-06"]);
 assert.deepStrictEqual(chartOption.series[0].data, [0.5, 0]);
+assert.strictEqual(chartOption.yAxis.name, "kWh");
+
+const decoratedConsumption = decorateConsumptionRows([
+  { collectionDate: "2026-04-05", consumption: 0.5 },
+  { collectionDate: "2026-04-06", consumption: 0.2 },
+  { collectionDate: "2026-04-07", consumption: 0 }
+]);
+assert.strictEqual(decoratedConsumption[0].change, null);
+assert.strictEqual(decoratedConsumption[1].change, -0.3);
+assert.strictEqual(decoratedConsumption[2].status, "Zero");
+
+assert.deepStrictEqual(
+  summarizeConsumptionRows([
+    { collectionDate: "2026-04-05", consumption: 0.5 },
+    { collectionDate: "2026-04-06", consumption: 0.2 }
+  ], {
+    granularity: "daily",
+    dateFrom: "2026-04-05",
+    dateTo: "2026-04-07"
+  }),
+  {
+    total: 0.7,
+    average: 0.35,
+    peakDate: "2026-04-05",
+    peakValue: 0.5,
+    reportingDays: 2,
+    expectedDays: 3,
+    missingDays: 1,
+    zeroDays: 0
+  }
+);
+
+assert.strictEqual(
+  buildConsumptionInsights([
+    { collectionDate: "2026-04-05", consumption: 0.5 },
+    { collectionDate: "2026-04-06", consumption: 1 }
+  ], {
+    granularity: "daily",
+    dateFrom: "2026-04-05",
+    dateTo: "2026-04-06"
+  })[3].value,
+  "Increasing"
+);
+
+assert.strictEqual(
+  summarizeConsumptionRows([
+    { collectionDate: "2026-04", consumption: 4.2 }
+  ], {
+    granularity: "monthly",
+    dateFrom: "2026-04-01",
+    dateTo: "2026-05-06"
+  }).expectedDays,
+  2
+);
+
+const consumptionCalls = [];
+const liveConsumption = await fetchConsumptionStatistics({
+  dateFrom: "2026-04-01",
+  dateTo: "2026-04-30"
+}, {
+  pageNumber: 1,
+  pageSize: 20
+}, {
+  async postApi(path, payload) {
+    consumptionCalls.push({ path, payload });
+    return {
+      code: 0,
+      result: {
+        total: 1,
+        data: [{ currentDate: "2026-04-05 00:00:00", usage1: "0.5", meterId: "A" }]
+      },
+      _proxy: { source: "live" }
+    };
+  }
+});
+assert.strictEqual(liveConsumption.endpoint, "/api/DailyDataMeter/read");
+assert.strictEqual(liveConsumption.source, "live-derived");
+assert.deepStrictEqual(consumptionCalls.map((call) => call.path), ["/api/DailyDataMeter/read"]);
+assert.strictEqual(liveConsumption.rows[0].consumption, 0.5);
+
+const monthlyConsumptionCalls = [];
+const monthlyConsumption = await fetchConsumptionStatistics({
+  dateFrom: "2026-04-01",
+  dateTo: "2026-04-30",
+  granularity: "monthly"
+}, {
+  pageNumber: 1,
+  pageSize: 20
+}, {
+  async postApi(path) {
+    monthlyConsumptionCalls.push(path);
+    if (path.includes("readMonthly")) {
+      return { code: 0, result: { total: 0, data: [] }, _proxy: { source: "live" } };
+    }
+    return {
+      code: 0,
+      result: {
+        total: 1,
+        data: [{ currentDate: "2026-04-05 00:00:00", usage1: "1.2", meterId: "A" }]
+      },
+      _proxy: { source: "live" }
+    };
+  }
+});
+assert.deepStrictEqual(monthlyConsumptionCalls, ["/api/DailyDataMeter/readMonthly", "/api/DailyDataMeter/read"]);
+assert.strictEqual(monthlyConsumption.endpoint, "/api/DailyDataMeter/read");
+assert.match(monthlyConsumption.warning, /grouped from live daily AMR data/);
+
+await assert.rejects(() => fetchConsumptionStatistics({
+  dateFrom: "2026-04-01",
+  dateTo: "2026-04-30"
+}, {
+  pageNumber: 1,
+  pageSize: 20
+}, {
+  async postApi(path) {
+    assert.strictEqual(path, "/api/DailyDataMeter/read");
+    return { code: 99, reason: "Value does not fall within the expected range.", result: null };
+  }
+}), /Value does not fall within the expected range/);
+
+await assert.rejects(() => fetchConsumptionStatistics({
+  dateFrom: "2026-04-01",
+  dateTo: "2026-04-30"
+}, {
+  pageNumber: 1,
+  pageSize: 20
+}, {
+  async postApi(path) {
+    assert.strictEqual(path, "/api/DailyDataMeter/read");
+    return {
+      code: 0,
+      total: 1,
+      readings: [{ timestamp: "2026-01-10T00:00:00.000Z", energyConsumptionKwh: 0.21 }],
+      _proxy: { source: "sample" }
+    };
+  }
+}), /Static sample data is disabled/);
 
 const dailyDataMeterRequest = tableRequest({
   hash: "#/prepay-report/daily-data-meter",
@@ -320,6 +515,9 @@ assert(accountAddFields.some((field) => field.name === "stationId" && field.requ
 const dlmsEditFields = managementFields(dlmsRoute, "Edit");
 assert(dlmsEditFields.some((field) => field.name === "dlmsId" && field.readonly));
 assert(dlmsEditFields.some((field) => field.name === "nameEN"));
+const firmwareAddFields = managementFields({ hash: "#/remote-support/firmware-update" }, "Add");
+assert(firmwareAddFields.some((field) => field.name === "gatewayId" && field.required));
+assert(firmwareAddFields.some((field) => field.name === "fileName" && field.picker && field.pickerApi === "/api/local/importJobs/read"));
 assert.deepStrictEqual(
   managementFormSeed(accountRoute, "Edit", { customerId: "C-1", meterId: "M-1" }),
   {
@@ -497,9 +695,9 @@ assert(dashboard.top.labels.length >= 1);
 assert.deepStrictEqual(dashboard.success.labels, ["10:00", "12:00", "14:00", "16:00", "18:00", "20:00"]);
 assert.deepStrictEqual(dashboard.success.values, [91, 95, 93, 94, 96, 92]);
 assert.deepStrictEqual(dashboard.alarms, [
-  { label: "Battery Low", value: 2, color: "#35c2c1" },
-  { label: "Relay Open", value: 4, color: "#5caee8" },
-  { label: "Current Reverse", value: 1, color: "#b399dd" },
+  { label: "Battery Low", value: 2, color: "#059669" },
+  { label: "Relay Open", value: 4, color: "#10b981" },
+  { label: "Current Reverse", value: 1, color: "#34d399" },
   { label: "No Data Report", value: 3, color: "#ffb26a" }
 ]);
 assert.strictEqual(dashboard.meta.siteId, "KYAKALE");

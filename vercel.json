@@ -3,15 +3,8 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/[...path].js": {
-      "runtime": "nodejs20.x"
-    },
-    "api/reference.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

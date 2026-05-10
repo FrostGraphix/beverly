@@ -64,6 +64,8 @@ const defaultBodies = {
   },
   "/API/EventNotification/Read": {
     lang: "en",
+    stationId: "KYAKALE",
+    currentDateRange: ["2026-01-01T00:00:00.000Z", "2026-05-09T23:59:59.999Z"],
     pageNumber: 1,
     pageSize: 20
   },

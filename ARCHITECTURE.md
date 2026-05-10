@@ -25,6 +25,13 @@ Keep write safety strict.
 - `src/services/mappers/` owns response normalization.
 - `src/services/echarts-loader.mjs` owns chart loading.
 - `src/data/route-manifest.js` owns route metadata.
+- `src/styles/tokens.css` owns design primitives, semantic aliases, and component tokens.
+- `src/styles/themes.css` owns theme overrides only.
+- `src/styles/primitives.css` owns reusable UI class contracts.
+- `src/styles/layouts.css` owns app shell and page geometry contracts.
+- `src/styles/reference.css` remains the temporary style import hub during migration.
+- `src/styles/legacy-components.css` owns extracted legacy component CSS until migration completes.
+- `src/components/base/` owns reusable visual primitives only.
 
 ## Backend
 
@@ -48,6 +55,33 @@ Keep write safety strict.
 - Live writes require `ALLOW_LIVE_WRITES=true`.
 - Upload rules live in `src/services/upload-policy.mjs`.
 - Live health is exposed at `/api/system/live-report`.
+
+## Persistence Strategy
+
+- Supabase is production persistence.
+- Supabase Auth owns production sign-in.
+- Supabase Storage owns production artifacts.
+- SQLite is local development persistence.
+- SQLite is preview cache only when configured.
+- Local memory mode is test persistence.
+- Live upstream remains read-through source data.
+- Live writes stay gated by `ALLOW_LIVE_WRITES=true`.
+- Demo auth requires `DEMO_AUTH_ENABLED=true`.
+- Demo auth requires `DEMO_AUTH_PASSWORD`.
+- No live upstream URL has a code default.
+
+## Design System
+
+- Use primitive, semantic, and component token layers.
+- Keep theme deltas in `themes.css`.
+- Keep reusable visual behavior in `primitives.css`.
+- Keep page and shell geometry in `layouts.css`.
+- Keep route and business behavior out of base components.
+- Prefer token-backed classes before local component styles.
+- Avoid new raw colors in component styles.
+- Preserve table action column behavior during migration.
+- Preserve modal flow contracts during migration.
+- Keep `reference.css` as an import hub only.
 
 ## EIH Rules
 

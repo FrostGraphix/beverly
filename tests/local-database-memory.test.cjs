@@ -59,6 +59,17 @@ assert.strictEqual(counts.write_confirmations, 1);
 localDatabase.resetForTests();
 delete process.env.LOCAL_DB_MODE;
 
+process.env.VERCEL = "1";
+const vercelDbPath = localDatabase.databasePath();
+assert.strictEqual(vercelDbPath.includes("reference-crm.sqlite"), true);
+assert.strictEqual(vercelDbPath.startsWith(localDatabase.writableRoot()), true);
+process.env.LOCAL_DB_PATH = "backend/data/reference-crm.sqlite";
+const redirectedVercelDbPath = localDatabase.databasePath();
+assert.strictEqual(redirectedVercelDbPath.startsWith(localDatabase.writableRoot()), true);
+assert.strictEqual(redirectedVercelDbPath.endsWith("reference-crm.sqlite"), true);
+delete process.env.LOCAL_DB_PATH;
+delete process.env.VERCEL;
+
 console.log(JSON.stringify({
   cacheRows: counts.api_cache,
   auditRows: counts.audit_logs,

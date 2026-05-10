@@ -1,24 +1,21 @@
 <template>
   <div class="tom-backdrop" role="dialog" aria-modal="true" @click.self="$emit('close')">
-    <section class="tom-modal">
-
-      <!-- Top bar -->
-      <header class="tom-header">
-        <div class="tom-brand">
-          <div class="brand-gem">
-            <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <BaseModalShell class="tom-modal">
+      <template #header>
+        <header class="tom-header">
+          <div class="tom-brand">
+            <div class="brand-gem">
+              <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>
+            <span>Meter Analytics</span>
           </div>
-          <span>Meter Analytics</span>
-        </div>
-        <button class="tom-close" type="button" @click="$emit('close')" aria-label="Close">
-          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </header>
+          <BaseIconButton class="tom-close" @click="$emit('close')" aria-label="Close">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </BaseIconButton>
+        </header>
+      </template>
 
-      <!-- Split body: orb ← → data -->
       <div class="tom-body">
-
-        <!-- LEFT: Orb column -->
         <div class="tom-orb-col">
           <div :class="['tom-orb', statusClass]">
             <div class="tom-orb-ring"></div>
@@ -31,7 +28,6 @@
           <p class="orb-status-label" :class="statusClass">{{ statusText }}</p>
         </div>
 
-        <!-- RIGHT: Data column -->
         <div class="tom-data-col">
           <h3 class="data-name">{{ row.customerName || "Customer" }}</h3>
           <p class="data-meter">{{ row.meterId || "Unknown" }}</p>
@@ -51,7 +47,6 @@
             </div>
           </div>
 
-          <!-- Decoded payload segments -->
           <div v-if="decodedSegments.length > 1" class="seg-row">
             <div v-for="seg in decodedSegments" :key="seg.label" class="seg-chip">
               <span class="seg-l">{{ seg.label }}</span>
@@ -59,125 +54,132 @@
             </div>
           </div>
 
-          <!-- Raw payload -->
           <details class="raw-block">
             <summary>
               Raw payload
-              <button class="copy-btn" @click.stop.prevent="copyRaw">Copy</button>
+              <BaseButton class="copy-btn" size="sm" variant="quiet" @click.stop.prevent="copyRaw">Copy</BaseButton>
             </summary>
             <pre>{{ rawValue }}</pre>
           </details>
         </div>
       </div>
 
-      <!-- Footer -->
-      <footer class="tom-footer">
-        <button class="done-btn" type="button" @click="$emit('close')">
-          Done
-          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-        </button>
-      </footer>
-    </section>
+      <template #footer>
+        <footer class="tom-footer">
+          <BaseButton class="done-btn" variant="primary" size="lg" @click="$emit('close')">
+            Done
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </BaseButton>
+        </footer>
+      </template>
+    </BaseModalShell>
   </div>
 </template>
 
 <script>
+import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseModalShell from "./base/BaseModalShell.vue";
+
 function decodeSegments(row) {
   const parts = String(row.dataValue || row.data || "")
-    .split(",").map(s => s.trim()).filter(Boolean);
+    .split(",").map((segment) => segment.trim()).filter(Boolean);
   if (!parts.length) return [{ label: "Result", value: "No payload" }];
-  const di = String(row.dataItem || "").toLowerCase();
-  if (di === "credit balance") {
+  const dataItem = String(row.dataItem || "").toLowerCase();
+  if (dataItem === "credit balance") {
     return [
       { label: "Balance", value: parts[0] || "0.00" },
       { label: "Register", value: parts[1] || "N/A" },
       { label: "Flag", value: parts[2] || "N/A" }
     ];
   }
-  if (di === "total consumption") return [{ label: "Total", value: parts[0] || "0.00" }];
-  return parts.map((v, i) => ({ label: `Seg ${i + 1}`, value: v }));
+  if (dataItem === "total consumption") return [{ label: "Total", value: parts[0] || "0.00" }];
+  return parts.map((value, index) => ({ label: `Seg ${index + 1}`, value }));
 }
 
 export default {
   name: "TaskOutputModal",
-  props: { row: { type: Object, required: true } },
+  components: { BaseButton, BaseIconButton, BaseModalShell },
+  props: {
+    row: { type: Object, required: true }
+  },
   computed: {
-    rawValue() { return String(this.row.dataValue || this.row.data || "No payload returned"); },
-    decodedSegments() { return decodeSegments(this.row); },
-    primaryValue() { return this.decodedSegments[0]?.value || "---"; },
+    rawValue() {
+      return String(this.row.dataValue || this.row.data || "No payload returned");
+    },
+    decodedSegments() {
+      return decodeSegments(this.row);
+    },
+    primaryValue() {
+      return this.decodedSegments[0]?.value || "---";
+    },
     primaryUnit() {
-      const di = String(this.row.dataItem || "").toLowerCase();
-      if (di === "total consumption") return "kWh";
-      if (di === "credit balance") return "Units";
+      const dataItem = String(this.row.dataItem || "").toLowerCase();
+      if (dataItem === "total consumption") return "kWh";
+      if (dataItem === "credit balance") return "Units";
       return "Val";
     },
     statusText() {
-      const s = Number(this.row.status);
-      return s === 1 ? "Success" : s === 2 ? "Failure" : "Pending";
+      const status = Number(this.row.status);
+      return status === 1 ? "Success" : status === 2 ? "Failure" : "Pending";
     },
     statusClass() {
       return { Success: "is-success", Failure: "is-danger", Pending: "is-warning" }[this.statusText] || "is-warning";
     }
   },
   methods: {
-    formatDate(d) {
-      if (!d) return "N/A";
+    formatDate(value) {
+      if (!value) return "N/A";
       try {
-        const dt = new Date(d);
-        if (isNaN(dt)) return d;
-        return dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " " +
-               dt.toLocaleDateString([], { month: "short", day: "numeric" });
-      } catch { return d; }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return `${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ${date.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+      } catch {
+        return value;
+      }
     },
     async copyRaw() {
-      try { await navigator.clipboard.writeText(this.rawValue); } catch {}
+      try {
+        await navigator.clipboard.writeText(this.rawValue);
+      } catch {
+        // Ignore clipboard failures.
+      }
     }
   }
 };
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
-
-/* ── Backdrop ─────────────────────────────── */
 .tom-backdrop {
   position: fixed;
   inset: 0;
   z-index: 3000;
-  background: rgba(4, 11, 24, 0.5);
-  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  font-family: 'Outfit', sans-serif;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(10px);
+  font-family: var(--font-family);
 }
 
-/* ── Modal shell ──────────────────────────── */
 .tom-modal {
-  width: 640px;
+  width: min(760px, calc(100vw - 32px));
   max-width: 100%;
-  background: rgba(255,255,255,0.9);
-  backdrop-filter: blur(28px);
-  border-radius: 28px;
-  border: 1px solid rgba(255,255,255,0.65);
-  box-shadow:
-    0 32px 80px -16px rgba(8,24,48,0.28),
-    0 0 0 1px rgba(15,68,144,0.04);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  animation: pop-in 0.38s cubic-bezier(0.34,1.56,0.64,1);
+  max-height: calc(100vh - 32px);
+  border-radius: var(--modal-radius) !important;
+  overflow: hidden !important;
+  clip-path: none !important;
+  animation: pop-in 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes pop-in {
   from { opacity: 0; transform: scale(0.88) translateY(18px); }
-  to   { opacity: 1; transform: scale(1)    translateY(0); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* ── Header ───────────────────────────────── */
 .tom-header {
-  padding: 14px 18px 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -189,44 +191,54 @@ export default {
   gap: 8px;
   font-weight: 700;
   font-size: 12px;
-  color: #1e293b;
+  color: var(--text-strong);
   letter-spacing: -0.01em;
 }
 
 .brand-gem {
-  width: 24px; height: 24px;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
   color: #fff;
-  box-shadow: 0 3px 10px rgba(59,130,246,0.45);
+  box-shadow: var(--shadow-glow-sm);
 }
-.brand-gem svg { width: 13px; height: 13px; fill: currentColor; }
+
+.brand-gem svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
 
 .tom-close {
-  width: 28px; height: 28px;
-  border: 0;
-  background: rgba(0,0,0,0.04);
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  color: #64748b;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
+  background: var(--primary-light);
+  color: var(--text-muted);
   transition: all 0.2s;
 }
-.tom-close:hover { background: #fee2e2; color: #ef4444; transform: rotate(90deg); }
-.tom-close svg { width: 16px; height: 16px; fill: currentColor; }
 
-/* ── Split body ───────────────────────────── */
-.tom-body {
-  display: flex;
-  gap: 0;
-  padding: 14px 18px;
-  align-items: center;
+.tom-close:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+  transform: rotate(90deg);
 }
 
-/* ── Orb column ───────────────────────────── */
+.tom-close svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.tom-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
 .tom-orb-col {
   flex: 0 0 auto;
   display: flex;
@@ -234,7 +246,7 @@ export default {
   align-items: center;
   gap: 6px;
   padding-right: 18px;
-  border-right: 1px solid rgba(0,0,0,0.06);
+  border-right: 1px solid var(--border-color);
 }
 
 .tom-orb {
@@ -247,58 +259,73 @@ export default {
   border-radius: 50%;
 }
 
-/* Glow background pulse */
 .tom-orb::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 8px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,255,255,0.9) 40%, rgba(240,249,255,0.4) 100%);
+  background: radial-gradient(circle, var(--bg-card) 40%, var(--primary-light) 100%);
   animation: pulse-bg 3s ease-in-out infinite;
 }
 
 @keyframes pulse-bg {
-  0%,100% { opacity: 0.7; transform: scale(0.97); }
-  50%      { opacity: 1;   transform: scale(1); }
+  0%, 100% { opacity: 0.7; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
-/* Spinning ring */
 .tom-orb-ring {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 3px solid rgba(0,0,0,0.04);
+  border: 3px solid var(--border-color);
 }
+
 .tom-orb-ring::before,
 .tom-orb-ring::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -3px;
   border-radius: 50%;
   border: 3px solid transparent;
 }
+
 .tom-orb-ring::before {
   border-top-color: currentColor;
   animation: spin 2.4s linear infinite;
   opacity: 0.9;
 }
+
 .tom-orb-ring::after {
+  inset: 8px;
   border-bottom-color: currentColor;
   animation: spin 4s linear infinite reverse;
   opacity: 0.35;
-  inset: 8px;
 }
 
-@keyframes spin { 100% { transform: rotate(360deg); } }
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
 
-/* Status colour tokens */
-.is-success { color: #10b981; }
-.is-success .tom-orb-ring::before { filter: drop-shadow(0 0 6px #10b981); }
-.is-danger  { color: #ef4444; }
-.is-danger  .tom-orb-ring::before { filter: drop-shadow(0 0 6px #ef4444); }
-.is-warning { color: #f59e0b; }
+.is-success {
+  color: var(--success);
+}
 
-/* Orb core content */
+.is-success .tom-orb-ring::before {
+  filter: drop-shadow(0 0 6px var(--success));
+}
+
+.is-danger {
+  color: var(--danger);
+}
+
+.is-danger .tom-orb-ring::before {
+  filter: drop-shadow(0 0 6px var(--danger));
+}
+
+.is-warning {
+  color: var(--warning);
+}
+
 .tom-orb-core {
   position: relative;
   z-index: 2;
@@ -313,7 +340,7 @@ export default {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .orb-val {
@@ -321,29 +348,35 @@ export default {
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.05em;
-  background: linear-gradient(160deg, #0f172a 30%, #475569);
+  background: linear-gradient(160deg, var(--text-strong) 30%, var(--primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-.is-success .orb-val { background: linear-gradient(160deg, #064e3b, #10b981); -webkit-background-clip: text; }
-.is-danger  .orb-val { background: linear-gradient(160deg, #7f1d1d, #ef4444); -webkit-background-clip: text; }
+.is-success .orb-val {
+  background: linear-gradient(160deg, var(--primary-deep), var(--success));
+  -webkit-background-clip: text;
+}
+
+.is-danger .orb-val {
+  background: linear-gradient(160deg, var(--danger), var(--text-strong));
+  -webkit-background-clip: text;
+}
 
 .orb-unit {
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .orb-status-label {
+  margin: 0;
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  margin: 0;
 }
 
-/* ── Data column ──────────────────────────── */
 .tom-data-col {
   flex: 1;
   min-width: 0;
@@ -357,7 +390,7 @@ export default {
   margin: 0;
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -366,11 +399,10 @@ export default {
 .data-meter {
   margin: 0;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 600;
 }
 
-/* Chips */
 .chip-row {
   display: flex;
   flex-direction: column;
@@ -379,18 +411,26 @@ export default {
 
 .chip {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: rgba(0,0,0,0.025);
-  border-radius: 8px;
+  justify-content: space-between;
   padding: 5px 9px;
-  border: 1px solid rgba(0,0,0,0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-page);
 }
 
-.chip-l { font-size: 10px; color: #94a3b8; font-weight: 600; }
-.chip-v { font-size: 11px; color: #1e293b; font-weight: 700; }
+.chip-l {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
 
-/* Decoded segments */
+.chip-v {
+  font-size: 11px;
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
 .seg-row {
   display: flex;
   flex-wrap: wrap;
@@ -398,87 +438,121 @@ export default {
 }
 
 .seg-chip {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  padding: 4px 8px;
+  min-width: 56px;
   display: flex;
   flex-direction: column;
-  min-width: 56px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  background: var(--primary-light);
 }
 
-.seg-l { font-size: 9px; color: #3b82f6; font-weight: 700; text-transform: uppercase; }
-.seg-v { font-size: 12px; color: #1e40af; font-weight: 700; }
+.seg-l {
+  font-size: 9px;
+  color: var(--primary);
+  font-weight: 700;
+  text-transform: uppercase;
+}
 
-/* Raw payload */
+.seg-v {
+  font-size: 12px;
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
 .raw-block {
-  background: #0f172a;
-  border-radius: 10px;
   overflow: hidden;
+  border-radius: 10px;
+  background: var(--text-strong);
   font-size: 11px;
 }
 
 .raw-block summary {
-  padding: 7px 11px;
-  color: #94a3b8;
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 7px 11px;
+  color: var(--text-inverse);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
   list-style: none;
   user-select: none;
 }
-.raw-block summary::-webkit-details-marker { display: none; }
+
+.raw-block summary::-webkit-details-marker {
+  display: none;
+}
 
 .copy-btn {
-  padding: 2px 8px;
-  background: rgba(255,255,255,0.1);
-  border: 0;
+  min-height: 22px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: 6px;
-  color: #fff;
   font-size: 9px;
   font-weight: 700;
-  cursor: pointer;
   letter-spacing: 0.04em;
 }
-.copy-btn:hover { background: rgba(255,255,255,0.2); }
 
 .raw-block pre {
   margin: 0;
   padding: 0 11px 10px;
-  color: #38bdf8;
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--theme-color-bright);
+  font-family: var(--font-mono);
   font-size: 10px;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-/* ── Footer ───────────────────────────────── */
 .tom-footer {
-  padding: 0 18px 16px;
+  width: 100%;
 }
 
 .done-btn {
   width: 100%;
   height: 42px;
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  color: #fff;
-  border: 0;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  cursor: pointer;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-glow-sm);
   transition: all 0.25s ease;
-  box-shadow: 0 8px 16px -4px rgba(15,23,42,0.38);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-family);
 }
-.done-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -6px rgba(15,23,42,0.5); }
-.done-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+.done-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
+}
+
+.done-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+@media (max-width: 720px) {
+  .tom-body {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .tom-orb-col {
+    width: 100%;
+    padding-right: 0;
+    padding-bottom: 18px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .tom-data-col {
+    width: 100%;
+    padding-left: 0;
+  }
+}
 </style>

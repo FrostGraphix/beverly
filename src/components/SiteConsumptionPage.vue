@@ -13,30 +13,54 @@
       </div>
       <div class="eih-controls">
         <div class="period-pills">
-          <button
+          <BaseButton
             v-for="preset in periodPresets"
             :key="preset.key"
             :class="['period-pill', activePeriod === preset.key ? 'period-pill--active' : '']"
-            type="button"
             @click="setPeriod(preset.key)"
-          >{{ preset.label }}</button>
+          >{{ preset.label }}</BaseButton>
         </div>
         <div class="custom-range">
           <div class="eih-date-group">
             <label class="ctrl-label">From</label>
-            <input v-model="filters.from" class="ctrl-input" type="date" @change="onCustomDateChange" />
+            <BaseInput v-model="filters.from" class="ctrl-input" type="date" @change="onCustomDateChange" />
           </div>
           <div class="eih-date-group">
             <label class="ctrl-label">To</label>
-            <input v-model="filters.to" class="ctrl-input" type="date" @change="onCustomDateChange" />
+            <BaseInput v-model="filters.to" class="ctrl-input" type="date" @change="onCustomDateChange" />
           </div>
         </div>
-        <button class="eih-btn eih-btn--primary" :disabled="loadingSales || loadingConsumption" @click="reload">
+        <BaseButton class="eih-btn eih-btn--primary" variant="primary" :disabled="loadingSales || loadingConsumption" @click="reload">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: loadingSales || loadingConsumption }"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
-        </button>
+        </BaseButton>
       </div>
     </div>
+
+    <div v-if="auditBadges.length" class="eih-badge-row">
+      <article
+        v-for="badge in auditBadges"
+        :key="badge.label"
+        :class="['eih-badge-card', `eih-badge-card--${badge.tone}`]"
+      >
+        <span class="eih-badge-label">{{ badge.label }}</span>
+        <strong class="eih-badge-value">{{ badge.value }}</strong>
+        <span v-if="badge.note" class="eih-badge-note">{{ badge.note }}</span>
+      </article>
+    </div>
+
+    <div v-if="combinedWarnings.length" class="eih-warning-stack">
+      <article v-for="warning in combinedWarnings" :key="warning" class="eih-warning-card">
+        {{ warning }}
+      </article>
+    </div>
+
+    <SiteConsumptionAuditPanel
+      v-if="storeAudit"
+      :activeStation="filters.stationId"
+      :audit="storeAudit"
+      @select-station="setStation"
+    />
 
     <div class="eih-body">
       <SiteSidebar
@@ -48,13 +72,12 @@
 
       <div class="eih-main">
         <div class="view-pills" role="tablist" aria-label="Site performance views">
-          <button
+          <BaseButton
             v-for="view in views"
             :key="view.key"
             :class="['view-pill', activeView === view.key ? 'view-pill--active' : '']"
-            type="button"
             @click="setView(view.key)"
-          >{{ view.label }}</button>
+          >{{ view.label }}</BaseButton>
         </div>
 
         <SiteConsumptionOverviewView
@@ -115,7 +138,7 @@
     <div v-if="errorMsg" class="eih-error-toast">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       {{ errorMsg }}
-      <button class="toast-close" @click="errorMsg = null">x</button>
+      <BaseIconButton class="toast-close" aria-label="Close error" @click="errorMsg = null">x</BaseIconButton>
     </div>
   </div>
 </template>
@@ -124,10 +147,15 @@
 import {
   LEDGER_STEPS_PER_STATION,
   LIVE_STATIONS,
-  currentMonthRange,
+  fetchConsumptionAudit,
   loadConsumptionData,
+  periodRange,
 } from "../services/consumption-service.mjs";
 import CustomerDrawer from "./consumption/CustomerDrawer.vue";
+import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import SiteConsumptionAuditPanel from "./consumption/SiteConsumptionAuditPanel.vue";
 import SiteConsumptionConsumptionView from "./consumption/SiteConsumptionConsumptionView.vue";
 import SiteConsumptionFraudView from "./consumption/SiteConsumptionFraudView.vue";
 import SiteConsumptionOverviewView from "./consumption/SiteConsumptionOverviewView.vue";
@@ -140,17 +168,26 @@ export default {
     route: { type: Object, default: () => ({}) },
   },
   components: {
+    BaseButton,
+    BaseIconButton,
+    BaseInput,
     CustomerDrawer,
+    SiteConsumptionAuditPanel,
     SiteConsumptionConsumptionView,
     SiteConsumptionFraudView,
     SiteConsumptionOverviewView,
     SiteSidebar,
   },
   data() {
-    const [from, to] = currentMonthRange();
+    const initialRange = periodRange("all");
     return {
-      filters: { stationId: null, from, to, granularity: "daily" },
-      activePeriod: "month",
+      filters: {
+        stationId: null,
+        from: initialRange.from,
+        to: initialRange.to,
+        granularity: initialRange.granularity,
+      },
+      activePeriod: "all",
       chartMode: "sales",
       kpiData: {},
       chartData: {
@@ -172,6 +209,8 @@ export default {
       accountCounts: {},
       selectedCustomer: null,
       errorMsg: null,
+      qualityWarnings: [],
+      storeAudit: null,
     };
   },
   computed: {
@@ -184,10 +223,10 @@ export default {
     },
     periodPresets() {
       return [
-        { key: "today", label: "Today" },
-        { key: "week", label: "This Week" },
-        { key: "month", label: "This Month" },
-        { key: "year", label: "This Year" },
+        { key: "all", label: "All Data" },
+        { key: "day", label: "Day" },
+        { key: "month", label: "Month" },
+        { key: "year", label: "Year" },
         { key: "custom", label: "Custom" },
       ];
     },
@@ -207,7 +246,52 @@ export default {
       return !this.loadingSales && (this.kpiData.rechargeCount || 0) === 0;
     },
     showConsumptionEmpty() {
-      return !this.loadingConsumption && (this.kpiData.consumedKwh || 0) === 0;
+      const meta = this.chartData.consumption?.meta || {};
+      const readingDayCount = Number(meta.readingDayCount) || 0;
+      const meterCount = Number(meta.meterCount) || 0;
+      return !this.loadingConsumption && readingDayCount === 0 && meterCount === 0;
+    },
+    activeAuditStation() {
+      if (!this.storeAudit?.stations?.length || !this.filters.stationId) return null;
+      return this.storeAudit.stations.find((station) => station.station === this.filters.stationId) || null;
+    },
+    combinedWarnings() {
+      const auditWarnings = this.activeAuditStation?.warnings || this.storeAudit?.warnings || [];
+      return Array.from(new Set([...(this.qualityWarnings || []), ...auditWarnings]));
+    },
+    auditBadges() {
+      const station = this.activeAuditStation;
+      const overall = this.storeAudit?.overall;
+      if (!station && !overall) return [];
+
+      const completenessStatus = station?.completenessStatus || overall?.completenessStatus || "unknown";
+      const freshnessStatus = station?.freshness?.status || overall?.freshnessStatus || "unknown";
+      const coverageStatus = station?.coverage?.status || overall?.coverageStatus || "unknown";
+      const latestReadingDate = station?.latestReadingDate || overall?.latestReadingDate || "n/a";
+      const earliestReadingDate = station?.earliestReadingDate || overall?.earliestReadingDate || "n/a";
+      const liveDelta = station?.deltaStoreVsLive;
+      const configuredFrom = this.storeAudit?.configuredFrom || "n/a";
+
+      return [
+        {
+          label: "Backfill",
+          value: completenessStatus === "complete" ? "Complete" : completenessStatus === "incomplete" ? "Gap Found" : completenessStatus === "unverified" ? "Unverified" : "Unknown",
+          note: liveDelta == null ? `Rows ${station?.rows ?? overall?.totalRows ?? 0}` : `${station?.liveMetric === "unique" ? "Unique" : "Raw"} delta ${liveDelta}`,
+          tone: completenessStatus === "complete" ? "ok" : completenessStatus === "incomplete" || completenessStatus === "unverified" ? "warn" : "muted",
+        },
+        {
+          label: "Freshness",
+          value: freshnessStatus === "fresh" ? "Fresh" : freshnessStatus === "stale" ? "Stale" : freshnessStatus === "aging" ? "Aging" : "Unknown",
+          note: `Latest ${latestReadingDate}`,
+          tone: freshnessStatus === "fresh" ? "ok" : freshnessStatus === "stale" ? "warn" : "muted",
+        },
+        {
+          label: "Coverage",
+          value: coverageStatus === "full" ? "Full" : coverageStatus === "partial" ? "Partial" : "Unknown",
+          note: `From ${earliestReadingDate} vs ${configuredFrom}`,
+          tone: coverageStatus === "full" ? "ok" : coverageStatus === "partial" ? "warn" : "muted",
+        },
+      ];
     },
     activeStationChartData() {
       return this.chartMode === "sales"
@@ -240,8 +324,11 @@ export default {
     },
   },
   mounted() {
-    this.syncFiltersFromHash();
-    this.reload();
+    const didReloadFromHash = this.syncFiltersFromHash();
+    if (!didReloadFromHash) this.reload();
+  },
+  beforeDestroy() {
+    clearTimeout(this._reloadTimer);
   },
   watch: {
     hash() {
@@ -274,9 +361,10 @@ export default {
     },
     syncFiltersFromHash() {
       const nextStation = this.activeStationFromHash;
-      if (this.filters.stationId === nextStation) return;
+      if (this.filters.stationId === nextStation) return false;
       this.filters.stationId = nextStation;
       this.reload();
+      return true;
     },
     openStationView({ stationId, view }) {
       const nextView = this.views.some((item) => item.key === view) ? view : this.activeView;
@@ -302,30 +390,10 @@ export default {
         return;
       }
 
-      const now = new Date();
-      const pad = (value) => String(value).padStart(2, "0");
-      const format = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-      const today = format(now);
-
-      if (key === "today") {
-        this.filters.from = today;
-        this.filters.to = today;
-        this.filters.granularity = "daily";
-      } else if (key === "week") {
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-        this.filters.from = format(monday);
-        this.filters.to = today;
-        this.filters.granularity = "daily";
-      } else if (key === "month") {
-        this.filters.from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-        this.filters.to = today;
-        this.filters.granularity = "daily";
-      } else if (key === "year") {
-        this.filters.from = `${now.getFullYear()}-01-01`;
-        this.filters.to = today;
-        this.filters.granularity = "monthly";
-      }
+      const nextRange = periodRange(key);
+      this.filters.from = nextRange.from;
+      this.filters.to = nextRange.to;
+      this.filters.granularity = nextRange.granularity;
 
       this.reload();
     },
@@ -342,6 +410,20 @@ export default {
       clearTimeout(this._reloadTimer);
       this._reloadTimer = setTimeout(() => this._doReload(), 200);
     },
+    addWarning(message) {
+      if (!message) return;
+      this.qualityWarnings = Array.from(new Set([...(this.qualityWarnings || []), String(message)]));
+    },
+    async refreshAudit(generation) {
+      try {
+        const audit = await fetchConsumptionAudit();
+        if (this._reloadGen !== generation) return;
+        this.storeAudit = audit;
+      } catch (error) {
+        if (this._reloadGen !== generation) return;
+        this.addWarning(error?.message || "Consumption audit failed.");
+      }
+    },
     async _doReload() {
       const generation = (this._reloadGen = (this._reloadGen || 0) + 1);
 
@@ -351,6 +433,7 @@ export default {
       }
 
       this.errorMsg = null;
+      this.qualityWarnings = [];
       this.loadingSales = true;
       this.loadingConsumption = true;
       this.loadingLedger = true;
@@ -370,6 +453,7 @@ export default {
 
       const stationCount = this.filters.stationId ? 1 : LIVE_STATIONS.length;
       this.ledgerProgress = { loaded: 0, total: stationCount * LEDGER_STEPS_PER_STATION, label: "" };
+      const auditPromise = this.refreshAudit(generation);
 
       try {
         await loadConsumptionData(
@@ -398,6 +482,11 @@ export default {
               if (this._reloadGen !== generation) return;
               this.ledgerProgress = { loaded, total, label: station || "" };
             },
+            onRangeReady: ({ from, to }) => {
+              if (this._reloadGen !== generation || this.activePeriod !== "all") return;
+              this.filters.from = from;
+              this.filters.to = to;
+            },
             onLedgerReady: ({ ledger, kpiUpdate, accountCounts }) => {
               if (this._reloadGen !== generation) return;
               this.suspectLedger = ledger;
@@ -413,8 +502,13 @@ export default {
               this.errorMsg = error?.message || "Failed to load site analytics";
               console.error("[SiteConsumptionPage]", error);
             },
+            onWarning: (message) => {
+              if (this._reloadGen !== generation) return;
+              this.addWarning(message);
+            },
           }
         );
+        await auditPromise;
       } catch (error) {
         if (this._reloadGen !== generation) return;
         if (error.name !== "AbortError") {
@@ -448,7 +542,7 @@ export default {
 
 .eih-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 14px;
@@ -489,6 +583,66 @@ export default {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.eih-badge-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.eih-badge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.eih-badge-card--ok {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.eih-badge-card--warn {
+  border-color: rgba(244, 81, 108, 0.35);
+  background: rgba(244, 81, 108, 0.08);
+}
+
+.eih-badge-label {
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.eih-badge-value {
+  font-size: 18px;
+  color: var(--text-strong);
+}
+
+.eih-badge-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.eih-warning-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eih-warning-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(244, 81, 108, 0.28);
+  background: rgba(244, 81, 108, 0.08);
+  color: var(--text-strong);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .period-pills {
@@ -680,6 +834,10 @@ export default {
 }
 
 @media (max-width: 1100px) {
+  .eih-badge-row {
+    grid-template-columns: 1fr;
+  }
+
   .eih-sidebar {
     width: 120px;
   }
@@ -719,9 +877,9 @@ export default {
 }
 
 .eih-no-data--blue {
-  background: rgba(54, 163, 247, 0.06);
-  border: 1px dashed rgba(54, 163, 247, 0.28);
-  color: #2563eb;
+  background: var(--primary-light);
+  border: 1px dashed var(--border-mid);
+  color: var(--primary);
 }
 
 .eih-error-toast {

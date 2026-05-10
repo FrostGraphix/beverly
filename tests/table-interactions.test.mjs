@@ -14,6 +14,17 @@ const dlmsRoute = {
   title: "DLMS",
   actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"]
 };
+const remoteSupportReadRoute = {
+  hash: "#/remote-support/gprs-tasks",
+  title: "GPRS Tasks",
+  actions: ["Sort", "Search", "Reset", "Export"]
+};
+const remoteSupportToolbarTaskRoute = {
+  hash: "#/remote-support/gprs-tasks",
+  title: "GPRS Tasks",
+  columns: ["id", "gatewayId", "status"],
+  actions: ["Sort", "Search", "Reset", "Add Task", "Export"]
+};
 const rows = [
   { customerId: "470005343091", meterId: "470005343091", stationId: "TUNGA", customerName: "ALI MUHAMMAD", tariffId: "RESIDENTIAL", communicationWay: "LoraWan", ctRatio: "1", remark: "", createTime: "2026-04-28", updateTime: "2026-04-28" },
   { customerId: "470005342689", meterId: "470005342689", stationId: "MUSHA", customerName: "HARUNA ADAMU", tariffId: "RESIDENTIAL", communicationWay: "LoraWan", ctRatio: "1", remark: "", createTime: "2026-04-27", updateTime: "2026-04-27" },
@@ -33,6 +44,8 @@ assert.deepStrictEqual(pageNumbers(2, 5), [1, 2, 3]);
 assert.deepStrictEqual(rowActionButtons(accountRoute), ["Edit", "Delete"]);
 assert.deepStrictEqual(rowActionButtons(tokenRoute), ["Cancel", "Print"]);
 assert.deepStrictEqual(rowActionButtons(dlmsRoute), ["Edit", "Delete"]);
+assert.deepStrictEqual(rowActionButtons(remoteSupportReadRoute), []);
+assert.deepStrictEqual(rowActionButtons(remoteSupportToolbarTaskRoute), []);
 
 const recordRows = [
   { receiptId: 1, createDate: "2026-04-28 09:00:00" },

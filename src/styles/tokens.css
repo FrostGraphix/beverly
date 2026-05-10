@@ -1,0 +1,195 @@
+/*
+ * Beverly design tokens.
+ * Layer order: primitive -> semantic -> component.
+ */
+
+:root {
+  /* Primitive color tokens */
+  --bev-color-green-50: #ecfdf5;
+  --bev-color-green-100: #d1fae5;
+  --bev-color-green-200: #a7f3d0;
+  --bev-color-green-500: #10b981;
+  --bev-color-green-600: #059669;
+  --bev-color-green-700: #047857;
+  --bev-color-green-800: #065f46;
+  --bev-color-green-950: #022c22;
+  --bev-color-red-50: #fef2f2;
+  --bev-color-red-100: #fee2e2;
+  --bev-color-red-500: #ef4444;
+  --bev-color-red-600: #dc2626;
+  --bev-color-amber-50: #fffbeb;
+  --bev-color-amber-100: #fef3c7;
+  --bev-color-amber-400: #facc15;
+  --bev-color-amber-500: #f59e0b;
+  --bev-color-blue-50: #eff6ff;
+  --bev-color-blue-500: #0ea5e9;
+  --bev-color-slate-50: #f8fafc;
+  --bev-color-slate-100: #f1f5f9;
+  --bev-color-slate-200: #e2e8f0;
+  --bev-color-slate-400: #94a3b8;
+  --bev-color-slate-500: #64748b;
+  --bev-color-slate-700: #334155;
+  --bev-color-slate-900: #0f172a;
+  --bev-color-black: #000000;
+  --bev-color-white: #ffffff;
+
+  /* Primitive type tokens */
+  --bev-font-sans: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  --bev-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --bev-font-size-2xs: 10px;
+  --bev-font-size-xs: 11px;
+  --bev-font-size-sm: 12px;
+  --bev-font-size-md: 13px;
+  --bev-font-size-lg: 14px;
+  --bev-font-size-xl: 16px;
+  --bev-font-size-2xl: 18px;
+  --bev-font-size-3xl: 20px;
+  --bev-line-tight: 1.2;
+  --bev-line-normal: 1.5;
+
+  /* Primitive space tokens */
+  --bev-space-0: 0;
+  --bev-space-1: 4px;
+  --bev-space-2: 8px;
+  --bev-space-3: 12px;
+  --bev-space-4: 16px;
+  --bev-space-5: 20px;
+  --bev-space-6: 24px;
+  --bev-space-7: 28px;
+  --bev-space-8: 32px;
+  --bev-touch-target-min: 44px;
+
+  /* Primitive shape tokens */
+  --bev-radius-xs: 4px;
+  --bev-radius-sm: 6px;
+  --bev-radius-md: 8px;
+  --bev-radius-lg: 12px;
+  --bev-radius-xl: 16px;
+  --bev-radius-pill: 999px;
+
+  /* Primitive motion tokens */
+  --bev-motion-fast: 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  --bev-motion-normal: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  --bev-motion-layout: 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Primitive elevation tokens */
+  --bev-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --bev-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --bev-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --bev-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --bev-shadow-xl: 0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -8px rgba(0, 0, 0, 0.08);
+  --bev-shadow-glow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 16px rgba(16, 185, 129, 0.3);
+  --bev-shadow-glow-sm: 0 0 8px rgba(16, 185, 129, 0.25);
+
+  /* Semantic tokens */
+  --color-brand: var(--bev-color-green-600);
+  --color-brand-hover: var(--bev-color-green-700);
+  --color-brand-strong: var(--bev-color-green-800);
+  --color-brand-soft: rgba(5, 150, 105, 0.12);
+  --color-text: var(--bev-color-slate-700);
+  --color-text-strong: var(--bev-color-slate-900);
+  --color-text-muted: var(--bev-color-slate-500);
+  --color-text-faint: var(--bev-color-slate-400);
+  --color-text-inverse: var(--bev-color-slate-50);
+  --color-surface-page: var(--bev-color-green-50);
+  --color-surface-card: var(--bev-color-white);
+  --color-surface-glass: rgba(255, 255, 255, 0.7);
+  --color-surface-overlay: rgba(2, 44, 34, 0.55);
+  --color-border: var(--bev-color-green-100);
+  --color-border-strong: var(--bev-color-green-200);
+  --color-success: var(--bev-color-green-500);
+  --color-success-soft: rgba(16, 185, 129, 0.1);
+  --color-danger: var(--bev-color-red-500);
+  --color-danger-soft: rgba(239, 68, 68, 0.1);
+  --color-warning: var(--bev-color-amber-500);
+  --color-warning-soft: rgba(245, 158, 11, 0.1);
+  --color-info: var(--bev-color-blue-500);
+  --color-info-soft: rgba(14, 165, 233, 0.1);
+
+  /* Component tokens */
+  --button-height-sm: 28px;
+  --button-height-md: 36px;
+  --button-height-lg: 40px;
+  --button-radius: var(--bev-radius-sm);
+  --button-font-size: var(--bev-font-size-md);
+  --button-font-weight: 700;
+  --field-height: 34px;
+  --field-radius: var(--bev-radius-sm);
+  --field-padding-x: 10px;
+  --badge-radius: var(--bev-radius-pill);
+  --modal-width: 520px;
+  --modal-radius: var(--bev-radius-xl);
+  --table-action-column-width: 240px;
+  --shell-sidebar-width: 264px;
+  --shell-sidebar-collapsed-width: 58px;
+  --shell-header-height: 92px;
+  --shell-page-gutter: 24px;
+  --icon-button-size: 36px;
+  --icon-button-touch-size: var(--bev-touch-target-min);
+
+  /* Legacy aliases. */
+  --primary: var(--color-brand);
+  --primary-hover: var(--color-brand-hover);
+  --primary-deep: var(--color-brand-strong);
+  --primary-light: var(--color-brand-soft);
+  --primary-glow: var(--bev-shadow-glow-sm);
+  --theme-color: var(--color-brand);
+  --theme-color-bright: var(--bev-color-green-500);
+  --theme-color-dim: var(--bev-color-green-200);
+  --success: var(--color-success);
+  --success-bg: var(--color-success-soft);
+  --danger: var(--color-danger);
+  --danger-bg: var(--color-danger-soft);
+  --warning: var(--color-warning);
+  --warning-bg: var(--color-warning-soft);
+  --info: var(--color-info);
+  --info-bg: var(--color-info-soft);
+  --text-main: var(--color-text);
+  --text-strong: var(--color-text-strong);
+  --text-muted: var(--color-text-muted);
+  --text-faint: var(--color-text-faint);
+  --text-inverse: var(--color-text-inverse);
+  --bg-page: var(--color-surface-page);
+  --bg-card: var(--color-surface-card);
+  --bg-header: var(--color-surface-glass);
+  --bg-glass: var(--color-surface-glass);
+  --bg-overlay: var(--color-surface-overlay);
+  --sidebar-bg-start: var(--bev-color-green-950);
+  --sidebar-bg-end: var(--bev-color-green-800);
+  --sidebar-text: rgba(167, 243, 208, 0.65);
+  --sidebar-text-hover: var(--bev-color-green-50);
+  --sidebar-active-bg: linear-gradient(90deg, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.02) 100%);
+  --sidebar-active-border: var(--color-brand);
+  --sidebar-logo-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  --sidebar-logo-border: rgba(255, 255, 255, 0.08);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
+  --sidebar-hover-border: rgba(255, 255, 255, 0.08);
+  --sidebar-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  --sidebar-footer-border: rgba(255, 255, 255, 0.08);
+  --border-color: var(--color-border);
+  --border-mid: var(--color-border-strong);
+  --border-dark: rgba(255, 255, 255, 0.08);
+  --font-family: var(--bev-font-sans);
+  --font-mono: var(--bev-font-mono);
+  --radius-xs: var(--bev-radius-xs);
+  --radius-sm: var(--bev-radius-sm);
+  --radius-md: var(--bev-radius-lg);
+  --radius-lg: var(--bev-radius-xl);
+  --radius-xl: var(--bev-radius-pill);
+  --transition-fast: var(--bev-motion-fast);
+  --transition-normal: var(--bev-motion-normal);
+  --transition-snappy: var(--bev-motion-fast);
+  --transition-layout: var(--bev-motion-layout);
+  --shadow-xs: var(--bev-shadow-xs);
+  --shadow-sm: var(--bev-shadow-sm);
+  --shadow-md: var(--bev-shadow-md);
+  --shadow-lg: var(--bev-shadow-lg);
+  --shadow-xl: var(--bev-shadow-xl);
+  --shadow-glow: var(--bev-shadow-glow);
+  --shadow-glow-sm: var(--bev-shadow-glow-sm);
+  --sidebar-width: var(--shell-sidebar-width);
+  --z-dropdown: 100;
+  --z-modal: 2000;
+  --z-overlay: 4000;
+  --z-toast: 9000;
+}

@@ -88,17 +88,22 @@ async function main() {
       LOCAL_DB_PATH: "./tmp/vercel-production-test.sqlite"
     }, async () => {
       const health = await request(port, "GET", "/api/system/health");
+      const automation = await request(port, "GET", "/api/system/automation-report");
       const read = await request(port, "POST", "/api/dashboard/readPanelGroup", {});
       const write = await request(port, "POST", "/api/account/create", [{ customerId: "x" }]);
 
       assert.strictEqual(health.status, 200);
       assert.strictEqual(health.body.data.ok, true);
+      assert.strictEqual(automation.status, 200);
+      assert.strictEqual(automation.body.data.direction, "Operational Command");
+      assert(automation.body.data.summary.total >= 18);
       assert.strictEqual(read.status, 200);
       assert.strictEqual(read.body._proxy.source, "sample");
       assert.strictEqual(write.status, 403);
 
       console.log(JSON.stringify({
         healthStatus: health.status,
+        automationStatus: automation.status,
         readStatus: read.status,
         writeStatus: write.status,
         status: "vercel production passed"

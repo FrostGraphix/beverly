@@ -16,6 +16,7 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/api/RemoteMeterTask/CreateReadingTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/api/RemoteMeterTask/CreateControlTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/RemoteMeterTask/CreateTokenTask";
+  if (action === "Add" && route.hash.includes("remote-support/firmware-update")) return "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask";
 
   const moduleName = route.hash.includes("gateway")
     ? "gateway"
@@ -58,6 +59,9 @@ function auditMeta(route, action, form) {
 function formDataPayload(route, action, form, selectedFile) {
   const formData = new FormData();
   formData.append("file", selectedFile);
+  formData.append("fileName", selectedFile?.name || "upload");
+  formData.append("fileSize", String(selectedFile?.size || 0));
+  formData.append("contentType", selectedFile?.type || "application/octet-stream");
   formData.append("routeHash", route.hash);
   formData.append("action", action);
   formData.append("confirmationText", form.confirmationText);

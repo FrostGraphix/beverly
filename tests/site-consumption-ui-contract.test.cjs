@@ -36,6 +36,30 @@ assert.match(
 
 assert.match(
   siteConsumptionPage,
+  /activePeriod: "all"/,
+  "SiteConsumptionPage should default to the full data view"
+);
+
+assert.match(
+  siteConsumptionPage,
+  /periodRange\("all"\)/,
+  "SiteConsumptionPage should seed the default range from all available data"
+);
+
+assert.match(
+  siteConsumptionPage,
+  /onRangeReady: \(\{ from, to \}\) => \{/,
+  "SiteConsumptionPage should accept the resolved first data date"
+);
+
+assert.match(
+  siteConsumptionPage,
+  /readingDayCount === 0 && meterCount === 0/,
+  "SiteConsumptionPage should only show no-reading copy when no meter readings exist"
+);
+
+assert.match(
+  siteConsumptionPage,
   /this\.chartData = \{ sales, consumption \};/,
   "SiteConsumptionPage should store sales and consumption chart groups together"
 );
@@ -84,5 +108,5 @@ assert.match(
 
 console.log(JSON.stringify({
   status: "site consumption ui contract passed",
-  checks: 11
+  checks: 15
 }, null, 2));

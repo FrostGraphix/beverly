@@ -76,6 +76,7 @@ export default {
   },
   computed: {
     coverageText() {
+      if (this.kpiData.matchedMeters == null && this.kpiData.unmatchedMeters == null) return "Calculating...";
       const matched = Number(this.kpiData.matchedMeters) || 0;
       const unmatched = Number(this.kpiData.unmatchedMeters) || 0;
       return `${matched} matched / ${unmatched} unmatched`;
@@ -180,8 +181,8 @@ export default {
 }
 
 .eih-no-data--blue {
-  background: rgba(54, 163, 247, 0.06);
-  border: 1px dashed rgba(54, 163, 247, 0.28);
-  color: #2563eb;
+  background: var(--primary-light);
+  border: 1px dashed var(--border-mid);
+  color: var(--primary);
 }
 </style>

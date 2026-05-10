@@ -78,7 +78,7 @@ function extractArray(source) {
 }
 
 function palette(index) {
-  const colors = ["#35c2c1", "#5caee8", "#b399dd", "#ffb26a", "#db7a85", "#92a0bd", "#f3d600", "#9ab94f"];
+  const colors = ["#059669", "#10b981", "#34d399", "#ffb26a", "#db7a85", "#92a0bd", "#f3d600", "#9ab94f"];
   return colors[index % colors.length];
 }
 
@@ -164,10 +164,10 @@ export function buildHourlySuccessSeries(readings) {
 export function buildAlarmLegendFromReadings(readings) {
   const buckets = new Map([
     ["No Data Report", { color: "#35c2c1", value: 0 }],
-    ["Active Readings", { color: "#5caee8", value: 0 }],
+    ["Active Readings", { color: "#059669", value: 0 }],
     ["Battery Low", { color: "#ffb26a", value: 0 }],
     ["Relay Open", { color: "#f97316", value: 0 }],
-    ["Terminal Cover Open", { color: "#0ea5e9", value: 0 }],
+    ["Terminal Cover Open", { color: "#10b981", value: 0 }],
     ["Current Reverse", { color: "#8b5cf6", value: 0 }],
     ["Current Unbalance", { color: "#db2777", value: 0 }],
     ["Magnetic Interference", { color: "#ef4444", value: 0 }]

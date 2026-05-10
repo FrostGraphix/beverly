@@ -1,4 +1,5 @@
 import axios from "axios";
+import { validateApiEnvelope, validateCurrentUserResponse, validateLoginResponse } from "./runtime-schemas.mjs";
 
 export const apiClient = axios.create({
   baseURL: "/api",
@@ -29,13 +30,13 @@ export function getCookie(name) {
 export async function postApi(path, payload = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, payload);
-  return response.data;
+  return validateApiEnvelope(response.data, cleanPath || "postApi");
 }
 
 export async function getApi(path, params = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.get(cleanPath, { params });
-  return response.data;
+  return validateApiEnvelope(response.data, cleanPath || "getApi");
 }
 
 export async function uploadApi(path, formData) {
@@ -45,11 +46,11 @@ export async function uploadApi(path, formData) {
       "Content-Type": "multipart/form-data"
     }
   });
-  return response.data;
+  return validateApiEnvelope(response.data, cleanPath || "uploadApi");
 }
 
 export async function login(payload) {
-  const response = await postApi("/api/user/login", payload);
+  const response = validateLoginResponse(await postApi("/api/user/login", payload));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
   setCookie("token", token);
@@ -57,7 +58,8 @@ export async function login(payload) {
   setCookie("SiteCom", "ACB");
   setCookie("userId", response.data?.userId || payload.userId);
   setCookie("userName", response.data?.userName || payload.userId);
-  setCookie("roleId", "super-admin");
+  setCookie("roleId", response.data?.roleId || "super-admin");
+  setCookie("userRemark", response.data?.remark || "");
   return response;
 }
 
@@ -65,25 +67,27 @@ export async function currentUserInfo() {
   try {
     const response = await postApi("/api/user/info", { userId: getCookie("userId") || "admin", pageNumber: 1, pageSize: 1 });
     const row = Array.isArray(response?.result?.data) ? response.result.data[0] : Array.isArray(response?.data?.data) ? response.data.data[0] : null;
-    return {
+    return validateCurrentUserResponse({
       ...response,
       data: {
         ...(response.data || {}),
         ...(row || {}),
-        roleId: "super-admin"
+        roleId: getCookie("roleId") || "super-admin",
+        remark: getCookie("userRemark") || ""
       }
-    };
+    });
   } catch {
-    return {
+    return validateCurrentUserResponse({
       code: 0,
       reason: "fallback",
       data: {
         userId: getCookie("userId") || "admin",
         userName: getCookie("userName") || "ACB(admin)",
         name: getCookie("userName") || "ACB(admin)",
-        roleId: "super-admin"
+        roleId: getCookie("roleId") || "super-admin",
+        remark: getCookie("userRemark") || ""
       }
-    };
+    });
   }
 }
 

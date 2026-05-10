@@ -23,9 +23,9 @@
         </div>
 
         <!-- Close -->
-        <button class="toast-close" type="button" @click.stop="dismiss(item.id)" aria-label="Close">
+        <BaseIconButton class="toast-close" @click.stop="dismiss(item.id)" aria-label="Close">
           <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
+        </BaseIconButton>
 
         <!-- Progress bar -->
         <div class="toast-progress" :style="{ animationDuration: item.duration + 'ms' }"></div>
@@ -35,10 +35,12 @@
 </template>
 
 <script>
+import BaseIconButton from "./base/BaseIconButton.vue";
 import { toastBus } from "../services/toast.js";
 
 export default {
   name: "ToastNotification",
+  components: { BaseIconButton },
   data() {
     return { toasts: [] };
   },
@@ -65,15 +67,13 @@ export default {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
-
 .toast-portal {
   position: fixed;
   top: 20px;
   right: 20px;
   z-index: 9999;
   pointer-events: none;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-family);
 }
 
 .toast-stack {
@@ -113,7 +113,7 @@ export default {
 .toast-success { border-left: 4px solid #10b981; }
 .toast-error   { border-left: 4px solid #ef4444; }
 .toast-warning { border-left: 4px solid #f59e0b; }
-.toast-info    { border-left: 4px solid #3b82f6; }
+.toast-info    { border-left: 4px solid var(--info); }
 
 /* ── Icon ───────────────────────────────────── */
 .toast-icon {
@@ -128,7 +128,7 @@ export default {
 .toast-success .toast-icon { background: #d1fae5; color: #059669; }
 .toast-error   .toast-icon { background: #fee2e2; color: #dc2626; }
 .toast-warning .toast-icon { background: #fef3c7; color: #d97706; }
-.toast-info    .toast-icon { background: #dbeafe; color: #2563eb; }
+.toast-info    .toast-icon { background: var(--info-bg); color: var(--info); }
 
 .toast-icon svg { width: 18px; height: 18px; fill: currentColor; }
 
@@ -147,7 +147,7 @@ export default {
 .toast-success .toast-label { color: #059669; }
 .toast-error   .toast-label { color: #dc2626; }
 .toast-warning .toast-label { color: #d97706; }
-.toast-info    .toast-label { color: #2563eb; }
+.toast-info    .toast-label { color: var(--info); }
 
 .toast-msg {
   margin: 0;
@@ -191,7 +191,7 @@ export default {
 .toast-success .toast-progress { background: #10b981; }
 .toast-error   .toast-progress { background: #ef4444; }
 .toast-warning .toast-progress { background: #f59e0b; }
-.toast-info    .toast-progress { background: #3b82f6; }
+.toast-info    .toast-progress { background: var(--info); }
 
 @keyframes toast-shrink {
   from { transform: scaleX(1); }

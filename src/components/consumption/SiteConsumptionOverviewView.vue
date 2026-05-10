@@ -141,8 +141,8 @@ export default {
 }
 
 .eih-no-data--blue {
-  background: rgba(54, 163, 247, 0.06);
-  border: 1px dashed rgba(54, 163, 247, 0.28);
-  color: #2563eb;
+  background: var(--primary-light);
+  border: 1px dashed var(--border-mid);
+  color: var(--primary);
 }
 </style>

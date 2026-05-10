@@ -5,14 +5,36 @@ const series = dashboardSeries(["2026-01-01", "2026-01-02"], [10, 20]);
 const bar = createBarOption(series, "Purchase Money");
 const line = createLineOption(series, "Communication Success Rate");
 const pie = createPieOption(series, "Abnormal Alarm");
+const themed = createBarOption(series, "Themed", {
+  primary: "#047857",
+  success: "#22c55e",
+  primaryDeep: "#166534",
+  textMuted: "#052e16",
+  textFaint: "#166534",
+  border: "#bbf7d0",
+  tooltip: "#ffffff",
+  tooltipText: "#052e16"
+});
+const alarm = createPieOption(series, "Alarm", {
+  alarmColors: ["#ef4444", "#f59e0b"]
+});
 
 assert.strictEqual(series.xData.length, 2);
 assert.strictEqual(bar.series[0].type, "bar");
-assert.strictEqual(bar.series[0].animationDuration, 2000);
+assert.strictEqual(bar.series[0].animationDuration, 1500);
+assert.strictEqual(bar.series[0].itemStyle.color, "#059669");
+assert.strictEqual(typeof bar.series[0].itemStyle.color, "string");
+assert.strictEqual(themed.series[0].itemStyle.color, "#047857");
+assert.strictEqual(themed.tooltip.backgroundColor, "#ffffff");
+assert.strictEqual(themed.tooltip.textStyle.color, "#052e16");
 assert.strictEqual(line.series[0].type, "line");
-assert.strictEqual(line.tooltip.formatter, "{b} <br/>{a} : {c}%");
+assert.match(line.tooltip.formatter, /#10b981/);
+assert.match(line.tooltip.formatter, /\{c\}%/);
 assert.strictEqual(pie.series[0].type, "pie");
 assert.strictEqual(pie.series[0].roseType, "radius");
+assert.strictEqual(alarm.series[0].itemStyle.borderWidth, 0);
+assert.strictEqual(alarm.series[0].label.textBorderWidth, 0);
+assert.strictEqual(alarm.series[0].data[0].itemStyle.color, "#ef4444");
 
 console.log(JSON.stringify({
   charts: 3,

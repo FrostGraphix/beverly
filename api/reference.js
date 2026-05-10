@@ -3,17 +3,49 @@ const path = require("path");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
 const {
   ensureDatabase,
+  cacheApiResponse,
   recordAuditLog,
   recordExportJob,
   recordImportJob,
   listImportJobs,
+  readCachedApiResponse,
   recordPrintJob,
   recordWriteConfirmation,
-  resetForTests,
+  saveArtifact,
   tableCounts
-} = require("../backend/src/services/local-database");
+} = require("../backend/src/services/storage-adapter");
+const { resetForTests } = require("../backend/src/services/local-database");
+const {
+  authEnabled: supabaseAuthEnabled,
+  signInWithPassword,
+  storageReport,
+  createAuthUser,
+  updateAuthUser,
+  deleteAuthUser,
+  getAuthUserByUserId
+} = require("../backend/src/services/supabase-service");
+const {
+  readSnapshot,
+  snapshotSchedule,
+  writeSnapshot
+} = require("../backend/src/services/snapshot-service");
+const {
+  dailyMeterStationStats,
+  dailyMeterTableReport,
+  readDailyMeterRows,
+  writeDailyMeterRows
+} = require("../backend/src/services/consumption-store");
+const { automationReport } = require("../backend/src/services/automation-catalog");
+const {
+  automationControlReport,
+  handleAutomationIncident,
+  readAutomationControl,
+  saveAutomationControl
+} = require("../backend/src/services/automation-control");
+const { refreshTargets } = require("../backend/src/services/refresh-targets");
 
-const liveBaseUrlDefault = "http://8.208.16.168:9310";
+// No live upstream URL has a code default.
+const liveBaseUrlDefault = "";
 const root = path.resolve(__dirname, "..");
 const contractPath = path.join(root, "reference-contract.json");
 const samplesDir = path.join(root, "contracts", "samples");
@@ -32,17 +64,21 @@ loadEnvFile();
 let contractAliasMap = null;
 
 function getEnv() {
-  const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "false" ? "local" : "live");
+  const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
+  const liveBaseUrl = process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault;
   return {
     readMode,
-    liveBaseUrl: process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault,
-    liveProxyEnabled: readMode !== "local" && (process.env.LIVE_API_PROXY_ENABLED === "true" || Boolean(process.env.UPSTREAM_API_URL)),
+    liveBaseUrl,
+    liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
     allowLiveWrites: process.env.ALLOW_LIVE_WRITES === "true",
     corsOrigins: splitCsv(process.env.CORS_ORIGINS || defaultCorsOrigins.join(",")),
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== "false",
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
-    rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS || 300)
+    rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS || 300),
+    demoAuthEnabled: process.env.DEMO_AUTH_ENABLED === "true",
+    demoAuthUser: process.env.DEMO_AUTH_USER || "admin",
+    demoAuthPassword: process.env.DEMO_AUTH_PASSWORD || ""
   };
 }
 
@@ -144,6 +180,8 @@ function readRequest(request) {
         } catch {
           parsedBody = { raw: rawText };
         }
+      } else if (contentType.includes("multipart/form-data")) {
+        parsedBody = parseMultipartFields(rawBody, rawText, contentType);
       } else {
         parsedBody = { raw: rawText };
       }
@@ -158,13 +196,66 @@ function readRequest(request) {
   });
 }
 
+function parseMultipartFields(rawBody, rawText, contentType) {
+  const boundary = String(contentType || "").match(/boundary=([^;]+)/i)?.[1];
+  if (!boundary) return { raw: rawText };
+  const fields = {};
+  for (const part of rawText.split(`--${boundary}`)) {
+    const name = part.match(/name="([^"]+)"/)?.[1];
+    if (!name) continue;
+    const filename = part.match(/filename="([^"]*)"/)?.[1];
+    const value = part.split(/\r?\n\r?\n/).slice(1).join("\n\n").replace(/\r?\n--$/, "").trim();
+    if (filename) {
+      fields.fileName = fields.fileName || filename;
+      fields.uploadFileName = filename;
+    } else {
+      fields[name] = value;
+    }
+  }
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  let offset = rawBody.indexOf(boundaryBuffer);
+  while (offset !== -1) {
+    const next = rawBody.indexOf(boundaryBuffer, offset + boundaryBuffer.length);
+    if (next === -1) break;
+    const part = rawBody.subarray(offset + boundaryBuffer.length, next);
+    const headerEnd = part.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd !== -1) {
+      const headerText = part.subarray(0, headerEnd).toString("utf8");
+      const filename = headerText.match(/filename="([^"]*)"/)?.[1];
+      if (filename) {
+        const type = headerText.match(/content-type:\s*([^\r\n]+)/i)?.[1] || "application/octet-stream";
+        let fileBuffer = part.subarray(headerEnd + 4);
+        if (fileBuffer.subarray(0, 2).toString() === "\r\n") fileBuffer = fileBuffer.subarray(2);
+        if (fileBuffer.subarray(-2).toString() === "\r\n") fileBuffer = fileBuffer.subarray(0, -2);
+        fields._file = { name: filename, contentType: type, buffer: fileBuffer };
+        break;
+      }
+    }
+    offset = next;
+  }
+  return fields;
+}
+
 function normalizeRequestPath(urlValue) {
+  const overridePath = requestPathOverride(urlValue);
+  if (overridePath) return overridePath;
   const pathname = String(urlValue || "/")
     .replace(/^\/api\/reference(?:\.js)?/i, "/api")
     .split("?")[0];
   if (/^\/api\/API\//.test(pathname)) return pathname.replace(/^\/api\/API\//, "/API/");
   if (/^\/api\/api\//.test(pathname)) return pathname.replace(/^\/api\/api\//, "/api/");
   return pathname;
+}
+
+function requestPathOverride(urlValue) {
+  try {
+    const parsed = new URL(String(urlValue || "/"), "http://localhost");
+    const override = parsed.searchParams.get("__pathname");
+    if (!override) return "";
+    return override.startsWith("/") ? override : `/${override}`;
+  } catch {
+    return "";
+  }
 }
 
 function querySuffix(urlValue) {
@@ -206,11 +297,58 @@ function isCacheableRequest(pathname, method) {
   return !isWriteRequest(pathname, method);
 }
 
+function requiresLiveRead(pathname) {
+  return /\/api\/DailyDataMeter\/read$/i.test(String(pathname || ""));
+}
+
+function apiCacheEnabled() {
+  return process.env.API_CACHE_ENABLED === "true" || process.env.SESSION_STORE_MODE === "supabase";
+}
+
 function buildCacheKey(request, requestData) {
   return JSON.stringify({
     query: querySuffix(request.url),
     body: requestData.parsedBody || {}
   });
+}
+
+function cronAuthorized(request) {
+  const secret = process.env.CRON_SECRET || "";
+  if (!secret && process.env.NODE_ENV !== "production") return true;
+  return String(request.headers.authorization || "") === `Bearer ${secret}`;
+}
+
+function refreshScopeFromPath(pathname) {
+  if (pathname.endsWith("/refresh-hourly")) return "hourly";
+  if (pathname.endsWith("/refresh-daily")) return "daily";
+  if (pathname.endsWith("/refresh-backfill")) return "backfill";
+  if (pathname.endsWith("/refresh-all")) return "all";
+  return "hot";
+}
+
+function syntheticRefreshRequest(target) {
+  const rawBody = Buffer.from(JSON.stringify(target.payload || {}));
+  return {
+    method: "POST",
+    url: target.path,
+    headers: {
+      accept: jsonContentType,
+      "content-type": jsonContentType
+    },
+    socket: {
+      remoteAddress: "cron"
+    }
+  };
+}
+
+function syntheticRefreshRequestData(target) {
+  const rawBody = Buffer.from(JSON.stringify(target.payload || {}));
+  return {
+    contentType: jsonContentType,
+    rawBody,
+    rawText: rawBody.toString("utf8"),
+    parsedBody: target.payload || {}
+  };
 }
 
 function logWriteEvent(kind, details) {
@@ -385,16 +523,42 @@ function syntheticSampleResponse(sourcePathname, requestData, facadePathname) {
   };
 }
 
-function cacheResponseIfNeeded(request, pathname, requestData, result) {
-  void request;
-  void pathname;
-  void requestData;
-  void result;
+async function cacheResponseIfNeeded(request, pathname, requestData, result) {
+  if (!apiCacheEnabled() || !isCacheableRequest(pathname, request.method) || result.status >= 400) return;
+  await cacheApiResponse({
+    method: request.method || "GET",
+    path: pathname,
+    requestKey: buildCacheKey(request, requestData),
+    status: result.status,
+    source: result.body?._proxy?.source || "unknown",
+    body: result.body
+  });
 }
 
-function recordWriteArtifacts(pathname, requestData, status) {
+async function cachedReadResponse(request, pathname, requestData) {
+  if (!apiCacheEnabled() || !isCacheableRequest(pathname, request.method)) return null;
+  const cached = await readCachedApiResponse({
+    method: request.method || "GET",
+    path: pathname,
+    requestKey: buildCacheKey(request, requestData)
+  });
+  if (!cached) return null;
+  return {
+    status: cached.status,
+    body: {
+      ...(cached.body || {}),
+      _proxy: {
+        ...(cached.body?._proxy || {}),
+        source: "cache",
+        pathname
+      }
+    }
+  };
+}
+
+async function recordWriteArtifacts(pathname, requestData, status) {
   const payload = Array.isArray(requestData.parsedBody) ? requestData.parsedBody[0] || {} : requestData.parsedBody || {};
-  recordWriteConfirmation({
+  await recordWriteConfirmation({
     endpoint: pathname,
     action: payload.action || pathname.split("/").pop() || "write",
     confirmationText: payload.confirmationText || "",
@@ -403,7 +567,7 @@ function recordWriteArtifacts(pathname, requestData, status) {
     details: payload
   });
   if (/\/import\b/i.test(pathname)) {
-    recordImportJob({
+    await recordImportJob({
       routeHash: payload.routeHash || "",
       fileName: payload.fileName || "unknown",
       rowCount: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.items) ? payload.items.length : 0,
@@ -412,12 +576,24 @@ function recordWriteArtifacts(pathname, requestData, status) {
     });
   }
   if (/\/upload\b/i.test(pathname)) {
-    recordImportJob({
+    const file = payload._file || null;
+    const uploadArtifact = await saveArtifact({
+      bucket: "uploads",
       routeHash: payload.routeHash || "#/remote-support/file-upload",
-      fileName: payload.fileName || "upload",
+      filename: file?.name || payload.fileName || "upload.bin",
+      content: file?.buffer || requestData.rawBody,
+      contentType: file?.contentType || payload.contentType || requestData.contentType || "application/octet-stream"
+    });
+    const details = { ...payload };
+    delete details._file;
+    await recordImportJob({
+      routeHash: payload.routeHash || "#/remote-support/file-upload",
+      fileName: file?.name || payload.fileName || "upload",
       rowCount: 1,
       status: status < 400 ? "completed" : "blocked",
-      details: { ...payload, kind: "upload" }
+      storageBucket: uploadArtifact?.bucket,
+      storagePath: uploadArtifact?.path,
+      details: { ...details, kind: "upload", storage: uploadArtifact }
     });
   }
 }
@@ -439,11 +615,283 @@ function localJobResponse(body) {
   };
 }
 
-function localLoginResponse(payload) {
+function configuredConsumptionBackfillFrom() {
+  return process.env.CONSUMPTION_BACKFILL_FROM || "2025-01-01";
+}
+
+function readConsumptionBackfillProgress() {
+  const progressPath = path.join(root, "tmp", "consumption-backfill-progress.json");
+  try {
+    return JSON.parse(fs.readFileSync(progressPath, "utf8"));
+  } catch {
+    return { stations: {} };
+  }
+}
+
+function readConsumptionLiveUniqueAudit() {
+  const auditPath = path.join(root, "tmp", "consumption-live-unique-audit.json");
+  try {
+    const payload = JSON.parse(fs.readFileSync(auditPath, "utf8"));
+    const stations = Array.isArray(payload?.stations) ? payload.stations : [];
+    return {
+      generatedAt: payload?.generatedAt || null,
+      stations: new Map(stations.map((station) => [String(station.station || "").toUpperCase(), station])),
+    };
+  } catch {
+    return {
+      generatedAt: null,
+      stations: new Map(),
+    };
+  }
+}
+
+function dayDiff(from, to) {
+  if (!from || !to) return null;
+  const fromTime = new Date(`${from}T00:00:00.000Z`).getTime();
+  const toTime = new Date(`${to}T00:00:00.000Z`).getTime();
+  if (!Number.isFinite(fromTime) || !Number.isFinite(toTime)) return null;
+  return Math.max(0, Math.round((toTime - fromTime) / 86400000));
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function classifyFreshness(latestReadingDate) {
+  if (!latestReadingDate) return { status: "missing", staleDays: null };
+  const staleDays = dayDiff(latestReadingDate, todayKey());
+  if (staleDays == null) return { status: "unknown", staleDays: null };
+  if (staleDays <= 1) return { status: "fresh", staleDays };
+  if (staleDays <= 3) return { status: "aging", staleDays };
+  return { status: "stale", staleDays };
+}
+
+function classifyCoverage(earliestReadingDate, configuredFrom) {
+  if (!earliestReadingDate) {
+    return { status: "missing", gapDays: null };
+  }
+  const gapDays = dayDiff(configuredFrom, earliestReadingDate);
+  if (gapDays == null) return { status: "unknown", gapDays: null };
+  return {
+    status: gapDays === 0 ? "full" : "partial",
+    gapDays,
+  };
+}
+
+async function fetchLiveDailyMeterTotal(stationId) {
+  const env = getEnv();
+  if (!env.liveProxyEnabled || !env.liveBaseUrl) return null;
+  
+  const axios = require("axios");
+  const http = require("http");
+  const https = require("https");
+  
+  if (!global.liveAxios) {
+    global.liveAxios = axios.create({
+      httpAgent: new http.Agent({ keepAlive: true, maxSockets: 10 }),
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 10 }),
+      validateStatus: () => true
+    });
+  }
+
+  const payload = {
+    lang: "en",
+    stationId,
+    FROM: configuredConsumptionBackfillFrom(),
+    TO: todayKey(),
+    pageNumber: 1,
+    pageSize: 1,
+    compact: true,
+  };
+
+  const requestData = {
+    parsedBody: payload,
+    rawBody: Buffer.from(JSON.stringify(payload)),
+    contentType: jsonContentType,
+  };
+  const token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : "";
+  const liveUrl = `${env.liveBaseUrl}/api/DailyDataMeter/read`;
+
+  const request = { method: "POST", headers: { accept: jsonContentType } };
+  
+  const response = await global.liveAxios({
+    method: "POST",
+    url: liveUrl,
+    headers: buildLiveHeaders(request, requestData, token),
+    data: requestData.rawBody,
+    responseType: "text"
+  });
+
+  let payloadBody;
+  const contentTypeHeader = String(response.headers["content-type"] || "");
+  if (contentTypeHeader.includes("application/json")) {
+    try { payloadBody = JSON.parse(response.data); } catch { payloadBody = { raw: response.data }; }
+  } else {
+    payloadBody = { raw: response.data };
+  }
+
+  if (response.status < 200 || response.status >= 300 || hasBusinessFailure(payloadBody)) {
+    throw new Error(`Live total read failed for ${stationId}`);
+  }
+  return Number(payloadBody?.result?.total ?? payloadBody?.data?.total ?? 0);
+}
+
+async function buildConsumptionAudit() {
+  const progress = readConsumptionBackfillProgress();
+  const uniqueAudit = readConsumptionLiveUniqueAudit();
+  const configuredFrom = configuredConsumptionBackfillFrom();
+  const stats = await dailyMeterStationStats();
+  if (!stats.tableReady) {
+    return {
+      enabled: stats.enabled,
+      tableReady: false,
+      configuredFrom,
+      generatedAt: new Date().toISOString(),
+      stations: [],
+      overall: {
+        completenessStatus: "unknown",
+        freshnessStatus: "unknown",
+        coverageStatus: "unknown",
+      },
+      warnings: [stats.error || "Consumption store is not ready"],
+    };
+  }
+
+  const stations = [];
+  for (const stationStat of stats.stations) {
+    const stationId = stationStat.station;
+    const progressStation = progress?.stations?.[stationId] || {};
+    const uniqueStation = uniqueAudit.stations.get(stationId) || null;
+    let liveTotalRows = null;
+    let liveError = null;
+    let liveMetric = "unavailable";
+    if (uniqueStation?.uniqueTotal != null) {
+      liveTotalRows = Number(uniqueStation.uniqueTotal);
+      liveMetric = "unique";
+    } else {
+      try {
+        liveTotalRows = await fetchLiveDailyMeterTotal(stationId);
+        liveMetric = "raw";
+      } catch (error) {
+        liveError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    const latestReadingDate = uniqueStation?.latestReadingDate || stationStat.latestReadingDate;
+    const earliestReadingDate = uniqueStation?.earliestReadingDate || stationStat.earliestReadingDate;
+    const freshness = classifyFreshness(latestReadingDate);
+    const coverage = classifyCoverage(earliestReadingDate, configuredFrom);
+    const storeRows = Number(stationStat.rows || 0);
+    const progressTotalRows = Number(progressStation.totalRows || 0) || null;
+    const progressStoredRows = Number(progressStation.storedRows || 0) || null;
+    const deltaStoreVsLive = liveTotalRows == null ? null : storeRows - liveTotalRows;
+    const deltaStoreVsProgress = progressTotalRows == null ? null : storeRows - progressTotalRows;
+    const warnings = [];
+
+    let completenessStatus = "unknown";
+    if (liveTotalRows != null) {
+      if (liveMetric === "unique") {
+        completenessStatus = deltaStoreVsLive === 0 ? "complete" : "incomplete";
+        if (deltaStoreVsLive !== 0) {
+          warnings.push(`${stationId}: store differs from live unique rows by ${deltaStoreVsLive}.`);
+        }
+      } else {
+        completenessStatus = deltaStoreVsLive === 0 ? "estimated-match" : "unverified";
+        warnings.push(`${stationId}: live audit still uses raw row totals, so completeness is not verified.`);
+        if (deltaStoreVsLive !== 0) {
+          warnings.push(`${stationId}: raw live total differs from store by ${deltaStoreVsLive}.`);
+        }
+      }
+    } else if (progressTotalRows != null) {
+      completenessStatus = deltaStoreVsProgress === 0 ? "complete" : "needs-review";
+      if (deltaStoreVsProgress !== 0) {
+        warnings.push(`${stationId}: store differs from progress by ${deltaStoreVsProgress}.`);
+      }
+    }
+
+    if (progressStation.complete && progressStoredRows != null && progressStoredRows !== storeRows) {
+      warnings.push(`${stationId}: progress marked complete, but stored rows drift by ${storeRows - progressStoredRows}.`);
+    }
+    if (coverage.status === "partial" && coverage.gapDays > 0) {
+      warnings.push(`${stationId}: earliest reading starts ${coverage.gapDays} days after ${configuredFrom}.`);
+    }
+    if (freshness.status === "aging" || freshness.status === "stale") {
+      warnings.push(`${stationId}: latest reading is ${freshness.staleDays} days behind today.`);
+    }
+    if (liveError) warnings.push(`${stationId}: live total audit unavailable.`);
+
+    stations.push({
+      station: stationId,
+      rows: storeRows,
+      liveTotalRows,
+      liveMetric,
+      auditedAt: uniqueStation?.auditedAt || uniqueAudit.generatedAt || null,
+      progressTotalRows,
+      progressStoredRows,
+      earliestReadingDate,
+      latestReadingDate,
+      completenessStatus,
+      deltaStoreVsLive,
+      deltaStoreVsProgress,
+      freshness,
+      coverage,
+      warnings,
+    });
+  }
+
+  const overallWarnings = stations.flatMap((station) => station.warnings);
+  const overall = {
+    completenessStatus: stations.every((station) => station.completenessStatus === "complete")
+      ? "complete"
+      : stations.some((station) => station.completenessStatus === "incomplete" || station.completenessStatus === "needs-review")
+        ? "incomplete"
+        : stations.some((station) => station.completenessStatus === "estimated-match" || station.completenessStatus === "unverified")
+          ? "unverified"
+        : "unknown",
+    freshnessStatus: stations.every((station) => station.freshness.status === "fresh")
+      ? "fresh"
+      : stations.some((station) => station.freshness.status === "stale" || station.freshness.status === "aging")
+        ? "stale"
+        : "unknown",
+    coverageStatus: stations.every((station) => station.coverage.status === "full")
+      ? "full"
+      : stations.some((station) => station.coverage.status === "partial")
+        ? "partial"
+        : "unknown",
+    totalRows: stats.totalRows,
+    earliestReadingDate: stations.map((station) => station.earliestReadingDate).filter(Boolean).sort()[0] || null,
+    latestReadingDate: stations.map((station) => station.latestReadingDate).filter(Boolean).sort().slice(-1)[0] || null,
+  };
+
+  return {
+    enabled: true,
+    tableReady: true,
+    configuredFrom,
+    generatedAt: new Date().toISOString(),
+    liveAuditMode: uniqueAudit.stations.size ? "mixed-audit" : "raw-live-total",
+    verificationStatus: stations.every((station) => station.liveMetric === "unique")
+      ? "verified"
+      : stations.some((station) => station.liveMetric === "unique")
+        ? "partial"
+        : "raw-only",
+    overall,
+    stations,
+    warnings: overallWarnings,
+  };
+}
+
+async function loginResponse(payload) {
+  if (supabaseAuthEnabled()) {
+    const supabaseResult = await signInWithPassword(payload);
+    if (supabaseResult?.status === 200) return supabaseResult;
+    if (!getEnv().demoAuthEnabled) return supabaseResult;
+  }
+
   const userId = String(payload.userId || payload.username || "").trim() || "admin";
   const password = String(payload.password || "");
   const normalizedUserId = userId === "admin@acoblighting.com" ? "admin" : userId;
-  const allowed = normalizedUserId === "admin" && (password === "ACOB_ADMIN" || password === "admin");
+  const env = getEnv();
+  const allowed = env.demoAuthEnabled && env.demoAuthPassword && normalizedUserId === env.demoAuthUser && password === env.demoAuthPassword;
   if (!allowed) {
     return {
       status: 401,
@@ -470,12 +918,14 @@ function localLoginResponse(payload) {
       data: {
         token: "local-dev-token",
         userId: normalizedUserId,
-        userName: "ACB(admin)"
+        userName: "ACB(admin)",
+        roleId: "super-admin"
       },
       result: {
         token: "local-dev-token",
         userId: normalizedUserId,
-        userName: "ACB(admin)"
+        userName: "ACB(admin)",
+        roleId: "super-admin"
       },
       _proxy: {
         source: "local-auth",
@@ -485,7 +935,23 @@ function localLoginResponse(payload) {
   };
 }
 
-function dispatchLocalDatabaseAction(request, pathname, requestData) {
+async function dispatchLocalDatabaseAction(request, pathname, requestData) {
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname.startsWith("/api/cron/refresh")) {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    return localJobResponse(await runRefreshJob(refreshScopeFromPath(pathname)));
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/health") {
     return localJobResponse({
       ok: true,
@@ -519,8 +985,30 @@ function dispatchLocalDatabaseAction(request, pathname, requestData) {
       liveProxyEnabled: getEnv().liveProxyEnabled,
       allowLiveWrites: getEnv().allowLiveWrites,
       routeSummary,
-      storage: tableCounts()
+      storage: await tableCounts(),
+      snapshots: snapshotSchedule()
     });
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/automation-report") {
+    return localJobResponse(automationReport());
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/automation-control") {
+    return localJobResponse(automationControlReport());
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/snapshot-schedule") {
+    return localJobResponse({
+      enabled: process.env.SNAPSHOT_STORE_ENABLED === "true" || process.env.SESSION_STORE_MODE === "supabase",
+      schedule: snapshotSchedule()
+    });
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/storage-report") {
+    return localJobResponse(await storageReport());
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-store") {
+    return localJobResponse(await dailyMeterTableReport());
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-audit") {
+    return localJobResponse(await buildConsumptionAudit());
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/hourly") {
     return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname);
@@ -536,66 +1024,291 @@ function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
   if (pathname === "/api/user/login") {
-    return localLoginResponse(payload);
+    return loginResponse(payload);
+  }
+  if (pathname === "/api/user/profile") {
+    return localJobResponse({
+      saved: true,
+      profile: {
+        name: String(payload.name || ""),
+        email: String(payload.email || ""),
+        phone: String(payload.phone || "")
+      }
+    });
+  }
+  if (pathname === "/api/user/changePassword") {
+    if (!payload.currentPassword || !payload.newPassword || String(payload.newPassword).length < 8) {
+      return {
+        status: 400,
+        body: {
+          code: 400,
+          msg: "Invalid password payload",
+          reason: "Invalid password payload",
+          data: null,
+          result: null,
+          _proxy: { source: "local-auth", pathname }
+        }
+      };
+    }
+    return localJobResponse({ changed: true });
+  }
+  if (pathname === "/api/system/automation-control") {
+    return localJobResponse(saveAutomationControl({
+      webhooks: Array.isArray(payload.webhooks) ? payload.webhooks : [],
+      remediation: payload.remediation || {},
+      deliveryPolicy: payload.deliveryPolicy || {}
+    }));
+  }
+  if (pathname === "/api/system/automation-hooks/test") {
+    const incidentKind = payload.kind || "manual-test";
+    const outcome = await handleAutomationIncident({
+      kind: incidentKind,
+      severity: payload.severity || "info",
+      title: payload.title || "Manual test alert",
+      message: payload.message || "Manual automation hook test.",
+      source: "automation-command-page",
+      details: payload.details || {}
+    });
+    if (incidentKind === "smoke-failure" && readAutomationControl().remediation.runHotRefreshOnSmokeFailure) {
+      const smokeRefresh = await runRefreshJob("hot");
+      outcome.incident.remediation.push({
+        type: "run-hot-refresh",
+        status: smokeRefresh.failed ? "degraded" : "applied",
+        refreshed: smokeRefresh.refreshed,
+        failed: smokeRefresh.failed
+      });
+      const control = readAutomationControl();
+      saveAutomationControl({
+        ...control,
+        incidents: [outcome.incident, ...control.incidents.filter((entry) => entry.id !== outcome.incident.id)].slice(0, 20)
+      });
+      return localJobResponse({
+        ...outcome.incident,
+        smokeRefresh
+      });
+    }
+    return localJobResponse(outcome.incident);
   }
   if (pathname === "/api/local/importJobs/read") {
-    return localJobResponse(listImportJobs({
+    return localJobResponse(await listImportJobs({
       routeHash: payload.routeHash || "",
       pageSize: payload.pageSize || 500,
       offset: payload.offset || 0
     }));
   }
+  if (pathname === "/api/local/snapshots/read") {
+    return localJobResponse(await readSnapshot({
+      type: payload.type || "",
+      scope: payload.scope || "global",
+      limit: payload.limit || payload.pageSize || 20
+    }));
+  }
   if (pathname === "/api/local/exportJob/create") {
-    recordExportJob({
+    const artifact = payload.content ? await saveArtifact({
+      bucket: "exports",
+      routeHash: payload.routeHash || "",
+      filename: payload.fileName || `export.${payload.format || "txt"}`,
+      content: payload.content,
+      contentType: payload.contentType || "text/plain;charset=utf-8"
+    }) : null;
+    await recordExportJob({
       routeHash: payload.routeHash || "",
       rowCount: payload.rowCount || 0,
       format: payload.format || "csv",
       status: payload.status || "completed",
-      details: payload
+      storageBucket: artifact?.bucket,
+      storagePath: artifact?.path,
+      details: { ...payload, content: payload.content ? "[stored]" : undefined, storage: artifact }
     });
-    return localJobResponse({ saved: true, kind: "export" });
+    return localJobResponse({ saved: true, kind: "export", storage: artifact });
   }
   if (pathname === "/api/local/printJob/create") {
-    recordPrintJob({
+    const artifact = payload.content ? await saveArtifact({
+      bucket: "receipts",
+      routeHash: payload.routeHash || "",
+      filename: payload.fileName || `receipt.${payload.format || "html"}`,
+      content: payload.content,
+      contentType: payload.contentType || "text/html;charset=utf-8"
+    }) : null;
+    await recordPrintJob({
       routeHash: payload.routeHash || "",
       receiptType: payload.receiptType || "credit",
       status: payload.status || "completed",
-      details: payload
+      storageBucket: artifact?.bucket,
+      storagePath: artifact?.path,
+      details: { ...payload, content: payload.content ? "[stored]" : undefined, storage: artifact }
     });
-    return localJobResponse({ saved: true, kind: "print" });
+    return localJobResponse({ saved: true, kind: "print", storage: artifact });
   }
 
+  // --- SUPABASE AUTH SYNC INTERCEPT ---
+  if (supabaseAuthEnabled()) {
+    try {
+      if (pathname === "/api/user/create") {
+        const item = Array.isArray(payload) ? payload[0] : payload;
+        await createAuthUser(item);
+      } else if (pathname === "/api/user/update") {
+        const item = Array.isArray(payload) ? payload[0] : payload;
+        await updateAuthUser(item.userId, item);
+      } else if (pathname === "/api/user/delete") {
+        const item = Array.isArray(payload) ? payload[0] : payload;
+        await deleteAuthUser(item.userId);
+      }
+    } catch (err) {
+      console.error("[supabase-auth-sync-error]", err);
+      return {
+        status: 400,
+        body: {
+          code: 400,
+          msg: "Supabase Auth Sync Failed: " + err.message,
+          reason: "Supabase Auth Sync Failed: " + err.message,
+          data: null,
+          result: null,
+          _proxy: { source: "supabase-auth", pathname }
+        }
+      };
+    }
+  }
+
+  // Return null to allow proxyLive to handle it upstream
   return null;
 }
 
+async function runRefreshJob(scope) {
+  const control = readAutomationControl();
+  const targets = refreshTargets(scope);
+  const results = [];
+  for (const target of targets) {
+    let attempts = 1;
+    let execution = await runRefreshTarget(target);
+    if (!execution.ok && control.remediation.retryFailedRefreshOnce) {
+      attempts += 1;
+      execution = await runRefreshTarget(target);
+    }
+    if (!execution.ok) {
+      const incident = await handleAutomationIncident({
+        kind: "refresh-failure",
+        severity: "warning",
+        title: `Refresh failed for ${target.name}`,
+        message: `Automation refresh could not complete for ${target.path}.`,
+        source: "refresh-cron",
+        details: {
+          scope,
+          target,
+          attempts
+        }
+      });
+      results.push({
+        name: target.name,
+        path: target.path,
+        status: 502,
+        source: "unavailable",
+        retries: attempts - 1,
+        alerts: incident.incident.alerts.length
+      });
+      continue;
+    }
+    results.push({
+      ...execution.entry,
+      retries: attempts - 1
+    });
+  }
+  return {
+    ok: true,
+    scope,
+    refreshed: results.filter((entry) => entry.status < 400).length,
+    failed: results.filter((entry) => entry.status >= 400).length,
+    results
+  };
+}
+
+async function runRefreshTarget(target) {
+  let pageNumber = Math.max(1, Number(target.payload?.pageNumber || 1));
+  let fetchedRows = 0;
+  let totalRows = Infinity;
+  let result = null;
+  const maxPages = Math.max(1, Number(target.maxPages || 100));
+
+  do {
+    const pageTarget = {
+      ...target,
+      payload: target.paginate ? { ...(target.payload || {}), pageNumber } : target.payload
+    };
+    const refreshRequest = syntheticRefreshRequest(pageTarget);
+    const refreshData = syntheticRefreshRequestData(pageTarget);
+    result = await proxyLive(refreshRequest, target.path, refreshData);
+    if (!result && !isWriteRequest(target.path, "POST") && !requiresLiveRead(target.path)) {
+      result = sampleReadResponse(target.path, refreshData);
+    }
+    if (!result) return { ok: false };
+    await cacheResponseIfNeeded(refreshRequest, target.path, refreshData, result);
+    await writeSnapshot({
+      pathname: target.path,
+      requestKey: buildCacheKey(refreshRequest, refreshData),
+      requestPayload: refreshData.parsedBody,
+      responsePayload: result.body
+    }).catch((error) => {
+      console.error("[snapshot-refresh]", error instanceof Error ? error.message : String(error));
+    });
+
+    const rows = collectionRowsFromPayload(result.body);
+    if (result?.body?._proxy?.source === "live") {
+      await writeDailyMeterRows({
+        pathname: target.path,
+        requestPayload: pageTarget.payload,
+        responsePayload: result.body
+      }).catch((error) => {
+        console.error("[consumption-store-refresh-write]", error instanceof Error ? error.message : String(error));
+      });
+    }
+    const pageTotal = Number(result.body?.result?.total ?? result.body?.data?.total);
+    totalRows = Number.isFinite(pageTotal) && pageTotal >= 0 ? pageTotal : rows.length;
+    fetchedRows += rows.length;
+    pageNumber++;
+    if (!target.paginate || !rows.length) break;
+  } while (fetchedRows < totalRows && (pageNumber - Number(target.payload?.pageNumber || 1)) < maxPages);
+
+  return {
+    ok: true,
+    entry: {
+      name: target.name,
+      path: target.path,
+      status: result.status,
+      source: result.body?._proxy?.source || "unknown",
+      cadence: target.cadence,
+      rows: fetchedRows
+    }
+  };
+}
+
 function fallbackRemoteTask(pathname, requestData) {
+  void requestData;
   const remoteTaskPaths = [
     "/API/RemoteMeterTask/CreateReadingTask",
     "/API/RemoteMeterTask/CreateControlTask",
     "/API/RemoteMeterTask/CreateTokenTask"
   ];
   if (!remoteTaskPaths.some((p) => pathname.toLowerCase() === p.toLowerCase())) return null;
-  const rows = Array.isArray(requestData.parsedBody) ? requestData.parsedBody : [requestData.parsedBody || {}];
   const taskKind = pathname.toLowerCase().includes("control") ? "control"
     : pathname.toLowerCase().includes("token") ? "token"
     : "reading";
-  recordWriteConfirmation({
-    endpoint: pathname,
-    action: `create-${taskKind}-task`,
-    confirmationText: "",
-    authorizationProvided: false,
-    status: "queued-local",
-    details: rows[0] || {}
-  });
-  return localJobResponse({
-    submitted: rows.length,
-    taskKind,
-    queued: true,
-    note: "Task queued locally — live backend unavailable"
-  });
+  return {
+    status: 502,
+    body: {
+      code: 502,
+      msg: `Live ${taskKind} task API unavailable`,
+      reason: `Live ${taskKind} task API unavailable`,
+      data: null,
+      result: null,
+      _proxy: {
+        source: "live-required",
+        pathname
+      }
+    }
+  };
 }
-function auditResult(request, pathname, result) {
-  recordAuditLog({
+async function auditResult(request, pathname, result) {
+  await recordAuditLog({
     method: request.method || "GET",
     path: pathname,
     outcome: result.status < 400 ? "success" : "error",
@@ -606,14 +1319,40 @@ function auditResult(request, pathname, result) {
 }
 
 async function tryLivePath(request, liveUrl, requestData, token) {
-  const response = await fetch(liveUrl, {
+  const axios = require("axios");
+  const http = require("http");
+  const https = require("https");
+  
+  if (!global.liveAxios) {
+    global.liveAxios = axios.create({
+      httpAgent: new http.Agent({ keepAlive: true, maxSockets: 10 }),
+      httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 10 }),
+      validateStatus: () => true // Resolve all statuses
+    });
+  }
+
+  const response = await global.liveAxios({
     method: request.method || "GET",
+    url: liveUrl,
     headers: buildLiveHeaders(request, requestData, token),
-    body: request.method === "GET" ? undefined : requestData.rawBody
+    data: request.method === "GET" ? undefined : requestData.rawBody,
+    responseType: "text" // Get raw text to match previous fetch behavior
   });
-  const payload = await parseLiveResponse(response);
+
+  let payload;
+  const contentType = String(response.headers["content-type"] || "");
+  if (contentType.includes("application/json")) {
+    try {
+      payload = JSON.parse(response.data);
+    } catch {
+      payload = { raw: response.data };
+    }
+  } else {
+    payload = { raw: response.data };
+  }
+
   return {
-    ok: response.ok,
+    ok: response.status >= 200 && response.status < 300,
     status: response.status,
     payload,
     headers: response.headers
@@ -651,6 +1390,20 @@ async function proxyLive(request, pathname, requestData) {
       const liveResult = await tryLivePath(request, liveUrl, requestData, token);
       if (liveResult.status === 401 || liveResult.status === 403) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
+        await handleAutomationIncident({
+          kind: "live-auth-failure",
+          severity: "error",
+          title: "Live auth failure",
+          message: `Live upstream rejected ${pathname} with ${liveResult.status}.`,
+          source: "live-proxy",
+          details: {
+            pathname,
+            candidate,
+            status: liveResult.status
+          }
+        }).catch((error) => {
+          console.error("[automation-live-auth-hook]", error instanceof Error ? error.message : String(error));
+        });
       }
       if (liveResult.ok || (liveResult.status < 500 && liveResult.status !== 404)) {
         if (!isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
@@ -688,7 +1441,9 @@ async function proxyLive(request, pathname, requestData) {
       lastFailure = {
         pathname,
         candidate,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        cause: error.cause ? String(error.cause) : undefined,
+        stack: error.stack
       };
     }
   }
@@ -708,12 +1463,12 @@ async function handler(request, response) {
     const pathname = normalizeRequestPath(request.url);
     let result = rateLimitResult(request);
     if (result) {
-      auditResult(request, pathname, result);
+      await auditResult(request, pathname, result);
       response.status(result.status).json(result.body);
       return;
     }
     const requestData = await readRequest(request);
-    result = dispatchLocalDatabaseAction(request, pathname, requestData);
+    result = await dispatchLocalDatabaseAction(request, pathname, requestData);
 
     if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
       result = {
@@ -733,7 +1488,30 @@ async function handler(request, response) {
     }
 
     if (!result) {
+      result = await readDailyMeterRows({
+        pathname,
+        requestPayload: requestData.parsedBody
+      }).catch((error) => {
+        console.error("[consumption-store-read]", error instanceof Error ? error.message : String(error));
+        return null;
+      });
+    }
+
+    if (!result) {
       result = await proxyLive(request, pathname, requestData);
+      if (result?.body?._proxy?.source === "live") {
+        await writeDailyMeterRows({
+          pathname,
+          requestPayload: requestData.parsedBody,
+          responsePayload: result.body
+        }).catch((error) => {
+          console.error("[consumption-store-write]", error instanceof Error ? error.message : String(error));
+        });
+      }
+    }
+
+    if (!result) {
+      result = await cachedReadResponse(request, pathname, requestData);
     }
 
     if (!result && !isWriteRequest(pathname, request.method)) {
@@ -761,11 +1539,19 @@ async function handler(request, response) {
       };
     }
 
-    cacheResponseIfNeeded(request, pathname, requestData, result);
+    await cacheResponseIfNeeded(request, pathname, requestData, result);
+    await writeSnapshot({
+      pathname,
+      requestKey: buildCacheKey(request, requestData),
+      requestPayload: requestData.parsedBody,
+      responsePayload: result.body
+    }).catch((error) => {
+      console.error("[snapshot-write]", error instanceof Error ? error.message : String(error));
+    });
     if (isGuardedWriteRequest(pathname, request.method, requestData) && !pathname.startsWith("/api/local/")) {
-      recordWriteArtifacts(pathname, requestData, result.status);
+      await recordWriteArtifacts(pathname, requestData, result.status);
     }
-    auditResult(request, pathname, result);
+    await auditResult(request, pathname, result);
     response.status(result.status).json(result.body);
   } catch (error) {
     console.error("[reference-facade-crash]", error);
@@ -789,6 +1575,8 @@ module.exports._test = {
   normalizeRequestPath,
   readRequest,
   rateLimitResult,
+  refreshTargets,
+  runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;
     rateLimitBuckets.clear();

@@ -13,16 +13,15 @@
             <div class="profile-panel-role">{{ roleName }}</div>
           </div>
         </div>
-        <button class="profile-close-btn" @click="$emit('close')" aria-label="Close profile">
+        <BaseIconButton class="profile-close-btn" @click="$emit('close')" aria-label="Close profile">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        </BaseIconButton>
       </div>
 
       <!-- Avatar Hero -->
       <div class="profile-hero">
         <div class="profile-avatar-wrap">
           <div class="profile-avatar">{{ initials }}</div>
-          <div class="profile-avatar-ring"></div>
         </div>
         <div class="profile-hero-info">
           <div class="profile-hero-name">{{ userName }}</div>
@@ -57,10 +56,10 @@
 
       <!-- Tab Nav -->
       <div class="profile-tabs">
-        <button v-for="t in tabs" :key="t.id" :class="['profile-tab', { active: activeTab === t.id }]" @click="activeTab = t.id">
+        <BaseButton v-for="t in tabs" :key="t.id" :class="['profile-tab', { active: activeTab === t.id }]" @click="activeTab = t.id">
           <span v-html="t.icon" class="profile-tab-icon"></span>
           {{ t.label }}
-        </button>
+        </BaseButton>
       </div>
 
       <!-- Tab Content -->
@@ -72,35 +71,35 @@
           <div class="profile-form-grid">
             <div class="profile-field">
               <label class="profile-label">Full Name</label>
-              <input class="profile-input" v-model="form.name" placeholder="Enter your name" />
+              <BaseInput class="profile-input" v-model="form.name" placeholder="Enter your name" />
             </div>
             <div class="profile-field">
               <label class="profile-label">Username / ID</label>
-              <input class="profile-input profile-input-readonly" :value="userName" readonly />
+              <BaseInput class="profile-input profile-input-readonly" :value="userName" readonly />
             </div>
             <div class="profile-field">
               <label class="profile-label">Email Address</label>
-              <input class="profile-input" v-model="form.email" type="email" placeholder="Enter email" />
+              <BaseInput class="profile-input" v-model="form.email" type="email" placeholder="Enter email" />
             </div>
             <div class="profile-field">
               <label class="profile-label">Phone Number</label>
-              <input class="profile-input" v-model="form.phone" placeholder="+234 000 000 0000" />
+              <BaseInput class="profile-input" v-model="form.phone" placeholder="+234 000 000 0000" />
             </div>
             <div class="profile-field profile-field-full">
               <label class="profile-label">Organisation</label>
-              <input class="profile-input profile-input-readonly" value="Beverly Energy Systems" readonly />
+              <BaseInput class="profile-input profile-input-readonly" value="Beverly Energy Systems" readonly />
             </div>
             <div class="profile-field profile-field-full">
               <label class="profile-label">Role</label>
-              <input class="profile-input profile-input-readonly" :value="roleName" readonly />
+              <BaseInput class="profile-input profile-input-readonly" :value="roleName" readonly />
             </div>
           </div>
           <div class="profile-form-actions">
-            <button class="profile-btn-outline" @click="resetForm">Discard</button>
-            <button class="profile-btn-primary" @click="saveProfile" :disabled="saving">
+            <BaseButton class="profile-btn-outline" @click="resetForm">Discard</BaseButton>
+            <BaseButton class="profile-btn-primary" variant="primary" :loading="saving" @click="saveProfile">
               <span v-if="saving" class="profile-spinner"></span>
-              {{ saving ? 'Saving…' : 'Save Changes' }}
-            </button>
+              {{ saving ? 'Saving...' : 'Save Changes' }}
+            </BaseButton>
           </div>
           <div class="profile-save-notice" v-if="saveSuccess">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -115,19 +114,19 @@
             <div class="profile-field profile-field-full">
               <label class="profile-label">Current Password</label>
               <div class="profile-pw-wrap">
-                <input class="profile-input" :type="showPw.current ? 'text' : 'password'" v-model="pw.current" placeholder="Enter current password" />
-                <button class="profile-eye" @click="showPw.current = !showPw.current" type="button">
+                <BaseInput class="profile-input" :type="showPw.current ? 'text' : 'password'" v-model="pw.current" placeholder="Enter current password" />
+                <BaseIconButton class="profile-eye" aria-label="Toggle current password visibility" @click="showPw.current = !showPw.current">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
+                </BaseIconButton>
               </div>
             </div>
             <div class="profile-field">
               <label class="profile-label">New Password</label>
               <div class="profile-pw-wrap">
-                <input class="profile-input" :type="showPw.next ? 'text' : 'password'" v-model="pw.next" placeholder="Min 8 characters" />
-                <button class="profile-eye" @click="showPw.next = !showPw.next" type="button">
+                <BaseInput class="profile-input" :type="showPw.next ? 'text' : 'password'" v-model="pw.next" placeholder="Min 8 characters" />
+                <BaseIconButton class="profile-eye" aria-label="Toggle new password visibility" @click="showPw.next = !showPw.next">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
+                </BaseIconButton>
               </div>
               <div class="profile-pw-strength" v-if="pw.next">
                 <div class="pw-bar" v-for="i in 4" :key="i" :class="{ filled: pwStrength >= i, strong: pwStrength === 4, medium: pwStrength === 3 }"></div>
@@ -137,10 +136,10 @@
             <div class="profile-field">
               <label class="profile-label">Confirm Password</label>
               <div class="profile-pw-wrap">
-                <input class="profile-input" :type="showPw.confirm ? 'text' : 'password'" v-model="pw.confirm" placeholder="Repeat new password" />
-                <button class="profile-eye" @click="showPw.confirm = !showPw.confirm" type="button">
+                <BaseInput class="profile-input" :type="showPw.confirm ? 'text' : 'password'" v-model="pw.confirm" placeholder="Repeat new password" />
+                <BaseIconButton class="profile-eye" aria-label="Toggle confirm password visibility" @click="showPw.confirm = !showPw.confirm">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
+                </BaseIconButton>
               </div>
               <div class="profile-pw-match" v-if="pw.confirm" :class="{ ok: pw.next === pw.confirm }">
                 {{ pw.next === pw.confirm ? '✓ Passwords match' : '✗ Passwords do not match' }}
@@ -148,7 +147,11 @@
             </div>
           </div>
           <div class="profile-form-actions">
-            <button class="profile-btn-primary" @click="changePassword" :disabled="!canChangePw">Update Password</button>
+            <BaseButton class="profile-btn-primary" variant="primary" :disabled="!canChangePw" @click="changePassword">Update Password</BaseButton>
+          </div>
+          <div class="profile-save-notice" v-if="passwordMessage">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+            {{ passwordMessage }}
           </div>
 
           <div class="profile-section-title" style="margin-top:32px">Active Sessions</div>
@@ -160,7 +163,7 @@
                 <div class="session-meta">{{ s.location }} · {{ s.time }}</div>
               </div>
               <div class="session-current" v-if="s.current">Current</div>
-              <button class="session-revoke" v-else @click="revokeSession(s.id)">Revoke</button>
+              <BaseButton class="session-revoke" v-else variant="danger" size="sm" @click="revokeSession(s.id)">Revoke</BaseButton>
             </div>
           </div>
         </div>
@@ -175,10 +178,10 @@
                 <span class="profile-pref-desc">Choose your display theme</span>
               </div>
               <div class="profile-theme-picker">
-                <button v-for="t in themes" :key="t.id" :class="['theme-pick-btn', { active: prefs.theme === t.id }]" @click="prefs.theme = t.id; applyTheme(t.id)">
+                <BaseButton v-for="t in themes" :key="t.id" :class="['theme-pick-btn', { active: prefs.theme === t.id }]" @click="prefs.theme = t.id; applyTheme(t.id)">
                   <span class="theme-pick-icon" v-html="t.icon"></span>
                   {{ t.label }}
-                </button>
+                </BaseButton>
               </div>
             </div>
             <div class="profile-pref-row">
@@ -186,9 +189,7 @@
                 <span class="profile-pref-name">Compact Mode</span>
                 <span class="profile-pref-desc">Denser tables and layouts</span>
               </div>
-              <button :class="['profile-toggle', { on: prefs.compact }]" @click="prefs.compact = !prefs.compact">
-                <span class="profile-toggle-knob"></span>
-              </button>
+              <BaseToggle v-model="prefs.compact" :class="['profile-toggle', { on: prefs.compact }]"></BaseToggle>
             </div>
           </div>
 
@@ -199,14 +200,12 @@
                 <span class="profile-pref-name">{{ n.label }}</span>
                 <span class="profile-pref-desc">{{ n.desc }}</span>
               </div>
-              <button :class="['profile-toggle', { on: prefs[n.id] }]" @click="prefs[n.id] = !prefs[n.id]">
-                <span class="profile-toggle-knob"></span>
-              </button>
+              <BaseToggle v-model="prefs[n.id]" :class="['profile-toggle', { on: prefs[n.id] }]"></BaseToggle>
             </div>
           </div>
 
           <div class="profile-form-actions">
-            <button class="profile-btn-primary" @click="savePrefs">Save Preferences</button>
+            <BaseButton class="profile-btn-primary" variant="primary" @click="savePrefs">Save Preferences</BaseButton>
           </div>
         </div>
 
@@ -216,14 +215,22 @@
 </template>
 
 <script>
+import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import BaseToggle from "./base/BaseToggle.vue";
+import { changeUserPassword, loadPreferenceState, loadProfileState, savePreferenceState, updateRemoteProfile } from "../services/profile-store.mjs";
+
 export default {
   name: 'ProfilePage',
+  components: { BaseButton, BaseIconButton, BaseInput, BaseToggle },
   props: {
     userName: { type: String, default: 'ACB(admin)' },
     roleId:   { type: String, default: 'super-admin' }
   },
   data() {
-    const saved = JSON.parse(localStorage.getItem('beverly-profile') || '{}');
+    const saved = loadProfileState(this.userName);
+    const preferences = loadPreferenceState();
     return {
       activeTab: 'profile',
       saving: false,
@@ -231,13 +238,8 @@ export default {
       form: { name: saved.name || this.userName, email: saved.email || '', phone: saved.phone || '' },
       pw: { current: '', next: '', confirm: '' },
       showPw: { current: false, next: false, confirm: false },
-      prefs: {
-        theme:   localStorage.getItem('acob-theme') || 'system',
-        compact: false,
-        emailAlerts: true,
-        tokenAlerts: true,
-        systemAlerts: false,
-      },
+      passwordMessage: "",
+      prefs: preferences,
       sessions: [
         { id: 1, device: 'Chrome on Windows', location: 'Lagos, NG', time: 'Now', current: true,  icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
         { id: 2, device: 'Firefox on macOS', location: 'Abuja, NG',  time: '2h ago',  current: false, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
@@ -249,9 +251,12 @@ export default {
         { id: 'preferences', label: 'Preferences', icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54A.484.484 0 0 0 14 2h-4a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h4c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>' },
       ],
       themes: [
-        { id: 'light',  label: 'Light',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>' },
-        { id: 'dark',   label: 'Dark',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>' },
         { id: 'system', label: 'System', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
+        { id: 'light',  label: 'Light',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/></svg>' },
+        { id: 'dark',   label: 'Dark',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>' },
+        { id: 'executive', label: 'Executive', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-8h6v8"/></svg>' },
+        { id: 'ocean', label: 'Canopy', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"/><path d="M6 19c3-5 7-8 13-8"/></svg>' },
+        { id: 'contrast', label: 'Contrast', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/></svg>' },
       ],
       notifOptions: [
         { id: 'emailAlerts',  label: 'Email Alerts',   desc: 'Receive alerts via email' },
@@ -271,7 +276,7 @@ export default {
     sessionDays() { return 42; },
     permissions() {
       const map = { 'super-admin': 'Full', 'operations-manager': 'Ops', account: 'Read' };
-      return map[this.roleId] || '—';
+      return map[this.roleId] || '-';
     },
     pwStrength() {
       const p = this.pw.next;
@@ -292,31 +297,35 @@ export default {
   },
   methods: {
     resetForm() {
-      const saved = JSON.parse(localStorage.getItem('beverly-profile') || '{}');
+      const saved = loadProfileState(this.userName);
       this.form = { name: saved.name || this.userName, email: saved.email || '', phone: saved.phone || '' };
     },
     async saveProfile() {
       this.saving = true;
-      await new Promise(r => setTimeout(r, 800));
-      localStorage.setItem('beverly-profile', JSON.stringify(this.form));
+      await updateRemoteProfile(this.form);
       this.saving = false;
       this.saveSuccess = true;
       setTimeout(() => { this.saveSuccess = false; }, 3000);
     },
-    changePassword() {
+    async changePassword() {
       if (!this.canChangePw) return;
+      this.passwordMessage = "";
+      await changeUserPassword({
+        currentPassword: this.pw.current,
+        newPassword: this.pw.next
+      });
       this.pw = { current: '', next: '', confirm: '' };
-      alert('Password updated. (Connect to /api/user/changePassword in production.)');
+      this.passwordMessage = "Password updated.";
     },
     revokeSession(id) {
       this.sessions = this.sessions.filter(s => s.id !== id);
     },
     applyTheme(theme) {
-      localStorage.setItem('acob-theme', theme);
+      this.prefs = savePreferenceState({ ...this.prefs, theme });
       this.$emit('theme-change', theme);
     },
     savePrefs() {
-      localStorage.setItem('beverly-prefs', JSON.stringify(this.prefs));
+      this.prefs = savePreferenceState(this.prefs);
     },
   },
 };

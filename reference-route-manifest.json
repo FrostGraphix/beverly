@@ -1140,24 +1140,20 @@
       "/API/EventNotification/Read"
     ],
     "columns": [
-      "id",
-      "customerId",
+      "eventCode",
+      "eventContent",
       "meterId",
-      "status",
+      "currentDate",
       "remark",
       "createDate",
       "updateDate",
-      "stationId",
-      "Actions"
+      "stationId"
     ],
     "actions": [
       "Sort",
       "Search",
       "Reset",
-      "Export",
-      "Close",
-      "Cancel",
-      "Confirm"
+      "Export"
     ],
     "roles": [
       "super-admin",

@@ -6,18 +6,18 @@
         <span v-if="!loading" class="ledger-count">{{ filtered.length }} accounts</span>
       </div>
       <div class="ledger-controls">
-        <button v-if="!loading && filtered.length" class="ledger-export-btn" title="Export CSV" @click="exportCsv">
+        <BaseButton v-if="!loading && filtered.length" class="ledger-export-btn" title="Export CSV" @click="exportCsv">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           CSV
-        </button>
-        <input v-model="search" class="ledger-search" placeholder="Search by name, meter, ID..." type="text" />
-        <select v-model="riskFilter" class="ledger-select">
+        </BaseButton>
+        <BaseInput v-model="search" class="ledger-search" placeholder="Search by name, meter, ID..." type="text" />
+        <BaseSelect v-model="riskFilter" class="ledger-select">
           <option value="">All Risk Tiers</option>
           <option value="CRITICAL">Critical (81-100)</option>
           <option value="HIGH">High (61-80)</option>
           <option value="MEDIUM">Medium (31-60)</option>
           <option value="LOW">Low (0-30)</option>
-        </select>
+        </BaseSelect>
       </div>
     </div>
 
@@ -53,7 +53,7 @@
             <th class="sortable" @click="sort('shortfallGap')">Shortfall (N) <span class="sort-arrow">{{ sortArrow('shortfallGap') }}</span></th>
             <th class="sortable" @click="sort('daysSinceRecharge')">Last Recharge <span class="sort-arrow">{{ sortArrow('daysSinceRecharge') }}</span></th>
             <th class="sortable" @click="sort('riskScore')">Risk <span class="sort-arrow">{{ sortArrow('riskScore') }}</span></th>
-            <th></th>
+            <th class="ledger-action-col">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -63,7 +63,7 @@
             class="ledger-row"
             @click="$emit('select', row)"
           >
-            <td>
+            <td class="ledger-action-col">
               <div class="ledger-customer">
                 <span class="ledger-name">{{ row.customerName }}</span>
                 <span class="ledger-id">{{ row.customerId }}</span>
@@ -90,18 +90,18 @@
               </div>
             </td>
             <td>
-              <button class="drill-btn" title="Inspect customer" @click.stop="$emit('select', row)">
+              <BaseIconButton class="drill-btn" title="Inspect customer" aria-label="Inspect customer" @click.stop="$emit('select', row)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
+              </BaseIconButton>
             </td>
           </tr>
         </tbody>
       </table>
 
       <div class="ledger-pagination">
-        <button class="page-btn" :disabled="page <= 1" @click="page--">‹</button>
+        <BaseButton class="page-btn" size="sm" :disabled="page <= 1" @click="page--">‹</BaseButton>
         <span class="page-info">{{ page }} / {{ totalPages }}</span>
-        <button class="page-btn" :disabled="page >= totalPages" @click="page++">›</button>
+        <BaseButton class="page-btn" size="sm" :disabled="page >= totalPages" @click="page++">›</BaseButton>
         <span class="page-size-label">{{ filtered.length }} total</span>
       </div>
     </div>
@@ -109,8 +109,15 @@
 </template>
 
 <script>
+import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../../services/import-export.mjs";
+import BaseButton from "../base/BaseButton.vue";
+import BaseIconButton from "../base/BaseIconButton.vue";
+import BaseInput from "../base/BaseInput.vue";
+import BaseSelect from "../base/BaseSelect.vue";
+
 export default {
   name: "SuspectLedger",
+  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect },
   props: {
     ledger: { type: Array, default: () => [] },
     loading: { type: Boolean, default: false },
@@ -180,76 +187,65 @@ export default {
       return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: decimals });
     },
     exportCsv() {
-      const headers = [
-        "Customer",
-        "ID",
-        "Meter",
-        "Station",
-        "Tariff",
-        "Consumed (kWh)",
-        "Paid (N)",
-        "Balance (N)",
-        "Shortfall (N)",
-        "Credit (N)",
-        "Days Since Recharge",
-        "Risk Score",
-        "Tier",
-        "Tokens Used",
-        "Tokens Unused",
-      ];
       const rows = this.filtered.map((row) => {
         const used = (row.recharges || []).filter((token) => token.vend).length;
         const unused = (row.recharges || []).length - used;
-        return [
-          row.customerName,
-          row.customerId,
-          row.meterId,
-          row.stationId,
-          row.tariffId,
-          row.totalConsumed,
-          row.totalPaid,
-          row.netGap,
-          row.shortfallGap,
-          row.creditGap,
-          row.daysSinceRecharge ?? "",
-          row.riskScore,
-          row.riskTier?.label || "",
-          used,
-          unused,
-        ];
+        return { ...row, tokensUsed: used, tokensUnused: unused, riskTierLabel: row.riskTier?.label || "" };
       });
-      const csv = [headers, ...rows]
-        .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-        .join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `suspect_ledger_${new Date().toISOString().substring(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      const columns = [
+        { label: "Customer", key: "customerName" },
+        { label: "Customer Id", key: "customerId" },
+        { label: "Meter Id", key: "meterId" },
+        { label: "Station", key: "stationId" },
+        { label: "Tariff", key: "tariffId" },
+        { label: "Consumed (kWh)", key: "totalConsumed" },
+        { label: "Paid (N)", key: "totalPaid" },
+        { label: "Balance (N)", key: "netGap" },
+        { label: "Shortfall (N)", key: "shortfallGap" },
+        { label: "Credit (N)", key: "creditGap" },
+        { label: "Days Since Recharge", key: "daysSinceRecharge" },
+        { label: "Risk Score", key: "riskScore" },
+        { label: "Tier", key: "riskTierLabel" },
+        { label: "Tokens Used", key: "tokensUsed" },
+        { label: "Tokens Unused", key: "tokensUnused" }
+      ];
+      const csv = exportReportCsvText(this.title, columns, rows, [
+        ["Risk Filter", this.riskFilter || "All"],
+        ["Search", this.search || ""]
+      ]);
+      const excel = exportReportExcelXml(this.title, columns, rows, [
+        ["Risk Filter", this.riskFilter || "All"],
+        ["Search", this.search || ""]
+      ]);
+      const baseName = `Beverly_suspect_ledger_${new Date().toISOString().substring(0, 10)}`;
+      downloadTextFile(`${baseName}.csv`, csv, "text/csv;charset=utf-8");
+      downloadTextFile(`${baseName}.xls`, excel, "application/vnd.ms-excel");
     },
   },
 };
 </script>
 
 <style scoped>
-.ledger-card { background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; }
-.ledger-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px; }
+.ledger-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
+.ledger-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px; background: linear-gradient(90deg, rgba(236,253,245,.86), rgba(255,255,255,.96)); }
 .ledger-title { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-strong); }
 .ledger-count { font-size: 11px; background: var(--primary-light); color: var(--primary); border-radius: 20px; padding: 2px 8px; font-weight: 600; }
 .ledger-controls { display: flex; gap: 8px; align-items: center; }
-.ledger-export-btn { height: 30px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-main); font-size: 11px; font-family: var(--font-family); font-weight: 600; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s; }
+.ledger-export-btn { height: 34px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-card); font-size: 11px; font-family: var(--font-family); font-weight: 700; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s; }
 .ledger-export-btn svg { width: 14px; height: 14px; }
 .ledger-export-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
-.ledger-search { height: 30px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-main); color: var(--text-main); width: 200px; }
-.ledger-select { height: 30px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-main); color: var(--text-main); cursor: pointer; }
+.ledger-search { height: 34px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); width: 220px; outline: 0; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.ledger-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.ledger-select { height: 34px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); cursor: pointer; outline: 0; }
 .ledger-wrap { overflow-x: auto; }
-.ledger-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ledger-table th { padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); white-space: nowrap; background: var(--bg-main); }
-.ledger-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
-.ledger-row { cursor: pointer; transition: background 0.12s; }
-.ledger-row:hover { background: var(--primary-light); }
+.ledger-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ledger-table th { height: 42px; padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border-mid); white-space: nowrap; background: linear-gradient(180deg, rgba(240,253,244,.95), rgba(255,255,255,.95)); text-transform: uppercase; letter-spacing: 0; }
+.ledger-table td { padding: 11px 12px; border-bottom: 1px solid rgba(209,250,229,.72); color: var(--text-main); vertical-align: middle; }
+.ledger-action-col { position: sticky; right: 0; z-index: 5; width: 82px; min-width: 82px; text-align: center !important; background: var(--bg-card); border-left: 1px solid var(--border-color); box-shadow: -12px 0 22px rgba(15,23,42,.1); }
+.ledger-table th.ledger-action-col { z-index: 8; color: var(--text-strong); background: linear-gradient(180deg, rgba(240,253,244,.95), rgba(255,255,255,.95)); }
+.ledger-row { cursor: pointer; transition: background var(--transition-fast), box-shadow var(--transition-fast); }
+.ledger-row:hover { background: rgba(236,253,245,.68); box-shadow: inset 3px 0 0 var(--primary); }
+.ledger-row:hover .ledger-action-col { background: var(--bg-card); }
 .sortable { cursor: pointer; user-select: none; }
 .sortable:hover { color: var(--primary); }
 .sort-arrow { font-size: 10px; color: var(--primary); }
@@ -269,11 +265,11 @@ export default {
 .risk-high { background: #f4516c; color: #f4516c; }
 .risk-critical { background: #aa00ff; color: #aa00ff; }
 .risk-badge.risk-low, .risk-badge.risk-medium, .risk-badge.risk-high, .risk-badge.risk-critical { background: none; }
-.drill-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
-.drill-btn:hover { border-color: var(--primary); color: var(--primary); }
+.drill-btn { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-strong); transition: all 0.15s; box-shadow: var(--shadow-xs); }
+.drill-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
 .drill-btn svg { width: 14px; height: 14px; }
-.ledger-pagination { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted); }
-.page-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); width: 26px; height: 26px; cursor: pointer; font-size: 14px; color: var(--text-main); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+.ledger-pagination { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted); background: var(--bg-card); }
+.page-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: var(--text-main); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
 .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
 .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .page-info { font-weight: 600; color: var(--text-main); }

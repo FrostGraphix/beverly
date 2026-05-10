@@ -1,0 +1,228 @@
+(node:34356) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[consumption-store-read] fetch failed
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[consumption-store-read] fetch failed
+[consumption-store-read] fetch failed
+[consumption-store-read] fetch failed
+[consumption-store-read] fetch failed
+[consumption-store-read] fetch failed
+[consumption-store-read] fetch failed
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}

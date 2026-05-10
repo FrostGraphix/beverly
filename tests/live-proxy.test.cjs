@@ -322,13 +322,15 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "false",
       LIVE_API_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
       LIVE_API_BEARER_TOKEN: "env-token",
-      ALLOW_LIVE_WRITES: "false"
+      ALLOW_LIVE_WRITES: "false",
+      DEMO_AUTH_ENABLED: "true",
+      DEMO_AUTH_PASSWORD: "test-demo-password"
     }, async () => {
       const localLogin = await request(proxyPort, "POST", "/api/user/login", {
         headers: {
           "Content-Type": "application/json"
         },
-        body: Buffer.from(JSON.stringify({ userId: "admin", password: "ACOB_ADMIN" }))
+        body: Buffer.from(JSON.stringify({ userId: "admin", password: "test-demo-password" }))
       });
       assert.strictEqual(localLogin.status, 200);
       assert.strictEqual(localLogin.body.data.userId, "admin");

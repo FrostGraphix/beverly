@@ -38,48 +38,71 @@
         </template>
       </nav>
       <div class="sidebar-footer">
-        <button class="sidebar-signout" @click="handleSignOut">
+        <BaseButton class="sidebar-signout" variant="ghost" @click="handleSignOut">
           <span class="sidebar-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </span>
           <span class="sidebar-label">Sign Out</span>
-        </button>
+        </BaseButton>
       </div>
     </aside>
     <section class="main-container">
       <header class="fixed-header">
         <div class="navbar" :aria-label="`${route.title} ${currentUserName}`">
-          <button class="hamburger-container" type="button" aria-label="Toggle sidebar" @click="toggleSidebar">
+          <BaseIconButton class="hamburger-container" aria-label="Toggle sidebar" @click="toggleSidebar">
             <span class="hamburger-lines">
               <span></span>
               <span></span>
               <span></span>
             </span>
-          </button>
+          </BaseIconButton>
           <div class="breadcrumb">{{ breadcrumb }}</div>
           <div class="right-menu">
-            <button class="topbar-tool" @click="searchOpen = true" :aria-label="'Global Search'">
+            <BaseIconButton class="topbar-tool" @click="searchOpen = true" :aria-label="'Global Search'">
               <svg viewBox="0 0 128 128" aria-hidden="true"><path d="M55 0C24.624 0 0 24.624 0 55s24.624 55 55 55c13.025 0 24.994-4.532 34.408-12.112L120.52 128 128 120.52 97.888 89.408C105.468 79.994 110 68.025 110 55 110 24.624 85.376 0 55 0zm0 10c24.853 0 45 20.147 45 45s-20.147 45-45 45-45-20.147-45-45 20.147-45 45-45z"/></svg>
-            </button>
-            <button class="topbar-tool" @click="toggleFullscreen" :aria-label="'Toggle Fullscreen'">
+            </BaseIconButton>
+            <BaseIconButton class="topbar-tool" @click="toggleFullscreen" :aria-label="'Toggle Fullscreen'">
               <svg viewBox="0 0 128 128" aria-hidden="true"><path d="M49.217 41.329 49.08 6.09C49.02 3.374 46.778 1.744 44.058 1.684h-3.65c-2.712-.06-4.866 2.303-4.806 5.016l.152 19.164-24.151-23.79a6.698 6.698 0 0 0-9.499 0 6.76 6.76 0 0 0 0 9.526l23.93 23.713-18.345.074c-2.712-.069-5.228 1.813-5.64 5.02v3.462c.069 2.721 2.31 4.97 5.022 5.03l35.028-.207h2.457a4.626 4.626 0 0 0 3.436-1.38c.88-.874 1.205-2.096 1.169-3.462l-.262-2.465zm52.523 51.212 18.32-.073c2.713.06 5.224-1.609 5.64-4.815v-3.462c-.068-2.722-2.317-4.97-5.021-5.04l-34.58.21h-2.451a4.64 4.64 0 0 0-3.445 1.381c-.885.868-1.201 2.094-1.174 3.46l.27 2.46.141 34.697c.069 2.713 2.31 4.338 5.022 4.397l3.45.006c2.705.062 4.867-2.31 4.8-5.026l-.153-18.752 24.151 23.946a6.69 6.69 0 0 0 9.494 0 6.747 6.747 0 0 0 0-9.523L101.74 92.54z"/></svg>
-            </button>
+            </BaseIconButton>
             <div class="theme-dropdown-container">
-              <button class="topbar-tool theme-btn" @click="themeDropdownOpen = !themeDropdownOpen" :aria-label="'Toggle Theme'" v-html="themeIcon"></button>
+              <BaseIconButton class="topbar-tool theme-btn" @click="themeDropdownOpen = !themeDropdownOpen" :aria-label="'Toggle Theme'" v-html="themeIcon"></BaseIconButton>
               <div v-if="themeDropdownOpen" class="theme-backdrop" @click="themeDropdownOpen = false"></div>
               <transition name="dropdown">
-                <div v-show="themeDropdownOpen" class="theme-dropdown">
-                  <div class="theme-item" :class="{active: currentTheme === 'light'}" @click="setTheme('light')">Light</div>
-                  <div class="theme-item" :class="{active: currentTheme === 'dark'}" @click="setTheme('dark')">Dark</div>
-                  <div class="theme-item" :class="{active: currentTheme === 'system'}" @click="setTheme('system')">System</div>
+                <div v-show="themeDropdownOpen" class="theme-dropdown theme-command-menu" role="menu" aria-label="Theme menu">
+                  <BaseButton
+                    v-for="theme in themeOptions"
+                    :key="theme.id"
+                    :class="['theme-item', { active: currentTheme === theme.id }]"
+                    variant="ghost"
+                    role="menuitemradio"
+                    :aria-checked="currentTheme === theme.id"
+                    @click="setTheme(theme.id)"
+                  >
+                    <span class="theme-swatch" :style="{ background: theme.swatch }"></span>
+                    <span>
+                      <strong>{{ theme.label }}</strong>
+                      <small>{{ theme.description }}</small>
+                    </span>
+                  </BaseButton>
                 </div>
               </transition>
             </div>
             <div class="theme-dropdown-container">
-              <button class="user-chip" @click="userDropdownOpen = !userDropdownOpen" :aria-label="'User menu'">
+              <BaseIconButton class="topbar-tool automation-tool" @click="openAutomationCenter" :aria-label="'Automation Command Center'">
+                <span v-if="automationBadgeCount > 0" class="automation-badge">{{ automationBadgeLabel }}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="5" rx="2"></rect>
+                  <rect x="3" y="15" width="18" height="5" rx="2"></rect>
+                  <circle cx="8" cy="6.5" r="1"></circle>
+                  <circle cx="16" cy="17.5" r="1"></circle>
+                </svg>
+              </BaseIconButton>
+            </div>
+            <div class="theme-dropdown-container">
+              <BaseButton class="user-chip" variant="ghost" @click="userDropdownOpen = !userDropdownOpen" :aria-label="'User menu'">
                 <span class="user-avatar">{{ userInitials }}</span>
                 <span>{{ currentUserName }}</span>
-              </button>
+              </BaseButton>
               <div v-if="userDropdownOpen" class="theme-backdrop" @click="userDropdownOpen = false"></div>
               <transition name="dropdown">
                 <div v-show="userDropdownOpen" class="theme-dropdown user-dropdown">
@@ -101,6 +124,7 @@
         <main :class="['content-page', route.hash === '#/dashboard' ? 'dashboard-editor-container' : '']">
           <DashboardPage v-if="route.hash === '#/dashboard'" />
           <DailyDataMeterPage v-else-if="route.hash === '#/prepay-report/daily-data-meter'" :route="route" />
+          <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
           <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" />
           <TablePage v-else :route="route" />
@@ -154,13 +178,16 @@
 <script>
 import DashboardPage from "./components/DashboardPage.vue";
 import LoginPage from "./components/LoginPage.vue";
+import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
 import SiteConsumptionPage from "./components/SiteConsumptionPage.vue";
 import TablePage from "./components/TablePage.vue";
 import ProfilePage from "./components/ProfilePage.vue";
 import ToastNotification from "./components/ToastNotification.vue";
-import { currentUserInfo, getCookie, setCookie } from "./services/api";
+import BaseButton from "./components/base/BaseButton.vue";
+import BaseIconButton from "./components/base/BaseIconButton.vue";
+import { currentUserInfo, getApi, getCookie, setCookie } from "./services/api";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
 const groupIcons = {
@@ -173,7 +200,8 @@ const groupIcons = {
   Management: '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M115.625 127.937H.063V12.375h57.781v12.374H12.438v90.813h90.813V70.156h12.374zM127.893 37.982h-12.375V12.375H88.706V0h39.187z"/></svg>',
   Administration: '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M64 0C46.327 0 32 14.327 32 32s14.327 32 32 32 32-14.327 32-32S81.673 0 64 0zM9.6 128C4.298 128 0 123.702 0 118.4c0-28.277 22.923-51.2 51.2-51.2h25.6C105.077 67.2 128 90.123 128 118.4c0 5.302-4.298 9.6-9.6 9.6H9.6z"/></svg>',
   Protocol: '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M0 16h128v16H0zm0 40h128v16H0zm0 40h128v16H0zM16 0h16v128H16zm80 0h16v128H96z"/></svg>',
-  "Remote Support": '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M64 0C28.654 0 0 28.654 0 64s28.654 64 64 64 64-28.654 64-64S99.346 0 64 0zm0 112C36.394 112 16 91.606 16 64S36.394 16 64 16s48 20.394 48 48-20.394 48-48 48zm-8-72h16v16H56zm0 32h16v24H56z"/></svg>'
+  "Remote Support": '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M64 0C28.654 0 0 28.654 0 64s28.654 64 64 64 64-28.654 64-64S99.346 0 64 0zm0 112C36.394 112 16 91.606 16 64S36.394 16 64 16s48 20.394 48 48-20.394 48-48 48zm-8-72h16v16H56zm0 32h16v24H56z"/></svg>',
+  System: '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M10 20h108v28H10zm0 60h108v28H10zm18-42h18v-8H28zm54 60h18v-8H82z"/></svg>'
 };
 
 const topbarIcons = {
@@ -184,11 +212,11 @@ const topbarIcons = {
 
 export default {
   name: "App",
-  components: { ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, LoginPage, ProfilePage, SiteConsumptionPage, TablePage, ToastNotification },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, LoginPage, ProfilePage, SiteConsumptionPage, TablePage, ToastNotification },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
-      sidebarOpen: true,
+      sidebarOpen: window.innerWidth > 1024,
       collapsed: false,
       width: window.innerWidth,
       currentRoleId: getCookie("roleId") || "super-admin",
@@ -200,7 +228,9 @@ export default {
       searchOpen: false,
       searchQuery: '',
       profileOpen: false,
-      mediaQuery: null
+      mediaQuery: null,
+      automationBadgeCount: 0,
+      automationPollTimer: null
     };
   },
   computed: {
@@ -217,8 +247,8 @@ export default {
       return this.route.group === "Dashboard" ? "Dashboard" : `${this.route.group} / ${this.route.title}`;
     },
     deviceClass() {
-      if (this.width <= 550) return "mobile hideSidebar";
-      if (this.width <= 1024 || this.collapsed) return "hideSidebar";
+      if (this.width <= 1024) return "mobile";
+      if (this.collapsed) return "hideSidebar";
       return "";
     },
     userInitials() {
@@ -237,10 +267,26 @@ export default {
     firstSearchResult() {
       return this.searchResults.length ? this.searchResults[0].routes[0] : null;
     },
+    themeOptions() {
+      return [
+        { id: "system", label: "System", description: "Follow device", swatch: "linear-gradient(135deg, #10b981, #0f172a)" },
+        { id: "light", label: "Light", description: "Clean operations", swatch: "linear-gradient(135deg, #ecfdf5, #ffffff)" },
+        { id: "dark", label: "Dark", description: "Night command", swatch: "linear-gradient(135deg, #020617, #10b981)" },
+        { id: "executive", label: "Executive", description: "Forest command", swatch: "linear-gradient(135deg, #06120b, #22c55e)" },
+        { id: "ocean", label: "Canopy", description: "Fresh green field", swatch: "linear-gradient(135deg, #f0fdf4, #047857)" },
+        { id: "contrast", label: "Contrast", description: "Maximum legibility", swatch: "linear-gradient(135deg, #000000, #facc15)" }
+      ];
+    },
     themeIcon() {
-      if (this.currentTheme === 'light') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
-      if (this.currentTheme === 'dark') return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+      if (this.currentTheme === "light") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>';
+      if (this.currentTheme === "dark") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+      if (this.currentTheme === "executive") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-8h6v8"></path></svg>';
+      if (this.currentTheme === "ocean") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"></path><path d="M6 19c3-5 7-8 13-8"></path></svg>';
+      if (this.currentTheme === "contrast") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2v20"></path></svg>';
       return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
+    },
+    automationBadgeLabel() {
+      return this.automationBadgeCount > 9 ? "9+" : String(this.automationBadgeCount);
     }
   },
   watch: {
@@ -258,27 +304,31 @@ export default {
     this.mediaQuery.addEventListener('change', this.applyTheme);
     this.applyTheme();
     this.loadUser();
+    this.refreshAutomationBadge();
+    this.automationPollTimer = window.setInterval(() => {
+      this.refreshAutomationBadge();
+    }, 60000);
   },
   beforeDestroy() {
     window.removeEventListener("hashchange", this.syncHash);
     window.removeEventListener("resize", this.syncWidth);
     window.removeEventListener("keydown", this.handleGlobalKeydown);
     if (this.mediaQuery) this.mediaQuery.removeEventListener('change', this.applyTheme);
+    if (this.automationPollTimer) window.clearInterval(this.automationPollTimer);
   },
   methods: {
     setTheme(theme) {
-      this.currentTheme = theme;
-      localStorage.setItem('acob-theme', theme);
+      const nextTheme = this.themeOptions.some((option) => option.id === theme) ? theme : "system";
+      this.currentTheme = nextTheme;
+      localStorage.setItem('acob-theme', nextTheme);
       this.themeDropdownOpen = false;
       this.applyTheme();
     },
     applyTheme() {
-      const isDark = this.currentTheme === 'dark' || (this.currentTheme === 'system' && this.mediaQuery && this.mediaQuery.matches);
-      if (isDark) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
+      const systemTheme = this.mediaQuery && this.mediaQuery.matches ? "dark" : "light";
+      const resolvedTheme = this.currentTheme === "system" ? systemTheme : this.currentTheme;
+      document.documentElement.setAttribute("data-theme", resolvedTheme);
+      document.documentElement.setAttribute("data-theme-choice", this.currentTheme);
     },
     nextRoute(hash) {
       return findRoute(hash, this.currentRoleId);
@@ -293,6 +343,18 @@ export default {
       this.currentRoleId = response.data?.roleId || this.currentRoleId;
       this.currentUserName = response.data?.name || this.currentUserName;
       this.syncHash();
+      this.refreshAutomationBadge();
+    },
+    async refreshAutomationBadge() {
+      if (this.isLogin) return;
+      try {
+        const response = await getApi("/api/system/automation-control");
+        const incidents = Array.isArray(response.data?.incidents) ? response.data.incidents : [];
+        const smokeIncidents = incidents.filter((entry) => entry.kind === "smoke-failure" && entry.severity === "error");
+        this.automationBadgeCount = smokeIncidents.length;
+      } catch {
+        this.automationBadgeCount = 0;
+      }
     },
     syncHash() {
       const nextHash = window.location.hash || "#/login?redirect=%2Fdashboard";
@@ -316,7 +378,7 @@ export default {
       this.syncHash();
     },
     toggleSidebar() {
-      if (this.width <= 550) this.sidebarOpen = !this.sidebarOpen;
+      if (this.width <= 1024) this.sidebarOpen = !this.sidebarOpen;
       else this.collapsed = !this.collapsed;
     },
     toggleGroup(groupName) {
@@ -341,6 +403,12 @@ export default {
     openProfile() {
       this.userDropdownOpen = false;
       this.profileOpen = true;
+    },
+    openAutomationCenter() {
+      window.location.hash = "#/system/automation-command";
+      this.themeDropdownOpen = false;
+      this.userDropdownOpen = false;
+      this.searchOpen = false;
     },
     handleGlobalKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.searchOpen = !this.searchOpen; }

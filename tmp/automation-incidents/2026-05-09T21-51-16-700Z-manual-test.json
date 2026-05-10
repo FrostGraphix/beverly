@@ -1,0 +1,12 @@
+{
+  "id": "incident-1778363476700",
+  "kind": "manual-test",
+  "severity": "info",
+  "title": "Manual test alert",
+  "message": "Automation Command Center test dispatch",
+  "source": "automation-command-page",
+  "createdAt": "2026-05-09T21:51:16.700Z",
+  "details": {},
+  "alerts": [],
+  "remediation": []
+}

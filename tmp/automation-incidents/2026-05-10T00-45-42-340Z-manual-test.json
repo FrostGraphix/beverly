@@ -1,0 +1,12 @@
+{
+  "id": "incident-1778373942340",
+  "kind": "manual-test",
+  "severity": "info",
+  "title": "Manual test",
+  "message": "Automation control test",
+  "source": "automation-control",
+  "createdAt": "2026-05-10T00:45:42.340Z",
+  "details": {},
+  "alerts": [],
+  "remediation": []
+}

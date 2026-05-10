@@ -1,23 +1,25 @@
 <template>
   <nav class="site-sidebar" role="navigation" aria-label="Station filter">
-    <button
+    <BaseButton
       v-for="s in stations"
       :key="s.id"
       :class="['site-pill', activeStation === s.id ? 'site-pill--active' : '']"
-      type="button"
       :title="s.label"
       @click="$emit('change', s.id === activeStation ? null : s.id)"
     >
       <span class="site-pill-dot" :style="{ background: s.color }"></span>
       <span class="site-pill-label">{{ s.label }}</span>
       <span v-if="s.count != null" class="site-pill-count">{{ s.count }}</span>
-    </button>
+    </BaseButton>
   </nav>
 </template>
 
 <script>
+import BaseButton from "../base/BaseButton.vue";
+
 export default {
   name: "SiteSidebar",
+  components: { BaseButton },
   props: {
     activeStation: { type: String, default: null },
     accountCounts: { type: Object, default: () => ({}) }
@@ -27,7 +29,7 @@ export default {
       const all = [
         { id: null,      label: "All Sites", color: "var(--primary)",  count: null },
         { id: "TUNGA",   label: "Tunga",     color: "#40c9c6",         count: this.accountCounts["TUNGA"]   ?? null },
-        { id: "UMAISHA", label: "Umaisha",   color: "#36a3f7",         count: this.accountCounts["UMAISHA"] ?? null },
+        { id: "UMAISHA", label: "Umaisha",   color: "#10b981",         count: this.accountCounts["UMAISHA"] ?? null },
         { id: "OGUFA",   label: "Ogufa",     color: "#f4516c",         count: this.accountCounts["OGUFA"]   ?? null },
         { id: "KYAKALE", label: "Kyakale",   color: "#34bfa3",         count: this.accountCounts["KYAKALE"] ?? null },
         { id: "MUSHA",   label: "Musha",     color: "#ffb822",         count: this.accountCounts["MUSHA"]   ?? null },

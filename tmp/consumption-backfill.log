@@ -1,0 +1,238 @@
+
+> beverly@0.1.0 consumption:backfill
+> node --disable-warning=ExperimentalWarning tools/consumption-backfill.cjs --page-size 500 --timeout-ms 60000 --retries 5
+
+{"stationId":"TUNGA","skipped":true,"reason":"already complete"}
+{"stationId":"UMAISHA","skipped":true,"reason":"already complete"}
+{"stationId":"OGUFA","pageNumber":51,"rows":500,"stored":500,"storedRows":25500,"totalRows":53822,"fetchedThrough":26000,"complete":false}
+{"stationId":"OGUFA","pageNumber":52,"rows":500,"stored":500,"storedRows":26000,"totalRows":53822,"fetchedThrough":26500,"complete":false}
+{"stationId":"OGUFA","pageNumber":53,"rows":500,"stored":500,"storedRows":26500,"totalRows":53823,"fetchedThrough":27000,"complete":false}
+{"stationId":"OGUFA","pageNumber":54,"rows":500,"stored":500,"storedRows":27000,"totalRows":53823,"fetchedThrough":27500,"complete":false}
+{"stationId":"OGUFA","pageNumber":55,"rows":500,"stored":500,"storedRows":27500,"totalRows":53823,"fetchedThrough":28000,"complete":false}
+{"stationId":"OGUFA","pageNumber":56,"rows":500,"stored":500,"storedRows":28000,"totalRows":53823,"fetchedThrough":28500,"complete":false}
+{"stationId":"OGUFA","pageNumber":57,"rows":500,"stored":500,"storedRows":28500,"totalRows":53823,"fetchedThrough":29000,"complete":false}
+{"stationId":"OGUFA","pageNumber":58,"rows":500,"stored":500,"storedRows":29000,"totalRows":53823,"fetchedThrough":29500,"complete":false}
+{"stationId":"OGUFA","pageNumber":59,"rows":500,"stored":500,"storedRows":29500,"totalRows":53823,"fetchedThrough":30000,"complete":false}
+{"stationId":"OGUFA","pageNumber":60,"rows":500,"stored":500,"storedRows":30000,"totalRows":53824,"fetchedThrough":30500,"complete":false}
+{"stationId":"OGUFA","pageNumber":61,"rows":500,"stored":500,"storedRows":30500,"totalRows":53824,"fetchedThrough":31000,"complete":false}
+{"stationId":"OGUFA","pageNumber":62,"rows":500,"stored":500,"storedRows":31000,"totalRows":53824,"fetchedThrough":31500,"complete":false}
+{"stationId":"OGUFA","pageNumber":63,"rows":500,"stored":500,"storedRows":31500,"totalRows":53824,"fetchedThrough":32000,"complete":false}
+{"stationId":"OGUFA","pageNumber":64,"rows":500,"stored":500,"storedRows":32000,"totalRows":53824,"fetchedThrough":32500,"complete":false}
+{"stationId":"OGUFA","pageNumber":65,"rows":500,"stored":500,"storedRows":32500,"totalRows":53824,"fetchedThrough":33000,"complete":false}
+{"stationId":"OGUFA","pageNumber":66,"rows":500,"stored":500,"storedRows":33000,"totalRows":53824,"fetchedThrough":33500,"complete":false}
+{"stationId":"OGUFA","pageNumber":67,"rows":500,"stored":500,"storedRows":33500,"totalRows":53824,"fetchedThrough":34000,"complete":false}
+{"stationId":"OGUFA","pageNumber":68,"rows":500,"stored":500,"storedRows":34000,"totalRows":53824,"fetchedThrough":34500,"complete":false}
+{"stationId":"OGUFA","pageNumber":69,"rows":500,"stored":500,"storedRows":34500,"totalRows":53826,"fetchedThrough":35000,"complete":false}
+{"stationId":"OGUFA","pageNumber":70,"rows":500,"stored":500,"storedRows":35000,"totalRows":53826,"fetchedThrough":35500,"complete":false}
+{"stationId":"OGUFA","pageNumber":71,"rows":500,"stored":500,"storedRows":35500,"totalRows":53826,"fetchedThrough":36000,"complete":false}
+{"stationId":"OGUFA","pageNumber":72,"rows":500,"stored":500,"storedRows":36000,"totalRows":53826,"fetchedThrough":36500,"complete":false}
+{"stationId":"OGUFA","pageNumber":73,"rows":500,"stored":500,"storedRows":36500,"totalRows":53827,"fetchedThrough":37000,"complete":false}
+{"stationId":"OGUFA","pageNumber":74,"rows":500,"stored":500,"storedRows":37000,"totalRows":53827,"fetchedThrough":37500,"complete":false}
+{"stationId":"OGUFA","pageNumber":75,"rows":500,"stored":500,"storedRows":37500,"totalRows":53827,"fetchedThrough":38000,"complete":false}
+{"stationId":"OGUFA","pageNumber":76,"rows":500,"stored":500,"storedRows":38000,"totalRows":53827,"fetchedThrough":38500,"complete":false}
+{"stationId":"OGUFA","pageNumber":77,"rows":500,"stored":500,"storedRows":38500,"totalRows":53827,"fetchedThrough":39000,"complete":false}
+{"stationId":"OGUFA","pageNumber":78,"rows":500,"stored":500,"storedRows":39000,"totalRows":53827,"fetchedThrough":39500,"complete":false}
+{"stationId":"OGUFA","pageNumber":79,"rows":500,"stored":500,"storedRows":39500,"totalRows":53827,"fetchedThrough":40000,"complete":false}
+{"stationId":"OGUFA","pageNumber":80,"rows":500,"stored":500,"storedRows":40000,"totalRows":53830,"fetchedThrough":40500,"complete":false}
+{"stationId":"OGUFA","pageNumber":81,"rows":500,"stored":500,"storedRows":40500,"totalRows":53830,"fetchedThrough":41000,"complete":false}
+{"stationId":"OGUFA","pageNumber":82,"rows":500,"stored":500,"storedRows":41000,"totalRows":53830,"fetchedThrough":41500,"complete":false}
+{"stationId":"OGUFA","pageNumber":83,"rows":500,"stored":500,"storedRows":41500,"totalRows":53830,"fetchedThrough":42000,"complete":false}
+{"stationId":"OGUFA","pageNumber":84,"rows":500,"stored":500,"storedRows":42000,"totalRows":53830,"fetchedThrough":42500,"complete":false}
+{"stationId":"OGUFA","pageNumber":85,"rows":500,"stored":500,"storedRows":42500,"totalRows":53830,"fetchedThrough":43000,"complete":false}
+{"stationId":"OGUFA","pageNumber":86,"rows":500,"stored":500,"storedRows":43000,"totalRows":53830,"fetchedThrough":43500,"complete":false}
+{"stationId":"OGUFA","pageNumber":87,"rows":500,"stored":500,"storedRows":43500,"totalRows":53830,"fetchedThrough":44000,"complete":false}
+{"stationId":"OGUFA","pageNumber":88,"rows":500,"stored":500,"storedRows":44000,"totalRows":53831,"fetchedThrough":44500,"complete":false}
+{"stationId":"OGUFA","pageNumber":89,"rows":500,"stored":500,"storedRows":44500,"totalRows":53831,"fetchedThrough":45000,"complete":false}
+{"stationId":"OGUFA","pageNumber":90,"rows":500,"stored":500,"storedRows":45000,"totalRows":53831,"fetchedThrough":45500,"complete":false}
+{"stationId":"OGUFA","pageNumber":91,"rows":500,"stored":500,"storedRows":45500,"totalRows":53831,"fetchedThrough":46000,"complete":false}
+{"stationId":"OGUFA","pageNumber":92,"rows":500,"stored":500,"storedRows":46000,"totalRows":53832,"fetchedThrough":46500,"complete":false}
+{"stationId":"OGUFA","pageNumber":93,"rows":500,"stored":500,"storedRows":46500,"totalRows":53832,"fetchedThrough":47000,"complete":false}
+{"stationId":"OGUFA","pageNumber":94,"rows":500,"stored":500,"storedRows":47000,"totalRows":53833,"fetchedThrough":47500,"complete":false}
+{"stationId":"OGUFA","pageNumber":95,"rows":500,"stored":500,"storedRows":47500,"totalRows":53834,"fetchedThrough":48000,"complete":false}
+{"stationId":"OGUFA","pageNumber":96,"rows":500,"stored":500,"storedRows":48000,"totalRows":53834,"fetchedThrough":48500,"complete":false}
+{"stationId":"OGUFA","pageNumber":97,"rows":500,"stored":500,"storedRows":48500,"totalRows":53835,"fetchedThrough":49000,"complete":false}
+{"stationId":"OGUFA","pageNumber":98,"rows":500,"stored":500,"storedRows":49000,"totalRows":53835,"fetchedThrough":49500,"complete":false}
+{"stationId":"OGUFA","pageNumber":99,"rows":500,"stored":500,"storedRows":49500,"totalRows":53836,"fetchedThrough":50000,"complete":false}
+{"stationId":"OGUFA","pageNumber":100,"rows":500,"stored":500,"storedRows":50000,"totalRows":53836,"fetchedThrough":50500,"complete":false}
+{"stationId":"OGUFA","pageNumber":101,"rows":500,"stored":500,"storedRows":50500,"totalRows":53837,"fetchedThrough":51000,"complete":false}
+{"stationId":"OGUFA","pageNumber":102,"rows":500,"stored":500,"storedRows":51000,"totalRows":53837,"fetchedThrough":51500,"complete":false}
+{"stationId":"OGUFA","pageNumber":103,"rows":500,"stored":500,"storedRows":51500,"totalRows":53837,"fetchedThrough":52000,"complete":false}
+{"stationId":"OGUFA","pageNumber":104,"rows":500,"stored":500,"storedRows":52000,"totalRows":53837,"fetchedThrough":52500,"complete":false}
+{"stationId":"OGUFA","pageNumber":105,"rows":500,"stored":500,"storedRows":52500,"totalRows":53837,"fetchedThrough":53000,"complete":false}
+{"stationId":"OGUFA","pageNumber":106,"rows":500,"stored":500,"storedRows":53000,"totalRows":53837,"fetchedThrough":53500,"complete":false}
+{"stationId":"OGUFA","pageNumber":107,"rows":500,"stored":500,"storedRows":53500,"totalRows":53838,"fetchedThrough":54000,"complete":true}
+{"stationId":"KYAKALE","pageNumber":1,"rows":500,"stored":500,"storedRows":750,"totalRows":39438,"fetchedThrough":1000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":2,"rows":500,"stored":500,"storedRows":1250,"totalRows":39438,"fetchedThrough":1500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":3,"rows":500,"stored":500,"storedRows":1750,"totalRows":39438,"fetchedThrough":2000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":4,"rows":500,"stored":500,"storedRows":2250,"totalRows":39439,"fetchedThrough":2500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":5,"rows":500,"stored":500,"storedRows":2750,"totalRows":39440,"fetchedThrough":3000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":6,"rows":500,"stored":500,"storedRows":3250,"totalRows":39440,"fetchedThrough":3500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":7,"rows":500,"stored":500,"storedRows":3750,"totalRows":39440,"fetchedThrough":4000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":8,"rows":500,"stored":500,"storedRows":4250,"totalRows":39441,"fetchedThrough":4500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":9,"rows":500,"stored":500,"storedRows":4750,"totalRows":39442,"fetchedThrough":5000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":10,"rows":500,"stored":500,"storedRows":5250,"totalRows":39442,"fetchedThrough":5500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":11,"rows":500,"stored":500,"storedRows":5750,"totalRows":39442,"fetchedThrough":6000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":12,"rows":500,"stored":500,"storedRows":6250,"totalRows":39442,"fetchedThrough":6500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":13,"rows":500,"stored":500,"storedRows":6750,"totalRows":39442,"fetchedThrough":7000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":14,"rows":500,"stored":500,"storedRows":7250,"totalRows":39442,"fetchedThrough":7500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":15,"rows":500,"stored":500,"storedRows":7750,"totalRows":39442,"fetchedThrough":8000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":16,"rows":500,"stored":500,"storedRows":8250,"totalRows":39442,"fetchedThrough":8500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":17,"rows":500,"stored":500,"storedRows":8750,"totalRows":39444,"fetchedThrough":9000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":18,"rows":500,"stored":500,"storedRows":9250,"totalRows":39445,"fetchedThrough":9500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":19,"rows":500,"stored":500,"storedRows":9750,"totalRows":39445,"fetchedThrough":10000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":20,"rows":500,"stored":500,"storedRows":10250,"totalRows":39445,"fetchedThrough":10500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":21,"rows":500,"stored":500,"storedRows":10750,"totalRows":39445,"fetchedThrough":11000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":22,"rows":500,"stored":500,"storedRows":11250,"totalRows":39446,"fetchedThrough":11500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":23,"rows":500,"stored":500,"storedRows":11750,"totalRows":39446,"fetchedThrough":12000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":24,"rows":500,"stored":500,"storedRows":12250,"totalRows":39446,"fetchedThrough":12500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":25,"rows":500,"stored":500,"storedRows":12750,"totalRows":39446,"fetchedThrough":13000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":26,"rows":500,"stored":500,"storedRows":13250,"totalRows":39446,"fetchedThrough":13500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":27,"rows":500,"stored":500,"storedRows":13750,"totalRows":39447,"fetchedThrough":14000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":28,"rows":500,"stored":500,"storedRows":14250,"totalRows":39447,"fetchedThrough":14500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":29,"rows":500,"stored":500,"storedRows":14750,"totalRows":39447,"fetchedThrough":15000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":30,"rows":500,"stored":500,"storedRows":15250,"totalRows":39448,"fetchedThrough":15500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":31,"rows":500,"stored":500,"storedRows":15750,"totalRows":39449,"fetchedThrough":16000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":32,"rows":500,"stored":500,"storedRows":16250,"totalRows":39449,"fetchedThrough":16500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":33,"rows":500,"stored":500,"storedRows":16750,"totalRows":39449,"fetchedThrough":17000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":34,"rows":500,"stored":500,"storedRows":17250,"totalRows":39449,"fetchedThrough":17500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":35,"rows":500,"stored":500,"storedRows":17750,"totalRows":39450,"fetchedThrough":18000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":36,"rows":500,"stored":500,"storedRows":18250,"totalRows":39451,"fetchedThrough":18500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":37,"rows":500,"stored":500,"storedRows":18750,"totalRows":39451,"fetchedThrough":19000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":38,"rows":500,"stored":500,"storedRows":19250,"totalRows":39451,"fetchedThrough":19500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":39,"rows":500,"stored":500,"storedRows":19750,"totalRows":39451,"fetchedThrough":20000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":40,"rows":500,"stored":500,"storedRows":20250,"totalRows":39451,"fetchedThrough":20500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":41,"rows":500,"stored":500,"storedRows":20750,"totalRows":39451,"fetchedThrough":21000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":42,"rows":500,"stored":500,"storedRows":21250,"totalRows":39451,"fetchedThrough":21500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":43,"rows":500,"stored":500,"storedRows":21750,"totalRows":39451,"fetchedThrough":22000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":44,"rows":500,"stored":500,"storedRows":22250,"totalRows":39452,"fetchedThrough":22500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":45,"rows":500,"stored":500,"storedRows":22750,"totalRows":39453,"fetchedThrough":23000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":46,"rows":500,"stored":500,"storedRows":23250,"totalRows":39454,"fetchedThrough":23500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":47,"rows":500,"stored":500,"storedRows":23750,"totalRows":39454,"fetchedThrough":24000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":48,"rows":500,"stored":500,"storedRows":24250,"totalRows":39455,"fetchedThrough":24500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":49,"rows":500,"stored":500,"storedRows":24750,"totalRows":39456,"fetchedThrough":25000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":50,"rows":500,"stored":500,"storedRows":25250,"totalRows":39456,"fetchedThrough":25500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":51,"rows":500,"stored":500,"storedRows":25750,"totalRows":39456,"fetchedThrough":26000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":52,"rows":500,"stored":500,"storedRows":26250,"totalRows":39457,"fetchedThrough":26500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":53,"rows":500,"stored":500,"storedRows":26750,"totalRows":39458,"fetchedThrough":27000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":54,"rows":500,"stored":500,"storedRows":27250,"totalRows":39458,"fetchedThrough":27500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":55,"rows":500,"stored":500,"storedRows":27750,"totalRows":39458,"fetchedThrough":28000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":56,"rows":500,"stored":500,"storedRows":28250,"totalRows":39458,"fetchedThrough":28500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":57,"rows":500,"stored":500,"storedRows":28750,"totalRows":39458,"fetchedThrough":29000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":58,"rows":500,"stored":500,"storedRows":29250,"totalRows":39459,"fetchedThrough":29500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":59,"rows":500,"stored":500,"storedRows":29750,"totalRows":39459,"fetchedThrough":30000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":60,"rows":500,"stored":500,"storedRows":30250,"totalRows":39459,"fetchedThrough":30500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":61,"rows":500,"stored":500,"storedRows":30750,"totalRows":39459,"fetchedThrough":31000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":62,"rows":500,"stored":500,"storedRows":31250,"totalRows":39459,"fetchedThrough":31500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":63,"rows":500,"stored":500,"storedRows":31750,"totalRows":39460,"fetchedThrough":32000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":64,"rows":500,"stored":500,"storedRows":32250,"totalRows":39461,"fetchedThrough":32500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":65,"rows":500,"stored":500,"storedRows":32750,"totalRows":39461,"fetchedThrough":33000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":66,"rows":500,"stored":500,"storedRows":33250,"totalRows":39461,"fetchedThrough":33500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":67,"rows":500,"stored":500,"storedRows":33750,"totalRows":39461,"fetchedThrough":34000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":68,"rows":500,"stored":500,"storedRows":34250,"totalRows":39462,"fetchedThrough":34500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":69,"rows":500,"stored":500,"storedRows":34750,"totalRows":39463,"fetchedThrough":35000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":70,"rows":500,"stored":500,"storedRows":35250,"totalRows":39463,"fetchedThrough":35500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":71,"rows":500,"stored":500,"storedRows":35750,"totalRows":39465,"fetchedThrough":36000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":72,"rows":500,"stored":500,"storedRows":36250,"totalRows":39465,"fetchedThrough":36500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":73,"rows":500,"stored":500,"storedRows":36750,"totalRows":39466,"fetchedThrough":37000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":74,"rows":500,"stored":500,"storedRows":37250,"totalRows":39468,"fetchedThrough":37500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":75,"rows":500,"stored":500,"storedRows":37750,"totalRows":39468,"fetchedThrough":38000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":76,"rows":500,"stored":500,"storedRows":38250,"totalRows":39468,"fetchedThrough":38500,"complete":false}
+{"stationId":"KYAKALE","pageNumber":77,"rows":500,"stored":500,"storedRows":38750,"totalRows":39469,"fetchedThrough":39000,"complete":false}
+{"stationId":"KYAKALE","pageNumber":78,"rows":500,"stored":500,"storedRows":39250,"totalRows":39469,"fetchedThrough":39500,"complete":true}
+{"stationId":"MUSHA","pageNumber":1,"rows":500,"stored":500,"storedRows":750,"totalRows":33594,"fetchedThrough":1000,"complete":false}
+{"stationId":"MUSHA","pageNumber":2,"rows":500,"stored":500,"storedRows":1250,"totalRows":33594,"fetchedThrough":1500,"complete":false}
+{"stationId":"MUSHA","pageNumber":3,"rows":500,"stored":500,"storedRows":1750,"totalRows":33596,"fetchedThrough":2000,"complete":false}
+{"stationId":"MUSHA","pageNumber":4,"rows":500,"stored":500,"storedRows":2250,"totalRows":33597,"fetchedThrough":2500,"complete":false}
+{"stationId":"MUSHA","pageNumber":5,"rows":500,"stored":500,"storedRows":2750,"totalRows":33597,"fetchedThrough":3000,"complete":false}
+{"stationId":"MUSHA","pageNumber":6,"rows":500,"stored":500,"storedRows":3250,"totalRows":33597,"fetchedThrough":3500,"complete":false}
+{"stationId":"MUSHA","pageNumber":7,"rows":500,"stored":500,"storedRows":3750,"totalRows":33598,"fetchedThrough":4000,"complete":false}
+{"stationId":"MUSHA","pageNumber":8,"rows":500,"stored":500,"storedRows":4250,"totalRows":33598,"fetchedThrough":4500,"complete":false}
+{"stationId":"MUSHA","pageNumber":9,"rows":500,"stored":500,"storedRows":4750,"totalRows":33598,"fetchedThrough":5000,"complete":false}
+{"stationId":"MUSHA","pageNumber":10,"rows":500,"stored":500,"storedRows":5250,"totalRows":33598,"fetchedThrough":5500,"complete":false}
+{"stationId":"MUSHA","pageNumber":11,"rows":500,"stored":500,"storedRows":5750,"totalRows":33598,"fetchedThrough":6000,"complete":false}
+{"stationId":"MUSHA","pageNumber":12,"rows":500,"stored":500,"storedRows":6250,"totalRows":33598,"fetchedThrough":6500,"complete":false}
+{"stationId":"MUSHA","pageNumber":13,"rows":500,"stored":500,"storedRows":6750,"totalRows":33598,"fetchedThrough":7000,"complete":false}
+{"stationId":"MUSHA","pageNumber":14,"rows":500,"stored":500,"storedRows":7250,"totalRows":33599,"fetchedThrough":7500,"complete":false}
+{"stationId":"MUSHA","pageNumber":15,"rows":500,"stored":500,"storedRows":7750,"totalRows":33599,"fetchedThrough":8000,"complete":false}
+{"stationId":"MUSHA","pageNumber":16,"rows":500,"stored":500,"storedRows":8250,"totalRows":33599,"fetchedThrough":8500,"complete":false}
+{"stationId":"MUSHA","pageNumber":17,"rows":500,"stored":500,"storedRows":8750,"totalRows":33599,"fetchedThrough":9000,"complete":false}
+{"stationId":"MUSHA","pageNumber":18,"rows":500,"stored":500,"storedRows":9250,"totalRows":33601,"fetchedThrough":9500,"complete":false}
+{"stationId":"MUSHA","pageNumber":19,"rows":500,"stored":500,"storedRows":9750,"totalRows":33601,"fetchedThrough":10000,"complete":false}
+{"stationId":"MUSHA","pageNumber":20,"rows":500,"stored":500,"storedRows":10250,"totalRows":33601,"fetchedThrough":10500,"complete":false}
+{"stationId":"MUSHA","pageNumber":21,"rows":500,"stored":500,"storedRows":10750,"totalRows":33601,"fetchedThrough":11000,"complete":false}
+{"stationId":"MUSHA","pageNumber":22,"rows":500,"stored":500,"storedRows":11250,"totalRows":33602,"fetchedThrough":11500,"complete":false}
+{"stationId":"MUSHA","pageNumber":23,"rows":500,"stored":500,"storedRows":11750,"totalRows":33602,"fetchedThrough":12000,"complete":false}
+{"stationId":"MUSHA","pageNumber":24,"rows":500,"stored":500,"storedRows":12250,"totalRows":33602,"fetchedThrough":12500,"complete":false}
+{"stationId":"MUSHA","pageNumber":25,"rows":500,"stored":500,"storedRows":12750,"totalRows":33602,"fetchedThrough":13000,"complete":false}
+{"stationId":"MUSHA","pageNumber":26,"rows":500,"stored":500,"storedRows":13250,"totalRows":33602,"fetchedThrough":13500,"complete":false}
+{"stationId":"MUSHA","pageNumber":27,"rows":500,"stored":500,"storedRows":13750,"totalRows":33602,"fetchedThrough":14000,"complete":false}
+{"stationId":"MUSHA","pageNumber":28,"rows":500,"stored":500,"storedRows":14250,"totalRows":33602,"fetchedThrough":14500,"complete":false}
+{"stationId":"MUSHA","pageNumber":29,"rows":500,"stored":500,"storedRows":14750,"totalRows":33602,"fetchedThrough":15000,"complete":false}
+{"stationId":"MUSHA","pageNumber":30,"rows":500,"stored":500,"storedRows":15250,"totalRows":33602,"fetchedThrough":15500,"complete":false}
+{"stationId":"MUSHA","pageNumber":31,"rows":500,"stored":500,"storedRows":15750,"totalRows":33602,"fetchedThrough":16000,"complete":false}
+{"stationId":"MUSHA","pageNumber":32,"rows":500,"stored":500,"storedRows":16250,"totalRows":33602,"fetchedThrough":16500,"complete":false}
+{"stationId":"MUSHA","pageNumber":33,"rows":500,"stored":500,"storedRows":16750,"totalRows":33603,"fetchedThrough":17000,"complete":false}
+{"stationId":"MUSHA","pageNumber":34,"rows":500,"stored":500,"storedRows":17250,"totalRows":33603,"fetchedThrough":17500,"complete":false}
+{"stationId":"MUSHA","pageNumber":35,"rows":500,"stored":500,"storedRows":17750,"totalRows":33603,"fetchedThrough":18000,"complete":false}
+{"stationId":"MUSHA","pageNumber":36,"rows":500,"stored":500,"storedRows":18250,"totalRows":33603,"fetchedThrough":18500,"complete":false}
+{"stationId":"MUSHA","pageNumber":37,"rows":500,"stored":500,"storedRows":18750,"totalRows":33603,"fetchedThrough":19000,"complete":false}
+{"stationId":"MUSHA","pageNumber":38,"rows":500,"stored":500,"storedRows":19250,"totalRows":33603,"fetchedThrough":19500,"complete":false}
+{"stationId":"MUSHA","pageNumber":39,"rows":500,"stored":500,"storedRows":19750,"totalRows":33604,"fetchedThrough":20000,"complete":false}
+{"stationId":"MUSHA","pageNumber":40,"rows":500,"stored":500,"storedRows":20250,"totalRows":33605,"fetchedThrough":20500,"complete":false}
+{"stationId":"MUSHA","pageNumber":41,"rows":500,"stored":500,"storedRows":20750,"totalRows":33605,"fetchedThrough":21000,"complete":false}
+{"stationId":"MUSHA","pageNumber":42,"rows":500,"stored":500,"storedRows":21250,"totalRows":33605,"fetchedThrough":21500,"complete":false}
+{"stationId":"MUSHA","pageNumber":43,"rows":500,"stored":500,"storedRows":21750,"totalRows":33605,"fetchedThrough":22000,"complete":false}
+{"stationId":"MUSHA","pageNumber":44,"rows":500,"stored":500,"storedRows":22250,"totalRows":33606,"fetchedThrough":22500,"complete":false}
+{"stationId":"MUSHA","pageNumber":45,"rows":500,"stored":500,"storedRows":22750,"totalRows":33606,"fetchedThrough":23000,"complete":false}
+{"stationId":"MUSHA","pageNumber":46,"rows":500,"stored":500,"storedRows":23250,"totalRows":33606,"fetchedThrough":23500,"complete":false}
+{"stationId":"MUSHA","pageNumber":47,"rows":500,"stored":500,"storedRows":23750,"totalRows":33607,"fetchedThrough":24000,"complete":false}
+{"stationId":"MUSHA","pageNumber":48,"rows":500,"stored":500,"storedRows":24250,"totalRows":33607,"fetchedThrough":24500,"complete":false}
+{"stationId":"MUSHA","pageNumber":49,"rows":500,"stored":500,"storedRows":24750,"totalRows":33607,"fetchedThrough":25000,"complete":false}
+{"stationId":"MUSHA","pageNumber":50,"rows":500,"stored":500,"storedRows":25250,"totalRows":33608,"fetchedThrough":25500,"complete":false}
+{"stationId":"MUSHA","pageNumber":51,"rows":500,"stored":500,"storedRows":25750,"totalRows":33610,"fetchedThrough":26000,"complete":false}
+{"stationId":"MUSHA","pageNumber":52,"rows":500,"stored":500,"storedRows":26250,"totalRows":33610,"fetchedThrough":26500,"complete":false}
+{"stationId":"MUSHA","pageNumber":53,"rows":500,"stored":500,"storedRows":26750,"totalRows":33610,"fetchedThrough":27000,"complete":false}
+{"stationId":"MUSHA","pageNumber":54,"rows":500,"stored":500,"storedRows":27250,"totalRows":33612,"fetchedThrough":27500,"complete":false}
+{"stationId":"MUSHA","pageNumber":55,"rows":500,"stored":500,"storedRows":27750,"totalRows":33612,"fetchedThrough":28000,"complete":false}
+{"stationId":"MUSHA","pageNumber":56,"rows":500,"stored":500,"storedRows":28250,"totalRows":33612,"fetchedThrough":28500,"complete":false}
+{"stationId":"MUSHA","pageNumber":57,"rows":500,"stored":500,"storedRows":28750,"totalRows":33613,"fetchedThrough":29000,"complete":false}
+{"stationId":"MUSHA","pageNumber":58,"rows":500,"stored":500,"storedRows":29250,"totalRows":33613,"fetchedThrough":29500,"complete":false}
+{"stationId":"MUSHA","pageNumber":59,"rows":500,"stored":500,"storedRows":29750,"totalRows":33613,"fetchedThrough":30000,"complete":false}
+{"stationId":"MUSHA","pageNumber":60,"rows":500,"stored":500,"storedRows":30250,"totalRows":33614,"fetchedThrough":30500,"complete":false}
+{"stationId":"MUSHA","pageNumber":61,"rows":500,"stored":500,"storedRows":30750,"totalRows":33614,"fetchedThrough":31000,"complete":false}
+{"stationId":"MUSHA","pageNumber":62,"rows":500,"stored":500,"storedRows":31250,"totalRows":33614,"fetchedThrough":31500,"complete":false}
+{"stationId":"MUSHA","pageNumber":63,"rows":500,"stored":500,"storedRows":31750,"totalRows":33614,"fetchedThrough":32000,"complete":false}
+{"stationId":"MUSHA","pageNumber":64,"rows":500,"stored":500,"storedRows":32250,"totalRows":33614,"fetchedThrough":32500,"complete":false}
+{"stationId":"MUSHA","pageNumber":65,"rows":500,"stored":500,"storedRows":32750,"totalRows":33614,"fetchedThrough":33000,"complete":false}
+{"stationId":"MUSHA","pageNumber":66,"rows":500,"stored":500,"storedRows":33250,"totalRows":33614,"fetchedThrough":33500,"complete":false}
+{"stationId":"MUSHA","pageNumber":67,"rows":500,"stored":500,"storedRows":33750,"totalRows":33614,"fetchedThrough":34000,"complete":true}
+{
+  "status": "backfill run complete",
+  "report": {
+    "enabled": true,
+    "tableReady": true,
+    "totalRows": 261487,
+    "stations": [
+      {
+        "station": "TUNGA",
+        "rows": 61898
+      },
+      {
+        "station": "UMAISHA",
+        "rows": 73857
+      },
+      {
+        "station": "OGUFA",
+        "rows": 53283
+      },
+      {
+        "station": "KYAKALE",
+        "rows": 38969
+      },
+      {
+        "station": "MUSHA",
+        "rows": 33480
+      }
+    ]
+  }
+}

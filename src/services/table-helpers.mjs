@@ -1,5 +1,9 @@
 export const pageSizeOptions = [10, 20, 50, 100];
 
+export function isBatchCheckableRoute(route = {}) {
+  return String(route.hash || "").includes("remote-operation/remote-meter-reading");
+}
+
 export function columnKey(label) {
   const map = {
     "Address": "address",
@@ -166,7 +170,7 @@ export function rowActionButtons(route) {
   if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Edit")) buttons.push("Edit");
   if (route.actions.includes("Delete")) buttons.push("Delete");
-  if (route.actions.includes("Add Task")) buttons.push("Add Task");
+  if (route.actions.includes("Add Task") && Array.isArray(route.columns) && route.columns.includes("Actions")) buttons.push("Add Task");
   if (!buttons.length && route.actions.includes("Close")) buttons.push("Close");
   return buttons;
 }
@@ -207,7 +211,7 @@ export function createFormSeed(route, action, row = {}) {
     seed.stationId = row.stationId || seed.stationId || "";
   }
   if (action === "Add Task" || action === "Add Batch Task") {
-    if (String(route.hash || "").includes("remote-operation/remote-meter-")) {
+    if (String(route.hash || "").includes("remote-operation/remote-meter-") || String(route.hash || "").includes("remote-support/gprs-tasks")) {
       seed.customerId = row.customerId || seed.customerId || row.meterId || seed.meterId || "";
       seed.customerName = row.customerName || seed.customerName || "";
       seed.meterId = row.meterId || seed.meterId || "";

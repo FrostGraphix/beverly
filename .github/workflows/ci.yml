@@ -1,0 +1,48 @@
+name: Production Hardening CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hardening:
+    name: Build and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Contract tests
+        run: npm run test:contracts
+
+      - name: Service tests
+        run: npm run test:services
+
+      - name: Security tests
+        run: npm run test:security
+
+      - name: Hardening audit
+        run: npm run hardening:audit

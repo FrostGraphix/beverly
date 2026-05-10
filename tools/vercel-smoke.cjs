@@ -2,6 +2,12 @@
 
 const targetUrl = String(process.env.TARGET_URL || process.argv[2] || "").replace(/\/+$/, "");
 
+function automationHookUrl() {
+  const explicit = String(process.env.AUTOMATION_HOOK_URL || "").trim();
+  if (explicit) return explicit;
+  return targetUrl ? `${targetUrl}/api/system/automation-hooks/test` : "";
+}
+
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
@@ -73,7 +79,27 @@ async function main() {
   }, null, 2));
 }
 
+async function reportSmokeFailure(error) {
+  const hookUrl = automationHookUrl();
+  if (!hookUrl) return;
+  try {
+    await postJson(hookUrl, {
+      kind: "smoke-failure",
+      severity: "error",
+      title: "Smoke monitor failure",
+      message: error instanceof Error ? error.message : String(error),
+      details: {
+        targetUrl
+      }
+    });
+  } catch (hookError) {
+    console.error("[smoke-failure-hook]", hookError instanceof Error ? hookError.message : String(hookError));
+  }
+}
+
 main().catch((error) => {
-  console.error(error);
-  process.exit(1);
+  reportSmokeFailure(error).finally(() => {
+    console.error(error);
+    process.exit(1);
+  });
 });

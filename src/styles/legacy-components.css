@@ -1,0 +1,10 @@
+/*
+ * Beverly extracted legacy component layer.
+ * This file is imported by reference.css during CSS separation.
+ */
+
+@import "./legacy-auth.css";
+@import "./legacy-dashboard.css";
+@import "./legacy-modals.css";
+@import "./legacy-profile.css";
+@import "./legacy-consumption.css";

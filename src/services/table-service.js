@@ -2,7 +2,7 @@ import { getApi, postApi } from "./api.js";
 import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapper.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
-import { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
+import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
@@ -58,7 +58,7 @@ export function tableDataPath(route) {
   if (route.hash.includes("remote-meter-token-task")) return "/API/RemoteMeterTask/GetTokenTask";
   if (route.hash.includes("long-nonpurchase-situation")) return "/api/PrepayReport/LongNonpurchaseSituation";
   if (route.hash.includes("low-purchase-situation")) return "/api/PrepayReport/LowPurchaseSituation";
-  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/readHourly";
+  if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("remote-support/file-upload")) return "/api/local/importJobs/read";
   if (route.hash.includes("management/gateway")) return "/api/gateway/read";
@@ -136,8 +136,11 @@ export function tableRequest(route, options = {}) {
   if (lowerPath.includes("/gprstmetertask/") || lowerPath.includes("/gprsmetertask/") || lowerPath.includes("/gprsonlinestatus/") || lowerPath.includes("/updatefirmwaretask/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  if (lowerPath.includes("/loadprofile/") || lowerPath.includes("/eventnotification/")) {
+  if (lowerPath.includes("/loadprofile/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  }
+  if (lowerPath.includes("/eventnotification/")) {
+    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), currentDateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   return { path, method: "POST", payload: { pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
 }
@@ -182,9 +185,43 @@ async function fetchAllTableRows(request, route) {
   const firstResponse = await sendTableRequest(request);
   const firstCollection = responseRows(firstResponse, route);
   const rows = firstCollection.rows.slice();
-  const total = firstCollection.total;
+  let total = firstCollection.total;
   const requestedSize = pageSizeForRequest(request);
 
+  // Detect C# backend pagination bug: we requested a large page (e.g. 500)
+  // but the API clamped the response to exactly 20 items and falsely claims total=20.
+  // If we continue using pageSize=500, we skip items (offset=500).
+  const isCappedAt20 = requestedSize > 20 && rows.length === 20;
+
+  if (isCappedAt20) {
+    // Switch to page size 20 and fetch sequentially to avoid skipping offsets
+    const clampedSize = 20;
+    let pageIndex = 1; // We already have page 1 (index 0)
+    
+    while (rows.length < maxTableRows) {
+      // Create a modified request that explicitly asks for pageSize 20
+      const nextReq = withPage({
+        ...request,
+        payload: { ...request.payload, pageSize: clampedSize },
+        params: { ...request.params, pageLimit: clampedSize }
+      }, pageIndex);
+      
+      const nextRes = await sendTableRequest(nextReq);
+      const nextCol = responseRows(nextRes, route);
+      
+      if (!nextCol.rows.length) break;
+      
+      rows.push(...nextCol.rows);
+      total = nextCol.total || total; // The API usually returns the real total on page 2+
+      
+      if (nextCol.rows.length < clampedSize) break;
+      pageIndex++;
+    }
+    
+    return { rows: rows.slice(0, Math.min(total || rows.length, maxTableRows)), total };
+  }
+
+  // Normal logic for well-behaved endpoints
   if (!request.pagination || rows.length >= total || rows.length >= maxTableRows) {
     return { rows, total };
   }
@@ -230,4 +267,4 @@ export function printModelForRoute(route, row) {
 }
 
 
-export { columnKey, createFormSeed, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };
+export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };

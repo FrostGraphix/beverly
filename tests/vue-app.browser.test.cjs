@@ -111,15 +111,23 @@ function accountRows() {
       meterId: "M-1001",
       tariffId: "T-1",
       stationId: "KYAKALE"
+    },
+    {
+      customerId: "C-1002",
+      customerName: "QA Customer 2",
+      meterId: "M-1002",
+      tariffId: "T-1",
+      stationId: "MUSHA"
     }
   ];
 }
 
 function apiBody(url) {
-  if (url.includes("/user/login")) {
+  const normalizedUrl = url.toLowerCase();
+  if (normalizedUrl.includes("/user/login")) {
     return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)" } };
   }
-  if (url.includes("/dashboard/readPanelGroup")) {
+  if (normalizedUrl.includes("/dashboard/readpanelgroup")) {
     return {
       code: 0,
       data: {
@@ -130,25 +138,25 @@ function apiBody(url) {
       }
     };
   }
-  if (url.includes("/dashboard/readLineChart")) {
+  if (normalizedUrl.includes("/dashboard/readlinechart")) {
     return { code: 0, data: { title: "Purchase Money", xData: ["Jan", "Feb"], yData: [10, 20] } };
   }
-  if (url.includes("/tariff/read")) {
+  if (normalizedUrl.includes("/tariff/read")) {
     return { code: 0, data: { data: [{ tariffId: "T-1", id: "T-1", name: "QA Tariff", price: "350" }], total: 1 } };
   }
-  if (url.includes("/token/creditTokenRecord/read")) {
+  if (normalizedUrl.includes("/token/credittokenrecord/read")) {
     return { code: 0, data: { data: creditTokenRows(), total: 1 }, result: { data: creditTokenRows(), total: 1 } };
   }
-  if (url.includes("/DailyDataMeter/read")) {
+  if (normalizedUrl.includes("/dailydatameter/read")) {
     return { code: 0, data: { data: dailyMeterRows(), total: 2 }, result: { data: dailyMeterRows(), total: 2 } };
   }
-  if (url.includes("/account/read")) {
-    return { code: 0, data: { data: accountRows(), total: 1 }, result: { data: accountRows(), total: 1 } };
+  if (normalizedUrl.includes("/account/read")) {
+    return { code: 0, data: { data: accountRows(), total: 2 }, result: { data: accountRows(), total: 2 } };
   }
-  if (url.includes("/token/creditToken/generate")) {
+  if (normalizedUrl.includes("/token/credittoken/generate")) {
     return { code: 0, data: { token: "1234 5678 9012 3456", createDate: "2026-01-01 00:00:00" } };
   }
-  if (url.includes("/account/create")) {
+  if (normalizedUrl.includes("/account/create")) {
     return { code: 403, reason: "Live writes are guarded" };
   }
   return { code: 0, data: { data: [sampleRow()], total: 1 } };
@@ -157,9 +165,9 @@ function apiBody(url) {
 async function installApiMocks(page) {
   await page.route("**/*", async (route) => {
     const url = route.request().url();
-    if (!url.includes("/api/")) return route.continue();
+    if (!url.toLowerCase().includes("/api/")) return route.continue();
     return route.fulfill({
-      status: url.includes("/account/create") ? 403 : 200,
+      status: url.toLowerCase().includes("/account/create") ? 403 : 200,
       contentType: "application/json",
       body: JSON.stringify(apiBody(url))
     });
@@ -197,16 +205,10 @@ async function runFlow(browserName, page) {
   await page.waitForSelector("text=Total Paid(MMK)", { timeout: 10000 });
   await page.locator(".modal-field", { hasText: "Total Paid(MMK)" }).locator("input").fill("350");
   await page.evaluate(() => {
-    document.querySelector(".modal-actions .btn.primary")?.click();
+    document.querySelector(".modal-actions .base-button--primary")?.click();
   });
-  await page.waitForSelector(".enterprise-reference-summary", { timeout: 10000 });
-  await page.waitForFunction(() => document.body.innerText.includes("Customer Id"));
-  await page.waitForFunction(() => document.body.innerText.includes("Customer Name"));
-  await page.waitForFunction(() => document.body.innerText.includes("Meter Id"));
-  await page.waitForFunction(() => document.body.innerText.includes("Pay Debt(MMK)"));
-  await page.waitForFunction(() => document.body.innerText.includes("Monthly Charge(MMK)"));
-  await page.waitForFunction(() => document.body.innerText.includes("Total Unit(kWh)"));
-  await page.waitForFunction(() => document.body.innerText.includes("Total Paid(MMK)"));
+  await page.waitForSelector(".token-review-hero", { timeout: 10000 });
+  await page.waitForSelector(".token-review-amount", { timeout: 10000 });
   await page.waitForSelector("text=Payment Method", { timeout: 10000 });
   await page.waitForSelector("text=Authorization Password", { timeout: 10000 });
   await closeModal(page);
@@ -228,10 +230,24 @@ async function runFlow(browserName, page) {
   await closeModal(page);
 
   await page.evaluate(() => {
+    window.location.hash = "#/remote-operation/remote-meter-reading";
+  });
+  await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
+  await page.click("text=Add Batch Task");
+  await page.waitForSelector(".modal-title", { timeout: 10000 });
+  await page.locator('select[multiple]').first().selectOption(["M-1001", "M-1002"]);
+  await page.locator('select[multiple]').nth(1).selectOption(["Credit balance", "Power"]);
+  await page.click(".modal-actions .base-button--primary");
+  await page.waitForSelector("text=Selected Meter", { timeout: 10000 });
+  await page.waitForSelector("text=Credit balance, Power", { timeout: 10000 });
+  await closeModal(page);
+
+  await page.evaluate(() => {
     window.location.hash = "#/prepay-report/site-consumption";
   });
   await page.waitForSelector("text=Site Performance", { timeout: 10000 });
   await page.waitForSelector("text=Revenue Shortfall", { timeout: 10000 });
+  await page.click("text=Fraud");
   await page.waitForSelector("text=Risk Investigation", { timeout: 10000 });
 
   return browserName;
@@ -239,7 +255,7 @@ async function runFlow(browserName, page) {
 
 async function closeModal(page) {
   await page.evaluate(() => {
-    document.querySelector(".modal-actions .btn")?.click();
+    document.querySelector(".modal-actions .base-button")?.click();
   });
   await page.waitForSelector(".modal-backdrop", { state: "detached", timeout: 10000 });
 }

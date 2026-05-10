@@ -6,6 +6,76 @@ function escapeXml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function safeSheetName(value) {
+  return String(value || "Export")
+    .replace(/[\[\]:*?/\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31) || "Export";
+}
+
+function exportDateStamp(now = new Date()) {
+  return now.toISOString().replace("T", " ").slice(0, 19);
+}
+
+function sanitizeCell(value) {
+  const text = String(value ?? "");
+  if (/^[=+\-@]/.test(text)) return `'${text}`;
+  return text;
+}
+
+function csvCell(value) {
+  return `"${sanitizeCell(value).replace(/"/g, "\"\"")}"`;
+}
+
+function valueForHeader(row, header, columnKey) {
+  const key = columnKey(header);
+  if (row[key] !== undefined && row[key] !== null) return row[key];
+  const exactKey = Object.keys(row).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+  if (exactKey) return row[exactKey];
+  return "";
+}
+
+function exportMetadata(route, rows) {
+  return [
+    ["Report", route?.title || "Export"],
+    ["Route", route?.hash || ""],
+    ["Generated At", exportDateStamp()],
+    ["Rows", rows.length],
+    ["System", "Beverly Energy Operations"],
+    []
+  ];
+}
+
+function numericSummaryRows(columns, rows) {
+  return columns
+    .map((column) => {
+      const key = column.key || column;
+      const label = column.label || column.key || column;
+      const values = rows
+        .map((row) => Number(typeof column.value === "function" ? column.value(row) : row[key]))
+        .filter((value) => Number.isFinite(value));
+      if (!values.length) return null;
+      const total = values.reduce((sum, value) => sum + value, 0);
+      return [label, "Total", total.toLocaleString(undefined, { maximumFractionDigits: 3 })];
+    })
+    .filter(Boolean);
+}
+
+function inferExcelType(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "String";
+  if (/^-?\d+(\.\d+)?$/.test(text) && !/^0\d+/.test(text)) return "Number";
+  return "String";
+}
+
+function excelCell(value, styleId = "") {
+  const safeValue = sanitizeCell(value);
+  const type = inferExcelType(safeValue);
+  const style = styleId ? ` ss:StyleID="${styleId}"` : "";
+  return `<Cell${style}><Data ss:Type="${type}">${escapeXml(safeValue)}</Data></Cell>`;
+}
+
 function readFileText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -22,26 +92,122 @@ export function exportHeaders(route) {
 export function exportCsvText(route, rows, columnKey) {
   const headers = exportHeaders(route);
   const lines = [
-    headers.join(","),
-    ...rows.map((row) => headers.map((header) => `"${String(row[columnKey(header)] ?? "").replace(/"/g, "\"\"")}"`).join(","))
+    ...exportMetadata(route, rows).map((line) => line.map(csvCell).join(",")),
+    headers.map(csvCell).join(","),
+    ...rows.map((row) => headers.map((header) => csvCell(valueForHeader(row, header, columnKey))).join(","))
   ];
-  return lines.join("\n");
+  return `\uFEFF${lines.join("\r\n")}`;
 }
 
 export function exportExcelXml(route, rows, columnKey) {
   const headers = exportHeaders(route);
-  const headerCells = headers.map((header) => `<Cell><Data ss:Type="String">${escapeXml(header)}</Data></Cell>`).join("");
-  const rowCells = rows.map((row) => `<Row>${headers.map((header) => `<Cell><Data ss:Type="String">${escapeXml(row[columnKey(header)] ?? "")}</Data></Cell>`).join("")}</Row>`).join("");
+  const metadataRows = exportMetadata(route, rows)
+    .map((line) => `<Row>${line.map((value, index) => excelCell(value, index === 0 ? "MetaLabel" : "MetaValue")).join("")}</Row>`)
+    .join("");
+  const headerCells = headers.map((header) => excelCell(header, "Header")).join("");
+  const rowCells = rows.map((row, index) => `<Row ss:AutoFitHeight="1">${headers.map((header) => excelCell(valueForHeader(row, header, columnKey), index % 2 ? "DataAlt" : "Data")).join("")}</Row>`).join("");
+  const columnWidths = headers.map(() => `<Column ss:AutoFitWidth="0" ss:Width="132"/>`).join("");
   return `<?xml version="1.0"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:o="urn:schemas-microsoft-com:office:office"
  xmlns:x="urn:schemas-microsoft-com:office:excel"
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="${escapeXml(route.title)}">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#059669" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#047857"/></Borders>
+    </Style>
+    <Style ss:ID="Data">
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D1FAE5"/></Borders>
+    </Style>
+    <Style ss:ID="DataAlt">
+      <Interior ss:Color="#F0FDF4" ss:Pattern="Solid"/>
+      <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D1FAE5"/></Borders>
+    </Style>
+    <Style ss:ID="MetaLabel"><Font ss:Bold="1" ss:Color="#0F172A"/></Style>
+    <Style ss:ID="MetaValue"><Font ss:Color="#334155"/></Style>
+  </Styles>
+  <Worksheet ss:Name="${escapeXml(safeSheetName(route.title))}">
     <Table>
+      ${columnWidths}
+      ${metadataRows}
       <Row>${headerCells}</Row>
       ${rowCells}
     </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>${exportMetadata(route, rows).length + 1}</SplitHorizontal>
+      <TopRowBottomPane>${exportMetadata(route, rows).length + 1}</TopRowBottomPane>
+    </WorksheetOptions>
+  </Worksheet>
+</Workbook>`;
+}
+
+export function exportReportCsvText(title, columns, rows, metadata = []) {
+  const route = { title, hash: metadata.find((item) => item[0] === "Route")?.[1] || "" };
+  const summaryRows = numericSummaryRows(columns, rows);
+  const metaRows = [
+    ...exportMetadata(route, rows),
+    ...metadata.filter((line) => Array.isArray(line) && line.length),
+    ...(summaryRows.length ? [["Summary", ""] , ...summaryRows] : [])
+  ];
+  const header = columns.map((column) => csvCell(column.label || column.key || column)).join(",");
+  const body = rows.map((row) => columns
+    .map((column) => {
+      const key = column.key || column;
+      return csvCell(typeof column.value === "function" ? column.value(row) : row[key]);
+    })
+    .join(","));
+  return `\uFEFF${[...metaRows.map((line) => line.map(csvCell).join(",")), header, ...body].join("\r\n")}`;
+}
+
+export function exportReportExcelXml(title, columns, rows, metadata = []) {
+  const route = { title, hash: metadata.find((item) => item[0] === "Route")?.[1] || "" };
+  const metaRows = [
+    ...exportMetadata(route, rows),
+    ...metadata.filter((line) => Array.isArray(line) && line.length)
+  ];
+  const summaryRows = numericSummaryRows(columns, rows);
+  const headerCells = columns.map((column) => excelCell(column.label || column.key || column, "Header")).join("");
+  const bodyRows = rows.map((row, index) => `<Row ss:AutoFitHeight="1">${columns.map((column) => {
+    const key = column.key || column;
+    return excelCell(typeof column.value === "function" ? column.value(row) : row[key], index % 2 ? "DataAlt" : "Data");
+  }).join("")}</Row>`).join("");
+  const metadataRows = metaRows
+    .map((line) => `<Row>${line.map((value, index) => excelCell(value, index === 0 ? "MetaLabel" : "MetaValue")).join("")}</Row>`)
+    .join("");
+  const summaryXml = summaryRows.length
+    ? `<Row>${excelCell("Summary", "MetaLabel")}</Row>${summaryRows.map((line) => `<Row>${line.map((value, index) => excelCell(value, index === 0 ? "MetaLabel" : "MetaValue")).join("")}</Row>`).join("")}`
+    : "";
+  const columnWidths = columns.map(() => `<Column ss:AutoFitWidth="0" ss:Width="132"/>`).join("");
+  return `<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#059669" ss:Pattern="Solid"/></Style>
+    <Style ss:ID="Data"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D1FAE5"/></Borders></Style>
+    <Style ss:ID="DataAlt"><Interior ss:Color="#F0FDF4" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D1FAE5"/></Borders></Style>
+    <Style ss:ID="MetaLabel"><Font ss:Bold="1" ss:Color="#0F172A"/></Style>
+    <Style ss:ID="MetaValue"><Font ss:Color="#334155"/></Style>
+  </Styles>
+  <Worksheet ss:Name="${escapeXml(safeSheetName(title))}">
+    <Table>
+      ${columnWidths}
+      ${metadataRows}
+      ${summaryXml}
+      <Row>${headerCells}</Row>
+      ${bodyRows}
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>${metaRows.length + summaryRows.length + 2}</SplitHorizontal>
+      <TopRowBottomPane>${metaRows.length + summaryRows.length + 2}</TopRowBottomPane>
+    </WorksheetOptions>
   </Worksheet>
 </Workbook>`;
 }

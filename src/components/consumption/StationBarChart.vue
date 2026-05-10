@@ -7,11 +7,11 @@
       </div>
       <div class="chart-legend">
         <template v-if="mode === 'sales'">
-          <span class="legend-dot" style="background:#36a3f7"></span><span>Units Sold</span>
+          <span class="legend-dot" style="background:#10b981"></span><span>Units Sold</span>
           <span class="legend-dot" style="background:#34bfa3"></span><span>Revenue (N)</span>
         </template>
         <template v-else>
-          <span class="legend-dot" style="background:#36a3f7"></span><span>Consumed kWh</span>
+          <span class="legend-dot" style="background:#10b981"></span><span>Consumed kWh</span>
         </template>
       </div>
     </div>
@@ -27,7 +27,7 @@
 <script>
 import { loadECharts } from "../../services/echarts-loader.mjs";
 
-const BREAKDOWN_COLORS = ["#36a3f7", "#34bfa3", "#ffb822", "#f4516c", "#7c4dff", "#40c9c6", "#ff6b6b"];
+const BREAKDOWN_COLORS = ["#10b981", "#34bfa3", "#ffb822", "#f4516c", "#7c4dff", "#40c9c6", "#ff6b6b"];
 
 export default {
   name: "StationBarChart",
@@ -211,7 +211,7 @@ export default {
             data: soldSeries,
             barMaxWidth: 36,
             itemStyle: {
-              color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#36a3f7" }, { offset: 1, color: "#36a3f720" }] },
+              color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#10b981" }, { offset: 1, color: "rgba(16, 185, 129, 0.13)" }] },
               borderRadius: [4, 4, 0, 0],
             },
           },
@@ -261,7 +261,7 @@ export default {
             data: consumedSeries,
             barMaxWidth: 38,
             itemStyle: {
-              color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#36a3f7" }, { offset: 1, color: "#36a3f720" }] },
+              color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "#10b981" }, { offset: 1, color: "rgba(16, 185, 129, 0.13)" }] },
               borderRadius: [4, 4, 0, 0],
             },
           },

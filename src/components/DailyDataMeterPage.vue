@@ -9,22 +9,22 @@
         </div>
       </div>
       <div class="ddm-controls">
-        <select v-model="stationId" class="ddm-select" @change="onFilterChange">
+        <BaseSelect v-model="stationId" class="ddm-select" @change="onFilterChange">
           <option value="">All Stations</option>
           <option v-for="s in stations" :key="s" :value="s">{{ s }}</option>
-        </select>
+        </BaseSelect>
         <div class="ddm-date-group">
           <label class="ddm-label">From</label>
-          <input type="date" v-model="from" class="ddm-input" @change="onFilterChange" />
+          <BaseInput type="date" v-model="from" class="ddm-input" @change="onFilterChange" />
         </div>
         <div class="ddm-date-group">
           <label class="ddm-label">To</label>
-          <input type="date" v-model="to" class="ddm-input" @change="onFilterChange" />
+          <BaseInput type="date" v-model="to" class="ddm-input" @change="onFilterChange" />
         </div>
-        <button class="ddm-btn" @click="reload" :disabled="loading">
+        <BaseButton class="ddm-btn" variant="primary" :disabled="loading" @click="reload">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: loading }"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
-        </button>
+        </BaseButton>
       </div>
     </div>
 
@@ -53,7 +53,11 @@
 
     <div class="ddm-table-card">
       <div class="ddm-table-header">
-        <input v-model="search" class="ddm-search" placeholder="Search meter, customer, gateway..." type="text" />
+        <div>
+          <strong>Meter interval ledger</strong>
+          <span>{{ displayRows.length.toLocaleString() }} shown</span>
+        </div>
+        <BaseInput v-model="search" class="ddm-search" placeholder="Search meter, customer, gateway..." type="search" aria-label="Search interval meter data" />
         <span class="ddm-page-info">
           Page {{ page }} of {{ totalPages }} ({{ totalRecords.toLocaleString() }} records)
         </span>
@@ -100,9 +104,9 @@
         </table>
       </div>
       <div class="ddm-pagination">
-        <button class="page-btn" :disabled="page <= 1" @click="page--; reload()">‹</button>
+        <BaseButton class="page-btn" size="sm" :disabled="page <= 1" @click="page--; reload()">‹</BaseButton>
         <span class="page-info-num">{{ page }} / {{ totalPages }}</span>
-        <button class="page-btn" :disabled="page >= totalPages" @click="page++; reload()">›</button>
+        <BaseButton class="page-btn" size="sm" :disabled="page >= totalPages" @click="page++; reload()">›</BaseButton>
       </div>
     </div>
   </div>
@@ -110,6 +114,9 @@
 
 <script>
 import { LIVE_STATIONS } from "../services/consumption-service.mjs";
+import BaseButton from "./base/BaseButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import BaseSelect from "./base/BaseSelect.vue";
 
 function sortByDate(rows) {
   return rows.slice().sort((a, b) => String(a.currentDate || "").localeCompare(String(b.currentDate || "")));
@@ -147,6 +154,7 @@ function deriveUsageRows(rows) {
 
 export default {
   name: "DailyDataMeterPage",
+  components: { BaseButton, BaseInput, BaseSelect },
   data() {
     const now = new Date();
     const pad = (value) => String(value).padStart(2, "0");
@@ -306,19 +314,22 @@ export default {
 .ddm-stat-card--alert .ddm-stat-value { color: #f4516c; }
 .ddm-stat-card--warn .ddm-stat-value { color: #e6a817; }
 .ddm-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-.ddm-table-card { background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden; }
-.ddm-table-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px; }
-.ddm-search { height: 30px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-main); color: var(--text-main); width: 240px; }
+.ddm-table-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
+.ddm-table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px; background: linear-gradient(90deg, rgba(236,253,245,.86), rgba(255,255,255,.96)); }
+.ddm-table-header strong { display: block; color: var(--text-strong); font-size: 13px; line-height: 1.2; }
+.ddm-table-header span { color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.ddm-search { height: 36px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); width: min(320px, 100%); outline: 0; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+.ddm-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
 .ddm-page-info { font-size: 12px; color: var(--text-muted); }
 .ddm-table-wrap { overflow-x: auto; }
-.ddm-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ddm-table th { padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border-color); white-space: nowrap; background: var(--bg-main); position: sticky; top: 0; }
-.ddm-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-color); color: var(--text-main); vertical-align: middle; }
+.ddm-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.ddm-table th { height: 42px; padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border-mid); white-space: nowrap; background: linear-gradient(180deg, rgba(240,253,244,.95), rgba(255,255,255,.95)); position: sticky; top: 0; letter-spacing: 0; text-transform: uppercase; box-shadow: inset 0 -1px 0 rgba(5,150,105,.08); }
+.ddm-table td { padding: 11px 12px; border-bottom: 1px solid rgba(209,250,229,.72); color: var(--text-main); vertical-align: middle; font-variant-numeric: tabular-nums; }
 .sortable { cursor: pointer; user-select: none; }
 .sortable:hover { color: var(--primary); }
 .sort-arrow { font-size: 10px; color: var(--primary); }
-.ddm-row { transition: background 0.12s; }
-.ddm-row:hover { background: var(--primary-light); }
+.ddm-row { transition: background var(--transition-fast), box-shadow var(--transition-fast); }
+.ddm-row:hover { background: rgba(236,253,245,.68); box-shadow: inset 3px 0 0 var(--primary); }
 .ddm-row--tamper { background: rgba(244, 81, 108, 0.06); }
 .ddm-row--tamper:hover { background: rgba(244, 81, 108, 0.12); }
 .ddm-row--relay { background: rgba(255, 184, 34, 0.06); }
@@ -332,8 +343,8 @@ export default {
 .status-badge--ok { background: rgba(52,191,163,.12); color: #34bfa3; }
 .status-badge--tamper { background: rgba(244,81,108,.12); color: #f4516c; }
 .status-badge--relay { background: rgba(255,184,34,.12); color: #e6a817; }
-.ddm-pagination { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted); }
-.page-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); width: 26px; height: 26px; cursor: pointer; font-size: 14px; color: var(--text-main); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+.ddm-pagination { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted); background: var(--bg-card); }
+.page-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); min-width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: var(--text-main); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
 .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
 .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .page-info-num { font-weight: 600; color: var(--text-main); }

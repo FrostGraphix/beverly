@@ -1,9 +1,7 @@
 <template>
   <transition name="success-modal">
     <div v-if="visible" class="sm-backdrop" role="dialog" aria-modal="true" @click.self="close">
-      <div class="sm-card">
-
-        <!-- Animated check ring -->
+      <BaseModalShell class="sm-card" body-class="sm-body-shell">
         <div class="sm-ring-wrap">
           <svg class="sm-ring-svg" viewBox="0 0 120 120">
             <circle class="sm-ring-track" cx="60" cy="60" r="52"/>
@@ -21,20 +19,25 @@
           <span>{{ detail }}</span>
         </div>
 
-        <button class="sm-btn" type="button" @click="close">
-          Done
-          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-        </button>
-      </div>
+        <template #footer>
+          <BaseButton class="sm-btn" variant="primary" size="lg" @click="close">
+            Done
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </BaseButton>
+        </template>
+      </BaseModalShell>
     </div>
   </transition>
 </template>
 
 <script>
 import { toastBus } from "../services/toast.js";
+import BaseButton from "./base/BaseButton.vue";
+import BaseModalShell from "./base/BaseModalShell.vue";
 
 export default {
   name: "SuccessModal",
+  components: { BaseButton, BaseModalShell },
   data() {
     return {
       visible: false,
@@ -64,38 +67,36 @@ export default {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
-
 .sm-backdrop {
   position: fixed;
   inset: 0;
   z-index: 8000;
-  background: rgba(4, 11, 24, 0.45);
-  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  font-family: 'Outfit', sans-serif;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(12px);
+  font-family: var(--font-family);
 }
 
 .sm-card {
-  width: 360px;
+  width: 390px;
   max-width: 100%;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(28px);
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 32px 80px -16px rgba(8, 24, 48, 0.28);
-  padding: 40px 32px 32px;
+  border-radius: var(--modal-radius) !important;
+  overflow: hidden !important;
+  clip-path: none !important;
+}
+
+.sm-body-shell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
   gap: 16px;
+  padding: 40px 32px 24px;
+  text-align: center;
 }
 
-/* ── Ring animation ─────────────────────────── */
 .sm-ring-wrap {
   position: relative;
   width: 96px;
@@ -113,19 +114,19 @@ export default {
 
 .sm-ring-track {
   fill: none;
-  stroke: #d1fae5;
+  stroke: var(--border-color);
   stroke-width: 6;
 }
 
 .sm-ring-fill {
   fill: none;
-  stroke: #10b981;
+  stroke: var(--success);
   stroke-width: 6;
   stroke-linecap: round;
   stroke-dasharray: 327;
   stroke-dashoffset: 327;
   animation: ring-draw 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.15s forwards;
-  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));
+  filter: drop-shadow(0 0 8px var(--primary-glow));
 }
 
 @keyframes ring-draw {
@@ -142,7 +143,7 @@ export default {
 
 .sm-check-mark {
   fill: none;
-  stroke: #059669;
+  stroke: var(--primary);
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -155,67 +156,77 @@ export default {
   to { stroke-dashoffset: 0; }
 }
 
-/* ── Text ───────────────────────────────────── */
 .sm-title {
   margin: 0;
   font-size: 22px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-strong);
   letter-spacing: -0.02em;
 }
 
 .sm-body {
   margin: 0;
+  max-width: 260px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 500;
   line-height: 1.55;
-  max-width: 260px;
 }
 
-/* ── Detail box ─────────────────────────────── */
 .sm-detail-box {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 12px;
+  max-width: 100%;
   padding: 10px 16px;
+  border: 1px solid var(--border-mid);
+  border-radius: 12px;
+  background: var(--primary-light);
   font-size: 12px;
   font-weight: 600;
-  color: #065f46;
-  max-width: 100%;
+  color: var(--primary-deep);
   word-break: break-word;
 }
 
-/* ── Button ─────────────────────────────────── */
 .sm-btn {
   width: 100%;
   height: 48px;
-  background: linear-gradient(135deg, #059669, #10b981);
-  color: #fff;
-  border: 0;
-  border-radius: 16px;
-  font-size: 14px;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  cursor: pointer;
-  font-family: 'Outfit', sans-serif;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary), var(--theme-color));
+  color: var(--text-inverse);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-glow-sm);
   transition: all 0.25s ease;
-  box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.45);
 }
-.sm-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(16, 185, 129, 0.55); }
-.sm-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
-/* ── Transitions ────────────────────────────── */
-.success-modal-enter-active { animation: sm-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.success-modal-leave-active { animation: sm-out 0.25s ease forwards; }
+.sm-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
+}
+
+.sm-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.success-modal-enter-active {
+  animation: sm-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.success-modal-leave-active {
+  animation: sm-out 0.25s ease forwards;
+}
 
 @keyframes sm-in {
   from { opacity: 0; transform: scale(0.85); }
-  to   { opacity: 1; transform: scale(1); }
+  to { opacity: 1; transform: scale(1); }
 }
+
 @keyframes sm-out {
   to { opacity: 0; transform: scale(0.9); }
 }

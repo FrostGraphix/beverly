@@ -1,5 +1,13 @@
 import assert from "node:assert";
-import { loadConsumptionData } from "../src/services/consumption-service.mjs";
+import {
+  DAILY_METER_MAX_ROWS,
+  DAILY_METER_PAGE_SIZE,
+  SITE_CONSUMPTION_FIRST_DATA_DATE,
+  fetchDailyMeterData,
+  loadConsumptionData,
+  periodRange,
+  resolveFirstDataDate,
+} from "../src/services/consumption-service.mjs";
 import {
   buildConsumptionStationComparison,
   buildConsumptionTemporalSeries,
@@ -71,6 +79,34 @@ const stationComparison = buildConsumptionStationComparison(new Map([["TUNGA", d
 assert.strictEqual(stationComparison[0].totalKwh, 12);
 assert.strictEqual(stationComparison[0].meterBreakdown[0].meterId, "M-2");
 
+const baseDate = new Date("2026-05-07T12:00:00");
+assert.deepStrictEqual(periodRange("all", baseDate), {
+  from: SITE_CONSUMPTION_FIRST_DATA_DATE,
+  to: "2026-05-07",
+  granularity: "monthly",
+});
+assert.deepStrictEqual(periodRange("day", baseDate), {
+  from: "2026-05-07",
+  to: "2026-05-07",
+  granularity: "daily",
+});
+assert.deepStrictEqual(periodRange("month", baseDate), {
+  from: "2026-05-01",
+  to: "2026-05-07",
+  granularity: "daily",
+});
+assert.deepStrictEqual(periodRange("year", baseDate), {
+  from: "2026-01-01",
+  to: "2026-05-07",
+  granularity: "monthly",
+});
+assert.strictEqual(DAILY_METER_PAGE_SIZE, 1000);
+assert.strictEqual(DAILY_METER_MAX_ROWS, 0);
+assert.strictEqual(
+  resolveFirstDataDate(tokenRows, new Map([["TUNGA", dailyRows]]), SITE_CONSUMPTION_FIRST_DATA_DATE),
+  "2026-05-01"
+);
+
 assert.deepStrictEqual(splitRevenueGap(-1750), {
   netGap: -1750,
   shortfallGap: 0,
@@ -106,6 +142,7 @@ global.fetch = async (path, options = {}) => {
   }
 
   if (path === "/api/DailyDataMeter/read") {
+    assert.strictEqual(payload.compact, true);
     return jsonResponse({
       code: 0,
       result: {
@@ -163,8 +200,6 @@ await loadConsumptionData(
   }
 );
 
-global.fetch = originalFetch;
-
 assert.strictEqual(salesKpi.purchasedKwh, 10);
 assert.strictEqual(salesKpi.totalRevenue, 3500);
 assert.strictEqual(salesKpi.priorPurchasedKwh, 8);
@@ -172,6 +207,14 @@ assert.strictEqual(consumptionKpi.consumedKwh, 12);
 assert.strictEqual(consumptionKpi.avgDailyConsumedKwh, 6);
 assert.strictEqual(chartsPayload.sales.stationBar[0].totalKwh, 10);
 assert.strictEqual(chartsPayload.consumption.stationBar[0].totalKwh, 12);
+assert(
+  calls.every((call) => call.path !== "/api/DailyDataMeter/read" || call.payload.pageSize <= DAILY_METER_PAGE_SIZE),
+  "Daily meter reads must use bounded page sizes"
+);
+assert(
+  calls.some((call) => call.path === "/api/DailyDataMeter/read" && call.payload.FROM === "2026-04-30"),
+  "Daily meter reads must include a baseline day before the selected period"
+);
 assert.deepStrictEqual(progressValues, [1, 2]);
 assert.strictEqual(ledgerPayload.ledger.length, 1);
 assert.strictEqual(ledgerPayload.kpiUpdate.creditBalance, 1750);
@@ -180,6 +223,57 @@ assert.strictEqual(ledgerPayload.kpiUpdate.matchedMeters, 1);
 assert.strictEqual(ledgerPayload.kpiUpdate.unmatchedMeters, 1);
 assert.strictEqual(ledgerPayload.accountCounts.TUNGA, 1);
 assert.strictEqual(calls.filter((call) => call.path === "/api/token/creditTokenRecord/read").length, 2);
+
+calls.length = 0;
+await loadConsumptionData(
+  {
+    stationId: "TUNGA",
+    from: SITE_CONSUMPTION_FIRST_DATA_DATE,
+    to: "2026-05-02",
+    granularity: "monthly",
+  },
+  {
+    onKpiReady() {},
+    onConsumptionReady() {},
+    onChartsReady() {},
+    onLedgerProgress() {},
+    onLedgerReady() {},
+    onError(error) {
+      throw error;
+    },
+  }
+);
+
+assert.strictEqual(
+  calls.filter((call) => call.path === "/api/token/creditTokenRecord/read").length,
+  1,
+  "All Data default should skip wasteful prior-period token fetch"
+);
+
+global.fetch = originalFetch;
+
+global.fetch = async (path, options = {}) => {
+  const payload = JSON.parse(options.body || "{}");
+  calls.push({ path, payload });
+  if (path !== "/api/DailyDataMeter/read") throw new Error(`Unexpected partial path ${path}`);
+  if (payload.pageNumber === 1) {
+    return jsonResponse({
+      code: 0,
+      result: {
+        total: 2000,
+        data: dailyRows.slice(0, 2),
+      },
+    });
+  }
+  const error = new Error("signal is aborted without reason");
+  error.name = "AbortError";
+  throw error;
+};
+
+const partialDailyRows = await fetchDailyMeterData("OGUFA", "2025-11-07", "2026-05-08");
+assert.strictEqual(partialDailyRows.length, 2);
+
+global.fetch = originalFetch;
 
 console.log(JSON.stringify({
   consumedKwh: consumptionKpi.consumedKwh,

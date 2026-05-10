@@ -94,10 +94,10 @@ const derivedAlarmLegend = buildAlarmLegendFromReadings([
 
 assert.deepStrictEqual(derivedAlarmLegend, [
   { label: "No Data Report", color: "#35c2c1", value: 1 },
-  { label: "Active Readings", color: "#5caee8", value: 1 },
+  { label: "Active Readings", color: "#059669", value: 1 },
   { label: "Battery Low", color: "#ffb26a", value: 1 },
   { label: "Relay Open", color: "#f97316", value: 1 },
-  { label: "Terminal Cover Open", color: "#0ea5e9", value: 1 },
+  { label: "Terminal Cover Open", color: "#10b981", value: 1 },
   { label: "Current Reverse", color: "#8b5cf6", value: 1 },
   { label: "Current Unbalance", color: "#db2777", value: 1 },
   { label: "Magnetic Interference", color: "#ef4444", value: 1 }

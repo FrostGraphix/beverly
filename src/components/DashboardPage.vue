@@ -11,11 +11,10 @@
         </div>
       </template>
       <template v-else>
-        <button
+        <BaseButton
           v-for="card in cards"
           :key="card.key"
           :class="['dashboard-stat-card', activeType === card.type ? 'active' : '']"
-          type="button"
           @click="loadTopChart(card.type)"
         >
           <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
@@ -23,7 +22,7 @@
             <span class="dashboard-stat-label">{{ card.label }}</span>
             <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>
           </span>
-        </button>
+        </BaseButton>
       </template>
     </section>
 
@@ -45,7 +44,7 @@
 
     <section class="dashboard-chart-card dashboard-consumption-card" aria-label="Daily consumption chart">
       <div class="dashboard-consumption-top">
-        <button class="dashboard-daily-chip" type="button">Daily</button>
+        <BaseButton class="dashboard-daily-chip" size="sm">Daily</BaseButton>
       </div>
       <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
       <EChartPanel v-else :option="consumptionChartOption" />
@@ -55,6 +54,7 @@
 
 <script>
 import EChartPanel from "./EChartPanel.vue";
+import BaseButton from "./base/BaseButton.vue";
 import { fetchDashboardData } from "../services/dashboard-service.mjs";
 import { createBarOption, createLineOption, createPieOption, dashboardSeries } from "../services/dashboard-chart-options.mjs";
 import { dashboardChartTitles } from "../services/mappers/dashboard-mapper.mjs";
@@ -67,10 +67,10 @@ const iconMarkup = {
 };
 
 const dashboardCards = [
-  { type: 0, key: "totalAccountCount", label: "Account Count", icon: iconMarkup.account, color: "#40c9c6" },
-  { type: 1, key: "totalPurchaseTimes", label: "Purchase Times", icon: iconMarkup.times, color: "#36a3f7" },
-  { type: 2, key: "totalPurchaseUnit", label: "Purchase Unit", icon: iconMarkup.unit, color: "#34bfa3" },
-  { type: 3, key: "totalPurchaseMoney", label: "Purchase Money", icon: iconMarkup.money, color: "#f4516c" }
+  { type: 0, key: "totalAccountCount", label: "Account Count", icon: iconMarkup.account, colorKey: "primary" },
+  { type: 1, key: "totalPurchaseTimes", label: "Purchase Times", icon: iconMarkup.times, colorKey: "success" },
+  { type: 2, key: "totalPurchaseUnit", label: "Purchase Unit", icon: iconMarkup.unit, colorKey: "primaryDeep" },
+  { type: 3, key: "totalPurchaseMoney", label: "Purchase Money", icon: iconMarkup.money, colorKey: "primary" }
 ];
 
 const referenceConsumption = {
@@ -90,7 +90,7 @@ const referenceConsumption = {
 
 export default {
   name: "DashboardPage",
-  components: { EChartPanel },
+  components: { BaseButton, EChartPanel },
   data() {
     return {
       loading: true,
@@ -104,34 +104,52 @@ export default {
       top: { title: dashboardChartTitles[3], labels: [], values: [] },
       consumption: { title: dashboardChartTitles[4], labels: [], values: [] },
       success: { labels: [], values: [] },
-      alarms: []
+      alarms: [],
+      chartTheme: null,
+      themeObserver: null
     };
   },
   computed: {
     cards() {
-      return dashboardCards;
+      const theme = this.chartTheme || {};
+      return dashboardCards.map((card) => ({
+        ...card,
+        color: theme[card.colorKey] || "var(--primary)"
+      }));
     },
     topChartOption() {
-      return createBarOption(dashboardSeries(this.top.labels, this.top.values), this.top.title || dashboardChartTitles[this.activeType]);
+      return createBarOption(dashboardSeries(this.top.labels, this.top.values), this.top.title || dashboardChartTitles[this.activeType], this.chartTheme);
     },
     consumptionChartOption() {
-      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), "Daily Consumption");
+      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), "Daily Consumption", this.chartTheme);
     },
     successChartOption() {
-      return createLineOption(dashboardSeries(this.success.labels, this.success.values), "Hourly Success Rate");
+      return createLineOption(dashboardSeries(this.success.labels, this.success.values), "Hourly Success Rate", this.chartTheme);
     },
     alarmChartOption() {
+      const theme = {
+        ...(this.chartTheme || {}),
+        alarmColors: this.alarms.map((item) => item.color).filter(Boolean)
+      };
       return createPieOption(
         dashboardSeries(
           this.alarms.map((item) => item.label),
           this.alarms.map((item) => item.value)
         ),
-        "Abnormal Alarm"
+        "Abnormal Alarm",
+        theme
       );
     }
   },
   created() {
     this.refreshDashboard();
+  },
+  mounted() {
+    this.syncThemePalette();
+    this.observeThemeChanges();
+  },
+  beforeDestroy() {
+    if (this.themeObserver) this.themeObserver.disconnect();
   },
   methods: {
     async refreshDashboard() {
@@ -161,6 +179,34 @@ export default {
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {
         maximumFractionDigits: 1
+      });
+    },
+    syncThemePalette() {
+      if (typeof window === "undefined" || typeof document === "undefined" || !document.documentElement) return;
+      const styles = window.getComputedStyle(document.documentElement);
+      const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+      this.chartTheme = {
+        primary: resolve("--primary", "#059669"),
+        primaryDeep: resolve("--primary-deep", "#047857"),
+        primaryLight: resolve("--primary-light", "rgba(5, 150, 105, 0.12)"),
+        success: resolve("--success", "#10b981"),
+        warning: resolve("--warning", "#f59e0b"),
+        danger: resolve("--danger", "#ef4444"),
+        textMuted: resolve("--text-muted", "#64748b"),
+        textFaint: resolve("--text-faint", "#94a3b8"),
+        textInverse: resolve("--text-inverse", "#f8fafc"),
+        border: resolve("--border-color", "rgba(148, 163, 184, 0.14)"),
+        surface: resolve("--bg-card", "#ffffff"),
+        tooltip: resolve("--bg-card", "#ffffff"),
+        tooltipText: resolve("--text-strong", "#0f172a")
+      };
+    },
+    observeThemeChanges() {
+      if (typeof MutationObserver === "undefined" || typeof document === "undefined" || !document.documentElement) return;
+      this.themeObserver = new MutationObserver(() => this.syncThemePalette());
+      this.themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme"]
       });
     }
   }

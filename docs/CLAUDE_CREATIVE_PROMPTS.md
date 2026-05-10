@@ -1,5 +1,17 @@
 # Claude Opus Creative Execution Prompts
 
+## Local Reference Note
+
+Use this response style for this workspace when generating or adapting prompts for this file:
+
+- Short sentences only, 3 to 6 words when possible.
+- No filler, preamble, or pleasantries.
+- Tool first when reporting work.
+- Result first when answering.
+- No explanation unless asked.
+- Keep code normal.
+- Keep English compressed.
+
 Use these prompts when you want Claude's highest Opus model to behave like a strong creative coding partner with structured execution, bold taste, and high finishing quality.
 
 Each section includes:
@@ -253,6 +265,15 @@ Success criteria:
 
 Begin now.
 ```
+
+## Codex Response Compression Note
+
+- Use short sentences.
+- Keep lines tight.
+- Result first.
+- Tool first when useful.
+- Explain only if asked.
+- Keep code normal.
 
 ### Expected Workflow
 
@@ -979,3 +1000,14 @@ Output:
 
 Begin now.
 ```
+
+---
+
+## Response Style Rules (Workspace Default)
+
+Apply these rules for all responses in this workspace.
+
+- Short sentences only. 3-6 words max when possible.
+- No filler. No preamble. No pleasantries.
+- Tool first. Result first. No explain unless asked.
+- Code stays normal. English gets compressed.

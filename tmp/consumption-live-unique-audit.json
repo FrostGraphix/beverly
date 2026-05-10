@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-05-10T01:22:43.999Z",
+  "stations": [
+    {
+      "station": "TUNGA",
+      "rawTotal": 62872,
+      "uniqueTotal": 62823,
+      "earliestReadingDate": "2025-07-14",
+      "latestReadingDate": "2026-05-10"
+    }
+  ]
+}

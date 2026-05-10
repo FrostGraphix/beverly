@@ -1,0 +1,138 @@
+
+> beverly@0.1.0 dev
+> node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs
+
+api proxy http://127.0.0.1:9410
+
+> beverly@0.1.0 dev:web
+> vite --host 127.0.0.1 --port 9411
+
+Re-optimizing dependencies because lockfile has changed
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m710[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m9411[22m/[39m
+[2m01:20:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue, /src/components/SiteConsumptionPage.vue[22m
+[2m01:21:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue, /src/components/SiteConsumptionPage.vue[22m
+[2m01:29:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue, /src/components/SiteConsumptionPage.vue[22m
+[2m01:31:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionConsumptionView.vue[22m
+[2m01:51:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m01:52:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue?vue&type=style&index=0&scoped=43e6fe11&lang.css[22m
+[2m01:52:53[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/KpiCardGrid.vue?vue&type=style&index=0&scoped=636cec15&lang.css[22m
+[2m01:53:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m01:53:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m01:53:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/StationSummaryGrid.vue?vue&type=style&index=0&scoped=2bd29899&lang.css[22m
+[2m01:53:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m01:53:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionOverviewView.vue?vue&type=style&index=0&scoped=c68b40c1&lang.css[22m
+[2m01:54:14[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue[22m
+[2m01:54:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionConsumptionView.vue?vue&type=style&index=0&scoped=cc0ae81f&lang.css[22m
+[2m01:54:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionFraudView.vue?vue&type=style&index=0&scoped=7c9e58f0&lang.css[22m
+[2m01:59:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionFraudView.vue?vue&type=style&index=0&scoped=7c9e58f0&lang.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionConsumptionView.vue?vue&type=style&index=0&scoped=cc0ae81f&lang.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionOverviewView.vue?vue&type=style&index=0&scoped=c68b40c1&lang.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/StationSummaryGrid.vue?vue&type=style&index=0&scoped=2bd29899&lang.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue?vue&type=style&index=0&scoped=43e6fe11&lang.css[22m
+[2m02:01:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/KpiCardGrid.vue?vue&type=style&index=0&scoped=636cec15&lang.css[22m
+[2m02:02:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue?vue&type=style&index=0&scoped=781f7e83&lang.css[22m
+[2m02:02:59[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue?vue&type=style&index=0&scoped=781f7e83&lang.css[22m
+[2m02:04:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/PickerModal.vue, /src/components/PickerModal.vue?vue&type=style&index=0&scoped=b4ee1683&lang.css[22m
+[2m02:04:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue[22m
+[2m02:04:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:04:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue, /src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css[22m
+[2m02:05:43[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:06:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue, /src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css[22m
+[2m02:07:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue[22m
+[2m02:07:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m02:07:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m02:07:53[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:09:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:28:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css[22m
+[2m02:32:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css, /src/components/TaskOutputModal.vue[22m
+[2m02:33:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue, /src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css[22m
+[2m02:35:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m02:35:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:40:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseModalShell.vue?vue&type=style&index=0&scoped=2c5b45c9&lang.css[22m
+[2m02:40:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TaskOutputModal.vue?vue&type=style&index=0&scoped=05a6c3b8&lang.css[22m
+[2m02:42:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:42:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:42:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:42:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:42:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:43:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:43:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:48:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseSelect.vue[22m
+[2m02:49:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:50:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:50:14[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:50:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m02:53:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:54:38[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:58:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m02:59:08[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseSelect.vue[22m
+[2m03:04:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m03:04:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseSelect.vue[22m
+[2m03:06:08[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:06:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:06:47[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:07:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:07:38[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:07:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:08:33[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m03:08:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m03:08:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m03:13:59[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:14:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:14:20[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:14:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:14:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:15:05[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m03:21:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue, /src/components/SiteConsumptionPage.vue[22m
+[2m03:22:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionFraudView.vue[22m
+[2m03:23:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:23:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:23:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:24:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:24:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:24:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m03:25:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue?vue&type=style&index=0&scoped=43e6fe11&lang.css[22m
+[2m21:59:08[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m21:59:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m21:59:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m21:59:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m21:59:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m22:00:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m22:01:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue[22m
+[2m22:01:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:04:12[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:05:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:05:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:06:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m22:16:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue, /src/components/SiteConsumptionPage.vue[22m
+[2m22:18:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m22:18:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m22:32:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m22:32:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m22:32:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m22:41:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:44:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m22:45:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m23:17:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m23:57:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m00:09:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m01:44:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AutomationCommandPage.vue, /src/components/AutomationCommandPage.vue?vue&type=style&index=0&scoped=bd68d903&lang.css[22m
+[2m01:55:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AutomationCommandPage.vue, /src/components/AutomationCommandPage.vue?vue&type=style&index=0&scoped=bd68d903&lang.css[22m
+[2m01:55:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m01:55:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m01:58:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue, /src/components/ActionModal.vue[22m
+[2m02:51:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m02:51:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/SiteConsumptionAuditPanel.vue, /src/components/consumption/SiteConsumptionAuditPanel.vue?vue&type=style&index=0&scoped=ccbc42c9&lang.css[22m
+[2m03:03:12[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue?vue&type=style&index=0&scoped=781f7e83&lang.css[22m
+[2m03:04:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/PickerModal.vue?vue&type=style&index=0&scoped=b4ee1683&lang.css[22m
+[2m03:14:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m03:15:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m03:56:18[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m03:56:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m03:56:55[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m03:57:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m03:57:40[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/styles/legacy-tables.css[22m

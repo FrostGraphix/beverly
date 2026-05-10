@@ -7,3 +7,5 @@ backend/data/*.sqlite
 tmp-*.log
 tmp-*.err.log
 replica-screenshots/diffs/
+
+.vercel

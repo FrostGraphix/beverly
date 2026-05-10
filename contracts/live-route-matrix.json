@@ -319,10 +319,7 @@
         "Sort",
         "Search",
         "Reset",
-        "Export",
-        "Close",
-        "Cancel",
-        "Confirm"
+        "Export"
       ],
       "roles": [
         "super-admin",

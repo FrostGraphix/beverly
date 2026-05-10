@@ -45,12 +45,12 @@
         </div>
 
         <div class="station-actions">
-          <button class="station-action" type="button" @click="$emit('select-station', { stationId: row.stationId, view: 'consumption' })">
+          <BaseButton class="station-action" @click="$emit('select-station', { stationId: row.stationId, view: 'consumption' })">
             Open Consumption
-          </button>
-          <button class="station-action station-action--danger" type="button" @click="$emit('select-station', { stationId: row.stationId, view: 'fraud' })">
+          </BaseButton>
+          <BaseButton class="station-action station-action--danger" variant="danger" @click="$emit('select-station', { stationId: row.stationId, view: 'fraud' })">
             Open Fraud
-          </button>
+          </BaseButton>
         </div>
       </article>
     </div>
@@ -58,8 +58,11 @@
 </template>
 
 <script>
+import BaseButton from "../base/BaseButton.vue";
+
 export default {
   name: "StationSummaryGrid",
+  components: { BaseButton },
   emits: ["select-station"],
   props: {
     activeStation: { type: String, default: null },

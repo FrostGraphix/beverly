@@ -10,8 +10,8 @@ const devStack = fs.readFileSync(path.join(root, "tools/run-dev-stack.cjs"), "ut
 
 assert.match(
   viteConfig,
-  /VITE_API_PROXY_TARGET \|\| "http:\/\/127\.0\.0\.1:9310"/,
-  "Vite dev proxy should default to the same local API port as the dev stack"
+  /VITE_API_PROXY_TARGET[\s\S]*process\.env\.API_PORT[\s\S]*"http:\/\/127\.0\.0\.1:9310"/,
+  "Vite dev proxy should support API_PORT and default to the same local API port as the dev stack"
 );
 
 assert.match(

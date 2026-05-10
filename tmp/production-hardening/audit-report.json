@@ -1,0 +1,119 @@
+{
+  "generatedAt": "2026-05-08T17:24:21.566Z",
+  "status": "passed",
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "id": "css-separated",
+      "passed": true,
+      "detail": "reference.css is only the import hub.",
+      "files": [
+        "src/styles/reference.css",
+        "src/styles/legacy-components.css"
+      ]
+    },
+    {
+      "id": "typed-api-contracts",
+      "passed": true,
+      "detail": "API contracts are documented and consumed.",
+      "files": [
+        "src/services/api-contracts.mjs",
+        "src/services/api.js"
+      ]
+    },
+    {
+      "id": "runtime-schemas",
+      "passed": true,
+      "detail": "Runtime schema validators guard API and profile flows.",
+      "files": [
+        "src/services/runtime-schemas.mjs",
+        "tests/production-hardening.test.cjs"
+      ]
+    },
+    {
+      "id": "demo-auth-removed",
+      "passed": true,
+      "detail": "Demo auth requires explicit environment configuration.",
+      "files": [
+        "src/components/LoginPage.vue",
+        "api/reference.js",
+        "backend/src/services/supabase-service.js"
+      ]
+    },
+    {
+      "id": "profile-state-centralized",
+      "passed": true,
+      "detail": "Profile state flows through profile-store.",
+      "files": [
+        "src/services/profile-store.mjs",
+        "src/components/ProfilePage.vue"
+      ]
+    },
+    {
+      "id": "test-pipelines",
+      "passed": true,
+      "detail": "Test scripts are split by concern.",
+      "files": [
+        "package.json"
+      ]
+    },
+    {
+      "id": "ci-gates",
+      "passed": true,
+      "detail": "CI has build, contract, service, security, and audit gates.",
+      "files": [
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "id": "hardcoded-defaults-removed",
+      "passed": true,
+      "detail": "Live upstream defaults are env-only and local mode is default.",
+      "files": [
+        "api/reference.js",
+        "ARCHITECTURE.md"
+      ]
+    },
+    {
+      "id": "persistence-strategy",
+      "passed": true,
+      "detail": "Persistence ownership is explicit.",
+      "files": [
+        "ARCHITECTURE.md"
+      ]
+    },
+    {
+      "id": "typescript-gate",
+      "passed": true,
+      "detail": "TypeScript compiler and strict contract types are configured.",
+      "files": [
+        "tsconfig.json",
+        "src/types/api-contracts.ts",
+        "package.json"
+      ]
+    },
+    {
+      "id": "legacy-css-modules",
+      "passed": true,
+      "detail": "Legacy CSS is split into migration modules.",
+      "files": [
+        "src/styles/legacy-components.css",
+        "src/styles/legacy-auth.css"
+      ]
+    },
+    {
+      "id": "external-provisioning",
+      "passed": true,
+      "detail": "Supabase credentials and upstream URL are provisioned outside code.",
+      "files": [
+        "tools/validate-provisioning-env.cjs",
+        "docs/PRODUCTION_ENV_PROVISIONING.md",
+        ".env.example"
+      ]
+    }
+  ]
+}

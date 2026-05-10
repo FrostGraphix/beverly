@@ -81,7 +81,7 @@ for (const route of manifest) {
 
 for (const required of [
   "LIVE_API_BASE_URL",
-  "http://8.208.16.168:9310",
+  "No live upstream URL has a code default",
   "baseURL: \"/api\"",
   "name=\"userId\"",
   "name=\"password\"",

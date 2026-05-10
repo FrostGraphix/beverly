@@ -1,0 +1,68 @@
+{
+  "stations": {
+    "TUNGA": {
+      "stationId": "TUNGA",
+      "from": "2025-01-01",
+      "to": "2026-05-10",
+      "pageSize": 500,
+      "nextPage": 127,
+      "totalRows": 62932,
+      "storedRows": 62932,
+      "fetchedThrough": 62932,
+      "rawTotalRows": 62975,
+      "uniqueTotalRows": 62932,
+      "crawlPages": 126,
+      "sourceRangeTrusted": false,
+      "complete": true,
+      "updatedAt": "2026-05-10T02:34:38.795Z"
+    },
+    "UMAISHA": {
+      "stationId": "UMAISHA",
+      "from": "2025-01-01",
+      "to": "2026-05-09",
+      "pageSize": 500,
+      "nextPage": 101,
+      "totalRows": 74540,
+      "storedRows": 50000,
+      "fetchedThrough": 50500,
+      "complete": false,
+      "updatedAt": "2026-05-09T22:57:39.180Z"
+    },
+    "OGUFA": {
+      "stationId": "OGUFA",
+      "from": "2025-01-01",
+      "to": "2026-05-08",
+      "pageSize": 500,
+      "nextPage": 108,
+      "totalRows": 53838,
+      "storedRows": 53500,
+      "fetchedThrough": 54000,
+      "complete": true,
+      "updatedAt": "2026-05-08T23:41:52.310Z"
+    },
+    "KYAKALE": {
+      "stationId": "KYAKALE",
+      "from": "2025-01-01",
+      "to": "2026-05-08",
+      "pageSize": 500,
+      "nextPage": 79,
+      "totalRows": 39469,
+      "storedRows": 39250,
+      "fetchedThrough": 39500,
+      "complete": true,
+      "updatedAt": "2026-05-08T23:55:34.359Z"
+    },
+    "MUSHA": {
+      "stationId": "MUSHA",
+      "from": "2025-01-01",
+      "to": "2026-05-08",
+      "pageSize": 500,
+      "nextPage": 68,
+      "totalRows": 33614,
+      "storedRows": 33750,
+      "fetchedThrough": 34000,
+      "complete": true,
+      "updatedAt": "2026-05-09T00:06:16.840Z"
+    }
+  }
+}

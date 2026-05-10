@@ -7,12 +7,103 @@ function field(name, label, options = {}) {
     type: options.type || "text",
     picker: Boolean(options.picker),
     pickerApi: options.pickerApi || "",
-    pickerColumns: options.pickerColumns || [],     // API field names to show as columns
-    pickerColumnLabels: options.pickerColumnLabels || [], // friendly header labels (optional)
-    pickerValueKey: options.pickerValueKey || "",   // which API field to use as the final value
-    pickerTitle: options.pickerTitle || label
+    pickerColumns: options.pickerColumns || [],
+    pickerColumnLabels: options.pickerColumnLabels || [],
+    pickerValueKey: options.pickerValueKey || "",
+    pickerTitle: options.pickerTitle || label,
+    options: options.options || []       // for type:"permissions" grouped choices
   };
 }
+
+// ─── Role permission catalogue ────────────────────────────────────────────────
+// The API stores these as a comma-separated string in the `remark` field.
+// Each entry: { value: "<PermKey>", label: "<Human label>" }
+// Grouped by menu section for the picker UI.
+export const ROLE_PERMISSIONS = [
+  {
+    group: "Token Generate",
+    items: [
+      { value: "Token.CreditToken",               label: "Credit Token" },
+      { value: "Token.ClearTamperToken",           label: "Clear Tamper Token" },
+      { value: "Token.ClearCreditToken",           label: "Clear Credit Token" },
+      { value: "Token.SetMaximumPowerLimitToken",  label: "Set Max Power Limit Token" }
+    ]
+  },
+  {
+    group: "Token Record",
+    items: [
+      { value: "TokenRecord.CreditTokenRecord",                  label: "Credit Token Record" },
+      { value: "TokenRecord.ClearTamperTokenRecord",             label: "Clear Tamper Token Record" },
+      { value: "TokenRecord.ClearCreditTokenRecord",             label: "Clear Credit Token Record" },
+      { value: "TokenRecord.SetMaximumPowerLimitTokenRecord",    label: "Set Max Power Limit Record" }
+    ]
+  },
+  {
+    group: "Remote Operation",
+    items: [
+      { value: "RemoteOperation.MeterReading", label: "Meter Reading" },
+      { value: "RemoteOperation.MeterControl", label: "Meter Control" },
+      { value: "RemoteOperation.MeterToken",   label: "Meter Token" }
+    ]
+  },
+  {
+    group: "Remote Operation Task",
+    items: [
+      { value: "RemoteMeterTask.MeterReadingTask", label: "Reading Task" },
+      { value: "RemoteMeterTask.MeterControlTask", label: "Control Task" },
+      { value: "RemoteMeterTask.MeterTokenTask",   label: "Token Task" }
+    ]
+  },
+  {
+    group: "Data Report",
+    items: [
+      { value: "DataReport.LongNonpurchase",      label: "Long Nonpurchase Situation" },
+      { value: "DataReport.LowPurchase",          label: "Low Purchase Situation" },
+      { value: "DataReport.ConsumptionStatistics",label: "Consumption Statistics" },
+      { value: "AutomaticMeterReading.DailyDataMeter", label: "Interval Data (Daily Meter)" },
+      { value: "DataReport.SiteConsumption",      label: "Site Consumption" }
+    ]
+  },
+  {
+    group: "Management",
+    items: [
+      { value: "Management.Gateway",  label: "Gateway" },
+      { value: "Management.Customer", label: "Customer" },
+      { value: "Management.Tariff",   label: "Tariff" },
+      { value: "Management.Account",  label: "Account" }
+    ]
+  },
+  {
+    group: "Administration",
+    items: [
+      { value: "Admin.User",    label: "User" },
+      { value: "Admin.Role",    label: "Role" },
+      { value: "Admin.Log",     label: "Log" },
+      { value: "Admin.Station", label: "Station" },
+      { value: "Admin.Item",    label: "Item" },
+      { value: "Admin.Meter",   label: "Meter" },
+      { value: "Admin.Debt",    label: "Debt" }
+    ]
+  },
+  {
+    group: "Protocol",
+    items: [
+      { value: "Protocol.DLMS",   label: "DLMS" },
+      { value: "Protocol.DLT645", label: "DLT645" }
+    ]
+  },
+  {
+    group: "Remote Support",
+    items: [
+      { value: "RemoteSupport.GPRSTasks",          label: "GPRS Tasks" },
+      { value: "RemoteSupport.GPRSOnlineStatus",   label: "GPRS Online Status" },
+      { value: "RemoteSupport.LoadProfile",        label: "Load Profile" },
+      { value: "RemoteSupport.EventNotification",  label: "Event Notification" },
+      { value: "RemoteSupport.FirmwareUpdate",     label: "Firmware Update" },
+      { value: "RemoteSupport.FileUpload",         label: "File Upload" }
+    ]
+  }
+];
 
 const managementForms = {
   "#/management/gateway": {
@@ -148,18 +239,19 @@ const managementForms = {
   },
   "#/admin/user": {
     Add: [
-      field("userId", "User Id", { required: true }),
-      field("nickName", "Nick Name", { required: true }),
-      field("roleId", "Role Id"),
+      field("userId",    "User Id",   { required: true }),
+      field("nickName",  "Nick Name", { required: true }),
+      field("password",  "Password",  { required: true, type: "password" }),
+      field("roleId",    "Role",      { type: "role-select" }),
       field("stationId", "StationId", { required: true, type: "select" }),
-      field("remark", "Remark")
+      field("remark",    "Remark")
     ],
     Edit: [
-      field("userId", "User Id", { required: true, readonly: true }),
-      field("nickName", "Nick Name", { required: true }),
-      field("roleId", "Role Id"),
+      field("userId",    "User Id",   { required: true, readonly: true }),
+      field("nickName",  "Nick Name", { required: true }),
+      field("roleId",    "Role",      { type: "role-select" }),
       field("stationId", "StationId", { required: true, type: "select" }),
-      field("remark", "Remark")
+      field("remark",    "Remark")
     ],
     Delete: [
       field("userId", "User Id", { required: true, readonly: true })
@@ -168,13 +260,13 @@ const managementForms = {
   "#/admin/role": {
     Add: [
       field("roleId", "Role Id", { required: true }),
-      field("name", "Name", { required: true }),
-      field("remark", "Remark")
+      field("name",   "Name",    { required: true }),
+      field("remark", "Permissions", { type: "permissions" })
     ],
     Edit: [
       field("roleId", "Role Id", { required: true, readonly: true }),
-      field("name", "Name", { required: true }),
-      field("remark", "Remark")
+      field("name",   "Name",    { required: true }),
+      field("remark", "Permissions", { type: "permissions" })
     ],
     Delete: [
       field("roleId", "Role Id", { required: true, readonly: true })
@@ -258,12 +350,31 @@ const managementForms = {
     Delete: [
       field("dlt645Id", "Id", { required: true, readonly: true })
     ]
+  },
+  "#/remote-support/firmware-update": {
+    Add: [
+      field("gatewayId", "Gateway Id", { required: true }),
+      field("fileName", "Firmware", {
+        required: true,
+        picker: true,
+        pickerApi: "/api/local/importJobs/read",
+        pickerColumns: ["name", "status", "createDate", "stationId"],
+        pickerColumnLabels: ["Firmware", "Status", "Create Date", "Station Id"],
+        pickerValueKey: "name",
+        pickerTitle: "Uploaded Firmware"
+      }),
+      field("stationId", "Station Id", { required: true, type: "select" }),
+      field("remark", "Remark")
+    ]
   }
 };
 
 export function isManagementRoute(route) {
   const hash = String(route?.hash || "");
-  return hash.startsWith("#/management/") || hash.startsWith("#/admin/") || hash.startsWith("#/protocol/");
+  return hash.startsWith("#/management/")
+    || hash.startsWith("#/admin/")
+    || hash.startsWith("#/protocol/")
+    || hash === "#/remote-support/firmware-update";
 }
 
 export function managementFields(route, action) {

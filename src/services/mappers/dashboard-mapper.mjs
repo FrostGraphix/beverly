@@ -99,7 +99,7 @@ const referenceSuccess = [
 const referenceAlarms = [
   { label: "No Data Report", color: "#35c2c1", value: 10 },
   { label: "Current Unbalance", color: "#b399dd", value: 14 },
-  { label: "Current Reverse", color: "#5caee8", value: 18 },
+  { label: "Current Reverse", color: "#10b981", value: 18 },
   { label: "Cover Open", color: "#ffb26a", value: 20 },
   { label: "Terminal Cover Open", color: "#db7a85", value: 26 },
   { label: "Magnetic Interference", color: "#92a0bd", value: 12 },
