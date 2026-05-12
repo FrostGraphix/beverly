@@ -25,10 +25,10 @@ Release status: blocked.
 
 ### 3. Supabase preview smoke is not proven
 
-- Preview env vars: missing
+- Preview env vars: configured for `codex/production-gap-fixes-20260512`
 - Supabase-mode tests: pass locally
 - Deployed Supabase mode: not proven
-- Needed: configure preview Supabase envs
+- Needed: redeploy preview and smoke with bypass
 
 ### 4. Worktree is dirty
 
@@ -47,6 +47,8 @@ Release status: blocked.
 - Monitoring workflow uses Node 22.
 - Monitoring workflow passes bypass secret.
 - Remote CI lookup works through `npm run ci:actions`.
+- Preview Supabase envs were added.
+- Branch `codex/production-gap-fixes-20260512` was pushed.
 
 ## Canonical Docs
 
@@ -68,8 +70,7 @@ Release status: blocked.
 ## Next Order
 
 1. Set `VERCEL_PROTECTION_BYPASS`.
-2. Add preview Supabase envs.
-3. Push a clean branch.
-4. Rerun public preview smoke.
-5. Run staging write guard.
-6. Update release status.
+2. Redeploy preview branch.
+3. Rerun public preview smoke.
+4. Run staging write guard.
+5. Update release status.

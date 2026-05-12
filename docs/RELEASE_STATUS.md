@@ -8,7 +8,8 @@ Reason:
 - Public Vercel smoke fails.
 - Vercel Authentication blocks `npm run smoke:vercel`.
 - Remote CI is green on latest checked run.
-- Preview Supabase envs are missing.
+- Preview Supabase envs are configured for branch `codex/production-gap-fixes-20260512`.
+- Staging write guard is blocked by Vercel Authentication.
 - Worktree is dirty.
 
 Current proof:
@@ -22,11 +23,14 @@ Current proof:
 - Supabase-mode tests passed locally.
 - GitHub Actions `ci.yml` latest checked run passed.
 - Smoke tooling now supports `VERCEL_PROTECTION_BYPASS`.
+- Branch `codex/production-gap-fixes-20260512` is pushed.
+- Preview Supabase envs were added in Vercel.
 
 Failing release gates:
 - `npm run smoke:vercel` against public preview.
 - Deployed Supabase-mode smoke.
 - Public preview smoke without bypass secret.
+- `npm run write:staging` without bypass secret.
 
 Canonical architecture:
 - Root `ARCHITECTURE.md` is canonical.
@@ -42,8 +46,7 @@ Release rule:
 
 Unblock order:
 1. Add `VERCEL_PROTECTION_BYPASS` secret.
-2. Configure preview Supabase envs.
-3. Push a clean branch.
-4. Rerun public smoke.
-5. Run staging write guard.
-6. Record final evidence.
+2. Redeploy preview from `codex/production-gap-fixes-20260512`.
+3. Rerun public smoke.
+4. Run staging write guard.
+5. Record final evidence.

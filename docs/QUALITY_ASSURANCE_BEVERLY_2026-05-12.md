@@ -25,6 +25,8 @@ Reason:
 - Public preview smoke needs bypass secret.
 - Staging target needs bypass secret.
 - Remote CI latest checked run passed.
+- Preview Supabase envs are configured.
+- Clean branch is pushed.
 - Worktree contains unrelated drift.
 
 ## Verified Gates
@@ -48,6 +50,7 @@ Failed:
 
 Blocked:
 - `npm run write:staging` against protected preview
+- `npm run smoke:vercel` against protected preview
 
 ## Bug Log
 
@@ -98,10 +101,12 @@ Likely cause:
 Required fix:
 - Set `VERCEL_PROTECTION_BYPASS`.
 - Rerun preview smoke.
+- Redeploy the pushed branch.
 
 Implemented:
 - Tooling accepts bypass header.
 - Tooling reports protected HTML cleanly.
+- Preview Supabase envs are set.
 
 ### BUG-003: Staging target needs bypass
 
