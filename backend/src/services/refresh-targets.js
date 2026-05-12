@@ -70,7 +70,7 @@ function refreshTargets(scope = "hot", now = new Date()) {
     ...stations.map((stationId) => ({
       name: `daily-meter-${stationId.toLowerCase()}`,
       path: "/api/DailyDataMeter/read",
-      payload: basePayload({ stationId, from: daily.from, to: daily.to }),
+      payload: basePayload({ stationId, FROM: daily.from, TO: daily.to }),
       cadence: "1h"
     }))
   ];

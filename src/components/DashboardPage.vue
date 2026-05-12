@@ -14,7 +14,7 @@
         <BaseButton
           v-for="card in cards"
           :key="card.key"
-          :class="['dashboard-stat-card', activeType === card.type ? 'active' : '']"
+          :class="['dashboard-stat-card', 'dashboard-stat-card--' + card.key, activeType === card.type ? 'active' : '']"
           @click="loadTopChart(card.type)"
         >
           <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>

@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-backdrop show" role="dialog" aria-modal="true">
+  <div class="modal-backdrop show" role="dialog" aria-modal="true" @click.self="$emit('close')">
     <BaseModalShell
       tag="form"
       class="modal"
@@ -182,8 +182,33 @@
               </div>
             </div>
             <div v-if="finalTokenValue" class="token-vault">
-              <span>Token</span>
-              <strong>{{ finalTokenValue }}</strong>
+              <div class="token-vault-content">
+                <span>Token</span>
+                <strong>{{ finalTokenValue }}</strong>
+              </div>
+              <div class="token-send-action">
+                <BaseButton 
+                  v-if="!tokenSentStatus" 
+                  size="sm" 
+                  variant="primary" 
+                  :disabled="tokenSendLoading" 
+                  @click.prevent="sendTokenToMeter"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                  </svg>
+                  {{ tokenSendLoading ? 'Sending...' : 'Send to Meter' }}
+                </BaseButton>
+                <div v-else-if="tokenSentStatus === 'success'" class="token-sent-success">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Sent to meter
+                </div>
+                <div v-else-if="tokenSentStatus === 'error'" class="token-sent-error">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  Send failed
+                  <BaseButton size="sm" variant="quiet" @click.prevent="sendTokenToMeter">Retry</BaseButton>
+                </div>
+              </div>
             </div>
             <div class="token-final-grid">
               <div v-for="field in tokenFinalFields" :key="field[0]" class="token-final-row">
@@ -437,16 +462,6 @@
                 <div class="token-value">{{ receiptModel.fields.find(f => f.isToken).value }}</div>
               </div>
 
-              <div class="receipt-details receipt-details-sectioned">
-                <div v-for="section in receiptPreviewSections" :key="section.key" class="receipt-preview-section">
-                  <div class="receipt-preview-section-title">{{ section.label }}</div>
-                  <div v-for="field in section.fields" :key="field.label" class="detail-row" :class="{ 'detail-row-emphasis': field.emphasis }">
-                    <span class="detail-label">{{ field.label }}</span>
-                    <span class="detail-value">{{ field.value }}</span>
-                  </div>
-                </div>
-              </div>
-
               <div class="receipt-footer-branding">
                 <span class="company-name">{{ receiptModel.brand.company }}</span>
                 <div class="contact-line">{{ receiptModel.brand.email }} &bull; {{ receiptModel.brand.phone }}</div>
@@ -459,8 +474,6 @@
         <div v-if="importPreview" class="modal-result">{{ importPreview }}</div>
         <div v-if="error" class="modal-error">{{ error }}</div>
         <div v-if="result" class="modal-result">{{ result }}</div>
-        <pre v-if="requestLog && !isTokenFlow" class="modal-log">{{ requestLog }}</pre>
-        <pre v-if="responseLog && !isTokenFlow" class="modal-log">{{ responseLog }}</pre>
       </div>
 
       <template #footer>
@@ -569,6 +582,9 @@ export default {
   },
   data() {
     const rowDataItem = normalizeRemoteDataItem(this.route, this.row.dataItem);
+    const batchMeterIds = this.action === "Add Batch Task"
+      ? this.rows.map((row) => String(row?.meterId || "")).filter(Boolean)
+      : [];
     return {
       form: {
         ...this.row,
@@ -582,7 +598,7 @@ export default {
         paymentMethod: this.row.paymentMethod || "Cash",
         maximumPower: this.row.maximumPower || "",
         dataItem: rowDataItem || defaultRemoteDataItem(this.route),
-        selectedMeterIds: [],
+        selectedMeterIds: batchMeterIds,
         selectedDataItems: [],
         token: this.row.token || this.row.data || "",
         confirmationText: confirmationMessage(this.action, this.route.title)
@@ -611,7 +627,9 @@ export default {
       rolesLoading: false,
       showPwField: false,
       permOpen: false,
-      dataItemFilter: ""
+      dataItemFilter: "",
+      tokenSendLoading: false,
+      tokenSentStatus: ""
     };
   },
   computed: {
@@ -716,9 +734,7 @@ export default {
         identity: "Receipt",
         customer: "Customer",
         meter: "Meter",
-        transaction: "Transaction",
-        site: "Operations",
-        system: "System"
+        transaction: "Transaction"
       };
       return Object.entries(labels)
         .map(([key, label]) => ({
@@ -1024,6 +1040,9 @@ export default {
         }
         return combined;
       }
+      if (Array.isArray(field.options) && field.options.length) {
+        return field.options;
+      }
       return [];
     },
     // --- Permission picker helpers (writes back to form.remark as CSV) ---
@@ -1294,6 +1313,35 @@ export default {
         this.tokenLoading = false;
       }
     },
+    async sendTokenToMeter() {
+      if (!this.finalTokenValue) return;
+      this.tokenSendLoading = true;
+      this.tokenSentStatus = "";
+      try {
+        const payload = [{
+          customerId: this.form.customerId || this.row.customerId || "",
+          customerName: this.form.customerName || this.row.customerName || "",
+          meterId: this.form.meterId || this.row.meterId || "",
+          version: this.form.protocolVersion || this.row.protocolVersion || "2.2",
+          flag: "A120",
+          name: "Send Token",
+          dataItem: "Send Token",
+          dataDefault: "",
+          dataPrefix: "",
+          data: String(this.finalTokenValue).replace(/\s+/g, ""),
+          stationId: this.form.stationId || this.row.stationId || "",
+          remark: "Auto-sent after generation"
+        }];
+        const response = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload);
+        toastSuccess("Token dispatched to meter successfully.");
+        this.tokenSentStatus = "success";
+      } catch (error) {
+        toastError(error?.message || "Failed to send token to meter.");
+        this.tokenSentStatus = "error";
+      } finally {
+        this.tokenSendLoading = false;
+      }
+    },
     buildTokenReceiptRow(response) {
       const data = response?.data || response?.result || {};
       return {
@@ -1411,13 +1459,13 @@ export default {
         if (failed.length > 0) {
           this.result = `${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} submitted, ${failed.length} group${failed.length > 1 ? "s" : ""} failed`;
           toastWarn(`Partial: ${totalSubmitted} submitted, ${failed.length} failed`);
-          this.$emit("done");
+          this.$emit("done", { endpoint, payloads, succeeded, failed });
           return;
         }
 
         this.result = `${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} submitted`;
         toastSuccess(`${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} submitted successfully`);
-        this.$emit("done");
+        this.$emit("done", { endpoint, payloads, succeeded, failed: [] });
       } catch (error) {
         this.error = error?.message || "Task failed";
         toastError(error?.message || "Task failed");
@@ -1496,7 +1544,7 @@ export default {
           this.result = actionResult.resultText;
           toastSuccess(actionResult.resultText || `${this.action} completed successfully.`);
         }
-        this.$emit("done");
+        this.$emit("done", actionResult);
       } catch (error) {
         const msg = error?.response?.data?.msg || error?.response?.data?.reason || error?.response?.data?.error || error?.message || "Action failed";
         this.error = msg;

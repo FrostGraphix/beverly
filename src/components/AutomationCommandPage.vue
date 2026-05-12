@@ -6,9 +6,9 @@
     >
       <template #actions>
         <div class="automation-actions">
-          <BaseButton variant="ghost" @click="refreshData" :disabled="loading">Refresh</BaseButton>
-          <BaseButton variant="ghost" @click="sendTestAlert" :disabled="saving">Send Test Alert</BaseButton>
-          <BaseButton variant="primary" @click="saveControl" :disabled="saving">{{ saving ? "Saving..." : "Save Control" }}</BaseButton>
+          <BaseButton variant="ghost" :disabled="loading" @click="refreshData">Refresh</BaseButton>
+          <BaseButton variant="ghost" :disabled="saving" @click="sendTestAlert">Send Test Alert</BaseButton>
+          <BaseButton variant="primary" :disabled="saving" @click="saveControl">{{ saving ? "Saving..." : "Save Control" }}</BaseButton>
         </div>
       </template>
     </BasePageHeader>
@@ -188,7 +188,7 @@
               <span class="lane-badge" :class="incident.severity">{{ incident.severity }}</span>
             </div>
             <p>{{ incident.message }}</p>
-            <div class="incident-meta">{{ incident.kind }} · {{ formatTime(incident.createdAt) }}</div>
+            <div class="incident-meta">{{ incident.kind }} - {{ formatTime(incident.createdAt) }}</div>
             <div v-if="incident.remediation && incident.remediation.length" class="incident-strip">
               <span v-for="action in incident.remediation" :key="action.type">{{ action.type }}</span>
             </div>
@@ -286,10 +286,12 @@ export default {
       this.report = reportResponse.data || {};
       this.control = controlResponse.data || {};
       this.form = {
-        webhooks: Array.isArray(this.control.webhooks) ? this.control.webhooks.map((hook) => ({
-          ...hook,
-          events: Array.isArray(hook.events) ? [...hook.events] : []
-        })) : [],
+        webhooks: Array.isArray(this.control.webhooks)
+          ? this.control.webhooks.map((hook) => ({
+            ...hook,
+            events: Array.isArray(hook.events) ? [...hook.events] : []
+          }))
+          : [],
         remediation: {
           retryFailedRefreshOnce: this.control?.remediation?.retryFailedRefreshOnce !== false,
           captureIncidentArtifact: this.control?.remediation?.captureIncidentArtifact !== false,
@@ -564,20 +566,20 @@ export default {
 
 .lane-badge.ready,
 .lane-badge.info {
-  background: rgba(34, 197, 94, .14);
-  color: #15803d;
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .lane-badge.conditional,
 .lane-badge.warning {
-  background: rgba(245, 158, 11, .16);
-  color: #b45309;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .lane-badge.missing,
 .lane-badge.error {
-  background: rgba(239, 68, 68, .14);
-  color: #b91c1c;
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .incident-card p {
@@ -634,6 +636,18 @@ export default {
   border-radius: var(--radius-lg);
   color: var(--text-muted);
   text-align: center;
+}
+
+.automation-page :deep(.base-input),
+.automation-page :deep(.base-select) {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+.automation-page :deep(.base-input:focus),
+.automation-page :deep(.base-select:focus) {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 @media (max-width: 1100px) {

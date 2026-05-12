@@ -3,11 +3,14 @@
   <LoginPage v-if="isLogin" @logged-in="goDashboard" />
   <div v-else :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']">
 
-    <div class="drawer-bg" @click="sidebarOpen = false"></div>
+    <div class="drawer-bg" @click="closeSidebar"></div>
     <aside class="sidebar-container">
       <div class="sidebar-logo">
         <span class="sidebar-logo-icon">B</span>
         <span class="sidebar-logo-text">Beverly</span>
+        <button v-if="width <= 1024" type="button" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <nav class="sidebar-menu" aria-label="Main navigation">
         <template v-for="group in groups">
@@ -16,6 +19,7 @@
             :key="'dash-' + group.name"
             :class="sidebarClass(group.routes[0], false)"
             :href="group.routes[0].hash"
+            @click="closeSidebar"
           >
             <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
             <span class="sidebar-label">Dashboard</span>
@@ -28,7 +32,7 @@
             </div>
             <transition name="collapse">
               <div class="sidebar-submenu" v-show="expandedGroups[group.name]">
-                <a v-for="route in group.routes" :key="route.hash" :class="sidebarClass(route, true)" :href="route.hash">
+                <a v-for="route in group.routes" :key="route.hash" :class="sidebarClass(route, true)" :href="route.hash" @click="closeSidebar">
                   <span class="sidebar-dot"></span>
                   <span class="sidebar-label">{{ route.title }}</span>
                 </a>
@@ -108,7 +112,7 @@
                 <div v-show="userDropdownOpen" class="theme-dropdown user-dropdown">
                   <div class="user-dropdown-header">
                     <div class="user-dropdown-name">{{ currentUserName }}</div>
-                    <div class="user-dropdown-role">Super Admin</div>
+                    <div class="user-dropdown-role">{{ currentRoleName }}</div>
                   </div>
                   <div class="theme-item" style="margin-top:4px" @click="openProfile">Profile Settings</div>
                   <div class="theme-item" style="color: var(--danger)" @click="handleSignOut">Sign Out</div>
@@ -124,6 +128,7 @@
         <main :class="['content-page', route.hash === '#/dashboard' ? 'dashboard-editor-container' : '']">
           <DashboardPage v-if="route.hash === '#/dashboard'" />
           <DailyDataMeterPage v-else-if="route.hash === '#/prepay-report/daily-data-meter'" :route="route" />
+          <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
           <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" />
@@ -181,13 +186,14 @@ import LoginPage from "./components/LoginPage.vue";
 import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
+import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
 import SiteConsumptionPage from "./components/SiteConsumptionPage.vue";
 import TablePage from "./components/TablePage.vue";
 import ProfilePage from "./components/ProfilePage.vue";
 import ToastNotification from "./components/ToastNotification.vue";
 import BaseButton from "./components/base/BaseButton.vue";
 import BaseIconButton from "./components/base/BaseIconButton.vue";
-import { currentUserInfo, getApi, getCookie, setCookie } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getApi, getCookie, isSessionExpired, touchSession } from "./services/api";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
 const groupIcons = {
@@ -212,7 +218,7 @@ const topbarIcons = {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, LoginPage, ProfilePage, SiteConsumptionPage, TablePage, ToastNotification },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, LoginPage, OnboardingStudioPage, ProfilePage, SiteConsumptionPage, TablePage, ToastNotification },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -230,7 +236,9 @@ export default {
       profileOpen: false,
       mediaQuery: null,
       automationBadgeCount: 0,
-      automationPollTimer: null
+      automationPollTimer: null,
+      sessionTimer: null,
+      lastSessionTouchAt: 0
     };
   },
   computed: {
@@ -285,6 +293,15 @@ export default {
       if (this.currentTheme === "contrast") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2v20"></path></svg>';
       return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
     },
+    currentRoleName() {
+      const labels = {
+        "super-admin": "Super Admin",
+        "operations-manager": "Operations Manager",
+        account: "Account Officer",
+        vendor: "Vendor"
+      };
+      return labels[this.currentRoleId] || String(this.currentRoleId || "User").replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+    },
     automationBadgeLabel() {
       return this.automationBadgeCount > 9 ? "9+" : String(this.automationBadgeCount);
     }
@@ -293,16 +310,24 @@ export default {
     searchOpen(val) {
       if (val) this.$nextTick(() => this.$refs.searchInput && this.$refs.searchInput.focus());
       else this.searchQuery = '';
+    },
+    hash(newHash, oldHash) {
+      if (newHash !== oldHash && this.width <= 1024) {
+        this.sidebarOpen = false;
+      }
     }
   },
   created() {
-    setCookie("roleId", "super-admin");
     window.addEventListener("hashchange", this.syncHash);
     window.addEventListener("resize", this.syncWidth);
     window.addEventListener("keydown", this.handleGlobalKeydown);
+    window.addEventListener("pointerdown", this.bumpSessionActivity, { passive: true });
+    window.addEventListener("mousemove", this.bumpSessionActivity, { passive: true });
+    window.addEventListener("scroll", this.bumpSessionActivity, { passive: true });
     this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     this.mediaQuery.addEventListener('change', this.applyTheme);
     this.applyTheme();
+    this.armSessionTimer();
     this.loadUser();
     this.refreshAutomationBadge();
     this.automationPollTimer = window.setInterval(() => {
@@ -313,10 +338,36 @@ export default {
     window.removeEventListener("hashchange", this.syncHash);
     window.removeEventListener("resize", this.syncWidth);
     window.removeEventListener("keydown", this.handleGlobalKeydown);
+    window.removeEventListener("pointerdown", this.bumpSessionActivity);
+    window.removeEventListener("mousemove", this.bumpSessionActivity);
+    window.removeEventListener("scroll", this.bumpSessionActivity);
     if (this.mediaQuery) this.mediaQuery.removeEventListener('change', this.applyTheme);
     if (this.automationPollTimer) window.clearInterval(this.automationPollTimer);
+    if (this.sessionTimer) window.clearInterval(this.sessionTimer);
   },
   methods: {
+    bumpSessionActivity() {
+      if (this.isLogin || !getCookie("token")) return;
+      const now = Date.now();
+      if (now - this.lastSessionTouchAt < 15000) return;
+      this.lastSessionTouchAt = now;
+      touchSession();
+    },
+    armSessionTimer() {
+      if (this.sessionTimer) window.clearInterval(this.sessionTimer);
+      this.sessionTimer = window.setInterval(() => {
+        if (!this.isLogin && getCookie("token") && isSessionExpired()) {
+          this.expireSession();
+        }
+      }, 15000);
+    },
+    expireSession() {
+      clearSessionCookies();
+      this.userDropdownOpen = false;
+      this.searchOpen = false;
+      window.location.hash = "#/login?timeout=true";
+      this.syncHash();
+    },
     setTheme(theme) {
       const nextTheme = this.themeOptions.some((option) => option.id === theme) ? theme : "system";
       this.currentTheme = nextTheme;
@@ -339,11 +390,19 @@ export default {
     },
     async loadUser() {
       if (this.isLogin) return;
-      const response = await currentUserInfo();
-      this.currentRoleId = response.data?.roleId || this.currentRoleId;
-      this.currentUserName = response.data?.name || this.currentUserName;
-      this.syncHash();
-      this.refreshAutomationBadge();
+      try {
+        const response = await currentUserInfo();
+        this.currentRoleId = response.data?.roleId || this.currentRoleId;
+        this.currentUserName = response.data?.name || this.currentUserName;
+        this.syncHash();
+        this.refreshAutomationBadge();
+      } catch (error) {
+        if ((error?.message || "").includes("Session expired")) {
+          this.expireSession();
+          return;
+        }
+        throw error;
+      }
     },
     async refreshAutomationBadge() {
       if (this.isLogin) return;
@@ -381,6 +440,9 @@ export default {
       if (this.width <= 1024) this.sidebarOpen = !this.sidebarOpen;
       else this.collapsed = !this.collapsed;
     },
+    closeSidebar() {
+      if (this.width <= 1024) this.sidebarOpen = false;
+    },
     toggleGroup(groupName) {
       this.$set(this.expandedGroups, groupName, !this.expandedGroups[groupName]);
     },
@@ -394,8 +456,7 @@ export default {
       return ["sidebar-item", indent ? "indent" : "", route.hash === this.route.hash ? "active" : ""];
     },
     handleSignOut() {
-      document.cookie = "roleId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "userName=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      clearSessionCookies();
       window.location.hash = "#/login";
       this.userDropdownOpen = false;
       this.syncHash();

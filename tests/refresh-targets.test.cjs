@@ -14,6 +14,7 @@ const backfillTarget = refreshTargets("backfill", new Date("2026-05-07T23:00:00Z
 assert(hot.some((target) => target.name === "dashboard-panels"));
 assert(hot.every((target) => ["5m", "15m"].includes(target.cadence)));
 assert(hourly.some((target) => target.name === "accounts"));
+assert(hourly.every((target) => target.path !== "/api/DailyDataMeter/read" || ("FROM" in target.payload && "TO" in target.payload)));
 assert(!hourly.some((target) => target.name === "long-nonpurchase"));
 assert(midnight.some((target) => target.name === "long-nonpurchase"));
 assert(midnight.some((target) => target.name === "daily-consumption-sync-tunga"));

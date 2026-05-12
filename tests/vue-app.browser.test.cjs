@@ -12,20 +12,29 @@ const edgePath = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const distRoot = path.join(root, "dist");
 let appUrl = "";
 
-const browsers = [
+const allBrowsers = [
   { name: "edge", type: chromium, options: fs.existsSync(edgePath) ? { executablePath: edgePath } : {} },
   { name: "chromium", type: chromium, options: {}, optional: true },
   { name: "firefox", type: firefox, options: {}, optional: true },
   { name: "webkit", type: webkit, options: {}, optional: true }
 ];
 
+const browserTargets = String(process.env.BROWSER_QA_TARGETS || "chromium")
+  .split(",")
+  .map((item) => item.trim().toLowerCase())
+  .filter(Boolean);
+
+const browsers = browserTargets.includes("all")
+  ? allBrowsers
+  : allBrowsers.filter((target) => browserTargets.includes(target.name));
+
 const qaRoutes = [
-  { hash: "#/dashboard", text: "Account Count" },
-  { hash: "#/management/account", text: "customerId" },
-  { hash: "#/token-record/credit-token-record", text: "receiptId" },
-  { hash: "#/remote-operation-record/remote-meter-reading-task", text: "dataItem" },
-  { hash: "#/prepay-report/long-nonpurchase-situation", text: "nonpurchaseDays" },
-  { hash: "#/management/customer", text: "phone" }
+  { hash: "#/dashboard", selector: "text=Account Count" },
+  { hash: "#/management/account", selector: 'th[data-column-key="customerId"]' },
+  { hash: "#/token-record/credit-token-record", selector: 'th[data-column-key="receiptId"]' },
+  { hash: "#/remote-operation-record/remote-meter-reading-task", selector: 'th[data-column-key="dataItem"]' },
+  { hash: "#/prepay-report/long-nonpurchase-situation", selector: 'th[data-column-key="nonpurchaseDays"]' },
+  { hash: "#/management/customer", selector: 'th[data-column-key="phone"]' }
 ];
 
 function sampleRow() {
@@ -190,7 +199,7 @@ async function runFlow(browserName, page) {
       window.location.hash = hash;
     }, route.hash);
     await page.waitForTimeout(250);
-    await page.waitForSelector(`text=${route.text}`, { timeout: 10000 });
+    await page.waitForSelector(route.selector, { timeout: 10000 });
   }
 
   await page.click("text=Export");
@@ -216,7 +225,7 @@ async function runFlow(browserName, page) {
   await page.evaluate(() => {
     window.location.hash = "#/token-record/credit-token-record";
   });
-  await page.waitForSelector("text=receiptId", { timeout: 10000 });
+  await page.waitForSelector('th[data-column-key="receiptId"]', { timeout: 10000 });
   await page.locator("button.link-btn", { hasText: "Print" }).first().click();
   await page.waitForSelector(".modal-title", { timeout: 10000 });
   await closeModal(page);
@@ -233,13 +242,13 @@ async function runFlow(browserName, page) {
     window.location.hash = "#/remote-operation/remote-meter-reading";
   });
   await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
+  await page.locator("th.check-column .base-checkbox").click();
   await page.click("text=Add Batch Task");
   await page.waitForSelector(".modal-title", { timeout: 10000 });
-  await page.locator('select[multiple]').first().selectOption(["M-1001", "M-1002"]);
-  await page.locator('select[multiple]').nth(1).selectOption(["Credit balance", "Power"]);
   await page.click(".modal-actions .base-button--primary");
   await page.waitForSelector("text=Selected Meter", { timeout: 10000 });
-  await page.waitForSelector("text=Credit balance, Power", { timeout: 10000 });
+  await page.waitForSelector("text=Station Count", { timeout: 10000 });
+  await page.waitForSelector("text=Data Item", { timeout: 10000 });
   await closeModal(page);
 
   await page.evaluate(() => {
@@ -254,9 +263,7 @@ async function runFlow(browserName, page) {
 }
 
 async function closeModal(page) {
-  await page.evaluate(() => {
-    document.querySelector(".modal-actions .base-button")?.click();
-  });
+  await page.locator(".modal-close").click();
   await page.waitForSelector(".modal-backdrop", { state: "detached", timeout: 10000 });
 }
 

@@ -1,0 +1,17 @@
+
+> beverly@0.1.0 dev
+> node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs
+
+api proxy http://127.0.0.1:18740
+
+> beverly@0.1.0 dev:web
+> vite --host 127.0.0.1 --port 18741
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1383[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m18741[22m/[39m
+[2m11:56:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m11:56:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m12:12:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m12:12:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m

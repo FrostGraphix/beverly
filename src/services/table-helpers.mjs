@@ -66,11 +66,86 @@ export function columnKey(label) {
   return map[label] || label.charAt(0).toLowerCase() + label.slice(1).replace(/\s+/g, "");
 }
 
+function directRowValue(row, candidate) {
+  if (!row || typeof row !== "object" || !candidate) return undefined;
+  if (candidate in row) return row[candidate];
+  const actualKey = Object.keys(row).find((key) => key.toLowerCase() === String(candidate).toLowerCase());
+  return actualKey ? row[actualKey] : undefined;
+}
+
+function aliasedKeys(route = {}, key = "") {
+  const hash = String(route.hash || "");
+  const aliases = {
+    id: ["gatewayId", "customerId", "tariffId", "roleId", "logId", "stationId", "itemType", "dlmsId", "dlt645Id", "debtId", "userId"],
+    name: ["customerName", "gatewayName", "tariffName", "itemName", "nickName", "fullName", "nameEN"],
+    customerId: ["id"],
+    customerName: ["name", "fullName", "nickName"],
+    meterId: ["serialNumber"],
+    createDate: ["createTime", "timestamp", "time"],
+    updateDate: ["updateTime"],
+    totalUnit: ["purchaseTotalUnit", "transactionKwh", "usage1"],
+    totalPaid: ["purchaseTotalPaid", "amount"],
+    receiptId: ["transactionId", "id"],
+    dataItem: ["name", "title"],
+    dataValue: ["data", "value"],
+    remark: ["content", "message", "description"],
+    status: ["state", "result", "onlineStatus"],
+    successRate: ["rate"],
+    stationId: ["station", "siteId"],
+    totalEnergy: ["total1"],
+    lastHourUsage: ["usage1"],
+    creditBalance: ["remain1"],
+    relayStatus: ["relayOpen"],
+    batteryStatus: ["batteryLow"],
+    magneticStatus: ["magneticInterference"],
+    terminalCover: ["terminalCoverOpen"],
+    upperOpen: ["coverOpen"]
+  };
+
+  if (hash.includes("token-record/credit-token-record")) {
+    aliases.tariffId = ["transactionType", "tariffId"];
+    aliases.token = ["generatedToken", "tokenValue"];
+    aliases.stationId = ["station", "siteId", "serialNumber"];
+  }
+
+  if (hash.includes("admin/log")) {
+    aliases.userId = ["createId"];
+    aliases.status = ["title"];
+    aliases.remark = ["ipAddress", "contentAfter", "contentBefore"];
+  }
+
+  return [key, ...(aliases[key] || [])];
+}
+
+export function resolveRowValue(route, row, column) {
+  const key = columnKey(column);
+  for (const candidate of aliasedKeys(route, key)) {
+    const value = directRowValue(row, candidate);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+
+  if (key.toLowerCase().includes("id")) {
+    for (const candidate of ["id", "customerId", "meterId", "gatewayId", "tariffId", "userId", "roleId", "stationId"]) {
+      const value = directRowValue(row, candidate);
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+  }
+
+  if (key.toLowerCase().includes("name")) {
+    for (const candidate of ["name", "customerName", "gatewayName", "tariffName", "itemName", "nameEN", "fullName", "nickName"]) {
+      const value = directRowValue(row, candidate);
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+  }
+
+  return "";
+}
+
 export function searchRows(route, rows, searchTerm) {
   const query = String(searchTerm || "").trim().toLowerCase();
   if (!query) return rows.slice();
   const searchableColumns = route.columns.filter((column) => column !== "Actions");
-  return rows.filter((row) => searchableColumns.some((column) => String(row[columnKey(column)] || "").toLowerCase().includes(query)));
+  return rows.filter((row) => searchableColumns.some((column) => String(resolveRowValue(route, row, column) || "").toLowerCase().includes(query)));
 }
 
 const fixedSortPolicies = [
@@ -129,15 +204,15 @@ function comparableValue(value) {
   return text.toLowerCase();
 }
 
-export function sortRows(route, rows, direction) {
+export function sortRows(route, rows, sortDirection = "", sortField = "") {
   const policy = routeSortPolicy(route);
-  const sortDirection = policy.fixed ? policy.direction : direction;
-  if (!sortDirection) return rows.slice();
-  const key = policy.key;
-  const factor = sortDirection === "desc" ? -1 : 1;
+  const dir = sortDirection || policy.direction;
+  if (!dir) return rows.slice();
+  const key = sortField || policy.key;
+  const factor = dir === "desc" ? -1 : 1;
   return rows.slice().sort((left, right) => {
-    const leftValue = comparableValue(left[key]);
-    const rightValue = comparableValue(right[key]);
+    const leftValue = comparableValue(resolveRowValue(route, left, key));
+    const rightValue = comparableValue(resolveRowValue(route, right, key));
     if (typeof leftValue === "number" && typeof rightValue === "number") return (leftValue - rightValue) * factor;
     return String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true }) * factor;
   });
@@ -179,18 +254,7 @@ export function createFormSeed(route, action, row = {}) {
   const seed = {};
   for (const column of route.columns.filter((item) => item !== "Actions")) {
     const key = columnKey(column);
-    let value = row[key];
-    if (value === undefined || value === null) {
-      // Case-insensitive lookup
-      const actualKey = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase());
-      if (actualKey) value = row[actualKey];
-    }
-    if (value === undefined || value === null) {
-      // Generic fallbacks for common IDs
-      if (key === "stationId") value = row.stationId || row.station || row.siteId || row.StationId;
-      else if (key.toLowerCase().includes("id")) value = row.id || row.customerId || row.meterId || row.gatewayId || row.userId || row.tariffId;
-      if (key.toLowerCase().includes("name")) value = row.name || row.customerName || row.userName || row.gatewayName || row.tariffName;
-    }
+    let value = resolveRowValue(route, row, key);
     if (key === "stationId" && typeof value === "string") {
       value = value.toUpperCase();
     }

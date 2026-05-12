@@ -49,6 +49,37 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
         ]
       };
     }
+    if (pathname.includes("select=station_id")) {
+      return {
+        response: {
+          headers: {
+            get(name) {
+              return String(name).toLowerCase() === "content-range" ? "0-1/2" : "";
+            }
+          }
+        },
+        body: [
+          {
+            station_id: "TUNGA",
+            meter_id: "M-1",
+            customer_id: "C-1",
+            customer_name: "Ada",
+            reading_date: "2026-05-06",
+            total1: 110,
+            remain1: 5
+          },
+          {
+            station_id: "TUNGA",
+            meter_id: "M-1",
+            customer_id: "C-1",
+            customer_name: "Ada",
+            reading_date: "2026-05-07",
+            total1: 115,
+            remain1: 4
+          }
+        ]
+      };
+    }
     return {
       response: {
         headers: {
@@ -127,6 +158,20 @@ assert.strictEqual(report.stations[0].station, "TUNGA");
 const stats = await store.dailyMeterStationStats(["TUNGA"]);
 assert.strictEqual(stats.stations[0].earliestReadingDate, "2025-07-14");
 assert.strictEqual(stats.stations[0].latestReadingDate, "2026-05-09");
+
+const summary = await store.readDailyMeterSummary({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-07",
+    TO: "2026-05-07",
+    BASELINE_FROM: "2026-05-06",
+    granularity: "daily"
+  }
+});
+assert.strictEqual(summary.status, 200);
+assert.strictEqual(summary.body._proxy.source, "supabase-consumption-summary");
+assert.strictEqual(summary.body.data.consumedKwh, 5);
+assert.deepStrictEqual(summary.body.data.temporal.labels, ["2026-05-07"]);
 
 supabase.restRequest = originalRestRequest;
 supabase.restRequestWithResponse = originalRestRequestWithResponse;

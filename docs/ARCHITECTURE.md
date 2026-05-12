@@ -2,6 +2,10 @@
 
 > Last Updated: 2026-05-04 | Reflects shipped EIH implementation
 
+> Canonical source: root `ARCHITECTURE.md`.
+> This file is legacy reference only.
+> Release is blocked until remote CI, public preview smoke, and deployed Supabase smoke pass.
+
 ---
 
 ## System Overview

@@ -270,12 +270,12 @@ export default {
       return (this.userName || 'U').split(/[\s()_-]+/).filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('');
     },
     roleName() {
-      const map = { 'super-admin': 'Super Admin', 'operations-manager': 'Operations Manager', account: 'Account Officer' };
+      const map = { 'super-admin': 'Super Admin', 'operations-manager': 'Operations Manager', account: 'Account Officer', vendor: 'Vendor' };
       return map[this.roleId] || this.roleId;
     },
     sessionDays() { return 42; },
     permissions() {
-      const map = { 'super-admin': 'Full', 'operations-manager': 'Ops', account: 'Read' };
+      const map = { 'super-admin': 'Full', 'operations-manager': 'Ops', account: 'Read', vendor: 'Token' };
       return map[this.roleId] || '-';
     },
     pwStrength() {

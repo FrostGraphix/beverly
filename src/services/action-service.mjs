@@ -18,27 +18,18 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/RemoteMeterTask/CreateTokenTask";
   if (action === "Add" && route.hash.includes("remote-support/firmware-update")) return "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask";
 
-  const moduleName = route.hash.includes("gateway")
-    ? "gateway"
-    : route.hash.includes("customer")
-      ? "customer"
-      : route.hash.includes("tariff")
-        ? "tariff"
-        : route.hash.includes("account")
-          ? "account"
-          : route.hash.includes("protocol/dlms")
-            ? "dlms"
-            : route.hash.includes("protocol/dlt645")
-              ? "dlt645"
-          : route.hash.includes("admin/user")
-            ? "user"
-            : route.hash.includes("admin/role")
-              ? "role"
-              : route.hash.includes("admin/station")
-                ? "station"
-                : route.hash.includes("admin/item")
-                  ? "item"
-                  : "";
+  let moduleName = "";
+  if (route.hash.includes("gateway")) moduleName = "gateway";
+  else if (route.hash.includes("customer")) moduleName = "customer";
+  else if (route.hash.includes("tariff")) moduleName = "tariff";
+  else if (route.hash.includes("account")) moduleName = "account";
+  else if (route.hash.includes("protocol/dlms")) moduleName = "dlms";
+  else if (route.hash.includes("protocol/dlt645")) moduleName = "dlt645";
+  else if (route.hash.includes("admin/meter")) moduleName = "meter";
+  else if (route.hash.includes("admin/user")) moduleName = "user";
+  else if (route.hash.includes("admin/role")) moduleName = "role";
+  else if (route.hash.includes("admin/station")) moduleName = "station";
+  else if (route.hash.includes("admin/item")) moduleName = "item";
   if (!moduleName) return "";
   if (action === "Add") return `/api/${moduleName}/create`;
   if (action === "Edit") return `/api/${moduleName}/update`;
@@ -53,6 +44,13 @@ function auditMeta(route, action, form) {
     action,
     confirmationText: form.confirmationText,
     authorizationProvided: Boolean(form.authorizationPassword)
+  };
+}
+
+function requestHeaders(route, action) {
+  return {
+    "X-Route-Hash": String(route?.hash || ""),
+    "X-Route-Action": String(action || "")
   };
 }
 
@@ -161,15 +159,15 @@ export async function submitRouteAction(route, action, form, options = {}) {
   }
 
   const payload = action === "Import"
-    ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows })
+    ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
-      ? buildWritePayload(endpoint, { ...form, ...meta })
+      ? buildWritePayload(endpoint, { ...form, ...meta }, fields)
       : form;
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
   const response = uploadMode
-    ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile))
+    ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint
-      ? await api.postApi(endpoint, payload)
+      ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
   if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200) {

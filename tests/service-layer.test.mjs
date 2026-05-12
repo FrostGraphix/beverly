@@ -6,7 +6,7 @@ import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
 import { routeManifest } from "../src/data/route-manifest.js";
 import { managementFields, managementFormSeed } from "../src/services/management-forms.mjs";
-import { defaultTableOptions, tableRequest } from "../src/services/table-service.mjs";
+import { defaultTableOptions, resolveRowValue, searchRows, sortRows, tableRequest } from "../src/services/table-service.mjs";
 import { needsAuthorizationPassword, stripWriteMeta, validateWriteForm } from "../src/services/write-helpers.mjs";
 
 const accountRoute = {
@@ -39,16 +39,27 @@ const dlmsRoute = {
   apis: ["/api/dlms/read"],
   columns: ["Id", "Version", "Type", "Class Id", "OBIS", "Name", "Remark", "Actions"]
 };
+const meterRoute = {
+  hash: "#/admin/meter",
+  title: "Meter",
+  apis: ["/api/meter/read"],
+  columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"]
+};
 const manifestGatewayRoute = routeManifest.find((route) => route.hash === "#/management/gateway");
 const manifestDlmsRoute = routeManifest.find((route) => route.hash === "#/protocol/dlms");
 const manifestGprsRoute = routeManifest.find((route) => route.hash === "#/remote-support/gprs-tasks");
 const manifestEventRoute = routeManifest.find((route) => route.hash === "#/remote-support/event-notification");
 const manifestFirmwareRoute = routeManifest.find((route) => route.hash === "#/remote-support/firmware-update");
 const manifestFileUploadRoute = routeManifest.find((route) => route.hash === "#/remote-support/file-upload");
+const manifestMeterRoute = routeManifest.find((route) => route.hash === "#/admin/meter");
+const manifestOnboardingRoute = routeManifest.find((route) => route.hash === "#/system/station-onboarding-studio");
 
 assert.strictEqual(actionEndpoint(accountRoute, "Add"), "/api/account/create");
 assert.strictEqual(actionEndpoint(accountRoute, "Edit"), "/api/account/update");
 assert.strictEqual(actionEndpoint(accountRoute, "Delete"), "/api/account/delete");
+assert.strictEqual(actionEndpoint(meterRoute, "Add"), "/api/meter/create");
+assert.strictEqual(actionEndpoint(meterRoute, "Edit"), "/api/meter/update");
+assert.strictEqual(actionEndpoint(meterRoute, "Delete"), "/api/meter/delete");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Edit"), "/api/dlms/update");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Delete"), "/api/dlms/delete");
 assert.strictEqual(actionEndpoint({ hash: "#/remote-support/firmware-update" }, "Add"), "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask");
@@ -65,6 +76,30 @@ const creditTokenRecordRoute = {
 };
 
 assert.strictEqual(actionEndpoint(creditTokenRecordRoute, "Cancel"), "/api/token/creditTokenRecord/cancel");
+
+const aliasedCreditRecordRow = {
+  transactionId: "TX-1001",
+  customerId: "C-1001",
+  serialNumber: "M-1001",
+  amount: 3500,
+  transactionKwh: 12.5,
+  timestamp: "2026-05-01 08:30:00"
+};
+assert.strictEqual(resolveRowValue(creditTokenRecordRoute, aliasedCreditRecordRow, "receiptId"), "TX-1001");
+assert.strictEqual(resolveRowValue(creditTokenRecordRoute, aliasedCreditRecordRow, "meterId"), "M-1001");
+assert.strictEqual(resolveRowValue(creditTokenRecordRoute, aliasedCreditRecordRow, "totalPaid"), 3500);
+assert.strictEqual(resolveRowValue(creditTokenRecordRoute, aliasedCreditRecordRow, "totalUnit"), 12.5);
+assert.strictEqual(searchRows(creditTokenRecordRoute, [aliasedCreditRecordRow], "tx-1001").length, 1);
+assert.deepStrictEqual(
+  sortRows(
+    creditTokenRecordRoute,
+    [
+      { transactionId: "TX-1000", timestamp: "2026-04-01 08:30:00" },
+      { transactionId: "TX-1001", timestamp: "2026-05-01 08:30:00" }
+    ]
+  ).map((row) => resolveRowValue(creditTokenRecordRoute, row, "receiptId")),
+  ["TX-1001", "TX-1000"]
+);
 
 const table = mapTableCollection({
   code: 0,
@@ -87,6 +122,21 @@ const customerTable = mapTableCollection({
 }, customerRoute);
 assert.strictEqual(customerTable.rows[0].id, "2001");
 assert.strictEqual(customerTable.rows[0].name, "Binta");
+
+const accountGridRoute = {
+  hash: "#/management/account",
+  title: "Account",
+  apis: ["/api/account/read"],
+  columns: ["customerId", "meterId", "createDate", "updateDate", "Actions"]
+};
+const aliasedAccountRow = {
+  customerId: "4700",
+  meterId: "M-4700",
+  createTime: "2026-04-01 12:00:00",
+  updateTime: "2026-04-02 12:00:00"
+};
+assert.strictEqual(resolveRowValue(accountGridRoute, aliasedAccountRow, "createDate"), "2026-04-01 12:00:00");
+assert.strictEqual(resolveRowValue(accountGridRoute, aliasedAccountRow, "updateDate"), "2026-04-02 12:00:00");
 
 const gatewayTable = mapTableCollection({
   code: 0,
@@ -112,6 +162,10 @@ assert.deepStrictEqual(manifestFirmwareRoute.actions, ["Sort", "Search", "Reset"
 assert.strictEqual(manifestFirmwareRoute.columns.includes("Actions"), false);
 assert.deepStrictEqual(manifestFileUploadRoute.actions, ["Sort", "Search", "Reset", "Import", "Export"]);
 assert.strictEqual(manifestFileUploadRoute.columns.includes("Actions"), false);
+assert(manifestMeterRoute.actions.includes("Add"));
+assert(manifestMeterRoute.actions.includes("Edit"));
+assert(manifestMeterRoute.actions.includes("Delete"));
+assert.strictEqual(manifestOnboardingRoute.customComponent, "OnboardingStudioPage");
 assert.strictEqual(needsAuthorizationPassword("Delete", gatewayRoute), false);
 assert.strictEqual(needsAuthorizationPassword("Delete", dlmsRoute), false);
 
@@ -276,7 +330,7 @@ assert.deepStrictEqual(
     lang: "en",
     pageNumber: 2,
     pageSize: 20,
-    FROM: "2026-04-01T00:00:00.000Z",
+    FROM: "2026-03-31T00:00:00.000Z",
     TO: "2026-04-30T23:59:59.999Z",
     stationId: "TUNGA",
     customerId: "470005342689",
@@ -509,6 +563,11 @@ assert.strictEqual(action.envelope._proxy.source, "live");
 const gatewayEditFields = managementFields(gatewayRoute, "Edit");
 assert.strictEqual(gatewayEditFields.find((field) => field.name === "stationId").required, true);
 assert.strictEqual(gatewayEditFields.find((field) => field.name === "stationId").type, "select");
+const meterAddFields = managementFields(meterRoute, "Add");
+assert(meterAddFields.some((field) => field.name === "meterId" && field.required));
+assert(meterAddFields.some((field) => field.name === "type" && field.type === "select"));
+assert(meterAddFields.some((field) => field.name === "communicationWay" && field.type === "select"));
+assert(meterAddFields.some((field) => field.name === "stationId" && field.required));
 const accountAddFields = managementFields(accountRoute, "Add");
 assert(accountAddFields.some((field) => field.name === "ctRatio"));
 assert(accountAddFields.some((field) => field.name === "stationId" && field.required));

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
 const {
   ensureDatabase,
@@ -8,9 +9,12 @@ const {
   recordExportJob,
   recordImportJob,
   listImportJobs,
+  listAccountBindings,
   readCachedApiResponse,
   recordPrintJob,
   recordWriteConfirmation,
+  saveAccountBinding,
+  deleteAccountBinding,
   saveArtifact,
   tableCounts
 } = require("../backend/src/services/storage-adapter");
@@ -18,6 +22,7 @@ const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
   signInWithPassword,
+  authUserFromAccessToken,
   storageReport,
   createAuthUser,
   updateAuthUser,
@@ -32,6 +37,7 @@ const {
 const {
   dailyMeterStationStats,
   dailyMeterTableReport,
+  readDailyMeterSummary,
   readDailyMeterRows,
   writeDailyMeterRows
 } = require("../backend/src/services/consumption-store");
@@ -43,6 +49,12 @@ const {
   saveAutomationControl
 } = require("../backend/src/services/automation-control");
 const { refreshTargets } = require("../backend/src/services/refresh-targets");
+const {
+  governancePlan,
+  rolePermissionAudit,
+  runGovernance,
+  runRetentionCleanup
+} = require("../backend/src/services/data-governance");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -50,7 +62,7 @@ const root = path.resolve(__dirname, "..");
 const contractPath = path.join(root, "reference-contract.json");
 const samplesDir = path.join(root, "contracts", "samples");
 const jsonContentType = "application/json";
-const writePattern = /\/(create|update|delete|import|generate|cancel|reset|modify|addread|upload)\b/i;
+const writePattern = /\/(?:create|update|delete|import|generate|cancel|reset|modify|addread|upload)\w*\b/i;
 const defaultCorsOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -62,6 +74,7 @@ const rateLimitBuckets = new Map();
 loadEnvFile();
 
 let contractAliasMap = null;
+let accessControlModulePromise = null;
 
 function getEnv() {
   const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
@@ -161,6 +174,124 @@ function getContractAliasMap() {
     contractAliasMap = new Map();
   }
   return contractAliasMap;
+}
+
+async function getAccessControlModule() {
+  if (!accessControlModulePromise) {
+    accessControlModulePromise = import(pathToFileURL(path.join(root, "src", "data", "route-manifest.js")).href);
+  }
+  return accessControlModulePromise;
+}
+
+function authHeaderToken(request) {
+  const value = String(request.headers.authorization || "");
+  const match = value.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function routeHeaderHash(request) {
+  return String(request.headers["x-route-hash"] || "").trim();
+}
+
+function stationFromPayload(payload) {
+  const value = payload?.stationId ?? payload?.SITE_ID ?? payload?.siteId ?? "";
+  return String(value || "").trim();
+}
+
+function protectedPath(pathname) {
+  if (!supabaseAuthEnabled()) return false;
+  const lowerPath = String(pathname || "").toLowerCase();
+  if (!lowerPath.startsWith("/api/")) return false;
+  if (lowerPath === "/api/user/login") return false;
+  if (lowerPath === "/api/system/health") return false;
+  if (lowerPath.startsWith("/api/cron/")) return false;
+  return true;
+}
+
+function authFailure(status, pathname, reason) {
+  return {
+    status,
+    body: {
+      code: status,
+      msg: reason,
+      reason,
+      data: null,
+      result: null,
+      _proxy: {
+        source: "authz",
+        pathname
+      }
+    }
+  };
+}
+
+function actorCanAccessStation(actor, payload) {
+  const actorStation = String(actor?.stationId || "").trim();
+  const requestedStation = stationFromPayload(payload);
+  if (!actorStation || !requestedStation) return true;
+  return String(actorStation).toUpperCase() === String(requestedStation).toUpperCase();
+}
+
+async function matchingRouteForRequest(pathname, request) {
+  const access = await getAccessControlModule();
+  const requestedHash = routeHeaderHash(request);
+  if (requestedHash) {
+    return access.routeManifest.find((route) => route.hash === requestedHash) || null;
+  }
+  const loweredPath = String(pathname || "").toLowerCase();
+  return access.routeManifest.find((route) =>
+    Array.isArray(route.apis) && route.apis.some((apiPath) => String(apiPath || "").toLowerCase() === loweredPath)
+  ) || null;
+}
+
+async function authorizeRequest(request, pathname, requestData) {
+  if (!protectedPath(pathname)) return null;
+  const token = authHeaderToken(request);
+  if (!token) return authFailure(401, pathname, "Authentication required");
+
+  const actor = await authUserFromAccessToken(token);
+  if (!actor) return authFailure(401, pathname, "Invalid session");
+
+  request.__auth = actor;
+
+  const access = await getAccessControlModule();
+  const normalizedRole = access.normalizeRoleId(actor.roleId);
+  const lowerPath = String(pathname || "").toLowerCase();
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+
+  if (!actorCanAccessStation(actor, payload) && normalizedRole !== "super-admin") {
+    return authFailure(403, pathname, "Station scope violation");
+  }
+
+  if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword") return null;
+  if ((lowerPath === "/api/user/read" || lowerPath === "/api/user/info") && String(payload.userId || "").trim()) {
+    const targetUserId = String(payload.userId || "").trim().toLowerCase();
+    if (normalizedRole === "super-admin" || targetUserId === String(actor.userId || "").trim().toLowerCase()) return null;
+  }
+
+  if (lowerPath.startsWith("/api/user/")) {
+    return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
+  }
+
+  const route = await matchingRouteForRequest(pathname, request);
+  if (route && access.roleAllowsRoute(route, actor.roleId, actor.remark)) return null;
+
+  if (lowerPath.startsWith("/api/local/")) {
+    return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
+  }
+
+  if (lowerPath.startsWith("/api/system/")) {
+    if (lowerPath === "/api/system/automation-report" || lowerPath === "/api/system/automation-control" || lowerPath === "/api/system/automation-hooks/test") {
+      return (normalizedRole === "super-admin" || normalizedRole === "operations-manager") ? null : authFailure(403, pathname, "Insufficient permissions");
+    }
+    return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
+  }
+
+  if (isWriteRequest(pathname, request.method)) {
+    return authFailure(403, pathname, "Route permission required");
+  }
+
+  return null;
 }
 
 function readRequest(request) {
@@ -410,6 +541,139 @@ function hasBusinessFailure(payload) {
   const code = Number(payload.code);
   const emptyPayload = payload.result === null || payload.data === null;
   return Number.isFinite(code) && code !== 0 && code !== 200 && emptyPayload;
+}
+
+function isAccountCreatePath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/account/create";
+}
+
+function isAccountReadPath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/account/read";
+}
+
+function isAccountDeletePath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/account/delete";
+}
+
+function accountBindingPayloadRows(requestData) {
+  const payload = requestData?.parsedBody;
+  const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
+  return rows
+    .map((row) => ({
+      customerId: String(row?.customerId || "").trim(),
+      meterId: String(row?.meterId || "").trim(),
+      tariffId: String(row?.tariffId || "").trim(),
+      ctRatio: String(row?.ctRatio || "").trim(),
+      stationId: String(row?.stationId || "").trim(),
+      remark: String(row?.remark || "").trim()
+    }))
+    .filter((row) => row.customerId && row.meterId);
+}
+
+async function persistLocalAccountBindings(requestData, source = "local-fallback") {
+  const rows = accountBindingPayloadRows(requestData);
+  for (const row of rows) {
+    await saveAccountBinding({
+      ...row,
+      source,
+      status: "active",
+      details: row
+    });
+  }
+  return rows;
+}
+
+async function removeLocalAccountBindings(requestData) {
+  const rows = accountBindingPayloadRows(requestData);
+  let removed = 0;
+  for (const row of rows) {
+    removed += await deleteAccountBinding(row);
+  }
+  return removed;
+}
+
+function accountReadFilters(requestData) {
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  return {
+    customerId: String(payload.customerId || "").trim(),
+    meterId: String(payload.meterId || "").trim(),
+    stationId: String(payload.stationId || payload.SITE_ID || "").trim()
+  };
+}
+
+function accountBindingKey(row = {}) {
+  return `${String(row.customerId || "").trim()}::${String(row.meterId || "").trim()}`;
+}
+
+async function mergeLocalAccountBindings(pathname, requestData, result) {
+  if (!isAccountReadPath(pathname)) return result;
+  const localRows = await listAccountBindings(accountReadFilters(requestData));
+  if (!localRows.length) return result;
+  const body = result?.body;
+  if (!body || typeof body !== "object") {
+    return {
+      status: 200,
+      body: {
+        code: 0,
+        msg: "success",
+        reason: "success",
+        data: {
+          total: localRows.length,
+          data: localRows
+        },
+        result: {
+          total: localRows.length,
+          data: localRows
+        },
+        _proxy: {
+          source: "local-fallback",
+          pathname
+        }
+      }
+    };
+  }
+  const liveRows = collectionRowsFromPayload(body);
+  const merged = new Map();
+  for (const row of liveRows) merged.set(accountBindingKey(row), row);
+  for (const row of localRows) merged.set(accountBindingKey(row), { ...merged.get(accountBindingKey(row)), ...row });
+  const mergedRows = Array.from(merged.values());
+  const mergedBody = JSON.parse(JSON.stringify(body));
+  setCollectionRows(mergedBody, mergedRows, mergedRows.length);
+  mergedBody._proxy = {
+    ...(body._proxy || {}),
+    source: body._proxy?.source === "local-fallback" ? "local-fallback" : `${body._proxy?.source || "live"}+local`,
+    pathname
+  };
+  return {
+    status: result.status,
+    body: mergedBody
+  };
+}
+
+function localAccountCreateResponse(pathname, rows, lastFailure) {
+  return {
+    status: 200,
+    body: {
+      code: 0,
+      msg: "success",
+      reason: "Account binding stored locally while upstream is unavailable",
+      data: {
+        stored: true,
+        rows,
+        mode: "local-fallback"
+      },
+      result: {
+        stored: true,
+        rows,
+        mode: "local-fallback"
+      },
+      _proxy: {
+        source: "local-fallback",
+        pathname,
+        upstreamStatus: lastFailure?.status || 0
+      }
+    }
+  };
 }
 
 function logProxyFailure(details) {
@@ -777,10 +1041,11 @@ async function buildConsumptionAudit() {
       }
     }
 
-    const latestReadingDate = uniqueStation?.latestReadingDate || stationStat.latestReadingDate;
-    const earliestReadingDate = uniqueStation?.earliestReadingDate || stationStat.earliestReadingDate;
+    const latestReadingDate = stationStat.latestReadingDate || uniqueStation?.latestReadingDate || null;
+    const earliestReadingDate = stationStat.earliestReadingDate || uniqueStation?.earliestReadingDate || null;
     const freshness = classifyFreshness(latestReadingDate);
-    const coverage = classifyCoverage(earliestReadingDate, configuredFrom);
+    const effectiveCoverageStart = earliestReadingDate || configuredFrom;
+    const coverage = classifyCoverage(earliestReadingDate, effectiveCoverageStart);
     const storeRows = Number(stationStat.rows || 0);
     const progressTotalRows = Number(progressStation.totalRows || 0) || null;
     const progressStoredRows = Number(progressStation.storedRows || 0) || null;
@@ -830,6 +1095,7 @@ async function buildConsumptionAudit() {
       progressStoredRows,
       earliestReadingDate,
       latestReadingDate,
+      effectiveCoverageStart,
       completenessStatus,
       deltaStoreVsLive,
       deltaStoreVsProgress,
@@ -952,6 +1218,22 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     }
     return localJobResponse(await runRefreshJob(refreshScopeFromPath(pathname)));
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    return localJobResponse(await runGovernance());
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/health") {
     return localJobResponse({
       ok: true,
@@ -1004,6 +1286,9 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/storage-report") {
     return localJobResponse(await storageReport());
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/governance-plan") {
+    return localJobResponse(governancePlan());
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-store") {
     return localJobResponse(await dailyMeterTableReport());
   }
@@ -1020,6 +1305,9 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/events") {
     return syntheticSampleResponse("/API/EventNotification/Read", requestData, pathname)
       || localJobResponse({ total: 0, data: [] });
+  }
+  if (pathname === "/api/local/consumption/summary") {
+    return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
@@ -1102,6 +1390,14 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       scope: payload.scope || "global",
       limit: payload.limit || payload.pageSize || 20
     }));
+  }
+  if (pathname === "/api/local/governance/cleanup") {
+    return localJobResponse(await runRetentionCleanup({
+      dryRun: payload.dryRun !== false
+    }));
+  }
+  if (pathname === "/api/local/governance/role-audit") {
+    return localJobResponse(await rolePermissionAudit());
   }
   if (pathname === "/api/local/exportJob/create") {
     const artifact = payload.content ? await saveArtifact({
@@ -1218,6 +1514,7 @@ async function runRefreshJob(scope) {
     scope,
     refreshed: results.filter((entry) => entry.status < 400).length,
     failed: results.filter((entry) => entry.status >= 400).length,
+    governance: scope === "hourly" && new Date().getUTCHours() === 0 ? await runGovernance() : null,
     results
   };
 }
@@ -1417,10 +1714,25 @@ async function proxyLive(request, pathname, requestData) {
           continue;
         }
         if (isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
+          if (isAccountCreatePath(candidate)) {
+            lastFailure = {
+              pathname,
+              candidate,
+              status: liveResult.status,
+              payload: liveResult.payload
+            };
+            continue;
+          }
           return {
             status: liveResult.status,
             body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
           };
+        }
+        if (isAccountCreatePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
+          await persistLocalAccountBindings(requestData, "live");
+        }
+        if (isAccountDeletePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
+          await removeLocalAccountBindings(requestData);
         }
         if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
@@ -1449,6 +1761,10 @@ async function proxyLive(request, pathname, requestData) {
   }
 
   if (lastFailure) logProxyFailure(lastFailure);
+  if (isAccountCreatePath(pathname) && String(request.method || "GET").toUpperCase() === "POST") {
+    const rows = await persistLocalAccountBindings(requestData, "local-fallback");
+    if (rows.length) return localAccountCreateResponse(pathname, rows, lastFailure);
+  }
   return null;
 }
 
@@ -1468,6 +1784,12 @@ async function handler(request, response) {
       return;
     }
     const requestData = await readRequest(request);
+    result = await authorizeRequest(request, pathname, requestData);
+    if (result) {
+      await auditResult(request, pathname, result);
+      response.status(result.status).json(result.body);
+      return;
+    }
     result = await dispatchLocalDatabaseAction(request, pathname, requestData);
 
     if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
@@ -1521,6 +1843,8 @@ async function handler(request, response) {
     if (!result) {
       result = fallbackRemoteTask(pathname, requestData);
     }
+
+    result = await mergeLocalAccountBindings(pathname, requestData, result);
 
     if (!result) {
       result = {
@@ -1579,6 +1903,7 @@ module.exports._test = {
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;
+    accessControlModulePromise = null;
     rateLimitBuckets.clear();
     resetForTests();
   }

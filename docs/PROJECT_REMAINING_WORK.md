@@ -1,6 +1,38 @@
 Project Remaining Work
 ======================
 
+Phase 0 Truth Snapshot
+----------------------
+
+Date: 2026-05-12
+
+Release status:
+- blocked
+
+Why blocked:
+- public Vercel smoke fails because Vercel Authentication returns HTML
+- remote GitHub Actions `Production Hardening CI` is red
+- preview Supabase env vars are missing
+- deployed Supabase-mode smoke is unproven
+- worktree is dirty
+
+Current proof:
+- local `npm test` passes
+- local `npm run build` passes
+- local `npm run typecheck` passes
+- local `npm run hardening:audit` passes
+- local Edge browser smoke passes
+- Vercel preview deployment succeeds
+- protected Vercel smoke succeeds through `vercel curl`
+- Supabase-mode tests pass locally
+
+Canonical architecture:
+- root `ARCHITECTURE.md` is canonical
+- `docs/ARCHITECTURE.md` is legacy reference only
+
+Release rule:
+- do not ship until all local gates, public preview smoke, deployed Supabase smoke, and remote CI pass
+
 Snapshot
 --------
 
@@ -47,7 +79,7 @@ Live cutover:
 - write guard remains configurable through `ALLOW_LIVE_WRITES`
 
 Verification:
-- `npm test` passes
+- local `npm test` passes
 - `npm run build` passes
 - `npm run live:report` passes
 - focused `npm run diff` passes
@@ -69,21 +101,20 @@ Remaining Work
 1. Deploy Preview To Vercel
 ---------------------------
 
-Status: blocked locally.
+Status: deployed, but release blocked.
 
 Reason:
-- Vercel MCP returned CLI guidance only.
-- local `vercel` CLI is not installed.
-- preview URL is not available yet.
+- preview deployment succeeds
+- public smoke is blocked by Vercel Authentication
+- protected smoke passes through `vercel curl`
+- preview Supabase env vars are missing
 
 Tasks:
-- create Vercel project
-- set project root
-- set build command: `npm run build`
-- set output directory: `dist`
+- keep Vercel project linked
 - add all required environment variables
-- deploy preview
-- save preview URL
+- add smoke bypass support
+- rerun public preview smoke
+- save final evidence
 
 Required env vars:
 - `LIVE_READ_MODE=live`
@@ -103,7 +134,7 @@ npm run smoke:vercel
 ```
 
 Done when:
-- smoke command passes
+- public smoke command passes
 - dashboard loads in browser
 - account table loads in browser
 - write request returns `403` while guarded
@@ -246,11 +277,13 @@ Done when:
 6. Supabase Migration
 ---------------------
 
-Status: not started.
+Status: partially implemented, deployed proof missing.
 
 Current state:
 - local SQLite is used for cache, audit, import jobs, export jobs, print jobs, and write confirmations
 - Vercel can use memory mode until Supabase is added
+- Supabase-mode local tests pass
+- preview Supabase env vars are missing
 
 Tasks:
 - create Supabase project
@@ -455,18 +488,32 @@ Done when:
 Known Blockers
 --------------
 
-1. DLT645 upstream block
+1. Public Vercel smoke block
+- command: `npm run smoke:vercel`
+- status: fails
+- cause: Vercel Authentication
+- owner: deployment config
+- workaround: protected `vercel curl` smoke only
+
+2. Remote CI block
+- workflow: `Production Hardening CI`
+- status: failing
+- owner: release branch
+- workaround: none
+
+3. Supabase preview block
+- preview env vars: missing
+- deployed smoke: unproven
+- owner: deployment config
+- workaround: local Supabase-mode tests only
+
+4. DLT645 upstream block
 - endpoint: `/api/dlt645/read`
 - status: `403`
 - owner: upstream API/provider
 - workaround: keep route marked blocked
 
-2. Vercel preview unavailable
-- preview smoke cannot run without URL
-- owner: deployment step
-- workaround: local build and local tests pass
-
-3. File upload requires explicit approval
+5. File upload requires explicit approval
 - endpoint: `/API/File/Upload`
 - reason: outbound file transfer/write
 - workaround: keep guarded
@@ -474,14 +521,14 @@ Known Blockers
 Recommended Next Order
 ----------------------
 
-1. Deploy Vercel preview.
-2. Run `npm run smoke:vercel`.
-3. Fix preview-only issues.
-4. Request DLT645 permission.
-5. Build write approval workflow.
-6. Build Supabase storage adapter.
+1. Make Vercel smoke auth-aware.
+2. Configure preview Supabase envs.
+3. Push a clean branch.
+4. Confirm remote CI green.
+5. Rerun public preview smoke.
+6. Request DLT645 permission.
 7. Run final screenshot diff.
-8. Promote to production.
+8. Promote only after release status changes.
 
 Release Gate
 ------------
@@ -498,7 +545,9 @@ npm run smoke:vercel
 
 Production ready when:
 - all visible routes stay live-ready or live-derived
-- preview smoke passes
+- public preview smoke passes
+- deployed Supabase smoke passes
+- remote CI passes
 - write guard is confirmed
 - DLT645 blocker is accepted or resolved
 - file upload policy is accepted

@@ -15,7 +15,7 @@ function assertIncludes(file, expected) {
   );
 }
 
-const globalCss = `${readProjectFile("src/styles/reference.css")}\n${fs.readdirSync(path.join(root, "src/styles"))
+const globalCss = `${readProjectFile("src/styles/reference.css")}\n${readProjectFile("src/styles/primitives.css")}\n${fs.readdirSync(path.join(root, "src/styles"))
   .filter((file) => file.startsWith("legacy-") && file.endsWith(".css"))
   .map((file) => readProjectFile(`src/styles/${file}`))
   .join("\n")}`;
@@ -32,11 +32,15 @@ assertIncludes(globalCss, "font-variant-numeric: tabular-nums");
 assertIncludes(globalCss, "[data-theme=\"dark\"] .filter-toolbar");
 assertIncludes(globalCss, "th.action-column,");
 assertIncludes(globalCss, "min-width: 240px");
+assertIncludes(globalCss, "width: 240px");
 assertIncludes(globalCss, "[data-theme] .link-btn");
 
 assertIncludes(tablePage, "table-command-strip");
 assertIncludes(tablePage, ":aria-label=\"`${action} row ${rowIndex + 1}`\"");
-assertIncludes(tablePage, "min-width: max-content");
+assertIncludes(tablePage, "min-width: var(--table-action-column-width, 240px)");
+assertIncludes(tablePage, ":data-column-key=\"getColKey(column)\"");
+assertIncludes(tablePage, ".table-scroll th:not(.action-column)");
+assertIncludes(tablePage, ".table-scroll th.action-column");
 
 assertIncludes(dailyDataMeterPage, "Meter interval ledger");
 assertIncludes(dailyDataMeterPage, "aria-label=\"Search interval meter data\"");

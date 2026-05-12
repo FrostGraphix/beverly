@@ -101,10 +101,9 @@ async function main() {
       window.location.hash = "#/remote-operation/remote-meter-reading";
     });
     await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
+    await page.locator("th.check-column .base-checkbox").click();
     await page.click("text=Add Batch Task");
     await page.waitForSelector(".modal-title", { timeout: 10000 });
-    await page.locator('select[multiple]').first().selectOption(["M-1001", "M-1002"]);
-    await page.locator('select[multiple]').nth(1).selectOption(["Credit balance", "Power"]);
     await page.click(".modal-actions .base-button--primary");
     await page.waitForSelector("text=Selected Meter", { timeout: 10000 });
     await page.waitForSelector("text=Station Count", { timeout: 10000 });

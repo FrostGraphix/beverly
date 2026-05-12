@@ -110,11 +110,70 @@
    ============================================================ */
 
 @media (max-width: 1024px) {
-  .app-page:not(.hideSidebar) .sidebar-container { transform: translateX(0); }
+  .app-page.mobile.openSidebar .sidebar-container { transform: translateX(0); }
   .main-container { margin-left: 0 !important; }
 }
 
 @media (max-width: 768px) {
+  .mobile .sidebar-container {
+    width: var(--layout-mobile-sidebar-width);
+    transform: translateX(calc(-1 * var(--layout-mobile-sidebar-width)));
+  }
+  .mobile .main-container { padding-top: 84px; }
+  .mobile .navbar {
+    height: 50px;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+  .mobile .hamburger-container {
+    width: 48px;
+    height: 50px;
+  }
+  .mobile .right-menu {
+    height: 50px;
+    gap: 4px;
+    padding: 0 10px 0 0;
+    font-size: 13px;
+  }
+  .mobile .tags-view-container {
+    height: 34px;
+    align-items: center;
+    padding: 0 10px;
+  }
+  .mobile .tags-view-item {
+    height: 22px;
+    max-width: calc(100vw - 20px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .mobile .content-page { padding: 12px; }
+  .mobile .sidebar-logo {
+    height: 58px;
+    padding: 0 14px;
+  }
+  .mobile .sidebar-mobile-close {
+    width: 44px;
+    height: 44px;
+    margin-right: -8px;
+  }
+  .mobile .sidebar-menu {
+    margin-top: 8px;
+    padding: 0 10px 64px;
+  }
+  .mobile .sidebar-item {
+    min-height: 38px;
+    margin-bottom: 2px;
+    padding-inline: 10px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+  .mobile .sidebar-item.indent {
+    min-height: 34px;
+    padding-left: 36px;
+    font-size: 12px;
+  }
+  .mobile .sidebar-footer { padding: 10px; }
   .filter-toolbar { gap: 6px; }
   .search-input { min-width: 120px; }
   .modal, .modal-sop { min-width: 90vw !important; max-width: 95vw !important; margin: 12px; }
@@ -128,7 +187,14 @@
 @media (max-width: 480px) {
   .filter-toolbar .btn:not(.primary) { padding: 0 8px; }
   .topbar-tool { width: 32px; height: 32px; }
-  .sidebar-logo-text { display: none; }
+  .hideSidebar:not(.mobile) .sidebar-logo-text { display: none; }
+  .mobile .main-container { padding-top: 82px; }
+  .mobile .navbar,
+  .mobile .hamburger-container { height: 48px; }
+  .mobile .right-menu {
+    gap: 0;
+    padding-right: 8px;
+  }
   .profile-hero { padding: 16px; }
   .profile-body { padding: 16px; }
 }

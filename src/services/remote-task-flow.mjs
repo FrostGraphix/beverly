@@ -145,7 +145,7 @@ export function remoteTaskValidationError(route = {}, form = {}, options = {}) {
   const selectedDataItems = normalizeRemoteDataItems(route, form.selectedDataItems);
   const kind = remoteTaskKind(route);
   if (isBatch) {
-    if (Array.isArray(form.selectedMeterIds) && form.selectedMeterIds.length > 0) {
+    if (Array.isArray(form.selectedMeterIds)) {
       if (!selectedMeterIds.length) return "meterIds are required";
     } else if (!rows.some((row) => row?.meterId)) return "rows are required";
   } else {

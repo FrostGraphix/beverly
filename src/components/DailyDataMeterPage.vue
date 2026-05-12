@@ -1,354 +1,653 @@
 <template>
-  <div class="ddm-page">
-    <div class="ddm-filter-bar">
-      <div class="ddm-filter-title">
-        <svg class="ddm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        <div>
-          <h1 class="ddm-h1">Interval Data (DailyDataMeter)</h1>
-          <p class="ddm-sub">Daily meter readings · Relay status · Tamper events</p>
-        </div>
+  <div class="table-page ddm-container">
+    <div class="sr-only">Meter interval ledger</div>
+
+    <div class="filter-toolbar ddm-toolbar">
+      <div class="ddm-toolbar-group ddm-search-group">
+        <BaseInput
+          v-model="searchTerm"
+          class="search-input"
+          type="search"
+          placeholder="Search customer, meter, station..."
+          aria-label="Search interval meter data"
+          @keyup.enter="onSearch"
+        />
       </div>
-      <div class="ddm-controls">
-        <BaseSelect v-model="stationId" class="ddm-select" @change="onFilterChange">
-          <option value="">All Stations</option>
-          <option v-for="s in stations" :key="s" :value="s">{{ s }}</option>
+      <div class="ddm-toolbar-group ddm-sort-group">
+        <BaseSelect v-model="sortField" class="sort-select" aria-label="Sort by" @change="reload">
+          <option value="">Sort by...</option>
+          <option value="customerName">Customer Name</option>
+          <option value="meterId">Meter Id</option>
+          <option value="currentDate">Collection Date</option>
+          <option value="total1">Total Energy</option>
+          <option value="usage1">Last Hour Usage</option>
+          <option value="remain1">Credit Balance</option>
+          <option value="intervalDemand">Maximum Demand</option>
+          <option value="power">Power</option>
+          <option value="stationId">Station Id</option>
         </BaseSelect>
-        <div class="ddm-date-group">
-          <label class="ddm-label">From</label>
-          <BaseInput type="date" v-model="from" class="ddm-input" @change="onFilterChange" />
-        </div>
-        <div class="ddm-date-group">
-          <label class="ddm-label">To</label>
-          <BaseInput type="date" v-model="to" class="ddm-input" @change="onFilterChange" />
-        </div>
-        <BaseButton class="ddm-btn" variant="primary" :disabled="loading" @click="reload">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: loading }"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          Refresh
-        </BaseButton>
+        <BaseSelect v-model="sortDir" class="sort-select" aria-label="Sort direction" @change="reload">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </BaseSelect>
+      </div>
+      <div class="ddm-toolbar-group ddm-actions-group">
+        <BaseButton variant="primary" :disabled="loading" @click="onSearch">Search</BaseButton>
+        <BaseButton @click="resetFilters">Reset</BaseButton>
+        <BaseButton variant="primary" :disabled="!rows.length" @click="exportCsv">Export</BaseButton>
       </div>
     </div>
 
-    <div class="ddm-stats">
-      <div class="ddm-stat-card">
-        <div class="ddm-stat-value">{{ stats.totalMeters.toLocaleString() }}</div>
-        <div class="ddm-stat-label">Meters</div>
-      </div>
-      <div class="ddm-stat-card">
-        <div class="ddm-stat-value">{{ stats.totalReadings.toLocaleString() }}</div>
-        <div class="ddm-stat-label">Readings</div>
-      </div>
-      <div class="ddm-stat-card">
-        <div class="ddm-stat-value">{{ stats.avgUsage.toFixed(2) }}</div>
-        <div class="ddm-stat-label">Avg Usage (kWh)</div>
-      </div>
-      <div class="ddm-stat-card ddm-stat-card--alert">
-        <div class="ddm-stat-value">{{ stats.tamperEvents.toLocaleString() }}</div>
-        <div class="ddm-stat-label">Tamper Events</div>
-      </div>
-      <div class="ddm-stat-card ddm-stat-card--warn">
-        <div class="ddm-stat-value">{{ stats.relayOpen.toLocaleString() }}</div>
-        <div class="ddm-stat-label">Relay Open</div>
+    <div class="table-command-strip" aria-live="polite">
+      <div>{{ totalRecords }} visible</div>
+      <div class="table-command-meta">
+        <span>Page {{ page }} / {{ totalPages }}</span>
+        <span>{{ pageSize }}/page</span>
       </div>
     </div>
 
-    <div class="ddm-table-card">
-      <div class="ddm-table-header">
-        <div>
-          <strong>Meter interval ledger</strong>
-          <span>{{ displayRows.length.toLocaleString() }} shown</span>
-        </div>
-        <BaseInput v-model="search" class="ddm-search" placeholder="Search meter, customer, gateway..." type="search" aria-label="Search interval meter data" />
-        <span class="ddm-page-info">
-          Page {{ page }} of {{ totalPages }} ({{ totalRecords.toLocaleString() }} records)
-        </span>
-      </div>
-      <div v-if="loading" class="ddm-loading">
-        <div class="ddm-spinner"></div>
-        <span>Loading meter data...</span>
-      </div>
-      <div v-else-if="!displayRows.length" class="ddm-empty">No meter data for this period and station filter.</div>
-      <div v-else class="ddm-table-wrap">
-        <table class="ddm-table">
-          <thead>
-            <tr>
-              <th @click="sort('currentDate')" class="sortable">Date <span class="sort-arrow">{{ sortArrow('currentDate') }}</span></th>
-              <th @click="sort('meterId')" class="sortable">Meter <span class="sort-arrow">{{ sortArrow('meterId') }}</span></th>
-              <th @click="sort('customerName')" class="sortable">Customer <span class="sort-arrow">{{ sortArrow('customerName') }}</span></th>
-              <th>Gateway</th>
-              <th @click="sort('derivedUsage')" class="sortable">Usage (kWh) <span class="sort-arrow">{{ sortArrow('derivedUsage') }}</span></th>
-              <th @click="sort('total1')" class="sortable">Total (kWh) <span class="sort-arrow">{{ sortArrow('total1') }}</span></th>
-              <th @click="sort('remain1')" class="sortable">Remaining <span class="sort-arrow">{{ sortArrow('remain1') }}</span></th>
-              <th>Power</th>
-              <th>Status</th>
-              <th>Station</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in displayRows" :key="row._id" :class="rowClass(row)">
-              <td class="mono-sm">{{ (row.currentDate || '').substring(0, 10) }}</td>
-              <td><span class="meter-badge">{{ row.meterId }}</span></td>
-              <td>{{ row.customerName || row.customerId || '—' }}</td>
-              <td class="text-muted">{{ row.gatewayId || '—' }}</td>
-              <td>{{ fmtNum(row.derivedUsage) }}</td>
-              <td class="fw-600">{{ fmtNum(row.total1) }}</td>
-              <td>{{ fmtNum(row.remain1) }}</td>
-              <td>{{ fmtNum(row.power) }}</td>
-              <td>
-                <span v-if="isTamper(row)" class="status-badge status-badge--tamper">Tamper</span>
-                <span v-else-if="row.relayOpen" class="status-badge status-badge--relay">Relay Open</span>
-                <span v-else class="status-badge status-badge--ok">Normal</span>
+    <div class="table-scroll">
+      <table style="min-width:2660px">
+        <thead>
+          <tr>
+            <th style="min-width:120px">Meter Id</th>
+            <th style="min-width:180px">Gateway Id</th>
+            <th style="min-width:150px">Collection Date</th>
+            <th style="min-width:120px">Customer Id</th>
+            <th style="min-width:180px">Customer Name</th>
+            <th style="min-width:110px">Station Id</th>
+            <th style="min-width:110px">Total Energy</th>
+            <th style="min-width:120px">Last Hour Usage</th>
+            <th style="min-width:120px">Credit Balance</th>
+            <th style="min-width:130px">Maximum Demand</th>
+            <th style="min-width:110px">Power</th>
+            <th style="min-width:120px">Relay Status</th>
+            <th style="min-width:120px">Battery Status</th>
+            <th style="min-width:130px">Magnetic Status</th>
+            <th style="min-width:130px">Terminal Cover</th>
+            <th style="min-width:120px">Upper Open</th>
+            <th style="min-width:130px">Current Reverse</th>
+            <th style="min-width:150px">Current Unbalance</th>
+            <th style="min-width:160px">Update Time</th>
+            <th class="action-column">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-if="loading">
+            <tr v-for="i in 5" :key="`sk-${i}`" class="skeleton-row">
+              <td v-for="column in 20" :key="column">
+                <div class="skeleton-cell" :style="{ width: column === 20 ? '74px' : `${58 + (i * 13) % 34}%` }"></div>
               </td>
-              <td><span class="station-badge">{{ row.stationId }}</span></td>
             </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="ddm-pagination">
-        <BaseButton class="page-btn" size="sm" :disabled="page <= 1" @click="page--; reload()">‹</BaseButton>
-        <span class="page-info-num">{{ page }} / {{ totalPages }}</span>
-        <BaseButton class="page-btn" size="sm" :disabled="page >= totalPages" @click="page++; reload()">›</BaseButton>
-      </div>
+          </template>
+          <tr v-else-if="!rows.length">
+            <td class="empty-cell" colspan="20">No data found</td>
+          </tr>
+          <tr v-else v-for="(row, index) in visibleRows" :key="`${row.meterId || 'row'}-${index}`">
+            <td><span class="meter-badge">{{ text(row.meterId) }}</span></td>
+            <td class="mono-sm">{{ text(row.gatewayId) }}</td>
+            <td class="mono-sm">{{ dateText(row.currentDate) }}</td>
+            <td>{{ text(row.customerId) }}</td>
+            <td>{{ text(row.customerName) }}</td>
+            <td><span class="station-badge">{{ text(row.stationId) }}</span></td>
+            <td class="text-primary fw">{{ fmtNum(row.total1) }}</td>
+            <td>{{ fmtNum(row.usage1) }}</td>
+            <td>{{ fmtNum(row.remain1) }}</td>
+            <td>{{ fmtNum(row.intervalDemand) }}</td>
+            <td>{{ fmtNum(row.power) }}</td>
+            <td><span :class="healthClass(row.relayOpen)">{{ healthText(row.relayOpen) }}</span></td>
+            <td><span :class="healthClass(row.batteryLow)">{{ healthText(row.batteryLow) }}</span></td>
+            <td><span :class="healthClass(row.magneticInterference)">{{ healthText(row.magneticInterference) }}</span></td>
+            <td><span :class="healthClass(row.terminalCoverOpen)">{{ healthText(row.terminalCoverOpen) }}</span></td>
+            <td><span :class="healthClass(row.coverOpen)">{{ healthText(row.coverOpen) }}</span></td>
+            <td><span :class="healthClass(row.currentReverse)">{{ healthText(row.currentReverse) }}</span></td>
+            <td><span :class="healthClass(row.currentUnbalance)">{{ healthText(row.currentUnbalance) }}</span></td>
+            <td class="mono-sm text-muted">{{ dateTimeText(row.updateDate) }}</td>
+            <td class="action-column">
+              <BaseButton
+                class="hourly-btn"
+                aria-label="Open hourly hover modal"
+                @click.stop="openHourly(row)"
+              >
+                Hourly
+              </BaseButton>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
+    <div class="ddm-mobile-cards">
+      <template v-if="loading">
+        <article v-for="index in 4" :key="`ddm-mobile-sk-${index}`" class="ddm-mobile-card">
+          <div v-for="line in 5" :key="line" class="ddm-mobile-line">
+            <div class="skeleton-cell" :style="{ width: `${44 + ((index + line) * 11) % 34}%` }"></div>
+          </div>
+        </article>
+      </template>
+      <div v-else-if="!visibleRows.length" class="ddm-mobile-empty">No data found</div>
+      <article v-else v-for="(row, index) in visibleRows" :key="`ddm-mobile-${row.meterId || index}`" class="ddm-mobile-card">
+        <div class="ddm-mobile-head">
+          <div>
+            <strong>{{ text(row.meterId) }}</strong>
+            <span>{{ dateText(row.currentDate) }}</span>
+          </div>
+          <BaseButton class="hourly-btn" size="sm" @click.stop="openHourly(row)">Hourly</BaseButton>
+        </div>
+        <div class="ddm-mobile-grid">
+          <div class="ddm-mobile-field">
+            <span>Customer</span>
+            <strong>{{ text(row.customerName || row.customerId) }}</strong>
+          </div>
+          <div class="ddm-mobile-field">
+            <span>Station</span>
+            <strong>{{ text(row.stationId) }}</strong>
+          </div>
+          <div class="ddm-mobile-field">
+            <span>Total Energy</span>
+            <strong>{{ fmtNum(row.total1) }}</strong>
+          </div>
+          <div class="ddm-mobile-field">
+            <span>Last Hour</span>
+            <strong>{{ fmtNum(row.usage1) }}</strong>
+          </div>
+          <div class="ddm-mobile-field">
+            <span>Credit</span>
+            <strong>{{ fmtNum(row.remain1) }}</strong>
+          </div>
+          <div class="ddm-mobile-field">
+            <span>Power</span>
+            <strong>{{ fmtNum(row.power) }}</strong>
+          </div>
+        </div>
+        <div class="ddm-mobile-health">
+          <span :class="healthClass(row.relayOpen)">Relay {{ healthText(row.relayOpen) }}</span>
+          <span :class="healthClass(row.batteryLow)">Battery {{ healthText(row.batteryLow) }}</span>
+          <span :class="healthClass(row.magneticInterference)">Magnetic {{ healthText(row.magneticInterference) }}</span>
+        </div>
+      </article>
+    </div>
+
+    <div class="pagination">
+      <span>Total {{ totalRecords }}</span>
+      <BaseSelect v-model="pageSize" class="sort-select" aria-label="Page size" @change="onPageSizeChange">
+        <option :value="10">10/page</option>
+        <option :value="20">20/page</option>
+        <option :value="50">50/page</option>
+        <option :value="100">100/page</option>
+      </BaseSelect>
+      <BaseButton class="page-chip" size="sm" :disabled="page <= 1" @click="changePage(page - 1)">&#8249;</BaseButton>
+      <BaseButton v-for="p in pages" :key="p" :class="['page-chip', p === page ? 'active' : '']" size="sm" @click="changePage(p)">{{ p }}</BaseButton>
+      <BaseButton class="page-chip" size="sm" :disabled="page >= totalPages" @click="changePage(page + 1)">&#8250;</BaseButton>
+      <span>Go to</span>
+      <BaseInput v-model="gotoPage" type="number" class="goto-input" aria-label="Go to page" @keyup.enter="applyGoto" />
+    </div>
+
+    <teleport to="body">
+      <div v-if="hourly.open" class="ddm-overlay" role="dialog" aria-modal="true" @click.self="closeHourly">
+        <div class="ddm-modal">
+          <div class="ddm-modal-head">
+            <div>
+              <h2 class="ddm-modal-title">Hourly interval data</h2>
+              <p class="ddm-modal-sub">{{ hourly.meterId }} - {{ hourly.date || "Selected day" }}</p>
+            </div>
+            <BaseIconButton class="ddm-modal-x" aria-label="Close hourly modal" @click="closeHourly">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </BaseIconButton>
+          </div>
+
+          <div class="ddm-modal-body">
+            <div v-if="hourly.loading" class="ddm-loader"><div class="ddm-spin"></div> Loading hourly data...</div>
+            <div v-else-if="hourly.error" class="ddm-err">{{ hourly.error }}</div>
+            <div v-else class="ddm-htable-wrap">
+              <table class="ddm-htable" style="min-width:2300px">
+                <thead>
+                  <tr>
+                    <th style="min-width:120px">Collection Time</th>
+                    <th style="min-width:180px">Gateway Id</th>
+                    <th style="min-width:120px">Total Energy</th>
+                    <th style="min-width:130px">Last Hour Usage</th>
+                    <th style="min-width:130px">Credit Balance</th>
+                    <th style="min-width:130px">Maximum Demand</th>
+                    <th style="min-width:110px">Voltage-A (V)</th>
+                    <th style="min-width:110px">Voltage-B (V)</th>
+                    <th style="min-width:110px">Voltage-C (V)</th>
+                    <th style="min-width:110px">Current-A (A)</th>
+                    <th style="min-width:110px">Current-B (A)</th>
+                    <th style="min-width:110px">Current-C (A)</th>
+                    <th style="min-width:120px">Relay Status</th>
+                    <th style="min-width:120px">Battery Status</th>
+                    <th style="min-width:130px">Magnetic Status</th>
+                    <th style="min-width:130px">Terminal Cover</th>
+                    <th style="min-width:120px">Upper Open</th>
+                    <th style="min-width:130px">Current Reverse</th>
+                    <th style="min-width:150px">Current Unbalance</th>
+                    <th style="min-width:160px">Create Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!hourly.rows.length">
+                    <td colspan="20" class="empty-cell">No hourly data for this meter and date.</td>
+                  </tr>
+                  <tr v-for="(row, index) in hourly.rows" :key="`${row.meterId || 'hour'}-${index}`">
+                    <td class="mono-sm">{{ timeText(row.timestamp || row.currentDate || row.collectionDate) }}</td>
+                    <td class="mono-sm">{{ text(row.gatewayId || hourly.gatewayId) }}</td>
+                    <td class="text-primary fw">{{ fmtNum(row.total1 ?? row.totalEnergy ?? row.energyReadingKwh) }}</td>
+                    <td>{{ fmtNum(row.usage1 ?? row.lastHourUsage ?? row.energyConsumptionKwh) }}</td>
+                    <td>{{ fmtNum(row.remain1 ?? row.creditBalance ?? row.energyBalanceKwh) }}</td>
+                    <td>{{ fmtNum(row.intervalDemand ?? row.maximumDemand) }}</td>
+                    <td>{{ fmtNum(row.voltageA) }}</td>
+                    <td>{{ fmtNum(row.voltageB) }}</td>
+                    <td>{{ fmtNum(row.voltageC) }}</td>
+                    <td>{{ fmtNum(row.currentA) }}</td>
+                    <td>{{ fmtNum(row.currentB) }}</td>
+                    <td>{{ fmtNum(row.currentC) }}</td>
+                    <td><span :class="healthClass(row.relayOpen ?? row.relayStatus)">{{ healthText(row.relayOpen ?? row.relayStatus) }}</span></td>
+                    <td><span :class="healthClass(row.batteryLow ?? row.batteryStatus)">{{ healthText(row.batteryLow ?? row.batteryStatus) }}</span></td>
+                    <td><span :class="healthClass(row.magneticInterference ?? row.magneticStatus)">{{ healthText(row.magneticInterference ?? row.magneticStatus) }}</span></td>
+                    <td><span :class="healthClass(row.terminalCoverOpen ?? row.terminalCover)">{{ healthText(row.terminalCoverOpen ?? row.terminalCover) }}</span></td>
+                    <td><span :class="healthClass(row.coverOpen ?? row.upperOpen)">{{ healthText(row.coverOpen ?? row.upperOpen) }}</span></td>
+                    <td><span :class="healthClass(row.currentReverse)">{{ healthText(row.currentReverse) }}</span></td>
+                    <td><span :class="healthClass(row.currentUnbalance)">{{ healthText(row.currentUnbalance) }}</span></td>
+                    <td class="mono-sm text-muted">{{ dateTimeText(row.createDate || row.timestamp || row.currentDate || row.collectionDate) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="ddm-modal-foot">
+            <span>{{ hourly.total }} hourly rows</span>
+            <BaseButton @click="closeHourly">Close</BaseButton>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
 <script>
-import { LIVE_STATIONS } from "../services/consumption-service.mjs";
 import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
+import { getApi, postApi } from "../services/api.js";
+import { downloadTextFile, exportReportCsvText } from "../services/import-export.mjs";
 
-function sortByDate(rows) {
-  return rows.slice().sort((a, b) => String(a.currentDate || "").localeCompare(String(b.currentDate || "")));
+function normalizeCollection(response) {
+  const body = response?.body || response;
+  const result = body?.result;
+  const data = body?.data;
+  const rows = body?.readings || result?.readings || data?.readings || result?.data || data?.data || result || data || body;
+  if (Array.isArray(rows)) {
+    return {
+      rows,
+      total: Number(body?.total ?? result?.total ?? data?.total ?? rows.length) || rows.length
+    };
+  }
+  return { rows: [], total: 0 };
 }
 
-function deriveUsageRows(rows) {
-  const byMeter = new Map();
-  rows.forEach((row) => {
-    const key = String(row.meterId || row.customerId || "");
-    if (!byMeter.has(key)) byMeter.set(key, []);
-    byMeter.get(key).push(row);
-  });
-
-  const usageByKey = new Map();
-  byMeter.forEach((meterRows, meterId) => {
-    const sorted = sortByDate(meterRows);
-    sorted.forEach((row, index) => {
-      const current = Number(row.total1) || 0;
-      const previous = index === 0 ? current : (Number(sorted[index - 1].total1) || 0);
-      const derivedUsage = Math.max(0, current - previous);
-      const id = row._id || `${meterId}-${index}`;
-      usageByKey.set(id, parseFloat(derivedUsage.toFixed(3)));
-    });
-  });
-
-  return rows.map((row, index) => {
-    const id = row._id || `${row.meterId || row.customerId || "row"}-${index}`;
-    return {
-      ...row,
-      _id: id,
-      derivedUsage: usageByKey.get(id) ?? 0,
-    };
-  });
+function normalizeDailyRow(row) {
+  return {
+    ...row,
+    meterId: row.meterId || row.serialNumber || "",
+    gatewayId: row.gatewayId || row.gateway || "",
+    currentDate: row.currentDate || row.collectionDate || row.timestamp || row.createDate || "",
+    customerId: row.customerId || row.customerAccountId || "",
+    customerName: row.customerName || row.name || "",
+    stationId: row.stationId || row.station || row.siteId || "",
+    total1: row.total1 ?? row.totalEnergy ?? row.energyReadingKwh,
+    usage1: row.usage1 ?? row.lastHourUsage ?? row.energyConsumptionKwh,
+    remain1: row.remain1 ?? row.creditBalance ?? row.energyBalanceKwh,
+    intervalDemand: row.intervalDemand ?? row.maximumDemand,
+    power: row.power,
+    relayOpen: row.relayOpen ?? row.relayStatus,
+    batteryLow: row.batteryLow ?? row.batteryStatus,
+    magneticInterference: row.magneticInterference ?? row.magneticStatus,
+    terminalCoverOpen: row.terminalCoverOpen ?? row.terminalCover,
+    coverOpen: row.coverOpen ?? row.upperOpen,
+    currentReverse: row.currentReverse,
+    currentUnbalance: row.currentUnbalance,
+    updateDate: row.updateDate || row.updateTime || row.createDate || row.timestamp || "",
+    status: row.status
+  };
 }
 
 export default {
   name: "DailyDataMeterPage",
-  components: { BaseButton, BaseInput, BaseSelect },
+  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect },
+  props: {
+    route: {
+      type: Object,
+      default: () => ({})
+    }
+  },
   data() {
-    const now = new Date();
-    const pad = (value) => String(value).padStart(2, "0");
-    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const monthStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
     return {
-      stations: LIVE_STATIONS,
-      stationId: "",
-      from: monthStart,
-      to: today,
+      searchTerm: "",
       rows: [],
       totalRecords: 0,
       page: 1,
-      pageSize: 100,
+      pageSize: 10,
+      gotoPage: "1",
       loading: false,
-      search: "",
-      sortKey: "currentDate",
-      sortDir: -1,
+      sortField: "currentDate",
+      sortDir: "desc",
+      hourly: {
+        open: false,
+        loading: false,
+        error: "",
+        meterId: "",
+        gatewayId: "",
+        date: "",
+        rows: [],
+        total: 0
+      }
     };
   },
   computed: {
-    normalizedRows() {
-      return deriveUsageRows(this.rows);
-    },
-    stats() {
-      const rows = this.normalizedRows;
-      const meters = new Set(rows.map((row) => row.meterId)).size;
-      const total = rows.length;
-      const usage = rows.reduce((sum, row) => sum + (Number(row.derivedUsage) || 0), 0);
-      const tamper = rows.filter((row) => this.isTamper(row)).length;
-      const relay = rows.filter((row) => row.relayOpen).length;
-      return {
-        totalMeters: meters,
-        totalReadings: this.totalRecords,
-        avgUsage: total > 0 ? usage / total : 0,
-        tamperEvents: tamper,
-        relayOpen: relay,
-      };
-    },
     totalPages() {
       return Math.max(1, Math.ceil(this.totalRecords / this.pageSize));
     },
-    displayRows() {
-      let result = this.normalizedRows;
-      if (this.search) {
-        const query = this.search.toLowerCase();
-        result = result.filter((row) =>
-          String(row.meterId || "").toLowerCase().includes(query) ||
-          String(row.customerId || "").toLowerCase().includes(query) ||
-          String(row.customerName || "").toLowerCase().includes(query) ||
-          String(row.gatewayId || "").toLowerCase().includes(query)
-        );
-      }
-      return result.slice().sort((a, b) => {
-        const va = a[this.sortKey];
-        const vb = b[this.sortKey];
-        if (typeof va === "string" || typeof vb === "string") {
-          return String(va || "").localeCompare(String(vb || "")) * this.sortDir;
-        }
-        return ((Number(va) || 0) - (Number(vb) || 0)) * this.sortDir;
-      });
+    visibleRows() {
+      return this.rows;
     },
+    pages() {
+      const pages = [];
+      const start = Math.max(1, this.page - 1);
+      const end = Math.min(this.totalPages, start + 2);
+      for (let index = start; index <= end; index += 1) pages.push(index);
+      return pages;
+    }
   },
   mounted() {
     this.reload();
   },
   methods: {
-    onFilterChange() {
-      this.page = 1;
-      this.reload();
-    },
     async reload() {
       this.loading = true;
       try {
-        const body = {
+        const payload = {
           lang: "en",
           pageNumber: this.page,
           pageSize: this.pageSize,
-          FROM: this.from,
-          TO: this.to,
+          FROM: this.defaultFrom(),
+          TO: new Date().toISOString(),
+          orderBy: this.sortField ? `${this.sortField} ${this.sortDir}` : undefined
         };
-        if (this.stationId) body.stationId = this.stationId;
+        if (this.searchTerm) payload.searchTerm = this.searchTerm;
+        const response = await postApi("/api/DailyDataMeter/read", payload);
+        const collection = normalizeCollection(response);
+        let rows = collection.rows.map(normalizeDailyRow);
 
-        const res = await fetch("/api/DailyDataMeter/read", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const result = data?.result || data?.data || {};
-        this.rows = (Array.isArray(result.data) ? result.data : []).map((row, index) => ({ ...row, _id: `${this.page}-${index}` }));
-        this.totalRecords = Number(result.total) || this.rows.length;
-      } catch (e) {
-        console.error("[DailyDataMeterPage]", e);
+        const query = this.searchTerm.trim().toLowerCase();
+        if (query) {
+          rows = rows.filter((row) => [row.meterId, row.customerId, row.customerName, row.gatewayId, row.stationId]
+            .some((value) => String(value || "").toLowerCase().includes(query)));
+        }
+
+        rows = this.sortRows(rows);
+        this.rows = rows;
+        this.totalRecords = query && rows.length < collection.rows.length ? rows.length : collection.total;
+        this.page = Math.min(this.page, this.totalPages);
+      } catch (error) {
+        console.error("[DailyDataMeterPage]", error);
         this.rows = [];
         this.totalRecords = 0;
       } finally {
         this.loading = false;
       }
     },
-    isTamper(row) {
-      return !!(row.terminalCoverOpen || row.magneticInterference || row.currentReverse);
+    async openHourly(row) {
+      const meterId = String(row.meterId || "").trim();
+      const date = this.dateOnly(row.currentDate);
+      this.hourly = {
+        open: true,
+        loading: true,
+        error: "",
+        meterId,
+        gatewayId: row.gatewayId || "",
+        date,
+        rows: [],
+        total: 0
+      };
+      try {
+        const params = {
+          meterId,
+          FROM: date ? `${date}T00:00:00.000Z` : this.defaultFrom(),
+          TO: date ? `${date}T23:59:59.999Z` : new Date().toISOString(),
+          SITE_ID: row.stationId || undefined,
+          offset: 0,
+          pageLimit: 500
+        };
+        let response;
+        try {
+          response = await getApi("/api/DailyDataMeter/readHourly", params);
+        } catch {
+          response = await postApi("/api/DailyDataMeter/readMore", {
+            lang: "en",
+            meterId,
+            FROM: params.FROM,
+            TO: params.TO,
+            pageNumber: 1,
+            pageSize: 500
+          });
+        }
+        const collection = normalizeCollection(response);
+        const rows = collection.rows
+          .filter((item) => !meterId || String(item.meterId || "").trim() === meterId)
+          .filter((item) => !date || this.dateOnly(item.timestamp || item.currentDate || item.collectionDate) === date);
+        this.hourly.rows = rows;
+        this.hourly.total = rows.length;
+      } catch (error) {
+        console.error("[DailyDataMeterPage hourly]", error);
+        this.hourly.error = error?.message || "Unable to load hourly data";
+      } finally {
+        this.hourly.loading = false;
+      }
     },
-    rowClass(row) {
-      if (this.isTamper(row)) return "ddm-row ddm-row--tamper";
-      if (row.relayOpen) return "ddm-row ddm-row--relay";
-      return "ddm-row";
+    closeHourly() {
+      this.hourly.open = false;
+    },
+    sortRows(rows) {
+      const field = this.sortField || "currentDate";
+      const factor = this.sortDir === "desc" ? -1 : 1;
+      return rows.slice().sort((left, right) => {
+        const a = this.sortValue(left[field]);
+        const b = this.sortValue(right[field]);
+        if (typeof a === "number" && typeof b === "number") return (a - b) * factor;
+        return String(a).localeCompare(String(b), undefined, { numeric: true }) * factor;
+      });
+    },
+    sortValue(value) {
+      if (value === null || value === undefined) return "";
+      const text = String(value).trim();
+      const number = Number(text.replace(/,/g, ""));
+      if (Number.isFinite(number) && /^-?\d+(?:\.\d+)?$/.test(text)) return number;
+      const time = Date.parse(text);
+      if (Number.isFinite(time)) return time;
+      return text.toLowerCase();
+    },
+    onSearch() {
+      this.page = 1;
+      this.gotoPage = "1";
+      this.reload();
+    },
+    resetFilters() {
+      this.searchTerm = "";
+      this.sortField = "currentDate";
+      this.sortDir = "desc";
+      this.page = 1;
+      this.gotoPage = "1";
+      this.reload();
+    },
+    onPageSizeChange() {
+      this.page = 1;
+      this.gotoPage = "1";
+      this.reload();
+    },
+    changePage(page) {
+      this.page = Math.max(1, Math.min(this.totalPages, page));
+      this.gotoPage = String(this.page);
+      this.reload();
+    },
+    applyGoto() {
+      const page = Number(this.gotoPage);
+      if (Number.isFinite(page)) this.changePage(page);
+    },
+    exportCsv() {
+      const columns = [
+        { label: "Meter Id", key: "meterId" },
+        { label: "Gateway Id", key: "gatewayId" },
+        { label: "Collection Date", key: "currentDate" },
+        { label: "Customer Id", key: "customerId" },
+        { label: "Customer Name", key: "customerName" },
+        { label: "Station Id", key: "stationId" },
+        { label: "Total Energy", key: "total1" },
+        { label: "Last Hour Usage", key: "usage1" },
+        { label: "Credit Balance", key: "remain1" },
+        { label: "Power", key: "power" },
+        { label: "Status", key: "status" }
+      ];
+      const content = exportReportCsvText("Interval Data", columns, this.rows, []);
+      downloadTextFile("interval_data.csv", content, "text/csv;charset=utf-8");
+    },
+    healthText(value) {
+      if (value === null || value === undefined || value === "") return "Normal";
+      const text = String(value || "").toLowerCase();
+      if (["normal", "closed", "false", "0", "no", "ok"].includes(text)) return "Normal";
+      if (["check", "open", "true", "1", "yes", "abnormal", "error", "failed", "tamper"].includes(text)) return "Check";
+      return String(value);
+    },
+    healthClass(value) {
+      return this.healthText(value).toLowerCase() === "normal" ? "sp sp--ok" : "sp sp--danger";
     },
     fmtNum(value) {
-      if (value == null || value === "") return "—";
+      if (value === null || value === undefined || value === "") return "0";
       const number = Number(value);
       return Number.isNaN(number) ? String(value) : number.toLocaleString(undefined, { maximumFractionDigits: 2 });
     },
-    sort(key) {
-      if (this.sortKey === key) this.sortDir *= -1;
-      else {
-        this.sortKey = key;
-        this.sortDir = -1;
-      }
+    text(value) {
+      return value === null || value === undefined || value === "" ? "-" : String(value);
     },
-    sortArrow(key) {
-      if (this.sortKey !== key) return "";
-      return this.sortDir === -1 ? "↓" : "↑";
+    dateOnly(value) {
+      if (!value) return "";
+      return String(value).slice(0, 10);
     },
-  },
+    dateText(value) {
+      return this.dateOnly(value) || "-";
+    },
+    dateTimeText(value) {
+      if (!value) return "-";
+      const text = String(value);
+      if (text.includes("T")) return text.replace("T", " ").slice(0, 19);
+      return text.slice(0, 19);
+    },
+    timeText(value) {
+      const text = this.dateTimeText(value);
+      if (text === "-") return text;
+      return text.includes(" ") ? text.slice(11, 19) : text.slice(0, 8);
+    },
+    defaultFrom() {
+      return new Date(new Date().getFullYear(), 0, 1).toISOString();
+    }
+  }
 };
 </script>
 
 <style scoped>
-.ddm-page { display: flex; flex-direction: column; gap: 16px; padding: 20px; min-height: 100%; box-sizing: border-box; font-family: var(--font-family); }
-.ddm-filter-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; }
-.ddm-filter-title { display: flex; align-items: center; gap: 12px; }
-.ddm-icon { width: 36px; height: 36px; padding: 7px; background: var(--primary-light); color: var(--primary); border-radius: var(--radius-md); flex-shrink: 0; }
-.ddm-h1 { font-size: 18px; font-weight: 800; color: var(--text-strong); margin: 0; line-height: 1.2; }
-.ddm-sub { font-size: 11px; color: var(--text-muted); margin: 2px 0 0; }
-.ddm-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ddm-select { height: 30px; padding: 0 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); cursor: pointer; }
-.ddm-date-group { display: flex; flex-direction: column; gap: 3px; }
-.ddm-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-.ddm-input { height: 30px; padding: 0 8px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); }
-.ddm-btn { height: 30px; padding: 0 14px; border-radius: var(--radius-md); font-size: 12px; font-family: var(--font-family); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; border: none; background: var(--primary); color: #fff; transition: all 0.15s; }
-.ddm-btn svg { width: 14px; height: 14px; }
-.ddm-btn:hover:not(:disabled) { opacity: 0.88; }
-.ddm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.spinning { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.ddm-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-@media (max-width: 1000px) { .ddm-stats { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 600px) { .ddm-stats { grid-template-columns: repeat(2, 1fr); } }
-.ddm-stat-card { background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 16px 18px; text-align: center; position: relative; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; }
-.ddm-stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-.ddm-stat-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--primary); }
-.ddm-stat-card--alert::before { background: #f4516c; }
-.ddm-stat-card--warn::before { background: #ffb822; }
-.ddm-stat-value { font-size: 22px; font-weight: 800; color: var(--text-strong); margin-bottom: 4px; }
-.ddm-stat-card--alert .ddm-stat-value { color: #f4516c; }
-.ddm-stat-card--warn .ddm-stat-value { color: #e6a817; }
-.ddm-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-.ddm-table-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
-.ddm-table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 12px; background: linear-gradient(90deg, rgba(236,253,245,.86), rgba(255,255,255,.96)); }
-.ddm-table-header strong { display: block; color: var(--text-strong); font-size: 13px; line-height: 1.2; }
-.ddm-table-header span { color: var(--text-muted); font-size: 11px; font-weight: 700; }
-.ddm-search { height: 36px; padding: 0 12px; border-radius: var(--radius-md); border: 1px solid var(--border-color); font-size: 12px; font-family: var(--font-family); background: var(--bg-card); color: var(--text-main); width: min(320px, 100%); outline: 0; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
-.ddm-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
-.ddm-page-info { font-size: 12px; color: var(--text-muted); }
-.ddm-table-wrap { overflow-x: auto; }
-.ddm-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-.ddm-table th { height: 42px; padding: 10px 12px; text-align: left; font-size: 11px; color: var(--text-muted); border-bottom: 1px solid var(--border-mid); white-space: nowrap; background: linear-gradient(180deg, rgba(240,253,244,.95), rgba(255,255,255,.95)); position: sticky; top: 0; letter-spacing: 0; text-transform: uppercase; box-shadow: inset 0 -1px 0 rgba(5,150,105,.08); }
-.ddm-table td { padding: 11px 12px; border-bottom: 1px solid rgba(209,250,229,.72); color: var(--text-main); vertical-align: middle; font-variant-numeric: tabular-nums; }
-.sortable { cursor: pointer; user-select: none; }
-.sortable:hover { color: var(--primary); }
-.sort-arrow { font-size: 10px; color: var(--primary); }
-.ddm-row { transition: background var(--transition-fast), box-shadow var(--transition-fast); }
-.ddm-row:hover { background: rgba(236,253,245,.68); box-shadow: inset 3px 0 0 var(--primary); }
-.ddm-row--tamper { background: rgba(244, 81, 108, 0.06); }
-.ddm-row--tamper:hover { background: rgba(244, 81, 108, 0.12); }
-.ddm-row--relay { background: rgba(255, 184, 34, 0.06); }
-.ddm-row--relay:hover { background: rgba(255, 184, 34, 0.12); }
-.mono-sm { font-family: "Courier New", monospace; font-size: 11px; color: var(--text-muted); }
-.fw-600 { font-weight: 600; }
+.ddm-container { display: flex; flex-direction: column; min-height: 100%; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.ddm-toolbar { display: grid !important; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; }
+.ddm-toolbar-group { display: flex; align-items: center; gap: 12px; }
+.ddm-search-group { width: 100%; }
+.ddm-search-group .search-input { width: 100%; max-width: 100%; }
+.ddm-sort-group .sort-select { min-width: 140px; }
+.mono-sm { font-family: "Courier New", monospace; font-size: 10px; }
+.text-primary { color: var(--primary); }
 .text-muted { color: var(--text-muted); }
-.meter-badge { background: var(--primary-light); color: var(--primary); border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
-.station-badge { background: rgba(52,191,163,.12); color: #34bfa3; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
-.status-badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
-.status-badge--ok { background: rgba(52,191,163,.12); color: #34bfa3; }
-.status-badge--tamper { background: rgba(244,81,108,.12); color: #f4516c; }
-.status-badge--relay { background: rgba(255,184,34,.12); color: #e6a817; }
-.ddm-pagination { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border-color); font-size: 12px; color: var(--text-muted); background: var(--bg-card); }
-.page-btn { background: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); min-width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: var(--text-main); transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
-.page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
-.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.page-info-num { font-weight: 600; color: var(--text-main); }
-.ddm-loading { padding: 60px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-muted); font-size: 13px; }
-.ddm-spinner { width: 28px; height: 28px; border: 3px solid var(--border-color); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.ddm-empty { padding: 60px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.fw { font-weight: 700; }
+.meter-badge { background: var(--primary-light); color: var(--primary); border-radius: var(--radius-sm); padding: 1px 6px; font-size: 10px; font-weight: 800; }
+.station-badge { background: var(--info-bg); color: var(--info); border-radius: var(--radius-sm); padding: 1px 6px; font-size: 10px; font-weight: 800; }
+.sp { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px; border-radius: var(--badge-radius); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.sp--ok { background: var(--success-bg); color: var(--success); }
+.sp--warn { background: var(--warning-bg); color: var(--warning); }
+.sp--danger { background: var(--danger-bg); color: var(--danger); }
+.hourly-btn { min-width: 74px !important; height: 28px !important; padding-inline: 12px !important; font-size: 10px !important; }
+.goto-input { width: 50px; height: 28px; text-align: center; }
+.ddm-overlay { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg-overlay); backdrop-filter: blur(10px); }
+.ddm-modal { width: min(980px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--modal-radius); background: var(--bg-card); box-shadow: var(--shadow-xl); }
+.ddm-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border-color); background: linear-gradient(180deg, var(--bg-card), var(--bg-page)); }
+.ddm-modal-title { margin: 0; color: var(--text-strong); font-size: 16px; }
+.ddm-modal-sub { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; }
+.ddm-modal-x svg { width: 18px; height: 18px; }
+.ddm-modal-body { flex: 1; min-height: 220px; overflow: auto; }
+.ddm-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--border-color); color: var(--text-muted); background: var(--bg-page); }
+.ddm-htable-wrap { overflow-x: auto; }
+.ddm-htable { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--text-main); font-size: 12px; }
+.ddm-htable th { padding: 11px 14px; border-bottom: 1px solid var(--border-color); color: var(--text-muted); background: linear-gradient(180deg, var(--bg-card), var(--bg-page)); font-size: 11px; font-weight: 800; text-align: left; text-transform: uppercase; }
+.ddm-htable td { padding: 11px 14px; border-bottom: 1px solid var(--border-color); color: var(--text-main); font-variant-numeric: tabular-nums; }
+.ddm-htable tr:hover td { background: color-mix(in srgb, var(--primary-light) 72%, transparent); }
+.ddm-loader { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); }
+.ddm-err { padding: 40px; color: var(--danger); text-align: center; }
+.ddm-spin { width: 24px; height: 24px; border: 3px solid var(--border-color); border-top-color: var(--primary); border-radius: 999px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ddm-mobile-cards { display: none; }
+.ddm-mobile-card { padding: 14px; border-top: 1px solid var(--border-color); background: var(--bg-card); }
+.ddm-mobile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ddm-mobile-head div { min-width: 0; display: grid; gap: 3px; }
+.ddm-mobile-head strong { color: var(--text-strong); font-size: 14px; line-height: 1.2; word-break: break-word; }
+.ddm-mobile-head span { color: var(--text-muted); font-size: 11px; }
+.ddm-mobile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ddm-mobile-field { min-width: 0; display: grid; gap: 3px; padding: 9px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bg-page) 58%, var(--bg-card)); }
+.ddm-mobile-field span { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+.ddm-mobile-field strong { min-width: 0; color: var(--text-main); font-size: 12px; word-break: break-word; }
+.ddm-mobile-health { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.ddm-mobile-line { margin-bottom: 10px; }
+.ddm-mobile-empty { padding: 24px 14px; border-top: 1px solid var(--border-color); color: var(--text-muted); text-align: center; background: var(--bg-card); }
+
+.ddm-container :deep(.base-input),
+.ddm-container :deep(.base-select) {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+.ddm-container :deep(.base-input:focus),
+.ddm-container :deep(.base-select:focus) {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+@media (max-width: 900px) {
+  .ddm-toolbar { grid-template-columns: 1fr; gap: 12px; }
+  .ddm-sort-group { flex-wrap: wrap; }
+  .ddm-sort-group .sort-select { flex: 1; }
+  .ddm-actions-group { justify-content: flex-end; width: 100%; }
+}
+
+@media (max-width: 768px) {
+  .ddm-container .table-scroll { display: none; }
+  .ddm-mobile-cards { display: block; }
+  .ddm-toolbar { padding: 12px; }
+  .ddm-toolbar-group { gap: 8px; }
+  .ddm-sort-group .sort-select,
+  .ddm-actions-group .base-button { min-width: 0; }
+  .ddm-actions-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ddm-actions-group :deep(.base-button) { width: 100%; padding-inline: 8px; }
+  .ddm-container .table-command-strip { padding: 10px 12px; }
+  .ddm-container .pagination { padding: 12px; gap: 8px; }
+  .ddm-modal { max-height: calc(100vh - 24px); border-radius: var(--radius-md); }
+  .ddm-overlay { padding: 12px; }
+  .ddm-modal-head,
+  .ddm-modal-foot { padding: 12px 14px; }
+}
+
+@media (max-width: 420px) {
+  .ddm-mobile-grid { grid-template-columns: 1fr; }
+  .ddm-actions-group { grid-template-columns: 1fr; }
+}
 </style>

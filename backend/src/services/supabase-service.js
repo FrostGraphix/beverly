@@ -1,6 +1,7 @@
 "use strict";
 
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
+const defaultLoginDomain = "org.acoblighting.com";
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -15,7 +16,7 @@ function anonKey() {
 }
 
 function authEnabled() {
-  return process.env.SUPABASE_AUTH_ENABLED === "true" || process.env.SESSION_STORE_MODE === "supabase";
+  return process.env.SUPABASE_AUTH_ENABLED === "true";
 }
 
 function storageEnabled() {
@@ -89,21 +90,80 @@ async function readJsonResponse(response) {
   return { response, body };
 }
 
+function loginDomain() {
+  return String(process.env.LOGIN_EMAIL_DOMAIN || defaultLoginDomain).trim().replace(/^@+/, "").toLowerCase();
+}
+
+function normalizeIdentifier(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function emailFromLogin(userId) {
-  const value = String(userId || "").trim();
+  const value = normalizeIdentifier(userId);
   if (value.includes("@")) return value;
   const adminEmails = String(process.env.ADMIN_EMAILS || "")
     .split(",")
-    .map((entry) => entry.trim())
+    .map((entry) => normalizeIdentifier(entry))
     .filter(Boolean);
   if (value === "admin" && adminEmails[0]) return adminEmails[0];
-  return value ? `${value}@beverly.local`.toLowerCase() : "";
+  const domain = loginDomain();
+  return value ? `${value}@${domain}`.toLowerCase() : "";
+}
+
+function authUsersFromBody(body) {
+  return Array.isArray(body) ? body : Array.isArray(body?.users) ? body.users : [];
+}
+
+function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
+  const emailValue = user.email || fallbackEmail || "";
+  const roleId = user.user_metadata?.role_key || user.app_metadata?.role_key || "";
+  return {
+    authUserId: user.id || "",
+    userId: user.user_metadata?.user_id || (emailValue === adminEmailsFallback() ? "admin" : emailValue),
+    userName: user.user_metadata?.user_name || user.email || emailValue,
+    roleId,
+    remark: user.user_metadata?.remark || "",
+    stationId: user.user_metadata?.station_id || "",
+    email: emailValue
+  };
+}
+
+async function listAuthUsers() {
+  const key = serviceRoleKey();
+  if (!supabaseUrl() || !key) return [];
+  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+    method: "GET",
+    headers: jsonHeaders(key)
+  }));
+  if (!response.ok) return [];
+  return authUsersFromBody(body);
+}
+
+async function getAuthUserByIdentifier(identifier) {
+  const normalizedIdentifier = normalizeIdentifier(identifier);
+  if (!normalizedIdentifier) return null;
+  const users = await listAuthUsers();
+  return users.find((user) => {
+    const email = normalizeIdentifier(user?.email);
+    const metadataUserId = normalizeIdentifier(user?.user_metadata?.user_id);
+    return email === normalizedIdentifier || metadataUserId === normalizedIdentifier;
+  }) || null;
+}
+
+async function resolveAuthEmail(identifier, explicitEmail = "") {
+  const normalizedEmail = normalizeIdentifier(explicitEmail);
+  if (normalizedEmail) return normalizedEmail;
+  const normalizedIdentifier = normalizeIdentifier(identifier);
+  if (!normalizedIdentifier) return "";
+  if (normalizedIdentifier.includes("@")) return normalizedIdentifier;
+  const authUser = await getAuthUserByIdentifier(normalizedIdentifier);
+  return normalizeIdentifier(authUser?.email) || emailFromLogin(normalizedIdentifier);
 }
 
 async function signInWithPassword({ userId, password }) {
   if (!authEnabled() || !configured()) return null;
   const key = anonKey() || serviceRoleKey();
-  const email = emailFromLogin(userId);
+  const email = await resolveAuthEmail(userId);
   const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: jsonHeaders(key),
@@ -131,7 +191,7 @@ async function signInWithPassword({ userId, password }) {
   }
 
   const user = body.user || {};
-  const emailValue = user.email || email;
+  const actor = normalizedActorFromAuthUser(user, email);
   return {
     status: 200,
     body: {
@@ -142,21 +202,23 @@ async function signInWithPassword({ userId, password }) {
         token: body.access_token,
         refreshToken: body.refresh_token,
         expiresIn: body.expires_in,
-        userId: user.user_metadata?.user_id || (emailValue === adminEmailsFallback() ? "admin" : emailValue),
-        userName: user.user_metadata?.user_name || user.email || emailValue,
-        roleId: user.user_metadata?.role_key || "super-admin",
-        remark: user.user_metadata?.remark || "",
-        email: emailValue
+        userId: actor.userId,
+        userName: actor.userName,
+        roleId: actor.roleId,
+        remark: actor.remark,
+        stationId: actor.stationId,
+        email: actor.email
       },
       result: {
         token: body.access_token,
         refreshToken: body.refresh_token,
         expiresIn: body.expires_in,
-        userId: user.user_metadata?.user_id || (emailValue === adminEmailsFallback() ? "admin" : emailValue),
-        userName: user.user_metadata?.user_name || user.email || emailValue,
-        roleId: user.user_metadata?.role_key || "super-admin",
-        remark: user.user_metadata?.remark || "",
-        email: emailValue
+        userId: actor.userId,
+        userName: actor.userName,
+        roleId: actor.roleId,
+        remark: actor.remark,
+        stationId: actor.stationId,
+        email: actor.email
       },
       _proxy: {
         source: "supabase-auth",
@@ -164,6 +226,21 @@ async function signInWithPassword({ userId, password }) {
       }
     }
   };
+}
+
+async function authUserFromAccessToken(accessToken) {
+  const token = String(accessToken || "").trim();
+  const key = anonKey() || serviceRoleKey();
+  if (!authEnabled() || !configured() || !token || !key) return null;
+  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${token}`
+    }
+  }));
+  if (!response.ok) return null;
+  return normalizedActorFromAuthUser(body || {});
 }
 
 function adminEmailsFallback() {
@@ -192,24 +269,13 @@ async function createAdminUser({ email, password }) {
 }
 
 async function getAuthUserByUserId(userId) {
-  const key = serviceRoleKey();
-  if (!supabaseUrl() || !key) return null;
-  const email = emailFromLogin(userId);
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
-    method: "GET",
-    headers: jsonHeaders(key)
-  }));
-  if (response.ok) {
-    const users = Array.isArray(body) ? body : Array.isArray(body.users) ? body.users : [];
-    return users.find(u => String(u.email || "").toLowerCase() === String(email || "").toLowerCase() || u.user_metadata?.user_id === userId) || null;
-  }
-  return null;
+  return getAuthUserByIdentifier(userId);
 }
 
 async function createAuthUser(payload) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return null;
-  const email = emailFromLogin(payload.userId || payload.userId);
+  const email = await resolveAuthEmail(payload.userId, payload.email);
   const password = payload.password;
   if (!password) {
     return {
@@ -229,7 +295,9 @@ async function createAuthUser(payload) {
       user_metadata: {
         role_key: payload.roleId || "operations-manager",
         user_name: payload.name || payload.nickName || payload.userName || payload.userId,
-        user_id: payload.userId,
+        user_id: String(payload.userId || "").trim(),
+        login_email: email,
+        station_id: String(payload.stationId || "").trim(),
         remark: payload.remark || ""
       }
     })
@@ -251,15 +319,22 @@ async function updateAuthUser(userId, payload) {
   if (!supabaseUrl() || !key) return null;
   const user = await getAuthUserByUserId(userId);
   if (!user) throw new Error("User not found in Supabase Auth");
+  const nextEmail = await resolveAuthEmail(userId, payload.email);
   
   const updateBody = {
     user_metadata: {
       ...user.user_metadata,
       ...(payload.roleId ? { role_key: payload.roleId } : {}),
       ...(payload.name || payload.nickName || payload.userName ? { user_name: payload.name || payload.nickName || payload.userName } : {}),
+      ...(payload.userId ? { user_id: String(payload.userId).trim() } : {}),
+      ...(nextEmail ? { login_email: nextEmail } : {}),
+      ...(payload.stationId !== undefined ? { station_id: String(payload.stationId || "").trim() } : {}),
       ...(payload.remark !== undefined ? { remark: payload.remark } : {})
     }
   };
+  if (nextEmail && normalizeIdentifier(nextEmail) !== normalizeIdentifier(user.email)) {
+    updateBody.email = nextEmail;
+  }
   if (payload.password) {
     updateBody.password = payload.password;
   }
@@ -362,12 +437,16 @@ module.exports = {
   createAuthUser,
   updateAuthUser,
   deleteAuthUser,
+  resolveAuthEmail,
+  emailFromLogin,
+  getAuthUserByIdentifier,
   getAuthUserByUserId,
   ensureStorageBuckets,
   restRequest,
   restRequestWithResponse,
   serviceConfigured,
   signInWithPassword,
+  authUserFromAccessToken,
   storageEnabled,
   storageReport,
   uploadStorageObject

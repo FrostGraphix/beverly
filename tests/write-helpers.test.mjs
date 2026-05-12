@@ -19,6 +19,14 @@ assert.strictEqual(validateWriteForm("Add", null, { customerId: "1", meterId: "2
 assert.strictEqual(validateWriteForm("Delete", gatewayRoute, { gatewayId: "GW-1", confirmDelete: false }, [{ name: "gatewayId", required: true }]), "delete confirmation is required");
 assert.deepStrictEqual(buildWritePayload("/api/account/create", { customerId: "1", authorizationPassword: "secret", confirmationText: "ok" }), [{ customerId: "1" }]);
 assert.deepStrictEqual(buildWritePayload("/api/token/creditToken/generate", { customerId: "1", authorizationPassword: "secret" }), { customerId: "1" });
+assert.deepStrictEqual(
+  buildWritePayload(
+    "/api/user/create",
+    { userId: "TEMPER", email: "temper@org.acoblighting.com", status: "", amount: "", paymentMethod: "Cash" },
+    [{ name: "userId" }, { name: "email" }]
+  ),
+  [{ userId: "TEMPER", email: "temper@org.acoblighting.com" }]
+);
 assert(confirmationMessage("Delete", "Customer").includes("Customer"));
 assert(confirmationMessage("Cancel", "Credit Token Record").includes("cancellation"));
 assert(confirmationMessage("Import", "File Upload").includes("upload"));

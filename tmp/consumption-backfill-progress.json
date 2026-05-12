@@ -19,14 +19,18 @@
     "UMAISHA": {
       "stationId": "UMAISHA",
       "from": "2025-01-01",
-      "to": "2026-05-09",
+      "to": "2026-05-10",
       "pageSize": 500,
-      "nextPage": 101,
-      "totalRows": 74540,
-      "storedRows": 50000,
-      "fetchedThrough": 50500,
-      "complete": false,
-      "updatedAt": "2026-05-09T22:57:39.180Z"
+      "nextPage": 152,
+      "totalRows": 75140,
+      "storedRows": 75140,
+      "fetchedThrough": 75140,
+      "rawTotalRows": 75172,
+      "uniqueTotalRows": 75140,
+      "crawlPages": 151,
+      "sourceRangeTrusted": false,
+      "complete": true,
+      "updatedAt": "2026-05-10T03:31:22.247Z"
     },
     "OGUFA": {
       "stationId": "OGUFA",

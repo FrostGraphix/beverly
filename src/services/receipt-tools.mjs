@@ -166,37 +166,11 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
 
 
 export function receiptHtml(model) {
-  const fields = model.fields.filter(f => !f.isToken);
   const tokenField = model.fields.find(f => f.isToken);
-  const sections = [
-    ["identity", "Receipt"],
-    ["customer", "Customer"],
-    ["meter", "Meter"],
-    ["transaction", "Transaction"],
-    ["site", "Operations"],
-    ["system", "System"]
-  ].map(([key, label]) => ({
-    key,
-    label,
-    fields: fields.filter((field) => (field.section || "transaction") === key)
-  })).filter((section) => section.fields.length);
-  
   const receiptId = model.fields.find(f => f.label === "Receipt Id")?.value || "";
   const customerName = model.fields.find(f => f.label === "Customer Name")?.value || "";
   const meterId = model.fields.find(f => f.label === "Meter Id")?.value || "";
   const pageTitle = `${model.title} #${receiptId} - ${customerName} | ${model.brand.name}`;
-  
-  const sectionHtml = sections.map((section) => `
-    <section class="detail-section">
-      <h2>${escapeHtml(section.label)}</h2>
-      ${section.fields.map((field) => `
-        <div class="field-row ${field.emphasis ? "field-row--emphasis" : ""}">
-          <span class="field-label">${escapeHtml(field.label)}</span>
-          <span class="field-value">${escapeHtml(field.value)}</span>
-        </div>
-      `).join("")}
-    </section>
-  `).join("");
 
   return `<!doctype html>
 <html>
@@ -534,10 +508,6 @@ export function receiptHtml(model) {
       <div class="token-value">${escapeHtml(tokenField.value)}</div>
     </div>
     ` : ''}
-
-    <div class="details">
-      ${sectionHtml}
-    </div>
 
     <div class="audit-strip">
       <div class="audit-item">

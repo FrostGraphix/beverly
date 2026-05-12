@@ -69,7 +69,7 @@
 
     <!-- Right panel — form -->
     <section class="auth-panel auth-panel--right">
-      <form class="auth-card" @submit.prevent="submit" novalidate>
+      <form class="auth-card login-card" @submit.prevent="submit" novalidate>
         <BaseInput v-model="form.verifycode" name="verifycode" type="hidden" />
 
         <header class="auth-card-head">
@@ -115,7 +115,7 @@
                 v-model.trim="form.userId"
                 name="userId"
                 type="text"
-                placeholder="admin@acoblighting.com"
+                placeholder="mary or mary@org.acoblighting.com"
                 autocomplete="username"
                 autofocus
                 @focus="focused = 'user'"
@@ -159,7 +159,7 @@
         </div>
 
         <BaseButton
-          class="auth-submit"
+          class="auth-submit login-button"
           variant="primary"
           native-type="submit"
           :loading="loading"
@@ -221,7 +221,7 @@ export default {
   methods: {
     async submit() {
       this.error = "";
-      if (!this.form.userId) { this.error = "Username is required."; return; }
+      if (!this.form.userId) { this.error = "Email or username is required."; return; }
       if (!this.form.password) { this.error = "Password is required."; return; }
       this.loading = true;
       try {

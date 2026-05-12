@@ -519,8 +519,9 @@
 
 .action-btn-group {
   justify-content: flex-end;
-  width: 100%;
+  width: max-content;
   min-width: max-content;
+  margin-left: auto;
 }
 
 .quota-line {
@@ -540,6 +541,7 @@
 
 table,
 .picker-table {
+  table-layout: auto;
   width: max-content;
   min-width: 100%;
   border-collapse: separate;
@@ -550,6 +552,7 @@ table,
 
 th,
 td {
+  min-width: var(--table-data-column-min-width, 140px);
   min-height: 44px;
   padding: 12px 16px;
   text-align: left;
@@ -595,10 +598,11 @@ td.action-column {
   position: sticky;
   right: 0;
   z-index: 8;
-  min-width: var(--table-action-column-width);
-  width: var(--table-action-column-width);
+  min-width: 240px;
+  width: 240px;
+  white-space: nowrap;
   max-width: none;
-  padding-inline: 16px;
+  padding-inline: 12px;
   border-left: 1px solid var(--color-border);
   background:
     linear-gradient(90deg, rgba(255,255,255,0), var(--bg-card) 18%),
@@ -618,6 +622,35 @@ th.action-column {
 td.action-column {
   text-align: right;
   white-space: nowrap;
+}
+
+th[data-column-key="receiptId"],
+td[data-column-key="receiptId"],
+th[data-column-key="id"],
+td[data-column-key="id"],
+th[data-column-key="customerId"],
+td[data-column-key="customerId"],
+th[data-column-key="meterId"],
+td[data-column-key="meterId"],
+th[data-column-key="stationId"],
+td[data-column-key="stationId"] {
+  min-width: 132px;
+}
+
+th[data-column-key="customerName"],
+td[data-column-key="customerName"],
+th[data-column-key="token"],
+td[data-column-key="token"],
+th[data-column-key="remark"],
+td[data-column-key="remark"] {
+  min-width: 180px;
+}
+
+th[data-column-key="createDate"],
+td[data-column-key="createDate"],
+th[data-column-key="updateDate"],
+td[data-column-key="updateDate"] {
+  min-width: 160px;
 }
 
 [data-theme="dark"] .filter-toolbar,
@@ -726,19 +759,19 @@ tbody tr.selected td.action-column {
 }
 
 .link-btn {
-  min-height: 26px;
-  min-width: 64px;
+  min-height: 21px;
+  min-width: 51px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-card) 60%, transparent);
   backdrop-filter: blur(4px);
   color: var(--text-strong);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -779,8 +812,8 @@ tbody tr.selected td.action-column {
 }
 
 .link-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   fill: currentColor;
   flex-shrink: 0;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);

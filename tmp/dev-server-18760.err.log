@@ -1,0 +1,9 @@
+(node:102144) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[reference-facade-crash] Error: Supabase REST failed: 416
+    at Object.restRequestWithResponse (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\supabase-service.js:75:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async readCompactRowsFromStore (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\consumption-store.js:297:32)
+    at async readDailyMeterSummary (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\consumption-store.js:333:16)
+    at async handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1793:14)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7)

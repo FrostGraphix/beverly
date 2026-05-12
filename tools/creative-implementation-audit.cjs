@@ -33,12 +33,13 @@ function runAudit(options = {}) {
   const packageJson = JSON.parse(read("package.json"));
   const tokens = read("src/styles/tokens.css");
   const themes = read("src/styles/themes.css");
+  const primitives = read("src/styles/primitives.css");
   const reference = read("src/styles/reference.css");
   const legacy = fs.readdirSync(path.join(root, "src/styles"))
     .filter((file) => file.startsWith("legacy-") && file.endsWith(".css"))
     .map((file) => read(`src/styles/${file}`))
     .join("\n");
-  const styleSource = `${reference}\n${legacy}`;
+  const styleSource = `${reference}\n${primitives}\n${legacy}`;
   const table = read("src/components/TablePage.vue");
   const profile = read("src/components/ProfilePage.vue");
   const dashboard = read("src/components/DashboardPage.vue");

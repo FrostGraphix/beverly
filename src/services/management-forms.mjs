@@ -240,6 +240,7 @@ const managementForms = {
   "#/admin/user": {
     Add: [
       field("userId",    "User Id",   { required: true }),
+      field("email",     "Login Email", { required: true }),
       field("nickName",  "Nick Name", { required: true }),
       field("password",  "Password",  { required: true, type: "password" }),
       field("roleId",    "Role",      { type: "role-select" }),
@@ -248,6 +249,7 @@ const managementForms = {
     ],
     Edit: [
       field("userId",    "User Id",   { required: true, readonly: true }),
+      field("email",     "Login Email", { required: true }),
       field("nickName",  "Nick Name", { required: true }),
       field("roleId",    "Role",      { type: "role-select" }),
       field("stationId", "StationId", { required: true, type: "select" }),
@@ -303,10 +305,71 @@ const managementForms = {
     ]
   },
   "#/admin/meter": {
+    Add: [
+      field("meterId", "Meter Id", { required: true }),
+      field("type", "Meter Type", {
+        required: true,
+        type: "select",
+        options: [
+          { value: "0", label: "Electricity" },
+          { value: "1", label: "Water" },
+          { value: "2", label: "Gas" }
+        ]
+      }),
+      field("isThreePhase", "Phase", {
+        required: true,
+        type: "select",
+        options: [
+          { value: "0", label: "Single Phase" },
+          { value: "1", label: "Three Phase" }
+        ]
+      }),
+      field("communicationWay", "Communication", {
+        required: true,
+        type: "select",
+        options: [
+          { value: "0", label: "GPRS" },
+          { value: "1", label: "LoraWan" }
+        ]
+      }),
+      field("protocolVersion", "Protocol Version", { required: true }),
+      field("lat", "Latitude"),
+      field("lng", "Longitude"),
+      field("stationId", "StationId", { required: true, type: "select" }),
+      field("remark", "Remark")
+    ],
     Edit: [
       field("meterId",       "Meter Id",     { required: true, readonly: true }),
+      field("type", "Meter Type", {
+        type: "select",
+        options: [
+          { value: "0", label: "Electricity" },
+          { value: "1", label: "Water" },
+          { value: "2", label: "Gas" }
+        ]
+      }),
+      field("isThreePhase", "Phase", {
+        type: "select",
+        options: [
+          { value: "0", label: "Single Phase" },
+          { value: "1", label: "Three Phase" }
+        ]
+      }),
+      field("communicationWay", "Communication", {
+        type: "select",
+        options: [
+          { value: "0", label: "GPRS" },
+          { value: "1", label: "LoraWan" }
+        ]
+      }),
+      field("protocolVersion", "Protocol Version"),
+      field("lat", "Latitude"),
+      field("lng", "Longitude"),
       field("stationId",     "StationId",    { required: true, type: "select" }),
       field("remark",        "Remark")
+    ],
+    Delete: [
+      field("meterId", "Meter Id", { required: true, readonly: true })
     ]
   },
   "#/protocol/dlms": {
@@ -402,13 +465,23 @@ export function managementFormSeed(route, action, row = {}) {
       else if (currentField.name === "dlmsId") value = row.dlmsId || row.id;
       else if (currentField.name === "dlt645Id") value = row.dlt645Id || row.id;
       else if (currentField.name === "nameEN") value = row.nameEN || row.name;
+      else if (currentField.name === "email") value = row.email || row.loginEmail || row.userEmail;
       else if (currentField.name === "nickName") value = row.nickName || row.fullName || row.name;
       else if (["gatewayId", "userId"].includes(currentField.name)) value = row.id || row.userId;
       else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name;
       else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || "";
+      else if (currentField.name === "type") value = row.type ?? row.meterType ?? "";
+      else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? "";
+      else if (currentField.name === "communicationWay") value = row.communicationWay ?? "";
+      else if (currentField.name === "protocolVersion") value = row.protocolVersion ?? "";
+      else if (currentField.name === "lat") value = row.lat ?? "";
+      else if (currentField.name === "lng") value = row.lng ?? "";
     }
     if (currentField.name === "stationId" && typeof value === "string") {
       value = value.toUpperCase();
+    }
+    if (route.hash === "#/admin/meter" && ["type", "isThreePhase", "communicationWay"].includes(currentField.name) && value !== "") {
+      value = String(value);
     }
     seed[currentField.name] = value ?? "";
   }

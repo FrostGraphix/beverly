@@ -152,6 +152,19 @@ global.fetch = async (path, options = {}) => {
     });
   }
 
+  if (path === "/api/local/consumption/summary") {
+    if (payload.FROM === "2026-05-01") assert.strictEqual(payload.BASELINE_FROM, "2026-04-30");
+    return jsonResponse({
+      code: 0,
+      data: {
+        consumedKwh: 12,
+        stationBar: [{ station: "TUNGA", totalKwh: 12, meterCount: 2, meterBreakdown: [] }],
+        temporal: { labels: ["2026-05-01", "2026-05-02"], kwhSeries: [0, 12] },
+        meta: { meterCount: 2, metersWithConsumption: 2, readingDayCount: 4 },
+      },
+    });
+  }
+
   if (path === "/api/account/read") {
     return jsonResponse({
       code: 0,
@@ -214,6 +227,10 @@ assert(
 assert(
   calls.some((call) => call.path === "/api/DailyDataMeter/read" && call.payload.FROM === "2026-04-30"),
   "Daily meter reads must include a baseline day before the selected period"
+);
+assert(
+  calls.some((call) => call.path === "/api/local/consumption/summary"),
+  "Site consumption must read Supabase summary first"
 );
 assert.deepStrictEqual(progressValues, [1, 2]);
 assert.strictEqual(ledgerPayload.ledger.length, 1);

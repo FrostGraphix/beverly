@@ -1,7 +1,7 @@
 import { isManagementRoute } from "./management-forms.mjs";
 
-const crudPattern = /\/(create|update|delete|import)\b/i;
-const writePattern = /\/(create|update|delete|import|generate|cancel|reset|modify|addread|upload)\b/i;
+const crudPattern = /\/(?:create|update|delete|import)\w*\b/i;
+const writePattern = /\/(?:create|update|delete|import|generate|cancel|reset|modify|addread|upload)\w*\b/i;
 
 export function isWriteEndpoint(endpoint = "") {
   return writePattern.test(endpoint);
@@ -66,7 +66,33 @@ export function stripWriteMeta(form = {}) {
   return payload;
 }
 
-export function buildWritePayload(endpoint, form = {}) {
+function pruneEmpty(value) {
+  if (Array.isArray(value)) return value;
+  return value;
+}
+
+export function buildWritePayload(endpoint, form = {}, fields = []) {
   const payload = stripWriteMeta(form);
+  const fieldNames = new Set((fields || []).map((field) => field.name));
+  const allowedNames = new Set([
+    ...fieldNames,
+    "oldMeterId",
+    "rows",
+    "items",
+    "status"
+  ]);
+  if (fieldNames.size > 0) {
+    for (const key of Object.keys(payload)) {
+      if (!allowedNames.has(key)) delete payload[key];
+    }
+  }
+  for (const key of Object.keys(payload)) {
+    const value = pruneEmpty(payload[key]);
+    if (value === "" || value === undefined || value === null) {
+      delete payload[key];
+      continue;
+    }
+    payload[key] = value;
+  }
   return usesArrayPayload(endpoint) ? [payload] : payload;
 }

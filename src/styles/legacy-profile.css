@@ -355,12 +355,19 @@
   background: var(--bg-card);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.65);
 }
-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+table {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
 
 thead tr {
   background: linear-gradient(180deg, rgba(240,253,244,.95), rgba(255,255,255,.95));
 }
 th {
+  min-width: var(--table-data-column-min-width, 140px);
   height: 42px; padding: 10px 14px; text-align: left;
   font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0;
@@ -385,6 +392,7 @@ tbody tr.selected {
   box-shadow: inset 3px 0 0 var(--primary);
 }
 td {
+  min-width: var(--table-data-column-min-width, 140px);
   min-height: 44px; padding: 11px 14px; font-size: 12px;
   color: var(--text-main); white-space: nowrap;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis;
@@ -402,9 +410,10 @@ td.action-column {
   z-index: 8;
   min-width: 240px;
   width: 240px;
+  white-space: nowrap;
   max-width: none;
-  padding-right: 16px;
-  padding-left: 16px;
+  padding-right: 12px;
+  padding-left: 12px;
   background:
     linear-gradient(90deg, rgba(255,255,255,0), var(--bg-card) 18%),
     var(--bg-card);
@@ -422,12 +431,42 @@ td.action-column {
   border-left: 1px solid var(--border-color);
 }
 
+th[data-column-key="receiptId"],
+td[data-column-key="receiptId"],
+th[data-column-key="id"],
+td[data-column-key="id"],
+th[data-column-key="customerId"],
+td[data-column-key="customerId"],
+th[data-column-key="meterId"],
+td[data-column-key="meterId"],
+th[data-column-key="stationId"],
+td[data-column-key="stationId"] {
+  min-width: 132px;
+}
+
+th[data-column-key="customerName"],
+td[data-column-key="customerName"],
+th[data-column-key="token"],
+td[data-column-key="token"],
+th[data-column-key="remark"],
+td[data-column-key="remark"] {
+  min-width: 180px;
+}
+
+th[data-column-key="createDate"],
+td[data-column-key="createDate"],
+th[data-column-key="updateDate"],
+td[data-column-key="updateDate"] {
+  min-width: 160px;
+}
+
 .action-btn-group {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  width: 100%;
+  width: max-content;
+  margin-left: auto;
 }
 
 tbody tr:hover td.action-column {
@@ -469,14 +508,14 @@ tbody tr.selected td.action-column {
 
 /* Premium action buttons in rows */
 .link-btn {
-  min-height: 32px; padding: 0 12px;
+  min-height: 26px; padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-card);
-  color: var(--text-main); font-size: 11px; font-weight: 600;
+  color: var(--text-main); font-size: 9px; font-weight: 600;
   cursor: pointer; transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
   display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  min-width: 128px;
+  min-width: 102px;
   flex: 1 1 0;
   white-space: nowrap;
   text-align: center;
@@ -486,7 +525,7 @@ tbody tr.selected td.action-column {
 .link-btn + .link-btn { margin-left: 0; }
 .link-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); box-shadow: var(--shadow-xs); }
 .link-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
-.link-btn svg { width: 13px; height: 13px; fill: currentColor; flex-shrink: 0; }
+.link-btn svg { width: 10px; height: 10px; fill: currentColor; flex-shrink: 0; }
 
 /* Toolbar buttons */
 .btn {

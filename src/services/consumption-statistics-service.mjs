@@ -26,11 +26,21 @@ export function defaultConsumptionStatisticsFilters(now = new Date()) {
 export function buildConsumptionStatisticsPayload(filters = {}, paging = {}) {
   const pageSize = Number(paging.pageSize || paging.pageLimit || 5000);
   const pageNumber = Math.max(1, Number(paging.pageNumber || 1));
+  
+  let fromDateStr = filters.dateFrom;
+  if (fromDateStr) {
+    const fd = new Date(fromDateStr);
+    if (!Number.isNaN(fd.getTime())) {
+      fd.setDate(fd.getDate() - 1);
+      fromDateStr = `${fd.getFullYear()}-${pad(fd.getMonth() + 1)}-${pad(fd.getDate())}`;
+    }
+  }
+
   const payload = {
     lang: "en",
     pageNumber,
     pageSize,
-    FROM: filters.dateFrom ? `${filters.dateFrom}T00:00:00.000Z` : undefined,
+    FROM: fromDateStr ? `${fromDateStr}T00:00:00.000Z` : undefined,
     TO: filters.dateTo ? `${filters.dateTo}T23:59:59.999Z` : undefined
   };
 
@@ -71,18 +81,42 @@ export function normalizeConsumptionStatisticRow(row = {}, index = 0) {
     || row.timestamp
     || ""
   );
-  const rawConsumption = row.consumption ?? row.usage1 ?? row.energyConsumptionKwh ?? row.totalEnergy ?? 0;
+  const hasCumulativeTotal = row.total1 != null || row.totalEnergy != null;
+  const rawConsumption = row.total1 ?? row.totalEnergy ?? row.usage1 ?? row.consumption ?? row.energyConsumptionKwh ?? 0;
   const numericConsumption = Math.max(0, toNumber(rawConsumption, 0));
   return {
     id: row.id || `${collectionDate}-${row.meterId || row.customerId || index}`,
     collectionDate,
-    consumption: numericConsumption,
+    totalEnergy: numericConsumption, // Use totalEnergy for derivation
+    consumption: hasCumulativeTotal ? 0 : numericConsumption,
+    hasCumulativeTotal,
     customerId: row.customerId || row.customerAccountId || "",
     customerName: row.customerName || "",
     meterId: row.meterId || "",
     stationId: row.stationId || "",
     source: row
   };
+}
+
+export function deriveConsumptionFromTotal(rows = []) {
+  const byMeter = new Map();
+  for (const row of rows) {
+    const key = String(row.meterId || row.customerId || "unknown");
+    if (!byMeter.has(key)) byMeter.set(key, []);
+    byMeter.get(key).push(row);
+  }
+
+  for (const meterRows of byMeter.values()) {
+    if (!meterRows.some((row) => row.hasCumulativeTotal)) continue;
+    meterRows.sort((a, b) => String(a.collectionDate).localeCompare(String(b.collectionDate)));
+    for (let i = 0; i < meterRows.length; i++) {
+      const current = meterRows[i].totalEnergy;
+      // If we don't have a previous day, we assume 0 consumption for this meter on this first day
+      const previous = i === 0 ? current : meterRows[i - 1].totalEnergy;
+      meterRows[i].consumption = Math.max(0, current - previous);
+    }
+  }
+  return rows;
 }
 
 export function normalizeConsumptionStatisticsResponse(response = {}) {
@@ -156,8 +190,17 @@ export async function fetchConsumptionStatistics(filters = {}, paging = {}, api 
     warning = "Monthly AMR rows were empty, so monthly consumption is grouped from live daily AMR data.";
   }
 
+  // Derive daily/monthly consumption from cumulative energy
+  deriveConsumptionFromTotal(result.rows);
+
+  // Filter out the extra day we fetched for baseline
+  const dateFromPrefix = filters.dateFrom ? String(filters.dateFrom).slice(0, wantsMonthly ? 7 : 10) : "";
+  const filteredRows = dateFromPrefix 
+    ? result.rows.filter(r => String(r.collectionDate).slice(0, wantsMonthly ? 7 : 10) >= dateFromPrefix)
+    : result.rows;
+
   return {
-    rows: result.rows,
+    rows: filteredRows,
     total: result.total,
     source: "live-derived",
     endpoint: wantsMonthly && warning.includes("grouped") ? CONSUMPTION_STATISTICS_ENDPOINT : endpoint,

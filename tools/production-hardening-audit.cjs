@@ -89,9 +89,10 @@ function runAudit(writeArtifact = true) {
       "ci-gates",
       exists(".github/workflows/ci.yml") &&
         read(".github/workflows/ci.yml").includes("npm run build") &&
-        read(".github/workflows/ci.yml").includes("npm run test:contracts") &&
-        read(".github/workflows/ci.yml").includes("npm run test:security"),
-      "CI has build, contract, service, security, and audit gates.",
+        read(".github/workflows/ci.yml").includes("npm test") &&
+        read(".github/workflows/ci.yml").includes("npm run test:browser") &&
+        read(".github/workflows/ci.yml").includes("npm run hardening:audit"),
+      "CI has build, full test, browser, and audit gates.",
       [".github/workflows/ci.yml"]
     ),
     check(

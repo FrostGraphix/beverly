@@ -27,7 +27,7 @@ export const routeManifest = [
   { group: "Administration", title: "Log", hash: "#/admin/log", apis: ["/api/log/read"], columns: ["id", "userId", "action", "status", "remark", "createDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Station", hash: "#/admin/station", apis: ["/api/station/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
-  { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
+  { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLT645", hash: "#/protocol/dlt645", apis: ["/api/dlt645/read"], columns: ["id", "version", "type", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
@@ -37,6 +37,17 @@ export const routeManifest = [
   { group: "Remote Support", title: "Event Notification", hash: "#/remote-support/event-notification", apis: ["/API/EventNotification/Read"], columns: ["eventCode", "eventContent", "meterId", "currentDate", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
   { group: "Remote Support", title: "Firmware Update", hash: "#/remote-support/firmware-update", apis: ["/api/UpdateFirmwareTask/GetUpdateFirmwareTask"], columns: ["id", "gatewayId", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add", "Export"], roles: ["super-admin", "operations-manager"] },
   { group: "Remote Support", title: "File Upload", hash: "#/remote-support/file-upload", apis: ["/api/File/Upload"], columns: ["id", "name", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Import", "Export"], roles: ["super-admin"] },
+  {
+    group: "System",
+    title: "Station Onboarding Studio",
+    hash: "#/system/station-onboarding-studio",
+    apis: ["/api/station/read", "/api/gateway/read", "/api/meter/read", "/api/customer/read", "/api/account/read", "/api/tariff/read"],
+    columns: [],
+    actions: [],
+    isCustomPage: true,
+    customComponent: "OnboardingStudioPage",
+    roles: ["super-admin"]
+  },
   { group: "System", title: "Automation Command", hash: "#/system/automation-command", apis: ["/api/system/automation-report", "/api/system/automation-control"], columns: [], actions: ["Refresh", "Save", "Test Alert"], isCustomPage: true, customComponent: "AutomationCommandPage", roles: ["super-admin", "operations-manager"] },
   {
     group: "Data Report",
@@ -90,6 +101,7 @@ const referenceVisibleHashes = new Set([
   "#/remote-support/event-notification",
   "#/remote-support/firmware-update",
   "#/remote-support/file-upload",
+  "#/system/station-onboarding-studio",
   "#/system/automation-command"
 ]);
 
@@ -97,31 +109,58 @@ export function normalizeRoleId(roleId = "super-admin") {
   const value = String(roleId || "super-admin").trim().toLowerCase();
   if (["admin", "administrator", "superadmin", "super_admin", "super-admin", "0", "1"].includes(value)) return "super-admin";
   if (["operator", "operations", "operations-manager", "operation-manager"].includes(value)) return "operations-manager";
-  if (["account", "accountant", "finance"].includes(value)) return "account";
+  if (["account", "accountant", "finance", "account-officer", "account_officer"].includes(value)) return "account";
   return value;
 }
 
-export function routeAllowed(route, roleId = "super-admin") {
+const permissionAliases = {
+  "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken"],
+  "#/token-record/credit-token-record": ["TokenRecord.CreditTokenRecord", "CreditTokenRecord"],
+  "#/remote-operation/remote-meter-reading": ["RemoteMeterTask.CreateReadingTask", "GetReadingTask", "RemoteMeterTask.GetReadingTask"],
+  "#/remote-operation/remote-meter-control": ["RemoteMeterTask.CreateControlTask", "GetControlTask", "RemoteMeterTask.GetControlTask"],
+  "#/remote-operation/remote-meter-token": ["RemoteMeterTask.CreateTokenTask", "GetTokenTask", "RemoteMeterTask.GetTokenTask"],
+  "#/remote-operation-record/remote-meter-reading-task": ["RemoteMeterTaskRecord.GetReadingTask", "RemoteMeterTask.GetReadingTask"],
+  "#/remote-operation-record/remote-meter-control-task": ["RemoteMeterTaskRecord.GetControlTask", "RemoteMeterTask.GetControlTask", "RemoteMeterTaskRecord.UpdateControlTask"],
+  "#/remote-operation-record/remote-meter-token-task": ["RemoteMeterTaskRecord.GetTokenTask", "RemoteMeterTaskRecord.UpdateTokenTask", "RemoteMeterTask.GetTokenTask"],
+  "#/prepay-report/daily-data-meter": ["DailyDataMeter"],
+  "#/prepay-report/consumption-statistics": ["ConsumptionStatistics"],
+  "#/prepay-report/long-nonpurchase-situation": ["LongNonpurchase"],
+  "#/prepay-report/low-purchase-situation": ["LowPurchase"]
+};
+
+function matchesPermission(permissionString, candidate) {
+  return permissionString.toLowerCase().includes(String(candidate || "").toLowerCase());
+}
+
+export function permissionAliasesForRoute(route = {}) {
+  return [
+    ...(permissionAliases[route.hash] || []),
+    String(route.group || "").replace(/\s+/g, ""),
+    String(route.hash || "").split("/").pop() || ""
+  ].filter(Boolean);
+}
+
+export function permissionsGrantRoute(permissionString = "", route = {}) {
+  const permissionsStr = String(permissionString || "");
+  if (!permissionsStr) return false;
+  if (matchesPermission(permissionsStr, "super-admin") || matchesPermission(permissionsStr, "ALL")) return true;
+
+  const titleKey = String(route.title || "").replace(/\s+/g, "");
+  if (matchesPermission(permissionsStr, titleKey)) return true;
+  if (permissionAliasesForRoute(route).some((alias) => matchesPermission(permissionsStr, alias))) return true;
+  if (route.title === "Set Maximum Power Limit Token" && matchesPermission(permissionsStr, "SetMaximumPowerLimitToken")) return true;
+  return false;
+}
+
+export function roleAllowsRoute(route, roleId = "super-admin", permissionString = "") {
   const normRole = normalizeRoleId(roleId);
   if (normRole === "super-admin") return true;
-
-  const permissionsStr = String(getRouteCookie("userRemark") || "");
-  if (permissionsStr) {
-    if (permissionsStr.includes("super-admin") || permissionsStr.includes("ALL")) return true;
-    
-    // Check if the permission string contains the route's title without spaces
-    const titleKey = route.title.replace(/\s+/g, "");
-    if (permissionsStr.includes(titleKey)) return true;
-    
-    // Special cases mappings
-    if (route.title === "Set Maximum Power Limit Token" && permissionsStr.includes("SetMaximumPowerLimitToken")) return true;
-    if (route.title === "Long Nonpurchase Situation" && permissionsStr.includes("LongNonpurchase")) return true;
-    if (route.title === "Low Purchase Situation" && permissionsStr.includes("LowPurchase")) return true;
-    if (route.title === "Interval Data" && permissionsStr.includes("DailyDataMeter")) return true;
-    if (route.title === "Consumption Statistics" && permissionsStr.includes("ConsumptionStatistics")) return true;
-  }
-
+  if (permissionsGrantRoute(permissionString, route)) return true;
   return !route.roles || route.roles.includes(normRole);
+}
+
+export function routeAllowed(route, roleId = "super-admin") {
+  return roleAllowsRoute(route, roleId, getRouteCookie("userRemark"));
 }
 
 function getRouteCookie(name) {

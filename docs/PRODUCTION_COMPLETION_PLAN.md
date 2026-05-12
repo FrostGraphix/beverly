@@ -250,5 +250,7 @@ Targets:
 
 Done when:
 - `npm run build` passes.
-- Vercel preview works.
-- Production smoke passes.
+- public Vercel preview smoke passes.
+- deployed Supabase smoke passes.
+- remote CI passes.
+- production smoke passes.

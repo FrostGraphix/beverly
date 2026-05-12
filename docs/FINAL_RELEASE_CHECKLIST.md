@@ -1,6 +1,14 @@
 Final Release Checklist
 =======================
 
+Release Status
+--------------
+- blocked as of 2026-05-12
+- public Vercel smoke fails behind Vercel Authentication
+- remote CI is red
+- preview Supabase envs are missing
+- do not promote to production
+
 Local Gates
 -----------
 ```powershell
@@ -58,6 +66,10 @@ Known Acceptances
 Release Decision
 ----------------
 - approve only when all gates pass
+- reject while any release gate fails
+- reject while remote CI is red
+- reject while public smoke is blocked
+- reject while Supabase preview smoke is unproven
 - record deployed URL
 - record env mode
 - record token rotation date

@@ -372,6 +372,19 @@ export async function fetchConsumptionAudit() {
   return payload?.result || payload?.data || payload;
 }
 
+export async function fetchConsumptionSummary({ stationId = null, from, to, granularity = "monthly" }) {
+  if (!from || !to) throw new Error("fetchConsumptionSummary: date range is required");
+  const payload = {
+    FROM: from,
+    TO: to,
+    BASELINE_FROM: previousDate(from),
+    granularity,
+  };
+  if (stationId) payload.stationId = stationId;
+  const data = await postJSON("/api/local/consumption/summary", payload);
+  return data?.result || data?.data || data;
+}
+
 /**
  * @param {string|null} stationId
  * @returns {Promise<Array<Object>>}
@@ -588,7 +601,7 @@ function createLedgerProgressReporter(stations, onProgress) {
  * @returns {Promise<void>}
  */
 export async function loadConsumptionData(filters, callbacks) {
-  const { stationId, from, to, granularity = "monthly" } = filters;
+  const { stationId, from, to, granularity = "monthly", skipLedger = false } = filters;
   const { onKpiReady, onConsumptionReady, onChartsReady, onLedgerReady, onLedgerProgress, onRangeReady, onError, onWarning } = callbacks;
 
   if (!from || !to) {
@@ -629,6 +642,54 @@ export async function loadConsumptionData(filters, callbacks) {
           meta: { meterCount: 0, metersWithConsumption: 0, readingDayCount: 0 },
         },
       });
+    }
+
+    const summaryPromise = fetchConsumptionSummary({
+      stationId: selectedStationId,
+      from,
+      to,
+      granularity,
+    }).catch((error) => {
+      if (onWarning) onWarning(`Supabase consumption summary failed: ${error?.message || error}`);
+      return null;
+    });
+
+    const summary = await summaryPromise;
+    if (summary) {
+      const avgDailyConsumedKwh = parseFloat(((Number(summary.consumedKwh) || 0) / Math.max(1, kpiData.periodDays)).toFixed(3));
+      if (onConsumptionReady) {
+        onConsumptionReady({
+          consumedKwh: Number(summary.consumedKwh) || 0,
+          avgDailyConsumedKwh,
+        });
+      }
+      if (onChartsReady) {
+        onChartsReady({
+          sales: { stationBar: salesStationBar, temporal: salesTemporal },
+          consumption: {
+            stationBar: summary.stationBar || [],
+            temporal: summary.temporal || { labels: [], kwhSeries: [] },
+            meta: summary.meta || { meterCount: 0, metersWithConsumption: 0, readingDayCount: 0 },
+          },
+        });
+      }
+    }
+    if (skipLedger && summary) {
+      if (onLedgerReady) {
+        onLedgerReady({
+          ledger: [],
+          kpiUpdate: {
+            revenueShortfall: null,
+            netRevenueGap: null,
+            creditBalance: null,
+            highRiskCount: null,
+            matchedMeters: null,
+            unmatchedMeters: null,
+          },
+          accountCounts: {},
+        });
+      }
+      return;
     }
 
     const meterFrom = from === SITE_CONSUMPTION_FIRST_DATA_DATE ? from : previousDate(from);

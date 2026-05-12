@@ -1,0 +1,16 @@
+{
+  "id": "incident-1778499675100",
+  "kind": "live-auth-failure",
+  "severity": "error",
+  "title": "Live auth failure",
+  "message": "Live upstream rejected /api/dlt645/read with 403.",
+  "source": "live-proxy",
+  "createdAt": "2026-05-11T11:41:15.100Z",
+  "details": {
+    "pathname": "/api/dlt645/read",
+    "candidate": "/api/dlt645/read",
+    "status": 403
+  },
+  "alerts": [],
+  "remediation": []
+}

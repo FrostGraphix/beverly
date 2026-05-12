@@ -2,7 +2,7 @@ import { getApi, postApi } from "./api.js";
 import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapper.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
-import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
+import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
@@ -20,7 +20,8 @@ export const defaultTableOptions = {
   get from() { return new Date(new Date().getFullYear(), 0, 1).toISOString(); },
   get to()   { return new Date().toISOString(); },
   pageNumber: 1,
-  pageSize: tableFetchPageSize
+  pageSize: tableFetchPageSize,
+  orderBy: ""
 };
 
 function tableOptions(options = {}) {
@@ -70,8 +71,7 @@ export function tableDataPath(route) {
   return route.apis[route.apis.length - 1];
 }
 
-export function tableRequest(route, options = {}) {
-  const requestOptions = tableOptions(options);
+function buildTableRequest(route, requestOptions) {
   const path = tableDataPath(route);
   const lowerPath = path.toLowerCase();
   if (path === "/api/token/creditTokenRecord/readMore") {
@@ -142,7 +142,20 @@ export function tableRequest(route, options = {}) {
   if (lowerPath.includes("/eventnotification/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), currentDateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
-  return { path, method: "POST", payload: { pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  const defaultRequest = { path, method: "POST", payload: { pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+  const finalRequest = lowerPath.includes("/eventnotification/")
+    ? { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), currentDateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" }
+    : defaultRequest;
+  return finalRequest;
+}
+
+export function tableRequest(route, options = {}) {
+  const requestOptions = tableOptions(options);
+  const req = buildTableRequest(route, requestOptions);
+  if (requestOptions.orderBy && req.payload && typeof req.payload === 'object') {
+    req.payload.orderBy = requestOptions.orderBy;
+  }
+  return req;
 }
 
 function responseRows(rawResponse, route) {
@@ -267,4 +280,4 @@ export function printModelForRoute(route, row) {
 }
 
 
-export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };
+export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };

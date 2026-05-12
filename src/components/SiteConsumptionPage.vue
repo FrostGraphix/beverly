@@ -255,6 +255,9 @@ export default {
       if (!this.storeAudit?.stations?.length || !this.filters.stationId) return null;
       return this.storeAudit.stations.find((station) => station.station === this.filters.stationId) || null;
     },
+    auditDataStart() {
+      return this.activeAuditStation?.earliestReadingDate || this.storeAudit?.overall?.earliestReadingDate || null;
+    },
     combinedWarnings() {
       const auditWarnings = this.activeAuditStation?.warnings || this.storeAudit?.warnings || [];
       return Array.from(new Set([...(this.qualityWarnings || []), ...auditWarnings]));
@@ -270,7 +273,7 @@ export default {
       const latestReadingDate = station?.latestReadingDate || overall?.latestReadingDate || "n/a";
       const earliestReadingDate = station?.earliestReadingDate || overall?.earliestReadingDate || "n/a";
       const liveDelta = station?.deltaStoreVsLive;
-      const configuredFrom = this.storeAudit?.configuredFrom || "n/a";
+      const configuredFrom = station?.effectiveCoverageStart || this.storeAudit?.overall?.earliestReadingDate || this.storeAudit?.configuredFrom || "n/a";
 
       return [
         {
@@ -419,9 +422,18 @@ export default {
         const audit = await fetchConsumptionAudit();
         if (this._reloadGen !== generation) return;
         this.storeAudit = audit;
+        if (this.activePeriod === "all") {
+          const station = this.filters.stationId
+            ? audit?.stations?.find((item) => item.station === this.filters.stationId)
+            : null;
+          const firstDataDate = station?.earliestReadingDate || audit?.overall?.earliestReadingDate || null;
+          if (firstDataDate && firstDataDate > this.filters.from) this.filters.from = firstDataDate;
+        }
+        return audit;
       } catch (error) {
         if (this._reloadGen !== generation) return;
         this.addWarning(error?.message || "Consumption audit failed.");
+        return null;
       }
     },
     async _doReload() {
@@ -454,6 +466,7 @@ export default {
       const stationCount = this.filters.stationId ? 1 : LIVE_STATIONS.length;
       this.ledgerProgress = { loaded: 0, total: stationCount * LEDGER_STEPS_PER_STATION, label: "" };
       const auditPromise = this.refreshAudit(generation);
+      if (this.activePeriod === "all") await auditPromise;
 
       try {
         await loadConsumptionData(
@@ -462,6 +475,7 @@ export default {
             from: this.filters.from,
             to: this.filters.to,
             granularity: this.filters.granularity,
+            skipLedger: this.activeView === "consumption",
           },
           {
             onKpiReady: (kpi) => {
@@ -508,7 +522,7 @@ export default {
             },
           }
         );
-        await auditPromise;
+        if (this.activePeriod !== "all") await auditPromise;
       } catch (error) {
         if (this._reloadGen !== generation) return;
         if (error.name !== "AbortError") {

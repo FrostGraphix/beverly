@@ -28,6 +28,11 @@ function normalizeMeter(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function normalizeGranularity(value) {
+  const normalized = String(value || "monthly").toLowerCase();
+  return ["daily", "weekly", "monthly", "yearly"].includes(normalized) ? normalized : "monthly";
+}
+
 function requestPayload(source) {
   return Array.isArray(source) ? source[0] || {} : source || {};
 }
@@ -85,6 +90,55 @@ async function writeDailyMeterRows({ pathname, requestPayload: payload, response
 function totalFromContentRange(value, fallback) {
   const match = String(value || "").match(/\/(\d+)$/);
   return match ? Number(match[1]) : fallback;
+}
+
+function toIsoWeekKey(value) {
+  const date = new Date(`${String(value || "").substring(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "UNKNOWN";
+  const thursday = new Date(date);
+  thursday.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
+  return `${thursday.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+function periodKey(value, granularity) {
+  const day = normalizeDate(value);
+  if (!day) return "UNKNOWN";
+  if (granularity === "daily") return day;
+  if (granularity === "weekly") return toIsoWeekKey(day);
+  if (granularity === "yearly") return day.substring(0, 4);
+  return day.substring(0, 7);
+}
+
+function rowsToDeltas(rows) {
+  const byMeter = new Map();
+  for (const row of rows) {
+    const meterId = normalizeMeter(row.meterId || row.customerId);
+    if (!meterId) continue;
+    if (!byMeter.has(meterId)) byMeter.set(meterId, []);
+    byMeter.get(meterId).push(row);
+  }
+
+  const deltas = [];
+  for (const [meterId, meterRows] of byMeter.entries()) {
+    const sortedRows = meterRows.slice().sort((left, right) =>
+      String(left.currentDate || "").localeCompare(String(right.currentDate || ""))
+    );
+    for (let index = 0; index < sortedRows.length; index++) {
+      const row = sortedRows[index];
+      const currentTotal = Number(row.total1) || 0;
+      const previousTotal = index === 0 ? currentTotal : Number(sortedRows[index - 1].total1) || 0;
+      deltas.push({
+        stationId: normalizeStation(row.stationId),
+        meterId,
+        date: normalizeDate(row.currentDate),
+        delta: parseFloat(Math.max(0, currentTotal - previousTotal).toFixed(3)),
+        hasReading: row.total1 != null && row.total1 !== "",
+      });
+    }
+  }
+  return deltas;
 }
 
 async function countDailyMeterRows(stationId = "") {
@@ -224,10 +278,125 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
   };
 }
 
+async function readCompactRowsFromStore({ stationId, from, to }) {
+  const station = normalizeStation(stationId);
+  const pageSize = 1000;
+  const filters = [
+    "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1",
+    `reading_date=gte.${encodeURIComponent(from)}`,
+    `reading_date=lte.${encodeURIComponent(to)}`,
+    "order=station_id.asc,meter_id.asc,reading_date.asc",
+  ];
+  if (station) filters.splice(1, 0, `station_id=eq.${encodeURIComponent(station)}`);
+  const query = `/daily_meter_readings?${filters.join("&")}`;
+
+  async function fetchRange(offset) {
+    const rangeEnd = offset + pageSize - 1;
+    const { response, body } = await supabase.restRequestWithResponse(query, {
+      headers: {
+        Prefer: "count=exact",
+        Range: `${offset}-${rangeEnd}`,
+      },
+    });
+    const pageRows = Array.isArray(body) ? body : [];
+    return {
+      rows: pageRows,
+      total: totalFromContentRange(response.headers.get("content-range"), offset + pageRows.length),
+    };
+  }
+
+  const firstPage = await fetchRange(0);
+  const rows = [...firstPage.rows];
+  const total = firstPage.total;
+  const offsets = [];
+  for (let offset = pageSize; offset < total; offset += pageSize) offsets.push(offset);
+
+  const concurrency = 6;
+  for (let index = 0; index < offsets.length; index += concurrency) {
+    const pageResults = await Promise.all(offsets.slice(index, index + concurrency).map((offset) => fetchRange(offset)));
+    for (const result of pageResults) rows.push(...result.rows);
+  }
+
+  return rows.map((row) => ({
+    stationId: row.station_id,
+    meterId: row.meter_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    currentDate: row.reading_date,
+    total1: row.total1,
+    remain1: row.remain1,
+  }));
+}
+
+async function readDailyMeterSummary({ requestPayload: payload }) {
+  if (!storeEnabled()) return null;
+  const request = requestPayload(payload);
+  const stationId = normalizeStation(request.stationId || request.SITE_ID || request.siteId);
+  const from = normalizeDate(request.FROM || request.from);
+  const to = normalizeDate(request.TO || request.to);
+  const baselineFrom = normalizeDate(request.BASELINE_FROM || request.baselineFrom || from);
+  const granularity = normalizeGranularity(request.granularity);
+  if (!from || !to) return null;
+
+  const rows = await readCompactRowsFromStore({ stationId, from: baselineFrom, to });
+  const deltas = rowsToDeltas(rows).filter((delta) => delta.date >= from && delta.date <= to);
+
+  const byStation = new Map();
+  const byPeriod = new Map();
+  const meters = new Set();
+  const metersWithConsumption = new Set();
+  let consumedKwh = 0;
+  let readingDayCount = 0;
+
+  for (const delta of deltas) {
+    consumedKwh = parseFloat((consumedKwh + delta.delta).toFixed(3));
+    if (delta.hasReading) readingDayCount++;
+    meters.add(`${delta.stationId}:${delta.meterId}`);
+    if (delta.delta > 0) metersWithConsumption.add(`${delta.stationId}:${delta.meterId}`);
+
+    byStation.set(delta.stationId, parseFloat(((byStation.get(delta.stationId) || 0) + delta.delta).toFixed(3)));
+    const key = periodKey(delta.date, granularity);
+    byPeriod.set(key, parseFloat(((byPeriod.get(key) || 0) + delta.delta).toFixed(3)));
+  }
+
+  const stationBar = Array.from(byStation.entries())
+    .map(([station, totalKwh]) => ({ station, totalKwh, meterCount: 0, meterBreakdown: [] }))
+    .sort((left, right) => right.totalKwh - left.totalKwh);
+  const labels = Array.from(byPeriod.keys()).sort((left, right) => left.localeCompare(right));
+
+  return {
+    status: 200,
+    body: {
+      code: 0,
+      msg: "success",
+      reason: "success",
+      data: {
+        consumedKwh,
+        stationBar,
+        temporal: {
+          labels,
+          kwhSeries: labels.map((label) => byPeriod.get(label) || 0),
+        },
+        meta: {
+          meterCount: meters.size,
+          metersWithConsumption: metersWithConsumption.size,
+          readingDayCount,
+          sourceRows: rows.length,
+        },
+      },
+      _proxy: {
+        source: "supabase-consumption-summary",
+        pathname: "/api/local/consumption/summary",
+      },
+    },
+  };
+}
+
 module.exports = {
   collectionRowsFromPayload,
   dailyMeterStationStats,
   dailyMeterTableReport,
+  readDailyMeterSummary,
   readDailyMeterRows,
   storeEnabled,
   writeDailyMeterRows,

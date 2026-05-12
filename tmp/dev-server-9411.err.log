@@ -226,3 +226,914 @@
 [live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
 [live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
 [live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[consumption-store-read] fetch failed
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/tariff/read","candidate":"/API/tariff/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:302:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:122:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:68:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:121:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:952:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1153:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[2m12:47:37[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "./components/OnboardingStudioPage.vue" from "src/App.vue". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m:188:0
+[33m  5  |  import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
+  6  |  import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
+  7  |  import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
+     |                                    ^
+  8  |  import SiteConsumptionPage from "./components/SiteConsumptionPage.vue";
+  9  |  import TablePage from "./components/TablePage.vue";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[consumption-store-read] canceling statement due to statement timeout
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/consumption-audit","candidate":"/API/system/consumption-audit","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/dashboard/readPanelGroup","candidate":"/API/dashboard/readPanelGroup","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/readMore","candidate":"/API/token/creditTokenRecord/readMore","error":"fetch failed"}

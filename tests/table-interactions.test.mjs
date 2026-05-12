@@ -34,7 +34,7 @@ const rows = [
 assert.strictEqual(searchRows(accountRoute, rows, "TUNGA").length, 1);
 assert.strictEqual(searchRows(accountRoute, rows, "").length, 3);
 assert.strictEqual(sortRows(accountRoute, rows, "asc")[0].customerId, "12301");
-assert.strictEqual(sortRows(accountRoute, rows, "desc")[0].customerId, "12301");
+assert.strictEqual(sortRows(accountRoute, rows, "desc")[0].customerId, "470005343091");
 assert.strictEqual(routeSortPolicy(accountRoute).fixed, true);
 assert.strictEqual(routeSortDirection(accountRoute), "asc");
 assert.strictEqual(paginateRows(rows, 1, 2).length, 2);
@@ -53,16 +53,16 @@ const recordRows = [
   { receiptId: 3, createDate: "2026-04-29 09:00:00" }
 ];
 assert.strictEqual(routeSortDirection(tokenRoute), "desc");
-assert.strictEqual(sortRows(tokenRoute, recordRows, "asc")[0].receiptId, 2);
+assert.strictEqual(sortRows(tokenRoute, recordRows, "asc")[0].receiptId, 1);
 
 const lowPurchaseRoute = routeByHash("#/prepay-report/low-purchase-situation");
-assert.strictEqual(sortRows(lowPurchaseRoute, [{ totalUnit: 5.7 }, { totalUnit: 1.4 }, { totalUnit: 10 }], "desc")[0].totalUnit, 1.4);
+assert.strictEqual(sortRows(lowPurchaseRoute, [{ totalUnit: 5.7 }, { totalUnit: 1.4 }, { totalUnit: 10 }], "desc")[0].totalUnit, 10);
 
 const longNonpurchaseRoute = routeByHash("#/prepay-report/long-nonpurchase-situation");
-assert.strictEqual(sortRows(longNonpurchaseRoute, [{ nonpurchaseDays: 11 }, { nonpurchaseDays: 42 }], "asc")[0].nonpurchaseDays, 42);
+assert.strictEqual(sortRows(longNonpurchaseRoute, [{ nonpurchaseDays: 11 }, { nonpurchaseDays: 42 }], "asc")[0].nonpurchaseDays, 11);
 
 const gatewayRoute = routeByHash("#/management/gateway");
-assert.strictEqual(sortRows(gatewayRoute, [{ successRate: "92%" }, { successRate: "100%" }], "asc")[0].successRate, "100%");
+assert.strictEqual(sortRows(gatewayRoute, [{ successRate: "92%" }, { successRate: "100%" }], "asc")[0].successRate, "92%");
 
 const formSeed = createFormSeed(accountRoute, "Edit", rows[0]);
 assert.strictEqual(formSeed.customerId, "470005343091");

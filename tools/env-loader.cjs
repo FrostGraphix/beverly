@@ -15,6 +15,8 @@ function parseEnvLine(line) {
 }
 
 function loadEnvFile(filePath = path.resolve(process.cwd(), ".env")) {
+  const entrypoint = String(process.argv[1] || "");
+  if (process.env.FORCE_LOAD_ENV !== "true" && /(^|[\\/])tests([\\/]|$)/i.test(entrypoint)) return;
   if (!fs.existsSync(filePath)) return;
   const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
   for (const line of lines) {

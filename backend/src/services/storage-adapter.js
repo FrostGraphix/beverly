@@ -14,6 +14,7 @@ const tableNames = [
   "export_jobs",
   "print_jobs",
   "write_confirmations",
+  "account_bindings",
   "automation_deliveries"
 ];
 
@@ -63,6 +64,20 @@ async function saveArtifact({ bucket, routeHash, filename, content, contentType 
 function countFromRange(value) {
   const match = String(value || "").match(/\/(\d+)$/);
   return match ? Number(match[1]) : 0;
+}
+
+function mapAccountBindingRow(row = {}) {
+  return {
+    customerId: row.customer_id,
+    meterId: row.meter_id,
+    tariffId: row.tariff_id,
+    ctRatio: row.ct_ratio,
+    stationId: row.station_id,
+    remark: row.remark,
+    createDate: row.created_at,
+    updateDate: row.updated_at,
+    _supabase: true
+  };
 }
 
 async function runWithFallback(localAction, remoteAction) {
@@ -247,17 +262,111 @@ async function recordWriteConfirmation(entry) {
   );
 }
 
+async function saveAccountBinding(entry) {
+  return runWithFallback(
+    () => localDatabase.saveAccountBinding(entry),
+    async () => {
+      const rows = await supabase.restRequest("/account_bindings?on_conflict=customer_id,meter_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: {
+          id: crypto.randomUUID(),
+          customer_id: String(entry.customerId || ""),
+          meter_id: String(entry.meterId || ""),
+          tariff_id: String(entry.tariffId || ""),
+          ct_ratio: String(entry.ctRatio || ""),
+          station_id: String(entry.stationId || ""),
+          remark: String(entry.remark || ""),
+          source: String(entry.source || "supabase"),
+          status: String(entry.status || "active"),
+          detail_json: sanitizeValue(entry.details || {})
+        }
+      });
+      return mapAccountBindingRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteAccountBinding(entry) {
+  const customerId = encodeURIComponent(String(entry.customerId || ""));
+  const meterId = encodeURIComponent(String(entry.meterId || ""));
+  return runWithFallback(
+    () => localDatabase.deleteAccountBinding(entry),
+    async () => {
+      await supabase.restRequest(`/account_bindings?customer_id=eq.${customerId}&meter_id=eq.${meterId}`, {
+        method: "DELETE",
+        prefer: "return=minimal"
+      });
+      return 1;
+    }
+  );
+}
+
+async function listAccountBindings(options = {}) {
+  return runWithFallback(
+    () => localDatabase.listAccountBindings(options),
+    async () => {
+      const filters = [
+        "select=customer_id,meter_id,tariff_id,ct_ratio,station_id,remark,created_at,updated_at"
+      ];
+      if (options.customerId) filters.push(`customer_id=eq.${encodeURIComponent(String(options.customerId))}`);
+      if (options.meterId) filters.push(`meter_id=eq.${encodeURIComponent(String(options.meterId))}`);
+      if (options.stationId) filters.push(`station_id=eq.${encodeURIComponent(String(options.stationId).toUpperCase())}`);
+      filters.push("order=updated_at.desc");
+      const rows = await supabase.restRequest(`/account_bindings?${filters.join("&")}`);
+      return (Array.isArray(rows) ? rows : []).map(mapAccountBindingRow);
+    }
+  );
+}
+
 async function recordAutomationDelivery(entry) {
   return runWithFallback(
     () => localDatabase.recordAutomationDelivery(entry),
-    () => localDatabase.recordAutomationDelivery(entry)
+    () => supabase.restRequest("/automation_deliveries", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: {
+        id: String(entry.id || crypto.randomUUID()),
+        incident_id: String(entry.incidentId || ""),
+        incident_kind: String(entry.incidentKind || ""),
+        incident_title: String(entry.incidentTitle || ""),
+        webhook_id: String(entry.webhookId || ""),
+        webhook_name: String(entry.webhookName || ""),
+        attempt_number: Math.max(1, Number(entry.attemptNumber || 1)),
+        ok: Boolean(entry.ok),
+        status_code: Number(entry.status || 0),
+        error_text: String(entry.error || ""),
+        detail_json: sanitizeValue(entry.details || {}),
+        created_at: String(entry.createdAt || nowIso())
+      }
+    })
   );
 }
 
 async function listAutomationDeliveries(options = {}) {
   return runWithFallback(
     () => localDatabase.listAutomationDeliveries(options),
-    () => localDatabase.listAutomationDeliveries(options)
+    async () => {
+      const limit = Math.max(1, Math.min(Number(options.limit || 50), 200));
+      const rows = await supabase.restRequest(`/automation_deliveries?select=id,incident_id,incident_kind,incident_title,webhook_id,webhook_name,attempt_number,ok,status_code,error_text,detail_json,created_at&order=created_at.desc&limit=${limit}`);
+      return {
+        rows: (Array.isArray(rows) ? rows : []).map((row) => ({
+          id: row.id,
+          incidentId: row.incident_id,
+          incidentKind: row.incident_kind,
+          incidentTitle: row.incident_title,
+          webhookId: row.webhook_id,
+          webhookName: row.webhook_name,
+          attemptNumber: Number(row.attempt_number || 1),
+          ok: row.ok === true,
+          status: Number(row.status_code || 0),
+          error: String(row.error_text || ""),
+          createdAt: String(row.created_at || ""),
+          details: sanitizeValue(row.detail_json || {})
+        })),
+        total: Array.isArray(rows) ? rows.length : 0
+      };
+    }
   );
 }
 
@@ -283,14 +392,17 @@ module.exports = {
   cacheApiResponse,
   ensureDatabase,
   listAutomationDeliveries,
+  listAccountBindings,
   listImportJobs,
   readCachedApiResponse,
+  deleteAccountBinding,
   recordAutomationDelivery,
   recordAuditLog,
   recordExportJob,
   recordImportJob,
   recordPrintJob,
   recordWriteConfirmation,
+  saveAccountBinding,
   stableId,
   saveArtifact,
   tableCounts,

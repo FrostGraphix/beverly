@@ -1,0 +1,1 @@
+const { postApi } = require('./src/services/api.js'); postApi('/api/DailyDataMeter/read', { pageNumber: 1, pageSize: 5, searchTerm: 'M', orderBy: 'meterId desc', lang: 'en' }).then(console.log).catch(console.error);

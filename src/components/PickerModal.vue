@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-backdrop show picker-backdrop" role="dialog" aria-modal="true">
+  <div class="modal-backdrop show picker-backdrop" role="dialog" aria-modal="true" @click.self="$emit('close')">
     <BaseModalShell class="modal picker-modal" body-class="picker-body">
       <template #header>
         <div class="modal-header">

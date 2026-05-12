@@ -4535,6 +4535,58 @@
       ],
       "uiRouteConsumers": [],
       "writeRiskLevel": "none"
+    },
+    {
+      "module": "System",
+      "path": "/api/system/automation-report",
+      "operationId": "",
+      "method": "GET_OR_POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/system/automation-report",
+        "/API/system/automation-report"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "registryOnly": false,
+      "casingVariants": [
+        "/api/system/automation-report",
+        "/API/system/automation-report"
+      ],
+      "uiRouteConsumers": [
+        "#/system/automation-command"
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "System",
+      "path": "/api/system/automation-control",
+      "operationId": "",
+      "method": "GET_OR_POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "read",
+      "consumers": [],
+      "observed": false,
+      "aliases": [
+        "/api/system/automation-control",
+        "/API/system/automation-control"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "registryOnly": false,
+      "casingVariants": [
+        "/api/system/automation-control",
+        "/API/system/automation-control"
+      ],
+      "uiRouteConsumers": [
+        "#/system/automation-command"
+      ],
+      "writeRiskLevel": "none"
     }
   ]
 }

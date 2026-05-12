@@ -27,6 +27,7 @@ function createMemoryStore() {
     export_jobs: [],
     print_jobs: [],
     write_confirmations: [],
+    account_bindings: [],
     automation_deliveries: []
   };
 }
@@ -230,6 +231,21 @@ function ensureDatabase() {
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS account_bindings (
+      id TEXT PRIMARY KEY,
+      customer_id TEXT NOT NULL,
+      meter_id TEXT NOT NULL,
+      tariff_id TEXT NOT NULL,
+      ct_ratio TEXT NOT NULL,
+      station_id TEXT NOT NULL,
+      remark TEXT NOT NULL,
+      source TEXT NOT NULL,
+      status TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(customer_id, meter_id)
     );
     CREATE TABLE IF NOT EXISTS automation_deliveries (
       id TEXT PRIMARY KEY,
@@ -486,6 +502,151 @@ function recordWriteConfirmation(entry) {
   );
 }
 
+function saveAccountBinding(entry) {
+  const db = ensureDatabase();
+  const normalized = {
+    customerId: String(entry.customerId || ""),
+    meterId: String(entry.meterId || ""),
+    tariffId: String(entry.tariffId || ""),
+    ctRatio: String(entry.ctRatio || ""),
+    stationId: String(entry.stationId || ""),
+    remark: String(entry.remark || ""),
+    source: String(entry.source || "local-fallback"),
+    status: String(entry.status || "active"),
+    details: sanitizeValue(entry.details || {})
+  };
+  if (isMemoryDatabase(db)) {
+    const existingIndex = db.memoryStore.account_bindings.findIndex((row) =>
+      String(row.customerId || "") === normalized.customerId
+      && String(row.meterId || "") === normalized.meterId
+    );
+    const previous = existingIndex === -1 ? null : db.memoryStore.account_bindings[existingIndex];
+    const nextRow = {
+      ...normalized,
+      id: previous?.id || crypto.randomUUID(),
+      createdAt: previous?.createdAt || nowIso(),
+      updatedAt: nowIso()
+    };
+    if (existingIndex === -1) db.memoryStore.account_bindings.push(nextRow);
+    else db.memoryStore.account_bindings.splice(existingIndex, 1, nextRow);
+    return nextRow;
+  }
+  const timestamp = nowIso();
+  const existing = db.prepare(`
+    SELECT id, created_at
+    FROM account_bindings
+    WHERE customer_id = ? AND meter_id = ?
+  `).get(normalized.customerId, normalized.meterId);
+  const id = existing?.id || crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO account_bindings (
+      id, customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, source, status, detail_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(customer_id, meter_id) DO UPDATE SET
+      tariff_id = excluded.tariff_id,
+      ct_ratio = excluded.ct_ratio,
+      station_id = excluded.station_id,
+      remark = excluded.remark,
+      source = excluded.source,
+      status = excluded.status,
+      detail_json = excluded.detail_json,
+      updated_at = excluded.updated_at
+  `).run(
+    id,
+    normalized.customerId,
+    normalized.meterId,
+    normalized.tariffId,
+    normalized.ctRatio,
+    normalized.stationId,
+    normalized.remark,
+    normalized.source,
+    normalized.status,
+    JSON.stringify(normalized.details),
+    existing?.created_at || timestamp,
+    timestamp
+  );
+  return {
+    ...normalized,
+    id,
+    createdAt: existing?.created_at || timestamp,
+    updatedAt: timestamp
+  };
+}
+
+function deleteAccountBinding(entry) {
+  const db = ensureDatabase();
+  const customerId = String(entry.customerId || "");
+  const meterId = String(entry.meterId || "");
+  if (isMemoryDatabase(db)) {
+    const before = db.memoryStore.account_bindings.length;
+    db.memoryStore.account_bindings = db.memoryStore.account_bindings.filter((row) =>
+      !(String(row.customerId || "") === customerId && String(row.meterId || "") === meterId)
+    );
+    return before - db.memoryStore.account_bindings.length;
+  }
+  const result = db.prepare(`
+    DELETE FROM account_bindings
+    WHERE customer_id = ? AND meter_id = ?
+  `).run(customerId, meterId);
+  return Number(result.changes || 0);
+}
+
+function listAccountBindings(options = {}) {
+  const db = ensureDatabase();
+  const customerId = String(options.customerId || "").trim();
+  const meterId = String(options.meterId || "").trim();
+  const stationId = String(options.stationId || "").trim().toUpperCase();
+  if (isMemoryDatabase(db)) {
+    let rows = db.memoryStore.account_bindings.slice();
+    if (customerId) rows = rows.filter((row) => String(row.customerId || "") === customerId);
+    if (meterId) rows = rows.filter((row) => String(row.meterId || "") === meterId);
+    if (stationId) rows = rows.filter((row) => String(row.stationId || "").toUpperCase() === stationId);
+    return rows.map((row) => ({
+      customerId: row.customerId,
+      meterId: row.meterId,
+      tariffId: row.tariffId,
+      ctRatio: row.ctRatio,
+      stationId: row.stationId,
+      remark: row.remark,
+      createDate: row.createdAt,
+      updateDate: row.updatedAt,
+      _localFallback: true
+    }));
+  }
+  const clauses = [];
+  const params = [];
+  if (customerId) {
+    clauses.push("customer_id = ?");
+    params.push(customerId);
+  }
+  if (meterId) {
+    clauses.push("meter_id = ?");
+    params.push(meterId);
+  }
+  if (stationId) {
+    clauses.push("UPPER(station_id) = ?");
+    params.push(stationId);
+  }
+  const whereClause = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db.prepare(`
+    SELECT customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, created_at, updated_at
+    FROM account_bindings
+    ${whereClause}
+    ORDER BY updated_at DESC
+  `).all(...params);
+  return rows.map((row) => ({
+    customerId: row.customer_id,
+    meterId: row.meter_id,
+    tariffId: row.tariff_id,
+    ctRatio: row.ct_ratio,
+    stationId: row.station_id,
+    remark: row.remark,
+    createDate: row.created_at,
+    updateDate: row.updated_at,
+    _localFallback: true
+  }));
+}
+
 function tableCounts() {
   const db = ensureDatabase();
   const names = [
@@ -498,6 +659,7 @@ function tableCounts() {
     "export_jobs",
     "print_jobs",
     "write_confirmations",
+    "account_bindings",
     "automation_deliveries"
   ];
   if (isMemoryDatabase(db)) {
@@ -603,7 +765,9 @@ function resetForTests() {
 module.exports = {
   cacheApiResponse,
   databasePath,
+  deleteAccountBinding,
   ensureDatabase,
+  listAccountBindings,
   listImportJobs,
   listAutomationDeliveries,
   readCachedApiResponse,
@@ -614,6 +778,7 @@ module.exports = {
   recordPrintJob,
   recordWriteConfirmation,
   resetForTests,
+  saveAccountBinding,
   tableCounts,
   writableRoot
 };

@@ -1,5 +1,11 @@
 # Architecture
 
+Status:
+- This is the canonical architecture file.
+- Update this file first.
+- Treat `docs/ARCHITECTURE.md` as legacy reference.
+- Release is blocked until remote CI and preview smoke pass.
+
 ## Goal
 
 Build a Vue 2 remake of the reference Meter System.

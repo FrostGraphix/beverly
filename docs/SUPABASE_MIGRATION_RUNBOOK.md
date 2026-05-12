@@ -31,6 +31,7 @@ SUPABASE_AUTH_ENABLED=true
 SUPABASE_STORAGE_ENABLED=true
 API_CACHE_ENABLED=true
 SNAPSHOT_STORE_ENABLED=true
+DATA_GOVERNANCE_ENABLED=true
 ```
 
 Keep local fallback:
@@ -39,6 +40,7 @@ Keep local fallback:
 SESSION_STORE_MODE=memory
 API_CACHE_ENABLED=false
 SNAPSHOT_STORE_ENABLED=false
+DATA_GOVERNANCE_ENABLED=false
 ```
 
 ## Apply
@@ -120,6 +122,12 @@ Run cron refresh smoke:
 
 ```powershell
 curl.exe -H "Authorization: Bearer $env:CRON_SECRET" "$env:PRODUCTION_TARGET_URL/api/cron/refresh-hot"
+```
+
+Run governance smoke:
+
+```powershell
+curl.exe -H "Authorization: Bearer $env:CRON_SECRET" "$env:PRODUCTION_TARGET_URL/api/cron/governance-daily"
 ```
 
 Run build.

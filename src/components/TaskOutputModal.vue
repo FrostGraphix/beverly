@@ -53,14 +53,6 @@
               <span class="seg-v">{{ seg.value }}</span>
             </div>
           </div>
-
-          <details class="raw-block">
-            <summary>
-              Raw payload
-              <BaseButton class="copy-btn" size="sm" variant="quiet" @click.stop.prevent="copyRaw">Copy</BaseButton>
-            </summary>
-            <pre>{{ rawValue }}</pre>
-          </details>
         </div>
       </div>
 
@@ -556,3 +548,5 @@ export default {
   }
 }
 </style>
+
+
