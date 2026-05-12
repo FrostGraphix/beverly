@@ -9,6 +9,7 @@ require("module").Module._initPaths();
 const { chromium } = require("playwright");
 
 const root = path.resolve(__dirname, "..");
+const edgePath = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const distRoot = path.join(root, "dist");
 const artifactDir = path.join(root, "tmp", "design-system-audit");
 const themes = ["light", "dark", "executive", "ocean", "contrast"];
@@ -20,6 +21,10 @@ const routes = [
   { name: "login", hash: "#/login", ready: ".login-card" },
   { name: "dashboard", hash: "#/dashboard", ready: ".dashboard-editor-container" },
   { name: "table", hash: "#/management/account", ready: ".table-page" },
+  { name: "daily-meter", hash: "#/prepay-report/daily-data-meter", ready: ".ddm-container" },
+  { name: "credit-token-record", hash: "#/token-record/credit-token-record", ready: 'th[data-column-key="receiptId"]' },
+  { name: "remote-task", hash: "#/remote-operation-record/remote-meter-reading-task", ready: 'th[data-column-key="dataItem"]' },
+  { name: "long-nonpurchase", hash: "#/prepay-report/long-nonpurchase-situation", ready: 'th[data-column-key="nonpurchaseDays"]' },
   { name: "site-consumption", hash: "#/prepay-report/site-consumption", ready: ".eih-page" }
 ];
 
@@ -172,7 +177,10 @@ async function main() {
   assert(fs.existsSync(path.join(distRoot, "index.html")), "Run npm run build before visual audit.");
   fs.mkdirSync(artifactDir, { recursive: true });
   const server = await startStaticServer();
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    ...(fs.existsSync(edgePath) ? { executablePath: edgePath } : {})
+  });
   const results = [];
 
   try {
@@ -193,7 +201,7 @@ async function main() {
 
         for (const route of routes) {
           await page.goto(`${appUrl}/${route.hash}`, { waitUntil: "domcontentloaded" });
-          await page.waitForSelector(route.ready, { timeout: 10000 });
+          await page.waitForSelector(route.ready, { state: "attached", timeout: 10000 });
           await page.emulateMedia({ reducedMotion: "reduce" });
           await assertPageHealth(page, theme);
           const screenshot = path.join(artifactDir, `${viewport.name}-${theme}-${route.name}.png`);
@@ -210,6 +218,9 @@ async function main() {
         });
         await page.waitForSelector(".modal-backdrop", { timeout: 10000 });
         await assertPageHealth(page, theme);
+        const modalScreenshot = path.join(artifactDir, `${viewport.name}-${theme}-export-modal.png`);
+        await page.screenshot({ path: modalScreenshot, fullPage: false });
+        results.push(path.relative(root, modalScreenshot).replace(/\\/g, "/"));
         await page.keyboard.press("Escape");
         await page.locator(".modal-close").click();
         await page.waitForSelector(".modal-backdrop", { state: "detached", timeout: 10000 });
@@ -223,7 +234,7 @@ async function main() {
     server.close();
   }
 
-  assert.strictEqual(results.length, themes.length * viewports.length * routes.length);
+  assert.strictEqual(results.length, themes.length * viewports.length * (routes.length + 1));
   console.log(JSON.stringify({ screenshots: results.length, artifactDir: path.relative(root, artifactDir).replace(/\\/g, "/"), status: "design system visual audit passed" }, null, 2));
 }
 

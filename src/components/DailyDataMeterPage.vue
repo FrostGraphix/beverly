@@ -126,7 +126,7 @@
         </article>
       </template>
       <div v-else-if="!visibleRows.length" class="ddm-mobile-empty">No data found</div>
-      <article v-else v-for="(row, index) in visibleRows" :key="`ddm-mobile-${row.meterId || index}`" class="ddm-mobile-card">
+      <article v-else v-for="(row, index) in visibleRows" :key="`ddm-mobile-${row.meterId || 'row'}-${index}`" class="ddm-mobile-card">
         <div class="ddm-mobile-head">
           <div>
             <strong>{{ text(row.meterId) }}</strong>
@@ -183,9 +183,8 @@
       <BaseInput v-model="gotoPage" type="number" class="goto-input" aria-label="Go to page" @keyup.enter="applyGoto" />
     </div>
 
-    <teleport to="body">
-      <div v-if="hourly.open" class="ddm-overlay" role="dialog" aria-modal="true" @click.self="closeHourly">
-        <div class="ddm-modal">
+    <div v-if="hourly.open" class="ddm-overlay" role="dialog" aria-modal="true" @click.self="closeHourly">
+      <div class="ddm-modal">
           <div class="ddm-modal-head">
             <div>
               <h2 class="ddm-modal-title">Hourly interval data</h2>
@@ -263,9 +262,8 @@
             <span>{{ hourly.total }} hourly rows</span>
             <BaseButton @click="closeHourly">Close</BaseButton>
           </div>
-        </div>
       </div>
-    </teleport>
+    </div>
   </div>
 </template>
 

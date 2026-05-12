@@ -8,9 +8,9 @@
       <div class="sidebar-logo">
         <span class="sidebar-logo-icon">B</span>
         <span class="sidebar-logo-text">Beverly</span>
-        <button v-if="width <= 1024" type="button" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
+        <BaseIconButton v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+        </BaseIconButton>
       </div>
       <nav class="sidebar-menu" aria-label="Main navigation">
         <template v-for="group in groups">

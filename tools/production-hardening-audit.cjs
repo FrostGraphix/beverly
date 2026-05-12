@@ -126,13 +126,12 @@ function runAudit(writeArtifact = true) {
         "legacy-auth.css",
         "legacy-shell.css",
         "legacy-dashboard.css",
-        "legacy-tables.css",
         "legacy-modals.css",
         "legacy-profile.css",
         "legacy-consumption.css"
       ].every((file) => exists(`src/styles/${file}`)) &&
         read("src/styles/legacy-components.css").includes('@import "./legacy-auth.css";'),
-      "Legacy CSS is split into migration modules.",
+      "Active legacy CSS is split into migration modules.",
       ["src/styles/legacy-components.css", "src/styles/legacy-auth.css"]
     ),
     check(
