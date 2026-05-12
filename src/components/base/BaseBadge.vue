@@ -5,7 +5,7 @@
 </template>
 
 <script>
-const allowedVariants = ["default", "success", "warning", "danger"];
+const allowedVariants = ["default", "neutral", "success", "warning", "danger", "info", "live", "cached", "demo"];
 
 export default {
   name: "BaseBadge",

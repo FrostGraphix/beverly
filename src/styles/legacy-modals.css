@@ -212,8 +212,8 @@
     .toolbar-actions .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; font-weight: 600; }
     .toolbar-actions .btn svg { opacity: 0.7; }
     
-    .receipt-preview-container { display: flex; justify-content: center; padding: 14px; background: linear-gradient(145deg, color-mix(in srgb, var(--primary-light) 70%, transparent), var(--bg-page)); border: 1px solid var(--border-color); border-radius: 18px; }
-    .receipt-card-premium { width: min(500px, 100%); background: var(--bg-card); padding: 24px; border: 1px solid var(--border-color); border-radius: 20px; box-shadow: var(--shadow-lg); position: relative; overflow: hidden; }
+    .receipt-preview-container { display: flex; justify-content: center; padding: 14px; background: radial-gradient(circle at top, color-mix(in srgb, var(--primary) 16%, transparent), transparent 48%), linear-gradient(145deg, color-mix(in srgb, var(--primary-light) 70%, transparent), var(--bg-page)); border: 1px solid var(--border-color); border-radius: 18px; }
+    .receipt-card-premium { width: min(460px, 100%); background: linear-gradient(180deg, var(--bg-card), color-mix(in srgb, var(--bg-card) 86%, #000)); padding: 22px; border: 1px solid var(--border-color); border-radius: 20px; box-shadow: var(--shadow-lg), 0 0 0 6px color-mix(in srgb, var(--primary-light) 32%, transparent); position: relative; overflow: hidden; }
     .receipt-card-premium::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary-deep), var(--primary)); }
     
     .receipt-header { text-align: center; margin-bottom: 18px; }
@@ -222,14 +222,21 @@
     .receipt-brand .brand-name { font-size: 18px; font-weight: 600; color: var(--text-strong); }
     .receipt-title { font-size: 16px; font-weight: 600; margin: 0; color: var(--text-strong); }
     .receipt-subtitle { font-size: 12px; color: var(--text-muted); margin: 4px 0 0; }
+    .receipt-time-pill { width: fit-content; max-width: 100%; margin: 12px auto 0; display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border: 1px solid var(--border-color); border-radius: 999px; background: color-mix(in srgb, var(--primary-light) 72%, transparent); color: var(--text-strong); }
+    .receipt-time-pill span { color: var(--primary); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+    .receipt-time-pill strong { font-size: 11px; font-weight: 800; white-space: nowrap; }
     
     .receipt-amount { margin: 16px 0; padding: 16px; background: var(--primary-light); border-radius: 14px; border: 1px solid var(--border-color); text-align: center; }
     .amount-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 4px; }
     .amount-value { font-size: 28px; font-weight: 700; color: var(--primary); display: block; }
     
-    .receipt-token-box { background: var(--bg-page); border: 1px solid var(--border-mid); padding: 14px; border-radius: 14px; text-align: center; margin-bottom: 16px; }
+    .receipt-token-box { background: var(--bg-page); border: 1px solid var(--border-mid); padding: 14px; border-radius: 14px; text-align: center; margin-bottom: 12px; }
     .token-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--primary); margin-bottom: 6px; display: block; }
     .token-value { font-family: 'Courier New', Courier, monospace; font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--primary-deep); }
+    .receipt-mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+    .receipt-mini-grid div { min-width: 0; padding: 10px 11px; border: 1px solid var(--border-color); border-radius: 12px; background: color-mix(in srgb, var(--bg-page) 72%, transparent); }
+    .receipt-mini-grid span { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .receipt-mini-grid strong { display: block; color: var(--text-strong); font-size: 11px; font-weight: 800; overflow-wrap: anywhere; }
     
     .receipt-details { margin-bottom: 18px; border: 1px solid var(--border-color); border-radius: 14px; overflow: hidden; }
     .receipt-details-sectioned { display: grid; gap: 0; background: var(--bg-card); }

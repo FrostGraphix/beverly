@@ -105,6 +105,14 @@
   --color-warning-soft: rgba(245, 158, 11, 0.1);
   --color-info: var(--bev-color-blue-500);
   --color-info-soft: rgba(14, 165, 233, 0.1);
+  --color-neutral: var(--bev-color-slate-500);
+  --color-neutral-soft: rgba(100, 116, 139, 0.1);
+  --color-source-live: var(--bev-color-green-600);
+  --color-source-live-soft: rgba(5, 150, 105, 0.12);
+  --color-source-cached: var(--bev-color-amber-500);
+  --color-source-cached-soft: rgba(245, 158, 11, 0.12);
+  --color-source-demo: var(--bev-color-slate-500);
+  --color-source-demo-soft: rgba(100, 116, 139, 0.12);
 
   /* Component tokens */
   --button-height-sm: 28px;

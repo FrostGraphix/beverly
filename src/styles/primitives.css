@@ -354,6 +354,36 @@
   color: var(--color-danger);
 }
 
+.base-badge--info,
+.bev-badge--info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.base-badge--neutral,
+.bev-badge--neutral {
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+}
+
+.base-badge--live,
+.bev-badge--live {
+  background: var(--color-source-live-soft);
+  color: var(--color-source-live);
+}
+
+.base-badge--cached,
+.bev-badge--cached {
+  background: var(--color-source-cached-soft);
+  color: var(--color-source-cached);
+}
+
+.base-badge--demo,
+.bev-badge--demo {
+  background: var(--color-source-demo-soft);
+  color: var(--color-source-demo);
+}
+
 .base-modal-shell,
 .bev-modal-shell {
   width: var(--modal-width);

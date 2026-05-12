@@ -450,6 +450,10 @@
                 </div>
                 <h3 class="receipt-title">{{ receiptModel.title }}</h3>
                 <p class="receipt-subtitle">{{ receiptModel.subtitle }}</p>
+                <div class="receipt-time-pill">
+                  <span>Time</span>
+                  <strong>{{ receiptDisplayTime }}</strong>
+                </div>
               </div>
 
               <div class="receipt-amount">
@@ -460,6 +464,25 @@
               <div v-if="receiptModel.fields.find(f => f.isToken)" class="receipt-token-box">
                 <span class="token-label">Your Token</span>
                 <div class="token-value">{{ receiptModel.fields.find(f => f.isToken).value }}</div>
+              </div>
+
+              <div class="receipt-mini-grid">
+                <div>
+                  <span>Receipt</span>
+                  <strong>{{ receiptFieldValue(['Receipt Id', 'Id']) || receiptModel.receiptId }}</strong>
+                </div>
+                <div>
+                  <span>Meter</span>
+                  <strong>{{ receiptFieldValue(['Meter Id']) || 'Not supplied' }}</strong>
+                </div>
+                <div>
+                  <span>Unit</span>
+                  <strong>{{ receiptFieldValue(['Total Unit']) || '0' }}</strong>
+                </div>
+                <div>
+                  <span>Station</span>
+                  <strong>{{ receiptFieldValue(['Station Id']) || 'Not supplied' }}</strong>
+                </div>
               </div>
 
               <div class="receipt-footer-branding">
@@ -729,6 +752,9 @@ export default {
     receiptModel() {
       return printModelForRoute(this.route, this.row);
     },
+    receiptDisplayTime() {
+      return this.receiptFieldValue(["Time", "Create Date", "Create Time", "Update Date", "Update Time"]) || this.receiptModel.generatedAt || "";
+    },
     receiptPreviewSections() {
       const labels = {
         identity: "Receipt",
@@ -967,6 +993,10 @@ export default {
     if (this.fields.some(f => f.type === "role-select")) this.loadRoles();
   },
   methods: {
+    receiptFieldValue(labels) {
+      const wanted = new Set(labels.map((label) => String(label).toLowerCase()));
+      return this.receiptModel.fields.find((field) => wanted.has(String(field.label).toLowerCase()))?.value || "";
+    },
     syncRemoteTaskDataItem() {
       if (!this.isRemoteTaskFlow) return;
       if (this.isRemoteBatchFlow) {

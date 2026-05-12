@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-12T10:49:47.953Z",
+  "generatedAt": "2026-05-12T14:17:00.341Z",
   "status": "passed",
   "summary": {
     "total": 12,
@@ -99,7 +99,7 @@
     {
       "id": "legacy-css-modules",
       "passed": true,
-      "detail": "Legacy CSS is split into migration modules.",
+      "detail": "Active legacy CSS is split into migration modules.",
       "files": [
         "src/styles/legacy-components.css",
         "src/styles/legacy-auth.css"
