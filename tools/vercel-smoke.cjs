@@ -1,37 +1,63 @@
 "use strict";
 
-const targetUrl = String(process.env.TARGET_URL || process.argv[2] || "").replace(/\/+$/, "");
+const targetUrl = String(
+  process.env.TARGET_URL ||
+  process.env.PREVIEW_TARGET_URL ||
+  process.env.PRODUCTION_TARGET_URL ||
+  process.argv[2] ||
+  ""
+).replace(/\/+$/, "");
+const protectionBypass = String(
+  process.env.VERCEL_PROTECTION_BYPASS ||
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
+  ""
+).trim();
 
 function automationHookUrl() {
   const explicit = String(process.env.AUTOMATION_HOOK_URL || "").trim();
   if (explicit) return explicit;
+  if (!protectionBypass) return "";
   return targetUrl ? `${targetUrl}/api/system/automation-hooks/test` : "";
 }
 
 async function postJson(url, body) {
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "application/json"
+  };
+  if (protectionBypass) headers["x-vercel-protection-bypass"] = protectionBypass;
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
+    headers,
     body: JSON.stringify(body)
   });
+  const text = await response.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`Expected JSON from ${url}, got ${response.status} ${response.headers.get("content-type") || "unknown"}: ${text.slice(0, 120)}`);
+  }
   return {
     status: response.status,
-    body: await response.json()
+    body: parsed
   };
 }
 
 async function getJson(url) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json"
-    }
-  });
+  const headers = { Accept: "application/json" };
+  if (protectionBypass) headers["x-vercel-protection-bypass"] = protectionBypass;
+  const response = await fetch(url, { headers });
+  const text = await response.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`Expected JSON from ${url}, got ${response.status} ${response.headers.get("content-type") || "unknown"}: ${text.slice(0, 120)}`);
+  }
   return {
     status: response.status,
-    body: await response.json()
+    body: parsed
   };
 }
 
@@ -62,6 +88,7 @@ async function main() {
 
   console.log(JSON.stringify({
     targetUrl,
+    protectionBypassEnabled: Boolean(protectionBypass),
     healthStatus: health.status,
     readMode: health.body.data.readMode,
     liveProxyEnabled: health.body.data.liveProxyEnabled,

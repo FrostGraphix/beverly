@@ -19,7 +19,8 @@ const allBrowsers = [
   { name: "webkit", type: webkit, options: {}, optional: true }
 ];
 
-const browserTargets = String(process.env.BROWSER_QA_TARGETS || "chromium")
+const defaultBrowserTarget = fs.existsSync(edgePath) ? "edge" : "chromium";
+const browserTargets = String(process.env.BROWSER_QA_TARGETS || defaultBrowserTarget)
   .split(",")
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);

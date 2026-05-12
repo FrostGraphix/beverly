@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -35,6 +35,7 @@ jobs:
       - name: Run preview smoke
         env:
           TARGET_URL: ${{ github.event.inputs.target_url || vars.PREVIEW_TARGET_URL }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
         run: npm run smoke:vercel
 
   production-uptime:
@@ -49,7 +50,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -58,4 +59,5 @@ jobs:
       - name: Run production smoke
         env:
           TARGET_URL: ${{ vars.PRODUCTION_TARGET_URL }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
         run: npm run smoke:vercel

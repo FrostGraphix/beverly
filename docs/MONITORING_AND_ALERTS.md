@@ -41,6 +41,7 @@ Preview Schedule
 - run live report daily during rollout
 - `.github/workflows/monitoring-smoke.yml` runs hourly when configured
 - set repository variable `PREVIEW_TARGET_URL` to enable preview smoke
+- set `VERCEL_PROTECTION_BYPASS` when preview auth is enabled
 - manual runs can pass `target_url`
 
 Production Uptime Monitor
@@ -57,6 +58,7 @@ GitHub Variables
 ----------------
 - `PREVIEW_TARGET_URL`: preview smoke target
 - `PRODUCTION_TARGET_URL`: production smoke target
+- `VERCEL_PROTECTION_BYPASS`: protected preview bypass secret
 - leave unset until the matching deployment exists
 
 Done Criteria

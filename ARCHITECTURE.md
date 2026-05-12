@@ -120,4 +120,6 @@ Keep write safety strict.
 - Vercel functions serve `/api/*`.
 - `npm run build` is the build gate.
 - `npm run smoke:vercel` is preview smoke.
+- Protected previews use `VERCEL_PROTECTION_BYPASS`.
+- Staging write smoke must prove guarded writes.
 - Visual parity remains focused-batch.

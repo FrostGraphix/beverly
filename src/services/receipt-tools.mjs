@@ -164,12 +164,23 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
   return model;
 }
 
+function receiptFieldValue(model, labels = []) {
+  const wanted = new Set(labels.map((label) => String(label).toLowerCase()));
+  return model.fields.find((field) => wanted.has(String(field.label).toLowerCase()))?.value || "";
+}
+
+function receiptTime(model) {
+  return receiptFieldValue(model, ["Time", "Create Date", "Create Time", "Update Date", "Update Time"]) || model.generatedAt || "";
+}
 
 export function receiptHtml(model) {
   const tokenField = model.fields.find(f => f.isToken);
-  const receiptId = model.fields.find(f => f.label === "Receipt Id")?.value || "";
-  const customerName = model.fields.find(f => f.label === "Customer Name")?.value || "";
-  const meterId = model.fields.find(f => f.label === "Meter Id")?.value || "";
+  const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]);
+  const customerName = receiptFieldValue(model, ["Customer Name"]);
+  const meterId = receiptFieldValue(model, ["Meter Id"]);
+  const stationId = receiptFieldValue(model, ["Station Id"]);
+  const totalUnit = receiptFieldValue(model, ["Total Unit"]);
+  const displayTime = receiptTime(model);
   const pageTitle = `${model.title} #${receiptId} - ${customerName} | ${model.brand.name}`;
 
   return `<!doctype html>
@@ -180,43 +191,43 @@ export function receiptHtml(model) {
 
   <style>
     :root {
-      --primary: #059669;
-      --primary-deep: #065f46;
-      --primary-soft: #ecfdf5;
-      --ink: #0f172a;
-      --text-main: #334155;
-      --text-muted: #64748b;
-      --bg-light: #f0fdf4;
-      --bg-soft: #f8fafc;
-      --border: #d1fae5;
-      --danger: #ef4444;
+      --primary: #ffd600;
+      --primary-deep: #b99700;
+      --ink: #f8fafc;
+      --text-main: #d7dee9;
+      --text-muted: #8f98a8;
+      --panel: #0b0d10;
+      --panel-soft: #11151b;
+      --panel-glow: rgba(255, 214, 0, .12);
+      --border: rgba(255, 214, 0, .28);
     }
     * { box-sizing: border-box; }
     @page { size: A4; margin: 0; }
     html {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
-      background: #e5e7eb;
+      background: #050608;
     }
     body { 
       font-family: Inter, "Segoe UI", Arial, sans-serif;
       margin: 0; 
       padding: 24px;
-      background: #e5e7eb;
+      background: radial-gradient(circle at top left, rgba(255,214,0,.12), transparent 34%), #050608;
       color: var(--text-main);
     }
     .receipt {
-      width: 210mm;
-      min-height: 297mm;
+      width: 148mm;
+      min-height: auto;
       margin: 0 auto;
-      background: white;
-      padding: 16mm;
+      background: linear-gradient(180deg, #101216, #07080a);
+      padding: 12mm;
       position: relative;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       border: 1px solid var(--border);
-      box-shadow: 0 24px 60px rgba(15, 23, 42, .14);
+      border-radius: 24px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .38), 0 0 0 6px rgba(255,214,0,.04);
     }
     @media print {
       html,
@@ -228,99 +239,143 @@ export function receiptHtml(model) {
         background: white;
       }
       .receipt { 
-        width: 210mm;
-        min-height: 297mm;
+        width: 148mm;
+        min-height: auto;
         max-width: none; 
         box-shadow: none; 
-        border-radius: 0; 
-        border: 0;
-        padding: 14mm;
+        border-radius: 18px; 
+        border: 1px solid var(--border);
+        padding: 10mm;
       }
     }
     .receipt::before {
       content: '';
       position: absolute;
       top: 0; left: 0; right: 0;
-      height: 8px;
-      background: linear-gradient(90deg, var(--primary-deep), var(--primary));
+      height: 5px;
+      background: linear-gradient(90deg, var(--primary-deep), var(--primary), #fff2a6);
     }
     .header {
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 20px;
-      align-items: start;
-      margin-bottom: 22px;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 18px;
     }
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
+      gap: 10px;
+      margin-bottom: 10px;
     }
     .brand-mark {
-      width: 42px;
-      height: 42px;
-      background: linear-gradient(135deg, var(--primary), #10b981);
-      color: white;
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, var(--primary), #fff2a6);
+      color: #111;
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      font-size: 22px;
+      font-weight: 900;
+      font-size: 18px;
     }
     .brand-name {
-      font-size: 22px;
-      font-weight: 700;
+      font-size: 20px;
+      font-weight: 800;
       color: var(--ink);
     }
     .header-meta {
-      min-width: 190px;
-      padding: 14px;
+      min-width: 150px;
+      padding: 11px 12px;
       border: 1px solid var(--border);
-      border-radius: 14px;
-      background: linear-gradient(180deg, var(--primary-soft), var(--bg-soft));
+      border-radius: 16px;
+      background: var(--panel-soft);
       text-align: right;
       font-size: 11px;
       color: var(--text-muted);
     }
     .header-meta strong {
       display: block;
-      color: var(--ink);
+      color: var(--primary);
       font-size: 13px;
       margin-bottom: 4px;
     }
+    .title {
+      font-size: 21px;
+      font-weight: 850;
+      margin: 0;
+      color: var(--ink);
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 3px 0 0;
+    }
+    .receipt-time {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,214,0,.08);
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 750;
+    }
+    .receipt-time span {
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 9px;
+    }
     .hero {
       display: grid;
-      grid-template-columns: 1fr 190px;
-      gap: 18px;
-      margin-bottom: 20px;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
     }
-    .amount-display,
-    .summary-box {
+    .amount-display {
       padding: 18px;
-      background: linear-gradient(135deg, var(--primary-soft), white);
+      background: linear-gradient(135deg, var(--panel-glow), rgba(255,214,0,.04));
       border-radius: 18px;
       border: 1px solid var(--border);
+      text-align: center;
     }
     .amount-label {
-      font-size: 12px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-muted);
-      display: block;
-      margin-bottom: 4px;
-    }
-    .amount-value {
-      font-size: 34px;
-      font-weight: 700;
+      letter-spacing: .1em;
       color: var(--primary);
       display: block;
+      margin-bottom: 7px;
+      font-weight: 850;
+    }
+    .amount-value {
+      font-size: 36px;
+      font-weight: 900;
+      color: var(--primary);
+      display: block;
+      line-height: 1;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .summary-box {
+      padding: 11px 12px;
+      border: 1px solid rgba(255,214,0,.18);
+      border-radius: 14px;
+      background: rgba(255,255,255,.035);
     }
     .summary-box span {
       display: block;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
       letter-spacing: .08em;
       margin-bottom: 4px;
@@ -328,142 +383,87 @@ export function receiptHtml(model) {
     .summary-box strong {
       display: block;
       color: var(--ink);
-      font-size: 12px;
-      word-break: break-word;
-    }
-    .summary-box + .summary-box { margin-top: 10px; }
-    .title {
-      font-size: 26px;
-      font-weight: 700;
-      margin: 0;
-      color: var(--ink);
-    }
-    .subtitle {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin: 4px 0 0;
-    }
-    .details {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 22px;
-    }
-    .detail-section {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      background: white;
-      break-inside: avoid;
-    }
-    .detail-section h2 {
-      margin: 0;
-      padding: 10px 14px;
-      background: linear-gradient(180deg, var(--primary-soft), var(--bg-soft));
-      border-bottom: 1px solid var(--border);
-      color: var(--ink);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-    .field-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 9px 14px;
-      border-bottom: 1px dashed var(--border);
-    }
-    .field-row:last-child { border-bottom: none; }
-    .field-row--emphasis .field-value { color: var(--primary-deep); }
-    .field-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-    .field-value {
-      font-size: 12px;
-      font-weight: 700;
-      text-align: right;
-      color: var(--ink);
+      font-size: 11px;
       word-break: break-word;
     }
     .token-box {
-      background: linear-gradient(135deg, var(--primary-soft), white);
-      border: 1px solid #a7f3d0;
-      padding: 18px;
+      background: #030407;
+      border: 1px solid var(--border);
+      padding: 15px;
       border-radius: 16px;
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 14px;
     }
     .token-label {
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: .1em;
       color: var(--primary);
-      font-weight: 600;
+      font-weight: 850;
       margin-bottom: 8px;
       display: block;
     }
     .token-value {
-      font-family: monospace;
-      font-size: 21px;
-      font-weight: 700;
+      font-family: "Cascadia Mono", "Courier New", monospace;
+      font-size: 20px;
+      font-weight: 850;
       letter-spacing: 2px;
-      color: var(--primary-deep);
+      color: var(--primary);
       word-break: break-all;
     }
-    .audit-strip {
+    .detail-section {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-top: auto;
-      margin-bottom: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
     }
-    .audit-item {
-      border: 1px solid var(--border);
+    .detail-item {
+      padding: 9px 10px;
+      border: 1px solid rgba(255,214,0,.14);
       border-radius: 12px;
-      padding: 10px;
-      background: linear-gradient(180deg, var(--bg-soft), white);
-      min-height: 54px;
+      background: rgba(255,255,255,.025);
+      min-width: 0;
     }
-    .audit-item span {
+    .detail-item span {
       display: block;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 8px;
       text-transform: uppercase;
       letter-spacing: .08em;
+      margin-bottom: 4px;
     }
-    .audit-item strong {
+    .detail-item strong {
       display: block;
-      margin-top: 4px;
-      color: var(--ink);
-      font-size: 11px;
+      color: var(--text-main);
+      font-size: 10px;
       word-break: break-word;
+      line-height: 1.35;
     }
     .footer {
       text-align: center;
-      padding-top: 18px;
+      padding-top: 14px;
       border-top: 1px solid var(--border);
     }
     .company-name {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
       display: block;
+      color: var(--ink);
     }
     .contact-info {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
       line-height: 1.6;
     }
     @media print {
       body { background: white; padding: 0; }
-      .receipt { box-shadow: none; width: 210mm; max-width: 210mm; border-radius: 0; }
-      .detail-section, .token-box, .amount-display, .summary-box, .audit-item { break-inside: avoid; }
+      .receipt { box-shadow: none; width: 148mm; max-width: 148mm; }
+      .token-box, .amount-display, .summary-box { break-inside: avoid; }
     }
     @media (max-width: 720px) {
       .receipt { width: 100%; padding: 20px; min-height: 100vh; }
-      .header, .hero, .details, .audit-strip { grid-template-columns: 1fr; }
+      .header, .summary-grid { grid-template-columns: 1fr; }
       .header-meta { text-align: left; }
     }
   </style>
@@ -478,10 +478,11 @@ export function receiptHtml(model) {
         </div>
         <h1 class="title">${escapeHtml(model.title)}</h1>
         <p class="subtitle">${escapeHtml(model.subtitle)}</p>
+        <div class="receipt-time"><span>Time</span>${escapeHtml(displayTime)}</div>
       </div>
       <div class="header-meta">
-        <strong>${escapeHtml(model.receiptId || receiptId || "Pending")}</strong>
-        <span>${escapeHtml(model.generatedAt || "")}</span>
+        <strong>#${escapeHtml(model.receiptId || receiptId || "Pending")}</strong>
+        <span>Receipt ID</span>
       </div>
     </div>
 
@@ -490,15 +491,24 @@ export function receiptHtml(model) {
         <span class="amount-label">Amount Purchased</span>
         <span class="amount-value">${escapeHtml(model.amount || "0.00")}</span>
       </div>
-      <div>
-        <div class="summary-box">
-          <span>Customer</span>
-          <strong>${escapeHtml(customerName || "Not supplied")}</strong>
-        </div>
-        <div class="summary-box">
-          <span>Meter</span>
-          <strong>${escapeHtml(meterId || "Not supplied")}</strong>
-        </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-box">
+        <span>Customer</span>
+        <strong>${escapeHtml(customerName || "Not supplied")}</strong>
+      </div>
+      <div class="summary-box">
+        <span>Meter</span>
+        <strong>${escapeHtml(meterId || "Not supplied")}</strong>
+      </div>
+      <div class="summary-box">
+        <span>Unit</span>
+        <strong>${escapeHtml(totalUnit || "0")}</strong>
+      </div>
+      <div class="summary-box">
+        <span>Station</span>
+        <strong>${escapeHtml(stationId || "Not supplied")}</strong>
       </div>
     </div>
 
@@ -509,19 +519,16 @@ export function receiptHtml(model) {
     </div>
     ` : ''}
 
-    <div class="audit-strip">
-      <div class="audit-item">
-        <span>Source</span>
-        <strong>${escapeHtml(model.routeTitle || model.hash || "Transaction")}</strong>
-      </div>
-      <div class="audit-item">
-        <span>Generated</span>
-        <strong>${escapeHtml(model.generatedAt || "")}</strong>
-      </div>
-      <div class="audit-item">
-        <span>Record Count</span>
-        <strong>${escapeHtml(model.audit?.rowCount || 1)}</strong>
-      </div>
+    <div class="detail-section">
+      ${model.fields
+        .filter((field) => !field.isToken)
+        .slice(0, 12)
+        .map((field) => `
+      <div class="detail-item">
+        <span>${escapeHtml(field.label)}</span>
+        <strong>${escapeHtml(field.value)}</strong>
+      </div>`)
+        .join("")}
     </div>
 
     <div class="footer">
@@ -537,16 +544,26 @@ export function receiptHtml(model) {
 }
 
 export function buildReceiptPdfBytes(model) {
+  const tokenField = model.fields.find(f => f.isToken);
+  const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]) || model.receiptId || "Pending";
+  const customerName = receiptFieldValue(model, ["Customer Name"]) || "Not supplied";
+  const meterId = receiptFieldValue(model, ["Meter Id"]) || "Not supplied";
+  const stationId = receiptFieldValue(model, ["Station Id"]) || "Not supplied";
+  const totalUnit = receiptFieldValue(model, ["Total Unit"]) || "0";
   const textLines = [
     model.brand.name.toUpperCase(),
     model.brand.company,
     model.title,
     model.subtitle,
-    `Receipt: ${model.receiptId || "Pending"}`,
-    `Generated: ${model.generatedAt || ""}`,
+    `Receipt: ${receiptId}`,
+    `Time: ${receiptTime(model)}`,
     `Amount Purchased: ${model.amount || "0.00"}`,
+    `Token: ${tokenField?.value || ""}`,
     "----------------------------------------",
-    ...model.fields.map((field) => `${field.label}: ${field.value}`),
+    `Customer: ${customerName}`,
+    `Meter: ${meterId}`,
+    `Unit: ${totalUnit}`,
+    `Station: ${stationId}`,
     "----------------------------------------",
     model.brand.email,
     model.brand.phone,

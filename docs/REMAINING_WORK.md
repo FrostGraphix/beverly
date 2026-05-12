@@ -8,21 +8,20 @@ Release status: blocked.
 
 ## Blocking Now
 
-### 1. Public Vercel smoke fails
+### 1. Public Vercel smoke needs bypass secret
 
 - Command: `npm run smoke:vercel`
 - Target: Vercel preview URL
-- Current result: fails before JSON validation
-- Cause: Vercel Authentication returns HTML
-- Needed: bypass-aware smoke or public test access
+- Current result: fails with protected 401
+- Cause: Vercel Authentication is enabled
+- Tooling fix: implemented
+- Needed: set `VERCEL_PROTECTION_BYPASS`
 
-### 2. Remote CI is red
+### 2. Staging target needs protected access
 
-- Workflow: `Production Hardening CI`
-- Branch: `main`
-- Latest known result: failure
-- Needed: push clean branch and rerun
-- Rule: do not claim release green
+- `STAGING_TARGET_URL` or `PREVIEW_TARGET_URL` is required.
+- Protected preview also needs `VERCEL_PROTECTION_BYPASS`.
+- Guarded write smoke must return `403`.
 
 ### 3. Supabase preview smoke is not proven
 
@@ -37,6 +36,17 @@ Release status: blocked.
 - Some tmp files are generated.
 - Needed: curate release branch carefully.
 - Rule: never ship unknown drift.
+
+## Fixed This Pass
+
+- Receipt detail contract restored.
+- Public smoke supports `PREVIEW_TARGET_URL`.
+- Public smoke supports `VERCEL_PROTECTION_BYPASS`.
+- Staging smoke falls back to preview target.
+- Browser QA defaults to Edge on Windows.
+- Monitoring workflow uses Node 22.
+- Monitoring workflow passes bypass secret.
+- Remote CI lookup works through `npm run ci:actions`.
 
 ## Canonical Docs
 
@@ -57,9 +67,9 @@ Release status: blocked.
 
 ## Next Order
 
-1. Make Vercel smoke auth-aware.
+1. Set `VERCEL_PROTECTION_BYPASS`.
 2. Add preview Supabase envs.
 3. Push a clean branch.
-4. Confirm remote CI green.
-5. Rerun public preview smoke.
+4. Rerun public preview smoke.
+5. Run staging write guard.
 6. Update release status.

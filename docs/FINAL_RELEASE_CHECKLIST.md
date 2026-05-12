@@ -24,7 +24,10 @@ Preview Gates
 -------------
 ```powershell
 $env:TARGET_URL="https://your-preview-url.vercel.app"
+$env:VERCEL_PROTECTION_BYPASS="<preview-bypass-secret>"
 npm run smoke:vercel
+$env:STAGING_TARGET_URL=$env:TARGET_URL
+npm run write:staging
 ```
 
 Manual QA
