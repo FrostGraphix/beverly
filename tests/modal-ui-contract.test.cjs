@@ -15,7 +15,8 @@ const files = {
   shell: readFile("src/components/base/BaseModalShell.vue"),
   taskOutput: readFile("src/components/TaskOutputModal.vue"),
   profile: readFile("src/components/ProfilePage.vue"),
-  styles: readFile("src/styles/reference.css"),
+  settings: readFile("src/components/SettingsPage.vue"),
+  styles: readFile("src/styles/reference.css") + readFile("src/styles/legacy-profile.css") + readFile("src/styles/legacy-consumption.css"),
 };
 
 assert(
@@ -41,7 +42,7 @@ assert(
 
 assert(
   files.shell.includes(".base-modal-shell") &&
-    files.shell.includes("var(--radius-xl)") &&
+    files.shell.includes("var(--modal-radius)") &&
     files.shell.includes("var(--bg-glass)"),
   "Base modal shell should provide shared themed structure."
 );
@@ -64,8 +65,9 @@ assert(
     files.styles.includes("profileModalIn") &&
     !files.styles.includes("@keyframes slideInRight") &&
     !files.profile.includes("profile-avatar-ring") &&
+    files.settings.includes("Security") &&
     files.styles.includes(".profile-panel {\n  border-radius: var(--radius-lg) !important;"),
-  "Profile settings should open as a centered hover modal instead of a side drawer."
+  "Profile and settings should open as centered hover modals instead of a side drawer."
 );
 
 console.log("modal-ui-contract ok");

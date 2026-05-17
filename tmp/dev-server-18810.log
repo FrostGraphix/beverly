@@ -1,0 +1,247 @@
+
+> beverly@0.1.0 dev
+> node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs
+
+api proxy http://127.0.0.1:18810
+
+> beverly@0.1.0 dev:web
+> vite --host 127.0.0.1 --port 9311
+
+Port 9311 is in use, trying another one...
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m1477[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m9312[22m/[39m
+[2m17:53:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m17:56:47[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m17:59:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m18:04:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:05:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m21:18:39[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.js[22m
+[2m21:18:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/components/TablePage.vue, /src/components/ToastNotification.vue, /src/components/ActionModal.vue[22m
+[2m21:18:39[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:18:40[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.js[22m
+[2m21:18:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/components/TablePage.vue, /src/components/ToastNotification.vue, /src/components/ActionModal.vue[22m
+[2m21:18:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ToastNotification.vue[22m
+[2m21:18:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m21:21:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m21:21:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/TablePage.vue[22m
+[2m21:23:27[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:23:28[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:23:29[22m [36m[1m[vite][22m[39m server restarted.
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AutomationCommandPage.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AutomationCommandPage.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/TemporalLineChart.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/SiteConsumptionPage.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/CustomerDrawer.vue[22m
+[2m21:27:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/StationBarChart.vue[22m
+[2m21:33:57[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/services/interval-status.mjs[22m
+[2m21:33:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m21:34:08[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:34:08[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:34:09[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mvite.config.mjs.timestamp-1778618048756-227842b8ce27d.mjs[22m
+[2m21:34:11[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mvite.config.mjs.timestamp-1778618051390-80728de406dc9.mjs[22m
+[2m21:40:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m21:40:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m21:43:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m21:43:59[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mvite.config.mjs.timestamp-1778618639585-3114e6b6fd30c.mjs[22m
+[2m21:44:29[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:44:29[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:44:30[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mvite.config.mjs.timestamp-1778618669885-37ddd86a1d89c.mjs[22m
+[2m21:44:31[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mvite.config.mjs.timestamp-1778618670799-32a1eef4b7a7.mjs[22m
+[2m21:54:03[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.js[22m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.js[22m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:58:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m21:58:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseButton.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseIconButton.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseInput.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseSelect.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseCheckbox.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseModalShell.vue[22m
+[2m21:59:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseToggle.vue[22m
+[2m22:06:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m22:06:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m22:06:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m22:07:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m22:07:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m22:07:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m22:18:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m22:18:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m22:40:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m22:40:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m22:41:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m22:42:33[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:42:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m22:44:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m22:47:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m22:47:53[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:50:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:51:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:53:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:54:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:55:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:57:00[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m22:58:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:59:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m22:59:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m22:59:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m23:06:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m23:29:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m23:29:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m23:30:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m23:37:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m23:55:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m09:03:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:03:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:13:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:13:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:14:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:34:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:34:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m09:34:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:10:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:10:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:18:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AutomationCommandPage.vue, /src/components/LoginPage.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/OnboardingStudioPage.vue, /src/components/DashboardPage.vue, /src/components/PickerModal.vue, /src/components/ActionModal.vue, /src/components/ProfilePage.vue, /src/components/TablePage.vue, /src/components/AdminWalletOperationsPage.vue, /src/components/VendorWalletPage.vue[22m
+[2m10:18:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m10:19:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m10:19:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m10:24:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:24:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:24:35[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DailyDataMeterPage.vue[22m
+[2m10:25:18[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/VendorWalletPage.vue, /src/components/VendorWalletPage.vue?vue&type=style&index=0&scoped=cd0229e8&lang.css[22m
+[2m10:25:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/VendorWalletPage.vue, /src/components/VendorWalletPage.vue?vue&type=style&index=0&scoped=cd0229e8&lang.css[22m
+[2m10:26:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AutomationCommandPage.vue, /src/components/LoginPage.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/OnboardingStudioPage.vue, /src/components/DashboardPage.vue, /src/components/PickerModal.vue, /src/components/ActionModal.vue, /src/components/ProfilePage.vue, /src/components/TablePage.vue, /src/components/AdminWalletOperationsPage.vue[22m
+[2m10:26:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AutomationCommandPage.vue, /src/components/LoginPage.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/OnboardingStudioPage.vue, /src/components/DashboardPage.vue, /src/components/PickerModal.vue, /src/components/ActionModal.vue, /src/components/ProfilePage.vue, /src/components/TablePage.vue, /src/components/AdminWalletOperationsPage.vue[22m
+[2m10:28:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AdminWalletOperationsPage.vue, /src/components/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=e5686f5d&lang.css[22m
+[2m10:28:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AdminWalletOperationsPage.vue, /src/components/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=e5686f5d&lang.css[22m
+[2m10:29:13[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m10:29:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m11:09:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m11:09:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:09:59[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:10:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:24:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:28:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:35:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:35:43[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m11:36:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css, /src/App.vue[22m
+[2m11:36:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:37:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:38:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:39:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m11:43:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:43:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:44:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m11:44:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:45:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:45:13[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m11:45:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m11:45:54[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m11:47:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m11:48:12[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m11:48:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m11:48:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m11:50:47[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m12:02:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m12:02:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m12:10:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m12:11:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m12:11:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m13:19:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue, /src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m13:24:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue, /src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m13:26:43[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m13:27:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m13:28:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/OnboardingStudioPage.vue, /src/App.vue[22m
+[2m13:29:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m13:46:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m13:49:35[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m13:53:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css, /src/App.vue[22m
+[2m13:54:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css, /src/App.vue[22m
+[2m14:04:00[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m14:04:59[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m14:06:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m14:08:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css, /src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:08:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:11:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:11:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m14:13:09[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m14:14:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m14:15:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:15:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:16:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m14:16:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:22:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m14:27:13[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:32:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m14:33:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m14:48:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue[22m
+[2m14:48:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/ActionModal.vue, /src/components/consumption/SuspectLedger.vue[22m
+[2m14:49:00[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue[22m
+[2m14:49:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue?vue&type=style&index=0&scoped=41437699&lang.css[22m
+[2m15:09:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AutomationCommandPage.vue, /src/components/LoginPage.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/OnboardingStudioPage.vue, /src/components/DashboardPage.vue, /src/components/PickerModal.vue, /src/components/ActionModal.vue, /src/components/ProfilePage.vue, /src/components/TablePage.vue, /src/components/vendor/VendorWalletPage.vue, /src/components/vendor/VendorAuthPage.vue[22m
+[2m15:09:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AutomationCommandPage.vue, /src/components/LoginPage.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/DailyDataMeterPage.vue, /src/components/OnboardingStudioPage.vue, /src/components/DashboardPage.vue, /src/components/PickerModal.vue, /src/components/ActionModal.vue, /src/components/ProfilePage.vue, /src/components/TablePage.vue, /src/components/vendor/VendorWalletPage.vue, /src/components/vendor/VendorAuthPage.vue[22m
+[2m15:12:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue?vue&type=style&index=0&scoped=41437699&lang.css[22m
+[2m15:20:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue[22m
+[2m15:31:13[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseInput.vue[22m
+[2m15:31:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/base/BaseSelect.vue[22m
+[2m15:31:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ConsumptionStatisticsPage.vue[22m
+[2m15:31:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/LoginPage.vue[22m
+[2m15:32:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorAuthPage.vue[22m
+[2m15:32:21[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorAuthPage.vue?vue&type=style&index=0&scoped=2ce899ab&lang.css[22m
+[2m15:33:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorWalletPage.vue[22m
+[2m15:33:41[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorWalletPage.vue[22m
+[2m15:33:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorWalletPage.vue[22m
+[2m15:33:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/vendor/VendorWalletPage.vue[22m
+[2m15:34:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:34:42[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:35:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:35:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:35:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:38:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:38:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:38:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m15:39:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue?vue&type=style&index=0&scoped=78e3f7ae&lang.css[22m
+[2m15:41:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css, /src/App.vue[22m
+[2m15:43:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css, /src/App.vue[22m
+[2m15:44:22[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m15:44:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/wallet/AdminWalletOperationsPage.vue[22m
+[2m15:45:29[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue?vue&type=style&index=0&scoped=7a7a37b1&lang.css[22m
+[2m17:10:03[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ProfilePage.vue[22m
+[2m17:11:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m17:12:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m17:13:05[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m17:13:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m17:14:18[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/consumption/CustomerDrawer.vue, /src/components/consumption/TemporalLineChart.vue, /src/components/consumption/StationBarChart.vue[22m
+[2m17:14:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EChartPanel.vue[22m
+[2m17:17:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue[22m
+[2m17:58:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m17:58:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DashboardPage.vue[22m
+[2m18:03:38[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:04:13[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:06:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:06:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:07:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:07:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:08:07[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:09:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:25:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:25:50[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:26:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:29:55[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:30:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:31:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:31:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:33:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:34:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:35:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:36:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles/reference.css[22m
+[2m18:36:16[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:36:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m
+[2m18:51:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue, /src/components/ConsumptionStatisticsPage.vue, /src/components/TablePage.vue[22m
+[2m18:52:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ActionModal.vue[22m

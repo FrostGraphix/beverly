@@ -1,0 +1,6 @@
+/* Vendor Portal — all design primitives come from @beverly/tokens/wallet.css (bw-* classes).
+   Only vendor-specific overrides that have no bw- equivalent live here. */
+
+@media (max-width: 1200px) {
+  .bw-content { padding: var(--s-5); }
+}

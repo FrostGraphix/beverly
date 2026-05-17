@@ -5,32 +5,30 @@ Date: 2026-05-12
 Status: blocked.
 
 Reason:
-- Public Vercel smoke fails.
-- Vercel Authentication blocks `npm run smoke:vercel`.
-- Remote CI is green on latest checked run.
-- Preview Supabase envs are configured for branch `codex/production-gap-fixes-20260512`.
-- Staging write guard is blocked by Vercel Authentication.
+- Public Vercel smoke fails behind Vercel Authentication.
+- Protected API reads return `401 authz` without smoke credentials.
+- Remote CI has no run for branch `codex/production-gap-fixes-20260512`.
 - Worktree is dirty.
 
 Current proof:
-- Local build passed.
-- Local typecheck passed.
-- Local `npm test` passed.
-- Local hardening audit passed.
-- Edge browser smoke passed.
+- `npm run build` passed.
+- `npm run typecheck` passed.
+- `npm test` passed.
+- `npm run test:browser` passed on Edge.
+- `npm run hardening:audit` passed.
+- Production dependency audit passed.
 - Vercel preview deploy passed.
-- Protected Vercel smoke passed through `vercel curl`.
+- Protected Vercel health passed.
 - Supabase-mode tests passed locally.
-- GitHub Actions `ci.yml` latest checked run passed.
-- Smoke tooling now supports `VERCEL_PROTECTION_BYPASS`.
-- Branch `codex/production-gap-fixes-20260512` is pushed.
-- Preview Supabase envs were added in Vercel.
+- Preview Supabase envs exist.
+- Smoke tooling supports `VERCEL_PROTECTION_BYPASS`.
+- Smoke tooling supports `SMOKE_AUTH_TOKEN`.
+- Smoke tooling supports `SMOKE_USER_ID` and `SMOKE_PASSWORD`.
 
 Failing release gates:
 - `npm run smoke:vercel` against public preview.
-- Deployed Supabase-mode smoke.
-- Public preview smoke without bypass secret.
-- `npm run write:staging` without bypass secret.
+- Authenticated deployed read smoke without smoke credentials.
+- GitHub Actions `Production Hardening CI` for this branch.
 
 Canonical architecture:
 - Root `ARCHITECTURE.md` is canonical.
@@ -44,9 +42,12 @@ Release rule:
 - Do not enable live writes.
 - Do not claim CI green.
 
+Latest preview:
+- `https://beverly-3lrokjz2q-danmusa-abdulsamads-projects.vercel.app`
+
 Unblock order:
-1. Add `VERCEL_PROTECTION_BYPASS` secret.
-2. Redeploy preview from `codex/production-gap-fixes-20260512`.
-3. Rerun public smoke.
-4. Run staging write guard.
-5. Record final evidence.
+1. Set `VERCEL_PROTECTION_BYPASS`.
+2. Set `SMOKE_AUTH_TOKEN` or `SMOKE_USER_ID` and `SMOKE_PASSWORD`.
+3. Rerun `npm run smoke:vercel`.
+4. Push branch `codex/production-gap-fixes-20260512`.
+5. Confirm remote CI green.

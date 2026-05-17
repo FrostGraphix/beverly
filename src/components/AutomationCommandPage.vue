@@ -312,7 +312,7 @@ export default {
       this.form.webhooks.splice(index, 1);
     },
     toggleSecret(id) {
-      this.$set(this.revealedSecrets, id, !this.revealedSecrets[id]);
+      this.revealedSecrets[id] = !this.revealedSecrets[id];
     },
     toggleHookEvent(hook, eventName, enabled) {
       const next = new Set(hook.events || []);

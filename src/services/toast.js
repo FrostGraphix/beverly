@@ -1,12 +1,28 @@
-import Vue from "vue";
+const listeners = new Map();
 
-const bus = new Vue();
 let _id = 0;
 
-export const toastBus = bus;
+export const toastBus = {
+  $on(event, handler) {
+    const handlers = listeners.get(event) || new Set();
+    handlers.add(handler);
+    listeners.set(event, handlers);
+  },
+  $off(event, handler) {
+    const handlers = listeners.get(event);
+    if (!handlers) return;
+    handlers.delete(handler);
+    if (!handlers.size) listeners.delete(event);
+  },
+  $emit(event, payload) {
+    const handlers = listeners.get(event);
+    if (!handlers) return;
+    for (const handler of handlers) handler(payload);
+  }
+};
 
 export function toast(message, type = "success", duration = 4000) {
-  bus.$emit("toast:add", { id: ++_id, message, type, duration });
+  toastBus.$emit("toast:add", { id: ++_id, message, type, duration });
 }
 
 export function toastSuccess(message) { toast(message, "success", 4000); }

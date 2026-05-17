@@ -1,0 +1,39 @@
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:18:45[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778617125633-daff147d6d6da8.mjs
+[2m21:18:45[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:34:08[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618048756-227842b8ce27d.mjs
+[2m21:34:08[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:44:33[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue2' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618671812-6eeaa3d0e5b048.mjs
+[2m21:44:33[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:56:07[22m [31m[1m[vite][22m[39m Cannot find module 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.mjs' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\@vitejs\plugin-vue\dist\index.mjs
+[2m21:56:07[22m [31m[1m[vite][22m[39m server restart failed
+[2m10:34:00[22m [31m[1m[vite][22m[39m [31merror while updating dependencies:
+Error: ENOENT: no such file or directory, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.esm.js'
+    at async open (node:internal/fs/promises:637:25)
+    at async Object.readFile (node:internal/fs/promises:1269:14)
+    at async extractExportsData (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51156:24)
+    at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50904:27
+    at async Promise.all (index 5)
+    at async prepareEsbuildOptimizerRun (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50901:3)[39m
+[2m11:09:40[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m
+[2m11:09:59[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m
+[2m11:10:46[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m
+[2m11:15:39[22m [31m[1m[vite][22m[39m Pre-transform error: <template> cannot be keyed. Place the key on real elements instead.
+[2m11:22:56[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m
+[2m11:23:40[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m
+[2m11:24:24[22m [31m[1m[vite][22m[39m [31mInternal server error: <template> cannot be keyed. Place the key on real elements instead.[39m
+  Plugin: [35mvite:vue2[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/App.vue[39m

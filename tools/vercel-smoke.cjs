@@ -12,6 +12,7 @@ const protectionBypass = String(
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   ""
 ).trim();
+let smokeToken = String(process.env.SMOKE_AUTH_TOKEN || process.env.LIVE_API_BEARER_TOKEN || "").trim();
 
 function automationHookUrl() {
   const explicit = String(process.env.AUTOMATION_HOOK_URL || "").trim();
@@ -26,6 +27,7 @@ async function postJson(url, body) {
     Accept: "application/json"
   };
   if (protectionBypass) headers["x-vercel-protection-bypass"] = protectionBypass;
+  if (smokeToken) headers.Authorization = smokeToken.startsWith("Bearer ") ? smokeToken : `Bearer ${smokeToken}`;
   const response = await fetch(url, {
     method: "POST",
     headers,
@@ -47,6 +49,7 @@ async function postJson(url, body) {
 async function getJson(url) {
   const headers = { Accept: "application/json" };
   if (protectionBypass) headers["x-vercel-protection-bypass"] = protectionBypass;
+  if (smokeToken) headers.Authorization = smokeToken.startsWith("Bearer ") ? smokeToken : `Bearer ${smokeToken}`;
   const response = await fetch(url, { headers });
   const text = await response.text();
   let parsed = null;
@@ -61,10 +64,30 @@ async function getJson(url) {
   };
 }
 
+async function authenticateSmoke() {
+  if (smokeToken) return;
+  const userId = String(process.env.SMOKE_USER_ID || "").trim();
+  const password = String(process.env.SMOKE_PASSWORD || "").trim();
+  if (!userId || !password) return;
+
+  const response = await postJson(`${targetUrl}/api/user/login`, {
+    userId,
+    password,
+    verifycode: String(process.env.SMOKE_VERIFY_CODE || "s3b9")
+  });
+  const token = response.body?.data?.token || response.body?.result?.token;
+  if (response.status !== 200 || !token) {
+    throw new Error(`smoke login failed with ${response.status}: ${response.body?.msg || response.body?.reason || "missing token"}`);
+  }
+  smokeToken = String(token);
+}
+
 async function main() {
   if (!targetUrl) {
     throw new Error("TARGET_URL is required");
   }
+
+  await authenticateSmoke();
 
   const health = await getJson(`${targetUrl}/api/system/health`);
   const dashboard = await postJson(`${targetUrl}/api/dashboard/readPanelGroup`, {});
@@ -77,6 +100,7 @@ async function main() {
   const blockedWrite = await postJson(`${targetUrl}/api/account/create`, [{ customerId: "phase12-smoke" }]);
 
   if (health.status !== 200 || !health.body?.data?.ok) throw new Error("health failed");
+  if (dashboard.status === 401) throw new Error("dashboard read unauthorized; set SMOKE_AUTH_TOKEN or SMOKE_USER_ID/SMOKE_PASSWORD");
   if (dashboard.status !== 200 || !dashboard.body?.data) throw new Error("dashboard read failed");
   if (chart.status !== 200 || !chart.body?.data) throw new Error("chart read failed");
   if (accountRead.status !== 200 || !accountRead.body?.data) throw new Error("account read failed");
@@ -89,6 +113,7 @@ async function main() {
   console.log(JSON.stringify({
     targetUrl,
     protectionBypassEnabled: Boolean(protectionBypass),
+    authEnabled: Boolean(smokeToken),
     healthStatus: health.status,
     readMode: health.body.data.readMode,
     liveProxyEnabled: health.body.data.liveProxyEnabled,

@@ -1,0 +1,7 @@
+/* Wallet Admin — all design primitives come from @beverly/tokens/wallet.css (bw-* classes).
+   Only admin-specific overrides that have no bw- equivalent live here. */
+
+/* Admin content padding (bw-content uses s-7; tighten on mid breakpoints) */
+@media (max-width: 1200px) {
+  .bw-content { padding: var(--s-5); }
+}

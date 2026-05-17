@@ -18,6 +18,11 @@ Architecture basis:
 - Root [ARCHITECTURE.md](/C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/ARCHITECTURE.md)
 - Mirror [docs/ARCHITECTURE.md](/C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/docs/ARCHITECTURE.md)
 
+Runtime truth:
+- Frontend runtime is Vue 3 with Pinia.
+- Root architecture is canonical.
+- `docs/ARCHITECTURE.md` remains legacy reference.
+
 ## Executive Verdict
 
 Status: release blocked.
@@ -25,7 +30,7 @@ Status: release blocked.
 Production status:
 - Not production-ready.
 - Public preview smoke fails.
-- Remote CI latest checked run passes.
+- Remote CI has no current branch run yet.
 - Deployed Supabase smoke is unproven.
 
 Why:
@@ -35,12 +40,13 @@ Why:
 - `npm test` passes.
 - `npm run test:browser` passes on Edge.
 - CI is configured for the full release gate.
-- Remote CI latest checked run is green.
+- Remote CI still needs a branch run.
 - Supabase account binding and automation delivery persistence are now mapped.
 - Vercel preview deploy succeeded.
 - Public `npm run smoke:vercel` fails behind Vercel Authentication.
-- Protected smoke through `vercel curl` passed.
-- Preview Supabase env vars are missing.
+- Protected health through `vercel curl` passed.
+- Protected read smoke returns `401 authz` without smoke credentials.
+- Preview Supabase env vars exist.
 
 Readiness score: `8.7/10`
 
@@ -60,9 +66,10 @@ Confirmed on this audit:
 - Browser QA passed on Edge.
 - Vercel preview deploy passed.
 - Public Vercel smoke failed.
-- Protected Vercel smoke passed.
+- Protected Vercel health passed.
+- Protected Vercel read smoke needs smoke credentials.
 - Supabase-mode local tests passed.
-- Remote CI latest checked run passed.
+- Remote CI has no current branch run yet.
 - Worktree is dirty.
 - `README.md` now points to release truth.
 
@@ -96,7 +103,7 @@ Proof:
 - `npm test` passes.
 - `npm run test:browser` passes on Edge.
 - `npm run smoke:vercel` fails against public preview.
-- GitHub Actions `ci.yml` latest checked run passed.
+- GitHub Actions has no current branch run yet.
 
 ### 2. UI contract mismatch
 
@@ -218,7 +225,7 @@ Impact:
 | Supabase data | Migrations expanded | Needs deployed Supabase proof | Medium | Run Supabase mode smoke |
 | Storage | Buckets supported | No end-to-end production proof | High | Stage upload, receipt, export checks |
 | Deployment | Preview deploy succeeds | Public smoke blocked by Vercel Auth | Critical | Add bypass-aware smoke |
-| CI | Full release gate configured | Latest checked run green | Low | Keep branch clean |
+| CI | Full release gate configured | Current branch has no run | High | Push branch and inspect CI |
 | Docs | Many runbooks | Canonical docs drift | High | Consolidate and refresh |
 | Observability | Health docs exist | No deployed target evidence | High | Wire real preview and prod monitors |
 | Security | Good env posture | Production secrets not verified here | High | Run production env review after deploy |
@@ -375,7 +382,7 @@ These blocked production before this pass.
 6. Vercel preview deploy: passed.
 7. Public Vercel smoke: blocked by Vercel Authentication.
 8. Supabase deployed smoke: still pending.
-9. Remote CI: latest checked run passed.
+9. Remote CI: no current branch run yet.
 
 ## Code Mismatch Register
 
@@ -602,6 +609,6 @@ Start with release truth.
 
 Next:
 - Set `VERCEL_PROTECTION_BYPASS` and rerun smoke.
-- Configure preview Supabase env vars.
+- Set `SMOKE_AUTH_TOKEN` or `SMOKE_USER_ID` and `SMOKE_PASSWORD`.
 - Push a clean branch.
-- Keep remote CI green.
+- Confirm remote CI green.

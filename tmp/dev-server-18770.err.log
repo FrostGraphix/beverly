@@ -1,2 +1,14 @@
 (node:101764) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
 (Use `node --trace-deprecation ...` to show where the warning was created)
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:18:49[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778617128736-47e0247831dc48.mjs
+[2m21:18:49[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:34:09[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618048810-206298424f342.mjs
+[2m21:34:09[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:44:30[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue2' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618670691-1040aced0e42b8.mjs
+[2m21:44:30[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:56:10[22m [31m[1m[vite][22m[39m Cannot find module 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.mjs' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\@vitejs\plugin-vue\dist\index.mjs
+[2m21:56:10[22m [31m[1m[vite][22m[39m server restart failed

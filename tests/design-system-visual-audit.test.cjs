@@ -112,9 +112,9 @@ async function installApiMocks(page) {
 
 async function login(page) {
   await page.goto(`${appUrl}/#/login`, { waitUntil: "load" });
-  await page.fill('input[name="userId"]', "admin");
-  await page.fill('input[name="password"]', "admin");
-  await page.click("button.login-button");
+  await page.fill('[data-testid="login-user-id"]', "admin");
+  await page.fill('[data-testid="login-password"]', "admin");
+  await page.click('[data-testid="login-submit"]');
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
 }
 

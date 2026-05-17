@@ -1,53 +1,21 @@
 <template>
-  <div ref="chart" class="echart-panel"></div>
+  <div class="echart-panel dashboard-svg-chart">
+    <div ref="chart" class="echart-canvas" role="img" :aria-label="title"></div>
+  </div>
 </template>
 
 <script>
-import { use, init } from "echarts/core";
-import { BarChart, LineChart, PieChart } from "echarts/charts";
-import {
-  GridComponent,
-  LegendComponent,
-  TitleComponent,
-  TooltipComponent
-} from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
-
-use([
-  BarChart,
-  LineChart,
-  PieChart,
-  GridComponent,
-  LegendComponent,
-  TitleComponent,
-  TooltipComponent,
-  CanvasRenderer
-]);
+import { loadECharts } from "../services/echarts-loader.mjs";
 
 export default {
   name: "EChartPanel",
   props: {
     option: { type: Object, required: true }
   },
-  data() {
-    return {
-      chart: null,
-      resizeObserver: null
-    };
-  },
-  mounted() {
-    this.chart = init(this.$refs.chart, "macarons");
-    this.renderChart();
-    window.addEventListener("resize", this.resizeChart);
-    if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(this.resizeChart);
-      this.resizeObserver.observe(this.$refs.chart);
+  computed: {
+    title() {
+      return this.option?.title?.text || this.option?.series?.[0]?.name || "Chart";
     }
-  },
-  beforeDestroy() {
-    window.removeEventListener("resize", this.resizeChart);
-    if (this.resizeObserver) this.resizeObserver.disconnect();
-    if (this.chart) this.chart.dispose();
   },
   watch: {
     option: {
@@ -57,13 +25,30 @@ export default {
       }
     }
   },
+  mounted() {
+    this.renderChart();
+    this.resizeHandler = () => {
+      if (this.chart) this.chart.resize();
+    };
+    window.addEventListener("resize", this.resizeHandler, { passive: true });
+  },
+  beforeUnmount() {
+    window.removeEventListener("resize", this.resizeHandler);
+    if (this.chart) {
+      this.chart.dispose();
+      this.chart = null;
+    }
+  },
   methods: {
     renderChart() {
-      if (!this.chart) return;
-      this.chart.setOption(this.option, true, true);
-    },
-    resizeChart() {
-      if (this.chart) this.chart.resize();
+      this.$nextTick(async () => {
+        if (!this.$refs.chart) return;
+        if (!this.echarts) this.echarts = await loadECharts();
+        if (!this.$refs.chart) return;
+        if (!this.chart) this.chart = this.echarts.init(this.$refs.chart);
+        this.chart.setOption(this.option || {}, true);
+        this.chart.resize();
+      });
     }
   }
 };

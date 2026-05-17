@@ -20,6 +20,7 @@ const globalCss = `${readProjectFile("src/styles/reference.css")}\n${readProject
   .map((file) => readProjectFile(`src/styles/${file}`))
   .join("\n")}`;
 const tablePage = readProjectFile("src/components/TablePage.vue");
+const loginPage = readProjectFile("src/components/LoginPage.vue");
 const dailyDataMeterPage = readProjectFile("src/components/DailyDataMeterPage.vue");
 const pickerModal = readProjectFile("src/components/PickerModal.vue");
 const consumptionStatisticsPage = readProjectFile("src/components/ConsumptionStatisticsPage.vue");
@@ -39,8 +40,16 @@ assertIncludes(tablePage, "table-command-strip");
 assertIncludes(tablePage, ":aria-label=\"`${action} row ${rowIndex + 1}`\"");
 assertIncludes(tablePage, "min-width: var(--table-action-column-width, 240px)");
 assertIncludes(tablePage, ":data-column-key=\"getColKey(column)\"");
+assertIncludes(tablePage, "data-testid=\"table-apply-controls\"");
+assertIncludes(tablePage, "data-testid=\"table-select-all\"");
+assertIncludes(tablePage, ":data-testid=\"`table-toolbar-action-${actionTestId(action)}`\"");
+assertIncludes(tablePage, ":data-testid=\"`table-row-action-${actionTestId(action)}-${rowIndex + 1}`\"");
 assertIncludes(tablePage, ".table-scroll th:not(.action-column)");
 assertIncludes(tablePage, ".table-scroll th.action-column");
+
+assertIncludes(loginPage, "data-testid=\"login-user-id\"");
+assertIncludes(loginPage, "data-testid=\"login-password\"");
+assertIncludes(loginPage, "data-testid=\"login-submit\"");
 
 assertIncludes(dailyDataMeterPage, "Meter interval ledger");
 assertIncludes(dailyDataMeterPage, "aria-label=\"Search interval meter data\"");
@@ -48,8 +57,9 @@ assertIncludes(dailyDataMeterPage, "aria-label=\"Search interval meter data\"");
 assertIncludes(pickerModal, "box-shadow: var(--shadow-xl)");
 assertIncludes(pickerModal, "selected-row td");
 
-assertIncludes(consumptionStatisticsPage, "consumption-table-head");
-assertIncludes(consumptionStatisticsPage, "Consumption ledger");
+assertIncludes(consumptionStatisticsPage, "consumption-sort-panel");
+assertIncludes(consumptionStatisticsPage, "Pick a Customer Id first");
+assertIncludes(consumptionStatisticsPage, "exportReportPdfText");
 assertIncludes(consumptionStatisticsPage, "syncThemePalette");
 assertIncludes(consumptionStatisticsPage, "observeThemeChanges");
 assertIncludes(consumptionStatisticsPage, "var(--text-strong)");

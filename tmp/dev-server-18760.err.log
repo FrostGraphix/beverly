@@ -7,3 +7,15 @@
     at async readDailyMeterSummary (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\consumption-store.js:333:16)
     at async handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1793:14)
     at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7)
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:18:48[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778617127748-fc6d65ce382b78.mjs
+[2m21:18:48[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:34:09[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618048944-f5839daa990a38.mjs
+[2m21:34:09[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:44:30[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue2' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618670074-dac829e7d39b9.mjs
+[2m21:44:30[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:56:10[22m [31m[1m[vite][22m[39m Cannot find module 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.mjs' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\@vitejs\plugin-vue\dist\index.mjs
+[2m21:56:10[22m [31m[1m[vite][22m[39m server restart failed

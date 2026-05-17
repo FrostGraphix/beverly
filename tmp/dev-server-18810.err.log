@@ -1,0 +1,243 @@
+(node:17180) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[reference-facade-crash] Error: database is locked
+    at Object.recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\local-database.js:347:6)
+    at supabase.restRequest.method (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:138:25)
+    at runWithFallback (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:84:30)
+    at recordAuditLog (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\backend\src\services\storage-adapter.js:137:10)
+    at auditResult (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1608:9)
+    at handler (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\api\reference.js:1878:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async Server.<anonymous> (C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tools\run-dev-stack.cjs:31:7) {
+  code: 'ERR_SQLITE_ERROR',
+  errcode: 5,
+  errstr: 'database is locked'
+}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/station/read","candidate":"/API/station/read","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/item/read","candidate":"/API/item/read","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/dashboard/readPanelGroup","candidate":"/API/dashboard/readPanelGroup","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:508:28)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:520:35)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/readMore","candidate":"/API/token/creditTokenRecord/readMore","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:520:35)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[live-proxy] {"pathname":"/api/token/creditTokenRecord/read","candidate":"/API/token/creditTokenRecord/read","error":"connect EHOSTUNREACH 8.208.16.168:9310","cause":"Error: connect EHOSTUNREACH 8.208.16.168:9310","stack":"Error: connect EHOSTUNREACH 8.208.16.168:9310\n    at AxiosError.from (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:881:24)\n    at RedirectableRequest.handleRequestError (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:3397:25)\n    at RedirectableRequest.emit (node:events:520:35)\n    at eventHandlers.<computed> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\follow-redirects\\index.js:56:24)\n    at ClientRequest.emit (node:events:508:28)\n    at emitErrorEvent (node:_http_client:108:11)\n    at Socket.socketErrorListener (node:_http_client:575:5)\n    at Socket.emit (node:events:520:35)\n    at emitErrorNT (node:internal/streams/destroy:170:8)\n    at emitErrorCloseNT (node:internal/streams/destroy:129:3)\n    at Axios.request (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\axios\\dist\\node\\axios.cjs:4517:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async tryLivePath (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1631:20)\n    at async proxyLive (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1687:26)\n    at async handler (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\api\\reference.js:1823:16)\n    at async Server.<anonymous> (C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tools\\run-dev-stack.cjs:31:7)"}
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:18:53[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778617132946-aa65331495b098.mjs
+[2m21:18:53[22m [31m[1m[vite][22m[39m server restart failed
+[2m21:18:56[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:21:01[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:21:01[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:21:01[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:23:37[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:23:38[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:27:27[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:27:29[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:33:58[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:33:58[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:33:58[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:34:10[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618050719-451749516cb048.mjs
+[2m21:34:10[22m [31m[1m[vite][22m[39m server restart failed
+[2m21:34:11[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:40:23[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:40:23[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:40:46[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:40:47[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:43:10[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:43:11[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[2m21:43:59[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:44:00[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:44:30[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue2' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618669885-37ddd86a1d89c.mjs
+[2m21:44:30[22m [31m[1m[vite][22m[39m server restart failed
+[2m21:44:30[22m [31m[1m[vite][22m[39m Pre-transform error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?
+[2m21:44:37[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "pinia" from "src/main.js". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/ACOB/Desktop/VS Code/acob-crm-4/src/main.js[39m:2:30
+[33m  1  |  import { createApp } from "vue";
+  2  |  import { createPinia } from "pinia";
+     |                               ^
+  3  |  import App from "./App.vue";
+  4  |  import "./styles/reference.css";[39m
+      at TransformPluginContext._formatError (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 1)
+      at async TransformPluginContext.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:56:10[22m [31m[1m[vite][22m[39m Cannot find module 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.mjs' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\@vitejs\plugin-vue\dist\index.mjs
+[2m21:56:10[22m [31m[1m[vite][22m[39m server restart failed
+[2m21:56:10[22m [31m[1m[vite][22m[39m [31merror while updating dependencies:
+Error: ENOENT: no such file or directory, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.esm.js'
+    at async open (node:internal/fs/promises:637:25)
+    at async Object.readFile (node:internal/fs/promises:1269:14)
+    at async extractExportsData (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51156:24)
+    at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50904:27
+    at async Promise.all (index 5)
+    at async prepareEsbuildOptimizerRun (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50901:3)[39m

@@ -55,6 +55,12 @@ const {
   runGovernance,
   runRetentionCleanup
 } = require("../backend/src/services/data-governance");
+const walletLedger = require("../backend/src/services/wallet-ledger-service");
+const walletFunding = require("../backend/src/services/wallet-funding-service");
+const walletPurchase = require("../backend/src/services/wallet-purchase-service");
+const vendorOnboarding = require("../backend/src/services/vendor-onboarding-service");
+const walletApproval = require("../backend/src/services/wallet-approval-service");
+const walletReconciliation = require("../backend/src/services/wallet-reconciliation-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -232,6 +238,20 @@ function actorCanAccessStation(actor, payload) {
   return String(actorStation).toUpperCase() === String(requestedStation).toUpperCase();
 }
 
+function roleAllowsWalletPath(roleId, pathname) {
+  const role = String(roleId || "").trim();
+  const lowerPath = String(pathname || "").toLowerCase();
+  const staffRoles = new Set(["super-admin", "operations-manager", "account", "account-officer", "finance-checker"]);
+  const vendorRoles = new Set(["vendor_user", "vendor_manager"]);
+  if (lowerPath.startsWith("/api/vendor/")) return vendorRoles.has(role) || staffRoles.has(role);
+  if (lowerPath.startsWith("/api/wallet/funding/approve")) return role === "finance-checker" || role === "super-admin";
+  if (lowerPath.startsWith("/api/wallet/funding/reject")) return role === "finance-checker" || role === "super-admin";
+  if (lowerPath.startsWith("/api/wallet/freeze")) return role === "super-admin";
+  if (lowerPath.startsWith("/api/wallet/unfreeze")) return role === "super-admin";
+  if (lowerPath.startsWith("/api/wallet/")) return vendorRoles.has(role) || staffRoles.has(role);
+  return false;
+}
+
 async function matchingRouteForRequest(pathname, request) {
   const access = await getAccessControlModule();
   const requestedHash = routeHeaderHash(request);
@@ -285,6 +305,11 @@ async function authorizeRequest(request, pathname, requestData) {
       return (normalizedRole === "super-admin" || normalizedRole === "operations-manager") ? null : authFailure(403, pathname, "Insufficient permissions");
     }
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
+  }
+
+  if ((lowerPath.startsWith("/api/wallet/") || lowerPath.startsWith("/api/vendor/"))
+    && roleAllowsWalletPath(normalizedRole, lowerPath)) {
+    return null;
   }
 
   if (isWriteRequest(pathname, request.method)) {
@@ -879,6 +904,62 @@ function localJobResponse(body) {
   };
 }
 
+function isTokenGeneratePath(pathname) {
+  return /^\/api\/token\/(?:creditToken|clearCreditToken|clearTamperToken|setMaximumPowerLimitToken)\/generate$/i.test(String(pathname || ""));
+}
+
+function localPreviewToken(pathname, payload = {}) {
+  const seed = [
+    pathname,
+    payload.customerId,
+    payload.meterId,
+    payload.amount,
+    payload.totalUnit,
+    payload.maximumPower
+  ].join("|");
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  const numeric = `${hash}${Date.now()}`.replace(/\D/g, "").padEnd(20, "0").slice(0, 20);
+  return numeric.match(/.{1,4}/g).join(" ");
+}
+
+function localTokenPreviewResponse(pathname, payload = {}) {
+  const now = new Date().toISOString();
+  const body = {
+    receiptId: `PREVIEW-${Date.now()}`,
+    customerId: payload.customerId || "",
+    meterId: payload.meterId || "",
+    tariffId: payload.tariffId || "",
+    totalPaid: payload.amount || payload.totalPaid || "",
+    totalUnit: payload.totalUnit || "",
+    maximumPower: payload.maximumPower || "",
+    token: localPreviewToken(pathname, payload),
+    status: true,
+    vend: "Preview",
+    createTime: now,
+    createDate: now,
+    reason: "preview"
+  };
+
+  return {
+    status: 200,
+    body: {
+      code: 0,
+      msg: "success",
+      reason: "success",
+      data: body,
+      result: body,
+      _proxy: {
+        source: "local-token-preview",
+        pathname
+      }
+    }
+  };
+}
+
 function configuredConsumptionBackfillFrom() {
   return process.env.CONSUMPTION_BACKFILL_FROM || "2025-01-01";
 }
@@ -1311,6 +1392,192 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
+  if (isTokenGeneratePath(pathname) && payload.isPreview !== false) {
+    return localTokenPreviewResponse(pathname, payload);
+  }
+  if (pathname === "/api/vendor/organization/create") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletLedger.createVendorOrganization({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/vendor/organization/approve") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    const organization = walletLedger.updateVendorStatus(payload.organizationId, "active", actorId);
+    const wallet = walletLedger.provisionWalletForOrganization({
+      organizationId: payload.organizationId,
+      actorId
+    });
+    return localJobResponse({
+      organization,
+      wallet,
+      walletSummary: walletLedger.walletSummary(wallet.id)
+    });
+  }
+  if (pathname === "/api/vendor/onboarding/submit") {
+    const actorId = request.__auth?.userId || payload.actorId || "vendor-user";
+    return localJobResponse(vendorOnboarding.submitOnboarding({ ...payload, actorId }));
+  }
+  if (pathname === "/api/vendor/onboarding/document") {
+    const actorId = request.__auth?.userId || payload.actorId || "vendor-user";
+    return localJobResponse(vendorOnboarding.attachDocument({ ...payload, actorId }));
+  }
+  if (pathname === "/api/vendor/onboarding/review") {
+    const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+    return localJobResponse(vendorOnboarding.reviewOnboarding({ ...payload, actorId }));
+  }
+  if (pathname === "/api/vendor/onboarding/list") {
+    const rows = vendorOnboarding.listOnboardingSubmissions(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/summary") {
+    const wallet = payload.walletId
+      ? walletLedger.walletById(payload.walletId)
+      : walletLedger.walletForOrganization(payload.organizationId);
+    if (!wallet) {
+      return {
+        status: 404,
+        body: {
+          code: 404,
+          msg: "Wallet not found",
+          reason: "Wallet not found",
+          data: null,
+          result: null,
+          _proxy: { source: "wallet", pathname }
+        }
+      };
+    }
+    return localJobResponse(walletLedger.walletSummary(wallet.id));
+  }
+  if (pathname === "/api/wallet/funding/create") {
+    const actorId = request.__auth?.userId || payload.actorId || payload.requestedBy || "system";
+    return localJobResponse(walletFunding.createFundingRequest({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/funding/upload-proof") {
+    const actorId = request.__auth?.userId || payload.actorId || payload.uploadedBy || "system";
+    return localJobResponse(walletFunding.uploadFundingProof({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/funding/approve") {
+    const actorId = request.__auth?.userId || payload.actorId || payload.reviewedBy || "system";
+    return localJobResponse(walletFunding.approveFundingRequest({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/funding/reject") {
+    const actorId = request.__auth?.userId || payload.actorId || payload.reviewedBy || "system";
+    return localJobResponse(walletFunding.rejectFundingRequest({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/funding/list") {
+    return localJobResponse({
+      rows: walletFunding.listFundingRequests(payload),
+      total: walletFunding.listFundingRequests(payload).length
+    });
+  }
+  if (pathname === "/api/wallet/purchase/create") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletPurchase.createPurchaseOrder({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/purchase/complete-token") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletPurchase.completeTokenPurchase({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/purchase/remote-pending") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletPurchase.markRemoteSendPending({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/purchase/complete-remote") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletPurchase.completeRemoteSend({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/purchase/fail") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletPurchase.failPurchase({
+      ...payload,
+      actorId
+    }));
+  }
+  if (pathname === "/api/wallet/purchase/detail") {
+    return localJobResponse(walletPurchase.purchaseDetail(payload.purchaseOrderId));
+  }
+  if (pathname === "/api/wallet/purchase/list") {
+    const rows = walletPurchase.listPurchaseOrders(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/freeze") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletLedger.freezeWallet({
+      walletId: payload.walletId,
+      actorId,
+      reason: payload.reason || "manual_freeze"
+    }));
+  }
+  if (pathname === "/api/wallet/unfreeze") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletLedger.unfreezeWallet({
+      walletId: payload.walletId,
+      actorId,
+      reason: payload.reason || "manual_unfreeze"
+    }));
+  }
+  if (pathname === "/api/wallet/ledger/list") {
+    const wallet = payload.walletId
+      ? walletLedger.walletById(payload.walletId)
+      : walletLedger.walletForOrganization(payload.organizationId);
+    if (!wallet) {
+      return localJobResponse({ rows: [], total: 0 });
+    }
+    const rows = walletLedger.ledgerRows(wallet.id);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/manual-credit/request") {
+    const actorId = request.__auth?.userId || payload.actorId || "system";
+    return localJobResponse(walletApproval.requestManualCredit({
+      ...payload,
+      actorId,
+      idempotencyKey: payload.idempotencyKey || `manual-credit:${payload.organizationId}:${payload.amountMinor}:${Date.now()}`
+    }));
+  }
+  if (pathname === "/api/wallet/manual-credit/approve") {
+    const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+    return localJobResponse(walletApproval.approveManualCredit({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/manual-credit/reject") {
+    const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+    return localJobResponse(walletApproval.rejectManualCredit({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/manual-credit/list") {
+    const rows = walletApproval.listApprovalRequests(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/reconciliation/report") {
+    return localJobResponse(walletReconciliation.reportSummary(payload));
+  }
+  if (pathname === "/api/wallet/reconciliation/run") {
+    return localJobResponse(walletReconciliation.runReconciliation());
+  }
   if (pathname === "/api/user/login") {
     return loginResponse(payload);
   }

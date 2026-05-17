@@ -1,0 +1,4 @@
+packages:
+  - 'apps/*'         # customer, vendor, admin
+  - 'backend/wallet'
+  - 'packages/*'     # tokens

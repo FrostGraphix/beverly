@@ -136,13 +136,9 @@ export function normalizeConsumptionStatisticsResponse(response = {}) {
   };
 }
 
-function assertLiveConsumptionResponse(response = {}) {
+function assertConsumptionResponse(response = {}) {
   if (isFailureEnvelope(response)) {
     throw new Error(envelopeReason(response) || "Consumption statistics endpoint failed");
-  }
-  const proxySource = response?._proxy?.source || "";
-  if (proxySource && proxySource !== "live") {
-    throw new Error("Live AMR consumption data is unavailable. Static sample data is disabled for Consumption Statistics.");
   }
 }
 
@@ -155,7 +151,7 @@ async function getConsumptionPage(endpoint, filters, paging, api) {
     const reason = error?.response?.data?.reason || error?.response?.data?.msg || error?.message;
     throw new Error(reason || "Consumption statistics endpoint failed");
   }
-  assertLiveConsumptionResponse(response);
+  assertConsumptionResponse(response);
   return normalizeConsumptionStatisticsResponse(response);
 }
 
@@ -330,7 +326,7 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     xAxis: {
       type: "category",
-      boundaryGap: false,
+      boundaryGap: true,
       data: rows.map((row) => row.collectionDate),
       axisLine: {
         lineStyle: {
@@ -361,25 +357,11 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     series: [{
       name: title,
-      type: "line",
-      smooth: false,
-      symbol: "circle",
-      symbolSize: 7,
-      lineStyle: {
-        color: primary,
-        width: 3
-      },
+      type: "bar",
+      barMaxWidth: 46,
       itemStyle: {
-        color: primary
-      },
-      areaStyle: {
-        color: primaryLight
-      },
-      markPoint: {
-        data: [
-          { type: "max", name: "Peak" },
-          { type: "min", name: "Low" }
-        ]
+        color: primary,
+        borderRadius: [4, 4, 0, 0]
       },
       data: rows.map((row) => row.consumption)
     }]

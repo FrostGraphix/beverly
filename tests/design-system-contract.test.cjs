@@ -48,6 +48,7 @@ const tablePage = read("src/components/TablePage.vue");
 const taskOutputModal = read("src/components/TaskOutputModal.vue");
 const successModal = read("src/components/SuccessModal.vue");
 const profilePage = read("src/components/ProfilePage.vue");
+const settingsPage = read("src/components/SettingsPage.vue");
 const dailyDataMeterPage = read("src/components/DailyDataMeterPage.vue");
 const consumptionStatisticsPage = read("src/components/ConsumptionStatisticsPage.vue");
 const dashboardPage = read("src/components/DashboardPage.vue");
@@ -120,7 +121,7 @@ assert(read("src/components/base/BaseButton.vue").includes("nativeType"), "BaseB
 assert(profilePage.includes("BaseButton"), "ProfilePage actions should consume BaseButton.");
 assert(profilePage.includes("BaseIconButton"), "ProfilePage icon controls should consume BaseIconButton.");
 assert(profilePage.includes("BaseInput"), "ProfilePage fields should consume BaseInput.");
-assert(profilePage.includes("BaseToggle"), "ProfilePage switches should consume BaseToggle.");
+assert(settingsPage.includes("BaseToggle"), "SettingsPage switches should consume BaseToggle.");
 assert(dailyDataMeterPage.includes("BaseButton"), "DailyDataMeterPage controls should consume BaseButton.");
 assert(dailyDataMeterPage.includes("BaseInput"), "DailyDataMeterPage fields should consume BaseInput.");
 assert(dailyDataMeterPage.includes("BaseSelect"), "DailyDataMeterPage filters should consume BaseSelect.");

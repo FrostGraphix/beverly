@@ -1,17 +1,17 @@
-HTTP/1.1 200 OK
+HTTP/1.1 401 Unauthorized
 Access-Control-Allow-Headers: Content-Type,Authorization,X-Authorization-Password
 Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
 Access-Control-Max-Age: 86400
 Cache-Control: public, max-age=0, must-revalidate
-Content-Length: 13577
+Content-Length: 164
 Content-Type: application/json; charset=utf-8
-Date: Tue, 12 May 2026 09:43:31 GMT
-Etag: W/"3509-kDhUzTpFnIuPZ2RLfDGOgAVf4QY"
+Date: Tue, 12 May 2026 21:14:08 GMT
+Etag: W/"a4-PCwmHQ8kugPpP1vIr0VwDrkf5Ek"
 Server: Vercel
 Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 Vary: Origin
 X-Robots-Tag: noindex
 X-Vercel-Cache: MISS
 X-Vercel-Enable-Rewrite-Caching: 1
-X-Vercel-Id: cpt1::iad1::nrfpc-1778579011338-8eb082717494
+X-Vercel-Id: cpt1::iad1::kkt29-1778620447893-490b02fc8c78
 

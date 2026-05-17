@@ -1,0 +1,95 @@
+/* ════════════════════════════════════════════════════════════
+   Beverly Design Tokens — base scales
+   Independent of theme.  theme.css supplies the color surfaces.
+   ════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Spacing (4px base) ── */
+  --s-0: 0;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 28px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+
+  /* ── Type scale ── */
+  --t-2xs: 10px;
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-base: 13px;
+  --t-md: 14px;
+  --t-lg: 16px;
+  --t-xl: 18px;
+  --t-2xl: 22px;
+  --t-3xl: 28px;
+  --t-4xl: 36px;
+  --t-5xl: 48px;
+
+  /* ── Font stacks ── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* ── Font weights ── */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+
+  /* ── Radius ── */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --r-2xl: 18px;
+  --r-3xl: 24px;
+  --r-full: 999px;
+
+  /* ── Motion ── */
+  --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in:     cubic-bezier(0.55, 0, 1, 0.45);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+  --dur-slower: 560ms;
+
+  /* ── Z-index ── */
+  --z-base: 1;
+  --z-dropdown: 50;
+  --z-sticky: 100;
+  --z-overlay: 150;
+  --z-modal: 1000;
+  --z-toast: 2000;
+
+  /* ── Brand palette (theme-independent) ── */
+  --brand-50:  oklch(96% 0.05 145);
+  --brand-100: oklch(92% 0.10 145);
+  --brand-200: oklch(86% 0.13 145);
+  --brand-300: oklch(80% 0.16 145);
+  --brand-400: oklch(75% 0.18 145);
+  --brand-500: oklch(70% 0.19 145);  /* base */
+  --brand-600: oklch(62% 0.17 145);
+  --brand-700: oklch(52% 0.14 145);
+  --brand-800: oklch(42% 0.12 145);
+  --brand-900: oklch(32% 0.09 145);
+
+  --brand: var(--brand-500);
+  --brand-glow: oklch(70% 0.19 145 / 0.18);
+
+  /* ── Semantic accents ── */
+  --accent:  oklch(65% 0.18 270);
+  --info:    oklch(72% 0.13 220);
+  --warn:    oklch(78% 0.16 75);
+  --danger:  oklch(68% 0.20 25);
+  --success: var(--brand);
+}

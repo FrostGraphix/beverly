@@ -13,7 +13,7 @@ function assertIncludes(file, expected) {
 }
 
 const app = readProjectFile("src/App.vue");
-const profile = readProjectFile("src/components/ProfilePage.vue");
+const settings = readProjectFile("src/components/SettingsPage.vue");
 const referenceCss = readProjectFile("src/styles/reference.css");
 const legacyCss = fs.readdirSync(path.join(root, "src/styles"))
   .filter((file) => file.startsWith("legacy-") && file.endsWith(".css"))
@@ -25,7 +25,7 @@ const tokensCss = readProjectFile("src/styles/tokens.css");
 
 for (const theme of ["system", "light", "dark", "executive", "ocean", "contrast"]) {
   assertIncludes(app, `id: "${theme}"`);
-  assertIncludes(profile, `id: '${theme}'`);
+  assertIncludes(settings, `id: "${theme}"`);
 }
 
 assertIncludes(app, "data-theme-choice");
@@ -38,7 +38,7 @@ assertIncludes(themesCss, "--color-brand: #047857");
 assertIncludes(tokensCss, "--primary: var(--color-brand)");
 assertIncludes(tokensCss, "--theme-color: var(--color-brand)");
 assertIncludes(app, 'label: "Canopy"');
-assertIncludes(profile, "label: 'Canopy'");
+assertIncludes(settings, 'label: "Canopy"');
 assertIncludes(combinedCss, ".theme-command-menu");
 assertIncludes(combinedCss, ".theme-swatch");
 assertIncludes(themesCss, "color-scheme: dark");

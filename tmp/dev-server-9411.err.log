@@ -1137,3 +1137,138 @@
 [live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
 [live-proxy] {"pathname":"/api/dashboard/readLineChart","candidate":"/API/dashboard/readLineChart","error":"fetch failed"}
 [live-proxy] {"pathname":"/api/token/creditTokenRecord/readMore","candidate":"/API/token/creditTokenRecord/readMore","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-report","candidate":"/API/system/automation-report","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-report","candidate":"/API/system/automation-report","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-report","candidate":"/API/system/automation-report","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-report","candidate":"/API/system/automation-report","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/GPRSOnlineStatus/Read","candidate":"/api/GPRSOnlineStatus/Read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/GPRSOnlineStatus/Read","candidate":"/API/GPRSOnlineStatus/Read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/GPRSOnlineStatus/Read","candidate":"/API/GPRSOnlineStatus/Read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/system/automation-control","candidate":"/API/system/automation-control","status":404,"payload":{"raw":""}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/api/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-schema-drift] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/account/read","candidate":"/API/account/read","status":200,"payload":{"code":99,"reason":"Value does not fall within the expected range.","result":null}}
+[live-proxy] {"pathname":"/api/user/read","candidate":"/API/user/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/station/read","candidate":"/API/station/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/clearTamperTokenRecord/read","candidate":"/API/token/clearTamperTokenRecord/read","error":"fetch failed"}
+[live-proxy] {"pathname":"/api/token/clearTamperTokenRecord/read","candidate":"/API/token/clearTamperTokenRecord/read","error":"fetch failed"}
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:18:48[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778617127310-7466f7230c3a18.mjs
+[2m21:18:48[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:34:10[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618050073-2ce42431fba2c8.mjs
+[2m21:34:10[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:44:35[22m [31m[1m[vite][22m[39m Cannot find package '@vitejs/plugin-vue2' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs.timestamp-1778618671112-35ef22b2e85158.mjs
+[2m21:44:35[22m [31m[1m[vite][22m[39m server restart failed
+[31mfailed to load config from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\vite.config.mjs[39m
+[2m21:56:06[22m [31m[1m[vite][22m[39m Cannot find module 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.mjs' imported from C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\@vitejs\plugin-vue\dist\index.mjs
+[2m21:56:06[22m [31m[1m[vite][22m[39m server restart failed
+[2m22:27:28[22m [31m[1m[vite][22m[39m [31merror while updating dependencies:
+Error: ENOENT: no such file or directory, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.esm.js'
+    at async open (node:internal/fs/promises:637:25)
+    at async Object.readFile (node:internal/fs/promises:1269:14)
+    at async extractExportsData (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51156:24)
+    at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50904:27
+    at async Promise.all (index 5)
+    at async prepareEsbuildOptimizerRun (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50901:3)[39m
+[2m17:12:56[22m [31m[1m[vite][22m[39m [31merror while updating dependencies:
+Error: ENOENT: no such file or directory, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.esm.js'
+    at async open (node:internal/fs/promises:637:25)
+    at async Object.readFile (node:internal/fs/promises:1269:14)
+    at async extractExportsData (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51156:24)
+    at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50904:27
+    at async Promise.all (index 5)
+    at async prepareEsbuildOptimizerRun (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50901:3)[39m
+[2m17:14:18[22m [31m[1m[vite][22m[39m [31merror while updating dependencies:
+Error: ENOENT: no such file or directory, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\vue\dist\vue.runtime.esm.js'
+    at async open (node:internal/fs/promises:637:25)
+    at async Object.readFile (node:internal/fs/promises:1269:14)
+    at async extractExportsData (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51156:24)
+    at async file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50904:27
+    at async Promise.all (index 5)
+    at async prepareEsbuildOptimizerRun (file:///C:/Users/ACOB/Desktop/VS%20Code/acob-crm-4/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:50901:3)[39m

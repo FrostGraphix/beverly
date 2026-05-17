@@ -31,9 +31,15 @@
         </div>
 
         <div class="ddm-toolbar-group ddm-actions-group">
-          <BaseButton v-if="route.actions.includes('Search') || route.actions.includes('Sort')" variant="primary" @click="applyControls">Apply</BaseButton>
-          <BaseButton v-if="route.actions.includes('Reset')" @click="resetControls">Reset</BaseButton>
-          <BaseButton v-for="action in toolbarActions" :key="action" :variant="buttonVariant(action)" @click="openAction(action, action === 'Add' ? {} : (selectedRow || visibleRows[0] || {}))">{{ action }}</BaseButton>
+          <BaseButton v-if="route.actions.includes('Search') || route.actions.includes('Sort')" variant="primary" data-testid="table-apply-controls" @click="applyControls">Apply</BaseButton>
+          <BaseButton v-if="route.actions.includes('Reset')" data-testid="table-reset-controls" @click="resetControls">Reset</BaseButton>
+          <BaseButton
+            v-for="action in toolbarActions"
+            :key="action"
+            :variant="buttonVariant(action)"
+            :data-testid="`table-toolbar-action-${actionTestId(action)}`"
+            @click="openAction(action, action === 'Add' ? {} : (selectedRow || visibleRows[0] || {}))"
+          >{{ action }}</BaseButton>
         </div>
       </div>
     </template>
@@ -52,7 +58,7 @@
     <div class="table-scroll">
       <table>
         <thead><tr>
-          <th v-if="isBatchCheckable" class="check-column"><BaseCheckbox :value="allPageChecked" @input="toggleAllPage" /></th>
+          <th v-if="isBatchCheckable" class="check-column"><BaseCheckbox data-testid="table-select-all" :value="allPageChecked" @input="toggleAllPage" /></th>
           <th
             v-for="column in route.columns"
             :key="column"
@@ -77,7 +83,7 @@
           </tr>
           <tr v-else v-for="(row, rowIndex) in visibleRows" :key="rowIndex" :class="{ selected: row === selectedRow, checked: isRowChecked(row) }" @click="selectedRow = row">
             <td v-if="isBatchCheckable" class="check-column" @click.stop>
-              <BaseCheckbox :value="isRowChecked(row)" @input="toggleRow(row)" />
+              <BaseCheckbox :data-testid="`table-select-row-${rowIndex + 1}`" :value="isRowChecked(row)" @input="toggleRow(row)" />
             </td>
             <td
               v-for="column in route.columns"
@@ -86,7 +92,14 @@
               :data-column-key="getColKey(column)"
             >
               <span v-if="column === 'Actions'" class="action-btn-group">
-                <BaseButton v-for="action in rowActions" :key="action" :class="rowActionClass(action)" :aria-label="`${action} row ${rowIndex + 1}`" @click.stop="openAction(action, row)">
+                <BaseButton
+                  v-for="action in rowActions"
+                  :key="action"
+                  :class="rowActionClass(action)"
+                  :aria-label="`${action} row ${rowIndex + 1}`"
+                  :data-testid="`table-row-action-${actionTestId(action)}-${rowIndex + 1}`"
+                  @click.stop="openAction(action, row)"
+                >
                   <svg v-if="action === 'Edit'" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                   <svg v-else-if="action === 'Delete'" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                   {{ action }}
@@ -440,6 +453,13 @@ export default {
     },
     rowActionClass(action) {
       return ["link-btn", ["Delete", "Cancel"].includes(action) ? "danger" : ""];
+    },
+    actionTestId(action) {
+      return String(action || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
     },
     openDetail(row) {
       this.detailRow = row;

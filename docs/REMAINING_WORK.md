@@ -12,23 +12,25 @@ Release status: blocked.
 
 - Command: `npm run smoke:vercel`
 - Target: Vercel preview URL
-- Current result: fails with protected 401
+- Current result: protected 401 HTML
 - Cause: Vercel Authentication is enabled
 - Tooling fix: implemented
 - Needed: set `VERCEL_PROTECTION_BYPASS`
 
-### 2. Staging target needs protected access
+### 2. Deployed read smoke needs API auth
 
-- `STAGING_TARGET_URL` or `PREVIEW_TARGET_URL` is required.
-- Protected preview also needs `VERCEL_PROTECTION_BYPASS`.
-- Guarded write smoke must return `403`.
+- Protected health: passes
+- Protected read routes: `401 authz`
+- Cause: preview API requires authenticated read access
+- Tooling fix: implemented
+- Needed: set `SMOKE_AUTH_TOKEN` or `SMOKE_USER_ID` and `SMOKE_PASSWORD`
 
-### 3. Supabase preview smoke is not proven
+### 3. Remote CI is not proven
 
-- Preview env vars: configured for `codex/production-gap-fixes-20260512`
-- Supabase-mode tests: pass locally
-- Deployed Supabase mode: not proven
-- Needed: redeploy preview and smoke with bypass
+- Current branch: `codex/production-gap-fixes-20260512`
+- Latest current-branch result: no runs found
+- Needed: push the branch and inspect GitHub Actions
+- Rule: do not claim release green
 
 ### 4. Worktree is dirty
 
@@ -39,16 +41,17 @@ Release status: blocked.
 
 ## Fixed This Pass
 
-- Receipt detail contract restored.
+- Build/package/Vite runtime mismatch fixed.
+- Table action visibility remains contract-guarded.
+- Browser tests now use stable `data-testid` selectors.
+- Login fields expose stable `data-testid` selectors.
+- Toolbar and row actions expose stable `data-testid` selectors.
+- Theme menu now uses `role="menuitemradio"`.
 - Public smoke supports `PREVIEW_TARGET_URL`.
 - Public smoke supports `VERCEL_PROTECTION_BYPASS`.
-- Staging smoke falls back to preview target.
+- Public smoke supports smoke auth token and credentials.
 - Browser QA defaults to Edge on Windows.
-- Monitoring workflow uses Node 22.
-- Monitoring workflow passes bypass secret.
-- Remote CI lookup works through `npm run ci:actions`.
-- Preview Supabase envs were added.
-- Branch `codex/production-gap-fixes-20260512` was pushed.
+- Preview Supabase envs exist.
 
 ## Canonical Docs
 
@@ -62,15 +65,15 @@ Release status: blocked.
 - `npm run build` passed.
 - `npm run typecheck` passed.
 - `npm test` passed.
+- `npm run test:browser` passed.
 - `npm run hardening:audit` passed.
-- Edge browser QA passed.
-- Protected Vercel smoke passed.
+- Production dependency audit passed.
 - Supabase-mode local tests passed.
 
 ## Next Order
 
 1. Set `VERCEL_PROTECTION_BYPASS`.
-2. Redeploy preview branch.
+2. Set smoke API auth.
 3. Rerun public preview smoke.
-4. Run staging write guard.
-5. Update release status.
+4. Push branch.
+5. Confirm remote CI green.

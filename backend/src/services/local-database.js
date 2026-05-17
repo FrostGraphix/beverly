@@ -28,7 +28,21 @@ function createMemoryStore() {
     print_jobs: [],
     write_confirmations: [],
     account_bindings: [],
-    automation_deliveries: []
+    automation_deliveries: [],
+    vendor_organizations: [],
+    vendor_wallets: [],
+    wallet_ledger_entries: [],
+    wallet_holds: [],
+    wallet_funding_requests: [],
+    wallet_funding_proofs: [],
+    wallet_purchase_orders: [],
+    wallet_purchase_deliveries: [],
+    wallet_audit_events: [],
+    vendor_onboarding_submissions: [],
+    vendor_documents: [],
+    wallet_approval_requests: [],
+    wallet_reconciliation_runs: [],
+    wallet_risk_events: []
   };
 }
 
@@ -258,6 +272,181 @@ function ensureDatabase() {
       ok INTEGER NOT NULL,
       status_code INTEGER NOT NULL,
       error_text TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS vendor_organizations (
+      id TEXT PRIMARY KEY,
+      organization_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      station_ids_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS vendor_wallets (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL UNIQUE,
+      wallet_number TEXT NOT NULL UNIQUE,
+      currency TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wallet_ledger_entries (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL,
+      entry_type TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      reference_type TEXT NOT NULL,
+      reference_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(wallet_id, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS wallet_holds (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      status TEXT NOT NULL,
+      reference_type TEXT NOT NULL,
+      reference_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(wallet_id, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS wallet_funding_requests (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      verified_amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      status TEXT NOT NULL,
+      reference_code TEXT NOT NULL UNIQUE,
+      idempotency_key TEXT NOT NULL,
+      requested_by TEXT NOT NULL,
+      reviewed_by TEXT NOT NULL,
+      reviewer_note TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(wallet_id, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS wallet_funding_proofs (
+      id TEXT PRIMARY KEY,
+      funding_request_id TEXT NOT NULL,
+      storage_bucket TEXT NOT NULL,
+      storage_path TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wallet_purchase_orders (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      target_meter TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      status TEXT NOT NULL,
+      hold_id TEXT NOT NULL,
+      receipt_number TEXT NOT NULL UNIQUE,
+      idempotency_key TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(wallet_id, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS wallet_purchase_deliveries (
+      id TEXT PRIMARY KEY,
+      purchase_order_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      token_value TEXT NOT NULL,
+      remote_reference TEXT NOT NULL,
+      failure_reason TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wallet_audit_events (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      wallet_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      actor_id TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS vendor_onboarding_submissions (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      submitted_by TEXT NOT NULL,
+      reviewed_by TEXT NOT NULL,
+      reviewer_note TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS vendor_documents (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      onboarding_submission_id TEXT NOT NULL,
+      document_type TEXT NOT NULL,
+      storage_bucket TEXT NOT NULL,
+      storage_path TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wallet_approval_requests (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      organization_id TEXT NOT NULL,
+      approval_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      reason_code TEXT NOT NULL,
+      maker_id TEXT NOT NULL,
+      checker_id TEXT NOT NULL,
+      reviewer_note TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(wallet_id, idempotency_key)
+    );
+    CREATE TABLE IF NOT EXISTS wallet_reconciliation_runs (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      mismatch_count INTEGER NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS wallet_risk_events (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      wallet_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -660,7 +849,21 @@ function tableCounts() {
     "print_jobs",
     "write_confirmations",
     "account_bindings",
-    "automation_deliveries"
+    "automation_deliveries",
+    "vendor_organizations",
+    "vendor_wallets",
+    "wallet_ledger_entries",
+    "wallet_holds",
+    "wallet_funding_requests",
+    "wallet_funding_proofs",
+    "wallet_purchase_orders",
+    "wallet_purchase_deliveries",
+    "wallet_audit_events",
+    "vendor_onboarding_submissions",
+    "vendor_documents",
+    "wallet_approval_requests",
+    "wallet_reconciliation_runs",
+    "wallet_risk_events"
   ];
   if (isMemoryDatabase(db)) {
     return Object.fromEntries(names.map((name) => [

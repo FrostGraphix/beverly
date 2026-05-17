@@ -4,7 +4,7 @@
     class="base-icon-button"
     :disabled="disabled"
     type="button"
-    v-on="$listeners"
+    @click="handleClick"
   >
     <slot />
   </button>
@@ -14,10 +14,17 @@
 export default {
   name: "BaseIconButton",
   inheritAttrs: false,
+  emits: ["click"],
   props: {
     disabled: {
       type: Boolean,
       default: false
+    }
+  },
+  methods: {
+    handleClick(event) {
+      if (this.disabled) return;
+      this.$emit("click", event);
     }
   }
 };

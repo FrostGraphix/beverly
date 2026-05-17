@@ -3,6 +3,7 @@ import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
 import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
 import { validateUploadFile } from "./upload-policy.mjs";
+import { guardedWriteMessage } from "./guarded-write.mjs";
 
 export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/api/File/Upload";
@@ -151,7 +152,7 @@ export async function submitRouteAction(route, action, form, options = {}) {
     throw new Error("Import file is required");
   }
   if (writeAction && !writesAllowed) {
-    throw new Error("Writes are blocked until VITE_ALLOW_LIVE_WRITES=true");
+    throw new Error(guardedWriteMessage(action));
   }
 
   if (isCustomerDelete(route, action)) {

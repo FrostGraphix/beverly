@@ -3,13 +3,6 @@
     <div class="consumption-filter-shell">
       <div class="consumption-filter-grid">
         <label class="consumption-field">
-          <span>Station Id</span>
-          <BaseSelect v-model="filters.stationId" class="consumption-input">
-            <option v-for="site in siteOptions" :key="site.value" :value="site.value">{{ site.label }}</option>
-          </BaseSelect>
-        </label>
-
-        <label class="consumption-field">
           <span>Customer Id</span>
           <div class="consumption-picker">
             <BaseInput v-model="filters.customerId" class="consumption-input" placeholder="All customers" />
@@ -41,9 +34,20 @@
       </div>
 
       <div class="consumption-toolbar">
-        <BaseIconButton class="consumption-toolbar-icon" @click="toggleSortDirection" :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'" aria-label="Toggle sort direction">
+        <div class="consumption-sort-wrap">
+        <BaseIconButton class="consumption-toolbar-icon" @click="sortPanelOpen = !sortPanelOpen" :title="sortDirection === 'asc' ? 'Ascending' : 'Descending'" aria-label="Toggle sort direction">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 5v14l-4-4-1.4 1.4L9 23l6.4-6.6L14 15l-4 4V5zm8 14V5l4 4 1.4-1.4L15 1 8.6 7.6 10 9l4-4v14z"/></svg>
         </BaseIconButton>
+        <div v-if="sortPanelOpen" class="consumption-sort-panel" role="menu" aria-label="Sort consumption statistics">
+          <BaseSelect v-model="sortField" class="consumption-input" aria-label="Sort field">
+            <option value="collectionDate">Collection Date</option>
+            <option value="consumption">Consumption</option>
+          </BaseSelect>
+          <BaseButton size="sm" :variant="sortDirection === 'asc' ? 'primary' : 'quiet'" @click="sortDirection = 'asc'">Ascending</BaseButton>
+          <BaseButton size="sm" :variant="sortDirection === 'desc' ? 'primary' : 'quiet'" @click="sortDirection = 'desc'">Descending</BaseButton>
+          <BaseButton size="sm" @click="sortPanelOpen = false">Sort</BaseButton>
+        </div>
+        </div>
         <BaseButton class="consumption-btn" variant="primary" :disabled="loading" @click="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12a6 6 0 0 1 0-12z"/></svg>
           {{ loading ? "Loading" : "Search" }}
@@ -63,31 +67,9 @@
       {{ responseMeta.warning }}
     </div>
 
-    <div class="consumption-summary-grid">
-      <article class="consumption-summary-card">
-        <span>Total Consumption</span>
-        <strong>{{ formatConsumption(summary.total) }} kWh</strong>
-      </article>
-      <article class="consumption-summary-card">
-        <span>Average</span>
-        <strong>{{ formatConsumption(summary.average) }} kWh</strong>
-      </article>
-      <article class="consumption-summary-card">
-        <span>Peak Period</span>
-        <strong>{{ summary.peakDate || "No data" }}</strong>
-        <small>{{ formatConsumption(summary.peakValue) }} kWh</small>
-      </article>
-      <article class="consumption-summary-card">
-        <span>Coverage</span>
-        <strong>{{ summary.reportingDays }}/{{ summary.expectedDays || summary.reportingDays }}</strong>
-        <small>{{ summary.missingDays }} missing, {{ summary.zeroDays }} zero</small>
-      </article>
-    </div>
-
     <div class="consumption-tabs">
       <BaseButton :class="tabClass('data')" @click="activeTab = 'data'">Data</BaseButton>
       <BaseButton :class="tabClass('chart')" @click="activeTab = 'chart'">Chart</BaseButton>
-      <BaseButton :class="tabClass('insights')" @click="activeTab = 'insights'">Insights</BaseButton>
     </div>
 
     <div v-if="errorMessage" class="table-error" role="alert">
@@ -96,37 +78,26 @@
     </div>
 
     <div v-if="activeTab === 'data'" class="consumption-table-card">
-      <div class="consumption-table-head">
-        <div>
-          <strong>Consumption ledger</strong>
-          <span>{{ decoratedRows.length }} periods</span>
-        </div>
-        <span>{{ filters.granularity }} view</span>
-      </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
               <th class="selection-col"><BaseCheckbox disabled aria-label="Select all rows" /></th>
               <th>Collection Date</th>
-              <th>Consumption(kWh)</th>
-              <th>Change(kWh)</th>
-              <th>Status</th>
+              <th>Consumption</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td colspan="5" class="empty-cell">Loading...</td>
+              <td colspan="3" class="empty-cell">Loading...</td>
             </tr>
             <tr v-else-if="!decoratedRows.length">
-              <td colspan="5" class="empty-cell">No consumption data</td>
+              <td colspan="3" class="empty-cell">No Data</td>
             </tr>
             <tr v-for="row in visibleRows" :key="row.id">
               <td class="selection-col"><BaseCheckbox disabled aria-label="Select row" /></td>
               <td>{{ row.collectionDate }}</td>
               <td>{{ formatConsumption(row.consumption) }}</td>
-              <td :class="changeClass(row.change)">{{ formatChange(row.change) }}</td>
-              <td><span :class="statusClass(row.status)">{{ row.status }}</span></td>
             </tr>
           </tbody>
         </table>
@@ -148,14 +119,6 @@
 
     <div v-else-if="activeTab === 'chart'" class="consumption-chart-card">
       <EChartPanel :option="chartOption" />
-    </div>
-
-    <div v-else class="consumption-insight-grid">
-      <article v-for="insight in insights" :key="insight.label" class="consumption-insight">
-        <span>{{ insight.label }}</span>
-        <strong>{{ insight.value }}</strong>
-        <small>{{ insight.detail }}</small>
-      </article>
     </div>
 
     <PickerModal
@@ -191,12 +154,11 @@ import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { postApi } from "../services/api.js";
-import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
-import { pageNumbers, tableSiteOptions, totalPages } from "../services/table-service";
+import { downloadTextFile, exportReportCsvText, exportReportExcelXml, exportReportPdfText } from "../services/import-export.mjs";
+import { pageNumbers, totalPages } from "../services/table-service";
 import {
   aggregateConsumptionRows,
   buildConsumptionChartOption,
-  buildConsumptionInsights,
   decorateConsumptionRows,
   defaultConsumptionStatisticsFilters,
   fetchConsumptionStatistics,
@@ -209,13 +171,14 @@ export default {
   data() {
     return {
       filters: defaultConsumptionStatisticsFilters(),
-      siteOptions: tableSiteOptions,
       activePicker: "",
       activeTab: "data",
       loading: false,
       errorMessage: "",
       responseMeta: { source: "", endpoint: "", warning: "" },
       sortDirection: "desc",
+      sortField: "collectionDate",
+      sortPanelOpen: false,
       rawRows: [],
       searchRunId: 0,
       currentPage: 1,
@@ -232,6 +195,7 @@ export default {
     sortedRows() {
       const direction = this.sortDirection === "asc" ? 1 : -1;
       return this.aggregatedRows.slice().sort((left, right) => {
+        if (this.sortField === "consumption") return (Number(left.consumption || 0) - Number(right.consumption || 0)) * direction;
         return left.collectionDate.localeCompare(right.collectionDate) * direction;
       });
     },
@@ -240,9 +204,6 @@ export default {
     },
     summary() {
       return summarizeConsumptionRows(this.sortedRows, this.filters);
-    },
-    insights() {
-      return buildConsumptionInsights(this.sortedRows, this.filters);
     },
     pageCount() {
       return totalPages(this.decoratedRows.length, this.pageSize);
@@ -261,9 +222,8 @@ export default {
   mounted() {
     this.syncThemePalette();
     this.observeThemeChanges();
-    this.search();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
   },
   methods: {
@@ -273,6 +233,12 @@ export default {
       this.loading = true;
       this.errorMessage = "";
       this.responseMeta = { source: "", endpoint: "", warning: "" };
+      if (!this.filters.customerId || !this.filters.meterId) {
+        this.rawRows = [];
+        this.errorMessage = "Pick a Customer Id first. The Meter Id will follow the selected customer.";
+        this.loading = false;
+        return;
+      }
       try {
         const response = await fetchConsumptionStatistics(this.filters, {
           pageNumber: 1,
@@ -305,9 +271,13 @@ export default {
       this.filters = defaultConsumptionStatisticsFilters();
       this.activeTab = "data";
       this.sortDirection = "desc";
+      this.sortField = "collectionDate";
+      this.sortPanelOpen = false;
+      this.rawRows = [];
+      this.errorMessage = "";
+      this.responseMeta = { source: "", endpoint: "", warning: "" };
       this.currentPage = 1;
       this.gotoPage = "1";
-      this.search();
     },
     async selectCustomer(row) {
       const customerId = String(row.customerId || row.id || "");
@@ -385,11 +355,6 @@ export default {
       this.gotoPage = "1";
       this.search();
     },
-    toggleSortDirection() {
-      this.sortDirection = this.sortDirection === "asc" ? "desc" : "asc";
-      this.currentPage = 1;
-      this.gotoPage = "1";
-    },
     formatConsumption(value) {
       return Number(value || 0).toLocaleString(undefined, {
         maximumFractionDigits: 3
@@ -461,15 +426,15 @@ export default {
       ];
       const columns = [
         { label: "Collection Date", key: "collectionDate" },
-        { label: "Consumption (kWh)", key: "consumption" },
-        { label: "Change (kWh)", key: "change" },
-        { label: "Status", key: "status" }
+        { label: "Consumption", key: "consumption" }
       ];
       const content = exportReportCsvText("Consumption Statistics", columns, this.decoratedRows, meta);
       const excel = exportReportExcelXml("Consumption Statistics", columns, this.decoratedRows, meta);
+      const pdf = exportReportPdfText("Consumption Statistics", columns, this.decoratedRows, meta);
       const baseName = `Beverly_consumption_statistics_${this.filters.granularity}`;
       downloadTextFile(`${baseName}.csv`, content, "text/csv;charset=utf-8");
       downloadTextFile(`${baseName}.xls`, excel, "application/vnd.ms-excel");
+      downloadTextFile(`${baseName}.pdf`, pdf, "application/pdf");
     }
   }
 };
@@ -542,7 +507,7 @@ export default {
 
 .consumption-filter-grid {
   display: grid;
-  grid-template-columns: 1fr 1.1fr 1.1fr 1.7fr 180px;
+  grid-template-columns: 1fr 1fr 1.55fr 180px;
   border-bottom: 1px solid var(--border-color);
   background: linear-gradient(180deg, var(--bg-card), var(--bg-page));
 }
@@ -659,6 +624,47 @@ export default {
   gap: 14px;
   padding: 12px;
   background: var(--bg-card);
+}
+
+.consumption-sort-wrap {
+  position: relative;
+}
+
+.consumption-sort-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 14px);
+  z-index: 20;
+  width: 270px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-main);
+}
+
+.consumption-sort-panel::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  width: 14px;
+  height: 14px;
+  transform: rotate(45deg);
+  border-left: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.consumption-sort-panel label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-main);
+  font-size: 15px;
 }
 
 .consumption-toolbar-icon {

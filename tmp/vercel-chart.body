@@ -1,1 +1,1 @@
-{"code":0,"reason":"success","result":{"xData":[],"yData":[]},"msg":"success","data":{"xData":[],"yData":[]},"_proxy":{"source":"sample","pathname":"/api/dashboard/readLineChart"}}
+{"code":401,"msg":"Authentication required","reason":"Authentication required","data":null,"result":null,"_proxy":{"source":"authz","pathname":"/api/dashboard/readLineChart"}}

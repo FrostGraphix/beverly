@@ -1,0 +1,17 @@
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Headers: Content-Type,Authorization,X-Authorization-Password
+Access-Control-Allow-Methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+Access-Control-Max-Age: 86400
+Cache-Control: public, max-age=0, must-revalidate
+Content-Length: 174
+Content-Type: application/json; charset=utf-8
+Date: Tue, 12 May 2026 21:18:34 GMT
+Etag: W/"ae-W8ZZyy7ryRdq+CyhxZzRo3hK/BU"
+Server: Vercel
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+Vary: Origin
+X-Robots-Tag: noindex
+X-Vercel-Cache: MISS
+X-Vercel-Enable-Rewrite-Caching: 1
+X-Vercel-Id: cpt1::iad1::5s6xq-1778620711348-e49b6a603c2f
+

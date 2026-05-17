@@ -1,0 +1,1 @@
+{"code":400,"msg":"Invalid login credentials","reason":"Invalid login credentials","data":null,"result":null,"_proxy":{"source":"supabase-auth","pathname":"/api/user/login"}}

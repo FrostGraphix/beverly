@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { buildErrorReport, buildImportPreview, exportCsvText, exportExcelXml, exportReportCsvText, exportReportExcelXml, validateImportRows } from "../src/services/import-export.mjs";
+import { buildErrorReport, buildImportPreview, exportCsvText, exportExcelXml, exportReportCsvText, exportReportExcelXml, exportReportPdfText, validateImportRows } from "../src/services/import-export.mjs";
 import { columnKey } from "../src/services/table-helpers.mjs";
 
 const route = {
@@ -16,6 +16,7 @@ const csv = exportCsvText(route, rows, columnKey);
 const xml = exportExcelXml(route, rows, columnKey);
 const reportCsv = exportReportCsvText("Risk Report", [{ label: "Name", key: "name" }, { label: "Risk", key: "risk" }], [{ name: "Ada", risk: 12 }], [["Station", "TUNGA"]]);
 const reportXml = exportReportExcelXml("Risk Report", [{ label: "Name", key: "name" }, { label: "Risk", key: "risk" }], [{ name: "Ada", risk: 12 }], [["Station", "TUNGA"]]);
+const reportPdf = exportReportPdfText("Risk Report", [{ label: "Name", key: "name" }, { label: "Risk", key: "risk" }], [{ name: "Ada", risk: 12 }], [["Station", "TUNGA"]]);
 const validated = validateImportRows(route, [
   { Id: "3", Name: "Chris", Phone: "0802", Address: "KYAKALE", CertifiName: "", CertifiNo: "", Remark: "", "Create Time": "2026-04-28", "Update Time": "2026-04-28", "Station Id": "KYAKALE" },
   { Id: "", Name: "Bad", Phone: "", Address: "", CertifiName: "", CertifiNo: "", Remark: "", "Create Time": "", "Update Time": "", "Station Id": "" }
@@ -33,6 +34,8 @@ assert(reportCsv.includes("\"Station\",\"TUNGA\""));
 assert(reportCsv.includes("\"Risk\",\"Total\",\"12\""));
 assert(reportXml.includes("<Workbook"));
 assert(reportXml.includes("Summary"));
+assert(reportPdf.startsWith("%PDF-1.4"));
+assert(reportPdf.includes("Beverly Energy Operations"));
 assert.strictEqual(validated.rows.length, 2);
 assert(validated.errors.length > 0);
 assert.strictEqual(preview.added, 1);

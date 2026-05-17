@@ -11,8 +11,8 @@ Read first:
 Current truth:
 - Local verification is mostly green.
 - Public Vercel smoke is failing.
-- Remote CI is failing.
-- Preview Supabase envs are missing.
+- Remote CI is not proven for this branch.
+- Preview Supabase envs exist.
 - Production release is blocked.
 
 Canonical architecture:

@@ -40,6 +40,7 @@ export function createBarOption(series, title, theme = {}) {
   return {
     title: { left: "left", text: title, textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 14 } },
     xAxis: {
+      type: "category",
       data: series.xData,
       axisTick: { show: false },
       axisLine: { show: false },
@@ -55,6 +56,7 @@ export function createBarOption(series, title, theme = {}) {
       textStyle: { color: colors.tooltipText }
     },
     yAxis: {
+      type: "value",
       axisTick: { show: false },
       minInterval: 1,
       axisLine: { show: false },
@@ -65,14 +67,19 @@ export function createBarOption(series, title, theme = {}) {
       {
         name: "value",
         type: "bar",
+        coordinateSystem: "cartesian2d",
         barMaxWidth: 32,
         itemStyle: {
           color: colors.primary,
           borderRadius: [4, 4, 0, 0]
         },
         data: series.yData,
-        animationDuration: 1500,
-        animationEasing: "cubicOut"
+        animationDelay: (index) => index * 28,
+        animationDuration: 1200,
+        animationDurationUpdate: 900,
+        animationEasing: "elasticOut",
+        animationEasingUpdate: "cubicOut",
+        universalTransition: true
       }
     ]
   };
@@ -83,6 +90,7 @@ export function createLineOption(series, title, theme = {}) {
   return {
     title: { left: "left", text: title, textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 14 } },
     xAxis: {
+      type: "category",
       data: series.xData,
       boundaryGap: false,
       axisTick: { show: false },
@@ -100,6 +108,7 @@ export function createLineOption(series, title, theme = {}) {
       formatter: `{b} <br/><span style='color:${colors.success}'>●</span> {a} : {c}%`
     },
     yAxis: {
+      type: "value",
       axisTick: { show: false },
       min: 0,
       max: 80,
@@ -113,6 +122,7 @@ export function createLineOption(series, title, theme = {}) {
         name: "value",
         smooth: 0.4,
         type: "line",
+        coordinateSystem: "cartesian2d",
         symbol: "circle",
         symbolSize: 6,
         showSymbol: false,

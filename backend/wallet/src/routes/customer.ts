@@ -1,0 +1,372 @@
+/**
+ * Customer routes  /api/v1/customer/*
+ *
+ * Public (no auth):
+ *   POST /auth/signup   — send OTP for new account
+ *   POST /auth/login    — send OTP for existing account
+ *   POST /auth/verify   — verify OTP, get access_token
+ *
+ * Authenticated (requireCustomer):
+ *   GET    /me
+ *   PATCH  /me
+ *   POST   /logout
+ *
+ *   POST   /kyc/tier1
+ *   POST   /kyc/tier2/nin
+ *
+ *   GET    /meters
+ *   POST   /meters
+ *   DELETE /meters/:id
+ *
+ *   GET    /wallet
+ *   GET    /wallet/ledger
+ *   POST   /wallet/fund
+ *
+ *   POST   /purchase/preview
+ *   POST   /purchase
+ *   GET    /transactions
+ *   GET    /receipts
+ *   GET    /receipts/:id
+ */
+import type { FastifyPluginAsync } from 'fastify';
+import { adminClient } from '../db/supabase.js';
+import {
+    requestOtp, verifyOtp, AuthError,
+} from '../services/customer-auth.js';
+import {
+    submitKycTier1, submitKycTier2Nin, KycError,
+} from '../services/customer-kyc.js';
+import {
+    customerPurchase, previewCustomerPurchase, initiateCustomerFunding,
+    linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases,
+    CustomerPurchaseError,
+} from '../services/customer-purchase.js';
+import { findWalletByOwner } from '../services/wallets.js';
+import { getReceiptByOrder } from '../services/vending.js';
+import { logAction } from '../services/audit.js';
+
+const customer: FastifyPluginAsync = async (fastify) => {
+
+    // ── AUTH ──────────────────────────────────────────────────────────────────
+
+    fastify.post('/auth/signup', async (req, reply) => {
+        const { phone, email, full_name } = req.body as {
+            phone: string; email?: string; full_name?: string;
+        };
+        if (!phone) return reply.code(400).send({ error: 'phone_required', message: 'phone is required.' });
+        try {
+            const result = await requestOtp(phone, 'signup', { email, full_name });
+            return { challenge_id: result.challengeId };
+        } catch (e: any) {
+            if (e instanceof AuthError) return reply.code(e.code === 'rate_limit' ? 429 : 400).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/login', async (req, reply) => {
+        const { phone } = req.body as { phone: string };
+        if (!phone) return reply.code(400).send({ error: 'phone_required', message: 'phone is required.' });
+        try {
+            const result = await requestOtp(phone, 'login');
+            return { challenge_id: result.challengeId };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(
+                    e.code === 'rate_limit' ? 429
+                    : e.code === 'customer_not_found' ? 404
+                    : 400,
+                ).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/verify', async (req, reply) => {
+        const { challenge_id, otp } = req.body as { challenge_id: string; otp: string };
+        if (!challenge_id || !otp) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'challenge_id and otp required.' });
+        }
+        try {
+            const { access_token, customer, isNew } = await verifyOtp(challenge_id, otp);
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(e.code === 'invalid_otp' || e.code === 'otp_expired' ? 401 : 400)
+                    .send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    // ── PROFILE ───────────────────────────────────────────────────────────────
+
+    fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { data } = await adminClient
+            .from('customers')
+            .select('id, phone, email, full_name, kyc_tier, kyc_status, status, created_at')
+            .eq('id', req.actor!.customerId!)
+            .single();
+        if (!data) return reply.code(404).send({ error: 'not_found' });
+        return data;
+    });
+
+    fastify.patch('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { full_name, email } = req.body as { full_name?: string; email?: string };
+        const updates: Record<string, unknown> = {};
+        if (full_name !== undefined) updates.full_name = full_name.trim();
+        if (email !== undefined) updates.email = email.trim().toLowerCase() || null;
+        if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
+
+        const { data, error } = await adminClient
+            .from('customers')
+            .update(updates)
+            .eq('id', req.actor!.customerId!)
+            .select('id, phone, email, full_name, kyc_tier, kyc_status, status')
+            .single();
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        return data;
+    });
+
+    fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'customer',
+            action: 'customer.logout',
+            targetType: 'customer',
+            targetId: req.actor!.customerId!,
+        });
+        return { ok: true };
+    });
+
+    // ── KYC ───────────────────────────────────────────────────────────────────
+
+    fastify.post('/kyc/tier1', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { full_name, date_of_birth, address, state, lga } = req.body as {
+            full_name: string; date_of_birth: string; address: string; state: string; lga: string;
+        };
+        if (!full_name || !date_of_birth || !address || !state || !lga) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'full_name, date_of_birth, address, state and lga are required.' });
+        }
+        try {
+            await submitKycTier1({
+                customerId: req.actor!.customerId!,
+                actorUserId: req.actor!.userId,
+                full_name, date_of_birth, address, state, lga,
+            });
+            const { data } = await adminClient.from('customers').select('kyc_tier, kyc_status').eq('id', req.actor!.customerId!).single();
+            return { ok: true, kyc_tier: (data as any)?.kyc_tier, kyc_status: (data as any)?.kyc_status };
+        } catch (e: any) {
+            if (e instanceof KycError) return reply.code(422).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    fastify.post('/kyc/tier2/nin', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { nin } = req.body as { nin: string };
+        if (!nin) return reply.code(400).send({ error: 'nin_required', message: 'nin is required.' });
+        try {
+            await submitKycTier2Nin({
+                customerId: req.actor!.customerId!,
+                actorUserId: req.actor!.userId,
+                nin,
+            });
+            const { data } = await adminClient.from('customers').select('kyc_tier, kyc_status').eq('id', req.actor!.customerId!).single();
+            return { ok: true, kyc_tier: (data as any)?.kyc_tier, kyc_status: (data as any)?.kyc_status };
+        } catch (e: any) {
+            if (e instanceof KycError) return reply.code(422).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    // ── METERS ────────────────────────────────────────────────────────────────
+
+    fastify.get('/meters', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const meters = await listCustomerMeters(req.actor!.customerId!);
+        return { meters };
+    });
+
+    fastify.post('/meters', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { meter_id, nickname } = req.body as { meter_id: string; nickname?: string };
+        if (!meter_id) return reply.code(400).send({ error: 'meter_id_required' });
+        try {
+            const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname);
+            return { meter };
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    fastify.delete('/meters/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        try {
+            await unlinkMeter(req.actor!.customerId!, req.actor!.userId, id);
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'not_found' ? 404 : 422).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    // ── WALLET ────────────────────────────────────────────────────────────────
+
+    fastify.get('/wallet', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const wallet = await findWalletByOwner('customer', req.actor!.customerId!);
+        if (!wallet) return reply.code(404).send({ error: 'wallet_not_found' });
+
+        const { data: summary } = await adminClient
+            .from('v_wallet_balances')
+            .select('*')
+            .eq('wallet_id', wallet.id)
+            .maybeSingle();
+
+        return {
+            id: wallet.id,
+            currency: wallet.currency,
+            status: wallet.status,
+            balance_minor: (summary as any)?.balance_minor ?? 0,
+            holds_minor: (summary as any)?.holds_minor ?? 0,
+            available_minor: (summary as any)?.available_minor ?? 0,
+            daily_debit_cap_minor: wallet.daily_debit_cap_minor,
+            monthly_debit_cap_minor: wallet.monthly_debit_cap_minor,
+        };
+    });
+
+    fastify.get('/wallet/ledger', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const wallet = await findWalletByOwner('customer', req.actor!.customerId!);
+        if (!wallet) return { entries: [] };
+
+        const { limit = 100, offset = 0 } = req.query as { limit?: number; offset?: number };
+        const { data } = await adminClient
+            .from('wallet_ledger_entries')
+            .select('*')
+            .eq('wallet_id', wallet.id)
+            .order('created_at', { ascending: false })
+            .range(Number(offset), Number(offset) + Number(limit) - 1);
+        return { entries: data ?? [] };
+    });
+
+    fastify.post('/wallet/fund', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { amount_minor, callback_url } = req.body as { amount_minor: number; callback_url?: string };
+        if (!amount_minor || amount_minor < 50000) {
+            return reply.code(400).send({ error: 'amount_too_low', message: 'Minimum ₦500.' });
+        }
+        const { data: cu } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).single();
+        if (!(cu as any)?.email) {
+            return reply.code(422).send({ error: 'email_required', message: 'Add an email address to fund via card.' });
+        }
+        try {
+            const result = await initiateCustomerFunding({
+                customerId: req.actor!.customerId!,
+                customerUserId: req.actor!.userId,
+                customerEmail: (cu as any).email,
+                amountMinor: amount_minor,
+                callbackUrl: callback_url,
+            });
+            return result;
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) return reply.code(400).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    // ── PURCHASE ──────────────────────────────────────────────────────────────
+
+    fastify.post('/purchase/preview', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { meter_id, amount_minor } = req.body as { meter_id: string; amount_minor: number };
+        if (!meter_id || !amount_minor) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'meter_id and amount_minor required.' });
+        }
+        try {
+            const preview = await previewCustomerPurchase(meter_id, amount_minor);
+            return preview;
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    fastify.post('/purchase', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { meter_id, amount_minor, mode, idempotency_key } = req.body as {
+            meter_id: string; amount_minor: number;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
+        };
+        if (!meter_id || !amount_minor || !mode || !idempotency_key) {
+            return reply.code(400).send({ error: 'missing_fields' });
+        }
+        if (!['wallet', 'direct_pay'].includes(mode)) {
+            return reply.code(400).send({ error: 'invalid_mode', message: 'mode must be wallet or direct_pay.' });
+        }
+        const { data: cu } = await adminClient
+            .from('customers')
+            .select('full_name, email')
+            .eq('id', req.actor!.customerId!)
+            .single();
+        try {
+            const result = await customerPurchase({
+                customerId: req.actor!.customerId!,
+                customerUserId: req.actor!.userId,
+                customerName: (cu as any)?.full_name ?? null,
+                customerEmail: (cu as any)?.email ?? null,
+                meterId: meter_id.trim().toUpperCase(),
+                amountMinor: amount_minor,
+                mode,
+                clientIdempotencyKey: idempotency_key,
+            });
+            return result;
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) {
+                return reply.code(
+                    e.code === 'insufficient_balance' ? 402
+                    : e.code === 'wallet_inactive' ? 403
+                    : 422,
+                ).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    // ── TRANSACTIONS & RECEIPTS ───────────────────────────────────────────────
+
+    fastify.get('/transactions', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { limit = 100 } = req.query as { limit?: number };
+        const purchases = await listCustomerPurchases(req.actor!.customerId!, Number(limit));
+        return { purchases };
+    });
+
+    fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { data } = await adminClient
+            .from('receipts')
+            .select('id, receipt_number, purchase_order_id, created_at')
+            .in(
+                'purchase_order_id',
+                (
+                    await adminClient
+                        .from('purchase_orders')
+                        .select('id')
+                        .eq('customer_id', req.actor!.customerId!)
+                ).data?.map((r: any) => r.id) ?? [],
+            )
+            .order('created_at', { ascending: false })
+            .limit(100);
+        return { receipts: data ?? [] };
+    });
+
+    fastify.get('/receipts/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const receipt = await getReceiptByOrder(id);
+        if (!receipt) return reply.code(404).send({ error: 'not_found' });
+        // Ensure receipt belongs to this customer
+        const { data: po } = await adminClient
+            .from('purchase_orders')
+            .select('customer_id')
+            .eq('id', receipt.purchase_order_id)
+            .single();
+        if ((po as any)?.customer_id !== req.actor!.customerId!) {
+            return reply.code(403).send({ error: 'forbidden' });
+        }
+        return receipt;
+    });
+};
+
+export default customer;

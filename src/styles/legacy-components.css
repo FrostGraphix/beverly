@@ -8,3 +8,27 @@
 @import "./legacy-modals.css";
 @import "./legacy-profile.css";
 @import "./legacy-consumption.css";
+
+.theme-dropdown.user-dropdown {
+  width: min(322px, calc(100vw - 24px)) !important;
+  min-width: 0 !important;
+  padding: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--theme-color) 20%, var(--border-color)) !important;
+  border-radius: 22px !important;
+  background:
+    radial-gradient(circle at 18px 18px, color-mix(in srgb, var(--theme-color) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, var(--theme-color) 4%), var(--bg-card)) !important;
+  background-size: 22px 22px, auto !important;
+  box-shadow: var(--shadow-lg), inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 8%, transparent) !important;
+  backdrop-filter: blur(24px) !important;
+}
+
+@media (max-width: 768px) {
+  .theme-dropdown.user-dropdown {
+    position: fixed !important;
+    top: 56px !important;
+    right: 12px !important;
+    left: auto !important;
+    width: min(322px, calc(100vw - 24px)) !important;
+  }
+}

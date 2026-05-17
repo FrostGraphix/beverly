@@ -1,9 +1,10 @@
 import axios from "axios";
 import { validateApiEnvelope, validateCurrentUserResponse, validateLoginResponse } from "./runtime-schemas.mjs";
+import { recordClientError } from "./error-logger.mjs";
 
 export const apiClient = axios.create({
   baseURL: "/api",
-  timeout: 30000
+  timeout: Number(import.meta.env?.VITE_API_TIMEOUT_MS || 90000)
 });
 
 const sessionStorageKey = "beverly.session";
@@ -78,6 +79,17 @@ apiClient.interceptors.request.use((config) => {
   if (token) touchSession();
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    recordClientError("api-response-error", error, {
+      url: error?.config?.url || "",
+      method: error?.config?.method || ""
+    });
+    return Promise.reject(error);
+  }
+);
 
 export function setCookie(name, value) {
   document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=/; SameSite=Lax`;
@@ -178,9 +190,29 @@ export async function login(payload) {
         ...(profile.data || {})
       }
     };
-  } catch {
+  } catch (error) {
+    recordClientError("profile-refresh-error", error, { userId: payload.userId });
     return response;
   }
+}
+
+export function demoLogin(portal = "admin") {
+  const isVendor = portal === "vendor";
+  const userId = isVendor ? "vendor.demo@acob.ng" : "admin.demo@acob.ng";
+  const userName = isVendor ? "Bright Future Vendor" : "ACOB Finance Admin";
+  const roleId = isVendor ? "vendor_user" : "super-admin";
+  setCookie("token", `demo-${portal}-session`);
+  setCookie("SiteManager", userId);
+  setCookie("SiteCom", isVendor ? "SITE_001" : "ACB");
+  writeSessionState();
+  writeSessionCookies({
+    userId,
+    userName,
+    roleId,
+    remark: isVendor ? "Vendor portal demo" : "Internal wallet operations demo",
+    email: userId
+  });
+  return { data: { token: `demo-${portal}-session`, userId, userName, roleId } };
 }
 
 export async function currentUserInfo() {
@@ -200,7 +232,8 @@ export async function currentUserInfo() {
         ...session
       }
     });
-  } catch {
+  } catch (error) {
+    recordClientError("current-user-fallback", error, { userId: getCookie("userId") || "admin" });
     const session = normalizeSessionData({
       userId: getCookie("userId") || "admin",
       userName: getCookie("userName") || "ACB(admin)",

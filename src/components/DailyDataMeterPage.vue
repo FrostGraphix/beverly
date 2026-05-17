@@ -14,18 +14,6 @@
         />
       </div>
       <div class="ddm-toolbar-group ddm-sort-group">
-        <BaseSelect v-model="sortField" class="sort-select" aria-label="Sort by" @change="reload">
-          <option value="">Sort by...</option>
-          <option value="customerName">Customer Name</option>
-          <option value="meterId">Meter Id</option>
-          <option value="currentDate">Collection Date</option>
-          <option value="total1">Total Energy</option>
-          <option value="usage1">Last Hour Usage</option>
-          <option value="remain1">Credit Balance</option>
-          <option value="intervalDemand">Maximum Demand</option>
-          <option value="power">Power</option>
-          <option value="stationId">Station Id</option>
-        </BaseSelect>
         <BaseSelect v-model="sortDir" class="sort-select" aria-label="Sort direction" @change="reload">
           <option value="asc">Ascending</option>
           <option value="desc">Descending</option>
@@ -95,13 +83,13 @@
             <td>{{ fmtNum(row.remain1) }}</td>
             <td>{{ fmtNum(row.intervalDemand) }}</td>
             <td>{{ fmtNum(row.power) }}</td>
-            <td><span :class="healthClass(row.relayOpen)">{{ healthText(row.relayOpen) }}</span></td>
-            <td><span :class="healthClass(row.batteryLow)">{{ healthText(row.batteryLow) }}</span></td>
-            <td><span :class="healthClass(row.magneticInterference)">{{ healthText(row.magneticInterference) }}</span></td>
-            <td><span :class="healthClass(row.terminalCoverOpen)">{{ healthText(row.terminalCoverOpen) }}</span></td>
-            <td><span :class="healthClass(row.coverOpen)">{{ healthText(row.coverOpen) }}</span></td>
-            <td><span :class="healthClass(row.currentReverse)">{{ healthText(row.currentReverse) }}</span></td>
-            <td><span :class="healthClass(row.currentUnbalance)">{{ healthText(row.currentUnbalance) }}</span></td>
+            <td><span :class="tableHealthClass(row.relayOpen)">{{ tableHealthText(row.relayOpen) }}</span></td>
+            <td><span :class="tableHealthClass(row.batteryLow)">{{ tableHealthText(row.batteryLow) }}</span></td>
+            <td><span :class="tableHealthClass(row.magneticInterference)">{{ tableHealthText(row.magneticInterference) }}</span></td>
+            <td><span :class="tableHealthClass(row.terminalCoverOpen)">{{ tableHealthText(row.terminalCoverOpen) }}</span></td>
+            <td><span :class="tableHealthClass(row.coverOpen)">{{ tableHealthText(row.coverOpen) }}</span></td>
+            <td><span :class="tableHealthClass(row.currentReverse)">{{ tableHealthText(row.currentReverse) }}</span></td>
+            <td><span :class="tableHealthClass(row.currentUnbalance)">{{ tableHealthText(row.currentUnbalance) }}</span></td>
             <td class="mono-sm text-muted">{{ dateTimeText(row.updateDate) }}</td>
             <td class="action-column">
               <BaseButton
@@ -161,9 +149,9 @@
           </div>
         </div>
         <div class="ddm-mobile-health">
-          <span :class="healthClass(row.relayOpen)">Relay {{ healthText(row.relayOpen) }}</span>
-          <span :class="healthClass(row.batteryLow)">Battery {{ healthText(row.batteryLow) }}</span>
-          <span :class="healthClass(row.magneticInterference)">Magnetic {{ healthText(row.magneticInterference) }}</span>
+          <span :class="tableHealthClass(row.relayOpen)">Relay {{ tableHealthText(row.relayOpen) }}</span>
+          <span :class="tableHealthClass(row.batteryLow)">Battery {{ tableHealthText(row.batteryLow) }}</span>
+          <span :class="tableHealthClass(row.magneticInterference)">Magnetic {{ tableHealthText(row.magneticInterference) }}</span>
         </div>
       </article>
     </div>
@@ -251,7 +239,7 @@
                     <td><span :class="healthClass(row.coverOpen ?? row.upperOpen)">{{ healthText(row.coverOpen ?? row.upperOpen) }}</span></td>
                     <td><span :class="healthClass(row.currentReverse)">{{ healthText(row.currentReverse) }}</span></td>
                     <td><span :class="healthClass(row.currentUnbalance)">{{ healthText(row.currentUnbalance) }}</span></td>
-                    <td class="mono-sm text-muted">{{ dateTimeText(row.createDate || row.timestamp || row.currentDate || row.collectionDate) }}</td>
+                    <td class="mono-sm text-muted">{{ hourlyCreateTimeText(row) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -274,6 +262,8 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { getApi, postApi } from "../services/api.js";
 import { downloadTextFile, exportReportCsvText } from "../services/import-export.mjs";
+import { hourlyCreateTime, intervalRowMatchesSearch, normalizeDailyMeterRow, sliceIntervalRows } from "../services/interval-data-flow.mjs";
+import { normalizeHourlyStatus, normalizeIntervalTableStatus } from "../services/interval-status.mjs";
 
 function normalizeCollection(response) {
   const body = response?.body || response;
@@ -287,32 +277,6 @@ function normalizeCollection(response) {
     };
   }
   return { rows: [], total: 0 };
-}
-
-function normalizeDailyRow(row) {
-  return {
-    ...row,
-    meterId: row.meterId || row.serialNumber || "",
-    gatewayId: row.gatewayId || row.gateway || "",
-    currentDate: row.currentDate || row.collectionDate || row.timestamp || row.createDate || "",
-    customerId: row.customerId || row.customerAccountId || "",
-    customerName: row.customerName || row.name || "",
-    stationId: row.stationId || row.station || row.siteId || "",
-    total1: row.total1 ?? row.totalEnergy ?? row.energyReadingKwh,
-    usage1: row.usage1 ?? row.lastHourUsage ?? row.energyConsumptionKwh,
-    remain1: row.remain1 ?? row.creditBalance ?? row.energyBalanceKwh,
-    intervalDemand: row.intervalDemand ?? row.maximumDemand,
-    power: row.power,
-    relayOpen: row.relayOpen ?? row.relayStatus,
-    batteryLow: row.batteryLow ?? row.batteryStatus,
-    magneticInterference: row.magneticInterference ?? row.magneticStatus,
-    terminalCoverOpen: row.terminalCoverOpen ?? row.terminalCover,
-    coverOpen: row.coverOpen ?? row.upperOpen,
-    currentReverse: row.currentReverse,
-    currentUnbalance: row.currentUnbalance,
-    updateDate: row.updateDate || row.updateTime || row.createDate || row.timestamp || "",
-    status: row.status
-  };
 }
 
 export default {
@@ -333,8 +297,11 @@ export default {
       pageSize: 10,
       gotoPage: "1",
       loading: false,
-      sortField: "currentDate",
       sortDir: "desc",
+      searchCache: {
+        query: "",
+        rows: []
+      },
       hourly: {
         open: false,
         loading: false,
@@ -375,22 +342,24 @@ export default {
           pageSize: this.pageSize,
           FROM: this.defaultFrom(),
           TO: new Date().toISOString(),
-          orderBy: this.sortField ? `${this.sortField} ${this.sortDir}` : undefined
+          orderBy: `currentDate ${this.sortDir}`
         };
         if (this.searchTerm) payload.searchTerm = this.searchTerm;
         const response = await postApi("/api/DailyDataMeter/read", payload);
         const collection = normalizeCollection(response);
-        let rows = collection.rows.map(normalizeDailyRow);
-
         const query = this.searchTerm.trim().toLowerCase();
-        if (query) {
-          rows = rows.filter((row) => [row.meterId, row.customerId, row.customerName, row.gatewayId, row.stationId]
-            .some((value) => String(value || "").toLowerCase().includes(query)));
+        let rows = collection.rows.map(normalizeDailyMeterRow);
+        let total = collection.total;
+
+        if (query && !rows.every((row) => intervalRowMatchesSearch(row, query))) {
+          const searchedRows = this.sortRows(await this.fetchAllSearchMatches(payload, query));
+          total = searchedRows.length;
+          rows = sliceIntervalRows(searchedRows, this.page, this.pageSize);
         }
 
         rows = this.sortRows(rows);
         this.rows = rows;
-        this.totalRecords = query && rows.length < collection.rows.length ? rows.length : collection.total;
+        this.totalRecords = total;
         this.page = Math.min(this.page, this.totalPages);
       } catch (error) {
         console.error("[DailyDataMeterPage]", error);
@@ -424,8 +393,6 @@ export default {
         };
         let response;
         try {
-          response = await getApi("/api/DailyDataMeter/readHourly", params);
-        } catch {
           response = await postApi("/api/DailyDataMeter/readMore", {
             lang: "en",
             meterId,
@@ -434,11 +401,14 @@ export default {
             pageNumber: 1,
             pageSize: 500
           });
+        } catch {
+          response = await getApi("/api/DailyDataMeter/readHourly", params);
         }
         const collection = normalizeCollection(response);
         const rows = collection.rows
+          .map(normalizeDailyMeterRow)
           .filter((item) => !meterId || String(item.meterId || "").trim() === meterId)
-          .filter((item) => !date || this.dateOnly(item.timestamp || item.currentDate || item.collectionDate) === date);
+          .filter((item) => !date || this.dateOnly(item.timestamp || item.currentDate || item.collectionDate || item.createDate || item.createTime) === date);
         this.hourly.rows = rows;
         this.hourly.total = rows.length;
       } catch (error) {
@@ -451,8 +421,46 @@ export default {
     closeHourly() {
       this.hourly.open = false;
     },
+    async fetchAllSearchMatches(basePayload, query) {
+      if (this.searchCache.query === query && this.searchCache.rows.length) {
+        return this.searchCache.rows;
+      }
+
+      const pageSize = 500;
+      const first = await postApi("/api/DailyDataMeter/read", {
+        ...basePayload,
+        searchTerm: undefined,
+        pageNumber: 1,
+        pageSize
+      });
+      const firstCollection = normalizeCollection(first);
+      const total = firstCollection.total || firstCollection.rows.length;
+      const allRows = firstCollection.rows.map(normalizeDailyMeterRow);
+      const pageCount = Math.ceil(total / pageSize);
+
+      for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 4) {
+        const pageNumbers = Array.from(
+          { length: Math.min(4, pageCount - pageNumber + 1) },
+          (_, index) => pageNumber + index
+        );
+        const pages = await Promise.all(pageNumbers.map((nextPage) => postApi("/api/DailyDataMeter/read", {
+          ...basePayload,
+          searchTerm: undefined,
+          pageNumber: nextPage,
+          pageSize
+        })));
+        for (const response of pages) {
+          const collection = normalizeCollection(response);
+          allRows.push(...collection.rows.map(normalizeDailyMeterRow));
+        }
+      }
+
+      const rows = allRows.filter((row) => intervalRowMatchesSearch(row, query));
+      this.searchCache = { query, rows };
+      return rows;
+    },
     sortRows(rows) {
-      const field = this.sortField || "currentDate";
+      const field = "currentDate";
       const factor = this.sortDir === "desc" ? -1 : 1;
       return rows.slice().sort((left, right) => {
         const a = this.sortValue(left[field]);
@@ -477,8 +485,8 @@ export default {
     },
     resetFilters() {
       this.searchTerm = "";
-      this.sortField = "currentDate";
       this.sortDir = "desc";
+      this.searchCache = { query: "", rows: [] };
       this.page = 1;
       this.gotoPage = "1";
       this.reload();
@@ -515,14 +523,16 @@ export default {
       downloadTextFile("interval_data.csv", content, "text/csv;charset=utf-8");
     },
     healthText(value) {
-      if (value === null || value === undefined || value === "") return "Normal";
-      const text = String(value || "").toLowerCase();
-      if (["normal", "closed", "false", "0", "no", "ok"].includes(text)) return "Normal";
-      if (["check", "open", "true", "1", "yes", "abnormal", "error", "failed", "tamper"].includes(text)) return "Check";
-      return String(value);
+      return normalizeHourlyStatus(value);
     },
     healthClass(value) {
-      return this.healthText(value).toLowerCase() === "normal" ? "sp sp--ok" : "sp sp--danger";
+      return normalizeHourlyStatus(value) === "Normal" ? "sp sp--ok" : "sp sp--danger";
+    },
+    tableHealthText(value) {
+      return normalizeIntervalTableStatus(value);
+    },
+    tableHealthClass(value) {
+      return normalizeIntervalTableStatus(value) === "Normal" ? "sp sp--ok" : "sp sp--danger";
     },
     fmtNum(value) {
       if (value === null || value === undefined || value === "") return "0";
@@ -549,6 +559,9 @@ export default {
       const text = this.dateTimeText(value);
       if (text === "-") return text;
       return text.includes(" ") ? text.slice(11, 19) : text.slice(0, 8);
+    },
+    hourlyCreateTimeText(row) {
+      return this.dateTimeText(hourlyCreateTime(row));
     },
     defaultFrom() {
       return new Date(new Date().getFullYear(), 0, 1).toISOString();

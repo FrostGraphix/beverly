@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml } from "../src/services/receipt-tools.mjs";
+import { buildReceiptFilename, buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml } from "../src/services/receipt-tools.mjs";
 import { columnKey } from "../src/services/table-helpers.mjs";
 
 const route = {
@@ -23,8 +23,9 @@ const row = {
 };
 
 const model = buildReceiptModel(route, row, columnKey, "cancel");
-const html = receiptHtml(model);
+const html = receiptHtml(model, { theme: { primary: "#22c55e", panel: "#020617" } });
 const pdfBytes = buildReceiptPdfBytes(model);
+const filename = buildReceiptFilename(model, "pdf");
 
 assert.strictEqual(model.title, "Cancel Receipt");
 assert(model.fields.some((field) => field.label === "Token"));
@@ -35,8 +36,13 @@ assert(html.includes("@page { size: A4; margin: 0; }"));
 assert(html.includes(".receipt::before"));
 assert(html.includes(".detail-section"));
 assert(html.includes(".token-box"));
+assert(!html.includes('<div class="summary-grid">'));
+assert(!html.includes("<span>Total Paid</span>"));
+assert(html.includes("--primary: #22c55e;"));
 assert(html.includes("print-color-adjust: exact"));
 assert(!html.includes("fonts.googleapis.com"));
+assert(filename.endsWith(".pdf"));
+assert(filename.includes("Beverly_Cancel_Receipt_8311_mohammed_kaura_"));
 assert.strictEqual(downloadReceiptPdf.constructor.name, "AsyncFunction");
 assert.strictEqual(String.fromCharCode(...pdfBytes.slice(0, 8)), "%PDF-1.4");
 assert(pdfBytes.length > 900);

@@ -20,7 +20,7 @@
           <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
           <span class="dashboard-stat-copy">
             <span class="dashboard-stat-label">{{ card.label }}</span>
-            <span class="dashboard-stat-value">{{ formatNumber(panel[card.key]) }}</span>
+            <span class="dashboard-stat-value">{{ formatNumber(animatedPanel[card.key]) }}</span>
           </span>
         </BaseButton>
       </template>
@@ -101,12 +101,19 @@ export default {
         totalPurchaseUnit: 0,
         totalPurchaseMoney: 0
       },
+      animatedPanel: {
+        totalAccountCount: 0,
+        totalPurchaseTimes: 0,
+        totalPurchaseUnit: 0,
+        totalPurchaseMoney: 0
+      },
       top: { title: dashboardChartTitles[3], labels: [], values: [] },
       consumption: { title: dashboardChartTitles[4], labels: [], values: [] },
       success: { labels: [], values: [] },
       alarms: [],
       chartTheme: null,
-      themeObserver: null
+      themeObserver: null,
+      countFrame: null
     };
   },
   computed: {
@@ -148,8 +155,9 @@ export default {
     this.syncThemePalette();
     this.observeThemeChanges();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
+    if (this.countFrame) cancelAnimationFrame(this.countFrame);
   },
   methods: {
     async refreshDashboard() {
@@ -164,6 +172,7 @@ export default {
       try {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
         this.panel = dataset.panel;
+        this.animatePanel(dataset.panel);
         this.top = dataset.top;
         this.consumption = dataset.consumption.labels.length > 5 ? dataset.consumption : {
           title: "Daily Consumption",
@@ -180,6 +189,29 @@ export default {
       return Number(value || 0).toLocaleString(undefined, {
         maximumFractionDigits: 1
       });
+    },
+    animatePanel(targetPanel) {
+      if (this.countFrame) cancelAnimationFrame(this.countFrame);
+      const startPanel = { ...this.animatedPanel };
+      const duration = 1100;
+      const startAt = performance.now();
+      const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3);
+      const step = (now) => {
+        const progress = Math.min(1, (now - startAt) / duration);
+        const eased = easeOutCubic(progress);
+        for (const key of Object.keys(this.animatedPanel)) {
+          const start = Number(startPanel[key] || 0);
+          const end = Number(targetPanel[key] || 0);
+          this.animatedPanel[key] = start + (end - start) * eased;
+        }
+        if (progress < 1) {
+          this.countFrame = requestAnimationFrame(step);
+          return;
+        }
+        this.animatedPanel = { ...targetPanel };
+        this.countFrame = null;
+      };
+      this.countFrame = requestAnimationFrame(step);
     },
     syncThemePalette() {
       if (typeof window === "undefined" || typeof document === "undefined" || !document.documentElement) return;

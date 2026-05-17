@@ -393,6 +393,7 @@ const chartOption = buildConsumptionChartOption([
 assert.strictEqual(chartOption.title.text, "Daily Consumption");
 assert.deepStrictEqual(chartOption.xAxis.data, ["2026-04-05", "2026-04-06"]);
 assert.deepStrictEqual(chartOption.series[0].data, [0.5, 0]);
+assert.strictEqual(chartOption.series[0].type, "bar");
 assert.strictEqual(chartOption.yAxis.name, "kWh");
 
 const decoratedConsumption = decorateConsumptionRows([
@@ -514,7 +515,7 @@ await assert.rejects(() => fetchConsumptionStatistics({
   }
 }), /Value does not fall within the expected range/);
 
-await assert.rejects(() => fetchConsumptionStatistics({
+const sampleBackedConsumption = await fetchConsumptionStatistics({
   dateFrom: "2026-04-01",
   dateTo: "2026-04-30"
 }, {
@@ -530,7 +531,8 @@ await assert.rejects(() => fetchConsumptionStatistics({
       _proxy: { source: "sample" }
     };
   }
-}), /Static sample data is disabled/);
+});
+assert.strictEqual(sampleBackedConsumption.rows.length, 0);
 
 const dailyDataMeterRequest = tableRequest({
   hash: "#/prepay-report/daily-data-meter",
@@ -632,7 +634,7 @@ await assert.rejects(
   }, {
     fields: [{ name: "customerId", label: "Customer Id" }]
   }),
-  /Writes are blocked/
+  /queued locally/
 );
 
 const customerDeleteCalls = [];

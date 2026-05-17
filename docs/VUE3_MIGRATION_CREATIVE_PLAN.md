@@ -4,7 +4,7 @@
 
 Root `ARCHITECTURE.md` is canonical.
 
-Current frontend boots Vue 2.
+Current frontend boots Vue 3.
 
 `src/App.vue` owns shell routing.
 
@@ -126,7 +126,7 @@ Install router v4.
 
 Install Pinia.
 
-Replace Vue 2 plugin.
+Replaced Vue 2 plugin.
 
 Keep Vite unchanged.
 

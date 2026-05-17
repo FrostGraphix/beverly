@@ -4,7 +4,7 @@
     :class="buttonClasses"
     :disabled="disabled || loading"
     :type="nativeType"
-    v-on="listeners"
+    @click="handleClick"
   >
     <span v-if="loading" class="base-button__spinner" aria-hidden="true"></span>
     <slot />
@@ -18,6 +18,7 @@ const allowedSizes = ["sm", "md", "lg"];
 export default {
   name: "BaseButton",
   inheritAttrs: false,
+  emits: ["click"],
   props: {
     variant: {
       type: String,
@@ -50,21 +51,18 @@ export default {
     }
   },
   computed: {
-    listeners() {
-      return {
-        ...this.$listeners,
-        click: (event) => {
-          if (this.disabled || this.loading) return;
-          this.$emit("click", event);
-        }
-      };
-    },
     buttonClasses() {
       return [
         "base-button",
         this.variant !== "secondary" ? `base-button--${this.variant}` : "",
         this.size !== "md" ? `base-button--${this.size}` : ""
       ];
+    }
+  },
+  methods: {
+    handleClick(event) {
+      if (this.disabled || this.loading) return;
+      this.$emit("click", event);
     }
   }
 };

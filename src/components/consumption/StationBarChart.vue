@@ -69,7 +69,7 @@ export default {
     window.addEventListener("resize", this._resizeHandler);
     this.renderChart();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this._resizeHandler) window.removeEventListener("resize", this._resizeHandler);
     if (this._echartInstance) {
       this._echartInstance.dispose();

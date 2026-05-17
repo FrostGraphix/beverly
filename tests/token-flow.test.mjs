@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  buildLocalTokenPreview,
   buildTokenPayload,
   calculateTokenAmount,
   calculateTokenUnits,
   findTariff,
+  guardedPreviewError,
   parseTariffUnitPrice,
   tokenEndpoint,
   tokenValidationError
@@ -65,6 +67,13 @@ assert.equal(tokenEndpoint(creditRoute, "Recharge"), "/api/token/creditToken/gen
 assert.equal(tokenEndpoint(clearCreditRoute, "Generate Token"), "/api/token/clearCreditToken/generate");
 assert.equal(tokenEndpoint(clearTamperRoute, "Generate Token"), "/api/token/clearTamperToken/generate");
 assert.equal(tokenEndpoint(powerRoute, "Generate Token"), "/api/token/setMaximumPowerLimitToken/generate");
+assert.equal(guardedPreviewError({ response: { status: 403, data: { _proxy: { source: "guard" } } } }), true);
+assert.equal(guardedPreviewError(new Error("Request failed with status code 500")), false);
+
+const localPreview = buildLocalTokenPreview(creditRoute, form);
+assert.equal(localPreview.code, 0);
+assert.equal(localPreview.data.meterId, form.meterId);
+assert.match(localPreview.data.token, /^\d{4} \d{4} \d{4} \d{4} \d{4}$/);
 
 assert.equal(tokenValidationError(powerRoute, { ...form, maximumPower: "" }, tariff), "maximumPower is required");
 assert.equal(tokenValidationError(powerRoute, { ...form, maximumPower: "3000" }, tariff), "");

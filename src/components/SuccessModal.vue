@@ -49,7 +49,7 @@ export default {
   created() {
     toastBus.$on("success:modal", this.show);
   },
-  beforeDestroy() {
+  beforeUnmount() {
     toastBus.$off("success:modal", this.show);
   },
   methods: {

@@ -24,9 +24,9 @@ Reason:
 - Local gates pass.
 - Public preview smoke needs bypass secret.
 - Staging target needs bypass secret.
-- Remote CI latest checked run passed.
-- Preview Supabase envs are configured.
-- Clean branch is pushed.
+- Remote CI has no current branch run yet.
+- Preview Supabase envs exist.
+- Clean branch is not pushed in this session.
 - Worktree contains unrelated drift.
 
 ## Verified Gates
@@ -41,7 +41,7 @@ Passed:
 - `npm run security:check`
 - `npm run env:validate`
 - Protected Vercel health via `vercel curl`
-- GitHub Actions lookup via `npm run ci:actions`
+- GitHub Actions lookup via `npm run ci:actions` returned no current-branch runs
 
 Failed:
 - `npm run smoke:vercel` without `TARGET_URL`

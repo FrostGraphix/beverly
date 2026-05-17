@@ -2,7 +2,6 @@
   <component
     :is="tag"
     v-bind="$attrs"
-    v-on="$listeners"
     class="base-modal-shell"
     :role="role"
   >

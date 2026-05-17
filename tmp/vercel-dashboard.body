@@ -1,1 +1,1 @@
-{"code":0,"reason":"success","result":{"totalAccountCount":2420,"totalPurchaseTimes":7338,"totalPurchaseUnit":100605.29999999593,"totalPurchaseMoney":35336285},"msg":"success","data":{"totalAccountCount":2420,"totalPurchaseTimes":7338,"totalPurchaseUnit":100605.29999999593,"totalPurchaseMoney":35336285},"_proxy":{"source":"sample","pathname":"/api/dashboard/readPanelGroup"}}
+{"code":401,"msg":"Authentication required","reason":"Authentication required","data":null,"result":null,"_proxy":{"source":"authz","pathname":"/api/dashboard/readPanelGroup"}}

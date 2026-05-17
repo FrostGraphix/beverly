@@ -113,6 +113,24 @@
   --color-source-cached-soft: rgba(245, 158, 11, 0.12);
   --color-source-demo: var(--bev-color-slate-500);
   --color-source-demo-soft: rgba(100, 116, 139, 0.12);
+  --wallet-status-available: var(--color-success);
+  --wallet-status-available-soft: var(--color-success-soft);
+  --wallet-status-held: var(--color-warning);
+  --wallet-status-held-soft: var(--color-warning-soft);
+  --wallet-status-pending: var(--color-warning);
+  --wallet-status-pending-soft: var(--color-warning-soft);
+  --wallet-status-approved: var(--color-success);
+  --wallet-status-approved-soft: var(--color-success-soft);
+  --wallet-status-rejected: var(--color-danger);
+  --wallet-status-rejected-soft: var(--color-danger-soft);
+  --wallet-status-frozen: var(--color-info);
+  --wallet-status-frozen-soft: var(--color-info-soft);
+  --wallet-status-failed: var(--color-danger);
+  --wallet-status-failed-soft: var(--color-danger-soft);
+  --wallet-status-reversed: var(--color-info);
+  --wallet-status-reversed-soft: var(--color-info-soft);
+  --wallet-status-disputed: var(--color-warning);
+  --wallet-status-disputed-soft: var(--color-warning-soft);
 
   /* Component tokens */
   --button-height-sm: 28px;
@@ -128,6 +146,11 @@
   --modal-width: 520px;
   --modal-radius: var(--bev-radius-xl);
   --table-action-column-width: 240px;
+  --wallet-table-row-height: 54px;
+  --wallet-card-radius: var(--bev-radius-lg);
+  --wallet-shell-sidebar-width: var(--shell-sidebar-width);
+  --wallet-receipt-width: 420px;
+  --wallet-proof-preview-height: 120px;
   --shell-sidebar-width: 264px;
   --shell-sidebar-collapsed-width: 58px;
   --shell-header-height: 92px;

@@ -778,7 +778,13 @@ tbody tr.selected td.action-column {
 .skeleton-cell {
   height: 14px;
   border-radius: var(--bev-radius-pill);
-  background: linear-gradient(90deg, rgba(209,250,229,.65) 0%, rgba(167,243,208,.95) 50%, rgba(209,250,229,.65) 100%);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-brand-soft) 72%, var(--color-surface-card)) 0%,
+      color-mix(in srgb, var(--color-brand) 42%, var(--color-surface-card)) 50%,
+      color-mix(in srgb, var(--color-brand-soft) 72%, var(--color-surface-card)) 100%
+    );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

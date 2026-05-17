@@ -10,7 +10,7 @@
 
 ## System Overview
 
-Beverly CRM is a Vue 2 single-page application backed by a Node.js reverse proxy (`api/reference.js`). It connects to a third-party energy management backend via authenticated HTTP. The frontend is entirely client-rendered — no SSR.
+Beverly CRM is a Vue 3 single-page application backed by a Node.js reverse proxy (`api/reference.js`). It connects to a third-party energy management backend via authenticated HTTP. The frontend is entirely client-rendered — no SSR.
 
 ```
 Browser (Vue SPA)
@@ -273,7 +273,7 @@ Entities read-only: Log, Debt, Protocol, Remote Support
 | `DLT645` endpoint | Returns empty dataset — backend config issue, not frontend |
 | Debt module | Returns 200 with 0 records — no debt in database |
 | ECharts | Loaded through `src/services/echarts-loader.mjs` before chart init |
-| Vue version | Vue 2 (Options API) — no Composition API |
+| Vue version | Vue 3 (Options API migration-safe) |
 
 ---
 

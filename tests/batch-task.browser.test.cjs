@@ -51,9 +51,9 @@ async function installApiMocks(page) {
 
 async function login(page) {
   await page.goto(appUrl, { waitUntil: "load" });
-  await page.fill('input[name="userId"]', "admin");
-  await page.fill('input[name="password"]', "admin");
-  await page.click("button.login-button");
+  await page.fill('[data-testid="login-user-id"]', "admin");
+  await page.fill('[data-testid="login-password"]', "admin");
+  await page.click('[data-testid="login-submit"]');
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
 }
 
@@ -101,8 +101,8 @@ async function main() {
       window.location.hash = "#/remote-operation/remote-meter-reading";
     });
     await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
-    await page.locator("th.check-column .base-checkbox").click();
-    await page.click("text=Add Batch Task");
+    await page.check('[data-testid="table-select-all"]', { force: true });
+    await page.click('[data-testid="table-toolbar-action-add-batch-task"]');
     await page.waitForSelector(".modal-title", { timeout: 10000 });
     await page.click(".modal-actions .base-button--primary");
     await page.waitForSelector("text=Selected Meter", { timeout: 10000 });

@@ -14,3 +14,22 @@ Port 9313 is in use, trying another one...
   [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m403[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m9314[22m/[39m
+[2m17:20:53[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/index.html[22m
+[2m17:20:53[22m [36m[1m[vite][22m[39m changed tsconfig file detected: C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tmp\vercel-hobby-deploy\tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m17:20:54[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/legacy-reference-app/index.html[22m
+[2m17:20:59[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/source-crawl/index.html[22m
+[2m17:28:48[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/legacy-reference-app/index.html[22m
+[2m17:28:49[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/source-crawl/index.html[22m
+[2m17:28:51[22m [36m[1m[vite][22m[39m changed tsconfig file detected: C:\Users\ACOB\Desktop\VS Code\acob-crm-4\tmp\vercel-hobby-deploy\tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m17:28:51[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mtmp/vercel-hobby-deploy/index.html[22m
+[2m21:18:39[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:23:27[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:23:28[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:23:30[22m [36m[1m[vite][22m[39m server restarted.
+[2m21:34:08[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:34:08[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:44:29[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:44:29[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
+[2m21:56:05[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m

@@ -1,0 +1,103 @@
+/* ════════════════════════════════════════════════════════════
+   Beverly Theme System — dark + light surfaces
+   Switch with: <html data-theme="dark"> or "light"
+   ════════════════════════════════════════════════════════════ */
+
+:root[data-theme="dark"] {
+  --canvas:    oklch(14% 0.012 240);
+  --bg:        oklch(16% 0.014 240);
+  --bg-elev:   oklch(19% 0.016 240);
+  --surface:   oklch(21% 0.018 240);
+  --surface-2: oklch(24% 0.020 240);
+  --surface-3: oklch(28% 0.022 240);
+  --surface-4: oklch(33% 0.025 240);
+
+  --text:       oklch(96% 0.005 240);
+  --text-dim:   oklch(72% 0.012 240);
+  --text-muted: oklch(54% 0.012 240);
+  --text-faint: oklch(40% 0.012 240);
+
+  --border:        oklch(100% 0 0 / 0.06);
+  --border-strong: oklch(100% 0 0 / 0.12);
+  --border-bright: oklch(100% 0 0 / 0.18);
+
+  --grid: oklch(100% 0 0 / 0.035);
+
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / 0.30);
+  --shadow-2: 0 2px 8px oklch(0% 0 0 / 0.35), 0 1px 2px oklch(0% 0 0 / 0.25);
+  --shadow-3: 0 8px 24px oklch(0% 0 0 / 0.40), 0 2px 6px oklch(0% 0 0 / 0.30);
+  --shadow-4: 0 24px 64px oklch(0% 0 0 / 0.55);
+
+  --topbar-bg: oklch(19% 0.014 240 / 0.85);
+  --scrim:     oklch(0% 0 0 / 0.45);
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --canvas:    oklch(98% 0.004 240);
+  --bg:        oklch(100% 0 0);
+  --bg-elev:   oklch(100% 0 0);
+  --surface:   oklch(100% 0 0);
+  --surface-2: oklch(97% 0.005 240);
+  --surface-3: oklch(94% 0.008 240);
+  --surface-4: oklch(90% 0.010 240);
+
+  --text:       oklch(22% 0.020 240);
+  --text-dim:   oklch(42% 0.020 240);
+  --text-muted: oklch(58% 0.015 240);
+  --text-faint: oklch(72% 0.010 240);
+
+  --border:        oklch(20% 0.020 240 / 0.08);
+  --border-strong: oklch(20% 0.020 240 / 0.14);
+  --border-bright: oklch(20% 0.020 240 / 0.22);
+
+  --grid: oklch(20% 0.020 240 / 0.06);
+
+  --shadow-1: 0 1px 2px oklch(20% 0.020 240 / 0.05);
+  --shadow-2: 0 2px 8px oklch(20% 0.020 240 / 0.06), 0 1px 2px oklch(20% 0.020 240 / 0.04);
+  --shadow-3: 0 12px 32px oklch(20% 0.020 240 / 0.10), 0 4px 8px oklch(20% 0.020 240 / 0.06);
+  --shadow-4: 0 24px 64px oklch(20% 0.020 240 / 0.14);
+
+  --topbar-bg: oklch(100% 0 0 / 0.88);
+  --scrim:     oklch(20% 0.020 240 / 0.20);
+
+  color-scheme: light;
+}
+
+/* Base resets that depend on theme */
+:root {
+  color: var(--text);
+  background: var(--canvas);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  background: var(--canvas);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+button { font-family: inherit; cursor: pointer; }
+::selection { background: var(--brand-glow); color: var(--text); }
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-4); }

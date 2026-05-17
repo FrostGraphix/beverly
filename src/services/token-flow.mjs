@@ -1,3 +1,5 @@
+import { isGuardedWriteError } from "./guarded-write.mjs";
+
 export const purchaseWays = [
   { value: "paid", label: "Vend By Total Paid" },
   { value: "unit", label: "Vend By Total Unit" }
@@ -104,6 +106,60 @@ export function buildTokenPayload(route, form = {}, options = {}) {
   }
 
   return base;
+}
+
+export function guardedPreviewError(error = {}) {
+  return isGuardedWriteError(error);
+}
+
+function localPreviewToken(route = {}, form = {}) {
+  const seed = [
+    route.hash,
+    form.customerId,
+    form.meterId,
+    form.amount,
+    form.totalUnit,
+    form.maximumPower
+  ].join("|");
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  const numeric = `${hash}${Date.now()}`.replace(/\D/g, "").padEnd(20, "0").slice(0, 20);
+  return numeric.match(/.{1,4}/g).join(" ");
+}
+
+export function buildLocalTokenPreview(route = {}, form = {}) {
+  const now = new Date().toISOString();
+  const data = {
+    receiptId: `PREVIEW-${Date.now()}`,
+    customerId: form.customerId || "",
+    customerName: form.customerName || "",
+    meterId: form.meterId || "",
+    tariffId: form.tariffId || "",
+    stationId: form.stationId || "",
+    totalPaid: form.amount || form.totalPaid || "",
+    totalUnit: form.totalUnit || "",
+    maximumPower: form.maximumPower || "",
+    token: localPreviewToken(route, form),
+    status: true,
+    vend: "Preview",
+    createTime: now,
+    createDate: now,
+    reason: "preview"
+  };
+  return {
+    code: 0,
+    msg: "success",
+    reason: "success",
+    data,
+    result: data,
+    _proxy: {
+      source: "client-token-preview",
+      pathname: tokenEndpoint(route, isCreditTokenRoute(route) ? "Recharge" : "Generate Token")
+    }
+  };
 }
 
 export function tokenResultFields(payload = {}) {

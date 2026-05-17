@@ -330,7 +330,7 @@ export default {
     const didReloadFromHash = this.syncFiltersFromHash();
     if (!didReloadFromHash) this.reload();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     clearTimeout(this._reloadTimer);
   },
   watch: {

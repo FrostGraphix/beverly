@@ -21,6 +21,12 @@ function safeFilenamePart(value, fallback = "receipt") {
   return cleaned || fallback;
 }
 
+function safeCssValue(value, fallback) {
+  const text = stringValue(value).trim();
+  if (!text || /[;{}<>]/.test(text)) return fallback;
+  return text;
+}
+
 function normalizeMoney(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return stringValue(value);
@@ -101,6 +107,47 @@ const brand = {
   web: "www.acoblighting.com"
 };
 
+export function buildReceiptFilename(model, extension = "pdf") {
+  const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]) || model.receiptId || "no-id";
+  const customerName = receiptFieldValue(model, ["Customer Name"]) || receiptFieldValue(model, ["Customer Id"]) || "customer";
+  const safeName = safeFilenamePart(customerName, "customer").toLowerCase();
+  const safeTitle = safeFilenamePart(model.title, "receipt");
+  const safeReceiptId = safeFilenamePart(receiptId, "no-id");
+  const timestamp = new Date().toISOString().split("T")[0];
+  return `${safeFilenamePart(model.brand.name, "Beverly")}_${safeTitle}_${safeReceiptId}_${safeName}_${timestamp}.${extension}`;
+}
+
+export function buildReceiptThemeFromDocument(targetDocument = typeof document !== "undefined" ? document : null) {
+  const root = targetDocument?.documentElement;
+  const view = targetDocument?.defaultView || (typeof window !== "undefined" ? window : null);
+  if (!root || !view?.getComputedStyle) return {};
+  const styles = view.getComputedStyle(root);
+  const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    primary: resolve("--primary", "#ffd600"),
+    primaryDeep: resolve("--primary-deep", "#b99700"),
+    ink: resolve("--text-strong", "#f8fafc"),
+    textMain: resolve("--text-main", "#d7dee9"),
+    textMuted: resolve("--text-muted", "#8f98a8"),
+    panel: resolve("--bg-page", "#0b0d10"),
+    panelSoft: resolve("--bg-card", "#11151b"),
+    border: resolve("--border-color", "rgba(255, 214, 0, .28)")
+  };
+}
+
+function buildReceiptPdfTheme() {
+  return {
+    primary: "#d4a900",
+    primaryDeep: "#8a6a00",
+    ink: "#111827",
+    textMain: "#1f2937",
+    textMuted: "#475569",
+    panel: "#ffffff",
+    panelSoft: "#f8fafc",
+    border: "rgba(212, 169, 0, .38)"
+  };
+}
+
 export function buildReceiptModel(route, row, columnKey, receiptType = "") {
   const totalPaid = findRowValue(row, columnKey, ["Total Paid", "Total Paid(MMK)"], ["totalPaid", "amount"]);
   const totalUnit = findRowValue(row, columnKey, ["Total Unit", "Total Unit(kWh)"], ["totalUnit"]);
@@ -173,7 +220,7 @@ function receiptTime(model) {
   return receiptFieldValue(model, ["Time", "Create Date", "Create Time", "Update Date", "Update Time"]) || model.generatedAt || "";
 }
 
-export function receiptHtml(model) {
+export function receiptHtml(model, options = {}) {
   const tokenField = model.fields.find(f => f.isToken);
   const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]);
   const customerName = receiptFieldValue(model, ["Customer Name"]);
@@ -181,7 +228,33 @@ export function receiptHtml(model) {
   const stationId = receiptFieldValue(model, ["Station Id"]);
   const totalUnit = receiptFieldValue(model, ["Total Unit"]);
   const displayTime = receiptTime(model);
-  const pageTitle = `${model.title} #${receiptId} - ${customerName} | ${model.brand.name}`;
+  const filename = buildReceiptFilename(model, "pdf");
+  const pageTitle = filename.replace(/\.pdf$/i, "");
+  const theme = options.theme || {};
+  const lightMode = options.mode === "pdf" || options.light === true;
+  const primary = safeCssValue(theme.primary, "#ffd600");
+  const primaryDeep = safeCssValue(theme.primaryDeep, "#b99700");
+  const ink = safeCssValue(theme.ink, "#f8fafc");
+  const textMain = safeCssValue(theme.textMain, "#d7dee9");
+  const textMuted = safeCssValue(theme.textMuted, "#8f98a8");
+  const panel = safeCssValue(theme.panel, "#0b0d10");
+  const panelSoft = safeCssValue(theme.panelSoft, "#11151b");
+  const border = safeCssValue(theme.border, "rgba(255, 214, 0, .28)");
+  const pageBackground = lightMode ? "#ffffff" : "#050608";
+  const bodyBackground = lightMode
+    ? "#ffffff"
+    : "radial-gradient(circle at top left, rgba(255,214,0,.12), transparent 34%), #050608";
+  const receiptBackground = lightMode
+    ? "linear-gradient(180deg, #ffffff, #f8fafc)"
+    : "linear-gradient(180deg, #101216, #07080a)";
+  const tokenBackground = lightMode ? "#ffffff" : "#030407";
+  const summaryBackground = lightMode ? "rgba(15,23,42,.025)" : "rgba(255,255,255,.035)";
+  const detailBackground = lightMode ? "rgba(15,23,42,.02)" : "rgba(255,255,255,.025)";
+  const summaryBorder = lightMode ? "rgba(212,169,0,.30)" : "rgba(255,214,0,.18)";
+  const detailBorder = lightMode ? "rgba(212,169,0,.24)" : "rgba(255,214,0,.14)";
+  const receiptShadow = lightMode
+    ? "0 18px 46px rgba(15, 23, 42, .10), 0 0 0 6px rgba(212,169,0,.045)"
+    : "0 24px 70px rgba(0, 0, 0, .38), 0 0 0 6px rgba(255,214,0,.04)";
 
   return `<!doctype html>
 <html>
@@ -191,35 +264,35 @@ export function receiptHtml(model) {
 
   <style>
     :root {
-      --primary: #ffd600;
-      --primary-deep: #b99700;
-      --ink: #f8fafc;
-      --text-main: #d7dee9;
-      --text-muted: #8f98a8;
-      --panel: #0b0d10;
-      --panel-soft: #11151b;
+      --primary: ${primary};
+      --primary-deep: ${primaryDeep};
+      --ink: ${ink};
+      --text-main: ${textMain};
+      --text-muted: ${textMuted};
+      --panel: ${panel};
+      --panel-soft: ${panelSoft};
       --panel-glow: rgba(255, 214, 0, .12);
-      --border: rgba(255, 214, 0, .28);
+      --border: ${border};
     }
     * { box-sizing: border-box; }
     @page { size: A4; margin: 0; }
     html {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
-      background: #050608;
+      background: ${pageBackground};
     }
     body { 
       font-family: Inter, "Segoe UI", Arial, sans-serif;
       margin: 0; 
       padding: 24px;
-      background: radial-gradient(circle at top left, rgba(255,214,0,.12), transparent 34%), #050608;
+      background: ${bodyBackground};
       color: var(--text-main);
     }
     .receipt {
       width: 148mm;
       min-height: auto;
       margin: 0 auto;
-      background: linear-gradient(180deg, #101216, #07080a);
+      background: ${receiptBackground};
       padding: 12mm;
       position: relative;
       overflow: hidden;
@@ -227,7 +300,7 @@ export function receiptHtml(model) {
       flex-direction: column;
       border: 1px solid var(--border);
       border-radius: 24px;
-      box-shadow: 0 24px 70px rgba(0, 0, 0, .38), 0 0 0 6px rgba(255,214,0,.04);
+      box-shadow: ${receiptShadow};
     }
     @media print {
       html,
@@ -368,9 +441,9 @@ export function receiptHtml(model) {
     }
     .summary-box {
       padding: 11px 12px;
-      border: 1px solid rgba(255,214,0,.18);
+      border: 1px solid ${summaryBorder};
       border-radius: 14px;
-      background: rgba(255,255,255,.035);
+      background: ${summaryBackground};
     }
     .summary-box span {
       display: block;
@@ -387,7 +460,7 @@ export function receiptHtml(model) {
       word-break: break-word;
     }
     .token-box {
-      background: #030407;
+      background: ${tokenBackground};
       border: 1px solid var(--border);
       padding: 15px;
       border-radius: 16px;
@@ -419,9 +492,9 @@ export function receiptHtml(model) {
     }
     .detail-item {
       padding: 9px 10px;
-      border: 1px solid rgba(255,214,0,.14);
+      border: 1px solid ${detailBorder};
       border-radius: 12px;
-      background: rgba(255,255,255,.025);
+      background: ${detailBackground};
       min-width: 0;
     }
     .detail-item span {
@@ -493,25 +566,6 @@ export function receiptHtml(model) {
       </div>
     </div>
 
-    <div class="summary-grid">
-      <div class="summary-box">
-        <span>Customer</span>
-        <strong>${escapeHtml(customerName || "Not supplied")}</strong>
-      </div>
-      <div class="summary-box">
-        <span>Meter</span>
-        <strong>${escapeHtml(meterId || "Not supplied")}</strong>
-      </div>
-      <div class="summary-box">
-        <span>Unit</span>
-        <strong>${escapeHtml(totalUnit || "0")}</strong>
-      </div>
-      <div class="summary-box">
-        <span>Station</span>
-        <strong>${escapeHtml(stationId || "Not supplied")}</strong>
-      </div>
-    </div>
-
     ${tokenField ? `
     <div class="token-box">
       <span class="token-label">Your Token</span>
@@ -521,7 +575,7 @@ export function receiptHtml(model) {
 
     <div class="detail-section">
       ${model.fields
-        .filter((field) => !field.isToken)
+        .filter((field) => !field.isToken && !["total paid", "amount"].includes(String(field.label).toLowerCase()))
         .slice(0, 12)
         .map((field) => `
       <div class="detail-item">
@@ -635,27 +689,26 @@ function loadHtml2Pdf() {
   });
 }
 
-async function mountReceiptFrame(model) {
-  const frame = document.createElement("iframe");
-  frame.setAttribute("title", "Receipt PDF Renderer");
-  frame.style.position = "fixed";
-  frame.style.left = "-10000px";
-  frame.style.top = "0";
-  frame.style.width = "794px";
-  frame.style.height = "1123px";
-  frame.style.border = "0";
-  frame.style.opacity = "0";
-  frame.style.pointerEvents = "none";
-  document.body.appendChild(frame);
+async function mountReceiptNode(model, options = {}) {
+  const wrapper = document.createElement("div");
+  wrapper.setAttribute("aria-hidden", "true");
+  wrapper.style.position = "fixed";
+  wrapper.style.left = "-10000px";
+  wrapper.style.top = "0";
+  wrapper.style.width = "794px";
+  wrapper.style.minHeight = "1123px";
+  wrapper.style.padding = "0";
+  wrapper.style.display = "grid";
+  wrapper.style.placeItems = "start center";
+  wrapper.style.zIndex = "0";
+  wrapper.style.pointerEvents = "none";
+  wrapper.style.background = options.mode === "pdf" || options.light === true ? "#ffffff" : "#050608";
+  wrapper.innerHTML = receiptHtml(model, options);
+  document.body.appendChild(wrapper);
 
-  const doc = frame.contentDocument;
-  doc.open();
-  doc.write(receiptHtml(model));
-  doc.close();
-
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  if (doc.fonts?.ready) await doc.fonts.ready.catch(() => {});
-  return frame;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
+  return wrapper;
 }
 
 function waitForDocumentReady(targetWindow) {
@@ -679,20 +732,25 @@ function waitForDocumentReady(targetWindow) {
 }
 
 export async function downloadReceiptPdf(model) {
-  const receiptId = model.fields.find(f => f.label === "Receipt Id")?.value || "no-id";
-  const customerName = model.fields.find(f => f.label === "Customer Name")?.value || "customer";
-  const safeName = safeFilenamePart(customerName, "customer").toLowerCase();
-  const safeTitle = safeFilenamePart(model.title, "receipt");
-  const safeReceiptId = safeFilenamePart(receiptId, "no-id");
-  const timestamp = new Date().toISOString().split("T")[0];
-  const filename = `${safeFilenamePart(model.brand.name, "Beverly")}_${safeTitle}_${safeReceiptId}_${safeName}_${timestamp}.pdf`;
+  const theme = buildReceiptPdfTheme();
+  const filename = buildReceiptFilename(model, "pdf");
 
-  let frame = null;
+  let wrapper = null;
   try {
     const html2pdf = await loadHtml2Pdf();
-    frame = await mountReceiptFrame(model);
-    const receiptElement = frame.contentDocument.querySelector(".receipt");
+    wrapper = await mountReceiptNode(model, { theme, mode: "pdf" });
+    const receiptElement = wrapper.querySelector(".receipt");
     if (!receiptElement) throw new Error("Receipt renderer did not mount");
+    const capturePage = document.createElement("div");
+    capturePage.style.width = "794px";
+    capturePage.style.minHeight = "1123px";
+    capturePage.style.padding = "24px 0";
+    capturePage.style.background = "#ffffff";
+    capturePage.style.display = "flex";
+    capturePage.style.justifyContent = "center";
+    capturePage.style.alignItems = "flex-start";
+    capturePage.appendChild(receiptElement);
+    wrapper.replaceChildren(capturePage);
     const opt = {
       margin: 0,
       filename: filename,
@@ -710,14 +768,14 @@ export async function downloadReceiptPdf(model) {
       pagebreak: { mode: ["avoid-all", "css", "legacy"] }
     };
 
-    await html2pdf().set(opt).from(receiptElement).save();
+    await html2pdf().set(opt).from(capturePage).save();
     return { ok: true, mode: "html2pdf", filename };
   } catch (error) {
     console.error("Receipt PDF export failed. Using fallback PDF.", error);
     downloadPdfFallback(model, filename);
     return { ok: false, mode: "fallback", filename, error };
   } finally {
-    if (frame?.parentNode) frame.parentNode.removeChild(frame);
+    if (wrapper?.parentNode) wrapper.parentNode.removeChild(wrapper);
   }
 }
 
@@ -726,8 +784,9 @@ export async function downloadReceiptPdf(model) {
 export function openBrowserPrint(model, popupWindow = null) {
   const popup = popupWindow || window.open("", "_blank", "width=900,height=700");
   if (!popup) return false;
+  const theme = buildReceiptThemeFromDocument();
   popup.document.open();
-  popup.document.write(receiptHtml(model));
+  popup.document.write(receiptHtml(model, { theme }));
   popup.document.close();
   popup.focus();
   waitForDocumentReady(popup).then(() => {

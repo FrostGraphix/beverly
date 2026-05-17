@@ -6,7 +6,7 @@ Age: 0
 Cache-Control: public, max-age=0, must-revalidate
 Content-Length: 432
 Content-Type: application/json; charset=utf-8
-Date: Tue, 12 May 2026 09:43:05 GMT
+Date: Tue, 12 May 2026 21:12:47 GMT
 Etag: W/"1b0-8IkBb1M3djEWAzmfkE61h6Pd3nc"
 Server: Vercel
 Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
@@ -14,5 +14,5 @@ Vary: Origin
 X-Robots-Tag: noindex
 X-Vercel-Cache: MISS
 X-Vercel-Enable-Rewrite-Caching: 1
-X-Vercel-Id: cpt1::iad1::x7jn8-1778578985334-831b5bb405e6
+X-Vercel-Id: cpt1::iad1::ch4dp-1778620366740-b4d3bf1c0034
 

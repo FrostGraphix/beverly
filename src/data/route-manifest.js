@@ -29,6 +29,10 @@ export const routeManifest = [
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
+  // Wallet — opens the standalone wallet admin app in a new tab.
+  // Staff: localhost:5175 (dev) / admin.beverly.acoblighting.com (prod)
+  // Vendor portal: localhost:5174 (dev) — vendors log in there directly.
+  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "https://admin.beverly.acoblighting.com", devExternalUrl: "http://localhost:5175", roles: ["super-admin", "account", "finance-checker"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLT645", hash: "#/protocol/dlt645", apis: ["/api/dlt645/read"], columns: ["id", "version", "type", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Remote Support", title: "GPRS Tasks", hash: "#/remote-support/gprs-tasks", apis: ["/api/GPRSMeterTask/GPRSGetReadingTask"], columns: ["id", "gatewayId", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add Task", "Export"], roles: ["super-admin", "operations-manager"] },
@@ -105,11 +109,15 @@ const referenceVisibleHashes = new Set([
   "#/system/automation-command"
 ]);
 
+
 export function normalizeRoleId(roleId = "super-admin") {
   const value = String(roleId || "super-admin").trim().toLowerCase();
   if (["admin", "administrator", "superadmin", "super_admin", "super-admin", "0", "1"].includes(value)) return "super-admin";
   if (["operator", "operations", "operations-manager", "operation-manager"].includes(value)) return "operations-manager";
   if (["account", "accountant", "finance", "account-officer", "account_officer"].includes(value)) return "account";
+  if (["finance-checker", "finance_checker", "checker"].includes(value)) return "finance-checker";
+  if (["vendor", "vendor-user", "vendor_user"].includes(value)) return "vendor_user";
+  if (["vendor-manager", "vendor_manager"].includes(value)) return "vendor_manager";
   return value;
 }
 

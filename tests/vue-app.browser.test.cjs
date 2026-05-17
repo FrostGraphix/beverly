@@ -38,6 +38,15 @@ const qaRoutes = [
   { hash: "#/management/customer", selector: 'th[data-column-key="phone"]' }
 ];
 
+const walletQaRoutes = [
+  { hash: "#/wallet/admin/dashboard", selector: "text=Wallet Admin Dashboard" },
+  { hash: "#/wallet/admin/users-roles", selector: "text=Role & Permissions Matrix" },
+  { hash: "#/wallet/admin/vendors/create", selector: "text=Business Identity" },
+  { hash: "#/wallet/admin/verification", selector: "text=Review Decision" },
+  { hash: "#/wallet/admin/funding-credits", selector: "text=Funding & Manual Credits" },
+  { hash: "#/vendor/login", selector: "text=Vendor access is separate" }
+];
+
 function sampleRow() {
   return {
     id: "QA-1",
@@ -169,6 +178,25 @@ function apiBody(url) {
   if (normalizedUrl.includes("/account/create")) {
     return { code: 403, reason: "Live writes are guarded" };
   }
+  if (normalizedUrl.includes("/wallet/summary")) {
+    return {
+      code: 0,
+      data: {
+        wallet: {
+          id: "wallet-browser",
+          organizationId: "vendor-browser",
+          walletNumber: "VW-BROWSER",
+          status: "active"
+        },
+        ledgerBalanceMinor: 100000,
+        heldBalanceMinor: 0,
+        availableBalanceMinor: 100000
+      }
+    };
+  }
+  if (normalizedUrl.includes("/wallet/funding/list") || normalizedUrl.includes("/wallet/purchase/list")) {
+    return { code: 0, data: { rows: [], total: 0 } };
+  }
   return { code: 0, data: { data: [sampleRow()], total: 1 } };
 }
 
@@ -186,9 +214,9 @@ async function installApiMocks(page) {
 
 async function login(page) {
   await page.goto(appUrl, { waitUntil: "load" });
-  await page.fill('input[name="userId"]', "admin");
-  await page.fill('input[name="password"]', "admin");
-  await page.click("button.login-button");
+  await page.fill('[data-testid="login-user-id"]', "admin");
+  await page.fill('[data-testid="login-password"]', "admin");
+  await page.click('[data-testid="login-submit"]');
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
 }
 
@@ -203,7 +231,7 @@ async function runFlow(browserName, page) {
     await page.waitForSelector(route.selector, { timeout: 10000 });
   }
 
-  await page.click("text=Export");
+  await page.click('[data-testid="table-toolbar-action-export"]');
   await page.waitForSelector(".modal-title", { timeout: 10000 });
   await closeModal(page);
 
@@ -211,7 +239,7 @@ async function runFlow(browserName, page) {
     window.location.hash = "#/token-generate/credit-token";
   });
   await page.waitForSelector("text=Recharge", { timeout: 10000 });
-  await page.click("text=Recharge");
+  await page.click('[data-testid="table-row-action-recharge-1"]');
   await page.waitForSelector("text=Total Paid(MMK)", { timeout: 10000 });
   await page.locator(".modal-field", { hasText: "Total Paid(MMK)" }).locator("input").fill("350");
   await page.evaluate(() => {
@@ -227,7 +255,7 @@ async function runFlow(browserName, page) {
     window.location.hash = "#/token-record/credit-token-record";
   });
   await page.waitForSelector('th[data-column-key="receiptId"]', { timeout: 10000 });
-  await page.locator("button.link-btn", { hasText: "Print" }).first().click();
+  await page.locator('[data-testid^="table-row-action-print-"]').first().click();
   await page.waitForSelector(".modal-title", { timeout: 10000 });
   await closeModal(page);
 
@@ -235,7 +263,7 @@ async function runFlow(browserName, page) {
     window.location.hash = "#/management/account";
   });
   await page.waitForSelector("text=Add", { timeout: 10000 });
-  await page.click("text=Add");
+  await page.click('[data-testid="table-toolbar-action-add"]');
   await page.waitForSelector(".modal-title", { timeout: 10000 });
   await closeModal(page);
 
@@ -243,8 +271,8 @@ async function runFlow(browserName, page) {
     window.location.hash = "#/remote-operation/remote-meter-reading";
   });
   await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
-  await page.locator("th.check-column .base-checkbox").click();
-  await page.click("text=Add Batch Task");
+  await page.check('[data-testid="table-select-all"]', { force: true });
+  await page.click('[data-testid="table-toolbar-action-add-batch-task"]');
   await page.waitForSelector(".modal-title", { timeout: 10000 });
   await page.click(".modal-actions .base-button--primary");
   await page.waitForSelector("text=Selected Meter", { timeout: 10000 });
@@ -259,6 +287,14 @@ async function runFlow(browserName, page) {
   await page.waitForSelector("text=Revenue Shortfall", { timeout: 10000 });
   await page.click("text=Fraud");
   await page.waitForSelector("text=Risk Investigation", { timeout: 10000 });
+
+  for (const route of walletQaRoutes) {
+    await page.evaluate((hash) => {
+      window.location.hash = hash;
+    }, route.hash);
+    await page.waitForTimeout(250);
+    await page.waitForSelector(route.selector, { timeout: 10000 });
+  }
 
   return browserName;
 }
@@ -334,7 +370,7 @@ async function main() {
   console.log(JSON.stringify({
     passed,
     skipped: results.filter((result) => result.skipped),
-    flows: ["login", "dashboard", "account table", "credit token confirmation", "credit token record", "remote task table", "report page", "export", "print", "guarded write"],
+    flows: ["login", "dashboard", "account table", "credit token confirmation", "credit token record", "remote task table", "report page", "wallet surfaces", "export", "print", "guarded write"],
     status: "browser qa passed"
   }, null, 2));
 }

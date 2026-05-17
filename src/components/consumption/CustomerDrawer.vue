@@ -258,7 +258,7 @@ export default {
       window.print && window.print();
     }
   },
-  beforeDestroy() {
+  beforeUnmount() {
     // T5.1: Guard resize handler removal
     if (this._resizeHandler) window.removeEventListener("resize", this._resizeHandler);
     if (this._chart) { this._chart.dispose(); this._chart = null; }

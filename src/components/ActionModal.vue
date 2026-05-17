@@ -3,7 +3,7 @@
     <BaseModalShell
       tag="form"
       class="modal"
-      :class="{ 'modal-sop': isSopFlow, 'modal-token-flow': isTokenFlow || isRemoteBatchFlow }"
+      :class="{ 'modal-sop': isSopFlow, 'modal-token-flow': isTokenFlow || isRemoteBatchFlow, 'modal-print-receipt': action === 'Print' }"
       @submit.prevent="submit"
     >
       <template #header>
@@ -439,59 +439,12 @@
         </div>
         <p v-if="writeAction && !isTokenFlow && !isRemoteTaskFlow && action !== 'Print'" class="modal-confirmation">{{ form.confirmationText }}</p>
 
-        <div v-if="action === 'Print'" class="receipt-preview">
-          <div class="receipt-preview-container">
-
-            <div class="receipt-card-premium">
-              <div class="receipt-header">
-                <div class="receipt-brand">
-                  <div class="brand-mark">B</div>
-                  <span class="brand-name">Beverly</span>
-                </div>
-                <h3 class="receipt-title">{{ receiptModel.title }}</h3>
-                <p class="receipt-subtitle">{{ receiptModel.subtitle }}</p>
-                <div class="receipt-time-pill">
-                  <span>Time</span>
-                  <strong>{{ receiptDisplayTime }}</strong>
-                </div>
-              </div>
-
-              <div class="receipt-amount">
-                <span class="amount-label">Amount Purchased</span>
-                <span class="amount-value">{{ receiptModel.amount }}</span>
-              </div>
-
-              <div v-if="receiptModel.fields.find(f => f.isToken)" class="receipt-token-box">
-                <span class="token-label">Your Token</span>
-                <div class="token-value">{{ receiptModel.fields.find(f => f.isToken).value }}</div>
-              </div>
-
-              <div class="receipt-mini-grid">
-                <div>
-                  <span>Receipt</span>
-                  <strong>{{ receiptFieldValue(['Receipt Id', 'Id']) || receiptModel.receiptId }}</strong>
-                </div>
-                <div>
-                  <span>Meter</span>
-                  <strong>{{ receiptFieldValue(['Meter Id']) || 'Not supplied' }}</strong>
-                </div>
-                <div>
-                  <span>Unit</span>
-                  <strong>{{ receiptFieldValue(['Total Unit']) || '0' }}</strong>
-                </div>
-                <div>
-                  <span>Station</span>
-                  <strong>{{ receiptFieldValue(['Station Id']) || 'Not supplied' }}</strong>
-                </div>
-              </div>
-
-              <div class="receipt-footer-branding">
-                <span class="company-name">{{ receiptModel.brand.company }}</span>
-                <div class="contact-line">{{ receiptModel.brand.email }} &bull; {{ receiptModel.brand.phone }}</div>
-                <div class="contact-line">{{ receiptModel.brand.web }}</div>
-              </div>
-            </div>
-          </div>
+        <div v-if="action === 'Print'" class="receipt-preview receipt-preview-standard">
+          <iframe
+            class="receipt-preview-frame"
+            title="Receipt preview"
+            :srcdoc="receiptPreviewHtml"
+          ></iframe>
         </div>
 
         <div v-if="importPreview" class="modal-result">{{ importPreview }}</div>
@@ -501,9 +454,6 @@
 
       <template #footer>
       <div class="modal-actions">
-        <BaseButton @click="isRemoteBatchFlow && remoteBatchStep === 'review' ? remoteBatchStep = 'form' : (isSopFlow && sopStep === 2 ? sopStep = 1 : $emit('close'))">
-          {{ isRemoteBatchFlow && remoteBatchStep === 'review' ? 'Back' : (isSopFlow && sopStep === 2 ? 'Back' : 'Cancel') }}
-        </BaseButton>
         <template v-if="action === 'Print'">
           <BaseButton @click="downloadPdf">
             <svg class="svg-icon" viewBox="0 0 1024 1024"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372zm128-448c0-4.4-3.6-8-8-8h-88v-120c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v120h-88c-4.4 0-8 3.6-8 8s3.6 8 8 8h88v120c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8v-120h88c4.4 0 8-3.6 8-8z"></path></svg>
@@ -513,12 +463,19 @@
             <svg class="svg-icon" viewBox="0 0 1024 1024"><path d="M820 436h-40V312c0-8.8-7.2-16-16-16H260c-8.8 0-16 7.2-16 16v124h-40c-17.7 0-32 14.3-32 32v240c0 17.7 14.3 32 32 32h40v124c0 8.8 7.2 16 16 16h504c8.8 0 16-7.2 16-16V740h40c17.7 0 32-14.3 32-32V468c0-17.7-14.3-32-32-32zM308 360h408v76H308v-76zm408 536H308V684h408v212zM808 612c-13.3 0-24-10.7-24-24s10.7-24 24-24 24 10.7 24 24-10.7 24-24 24z"></path></svg>
             Browser Print
           </BaseButton>
+          <BaseButton @click="$emit('close')">Cancel</BaseButton>
         </template>
         <template v-else-if="isRemoteTaskFlow">
+          <BaseButton @click="isRemoteBatchFlow && remoteBatchStep === 'review' ? remoteBatchStep = 'form' : (isSopFlow && sopStep === 2 ? sopStep = 1 : $emit('close'))">
+            {{ isRemoteBatchFlow && remoteBatchStep === 'review' ? 'Back' : (isSopFlow && sopStep === 2 ? 'Back' : 'Cancel') }}
+          </BaseButton>
           <BaseButton v-if="isRemoteBatchFlow && remoteBatchStep === 'form'" variant="primary" :disabled="tokenLoading || Boolean(remoteTaskFormError)" @click="advanceRemoteBatchStep">Review</BaseButton>
           <BaseButton v-else variant="primary" :disabled="tokenLoading || Boolean(remoteTaskFormError)" @click="confirmRemoteTask">Confirm</BaseButton>
         </template>
         <template v-else-if="isTokenFlow">
+          <BaseButton @click="isRemoteBatchFlow && remoteBatchStep === 'review' ? remoteBatchStep = 'form' : (isSopFlow && sopStep === 2 ? sopStep = 1 : $emit('close'))">
+            {{ isRemoteBatchFlow && remoteBatchStep === 'review' ? 'Back' : (isSopFlow && sopStep === 2 ? 'Back' : 'Cancel') }}
+          </BaseButton>
           <BaseButton v-if="tokenFinal" @click="downloadFinalReceipt">PDF Receipt</BaseButton>
           <BaseButton v-if="tokenFinal" @click="printFinalReceipt">Print Again</BaseButton>
           <BaseButton v-if="tokenFinal" variant="primary" @click="$emit('done')">Done</BaseButton>
@@ -526,10 +483,18 @@
           <BaseButton v-if="!tokenFinal" variant="primary" :disabled="tokenLoading || Boolean(tokenActionError)" @click="handleTokenPrimary">{{ tokenPrimaryLabel }}</BaseButton>
         </template>
         <template v-else-if="isSopFlow">
+          <BaseButton @click="isRemoteBatchFlow && remoteBatchStep === 'review' ? remoteBatchStep = 'form' : (isSopFlow && sopStep === 2 ? sopStep = 1 : $emit('close'))">
+            {{ isRemoteBatchFlow && remoteBatchStep === 'review' ? 'Back' : (isSopFlow && sopStep === 2 ? 'Back' : 'Cancel') }}
+          </BaseButton>
           <BaseButton v-if="sopStep === 1" variant="primary" @click="sopNext">Continue &rarr;</BaseButton>
           <BaseButton v-else variant="primary" native-type="submit">Confirm</BaseButton>
         </template>
-        <BaseButton v-else-if="action !== 'Print'" variant="primary" native-type="submit">Confirm</BaseButton>
+        <template v-else>
+          <BaseButton @click="isRemoteBatchFlow && remoteBatchStep === 'review' ? remoteBatchStep = 'form' : (isSopFlow && sopStep === 2 ? sopStep = 1 : $emit('close'))">
+            {{ isRemoteBatchFlow && remoteBatchStep === 'review' ? 'Back' : (isSopFlow && sopStep === 2 ? 'Back' : 'Cancel') }}
+          </BaseButton>
+          <BaseButton variant="primary" native-type="submit">Confirm</BaseButton>
+        </template>
       </div>
       </template>
     </BaseModalShell>
@@ -559,14 +524,17 @@ import { columnKey, printModelForRoute, tableSiteOptions } from "../services/tab
 import { actionEndpoint, submitRouteAction } from "../services/action-service.mjs";
 import { liveWritesAllowed, postApi } from "../services/api.js";
 import { managementFields, managementFormSeed, ROLE_PERMISSIONS } from "../services/management-forms.mjs";
-import { downloadReceiptPdf, openBrowserPrint, receiptHtml } from "../services/receipt-tools.mjs";
+import { buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf, openBrowserPrint, receiptHtml } from "../services/receipt-tools.mjs";
 import { confirmationMessage, isWriteEndpoint, needsAuthorizationPassword } from "../services/write-helpers.mjs";
+import { guardedWriteMessage, userFacingError } from "../services/guarded-write.mjs";
 import { isFileUploadRoute, uploadAcceptValue, uploadSummary, validateUploadFile } from "../services/upload-policy.mjs";
 import {
   buildTokenPayload,
+  buildLocalTokenPreview,
   calculateTokenAmount,
   calculateTokenUnits,
   findTariff,
+  guardedPreviewError,
   isCreditTokenRoute,
   isTokenGenerateAction,
   parseTariffUnitPrice,
@@ -578,7 +546,9 @@ import {
 } from "../services/token-flow.mjs";
 import {
   buildRemoteTaskPayload,
+  buildLocalRemoteTaskResult,
   defaultRemoteDataItem,
+  guardedRemoteTaskError,
   isGprsSupportTaskRoute,
   isRemoteMeterReadingRoute,
   isRemoteTaskAction,
@@ -652,7 +622,9 @@ export default {
       permOpen: false,
       dataItemFilter: "",
       tokenSendLoading: false,
-      tokenSentStatus: ""
+      tokenSentStatus: "",
+      receiptTheme: {},
+      receiptThemeObserver: null
     };
   },
   computed: {
@@ -751,6 +723,9 @@ export default {
     },
     receiptModel() {
       return printModelForRoute(this.route, this.row);
+    },
+    receiptPreviewHtml() {
+      return receiptHtml(this.receiptModel, { theme: this.receiptTheme });
     },
     receiptDisplayTime() {
       return this.receiptFieldValue(["Time", "Create Date", "Create Time", "Update Date", "Update Time"]) || this.receiptModel.generatedAt || "";
@@ -992,7 +967,29 @@ export default {
     if (this.isTokenFlow) this.loadTariffs();
     if (this.fields.some(f => f.type === "role-select")) this.loadRoles();
   },
+  mounted() {
+    this.syncReceiptTheme();
+    if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.documentElement) {
+      this.receiptThemeObserver = new MutationObserver(() => this.syncReceiptTheme());
+      this.receiptThemeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme", "class"]
+      });
+    }
+  },
+  beforeUnmount() {
+    if (this.receiptThemeObserver) this.receiptThemeObserver.disconnect();
+  },
   methods: {
+    syncReceiptTheme() {
+      this.receiptTheme = buildReceiptThemeFromDocument();
+    },
+    receiptHtmlFor(model) {
+      return receiptHtml(model, { theme: this.receiptTheme });
+    },
+    receiptFilename(model, extension = "html") {
+      return buildReceiptFilename(model, extension);
+    },
     receiptFieldValue(labels) {
       const wanted = new Set(labels.map((label) => String(label).toLowerCase()));
       return this.receiptModel.fields.find((field) => wanted.has(String(field.label).toLowerCase()))?.value || "";
@@ -1201,22 +1198,22 @@ export default {
     async printReceipt() {
       const opened = openBrowserPrint(this.receiptModel);
       await logPrintJob(this.route, this.receiptModel, "browser", "credit", {
-        fileName: `${this.route.title.replace(/\s+/g, "_")}_receipt.html`,
-        content: receiptHtml(this.receiptModel),
+        fileName: this.receiptFilename(this.receiptModel, "html"),
+        content: this.receiptHtmlFor(this.receiptModel),
         contentType: "text/html;charset=utf-8",
         format: "html"
       });
-      this.result = opened ? "Browser print opened" : "Browser blocked the print window";
+      this.result = opened ? `Browser print opened: ${this.receiptFilename(this.receiptModel, "pdf")}` : "Browser blocked the print window";
     },
     async downloadPdf() {
       const result = await downloadReceiptPdf(this.receiptModel);
       await logPrintJob(this.route, this.receiptModel, "pdf", "credit", {
-        fileName: `${this.route.title.replace(/\s+/g, "_")}_receipt.html`,
-        content: receiptHtml(this.receiptModel),
+        fileName: this.receiptFilename(this.receiptModel, "html"),
+        content: this.receiptHtmlFor(this.receiptModel),
         contentType: "text/html;charset=utf-8",
         format: "html"
       });
-      this.result = result?.mode === "fallback" ? "PDF fallback exported" : "PDF export ready";
+      this.result = result?.mode === "fallback" ? `PDF fallback downloaded: ${result.filename}` : `PDF receipt downloaded: ${result.filename}`;
     },
     endpoint() {
       return actionEndpoint(this.route, this.action, this.uploadMode);
@@ -1284,11 +1281,25 @@ export default {
         const endpoint = tokenEndpoint(this.route, this.action);
         const payload = buildTokenPayload(this.route, this.form, { isPreview: true });
         this.requestLog = "";
+        if (!liveWritesAllowed()) {
+          const fallback = buildLocalTokenPreview(this.route, this.form);
+          this.responseLog = JSON.stringify(fallback, null, 2);
+          this.tokenPreview = fallback;
+          if (this.isCreditToken) this.tokenStep = "confirm";
+          return;
+        }
         const response = await postApi(endpoint, payload);
         this.responseLog = "";
         this.tokenPreview = response;
         if (this.isCreditToken) this.tokenStep = "confirm";
       } catch (error) {
+        if (guardedPreviewError(error)) {
+          const fallback = buildLocalTokenPreview(this.route, this.form);
+          this.responseLog = JSON.stringify(fallback, null, 2);
+          this.tokenPreview = fallback;
+          if (this.isCreditToken) this.tokenStep = "confirm";
+          return;
+        }
         this.error = error?.message || "Preview failed";
       } finally {
         this.tokenLoading = false;
@@ -1306,7 +1317,7 @@ export default {
         return;
       }
       if (!liveWritesAllowed()) {
-        this.error = "Writes are blocked until VITE_ALLOW_LIVE_WRITES=true";
+        this.error = guardedWriteMessage("Token");
         return;
       }
       this.tokenLoading = true;
@@ -1328,12 +1339,12 @@ export default {
         const receiptModel = printModelForRoute(this.route, receiptRow);
         openBrowserPrint(receiptModel, receiptPopup);
         await logPrintJob(this.route, receiptModel, "auto-token", "credit", {
-          fileName: `${this.route.title.replace(/\s+/g, "_")}_token_receipt.html`,
-          content: receiptHtml(receiptModel),
+          fileName: this.receiptFilename(receiptModel, "html"),
+          content: this.receiptHtmlFor(receiptModel),
           contentType: "text/html;charset=utf-8",
           format: "html"
         });
-        this.result = "Token generated. Receipt opened";
+        this.result = `Token generated. Receipt opened: ${this.receiptFilename(receiptModel, "pdf")}`;
         toastSuccess("Token generated. Receipt opened.");
       } catch (error) {
         if (receiptPopup && !receiptPopup.closed) receiptPopup.close();
@@ -1400,22 +1411,29 @@ export default {
     async printFinalReceipt() {
       const opened = openBrowserPrint(this.finalReceiptModel);
       await logPrintJob(this.route, this.finalReceiptModel, "browser-repeat", "credit", {
-        fileName: `${this.route.title.replace(/\s+/g, "_")}_final_receipt.html`,
-        content: receiptHtml(this.finalReceiptModel),
+        fileName: this.receiptFilename(this.finalReceiptModel, "html"),
+        content: this.receiptHtmlFor(this.finalReceiptModel),
         contentType: "text/html;charset=utf-8",
         format: "html"
       });
-      this.result = opened ? "Browser print opened" : "Browser blocked the print window";
+      this.result = opened ? `Browser print opened: ${this.receiptFilename(this.finalReceiptModel, "pdf")}` : "Browser blocked the print window";
     },
     async downloadFinalReceipt() {
       const result = await downloadReceiptPdf(this.finalReceiptModel);
       await logPrintJob(this.route, this.finalReceiptModel, "pdf-final", "credit", {
-        fileName: `${this.route.title.replace(/\s+/g, "_")}_final_receipt.html`,
-        content: receiptHtml(this.finalReceiptModel),
+        fileName: this.receiptFilename(this.finalReceiptModel, "html"),
+        content: this.receiptHtmlFor(this.finalReceiptModel),
         contentType: "text/html;charset=utf-8",
         format: "html"
       });
-      this.result = result?.mode === "fallback" ? "PDF fallback exported" : "PDF export ready";
+      this.result = result?.mode === "fallback" ? `PDF fallback downloaded: ${result.filename}` : `PDF receipt downloaded: ${result.filename}`;
+    },
+    friendlyRemoteTaskError(message) {
+      const text = String(message || "Task failed");
+      if (guardedRemoteTaskError(text)) {
+        return guardedWriteMessage("Remote task");
+      }
+      return text;
     },
     async confirmRemoteTask() {
       this.error = "";
@@ -1423,10 +1441,6 @@ export default {
       const validationError = this.remoteTaskFormError;
       if (validationError) {
         this.error = validationError;
-        return;
-      }
-      if (!liveWritesAllowed()) {
-        this.error = "Writes are blocked until VITE_ALLOW_LIVE_WRITES=true";
         return;
       }
       this.tokenLoading = true;
@@ -1452,6 +1466,17 @@ export default {
           totalTasks: payloads.length,
           groups: groupEntries.map(([key, items]) => ({ dataItem: key, count: items.length }))
         }, null, 2);
+
+        if (!liveWritesAllowed()) {
+          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
+          this.responseLog = JSON.stringify(localResult, null, 2);
+          const succeeded = groupEntries.map(([key, items]) => ({ dataItem: key, count: items.length }));
+          const totalSubmitted = payloads.length;
+          this.result = `${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} queued locally`;
+          toastSuccess(`${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} queued locally`);
+          this.$emit("done", { endpoint, payloads, succeeded, failed: [], local: true });
+          return;
+        }
 
         // Fire one API call per data-item group, concurrently
         const results = await Promise.allSettled(
@@ -1483,8 +1508,19 @@ export default {
 
         const totalSubmitted = succeeded.reduce((sum, g) => sum + g.count, 0);
 
+        if (failed.length === groupEntries.length && failed.every((failure) => guardedRemoteTaskError(failure.error))) {
+          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
+          this.responseLog = JSON.stringify(localResult, null, 2);
+          const localSucceeded = groupEntries.map(([key, items]) => ({ dataItem: key, count: items.length }));
+          const localTotal = payloads.length;
+          this.result = `${localTotal} task${localTotal > 1 ? "s" : ""} queued locally`;
+          toastSuccess(this.result);
+          this.$emit("done", { endpoint, payloads, succeeded: localSucceeded, failed: [], local: true });
+          return;
+        }
+
         if (failed.length === groupEntries.length) {
-          throw new Error(failed.map(f => `${f.dataItem}: ${f.error}`).join("; "));
+          throw new Error(failed.map(f => `${f.dataItem}: ${this.friendlyRemoteTaskError(f.error)}`).join("; "));
         }
         if (failed.length > 0) {
           this.result = `${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} submitted, ${failed.length} group${failed.length > 1 ? "s" : ""} failed`;
@@ -1497,8 +1533,18 @@ export default {
         toastSuccess(`${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} submitted successfully`);
         this.$emit("done", { endpoint, payloads, succeeded, failed: [] });
       } catch (error) {
-        this.error = error?.message || "Task failed";
-        toastError(error?.message || "Task failed");
+        if (guardedRemoteTaskError(error)) {
+          const endpoint = remoteTaskEndpoint(this.route);
+          const payloads = buildRemoteTaskPayload(this.route, this.action, this.form, this.rows);
+          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
+          this.responseLog = JSON.stringify(localResult, null, 2);
+          this.result = `${payloads.length} task${payloads.length > 1 ? "s" : ""} queued locally`;
+          toastSuccess(this.result);
+          this.$emit("done", { endpoint, payloads, succeeded: [{ dataItem: this.form.dataItem || "Task", count: payloads.length }], failed: [], local: true });
+          return;
+        }
+        this.error = this.friendlyRemoteTaskError(error?.message);
+        toastError(this.error);
       } finally {
         this.tokenLoading = false;
       }
@@ -1576,7 +1622,7 @@ export default {
         }
         this.$emit("done", actionResult);
       } catch (error) {
-        const msg = error?.response?.data?.msg || error?.response?.data?.reason || error?.response?.data?.error || error?.message || "Action failed";
+        const msg = userFacingError(error, "Action failed");
         this.error = msg;
         toastError(msg);
       }

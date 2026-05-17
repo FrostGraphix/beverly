@@ -344,6 +344,38 @@ async function main() {
       });
       assert.strictEqual(blockedWrite.status, 403);
       assert.strictEqual(blockedWrite.body._proxy.source, "guard");
+
+      const tokenPreview = await request(proxyPort, "POST", "/api/token/creditToken/generate", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({
+          customerId: "C-1",
+          meterId: "M-1",
+          amount: 500,
+          totalUnit: 1.4,
+          isPreview: true
+        }))
+      });
+      assert.strictEqual(tokenPreview.status, 200);
+      assert.strictEqual(tokenPreview.body.code, 0);
+      assert.strictEqual(tokenPreview.body._proxy.source, "local-token-preview");
+      assert.ok(tokenPreview.body.data.token);
+
+      const tokenConfirm = await request(proxyPort, "POST", "/api/token/creditToken/generate", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({
+          customerId: "C-1",
+          meterId: "M-1",
+          amount: 500,
+          totalUnit: 1.4,
+          isPreview: false
+        }))
+      });
+      assert.strictEqual(tokenConfirm.status, 403);
+      assert.strictEqual(tokenConfirm.body._proxy.source, "guard");
     });
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");

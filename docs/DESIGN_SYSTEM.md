@@ -181,7 +181,7 @@ What is strong:
 - browser QA covers critical flows
 
 What is weak:
-- Vue 2 limits long-term scaling
+- Vue 3 migration is active
 - legacy CSS still carries too much UI
 - full TypeScript coverage is incomplete
 - visual regression is focused, not exhaustive

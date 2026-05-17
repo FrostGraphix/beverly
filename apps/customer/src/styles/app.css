@@ -1,0 +1,361 @@
+/*
+ * Customer app mobile shell — extends @beverly/tokens/wallet.css
+ * wallet.css handles the design system; this file handles the mobile-specific
+ * appbar + main-scroll + bottom-tabbar layout not present in the sidebar shell.
+ */
+
+#app {
+  min-height: 100dvh;
+}
+
+/* ── Mobile shell layout ─────────────────────────────────────────────────── */
+
+.bw-mobile-shell {
+  display: grid;
+  grid-template-rows: 56px 1fr 60px;
+  min-height: 100dvh;
+  background: var(--canvas);
+}
+
+/* ── App bar ─────────────────────────────────────────────────────────────── */
+
+.bw-appbar {
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s-4);
+  gap: var(--s-3);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-overlay);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.bw-appbar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: var(--t-md);
+}
+
+.bw-appbar-spacer { flex: 1; }
+
+/* ── Main scroll area ────────────────────────────────────────────────────── */
+
+.bw-mobile-main {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--s-4);
+  padding-bottom: calc(var(--s-6) + env(safe-area-inset-bottom, 0px));
+}
+
+.bw-mobile-main-inner {
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* ── Auth pages (no tabbar) ──────────────────────────────────────────────── */
+
+.bw-auth-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-5);
+  background: var(--canvas);
+}
+
+.bw-auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* ── Bottom tab bar ──────────────────────────────────────────────────────── */
+
+.bw-tabbar {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 6px 0 max(8px, env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-overlay);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+
+.bw-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px;
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  border-radius: var(--r-md);
+  transition: color var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+
+.bw-tab svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.bw-tab.router-link-active {
+  color: var(--brand);
+}
+
+.bw-tab.router-link-active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--brand);
+  box-shadow: 0 0 8px var(--brand-glow);
+}
+
+/* ── Hero balance card ───────────────────────────────────────────────────── */
+
+.bw-balance-hero {
+  background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--surface);
+  border: 1px solid oklch(70% 0.19 145 / 0.22);
+  border-radius: var(--r-xl);
+  padding: var(--s-5);
+  position: relative;
+  overflow: hidden;
+}
+
+.bw-balance-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+}
+
+/* ── OTP input row ───────────────────────────────────────────────────────── */
+
+.bw-otp-row {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: center;
+}
+
+.bw-otp-digit {
+  width: 48px;
+  height: 60px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-align: center;
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  caret-color: var(--brand);
+  -webkit-appearance: none;
+}
+
+.bw-otp-digit:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+
+/* ── Purchase step wizard ────────────────────────────────────────────────── */
+
+.bw-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--s-5);
+}
+
+.bw-step {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-xs);
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.bw-step-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all var(--dur-fast);
+}
+
+.bw-step.active .bw-step-dot {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+  box-shadow: 0 0 0 4px var(--brand-glow);
+}
+
+.bw-step.done .bw-step-dot {
+  border-color: var(--brand);
+  background: transparent;
+  color: var(--brand);
+}
+
+.bw-step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin: 0 var(--s-1);
+}
+
+.bw-step-line.done { background: var(--brand); }
+
+/* ── Token reveal ────────────────────────────────────────────────────────── */
+
+.bw-token-box {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-5) var(--s-4);
+  text-align: center;
+  position: relative;
+}
+
+.bw-token-value {
+  font-family: var(--font-mono);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--brand);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.bw-token-units {
+  font-size: var(--t-sm);
+  color: var(--text-2);
+  margin-top: var(--s-2);
+}
+
+/* ── Meter card ──────────────────────────────────────────────────────────── */
+
+.bw-meter-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--s-4);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.bw-meter-card:hover,
+.bw-meter-card.selected {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-glow);
+}
+
+.bw-meter-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--brand);
+}
+
+.bw-meter-icon svg { width: 20px; height: 20px; }
+
+/* ── KYC tier badge ──────────────────────────────────────────────────────── */
+
+.bw-kyc-tier {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bw-kyc-tier.tier-0 { background: oklch(55% 0 0 / 0.12); color: var(--text-2); }
+.bw-kyc-tier.tier-1 { background: oklch(75% 0.14 80 / 0.15); color: oklch(75% 0.14 80); }
+.bw-kyc-tier.tier-2 { background: oklch(70% 0.19 145 / 0.15); color: var(--brand); }
+
+/* ── Amount quick-pick ───────────────────────────────────────────────────── */
+
+.bw-quick-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+
+.bw-quick-amt {
+  padding: var(--s-3) var(--s-2);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.bw-quick-amt.active,
+.bw-quick-amt:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: oklch(70% 0.19 145 / 0.07);
+}
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
+
+.bw-page-title {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+}
+
+.bw-page-sub {
+  font-size: var(--t-sm);
+  color: var(--text-2);
+  margin: 4px 0 0;
+}

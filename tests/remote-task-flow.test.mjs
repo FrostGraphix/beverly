@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  buildLocalRemoteTaskResult,
   buildRemoteTaskPayload,
   defaultRemoteDataItem,
   findRemoteTaskOption,
   formatToken,
+  guardedRemoteTaskError,
   isRemoteTaskAction,
   normalizeRemoteDataItem,
   normalizeAccountStatus,
@@ -133,5 +135,14 @@ const readingBatch = buildRemoteTaskPayload(readingRoute, "Add Batch Task", {
 assert.equal(readingBatch.length, 4);
 assert.deepEqual(readingBatch.map((item) => item.meterId), ["M1", "M1", "M2", "M2"]);
 assert.deepEqual(readingBatch.map((item) => item.dataItem), ["Credit balance", "Power", "Credit balance", "Power"]);
+
+const localQueue = buildLocalRemoteTaskResult(readingRoute, buildRemoteTaskPayload(readingRoute, "Add Task", { ...form, dataItem: "Credit balance" }));
+assert.equal(localQueue.code, 0);
+assert.equal(localQueue._proxy.source, "client-remote-task-queue");
+assert.equal(localQueue.data[0].status, "Queued");
+assert.match(localQueue.data[0].taskId, /^LOCAL-READING-/);
+assert.equal(guardedRemoteTaskError({ response: { status: 403, data: { _proxy: { source: "guard" } } } }), true);
+assert.equal(guardedRemoteTaskError("Remote task blocked. Your session lacks permission for this live write."), true);
+assert.equal(guardedRemoteTaskError("network offline"), false);
 
 console.log("remote-task-flow tests passed");

@@ -1,0 +1,21 @@
+{
+  "name": "@beverly/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Beverly design tokens — shared by customer, vendor, and admin frontends",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "files": [
+    "tokens.css",
+    "theme.css",
+    "index.js",
+    "index.d.ts"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./tokens.css": "./tokens.css",
+    "./theme.css": "./theme.css",
+    "./wallet.css": "./wallet.css"
+  }
+}

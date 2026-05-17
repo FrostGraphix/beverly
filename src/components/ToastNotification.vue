@@ -47,7 +47,7 @@ export default {
   created() {
     toastBus.$on("toast:add", this.add);
   },
-  beforeDestroy() {
+  beforeUnmount() {
     toastBus.$off("toast:add", this.add);
   },
   methods: {

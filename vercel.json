@@ -12,5 +12,11 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron/refresh-hot", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/refresh-hourly", "schedule": "0 * * * *" },
+    { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
+    { "path": "/api/cron/refresh-backfill", "schedule": "*/30 * * * *" }
   ]
 }
