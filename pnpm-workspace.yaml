@@ -2,3 +2,8 @@ packages:
   - 'apps/*'         # customer, vendor, admin
   - 'backend/wallet'
   - 'packages/*'     # tokens
+
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true
+  vue-demi: true
