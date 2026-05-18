@@ -74,6 +74,29 @@ function findRowValue(row, columnKey, labels, fallbackKeys = []) {
   return "";
 }
 
+function firstValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+}
+
+function receiptDataFromResponse(response = {}) {
+  if (!response || typeof response !== "object") return {};
+  return response.data || response.result || response;
+}
+
+function tariffUnitPrice(tariff = {}) {
+  const raw = firstValue(tariff.effectivePrice, tariff.unitPrice, tariff.price);
+  const parts = String(raw ?? "").split("~").map((part) => Number(part)).filter((value) => Number.isFinite(value));
+  if (parts.length >= 3) return parts[2] > 0 ? parts[2] : "";
+  return parts[0] > 0 ? parts[0] : raw;
+}
+
+function purchaseWayLabel(value) {
+  return String(value || "paid") === "unit" ? "Vend By Total Unit" : "Vend By Total Paid";
+}
+
 function field(label, value, options = {}) {
   return {
     label,
@@ -106,6 +129,75 @@ const brand = {
   phone: "+234 800 BEVERLY",
   web: "www.acoblighting.com"
 };
+
+export const requiredReceiptFields = [
+  "Receipt Id",
+  "Token",
+  "Meter Id",
+  "Customer Id",
+  "Customer Name",
+  "Total Paid",
+  "Total Unit",
+  "Tariff Id",
+  "Tariff Price",
+  "Tax / VAT",
+  "Payment Method",
+  "Purchase Way",
+  "Vend Status",
+  "Time",
+  "Operator / Vendor",
+  "Support Reference",
+  "Audit Status"
+];
+
+export function validateReceiptModel(model = {}) {
+  const fields = Array.isArray(model.fields) ? model.fields : [];
+  const fieldMap = new Map(fields.map((item) => [String(item.label || "").toLowerCase(), stringValue(item.value).trim()]));
+  const missing = requiredReceiptFields.filter((label) => !fieldMap.get(label.toLowerCase()));
+  return {
+    ok: missing.length === 0,
+    missing
+  };
+}
+
+export function buildCanonicalReceiptRow(context = {}) {
+  const form = context.form || {};
+  const row = context.row || {};
+  const responseData = receiptDataFromResponse(context.response);
+  const tariff = context.tariff || {};
+  const actor = context.actor || {};
+  const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const receiptId = firstValue(responseData.receiptId, responseData.id, form.receiptId, row.receiptId, row.id, `RCPT-${Date.now()}`);
+  const token = firstValue(responseData.token, responseData.tokenFirst, responseData.tokenValue, form.token, row.token);
+  const totalPaid = firstValue(form.amount, responseData.totalPaid, responseData.amount, row.totalPaid, row.amount);
+  const totalUnit = firstValue(form.totalUnit, responseData.totalUnit, responseData.unit, row.totalUnit);
+  const tariffId = firstValue(form.tariffId, responseData.tariffId, row.tariffId, tariff.tariffId, tariff.id);
+  const stationId = firstValue(form.stationId, responseData.stationId, row.stationId);
+  const auditStatus = firstValue(responseData.auditStatus, responseData.status === false ? "Failed" : responseData.status === true ? "Success" : "", responseData.reason, "Success");
+  return {
+    ...row,
+    ...form,
+    ...responseData,
+    receiptId,
+    token,
+    meterId: firstValue(form.meterId, responseData.meterId, row.meterId),
+    customerId: firstValue(form.customerId, responseData.customerId, row.customerId),
+    customerName: firstValue(form.customerName, responseData.customerName, row.customerName, row.name),
+    totalPaid,
+    totalUnit,
+    tariffId,
+    tariffPrice: firstValue(responseData.tariffPrice, form.tariffPrice, row.tariffPrice, tariffUnitPrice(tariff)),
+    tax: firstValue(responseData.tax, responseData.vat, form.tax, form.vat, row.tax, "0"),
+    paymentMethod: firstValue(form.paymentMethod, responseData.paymentMethod, row.paymentMethod, "Cash"),
+    purchaseWay: firstValue(responseData.purchaseWay, form.purchaseWayLabel, purchaseWayLabel(form.purchaseWay || row.purchaseWay)),
+    vend: firstValue(responseData.vend, responseData.vendStatus, row.vend, responseData.status === false ? "Failed" : "Generated"),
+    stationId,
+    operatorVendor: firstValue(actor.name, actor.email, form.operatorVendor, row.operatorVendor, "Beverly Operator"),
+    supportReference: firstValue(responseData.supportReference, responseData.reference, form.supportReference, row.supportReference, `SUP-${receiptId}`),
+    auditStatus,
+    time: firstValue(responseData.createTime, responseData.createDate, responseData.time, row.time, row.createDate, now)
+  };
+}
 
 export function buildReceiptFilename(model, extension = "pdf") {
   const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]) || model.receiptId || "no-id";
@@ -173,9 +265,15 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
     ["Token", token, { section: "transaction", isToken: true, emphasis: true, raw: true }],
     ["Total Paid", totalPaid, { section: "transaction", emphasis: true }],
     ["Total Unit", totalUnit, { section: "transaction" }],
+    ["Tariff Price", findRowValue(row, columnKey, ["Tariff Price"], ["tariffPrice", "unitPrice", "price"]), { section: "transaction" }],
     ["Tax / VAT", findRowValue(row, columnKey, ["VAT Charge"], ["tax"]), { section: "transaction" }],
+    ["Payment Method", findRowValue(row, columnKey, ["Payment Method"], ["paymentMethod"]), { section: "transaction" }],
+    ["Purchase Way", findRowValue(row, columnKey, ["Purchase Way"], ["purchaseWay"]), { section: "transaction" }],
     ["Vend Status", findRowValue(row, columnKey, ["Vend"], ["vend"]), { section: "transaction" }],
     ["Maximum Power(W)", findRowValue(row, columnKey, ["Maximum Power(W)"], ["maximumPower"]), { section: "transaction" }],
+    ["Operator / Vendor", findRowValue(row, columnKey, ["Operator / Vendor"], ["operatorVendor", "operator", "vendorName", "actorId"]), { section: "site" }],
+    ["Support Reference", findRowValue(row, columnKey, ["Support Reference"], ["supportReference", "reference"]), { section: "site" }],
+    ["Audit Status", findRowValue(row, columnKey, ["Audit Status"], ["auditStatus"]), { section: "site" }],
     ["Station Id", findRowValue(row, columnKey, ["Station Id"], ["stationId"]), { section: "site" }],
     ["Remark", findRowValue(row, columnKey, ["Remark"], ["remark"]), { section: "site" }],
     ["Time", findRowValue(row, columnKey, ["Time", "Create Time", "Update Time"], ["createDate", "createTime", "updateDate", "time"]), { section: "site" }]
@@ -576,7 +674,7 @@ export function receiptHtml(model, options = {}) {
     <div class="detail-section">
       ${model.fields
         .filter((field) => !field.isToken && !["total paid", "amount"].includes(String(field.label).toLowerCase()))
-        .slice(0, 12)
+        .slice(0, 24)
         .map((field) => `
       <div class="detail-item">
         <span>${escapeHtml(field.label)}</span>
@@ -604,6 +702,12 @@ export function buildReceiptPdfBytes(model) {
   const meterId = receiptFieldValue(model, ["Meter Id"]) || "Not supplied";
   const stationId = receiptFieldValue(model, ["Station Id"]) || "Not supplied";
   const totalUnit = receiptFieldValue(model, ["Total Unit"]) || "0";
+  const tariffId = receiptFieldValue(model, ["Tariff Id"]) || "Not supplied";
+  const tariffPrice = receiptFieldValue(model, ["Tariff Price"]) || "Not supplied";
+  const paymentMethod = receiptFieldValue(model, ["Payment Method"]) || "Not supplied";
+  const purchaseWay = receiptFieldValue(model, ["Purchase Way"]) || "Not supplied";
+  const auditStatus = receiptFieldValue(model, ["Audit Status"]) || "Not supplied";
+  const supportReference = receiptFieldValue(model, ["Support Reference"]) || "Not supplied";
   const textLines = [
     model.brand.name.toUpperCase(),
     model.brand.company,
@@ -617,6 +721,12 @@ export function buildReceiptPdfBytes(model) {
     `Customer: ${customerName}`,
     `Meter: ${meterId}`,
     `Unit: ${totalUnit}`,
+    `Tariff: ${tariffId}`,
+    `Tariff Price: ${tariffPrice}`,
+    `Payment: ${paymentMethod}`,
+    `Purchase Way: ${purchaseWay}`,
+    `Audit Status: ${auditStatus}`,
+    `Support Ref: ${supportReference}`,
     `Station: ${stationId}`,
     "----------------------------------------",
     model.brand.email,

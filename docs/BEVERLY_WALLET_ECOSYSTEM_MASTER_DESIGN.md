@@ -115,9 +115,9 @@ Three identity stores. One auth provider (Supabase Auth).
 
 | Domain | Audience | Self-signup | 2FA |
 |--------|----------|-------------|-----|
-| `admin.beverly.com` | CRM staff | NO | mandatory |
-| `vendor.beverly.com` | Approved vendors | NO | mandatory |
-| `app.beverly.com` | Public customers | YES | optional, encouraged |
+| `admin.beverly.acoblighting.com` | CRM staff | NO | mandatory |
+| `vendor.beverly.acoblighting.com` | Approved vendors | NO | mandatory |
+| `beverly.acoblighting.com` | Public customers | YES | optional, encouraged |
 
 Auth scopes are isolated.
 
@@ -423,15 +423,20 @@ Rules:
 
 ## 7. Payment Gateway Integration
 
-### 7.1 Providers
+### 7.1 Provider
 
-Primary: **Paystack** (dominant Nigerian gateway, NGN-native).
+**Paystack** is the sole payment gateway at launch. NGN-native, Nigerian-dominant.
 
-Fallback: **Flutterwave** (multi-currency, redundancy).
+Supported instruments:
+- Card (Visa, Mastercard, Verve)
+- Bank transfer (Paystack dedicated virtual account)
+- USSD
+- Bank account direct debit (where supported)
+- QR (NQR)
 
-Direct bank transfer with proof upload remains for vendors.
+Direct bank transfer with proof upload remains as an alternate vendor funding path (operational, not gateway-driven).
 
-USSD payment via Paystack USSD code for customer wallet top-up.
+Flutterwave or others may be added later as a second provider behind a `gateway-router` service. Not at launch.
 
 ### 7.2 Payment Flow Pattern
 
@@ -498,7 +503,9 @@ Closed-loop:
 
 ### 8.1 Customer KYC
 
-Provider: NIMC NIN (or Paystack Identity API), NIBSS BVN.
+Provider: **Paystack Identity API** (primary, automated). NIN, BVN, account verification.
+
+Fallback: **Manual review** by CRM admin staff within 24 hours for failed/edge cases.
 
 Tiers:
 
@@ -1074,10 +1081,10 @@ Date/currency via Intl API.
 
 ### 15.1 Channels
 
-- SMS (Termii or Twilio).
-- Email (Postmark or AWS SES).
-- In-app (Supabase Realtime + toast).
-- Push (Firebase, future).
+- SMS — **Twilio** (global, robust delivery analytics).
+- Email — Postmark (transactional, deliverability-first).
+- In-app — Supabase Realtime + toast.
+- Push — Web Push (PWA) at launch. Firebase native push later.
 
 ### 15.2 Events
 
@@ -1225,12 +1232,18 @@ Implementation: Supabase Edge Functions + pg_cron, or Vercel cron, or Inngest.
 
 ### 19.1 Hosting
 
-- Frontends: Vercel (three projects, three domains).
-- Backend API: Vercel serverless functions OR dedicated Node service on Fly.io/Railway.
+- Frontends: **Vercel** — three projects:
+  - `beverly-customer` → `beverly.acoblighting.com`
+  - `beverly-vendor` → `vendor.beverly.acoblighting.com`
+  - `beverly-admin` → `admin.beverly.acoblighting.com`
+- Backend API: **dedicated Node/Fastify service** on **Fly.io** (or Railway).
+  - Long-lived process (ledger atomicity, webhook reliability, scheduled jobs).
+  - Two regions: `lagos` (primary), fallback secondary.
+  - Auto-scaling between 2–8 instances.
 - Database: Supabase (Postgres + Auth + Storage + Realtime).
 - Cache + rate limit: Upstash Redis.
-- Cron: Vercel Cron + Supabase pg_cron.
-- Queue: Inngest or Supabase queue.
+- Cron: backend service via `node-cron` + Supabase `pg_cron` for DB-resident jobs.
+- Queue: BullMQ (Redis-backed) inside backend service.
 - Observability: Sentry (errors), Axiom (logs), Grafana Cloud (metrics).
 
 ### 19.2 Environments
@@ -1354,67 +1367,70 @@ Monthly restore drill:
 
 ## 22. Phased Rollout
 
-### Phase 1: Foundation (Weeks 1-3)
+All phases ship behind feature flags. Each phase gated by tests + acceptance criteria.
 
-- Schema migrations: identity, wallet, payment, KYC tables.
-- Supabase Auth + RLS.
-- Three frontend scaffolds.
-- Shared design tokens.
-- Universal ledger.
-- Audit log.
+### Phase 1 — Foundation (Weeks 1–3)
 
-### Phase 2: Vendor Portal Polish (Weeks 4-6)
+- Schema migrations: identity, wallet, payment, KYC, audit tables.
+- Supabase Auth + RLS scaffolding.
+- Dedicated backend service on Fly.io.
+- Three frontend scaffolds (customer, vendor, admin).
+- Shared design tokens + component library.
+- Universal ledger (vendors + customers).
+- Audit log primitives.
+- Twilio + Postmark wired.
 
-- Migrate existing vendor wallet to new ledger.
-- Vendor onboarding flow with 2FA.
-- Vendor settlement.
-- Vendor regional customer view.
+### Phase 2 — Vendor Portal Rewrite (Weeks 4–7)
 
-### Phase 3: Customer App MVP (Weeks 7-10)
+- Full rewrite of vendor surfaces — clean slate over existing.
+- Migrate any prior vendor wallet rows to new ledger.
+- Vendor onboarding with mandatory 2FA.
+- Vendor funding (Paystack + bank-transfer-with-proof).
+- Vendor vending (token + remote-send).
+- Vendor receipts, history, profile, security.
+- Wallet admin pages move out of CRM and into admin workspace.
 
-- Signup, login, OTP.
-- Tier 1 KYC (phone only).
-- Meter linking via OTP.
-- Direct-pay token purchase (Paystack).
-- Receipts.
-- Notifications (SMS + email).
+### Phase 3 — Customer App MVP **including wallet** (Weeks 8–12)
 
-### Phase 4: Customer Wallet (Weeks 11-12)
+- Signup (phone/email) + OTP via Twilio + Postmark.
+- Tier 1 KYC: phone-verified.
+- Tier 2 KYC: Paystack Identity (NIN). Manual review fallback for failures.
+- Meter linking via OTP or last-recharge challenge.
+- **Customer wallet** — fund via Paystack, ledger-derived balance.
+- Token purchase: both wallet-debit and direct-pay flows.
+- Receipts: in-app, SMS, email, PDF.
+- PWA installation prompt.
 
-- Customer wallet + funding via gateway.
-- Wallet history.
-- Multi-meter support.
-- Tier 2 KYC (NIN).
+### Phase 4 — Meter Purchase (Weeks 13–14)
 
-### Phase 5: Meter Purchase (Weeks 13-14)
+- Buy-meter flow: meter type, address, station assignment.
+- Paystack checkout.
+- **In-house** admin fulfillment queue in CRM.
+- Field technician dispatch workflow.
+- Installation tracking + activation.
 
-- Buy-meter flow.
-- Admin fulfillment queue.
-- Field technician integration.
-- Installation tracking.
-
-### Phase 6: Fraud + Risk (Weeks 15-16)
+### Phase 5 — Fraud + Risk (Weeks 15–16)
 
 - Transaction fraud engine.
-- Velocity rules.
-- Manual review queue.
-- Customer step-up auth.
+- Velocity rules + anomaly scoring.
+- Manual review queue in admin.
+- Step-up auth on customer side.
 
-### Phase 7: Operations Hardening (Weeks 17-19)
+### Phase 6 — Operations Hardening (Weeks 17–19)
 
-- Dispute system.
-- Refund automation.
-- Settlement reports.
+- Dispute system (customer + vendor).
+- Refund automation (closed-loop, ledger-based).
+- Settlement reports for finance.
 - Reconciliation dashboard.
-- Background job hardening.
+- Background jobs hardening (retries, dead-letter, alerting).
 
-### Phase 8: Compliance + Launch (Weeks 20-22)
+### Phase 7 — Compliance + Launch (Weeks 20–22)
 
 - NDPR compliance audit.
-- CBN compliance review.
+- CBN payment compliance review.
 - Penetration test.
 - Bug bounty soft launch.
-- Production launch with feature flag.
+- Production launch behind feature flag, ramped by region.
 
 ---
 
@@ -1481,22 +1497,44 @@ The ecosystem is production-ready when:
 
 ---
 
-## 25. Open Questions
+## 25. Locked Decisions
 
-Before build starts, decide:
+Confirmed 2026-05-16. These resolve all pre-build questions.
 
-1. Vercel functions vs dedicated backend service for `/api/*`?
-2. Paystack as sole gateway at launch, or Paystack + Flutterwave parallel?
-3. SMS provider: Termii (local) or Twilio (global)?
-4. Customer wallet at MVP, or post-MVP?
-5. Meter purchase fulfillment vendor: in-house or third party?
-6. KYC API: NIMC direct or via Paystack Identity?
-7. Sub-domain strategy: `app.beverly.com` or `pay.beverly.com`?
-8. Mobile app (native) vs PWA only at launch?
-9. Loyalty / cashback program at launch or later?
-10. Vendor commission model: per-transaction vs subscription vs hybrid?
+| # | Decision | Choice |
+|---|----------|--------|
+| 1 | Backend runtime | **Dedicated backend service** (not Vercel functions) — Node/Fastify on Fly.io or Railway |
+| 2 | Payment gateway | **Paystack only** — no Flutterwave fallback at launch |
+| 3 | SMS provider | **Twilio** (global) |
+| 4 | Customer wallet | **MVP** — ship in Phase 3 alongside direct-pay |
+| 5 | Meter fulfillment | **In-house** — Beverly field technicians dispatched from CRM admin queue |
+| 6 | KYC verification | **Paystack Identity** (primary, automated) **+ manual review** (fallback for failures/edge cases) |
+| 7 | Domain | **`beverly.acoblighting.com`** as base — subdomain isolation per workspace |
+| 8 | Mobile delivery | **PWA at launch** — native apps deferred |
+| 9 | Loyalty / cashback | **None** — no loyalty, no cashback, anywhere in the system |
+| 10 | Vendor commission | **None** — no per-transaction fees, no subscription, no hybrid model |
 
-Decisions block Phase 1 kickoff.
+### Domain Layout
+
+```
+beverly.acoblighting.com          → Customer App (public)
+vendor.beverly.acoblighting.com   → Vendor Portal
+admin.beverly.acoblighting.com    → CRM + Wallet Admin
+```
+
+All three share a single Supabase Auth tenant. Sessions are scoped per role at the API layer.
+
+### Rationale
+
+- **Dedicated backend**: ledger atomicity, long-running webhooks, and scheduled jobs are awkward on serverless. A persistent process is simpler.
+- **Paystack only**: Nigerian-native, NGN-default, lower friction. Flutterwave can be added later without rewiring.
+- **Twilio**: superior delivery analytics, retry visibility, and global readiness if expansion comes.
+- **Customer wallet at MVP**: powers the closed-loop refund pattern from day one. Skipping it would force gateway-bound refunds and complicate failure recovery.
+- **In-house fulfillment**: meter installation is a brand-trust moment; third-party introduces drift.
+- **Paystack Identity + manual**: covers ~95% automated, the rest goes to a 24-hour SLA review queue. No NIMC direct integration cost at launch.
+- **Single base domain**: simpler DNS, SSL, and SSO. Subdomain isolation still gives auth boundary discipline.
+- **PWA**: ships to all devices day one. Native can come once retention proves the customer surface.
+- **No loyalty/commission**: keeps the financial model deterministic. Every naira moves through clean ledger entries — no accrual, no rake, no marketing math.
 
 ---
 

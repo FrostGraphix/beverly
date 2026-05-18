@@ -16,6 +16,7 @@ function main() {
   const storage = readMigration("20260505125000_storage_buckets.sql");
   const snapshots = readMigration("20260507110000_operational_snapshots.sql");
   const dailyMeters = readMigration("20260508120000_daily_meter_readings.sql");
+  const rawDuplicates = readMigration("20260516130000_daily_meter_raw_duplicates.sql");
   const hardening = readMigration("20260511150000_harden_role_permissions_rls.sql");
   const governance = readMigration("20260512100000_data_governance.sql");
 
@@ -73,6 +74,18 @@ function main() {
     dailyMeters.includes("alter table public.daily_meter_readings enable row level security"),
     "missing daily meter RLS"
   );
+  assert(
+    rawDuplicates.includes("create table if not exists public.daily_meter_raw_duplicates"),
+    "missing raw duplicate readings table"
+  );
+  assert(
+    rawDuplicates.includes("daily_meter_raw_duplicates_event_idx"),
+    "missing raw duplicate event uniqueness"
+  );
+  assert(
+    rawDuplicates.includes("alter table public.daily_meter_raw_duplicates enable row level security"),
+    "missing raw duplicate RLS"
+  );
   assert(hardening.includes("create or replace function public.normalized_role_key"), "missing normalized role function");
   assert(hardening.includes("create or replace function public.current_role_key"), "missing current role function");
   assert(hardening.includes("create or replace function public.current_station_id"), "missing current station function");
@@ -94,8 +107,8 @@ function main() {
   assert(governance.includes("cleanup_data_governance"), "missing cleanup function");
 
   console.log(JSON.stringify({
-    migrations: 6,
-    tables: requiredTables.length + 3,
+    migrations: 7,
+    tables: requiredTables.length + 4,
     buckets: 4,
     status: "supabase migrations passed"
   }, null, 2));

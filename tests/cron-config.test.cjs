@@ -9,6 +9,7 @@ const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"
 const api = fs.readFileSync(path.join(root, "api", "reference.js"), "utf8");
 
 assert(Array.isArray(vercel.crons), "crons missing");
+assert.strictEqual(vercel.crons.length, new Set(vercel.crons.map((cron) => cron.path)).size, "cron paths must be unique");
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hot" && cron.schedule === "*/5 * * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hourly" && cron.schedule === "0 * * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-daily" && cron.schedule === "0 23 * * *"));

@@ -38,15 +38,6 @@ const qaRoutes = [
   { hash: "#/management/customer", selector: 'th[data-column-key="phone"]' }
 ];
 
-const walletQaRoutes = [
-  { hash: "#/wallet/admin/dashboard", selector: "text=Wallet Admin Dashboard" },
-  { hash: "#/wallet/admin/users-roles", selector: "text=Role & Permissions Matrix" },
-  { hash: "#/wallet/admin/vendors/create", selector: "text=Business Identity" },
-  { hash: "#/wallet/admin/verification", selector: "text=Review Decision" },
-  { hash: "#/wallet/admin/funding-credits", selector: "text=Funding & Manual Credits" },
-  { hash: "#/vendor/login", selector: "text=Vendor access is separate" }
-];
-
 function sampleRow() {
   return {
     id: "QA-1",
@@ -145,6 +136,9 @@ function apiBody(url) {
   const normalizedUrl = url.toLowerCase();
   if (normalizedUrl.includes("/user/login")) {
     return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)" } };
+  }
+  if (normalizedUrl.includes("/user/read")) {
+    return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
   }
   if (normalizedUrl.includes("/dashboard/readpanelgroup")) {
     return {
@@ -288,13 +282,7 @@ async function runFlow(browserName, page) {
   await page.click("text=Fraud");
   await page.waitForSelector("text=Risk Investigation", { timeout: 10000 });
 
-  for (const route of walletQaRoutes) {
-    await page.evaluate((hash) => {
-      window.location.hash = hash;
-    }, route.hash);
-    await page.waitForTimeout(250);
-    await page.waitForSelector(route.selector, { timeout: 10000 });
-  }
+  await page.waitForSelector('a.sidebar-item[href*="5175"], a.sidebar-item[href*="admin.beverly.acoblighting.com"]', { timeout: 10000 });
 
   return browserName;
 }
@@ -370,7 +358,7 @@ async function main() {
   console.log(JSON.stringify({
     passed,
     skipped: results.filter((result) => result.skipped),
-    flows: ["login", "dashboard", "account table", "credit token confirmation", "credit token record", "remote task table", "report page", "wallet surfaces", "export", "print", "guarded write"],
+    flows: ["login", "dashboard", "account table", "credit token confirmation", "credit token record", "remote task table", "report page", "external wallet link", "export", "print", "guarded write"],
     status: "browser qa passed"
   }, null, 2));
 }

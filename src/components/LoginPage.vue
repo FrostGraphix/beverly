@@ -19,15 +19,6 @@
           <h2 class="auth-card-title">Sign In</h2>
         </header>
 
-        <div class="portal-switch" aria-label="Portal switch">
-          <BaseButton class="portal-switch-button" :class="{ active: portal === 'admin' }" @click="setPortal('admin')">
-            Admin workspace
-          </BaseButton>
-          <BaseButton class="portal-switch-button" :class="{ active: portal === 'vendor' }" @click="setPortal('vendor')">
-            Vendor portal
-          </BaseButton>
-        </div>
-
         <transition name="auth-alert-fade">
           <div v-if="error" class="auth-alert auth-alert--error" role="alert">
             <strong>{{ error }}</strong>
@@ -115,10 +106,6 @@
           </span>
         </BaseButton>
 
-        <div class="demo-entry" aria-label="Demo entry">
-          <BaseButton class="demo-entry-button" type="button" @click="enterDemo('admin')">Enter admin workspace</BaseButton>
-          <BaseButton class="demo-entry-button" type="button" @click="enterDemo('vendor')">Enter vendor portal</BaseButton>
-        </div>
       </form>
     </section>
   </main>

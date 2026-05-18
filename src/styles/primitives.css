@@ -683,13 +683,10 @@ td[data-column-key="updateDate"] {
   min-width: 160px;
 }
 
-[data-theme="dark"] .filter-toolbar,
 [data-theme="executive"] .filter-toolbar,
 [data-theme="contrast"] .filter-toolbar,
-[data-theme="dark"] th,
 [data-theme="executive"] th,
 [data-theme="contrast"] th,
-[data-theme="dark"] .table-command-strip,
 [data-theme="executive"] .table-command-strip,
 [data-theme="contrast"] .table-command-strip {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 60%, transparent), var(--bg-page));

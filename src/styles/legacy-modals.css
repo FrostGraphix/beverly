@@ -667,119 +667,90 @@
       background: rgba(16,185,129,0.12);
     }
 
-    [data-theme="dark"] .fixed-header {
-      background: rgba(8, 17, 31, 0.94);
-      box-shadow: 0 1px 0 rgba(52,211,153,0.1), 0 18px 34px rgba(0,0,0,0.34);
-    }
-
-    [data-theme="dark"] .navbar {
-      background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(7,12,24,0.94));
-    }
-
-    [data-theme="dark"] .tags-view-container {
-      background: linear-gradient(180deg, rgba(15,23,42,0.88), rgba(10,22,40,0.78));
-    }
-
-    [data-theme="dark"] .topbar-tool:hover,
-    [data-theme="dark"] .user-chip:hover {
-      background: rgba(52,211,153,0.12);
-    }
-
-    [data-theme="executive"] .fixed-header {
-      background: rgba(10, 23, 14, 0.95);
-      box-shadow: 0 1px 0 rgba(134,239,172,0.1), 0 18px 36px rgba(0,0,0,0.32);
-    }
-
-    [data-theme="executive"] .navbar {
-      background: linear-gradient(180deg, rgba(13,31,19,0.98), rgba(6,18,11,0.94));
-    }
-
-    [data-theme="executive"] .tags-view-container {
-      background: linear-gradient(180deg, rgba(13,31,19,0.88), rgba(9,24,15,0.8));
-    }
-
-    [data-theme="executive"] .topbar-tool:hover,
-    [data-theme="executive"] .user-chip:hover {
-      background: rgba(134,239,172,0.12);
-    }
-
-    [data-theme="ocean"] .fixed-header {
-      background: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 1px 0 rgba(5,150,105,0.08), 0 14px 28px rgba(6,78,59,0.08);
-    }
-
-    [data-theme="ocean"] .navbar {
-      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(236,253,245,0.92));
-    }
-
-    [data-theme="ocean"] .tags-view-container {
-      background: linear-gradient(180deg, rgba(255,255,255,0.84), rgba(236,253,245,0.74));
-    }
-
-    [data-theme="ocean"] .topbar-tool:hover,
-    [data-theme="ocean"] .user-chip:hover {
-      background: rgba(5,150,105,0.1);
-    }
-
+    [data-theme="executive"] *:focus-visible,
     [data-theme="contrast"] *:focus-visible {
       outline: 3px solid var(--primary);
       outline-offset: 2px;
     }
 
+    [data-theme="executive"] body,
     [data-theme="contrast"] body,
+    [data-theme="executive"] .content-page,
     [data-theme="contrast"] .content-page,
+    [data-theme="executive"] .dashboard-editor-container,
     [data-theme="contrast"] .dashboard-editor-container {
       background:
-        radial-gradient(circle at top right, rgba(255,214,10,0.08), transparent 24%),
+        radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 18%, transparent), transparent 24%),
         radial-gradient(circle at top left, rgba(255,255,255,0.04), transparent 18%),
         var(--bg-page);
     }
 
+    [data-theme="executive"] .fixed-header,
     [data-theme="contrast"] .fixed-header {
-      background: rgba(4, 4, 4, 0.98);
-      box-shadow: 0 1px 0 rgba(255,214,10,0.16), 0 20px 40px rgba(0,0,0,0.45);
+      background: var(--bg-header);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--primary) 30%, transparent), 0 20px 40px rgba(0,0,0,0.45);
     }
 
+    [data-theme="executive"] .navbar,
+    [data-theme="executive"] .tags-view-container,
     [data-theme="contrast"] .navbar,
     [data-theme="contrast"] .tags-view-container {
-      border-bottom-color: rgba(255,214,10,0.2);
+      border-bottom-color: color-mix(in srgb, var(--primary) 28%, transparent);
     }
 
+    [data-theme="executive"] .navbar,
     [data-theme="contrast"] .navbar {
-      background: linear-gradient(180deg, rgba(18,18,18,0.96), rgba(6,6,6,0.96));
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, white 3%), color-mix(in srgb, var(--bg-page) 98%, black 2%));
     }
 
+    [data-theme="executive"] .tags-view-container,
     [data-theme="contrast"] .tags-view-container {
       background:
-        linear-gradient(180deg, rgba(18,18,18,0.94), rgba(10,10,10,0.9));
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 94%, white 4%), color-mix(in srgb, var(--bg-page) 92%, black 8%));
       backdrop-filter: blur(16px);
     }
 
+    [data-theme="executive"] .hamburger-container:hover,
+    [data-theme="executive"] .topbar-tool:hover,
     [data-theme="contrast"] .hamburger-container:hover,
     [data-theme="contrast"] .topbar-tool:hover {
-      background: rgba(255,214,10,0.12);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
       color: var(--primary);
     }
 
+    [data-theme="executive"] .tags-view-item,
     [data-theme="contrast"] .tags-view-item {
-      background: rgba(255,214,10,0.08);
-      border-color: rgba(255,214,10,0.28);
+      background: color-mix(in srgb, var(--primary) 8%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 28%, transparent);
       color: var(--text-muted);
     }
 
+    [data-theme="executive"] .tags-view-item:hover,
     [data-theme="contrast"] .tags-view-item:hover {
-      background: rgba(255,214,10,0.14);
-      border-color: rgba(255,214,10,0.52);
+      background: color-mix(in srgb, var(--primary) 14%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 52%, transparent);
       color: var(--text-strong);
     }
 
+    [data-theme="executive"] .tags-view-item.active,
     [data-theme="contrast"] .tags-view-item.active {
-      color: #0a0a0a;
+      color: var(--text-inverse);
       background: linear-gradient(180deg, var(--primary-hover), var(--primary));
       border-color: var(--primary);
       box-shadow: var(--shadow-glow-sm);
     }
 
+    [data-theme="executive"] .theme-dropdown,
+    [data-theme="executive"] .theme-command-menu,
+    [data-theme="executive"] .user-dropdown,
+    [data-theme="executive"] .picker-panel,
+    [data-theme="executive"] .picker-modal,
+    [data-theme="executive"] .modal-card,
+    [data-theme="executive"] .consumption-chart-card,
+    [data-theme="executive"] .consumption-table-card,
+    [data-theme="executive"] .table-card,
+    [data-theme="executive"] .kpi-card,
+    [data-theme="executive"] .chart-card,
     [data-theme="contrast"] .theme-dropdown,
     [data-theme="contrast"] .theme-command-menu,
     [data-theme="contrast"] .user-dropdown,
@@ -792,83 +763,109 @@
     [data-theme="contrast"] .kpi-card,
     [data-theme="contrast"] .chart-card {
       background:
-        linear-gradient(180deg, rgba(26,26,26,0.98), rgba(10,10,10,0.98));
-      border-color: rgba(255,214,10,0.22);
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 98%, white 2%), color-mix(in srgb, var(--bg-page) 98%, black 2%));
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
       box-shadow: var(--shadow-lg);
     }
 
+    [data-theme="executive"] .theme-item:hover,
+    [data-theme="executive"] .theme-item.active,
+    [data-theme="executive"] .dropdown-item:hover,
+    [data-theme="executive"] .user-chip:hover,
     [data-theme="contrast"] .theme-item:hover,
     [data-theme="contrast"] .theme-item.active,
     [data-theme="contrast"] .dropdown-item:hover,
     [data-theme="contrast"] .user-chip:hover {
-      background: rgba(255,214,10,0.14);
+      background: color-mix(in srgb, var(--primary) 14%, transparent);
       color: var(--text-strong);
-      border-color: rgba(255,214,10,0.52);
+      border-color: color-mix(in srgb, var(--primary) 52%, transparent);
       box-shadow: var(--shadow-xs);
     }
 
+    [data-theme="executive"] .user-chip,
     [data-theme="contrast"] .user-chip {
-      background: rgba(255,214,10,0.06);
-      border-color: rgba(255,214,10,0.24);
+      background: color-mix(in srgb, var(--primary) 6%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 24%, transparent);
       color: var(--text-muted);
     }
 
+    [data-theme="executive"] .table-scroll,
+    [data-theme="executive"] .pagination,
     [data-theme="contrast"] .table-scroll,
     [data-theme="contrast"] .pagination {
-      background: linear-gradient(180deg, #131313, #090909);
-      border-color: rgba(255,214,10,0.22);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 94%, white 2%), color-mix(in srgb, var(--bg-page) 98%, black 2%));
+      border-color: color-mix(in srgb, var(--primary) 22%, transparent);
       box-shadow: var(--shadow-md);
     }
 
+    [data-theme="executive"] thead tr,
     [data-theme="contrast"] thead tr {
-      background: linear-gradient(180deg, #1a1a1a, #111111);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, white 3%), color-mix(in srgb, var(--bg-card) 88%, black 12%));
     }
 
+    [data-theme="executive"] th,
     [data-theme="contrast"] th {
       color: var(--theme-color-bright);
       letter-spacing: 0.02em;
     }
 
+    [data-theme="executive"] td,
     [data-theme="contrast"] td {
       color: var(--text-main);
-      border-bottom-color: rgba(255,214,10,0.16);
+      border-bottom-color: color-mix(in srgb, var(--primary) 16%, transparent);
     }
 
+    [data-theme="executive"] tbody tr,
     [data-theme="contrast"] tbody tr {
       background: rgba(255,255,255,0.01);
     }
 
+    [data-theme="executive"] tbody tr:nth-child(even),
     [data-theme="contrast"] tbody tr:nth-child(even) {
-      background: rgba(255,214,10,0.02);
+      background: color-mix(in srgb, var(--primary) 3%, transparent);
     }
 
+    [data-theme="executive"] tbody tr:hover,
     [data-theme="contrast"] tbody tr:hover {
-      background: rgba(255,214,10,0.12);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
     }
 
+    [data-theme="executive"] tbody tr.selected,
     [data-theme="contrast"] tbody tr.selected {
-      background: rgba(255,214,10,0.16);
+      background: color-mix(in srgb, var(--primary) 16%, transparent);
       box-shadow: inset 3px 0 0 var(--primary);
     }
 
+    [data-theme="executive"] .page-chip,
     [data-theme="contrast"] .page-chip {
-      border-color: rgba(255,214,10,0.26);
+      border-color: color-mix(in srgb, var(--primary) 26%, transparent);
       color: var(--text-muted);
-      background: rgba(255,214,10,0.05);
+      background: color-mix(in srgb, var(--primary) 5%, transparent);
     }
 
+    [data-theme="executive"] .page-chip:hover:not(:disabled),
     [data-theme="contrast"] .page-chip:hover:not(:disabled) {
-      background: rgba(255,214,10,0.12);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
       color: var(--text-strong);
     }
 
+    [data-theme="executive"] .page-chip.active,
+    [data-theme="executive"] .btn.primary,
     [data-theme="contrast"] .page-chip.active,
     [data-theme="contrast"] .btn.primary {
-      color: #0a0a0a;
+      color: var(--text-inverse);
       background: linear-gradient(180deg, var(--primary-hover), var(--primary));
       border-color: var(--primary);
     }
 
+    [data-theme="executive"] .btn,
+    [data-theme="executive"] .link-btn,
+    [data-theme="executive"] .field,
+    [data-theme="executive"] .field input,
+    [data-theme="executive"] .field select,
+    [data-theme="executive"] input,
+    [data-theme="executive"] select,
+    [data-theme="executive"] textarea,
     [data-theme="contrast"] .btn,
     [data-theme="contrast"] .link-btn,
     [data-theme="contrast"] .field,
@@ -877,23 +874,30 @@
     [data-theme="contrast"] input,
     [data-theme="contrast"] select,
     [data-theme="contrast"] textarea {
-      background-color: #111111;
-      border-color: rgba(255,214,10,0.24);
+      background-color: color-mix(in srgb, var(--bg-card) 92%, black 8%);
+      border-color: color-mix(in srgb, var(--primary) 24%, transparent);
       color: var(--text-strong);
     }
 
+    [data-theme="executive"] input::placeholder,
+    [data-theme="executive"] textarea::placeholder,
     [data-theme="contrast"] input::placeholder,
     [data-theme="contrast"] textarea::placeholder {
       color: var(--text-faint);
     }
 
+    [data-theme="executive"] .btn:hover:not(:disabled),
+    [data-theme="executive"] .link-btn:hover,
     [data-theme="contrast"] .btn:hover:not(:disabled),
     [data-theme="contrast"] .link-btn:hover {
       color: var(--text-strong);
-      background: rgba(255,214,10,0.14);
-      border-color: rgba(255,214,10,0.52);
+      background: color-mix(in srgb, var(--primary) 14%, transparent);
+      border-color: color-mix(in srgb, var(--primary) 52%, transparent);
     }
 
+    [data-theme="executive"] .echart-panel,
+    [data-theme="executive"] .chart-shell,
+    [data-theme="executive"] .chart-shell-rich,
     [data-theme="contrast"] .echart-panel,
     [data-theme="contrast"] .chart-shell,
     [data-theme="contrast"] .chart-shell-rich {

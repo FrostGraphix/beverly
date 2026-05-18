@@ -3,863 +3,1802 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Beverly Wallet — Operations Dashboard</title>
+<title>Beverly Wallet — Operations</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #0a0e14;
-    --bg-elev: #0f141c;
-    --surface: #121823;
-    --surface-2: #182030;
-    --surface-3: #1d2738;
-    --border: rgba(255,255,255,0.06);
-    --border-strong: rgba(255,255,255,0.12);
-    --text: #e8ecf3;
-    --text-dim: #97a3b8;
-    --text-muted: #5d6b82;
-    --brand: #22c55e;
-    --brand-dim: #16a34a;
-    --brand-glow: rgba(34,197,94,0.18);
-    --accent: #6366f1;
-    --warn: #f59e0b;
-    --danger: #ef4444;
-    --info: #06b6d4;
-    --success: #22c55e;
-    --shadow-md: 0 4px 20px rgba(0,0,0,0.35);
-    --shadow-lg: 0 12px 48px rgba(0,0,0,0.55);
-    --grid-line: rgba(255,255,255,0.04);
-  }
-  [data-theme="light"] {
-    --bg: #f5f7fb;
-    --bg-elev: #ffffff;
-    --surface: #ffffff;
-    --surface-2: #f8fafc;
-    --surface-3: #eef2f7;
-    --border: rgba(15,23,42,0.08);
-    --border-strong: rgba(15,23,42,0.15);
-    --text: #0f172a;
-    --text-dim: #475569;
-    --text-muted: #94a3b8;
-    --shadow-md: 0 4px 20px rgba(15,23,42,0.06);
-    --shadow-lg: 0 12px 48px rgba(15,23,42,0.10);
-    --grid-line: rgba(15,23,42,0.05);
-  }
+/* ════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ════════════════════════════════════════════════════════════ */
+:root {
+  /* —— Spacing scale (4px base) —— */
+  --s-0: 0;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 28px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
 
-  * { box-sizing: border-box; }
-  html,body { margin: 0; padding: 0; }
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-  }
-  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  /* —— Type scale —— */
+  --t-2xs: 10px;
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-base: 13px;
+  --t-md: 14px;
+  --t-lg: 16px;
+  --t-xl: 18px;
+  --t-2xl: 22px;
+  --t-3xl: 28px;
+  --t-4xl: 36px;
 
-  /* ─────────── LAYOUT ─────────── */
-  .app {
-    display: grid;
-    grid-template-columns: 248px 1fr;
-    min-height: 100vh;
-  }
+  /* —— Radius —— */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --r-2xl: 18px;
+  --r-full: 999px;
 
-  /* ─────────── SIDEBAR ─────────── */
+  /* —— Motion —— */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+
+  /* —— Z —— */
+  --z-base: 1;
+  --z-sticky: 100;
+  --z-modal: 1000;
+
+  /* —— Brand —— */
+  --brand-50: oklch(96% 0.05 145);
+  --brand-300: oklch(80% 0.16 145);
+  --brand: oklch(70% 0.19 145);
+  --brand-600: oklch(62% 0.17 145);
+  --brand-700: oklch(52% 0.14 145);
+  --brand-glow: oklch(70% 0.19 145 / 0.18);
+
+  /* —— Semantic colors —— */
+  --accent: oklch(65% 0.18 270);
+  --info: oklch(72% 0.13 220);
+  --warn: oklch(78% 0.16 75);
+  --danger: oklch(68% 0.20 25);
+  --success: var(--brand);
+}
+
+/* ════════════════════════════════════════════════════════════
+   DARK THEME (default)
+   ════════════════════════════════════════════════════════════ */
+:root[data-theme="dark"] {
+  --canvas: oklch(14% 0.012 240);
+  --bg: oklch(16% 0.014 240);
+  --bg-elev: oklch(19% 0.016 240);
+  --surface: oklch(21% 0.018 240);
+  --surface-2: oklch(24% 0.020 240);
+  --surface-3: oklch(28% 0.022 240);
+  --surface-4: oklch(33% 0.025 240);
+
+  --text: oklch(96% 0.005 240);
+  --text-dim: oklch(72% 0.012 240);
+  --text-muted: oklch(54% 0.012 240);
+  --text-faint: oklch(40% 0.012 240);
+
+  --border: oklch(100% 0 0 / 0.06);
+  --border-strong: oklch(100% 0 0 / 0.12);
+  --border-bright: oklch(100% 0 0 / 0.18);
+
+  --grid: oklch(100% 0 0 / 0.035);
+
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / 0.30);
+  --shadow-2: 0 2px 8px oklch(0% 0 0 / 0.35), 0 1px 2px oklch(0% 0 0 / 0.25);
+  --shadow-3: 0 8px 24px oklch(0% 0 0 / 0.40), 0 2px 6px oklch(0% 0 0 / 0.30);
+  --shadow-4: 0 24px 64px oklch(0% 0 0 / 0.55);
+
+  --topbar-bg: oklch(19% 0.014 240 / 0.85);
+  --scrim: oklch(0% 0 0 / 0.45);
+}
+
+/* ════════════════════════════════════════════════════════════
+   LIGHT THEME
+   ════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  --canvas: oklch(98% 0.004 240);
+  --bg: oklch(100% 0 0);
+  --bg-elev: oklch(100% 0 0);
+  --surface: oklch(100% 0 0);
+  --surface-2: oklch(97% 0.005 240);
+  --surface-3: oklch(94% 0.008 240);
+  --surface-4: oklch(90% 0.010 240);
+
+  --text: oklch(22% 0.020 240);
+  --text-dim: oklch(42% 0.020 240);
+  --text-muted: oklch(58% 0.015 240);
+  --text-faint: oklch(72% 0.010 240);
+
+  --border: oklch(20% 0.020 240 / 0.08);
+  --border-strong: oklch(20% 0.020 240 / 0.14);
+  --border-bright: oklch(20% 0.020 240 / 0.22);
+
+  --grid: oklch(20% 0.020 240 / 0.06);
+
+  --shadow-1: 0 1px 2px oklch(20% 0.020 240 / 0.05);
+  --shadow-2: 0 2px 8px oklch(20% 0.020 240 / 0.06), 0 1px 2px oklch(20% 0.020 240 / 0.04);
+  --shadow-3: 0 12px 32px oklch(20% 0.020 240 / 0.10), 0 4px 8px oklch(20% 0.020 240 / 0.06);
+  --shadow-4: 0 24px 64px oklch(20% 0.020 240 / 0.14);
+
+  --topbar-bg: oklch(100% 0 0 / 0.88);
+  --scrim: oklch(20% 0.020 240 / 0.20);
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESET + BASE
+   ════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { font-size: 14px; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--canvas);
+  color: var(--text);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  overflow-x: hidden;
+  letter-spacing: -0.005em;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace; font-variant-numeric: tabular-nums; }
+button { font-family: inherit; cursor: pointer; }
+::selection { background: var(--brand-glow); color: var(--text); }
+
+/* Focus discipline */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-4); }
+
+/* ════════════════════════════════════════════════════════════
+   LAYOUT
+   ════════════════════════════════════════════════════════════ */
+.app {
+  display: grid;
+  grid-template-columns: 252px 1fr;
+  min-height: 100vh;
+}
+
+/* ════════════════════════════════════════════════════════════
+   SIDEBAR
+   ════════════════════════════════════════════════════════════ */
+.sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-5) var(--s-5) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.brand::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand-glow), transparent);
+}
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(135deg, var(--brand-300) 0%, var(--brand) 50%, var(--brand-600) 100%);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 16px;
+  color: white;
+  letter-spacing: -0.02em;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.30),
+    0 4px 12px var(--brand-glow);
+  flex-shrink: 0;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+.brand-text strong {
+  font-size: var(--t-md);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.brand-text span {
+  font-size: var(--t-2xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.cmd-pill {
+  margin: var(--s-3) var(--s-4) var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.cmd-pill:hover { border-color: var(--border-strong); color: var(--text-dim); }
+.cmd-pill .kbd {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+.cmd-pill .kbd kbd {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.nav {
+  padding: var(--s-2) var(--s-2) var(--s-4);
+  flex: 1;
+  overflow-y: auto;
+}
+.nav-section {
+  font-size: var(--t-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+  padding: var(--s-4) var(--s-3) var(--s-2);
+  font-weight: 700;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 8px var(--s-3);
+  border-radius: var(--r-md);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: var(--t-base);
+  font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  position: relative;
+  margin-bottom: 1px;
+}
+.nav-item .ic { color: var(--text-muted); }
+.nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.nav-item:hover .ic { color: var(--text-dim); }
+.nav-item.active {
+  background: linear-gradient(90deg, var(--brand-glow), transparent 60%);
+  color: var(--brand);
+  font-weight: 600;
+}
+.nav-item.active .ic { color: var(--brand); }
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--brand);
+  box-shadow: 0 0 12px var(--brand-glow);
+}
+
+.nav-item .pill {
+  margin-left: auto;
+  font-size: var(--t-2xs);
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  min-width: 22px;
+  text-align: center;
+}
+.nav-item.active .pill {
+  background: var(--brand);
+  color: white;
+  box-shadow: 0 2px 6px var(--brand-glow);
+}
+.nav-item .pill.warn { background: oklch(78% 0.16 75 / 0.18); color: var(--warn); }
+.nav-item .pill.danger { background: oklch(68% 0.20 25 / 0.18); color: var(--danger); }
+
+.sidebar-foot {
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  border-top: 1px solid var(--border);
+}
+.back-to-crm {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.back-to-crm:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateX(-1px);
+}
+
+/* ════════════════════════════════════════════════════════════
+   MAIN COLUMN
+   ════════════════════════════════════════════════════════════ */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ────── Topbar ────── */
+.topbar {
+  height: 60px;
+  border-bottom: 1px solid var(--border);
+  background: var(--topbar-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s-7);
+  gap: var(--s-4);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-base);
+}
+.crumb-link {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.crumb-link:hover { color: var(--text-dim); }
+.crumb strong {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.crumb-sep { color: var(--text-faint); }
+.spacer { flex: 1; }
+
+.global-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 36px;
+  padding: 0 var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  width: 280px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.global-search:hover { border-color: var(--border-strong); }
+.global-search input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: var(--t-base);
+  outline: none;
+  font-family: inherit;
+}
+.global-search input::placeholder { color: var(--text-muted); }
+.kbd-hint {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  position: relative;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.icon-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.icon-btn .notif-dot {
+  position: absolute;
+  top: 7px; right: 7px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.icon-btn .notif-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--danger);
+  opacity: 0.35;
+  animation: ring 2s infinite;
+}
+@keyframes ring {
+  0% { transform: scale(0.7); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 4px var(--s-3) 4px 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.user-chip:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-weight: 700;
+  font-size: var(--t-xs);
+  letter-spacing: -0.01em;
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.20);
+}
+.avatar.indigo { background: linear-gradient(135deg, oklch(70% 0.16 270), oklch(58% 0.20 290)); }
+.user-meta { display: flex; flex-direction: column; line-height: 1.2; }
+.user-meta strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; }
+.user-meta span { font-size: var(--t-2xs); color: var(--text-muted); }
+
+/* ────── System health strip ────── */
+.health-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  height: 36px;
+  padding: 0 var(--s-7);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-sm);
+}
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text-dim);
+}
+.health-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.health-dot.ok { background: var(--brand); box-shadow: 0 0 8px var(--brand-glow); }
+.health-dot.warn { background: var(--warn); box-shadow: 0 0 8px oklch(78% 0.16 75 / 0.5); }
+.health-dot.err { background: var(--danger); }
+.health-item strong { color: var(--text); font-weight: 600; }
+.health-meta {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONTENT
+   ════════════════════════════════════════════════════════════ */
+.content {
+  padding: var(--s-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ────── Page header ────── */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-6);
+}
+.page-title h1 {
+  margin: 0 0 var(--s-2);
+  font-size: var(--t-3xl);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  background: var(--brand-glow);
+  color: var(--brand);
+  padding: 4px var(--s-3);
+  border-radius: var(--r-full);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid oklch(70% 0.19 145 / 0.25);
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  position: relative;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0.5;
+  animation: pulse-ring 1.8s infinite;
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.page-title p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--t-md);
+  max-width: 640px;
+}
+
+.head-actions {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+}
+.btn {
+  height: 38px;
+  padding: 0 var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--t-base);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  letter-spacing: -0.01em;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  transform: translateY(-0.5px);
+}
+.btn:active { transform: translateY(0); }
+.btn.primary {
+  background: linear-gradient(180deg, var(--brand) 0%, var(--brand-600) 100%);
+  border-color: oklch(70% 0.19 145 / 0.40);
+  color: white;
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.20),
+    0 1px 2px oklch(0% 0 0 / 0.20),
+    0 4px 12px var(--brand-glow);
+}
+.btn.primary:hover {
+  box-shadow:
+    inset 0 1px 0 oklch(100% 0 0 / 0.20),
+    0 2px 4px oklch(0% 0 0 / 0.20),
+    0 8px 24px var(--brand-glow);
+}
+.btn.ghost { background: transparent; }
+
+/* ────── Segmented control ────── */
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 3px;
+  gap: 2px;
+}
+.seg {
+  padding: 5px var(--s-3);
+  border-radius: 5px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  letter-spacing: -0.005em;
+}
+.seg:hover { color: var(--text-dim); }
+.seg.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+}
+
+/* ════════════════════════════════════════════════════════════
+   KPI HERO
+   ════════════════════════════════════════════════════════════ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: var(--s-3);
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--s-5);
+  position: relative;
+  overflow: hidden;
+  transition: all var(--dur-base) var(--ease-out);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-height: 148px;
+}
+.kpi:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-3);
+}
+.kpi.featured {
+  background:
+    radial-gradient(120% 80% at 0% 0%, var(--brand-glow), transparent 50%),
+    var(--surface);
+  border-color: oklch(70% 0.19 145 / 0.22);
+}
+.kpi.featured::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+}
+
+.kpi-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.kpi-label {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+}
+.kpi-icon {
+  width: 32px; height: 32px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.kpi-icon .ic { width: 16px; height: 16px; }
+.kpi.featured .kpi-icon { background: var(--brand-glow); color: var(--brand); }
+.kpi.danger-tone .kpi-icon { background: oklch(68% 0.20 25 / 0.15); color: var(--danger); }
+.kpi.warn-tone .kpi-icon { background: oklch(78% 0.16 75 / 0.15); color: var(--warn); }
+.kpi.info-tone .kpi-icon { background: oklch(72% 0.13 220 / 0.15); color: var(--info); }
+
+.kpi-value {
+  font-size: var(--t-3xl);
+  font-weight: 700;
+  letter-spacing: -0.030em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin-top: auto;
+}
+.kpi-value .unit {
+  font-size: var(--t-lg);
+  color: var(--text-dim);
+  font-weight: 500;
+  margin-left: 2px;
+  letter-spacing: -0.01em;
+}
+
+.kpi-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  min-height: 22px;
+}
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  padding: 3px var(--s-2);
+  border-radius: var(--r-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+}
+.delta.up { background: var(--brand-glow); color: var(--brand); }
+.delta.down { background: oklch(68% 0.20 25 / 0.12); color: var(--danger); }
+.delta.flat { background: var(--surface-3); color: var(--text-dim); }
+
+.kpi-note {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.spark {
+  height: 36px;
+  margin: 0 calc(var(--s-1) * -1) calc(var(--s-1) * -1);
+}
+.spark path.stroke { fill: none; stroke: var(--brand); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.spark path.fill { fill: url(#sparkGrad); }
+.kpi.danger-tone .spark path.stroke { stroke: var(--danger); }
+.kpi.warn-tone .spark path.stroke { stroke: var(--warn); }
+.kpi.info-tone .spark path.stroke { stroke: var(--info); }
+
+/* ════════════════════════════════════════════════════════════
+   CARDS
+   ════════════════════════════════════════════════════════════ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--s-5) var(--s-6);
+  transition: border-color var(--dur-base) var(--ease-out);
+}
+.card.flush { padding: 0; overflow: hidden; }
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--s-4);
+  gap: var(--s-3);
+}
+.card-title {
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.card-sub {
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.card-cta {
+  font-size: var(--t-sm);
+  color: var(--brand);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.card-cta:hover { color: var(--brand-300); }
+
+.legend {
+  display: inline-flex;
+  gap: var(--s-4);
+  align-items: center;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-xs);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.legend-swatch {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+}
+.legend-swatch.brand { background: var(--brand); box-shadow: 0 0 0 2px var(--brand-glow); }
+.legend-swatch.accent { background: var(--accent); }
+.legend-swatch.dashed {
+  background: repeating-linear-gradient(90deg, var(--accent) 0 3px, transparent 3px 5px);
+}
+
+/* ────── 2-col row ────── */
+.row-2 {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: var(--s-4);
+}
+
+/* ────── Chart ────── */
+.chart-card { padding: var(--s-6); }
+.chart-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--border);
+}
+.chart-stat { display: flex; flex-direction: column; gap: 2px; }
+.chart-stat-label {
+  font-size: var(--t-2xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+}
+.chart-stat-value {
+  font-size: var(--t-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.chart-stat-delta {
+  font-size: var(--t-xs);
+  color: var(--brand);
+  font-weight: 600;
+  margin-top: 1px;
+}
+.chart-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+}
+
+.chart-wrap {
+  height: 280px;
+  position: relative;
+  margin: 0 calc(var(--s-2) * -1);
+}
+.chart-wrap svg { display: block; width: 100%; height: 100%; }
+.chart-grid line { stroke: var(--grid); stroke-width: 1; }
+.chart-axis text { font-size: 10px; fill: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+.chart-line {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 4px 8px var(--brand-glow));
+}
+.chart-line-2 {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+.chart-area { fill: url(#chartGrad); }
+.chart-dot { fill: var(--brand); stroke: var(--bg-elev); stroke-width: 3; }
+.chart-dot-2 { fill: var(--accent); stroke: var(--bg-elev); stroke-width: 3; }
+.chart-cursor { stroke: var(--brand); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.5; }
+.chart-tooltip-box {
+  fill: var(--surface-3);
+  stroke: var(--border-strong);
+  filter: drop-shadow(0 8px 24px oklch(0% 0 0 / 0.3));
+}
+
+/* ────── Queues ────── */
+.queue { display: flex; flex-direction: column; gap: var(--s-2); }
+.q-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-3);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+}
+.q-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--brand);
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.q-row:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  transform: translateX(2px);
+}
+.q-row:hover::before { opacity: 1; }
+.q-row.warn::before { background: var(--warn); }
+.q-row.danger::before { background: var(--danger); }
+.q-row.info::before { background: var(--info); }
+
+.q-icon {
+  width: 38px; height: 38px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.q-icon.warn { background: oklch(78% 0.16 75 / 0.12); color: var(--warn); }
+.q-icon.danger { background: oklch(68% 0.20 25 / 0.12); color: var(--danger); }
+.q-icon.info { background: oklch(72% 0.13 220 / 0.12); color: var(--info); }
+.q-icon.success { background: var(--brand-glow); color: var(--brand); }
+.q-body { flex: 1; min-width: 0; }
+.q-title {
+  font-size: var(--t-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.q-sub {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 500;
+}
+.q-count {
+  background: var(--surface-3);
+  padding: 5px var(--s-3);
+  border-radius: var(--r-sm);
+  font-weight: 700;
+  font-size: var(--t-base);
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 44px;
+  text-align: center;
+}
+
+/* ────── 3-col row ────── */
+.row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--s-4);
+}
+
+/* ────── Pulse feed ────── */
+.pulse-feed {
+  display: flex;
+  flex-direction: column;
+  max-height: 408px;
+  overflow-y: auto;
+  margin: 0 calc(var(--s-3) * -1);
+}
+.pulse-row {
+  display: grid;
+  grid-template-columns: 56px 44px 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px dashed var(--border);
+  animation: pulseIn var(--dur-slow) var(--ease-out);
+}
+.pulse-row:last-child { border-bottom: none; }
+@keyframes pulseIn {
+  from { opacity: 0; transform: translateY(-4px); background: var(--brand-glow); }
+  to { opacity: 1; transform: translateY(0); background: transparent; }
+}
+.pulse-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--t-2xs);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.pulse-tag {
+  font-size: 9px;
+  padding: 3px 0;
+  border-radius: var(--r-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.pulse-tag.buy { background: var(--brand-glow); color: var(--brand); }
+.pulse-tag.fund { background: oklch(72% 0.13 220 / 0.15); color: var(--info); }
+.pulse-tag.fail { background: oklch(68% 0.20 25 / 0.15); color: var(--danger); }
+.pulse-tag.rev { background: oklch(78% 0.16 75 / 0.15); color: var(--warn); }
+.pulse-desc {
+  font-size: var(--t-sm);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.pulse-desc strong { color: var(--text); font-weight: 600; }
+.pulse-amt {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--t-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ────── Leaderboard ────── */
+.leader { display: flex; flex-direction: column; gap: 0; }
+.leader-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.leader-row:last-child { border-bottom: none; padding-bottom: 0; }
+.leader-row:first-child { padding-top: 0; }
+
+.leader-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--t-xs);
+  color: var(--text-faint);
+  font-weight: 700;
+}
+.leader-rank.gold { color: oklch(82% 0.16 80); }
+.leader-rank.silver { color: oklch(80% 0 0); }
+.leader-rank.bronze { color: oklch(64% 0.13 45); }
+
+.leader-body { min-width: 0; }
+.leader-name {
+  font-size: var(--t-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.leader-trend {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+  background: var(--brand-glow);
+  color: var(--brand);
+  letter-spacing: 0.02em;
+}
+.leader-bar-bg {
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.leader-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-300), var(--brand));
+  border-radius: 2px;
+}
+.leader-amt {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+.leader-amt small {
+  display: block;
+  font-size: var(--t-2xs);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  margin-top: 1px;
+}
+
+/* ────── Exceptions ────── */
+.exc { display: flex; flex-direction: column; gap: 0; }
+.exc-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+  margin: 0 calc(var(--s-3) * -1);
+  padding-left: var(--s-3);
+  padding-right: var(--s-3);
+  border-radius: var(--r-sm);
+}
+.exc-row:hover { background: var(--surface-2); }
+.exc-row:last-child { border-bottom: none; }
+.exc-sev {
+  width: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.exc-sev.crit { background: var(--danger); box-shadow: 0 0 8px oklch(68% 0.20 25 / 0.5); }
+.exc-sev.high { background: var(--warn); }
+.exc-sev.med { background: var(--info); }
+.exc-body { flex: 1; min-width: 0; padding: 2px 0; }
+.exc-title {
+  font-size: var(--t-base);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.exc-meta {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-weight: 500;
+}
+.exc-act {
+  font-size: var(--t-xs);
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+  align-self: center;
+  padding: 5px var(--s-2);
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.exc-act:hover { background: var(--brand-glow); }
+
+/* ════════════════════════════════════════════════════════════
+   ACTIVITY TABLE
+   ════════════════════════════════════════════════════════════ */
+.table-head-bar {
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+.filter-bar {
+  padding: var(--s-2) var(--s-5);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+}
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--dur-fast);
+}
+.filter-pill:hover { background: var(--surface-2); color: var(--text); }
+.filter-pill.active {
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 600;
+}
+.filter-pill .count {
+  font-size: var(--t-2xs);
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+}
+.filter-pill.active .count { color: var(--brand); }
+
+/* ────── TABLE — compact, sleek ────── */
+.t-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+thead th {
+  text-align: left;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  padding: 10px var(--s-5);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+  background: transparent;
+}
+tbody td {
+  padding: 10px var(--s-5);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--t-sm);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+tbody tr {
+  transition: background var(--dur-fast);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface-2); }
+
+.row-id {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.vendor-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vendor-mark {
+  width: 26px; height: 26px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 10px;
+  color: white;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.18);
+}
+.vendor-mark.a { background: linear-gradient(135deg, oklch(70% 0.16 270), oklch(58% 0.20 290)); }
+.vendor-mark.b { background: linear-gradient(135deg, oklch(78% 0.16 75), oklch(64% 0.20 50)); }
+.vendor-mark.c { background: linear-gradient(135deg, oklch(72% 0.13 220), oklch(58% 0.17 210)); }
+.vendor-mark.d { background: linear-gradient(135deg, oklch(80% 0.16 145), oklch(62% 0.17 145)); }
+.vendor-mark.e { background: linear-gradient(135deg, oklch(72% 0.18 340), oklch(58% 0.22 350)); }
+.vendor-mark.f { background: linear-gradient(135deg, oklch(74% 0.14 15), oklch(60% 0.20 25)); }
+.vendor-meta-line {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  margin-top: 1px;
+  font-weight: 500;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge.success { background: var(--brand-glow); color: var(--brand); }
+.badge.warn { background: oklch(78% 0.16 75 / 0.14); color: var(--warn); }
+.badge.danger { background: oklch(68% 0.20 25 / 0.14); color: var(--danger); }
+.badge.info { background: oklch(72% 0.13 220 / 0.14); color: var(--info); }
+.badge.neutral { background: var(--surface-3); color: var(--text-dim); }
+
+.money {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.units {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
+
+.row-acts {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+tbody tr:hover .row-acts { opacity: 1; }
+.row-act {
+  width: 24px; height: 24px;
+  border-radius: var(--r-xs);
+  background: transparent;
+  border: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: all var(--dur-fast);
+}
+.row-act:hover { background: var(--surface-3); color: var(--brand); }
+
+.table-foot {
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  gap: var(--s-3);
+}
+
+/* ────── Mobile table cards ────── */
+.t-cards { display: none; }
+.tc {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.tc:last-child { border-bottom: none; }
+.tc:active { background: var(--surface-2); }
+.tc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.tc-vendor {
+  font-size: var(--t-base);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.tc-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 1px;
+  letter-spacing: -0.01em;
+}
+.tc-amt {
+  font-size: var(--t-md);
+  letter-spacing: -0.02em;
+}
+.tc-mid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-2) 0 var(--s-1);
+  border-top: 1px dashed var(--border);
+}
+.tc-pair {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tc-k {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.tc-v {
+  font-size: var(--t-xs);
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+.tc-bot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.pager { display: inline-flex; gap: 2px; align-items: center; }
+.pager-btn {
+  width: 30px; height: 30px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.pager-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.pager-btn.active { background: var(--surface-3); color: var(--text); border-color: var(--border-strong); }
+
+/* ════════════════════════════════════════════════════════════
+   ICONS
+   ════════════════════════════════════════════════════════════ */
+.ic {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.nav-item .ic { width: 17px; height: 17px; }
+.ic-sm { width: 14px; height: 14px; }
+.ic-lg { width: 18px; height: 18px; }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE NAV TOGGLE
+   ════════════════════════════════════════════════════════════ */
+.menu-btn {
+  display: none;
+  width: 36px; height: 36px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  place-items: center;
+}
+.menu-btn:hover { background: var(--surface-3); color: var(--text); }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.scrim.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — mobile-first compactness
+   ════════════════════════════════════════════════════════════ */
+
+/* 1200px and below — tablet landscape */
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .row-2 { grid-template-columns: 1fr; }
+  .row-3 { grid-template-columns: 1fr 1fr; }
+  .row-3 > :last-child { grid-column: span 2; }
+  .content { padding: var(--s-6); gap: var(--s-5); }
+  .global-search { width: 220px; }
+}
+
+/* 900px and below — tablet portrait */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+
   .sidebar {
-    background: var(--bg-elev);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    position: sticky;
-    top: 0;
-    height: 100vh;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 280px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-out);
+    box-shadow: var(--shadow-4);
   }
-  .brand {
-    padding: 22px 20px 18px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  .brand-logo {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dim) 100%);
-    display: grid;
-    place-items: center;
-    font-weight: 800;
-    font-size: 18px;
-    color: white;
-    box-shadow: 0 4px 14px var(--brand-glow);
-  }
-  .brand-text {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.15;
-  }
-  .brand-text strong { font-size: 15px; letter-spacing: -0.01em; }
-  .brand-text span { font-size: 11px; color: var(--text-muted); }
+  .sidebar.open { transform: translateX(0); }
 
-  .nav {
-    padding: 14px 10px;
-    flex: 1;
-    overflow-y: auto;
-  }
-  .nav-section {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
-    padding: 14px 12px 6px;
-    font-weight: 600;
-  }
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    padding: 9px 12px;
-    border-radius: 8px;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 120ms ease;
-    margin-bottom: 1px;
-  }
-  .nav-item:hover { background: var(--surface-2); color: var(--text); }
-  .nav-item.active {
-    background: linear-gradient(90deg, var(--brand-glow) 0%, transparent 100%);
-    color: var(--brand);
-    box-shadow: inset 2px 0 0 var(--brand);
-  }
-  .nav-item .icon {
-    width: 16px; height: 16px;
-    flex-shrink: 0;
-  }
-  .nav-item .badge {
-    margin-left: auto;
-    font-size: 10px;
-    background: var(--surface-3);
-    color: var(--text-dim);
-    padding: 2px 7px;
-    border-radius: 6px;
-    font-weight: 600;
-  }
-  .nav-item.active .badge { background: var(--brand); color: white; }
+  .menu-btn { display: grid; }
+  .global-search { display: none; }
 
-  .sidebar-foot {
-    padding: 12px 14px 18px;
-    border-top: 1px solid var(--border);
-  }
-  .back-crm {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    background: var(--surface-2);
-    border-radius: 8px;
-    font-size: 12px;
-    color: var(--text-dim);
-    cursor: pointer;
-    border: 1px solid var(--border);
-  }
-  .back-crm:hover { color: var(--text); background: var(--surface-3); }
+  .topbar { padding: 0 var(--s-4); gap: var(--s-3); height: 56px; }
+  .crumb { font-size: var(--t-sm); }
+  .user-meta { display: none; }
+  .user-chip { padding: 4px; }
 
-  /* ─────────── TOPBAR ─────────── */
-  .main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .topbar {
-    height: 64px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-elev);
-    display: flex;
-    align-items: center;
-    padding: 0 28px;
-    gap: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    backdrop-filter: blur(20px);
-  }
-  .crumb {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-  .crumb strong { color: var(--text); font-weight: 600; }
-  .crumb-sep { opacity: 0.4; }
-  .topbar-spacer { flex: 1; }
-  .icon-btn {
-    width: 36px; height: 36px;
-    border-radius: 9px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    color: var(--text-dim);
-    transition: all 120ms;
-    position: relative;
-  }
-  .icon-btn:hover { background: var(--surface-3); color: var(--text); }
-  .icon-btn .dot {
-    position: absolute;
-    top: 8px; right: 8px;
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--brand);
-    box-shadow: 0 0 0 2px var(--bg-elev);
-  }
-  .user-chip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 4px 12px 4px 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    cursor: pointer;
-  }
-  .user-chip:hover { background: var(--surface-3); }
-  .avatar {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    display: grid;
-    place-items: center;
-    color: white;
-    font-weight: 700;
-    font-size: 11px;
-  }
-  .user-meta { display: flex; flex-direction: column; line-height: 1.15; }
-  .user-meta strong { font-size: 12px; font-weight: 600; }
-  .user-meta span { font-size: 10px; color: var(--text-muted); }
+  .content { padding: var(--s-4); gap: var(--s-4); }
+  .page-head { flex-direction: column; align-items: stretch; gap: var(--s-4); }
+  .head-actions { flex-wrap: wrap; gap: var(--s-2); }
+  .page-title h1 { font-size: var(--t-2xl); }
+  .page-title p { font-size: var(--t-sm); }
 
-  /* ─────────── CONTENT ─────────── */
-  .content {
-    padding: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--s-2); }
+  .kpi { padding: var(--s-4); min-height: 130px; gap: var(--s-2); }
+  .kpi-value { font-size: var(--t-2xl); letter-spacing: -0.025em; }
+  .kpi-icon { width: 28px; height: 28px; }
 
-  /* page header */
-  .page-head {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
-  }
-  .page-title h1 {
-    margin: 0 0 6px;
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  .page-title p {
-    margin: 0;
-    color: var(--text-dim);
-    font-size: 13px;
-  }
-  .pulse-live {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(34,197,94,0.10);
-    color: var(--brand);
-    padding: 3px 10px 3px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    margin-left: 10px;
-    vertical-align: middle;
-  }
-  .pulse-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--brand);
-    animation: pulse 1.6s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.7); }
-  }
-  .head-actions { display: flex; gap: 8px; }
-  .btn {
-    height: 38px;
-    padding: 0 14px;
-    border-radius: 9px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: inherit;
-  }
-  .btn:hover { background: var(--surface-3); }
-  .btn.primary {
-    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dim) 100%);
-    border-color: transparent;
-    color: white;
-    box-shadow: 0 4px 14px var(--brand-glow);
-  }
-  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--brand-glow); }
+  .row-3 { grid-template-columns: 1fr; }
+  .row-3 > :last-child { grid-column: auto; }
 
-  /* segmented control */
-  .segmented {
-    display: inline-flex;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 3px;
-    gap: 2px;
-  }
-  .seg {
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: all 120ms;
-  }
-  .seg.active { background: var(--surface-3); color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+  .card { padding: var(--s-4) var(--s-4); border-radius: var(--r-lg); }
+  .card.flush { padding: 0; }
+  .chart-card { padding: var(--s-4); }
+  .chart-meta { gap: var(--s-3); flex-wrap: wrap; padding-bottom: var(--s-3); margin-bottom: var(--s-3); }
+  .chart-stat-value { font-size: var(--t-lg); }
+  .chart-divider { display: none; }
+  .chart-wrap { height: 220px; }
 
-  /* ─────────── KPI HERO ─────────── */
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 14px;
-  }
+  .table-head-bar, .filter-bar { padding-left: var(--s-4); padding-right: var(--s-4); }
+  .filter-bar { overflow-x: auto; flex-wrap: nowrap; padding-bottom: var(--s-3); }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-pill { flex-shrink: 0; }
+  thead th, tbody td { padding-left: var(--s-4); padding-right: var(--s-4); }
+
+  /* table compactness: collapse less-critical columns */
+  thead th:nth-child(2),
+  tbody td:nth-child(2) { min-width: 180px; }
+  thead th:nth-child(4),
+  tbody td:nth-child(4),
+  thead th:nth-child(5),
+  tbody td:nth-child(5),
+  thead th:nth-child(7),
+  tbody td:nth-child(7) { display: none; }
+  .vendor-meta-line { display: none; }
+}
+
+/* 640px and below — phones */
+@media (max-width: 640px) {
+  html { font-size: 13px; }
+  .topbar { padding: 0 var(--s-3); }
+  .content { padding: var(--s-3); gap: var(--s-3); }
+
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: var(--s-2); }
   .kpi {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 18px 14px;
-    position: relative;
-    overflow: hidden;
-    transition: all 200ms;
+    padding: var(--s-3) var(--s-3) var(--s-3);
+    min-height: 112px;
+    border-radius: var(--r-md);
   }
-  .kpi:hover {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-  }
-  .kpi.featured {
-    background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 100%);
-    border-color: rgba(34,197,94,0.20);
-  }
-  .kpi-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-  .kpi-label {
-    font-size: 11px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-  }
-  .kpi-icon {
-    width: 28px; height: 28px;
-    border-radius: 8px;
-    background: var(--surface-3);
-    color: var(--text-dim);
-    display: grid;
-    place-items: center;
-  }
-  .kpi.featured .kpi-icon { background: var(--brand-glow); color: var(--brand); }
-  .kpi-value {
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-  }
-  .kpi-value small { font-size: 14px; color: var(--text-dim); font-weight: 500; margin-left: 4px; }
-  .kpi-delta {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 5px;
-    margin-bottom: 8px;
-  }
-  .kpi-delta.up { background: rgba(34,197,94,0.12); color: var(--brand); }
-  .kpi-delta.down { background: rgba(239,68,68,0.12); color: var(--danger); }
-  .kpi-delta.flat { background: var(--surface-3); color: var(--text-dim); }
-  .kpi-spark {
-    height: 32px;
-    margin: 0 -2px -2px;
-  }
-  .kpi-spark path { fill: none; stroke: var(--brand); stroke-width: 1.6; }
-  .kpi-spark .spark-fill { fill: var(--brand); opacity: 0.10; stroke: none; }
-  .kpi.danger .kpi-spark path { stroke: var(--danger); }
-  .kpi.danger .kpi-spark .spark-fill { fill: var(--danger); }
-  .kpi.warn .kpi-spark path { stroke: var(--warn); }
-  .kpi.warn .kpi-spark .spark-fill { fill: var(--warn); }
-  .kpi.info .kpi-spark path { stroke: var(--info); }
-  .kpi.info .kpi-spark .spark-fill { fill: var(--info); }
+  .kpi-value { font-size: var(--t-xl); }
+  .kpi-label { font-size: 9px; letter-spacing: 0.06em; }
+  .kpi-note { display: none; }
+  .kpi .spark { max-width: 60px !important; }
 
-  /* ─────────── ROW: chart + queues ─────────── */
-  .row-2 {
-    display: grid;
-    grid-template-columns: 1.7fr 1fr;
-    gap: 20px;
-  }
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px 22px;
-  }
-  .card-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .card-title {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .card-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-  .legend { display: inline-flex; gap: 14px; }
-  .legend-item {
-    font-size: 11px;
-    color: var(--text-dim);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .legend-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-  }
+  .page-title h1 { font-size: var(--t-xl); gap: var(--s-2); }
+  .live-tag { font-size: 9px; padding: 2px 6px; }
 
-  /* Chart */
-  .chart-wrap {
-    height: 280px;
-    margin: 0 -8px;
-    position: relative;
-  }
-  .chart-grid line { stroke: var(--grid-line); stroke-width: 1; }
-  .chart-axis { font-size: 10px; fill: var(--text-muted); font-family: inherit; }
-  .chart-area { fill: url(#brandGrad); }
-  .chart-line { fill: none; stroke: var(--brand); stroke-width: 2; }
-  .chart-line-2 { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0.65; }
-  .chart-dot { fill: var(--brand); stroke: var(--bg-elev); stroke-width: 2; }
+  .head-actions { gap: var(--s-2); }
+  .head-actions .btn { height: 34px; padding: 0 var(--s-3); font-size: var(--t-sm); }
+  .segmented { padding: 2px; }
+  .seg { padding: 4px var(--s-2); font-size: var(--t-xs); }
 
-  /* Queue list */
-  .queue {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .queue-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    background: var(--surface-2);
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 150ms;
-  }
-  .queue-item:hover { background: var(--surface-3); border-color: var(--border-strong); transform: translateX(2px); }
-  .queue-icon {
-    width: 36px; height: 36px;
-    border-radius: 9px;
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-  }
-  .queue-icon.warn { background: rgba(245,158,11,0.12); color: var(--warn); }
-  .queue-icon.danger { background: rgba(239,68,68,0.12); color: var(--danger); }
-  .queue-icon.info { background: rgba(6,182,212,0.12); color: var(--info); }
-  .queue-icon.success { background: rgba(34,197,94,0.12); color: var(--brand); }
-  .queue-body { flex: 1; min-width: 0; }
-  .queue-title { font-size: 13px; font-weight: 600; }
-  .queue-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .queue-count {
-    background: var(--surface-3);
-    padding: 4px 10px;
-    border-radius: 7px;
-    font-weight: 700;
-    font-size: 13px;
-    font-family: 'JetBrains Mono', monospace;
-  }
+  .card-head { flex-wrap: wrap; gap: var(--s-2); margin-bottom: var(--s-3); }
+  .card-title { font-size: var(--t-base); }
+  .card-sub { font-size: var(--t-xs); }
 
-  /* ─────────── ROW 3: 3 cards ─────────── */
-  .row-3 {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-  }
+  .chart-wrap { height: 180px; }
+  .chart-meta { gap: var(--s-2); }
+  .chart-stat-value { font-size: var(--t-md); }
+  .chart-stat-label { font-size: 9px; }
 
-  /* Live pulse */
-  .pulse-feed {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    max-height: 360px;
-    overflow-y: auto;
-    margin: 0 -8px;
-  }
+  .q-row { padding: var(--s-2) var(--s-3); }
+  .q-icon { width: 32px; height: 32px; }
+  .q-title { font-size: var(--t-sm); }
+  .q-sub { font-size: var(--t-2xs); }
+  .q-count { padding: 3px var(--s-2); font-size: var(--t-sm); min-width: 36px; }
+
+  .pulse-feed { max-height: 320px; }
   .pulse-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 8px;
-    border-bottom: 1px dashed var(--border);
-    animation: slideIn 320ms ease-out;
+    grid-template-columns: 48px 38px 1fr auto;
+    gap: var(--s-2);
+    padding: 6px var(--s-2);
   }
-  .pulse-row:last-child { border-bottom: none; }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .pulse-time {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--text-muted);
-    min-width: 50px;
-  }
-  .pulse-tag {
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 5px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    flex-shrink: 0;
-  }
-  .pulse-tag.buy { background: rgba(34,197,94,0.12); color: var(--brand); }
-  .pulse-tag.fund { background: rgba(6,182,212,0.12); color: var(--info); }
-  .pulse-tag.fail { background: rgba(239,68,68,0.12); color: var(--danger); }
-  .pulse-tag.reverse { background: rgba(245,158,11,0.12); color: var(--warn); }
-  .pulse-desc {
-    flex: 1;
-    font-size: 12px;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .pulse-amt {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-  }
+  .pulse-time { font-size: 9px; }
+  .pulse-tag { font-size: 8px; }
+  .pulse-desc { font-size: var(--t-xs); }
+  .pulse-amt { font-size: var(--t-xs); }
 
-  /* Leaderboard */
-  .leader-row {
-    display: grid;
-    grid-template-columns: 22px 1fr auto;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .leader-row:last-child { border-bottom: none; }
-  .leader-rank {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--text-muted);
-    font-weight: 700;
-  }
-  .leader-rank.top { color: var(--brand); }
-  .leader-body { min-width: 0; }
-  .leader-name { font-size: 13px; font-weight: 600; }
-  .leader-bar-wrap {
-    height: 4px;
-    background: var(--surface-3);
-    border-radius: 2px;
-    margin-top: 5px;
-    overflow: hidden;
-  }
-  .leader-bar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--brand), var(--brand-dim));
-    border-radius: 2px;
-  }
-  .leader-amt {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    font-weight: 600;
-    text-align: right;
-  }
-  .leader-amt small { display: block; font-size: 10px; color: var(--text-muted); font-weight: 500; font-family: inherit; }
+  .leader-row { padding: var(--s-2) 0; }
+  .leader-name { font-size: var(--t-sm); }
+  .leader-amt { font-size: var(--t-xs); }
+  .leader-amt small { font-size: 9px; }
 
-  /* Exceptions */
-  .exc-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .exc-row:last-child { border-bottom: none; }
-  .exc-sev {
-    width: 4px;
-    height: 36px;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .exc-sev.crit { background: var(--danger); }
-  .exc-sev.high { background: var(--warn); }
-  .exc-sev.med { background: var(--info); }
-  .exc-body { flex: 1; min-width: 0; }
-  .exc-title { font-size: 12px; font-weight: 600; }
-  .exc-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .exc-action {
-    font-size: 11px;
-    color: var(--brand);
-    font-weight: 600;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
+  .exc-title { font-size: var(--t-sm); }
+  .exc-meta { font-size: var(--t-2xs); }
+  .exc-act { font-size: 9px; }
 
-  /* ─────────── ACTIVITY TABLE ─────────── */
-  .table-card { padding: 0; overflow: hidden; }
-  .table-head-bar {
-    padding: 20px 22px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .filter-tabs { display: inline-flex; gap: 4px; }
-  .filter-tab {
-    padding: 5px 12px;
-    border-radius: 7px;
-    font-size: 12px;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-weight: 500;
-  }
-  .filter-tab.active { background: var(--surface-2); color: var(--text); }
-  table { width: 100%; border-collapse: collapse; }
-  thead th {
-    text-align: left;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    padding: 12px 22px;
-    background: var(--surface-2);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-  }
-  tbody td {
-    padding: 14px 22px;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover td { background: var(--surface-2); }
-  .row-id { font-family: 'JetBrains Mono', monospace; color: var(--text-dim); font-size: 12px; }
-  .vendor-cell { display: flex; align-items: center; gap: 10px; }
-  .vendor-logo {
-    width: 28px; height: 28px;
-    border-radius: 7px;
-    background: var(--surface-3);
-    display: grid;
-    place-items: center;
-    font-weight: 700;
-    font-size: 11px;
-    flex-shrink: 0;
-  }
-  .vendor-logo.a { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
-  .vendor-logo.b { background: linear-gradient(135deg, #f59e0b, #f97316); color: white; }
-  .vendor-logo.c { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; }
-  .vendor-logo.d { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
-  .vendor-logo.e { background: linear-gradient(135deg, #ec4899, #db2777); color: white; }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 9px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .badge.success { background: rgba(34,197,94,0.12); color: var(--brand); }
-  .badge.warn { background: rgba(245,158,11,0.12); color: var(--warn); }
-  .badge.danger { background: rgba(239,68,68,0.12); color: var(--danger); }
-  .badge.info { background: rgba(6,182,212,0.12); color: var(--info); }
-  .badge.neutral { background: var(--surface-3); color: var(--text-dim); }
-  .badge::before {
-    content: '';
-    width: 5px; height: 5px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .money { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .row-actions {
-    display: flex;
-    gap: 4px;
-    opacity: 0.4;
-    transition: opacity 150ms;
-  }
-  tbody tr:hover .row-actions { opacity: 1; }
-  .row-act-btn {
-    width: 26px; height: 26px;
-    border-radius: 6px;
-    background: var(--surface-3);
-    display: grid;
-    place-items: center;
-    color: var(--text-dim);
-    cursor: pointer;
-    border: none;
-  }
-  .row-act-btn:hover { background: var(--brand); color: white; }
+  .table-head-bar { padding: var(--s-3) var(--s-3); flex-wrap: wrap; gap: var(--s-2); }
+  .filter-bar { padding: var(--s-2) var(--s-3); }
 
-  /* ─────────── ICONS ─────────── */
-  .ic {
-    width: 16px;
-    height: 16px;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+  /* swap table → cards on phones */
+  .t-wrap { display: none; }
+  .t-cards { display: flex; flex-direction: column; }
 
-  /* ─────────── RESPONSIVE ─────────── */
-  @media (max-width: 1400px) {
-    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (max-width: 1100px) {
-    .row-2 { grid-template-columns: 1fr; }
-    .row-3 { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 800px) {
-    .app { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
-    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-    .content { padding: 16px; }
-  }
+  .table-foot { padding: var(--s-2) var(--s-3); font-size: var(--t-xs); flex-wrap: wrap; }
+  .pager-btn { width: 26px; height: 26px; font-size: var(--t-xs); }
+}
+
+/* 400px and below — small phones */
+@media (max-width: 400px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .row-acts { display: none; }
+  .head-actions .btn .ic { margin-right: 0; }
+  .head-actions .btn span { display: none; }
+}
 </style>
 </head>
 <body>
+
+<!-- shared SVG defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="currentColor" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="oklch(70% 0.19 145)" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="oklch(70% 0.19 145)" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="scrim" id="scrim"></div>
 
 <div class="app">
 
   <!-- ═══════════ SIDEBAR ═══════════ -->
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-logo">B</div>
+      <div class="brand-mark">B</div>
       <div class="brand-text">
-        <strong>Beverly Wallet</strong>
-        <span>Admin Console</span>
+        <strong>Beverly</strong>
+        <span>Wallet Admin</span>
       </div>
+    </div>
+
+    <div class="cmd-pill">
+      <svg class="ic ic-sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Quick search
+      <span class="kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
     </div>
 
     <nav class="nav">
       <div class="nav-section">Overview</div>
       <div class="nav-item active">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M3 13l9-9 9 9M5 11v9h14v-9"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         Dashboard
-        <span class="badge">12</span>
+        <span class="pill">12</span>
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
         Live Pulse
       </div>
 
       <div class="nav-section">Vendors</div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         Vendors
-        <span class="badge">312</span>
+        <span class="pill">312</span>
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
         Create Vendor
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
         Verification
-        <span class="badge">7</span>
+        <span class="pill warn">7</span>
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M17 11l2 2 4-4"/></svg>
-        Users &amp; Roles
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M16 11l2 2 4-4"/></svg>
+        Users & Roles
       </div>
 
       <div class="nav-section">Money</div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="14" r="1.5"/></svg>
         Wallets
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M12 2v20m5-17H9a3 3 0 000 6h6a3 3 0 010 6H7"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
         Funding
-        <span class="badge">23</span>
+        <span class="pill">23</span>
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M6 2l3 6 5-12 4 9 4-4M2 22h20"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 11-8 0"/></svg>
         Purchases
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6M4 20l6-6M14 10l6-6"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M3 7v6h6M21 17v-6h-6"/><path d="M3 13a9 9 0 0014.85 3.36L21 13M21 11a9 9 0 00-14.85-3.36L3 11"/></svg>
         Reversals
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         Settlement
       </div>
 
       <div class="nav-section">Operations</div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
         Exceptions
-        <span class="badge">5</span>
+        <span class="pill danger">5</span>
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/></svg>
         Disputes
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
         Reports
       </div>
       <div class="nav-item">
-        <svg class="ic icon" viewBox="0 0 24 24"><path d="M12 15v2M5 9V7a7 7 0 0114 0v2M4 9h16v11H4z"/></svg>
+        <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         Audit Log
       </div>
     </nav>
 
     <div class="sidebar-foot">
-      <div class="back-crm">
-        <svg class="ic" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <div class="back-to-crm">
+        <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         Back to CRM
       </div>
     </div>
@@ -867,59 +1806,70 @@
 
   <!-- ═══════════ MAIN ═══════════ -->
   <div class="main">
-    <!-- TOPBAR -->
+
+    <!-- ── Topbar ── -->
     <header class="topbar">
-      <div class="crumb">
-        <span>Wallet</span>
-        <svg class="ic crumb-sep" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-        <strong>Operations Dashboard</strong>
-      </div>
-      <div class="topbar-spacer"></div>
-
-      <div class="segmented">
-        <div class="seg">Today</div>
-        <div class="seg active">7D</div>
-        <div class="seg">30D</div>
-        <div class="seg">90D</div>
-        <div class="seg">Custom</div>
-      </div>
-
-      <button class="icon-btn" id="themeBtn" title="Toggle theme">
-        <svg class="ic" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <button class="menu-btn" id="menuBtn" title="Menu">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
       </button>
-      <button class="icon-btn" title="Search">
-        <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <div class="crumb">
+        <span class="crumb-link">Wallet</span>
+        <svg class="ic ic-sm crumb-sep" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        <strong>Operations</strong>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="global-search">
+        <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--text-muted)"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input placeholder="Search vendors, customers, orders…" />
+        <span class="kbd-hint">⌘K</span>
+      </div>
+
+      <button class="icon-btn" id="themeBtn" title="Theme">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
+      </button>
+      <button class="icon-btn" title="Help">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
       </button>
       <button class="icon-btn" title="Notifications">
-        <svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
-        <span class="dot"></span>
+        <svg class="ic" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>
+        <span class="notif-dot"></span>
       </button>
 
       <div class="user-chip">
-        <div class="avatar">AS</div>
+        <div class="avatar indigo">AS</div>
         <div class="user-meta">
           <strong>A. Samad</strong>
           <span>Finance Lead</span>
         </div>
+        <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--text-muted)"><path d="M6 9l6 6 6-6"/></svg>
       </div>
     </header>
 
-    <!-- CONTENT -->
+    <!-- ── Content ── -->
     <main class="content">
 
-      <!-- PAGE HEAD -->
+      <!-- Page Header -->
       <div class="page-head">
         <div class="page-title">
-          <h1>Wallet Operations <span class="pulse-live"><span class="pulse-dot"></span> LIVE</span></h1>
-          <p>Real-time view of vendor wallets, customer purchases, settlement queues, and exceptions across all stations.</p>
+          <h1>Operations <span class="live-tag"><span class="live-dot"></span> LIVE</span></h1>
+          <p>Real-time view of vendor wallets, customer purchases, settlement queues, and exceptions across stations.</p>
         </div>
         <div class="head-actions">
+          <div class="segmented">
+            <div class="seg">Today</div>
+            <div class="seg active">7D</div>
+            <div class="seg">30D</div>
+            <div class="seg">90D</div>
+            <div class="seg">YTD</div>
+          </div>
           <button class="btn">
-            <svg class="ic" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Export
           </button>
           <button class="btn primary">
-            <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
+            <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             Manual Credit
           </button>
         </div>
@@ -928,395 +1878,413 @@
       <!-- KPI HERO -->
       <div class="kpi-grid">
 
+        <!-- featured -->
         <div class="kpi featured">
-          <div class="kpi-head">
-            <div class="kpi-label">Total Vendor Float</div>
-            <div class="kpi-icon">
-              <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
-            </div>
-          </div>
-          <div class="kpi-value">₦142.8<small>M</small></div>
-          <div class="kpi-delta up">
-            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 7l3-3 3 3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-            +12.4%
-          </div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,24 L8,22 L16,18 L24,20 L32,14 L40,16 L48,10 L56,12 L64,6 L72,8 L80,4 L88,7 L100,3 L100,32 L0,32 Z"/>
-            <path d="M0,24 L8,22 L16,18 L24,20 L32,14 L40,16 L48,10 L56,12 L64,6 L72,8 L80,4 L88,7 L100,3"/>
-          </svg>
-        </div>
-
-        <div class="kpi">
-          <div class="kpi-head">
-            <div class="kpi-label">Active Vendors</div>
-            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg></div>
-          </div>
-          <div class="kpi-value">312</div>
-          <div class="kpi-delta up">
-            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 7l3-3 3 3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-            +8 this wk
-          </div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,20 L12,22 L24,18 L36,19 L48,15 L60,14 L72,11 L84,9 L100,7 L100,32 L0,32 Z"/>
-            <path d="M0,20 L12,22 L24,18 L36,19 L48,15 L60,14 L72,11 L84,9 L100,7"/>
-          </svg>
-        </div>
-
-        <div class="kpi info">
-          <div class="kpi-head">
-            <div class="kpi-label">Today's Purchases</div>
-            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2l3 6 5-12 4 9 4-4"/></svg></div>
-          </div>
-          <div class="kpi-value">4,827</div>
-          <div class="kpi-delta up">₦38.4M moved</div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,16 L8,18 L16,12 L24,14 L32,8 L40,10 L48,4 L56,11 L64,15 L72,8 L80,5 L88,9 L100,6 L100,32 L0,32 Z"/>
-            <path d="M0,16 L8,18 L16,12 L24,14 L32,8 L40,10 L48,4 L56,11 L64,15 L72,8 L80,5 L88,9 L100,6"/>
-          </svg>
-        </div>
-
-        <div class="kpi warn">
-          <div class="kpi-head">
-            <div class="kpi-label">Pending Funding</div>
-            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
-          </div>
-          <div class="kpi-value">23 <small>₦6.2M</small></div>
-          <div class="kpi-delta flat">3 over SLA</div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,14 L12,16 L24,12 L36,18 L48,15 L60,20 L72,14 L84,18 L100,16 L100,32 L0,32 Z"/>
-            <path d="M0,14 L12,16 L24,12 L36,18 L48,15 L60,20 L72,14 L84,18 L100,16"/>
-          </svg>
-        </div>
-
-        <div class="kpi danger">
-          <div class="kpi-head">
-            <div class="kpi-label">Failed Transactions</div>
-            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg></div>
-          </div>
-          <div class="kpi-value">14</div>
-          <div class="kpi-delta down">
-            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3l3 3 3-3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-            -22% vs yesterday
-          </div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,8 L12,12 L24,10 L36,14 L48,12 L60,18 L72,20 L84,22 L100,24 L100,32 L0,32 Z"/>
-            <path d="M0,8 L12,12 L24,10 L36,14 L48,12 L60,18 L72,20 L84,22 L100,24"/>
-          </svg>
-        </div>
-
-        <div class="kpi">
-          <div class="kpi-head">
-            <div class="kpi-label">Frozen Wallets</div>
-            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
-          </div>
-          <div class="kpi-value">3</div>
-          <div class="kpi-delta flat">₦480K locked</div>
-          <svg class="kpi-spark" viewBox="0 0 100 32" preserveAspectRatio="none">
-            <path class="spark-fill" d="M0,18 L20,18 L40,18 L60,16 L80,16 L100,16 L100,32 L0,32 Z"/>
-            <path d="M0,18 L20,18 L40,18 L60,16 L80,16 L100,16"/>
-          </svg>
-        </div>
-
-      </div>
-
-      <!-- ROW: Chart + Queues -->
-      <div class="row-2">
-
-        <!-- CHART -->
-        <div class="card">
-          <div class="card-head">
+          <div class="kpi-row">
             <div>
-              <div class="card-title">Wallet Float &amp; Vending Volume</div>
-              <div class="card-sub">Rolling 7-day window · stations aggregated</div>
+              <div class="kpi-label">Total Vendor Float</div>
+              <div class="kpi-note" style="margin-top:6px">Across 312 active wallets</div>
             </div>
-            <div class="legend">
-              <span class="legend-item"><span class="legend-dot" style="background: var(--brand)"></span> Float (₦M)</span>
-              <span class="legend-item"><span class="legend-dot" style="background: var(--accent)"></span> Vending (₦M)</span>
+            <div class="kpi-icon">
+              <svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 9v.01M18 15v.01"/></svg>
             </div>
           </div>
-
-          <div class="chart-wrap">
-            <svg viewBox="0 0 720 280" preserveAspectRatio="none" width="100%" height="100%">
-              <defs>
-                <linearGradient id="brandGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="var(--brand)" stop-opacity="0.30"/>
-                  <stop offset="100%" stop-color="var(--brand)" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
-
-              <!-- grid -->
-              <g class="chart-grid">
-                <line x1="40" y1="40"  x2="710" y2="40"/>
-                <line x1="40" y1="90"  x2="710" y2="90"/>
-                <line x1="40" y1="140" x2="710" y2="140"/>
-                <line x1="40" y1="190" x2="710" y2="190"/>
-                <line x1="40" y1="240" x2="710" y2="240"/>
-              </g>
-
-              <!-- y axis labels -->
-              <g class="chart-axis">
-                <text x="32" y="44" text-anchor="end">160M</text>
-                <text x="32" y="94" text-anchor="end">120M</text>
-                <text x="32" y="144" text-anchor="end">80M</text>
-                <text x="32" y="194" text-anchor="end">40M</text>
-                <text x="32" y="244" text-anchor="end">0</text>
-              </g>
-
-              <!-- x axis labels -->
-              <g class="chart-axis">
-                <text x="80"  y="262" text-anchor="middle">May 10</text>
-                <text x="180" y="262" text-anchor="middle">May 11</text>
-                <text x="280" y="262" text-anchor="middle">May 12</text>
-                <text x="380" y="262" text-anchor="middle">May 13</text>
-                <text x="480" y="262" text-anchor="middle">May 14</text>
-                <text x="580" y="262" text-anchor="middle">May 15</text>
-                <text x="680" y="262" text-anchor="middle">Today</text>
-              </g>
-
-              <!-- area: wallet float -->
-              <path class="chart-area"
-                    d="M40,150 L80,140 L180,135 L280,120 L380,118 L480,98 L580,82 L680,68 L710,62 L710,240 L40,240 Z"/>
-              <!-- line: wallet float -->
-              <path class="chart-line"
-                    d="M40,150 L80,140 L180,135 L280,120 L380,118 L480,98 L580,82 L680,68 L710,62"/>
-
-              <!-- line: vending volume (dashed) -->
-              <path class="chart-line-2"
-                    d="M40,200 L80,195 L180,180 L280,175 L380,160 L480,155 L580,140 L680,128 L710,124"/>
-
-              <!-- dot markers -->
-              <circle class="chart-dot" cx="680" cy="68" r="4"/>
-              <circle class="chart-dot" cx="680" cy="128" r="3.5" style="fill: var(--accent)"/>
-
-              <!-- tooltip ghost -->
-              <line x1="580" y1="40" x2="580" y2="240" stroke="var(--brand)" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"/>
-              <rect x="500" y="50" width="120" height="58" rx="8" fill="var(--surface-3)" stroke="var(--border-strong)"/>
-              <text x="512" y="68" font-size="10" fill="var(--text-muted)" font-family="Inter">May 15</text>
-              <text x="512" y="84" font-size="11" fill="var(--text)" font-family="Inter" font-weight="600">Float ₦128.4M</text>
-              <text x="512" y="100" font-size="11" fill="var(--accent)" font-family="Inter" font-weight="600">Vend ₦42.1M</text>
+          <div class="kpi-value">₦142.8<span class="unit">M</span></div>
+          <div class="kpi-foot">
+            <span class="delta up">
+              <svg width="9" height="9" viewBox="0 0 9 9"><path d="M2 6l2.5-2.5L7 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              12.4%
+            </span>
+            <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none" style="flex:1; max-width:120px; color: var(--brand)">
+              <path class="fill" d="M0,28 L8,26 L16,22 L24,24 L32,18 L40,20 L48,12 L56,14 L64,7 L72,9 L80,4 L88,7 L100,3 L100,36 L0,36 Z"/>
+              <path class="stroke" d="M0,28 L8,26 L16,22 L24,24 L32,18 L40,20 L48,12 L56,14 L64,7 L72,9 L80,4 L88,7 L100,3"/>
             </svg>
           </div>
         </div>
 
-        <!-- QUEUES -->
+        <div class="kpi">
+          <div class="kpi-row">
+            <div class="kpi-label">Active Vendors</div>
+            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg></div>
+          </div>
+          <div class="kpi-value">312</div>
+          <div class="kpi-foot">
+            <span class="delta up">+8</span>
+            <span class="kpi-note">7 onboarded this week</span>
+          </div>
+        </div>
+
+        <div class="kpi info-tone">
+          <div class="kpi-row">
+            <div class="kpi-label">Today's Vending</div>
+            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></div>
+          </div>
+          <div class="kpi-value">₦38.4<span class="unit">M</span></div>
+          <div class="kpi-foot">
+            <span class="delta up">4,827 tx</span>
+            <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none" style="flex:1; max-width:84px; color: var(--info)">
+              <path class="fill" d="M0,20 L12,22 L24,16 L36,18 L48,10 L60,14 L72,8 L84,11 L100,6 L100,36 L0,36 Z"/>
+              <path class="stroke" d="M0,20 L12,22 L24,16 L36,18 L48,10 L60,14 L72,8 L84,11 L100,6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi warn-tone">
+          <div class="kpi-row">
+            <div class="kpi-label">Pending Funding</div>
+            <div class="kpi-icon"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+          </div>
+          <div class="kpi-value">₦6.2<span class="unit">M</span></div>
+          <div class="kpi-foot">
+            <span class="delta flat">23 requests</span>
+            <span class="kpi-note">3 over SLA</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Chart + Queues -->
+      <div class="row-2">
+
+        <div class="card chart-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--brand)"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+                Float &amp; Vending Trend
+              </div>
+              <div class="card-sub">Rolling 7 days · all stations</div>
+            </div>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-swatch brand"></span> Float</span>
+              <span class="legend-item"><span class="legend-swatch dashed"></span> Vending</span>
+            </div>
+          </div>
+
+          <div class="chart-meta">
+            <div class="chart-stat">
+              <span class="chart-stat-label">Current Float</span>
+              <span class="chart-stat-value">₦142.8M</span>
+              <span class="chart-stat-delta">+₦15.6M this week</span>
+            </div>
+            <div class="chart-divider"></div>
+            <div class="chart-stat">
+              <span class="chart-stat-label">Total Vended</span>
+              <span class="chart-stat-value">₦42.1M</span>
+              <span class="chart-stat-delta">+18.2% vs prior</span>
+            </div>
+            <div class="chart-divider"></div>
+            <div class="chart-stat">
+              <span class="chart-stat-label">Avg Daily</span>
+              <span class="chart-stat-value">₦6.01M</span>
+              <span class="chart-stat-delta" style="color: var(--text-muted)">peak ₦8.2M · Wed</span>
+            </div>
+          </div>
+
+          <div class="chart-wrap">
+            <svg viewBox="0 0 720 280" preserveAspectRatio="none">
+              <g class="chart-grid">
+                <line x1="44" y1="30"  x2="708" y2="30"/>
+                <line x1="44" y1="85"  x2="708" y2="85"/>
+                <line x1="44" y1="140" x2="708" y2="140"/>
+                <line x1="44" y1="195" x2="708" y2="195"/>
+                <line x1="44" y1="250" x2="708" y2="250"/>
+              </g>
+
+              <g class="chart-axis">
+                <text x="38" y="34" text-anchor="end">160M</text>
+                <text x="38" y="89" text-anchor="end">120M</text>
+                <text x="38" y="144" text-anchor="end">80M</text>
+                <text x="38" y="199" text-anchor="end">40M</text>
+                <text x="38" y="254" text-anchor="end">0</text>
+              </g>
+
+              <g class="chart-axis">
+                <text x="80"  y="270" text-anchor="middle">May 10</text>
+                <text x="180" y="270" text-anchor="middle">May 11</text>
+                <text x="280" y="270" text-anchor="middle">May 12</text>
+                <text x="380" y="270" text-anchor="middle">May 13</text>
+                <text x="480" y="270" text-anchor="middle">May 14</text>
+                <text x="580" y="270" text-anchor="middle">May 15</text>
+                <text x="680" y="270" text-anchor="middle">Today</text>
+              </g>
+
+              <!-- area: float -->
+              <path class="chart-area"
+                    d="M80,158 L180,150 L280,135 L380,130 L480,108 L580,90 L680,72 L680,250 L80,250 Z"/>
+
+              <!-- line: float -->
+              <path class="chart-line"
+                    d="M80,158 L180,150 L280,135 L380,130 L480,108 L580,90 L680,72"/>
+
+              <!-- line: vending dashed -->
+              <path class="chart-line-2"
+                    d="M80,205 L180,200 L280,185 L380,180 L480,162 L580,148 L680,132"/>
+
+              <!-- end dots -->
+              <circle class="chart-dot" cx="680" cy="72" r="5"/>
+              <circle class="chart-dot-2" cx="680" cy="132" r="5"/>
+
+              <!-- hover state on May 15 -->
+              <line class="chart-cursor" x1="580" y1="30" x2="580" y2="250"/>
+              <g transform="translate(490, 38)">
+                <rect class="chart-tooltip-box" x="0" y="0" width="138" height="72" rx="10"/>
+                <text x="14" y="20" font-size="10" fill="var(--text-muted)" font-family="JetBrains Mono" font-weight="600">MAY 15 · WED</text>
+                <circle cx="18" cy="36" r="3.5" fill="var(--brand)"/>
+                <text x="28" y="40" font-size="12" fill="var(--text)" font-family="Inter" font-weight="600">Float</text>
+                <text x="124" y="40" font-size="12" fill="var(--text)" font-family="JetBrains Mono" font-weight="700" text-anchor="end">₦128.4M</text>
+                <circle cx="18" cy="56" r="3.5" fill="var(--accent)"/>
+                <text x="28" y="60" font-size="12" fill="var(--text-dim)" font-family="Inter" font-weight="600">Vend</text>
+                <text x="124" y="60" font-size="12" fill="var(--text)" font-family="JetBrains Mono" font-weight="700" text-anchor="end">₦42.1M</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head">
             <div>
-              <div class="card-title">Operational Queues</div>
+              <div class="card-title">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--text-dim)"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                Operational Queues
+              </div>
               <div class="card-sub">Awaiting staff action</div>
             </div>
+            <span class="card-cta">View all
+              <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+            </span>
           </div>
           <div class="queue">
-            <div class="queue-item">
-              <div class="queue-icon warn">
-                <svg class="ic" viewBox="0 0 24 24"><path d="M12 2v20m5-17H9a3 3 0 000 6h6a3 3 0 010 6H7"/></svg>
+            <div class="q-row warn">
+              <div class="q-icon warn"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+              <div class="q-body">
+                <div class="q-title">Funding Approvals</div>
+                <div class="q-sub">3 over SLA · oldest 6h 12m</div>
               </div>
-              <div class="queue-body">
-                <div class="queue-title">Funding Approvals</div>
-                <div class="queue-sub">3 over SLA · oldest 6h 12m</div>
-              </div>
-              <div class="queue-count">23</div>
+              <div class="q-count">23</div>
             </div>
-
-            <div class="queue-item">
-              <div class="queue-icon info">
-                <svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <div class="q-row info">
+              <div class="q-icon info"><svg class="ic" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg></div>
+              <div class="q-body">
+                <div class="q-title">Vendor Verifications</div>
+                <div class="q-sub">7 pending · 2 need docs</div>
               </div>
-              <div class="queue-body">
-                <div class="queue-title">Vendor Verifications</div>
-                <div class="queue-sub">7 pending · 2 need documents</div>
-              </div>
-              <div class="queue-count">07</div>
+              <div class="q-count">07</div>
             </div>
-
-            <div class="queue-item">
-              <div class="queue-icon danger">
-                <svg class="ic" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+            <div class="q-row danger">
+              <div class="q-icon danger"><svg class="ic" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></div>
+              <div class="q-body">
+                <div class="q-title">Exceptions</div>
+                <div class="q-sub">5 active · 1 critical</div>
               </div>
-              <div class="queue-body">
-                <div class="queue-title">Exceptions</div>
-                <div class="queue-sub">5 active · 1 critical</div>
-              </div>
-              <div class="queue-count">05</div>
+              <div class="q-count">05</div>
             </div>
-
-            <div class="queue-item">
-              <div class="queue-icon success">
-                <svg class="ic" viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6M4 20l6-6M14 10l6-6"/></svg>
+            <div class="q-row">
+              <div class="q-icon success"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7v6h6M21 17v-6h-6"/><path d="M3 13a9 9 0 0014.85 3.36L21 13M21 11a9 9 0 00-14.85-3.36L3 11"/></svg></div>
+              <div class="q-body">
+                <div class="q-title">Reversal Requests</div>
+                <div class="q-sub">2 ready to process</div>
               </div>
-              <div class="queue-body">
-                <div class="queue-title">Reversal Requests</div>
-                <div class="queue-sub">2 ready to process</div>
-              </div>
-              <div class="queue-count">02</div>
+              <div class="q-count">02</div>
             </div>
-
-            <div class="queue-item">
-              <div class="queue-icon warn">
-                <svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+            <div class="q-row warn">
+              <div class="q-icon warn"><svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/></svg></div>
+              <div class="q-body">
+                <div class="q-title">Open Disputes</div>
+                <div class="q-sub">4 vendor · 1 customer</div>
               </div>
-              <div class="queue-body">
-                <div class="queue-title">Open Disputes</div>
-                <div class="queue-sub">4 vendor-side · 1 customer</div>
-              </div>
-              <div class="queue-count">05</div>
+              <div class="q-count">05</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ROW: 3 cards -->
+      <!-- 3-col row -->
       <div class="row-3">
 
-        <!-- LIVE PULSE -->
+        <!-- Live Pulse -->
         <div class="card">
           <div class="card-head">
             <div>
               <div class="card-title">
-                Live Transaction Pulse
-                <span class="pulse-live" style="font-size:9px; margin-left:4px"><span class="pulse-dot"></span> LIVE</span>
+                <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--brand)"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+                Live Pulse
+                <span class="live-tag" style="font-size:9px; padding: 2px 8px"><span class="live-dot"></span> LIVE</span>
               </div>
               <div class="card-sub">Last 60 seconds</div>
             </div>
           </div>
           <div class="pulse-feed">
-            <div class="pulse-row"><div class="pulse-time">14:38:42</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Sahara Power — Cust. 8842 · TUNGA</div><div class="pulse-amt">₦5,000</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:38</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Lokoja Vending — Cust. 2014 · UMAISHA</div><div class="pulse-amt">₦12,500</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:31</div><div class="pulse-tag fund">FUND</div><div class="pulse-desc">Nasarawa Retail — bank transfer</div><div class="pulse-amt">₦250,000</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:24</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Greenline Power — Cust. 5538 · OGUFA</div><div class="pulse-amt">₦3,200</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:19</div><div class="pulse-tag fail">FAIL</div><div class="pulse-desc">Meter offline — KYAKALE-0091</div><div class="pulse-amt">₦8,000</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:11</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Sahara Power — Cust. 7710 · TUNGA</div><div class="pulse-amt">₦15,000</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:38:04</div><div class="pulse-tag reverse">REV</div><div class="pulse-desc">Reversed #PO-99427 · operator: AS</div><div class="pulse-amt">₦4,500</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:37:58</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Energy Hub Abuja — Cust. 4421 · MUSHA</div><div class="pulse-amt">₦7,800</div></div>
-            <div class="pulse-row"><div class="pulse-time">14:37:51</div><div class="pulse-tag buy">BUY</div><div class="pulse-desc">Lokoja Vending — Cust. 1196 · UMAISHA</div><div class="pulse-amt">₦2,500</div></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:42</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Sahara Power</strong> · Cust 8842 · TUNGA</span><span class="pulse-amt">₦5,000</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:38</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Lokoja Vending</strong> · Cust 2014 · UMAISHA</span><span class="pulse-amt">₦12,500</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:31</span><span class="pulse-tag fund">FUND</span><span class="pulse-desc"><strong>Nasarawa Retail</strong> · bank transfer</span><span class="pulse-amt">₦250,000</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:24</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Greenline</strong> · Cust 5538 · OGUFA</span><span class="pulse-amt">₦3,200</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:19</span><span class="pulse-tag fail">FAIL</span><span class="pulse-desc">Meter offline · KYAKALE-0091</span><span class="pulse-amt">₦8,000</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:11</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Sahara Power</strong> · Cust 7710 · TUNGA</span><span class="pulse-amt">₦15,000</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:38:04</span><span class="pulse-tag rev">REV</span><span class="pulse-desc">Reversed #PO-99427 · op: AS</span><span class="pulse-amt">₦4,500</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:37:58</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Energy Hub</strong> · Cust 4421 · MUSHA</span><span class="pulse-amt">₦7,800</span></div>
+            <div class="pulse-row"><span class="pulse-time">14:37:51</span><span class="pulse-tag buy">BUY</span><span class="pulse-desc"><strong>Lokoja Vending</strong> · Cust 1196 · UMAISHA</span><span class="pulse-amt">₦2,500</span></div>
           </div>
         </div>
 
-        <!-- TOP VENDORS -->
+        <!-- Top Vendors -->
         <div class="card">
           <div class="card-head">
             <div>
-              <div class="card-title">Top Vendors · 7D</div>
-              <div class="card-sub">By gross vending volume</div>
+              <div class="card-title">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--text-dim)"><path d="M6 9H4.5a2.5 2.5 0 010-5H6"/><path d="M18 9h1.5a2.5 2.5 0 000-5H18"/><path d="M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0012 0V2z"/></svg>
+                Top Vendors · 7D
+              </div>
+              <div class="card-sub">By vending volume</div>
             </div>
           </div>
-          <div class="leader-row">
-            <div class="leader-rank top">01</div>
-            <div class="leader-body">
-              <div class="leader-name">Sahara Power Co.</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:100%"></div></div>
+          <div class="leader">
+            <div class="leader-row">
+              <div class="leader-rank gold">01</div>
+              <div class="leader-body">
+                <div class="leader-name">Sahara Power Co. <span class="leader-trend">↑ 18%</span></div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:100%"></div></div>
+              </div>
+              <div class="leader-amt">₦18.4M<small>1,204 tx</small></div>
             </div>
-            <div class="leader-amt">₦18.4M<small>1,204 tx</small></div>
-          </div>
-          <div class="leader-row">
-            <div class="leader-rank top">02</div>
-            <div class="leader-body">
-              <div class="leader-name">Lokoja Vending Hub</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:84%"></div></div>
+            <div class="leader-row">
+              <div class="leader-rank silver">02</div>
+              <div class="leader-body">
+                <div class="leader-name">Lokoja Vending Hub <span class="leader-trend">↑ 12%</span></div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:84%"></div></div>
+              </div>
+              <div class="leader-amt">₦15.5M<small>987 tx</small></div>
             </div>
-            <div class="leader-amt">₦15.5M<small>987 tx</small></div>
-          </div>
-          <div class="leader-row">
-            <div class="leader-rank top">03</div>
-            <div class="leader-body">
-              <div class="leader-name">Energy Hub Abuja</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:67%"></div></div>
+            <div class="leader-row">
+              <div class="leader-rank bronze">03</div>
+              <div class="leader-body">
+                <div class="leader-name">Energy Hub Abuja <span class="leader-trend">↑ 9%</span></div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:67%"></div></div>
+              </div>
+              <div class="leader-amt">₦12.3M<small>812 tx</small></div>
             </div>
-            <div class="leader-amt">₦12.3M<small>812 tx</small></div>
-          </div>
-          <div class="leader-row">
-            <div class="leader-rank">04</div>
-            <div class="leader-body">
-              <div class="leader-name">Greenline Power Ltd.</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:52%"></div></div>
+            <div class="leader-row">
+              <div class="leader-rank">04</div>
+              <div class="leader-body">
+                <div class="leader-name">Greenline Power Ltd.</div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:52%"></div></div>
+              </div>
+              <div class="leader-amt">₦9.6M<small>645 tx</small></div>
             </div>
-            <div class="leader-amt">₦9.6M<small>645 tx</small></div>
-          </div>
-          <div class="leader-row">
-            <div class="leader-rank">05</div>
-            <div class="leader-body">
-              <div class="leader-name">Nasarawa Retail</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:41%"></div></div>
+            <div class="leader-row">
+              <div class="leader-rank">05</div>
+              <div class="leader-body">
+                <div class="leader-name">Nasarawa Retail</div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:41%"></div></div>
+              </div>
+              <div class="leader-amt">₦7.6M<small>510 tx</small></div>
             </div>
-            <div class="leader-amt">₦7.6M<small>510 tx</small></div>
-          </div>
-          <div class="leader-row">
-            <div class="leader-rank">06</div>
-            <div class="leader-body">
-              <div class="leader-name">Beverly Direct (Kogi)</div>
-              <div class="leader-bar-wrap"><div class="leader-bar" style="width:33%"></div></div>
+            <div class="leader-row">
+              <div class="leader-rank">06</div>
+              <div class="leader-body">
+                <div class="leader-name">Beverly Direct (Kogi)</div>
+                <div class="leader-bar-bg"><div class="leader-bar" style="width:33%"></div></div>
+              </div>
+              <div class="leader-amt">₦6.1M<small>402 tx</small></div>
             </div>
-            <div class="leader-amt">₦6.1M<small>402 tx</small></div>
           </div>
         </div>
 
-        <!-- EXCEPTIONS -->
+        <!-- Critical Exceptions -->
         <div class="card">
           <div class="card-head">
             <div>
-              <div class="card-title">Critical Exceptions</div>
-              <div class="card-sub">Needs review now</div>
+              <div class="card-title">
+                <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--danger)"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+                Needs Attention
+              </div>
+              <div class="card-sub">Critical &amp; high-priority items</div>
             </div>
-            <span class="badge danger">5</span>
+            <span class="badge danger">5 active</span>
           </div>
-          <div class="exc-row">
-            <div class="exc-sev crit"></div>
-            <div class="exc-body">
-              <div class="exc-title">Wallet held — anomalous velocity</div>
-              <div class="exc-meta">Vendor: Beverly Direct (Kogi) · 42 tx / 5min</div>
+          <div class="exc">
+            <div class="exc-row">
+              <div class="exc-sev crit"></div>
+              <div class="exc-body">
+                <div class="exc-title">Wallet held — anomalous velocity</div>
+                <div class="exc-meta">Beverly Direct (Kogi) · 42 tx in 5 min · risk 91</div>
+              </div>
+              <span class="exc-act">Review</span>
             </div>
-            <div class="exc-action">Review</div>
-          </div>
-          <div class="exc-row">
-            <div class="exc-sev high"></div>
-            <div class="exc-body">
-              <div class="exc-title">Stuck remote-send · 3 tokens</div>
-              <div class="exc-meta">KYAKALE meter cluster · pending 2h 14m</div>
+            <div class="exc-row">
+              <div class="exc-sev high"></div>
+              <div class="exc-body">
+                <div class="exc-title">Stuck remote-send · 3 tokens</div>
+                <div class="exc-meta">KYAKALE meter cluster · pending 2h 14m</div>
+              </div>
+              <span class="exc-act">Retry</span>
             </div>
-            <div class="exc-action">Retry</div>
-          </div>
-          <div class="exc-row">
-            <div class="exc-sev high"></div>
-            <div class="exc-body">
-              <div class="exc-title">Ledger reconciliation drift</div>
-              <div class="exc-meta">+₦12,420 on Energy Hub Abuja · 02:00 batch</div>
+            <div class="exc-row">
+              <div class="exc-sev high"></div>
+              <div class="exc-body">
+                <div class="exc-title">Ledger drift on 02:00 batch</div>
+                <div class="exc-meta">Energy Hub Abuja · +₦12,420 unreconciled</div>
+              </div>
+              <span class="exc-act">Trace</span>
             </div>
-            <div class="exc-action">Trace</div>
-          </div>
-          <div class="exc-row">
-            <div class="exc-sev med"></div>
-            <div class="exc-body">
-              <div class="exc-title">Funding proof flagged</div>
-              <div class="exc-meta">Duplicate hash · Nasarawa Retail · ₦180K</div>
+            <div class="exc-row">
+              <div class="exc-sev med"></div>
+              <div class="exc-body">
+                <div class="exc-title">Funding proof flagged</div>
+                <div class="exc-meta">Nasarawa Retail · duplicate hash · ₦180K</div>
+              </div>
+              <span class="exc-act">Open</span>
             </div>
-            <div class="exc-action">Open</div>
-          </div>
-          <div class="exc-row">
-            <div class="exc-sev med"></div>
-            <div class="exc-body">
-              <div class="exc-title">Customer dispute escalated</div>
-              <div class="exc-meta">#DSP-3318 · token not received · 24h</div>
+            <div class="exc-row">
+              <div class="exc-sev med"></div>
+              <div class="exc-body">
+                <div class="exc-title">Customer dispute escalated</div>
+                <div class="exc-meta">#DSP-3318 · token not received · 24h old</div>
+              </div>
+              <span class="exc-act">Open</span>
             </div>
-            <div class="exc-action">Open</div>
           </div>
         </div>
+
       </div>
 
-      <!-- ACTIVITY TABLE -->
-      <div class="card table-card">
+      <!-- Activity Table -->
+      <div class="card flush">
         <div class="table-head-bar">
           <div>
-            <div class="card-title">Recent Activity</div>
-            <div class="card-sub">All wallet actions in the last hour</div>
+            <div class="card-title">
+              <svg class="ic ic-sm" viewBox="0 0 24 24" style="color: var(--text-dim)"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+              Recent Activity
+            </div>
+            <div class="card-sub">All wallet actions in the last hour · auto-refresh</div>
           </div>
-          <div class="filter-tabs">
-            <div class="filter-tab active">All</div>
-            <div class="filter-tab">Purchases</div>
-            <div class="filter-tab">Funding</div>
-            <div class="filter-tab">Reversals</div>
-            <div class="filter-tab">Disputes</div>
+          <button class="btn">
+            <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+            Filters
+          </button>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-pill active">All <span class="count">128</span></div>
+          <div class="filter-pill">Purchases <span class="count">87</span></div>
+          <div class="filter-pill">Funding <span class="count">23</span></div>
+          <div class="filter-pill">Reversals <span class="count">5</span></div>
+          <div class="filter-pill">Disputes <span class="count">3</span></div>
+          <div class="filter-pill">Failed <span class="count">10</span></div>
+          <div style="margin-left:auto; display:flex; gap: 6px">
+            <div class="filter-pill">
+              <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              All Stations
+              <svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div class="filter-pill">
+              <svg class="ic ic-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Today
+            </div>
           </div>
         </div>
+
+        <div class="t-wrap">
         <table>
           <thead>
             <tr>
@@ -1325,8 +2293,8 @@
               <th>Type</th>
               <th>Customer / Meter</th>
               <th>Station</th>
-              <th>Amount</th>
-              <th>Units</th>
+              <th style="text-align:right">Amount</th>
+              <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Time</th>
               <th></th>
@@ -1335,102 +2303,205 @@
           <tbody>
             <tr>
               <td><span class="row-id">#PO-99842</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo a">SP</div>Sahara Power</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark a">SP</div><div><div style="font-weight:600">Sahara Power</div><div class="vendor-meta-line">VND-0042 · Tier 2</div></div></div></td>
               <td><span class="badge success">Token Buy</span></td>
-              <td>Cust. 8842 · MTR-44120</td>
+              <td>Cust 8842 · MTR-44120</td>
               <td>TUNGA</td>
-              <td class="money">₦5,000</td>
-              <td class="money">14.3 kWh</td>
+              <td class="money" style="text-align:right">₦5,000</td>
+              <td class="units" style="text-align:right">14.3 kWh</td>
               <td><span class="badge success">Delivered</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#FR-12044</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo c">NR</div>Nasarawa Retail</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark c">NR</div><div><div style="font-weight:600">Nasarawa Retail</div><div class="vendor-meta-line">VND-0118 · Tier 1</div></div></div></td>
               <td><span class="badge info">Funding</span></td>
-              <td>—</td>
-              <td>—</td>
-              <td class="money">₦250,000</td>
-              <td>—</td>
+              <td style="color: var(--text-muted)">—</td>
+              <td style="color: var(--text-muted)">—</td>
+              <td class="money" style="text-align:right">₦250,000</td>
+              <td style="color: var(--text-muted); text-align:right">—</td>
               <td><span class="badge warn">Pending Review</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#PO-99841</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo b">LV</div>Lokoja Vending</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark b">LV</div><div><div style="font-weight:600">Lokoja Vending</div><div class="vendor-meta-line">VND-0019 · Tier 3</div></div></div></td>
               <td><span class="badge success">Token Buy</span></td>
-              <td>Cust. 2014 · MTR-77291</td>
+              <td>Cust 2014 · MTR-77291</td>
               <td>UMAISHA</td>
-              <td class="money">₦12,500</td>
-              <td class="money">35.7 kWh</td>
+              <td class="money" style="text-align:right">₦12,500</td>
+              <td class="units" style="text-align:right">35.7 kWh</td>
               <td><span class="badge success">Delivered</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#PO-99839</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo d">GP</div>Greenline Power</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark d">GP</div><div><div style="font-weight:600">Greenline Power</div><div class="vendor-meta-line">VND-0067 · Tier 2</div></div></div></td>
               <td><span class="badge success">Remote Send</span></td>
-              <td>Cust. 5538 · MTR-30418</td>
+              <td>Cust 5538 · MTR-30418</td>
               <td>OGUFA</td>
-              <td class="money">₦3,200</td>
-              <td class="money">9.1 kWh</td>
+              <td class="money" style="text-align:right">₦3,200</td>
+              <td class="units" style="text-align:right">9.1 kWh</td>
               <td><span class="badge info">Dispatching</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#PO-99836</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo e">BD</div>Beverly Direct</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark e">BD</div><div><div style="font-weight:600">Beverly Direct</div><div class="vendor-meta-line">VND-0211 · Tier 1</div></div></div></td>
               <td><span class="badge success">Token Buy</span></td>
-              <td>Cust. 0091 · MTR-91102</td>
+              <td>Cust 0091 · MTR-91102</td>
               <td>KYAKALE</td>
-              <td class="money">₦8,000</td>
-              <td class="money">22.9 kWh</td>
+              <td class="money" style="text-align:right">₦8,000</td>
+              <td class="units" style="text-align:right">22.9 kWh</td>
               <td><span class="badge danger">Failed</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#RV-00128</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo a">SP</div>Sahara Power</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark a">SP</div><div><div style="font-weight:600">Sahara Power</div><div class="vendor-meta-line">VND-0042 · Tier 2</div></div></div></td>
               <td><span class="badge warn">Reversal</span></td>
               <td>Ref #PO-99427</td>
               <td>TUNGA</td>
-              <td class="money">₦4,500</td>
-              <td>—</td>
+              <td class="money" style="text-align:right">₦4,500</td>
+              <td style="color: var(--text-muted); text-align:right">—</td>
               <td><span class="badge success">Processed</span></td>
               <td><span class="row-id">14:38</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#PO-99834</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo b">EH</div>Energy Hub Abuja</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark f">EH</div><div><div style="font-weight:600">Energy Hub Abuja</div><div class="vendor-meta-line">VND-0083 · Tier 3</div></div></div></td>
               <td><span class="badge success">Token Buy</span></td>
-              <td>Cust. 4421 · MTR-58804</td>
+              <td>Cust 4421 · MTR-58804</td>
               <td>MUSHA</td>
-              <td class="money">₦7,800</td>
-              <td class="money">22.3 kWh</td>
+              <td class="money" style="text-align:right">₦7,800</td>
+              <td class="units" style="text-align:right">22.3 kWh</td>
               <td><span class="badge success">Delivered</span></td>
               <td><span class="row-id">14:37</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
             <tr>
               <td><span class="row-id">#PO-99832</span></td>
-              <td><div class="vendor-cell"><div class="vendor-logo b">LV</div>Lokoja Vending</div></td>
+              <td><div class="vendor-cell"><div class="vendor-mark b">LV</div><div><div style="font-weight:600">Lokoja Vending</div><div class="vendor-meta-line">VND-0019 · Tier 3</div></div></div></td>
               <td><span class="badge success">Token Buy</span></td>
-              <td>Cust. 1196 · MTR-77443</td>
+              <td>Cust 1196 · MTR-77443</td>
               <td>UMAISHA</td>
-              <td class="money">₦2,500</td>
-              <td class="money">7.1 kWh</td>
+              <td class="money" style="text-align:right">₦2,500</td>
+              <td class="units" style="text-align:right">7.1 kWh</td>
               <td><span class="badge success">Delivered</span></td>
               <td><span class="row-id">14:37</span></td>
-              <td><div class="row-actions"><button class="row-act-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
+              <td><div class="row-acts"><button class="row-act"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></td>
             </tr>
           </tbody>
         </table>
+        </div>
+
+        <!-- Mobile card mode (≤640px) -->
+        <div class="t-cards">
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark a">SP</div><div><div class="tc-vendor">Sahara Power</div><div class="tc-id">#PO-99842 · 14:38</div></div></div>
+              <div class="money tc-amt">₦5,000</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Customer</span><span class="tc-v">Cust 8842</span></span>
+              <span class="tc-pair"><span class="tc-k">Meter</span><span class="tc-v">MTR-44120 · TUNGA</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge success">Delivered</span>
+              <span class="units">14.3 kWh</span>
+            </div>
+          </div>
+
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark c">NR</div><div><div class="tc-vendor">Nasarawa Retail</div><div class="tc-id">#FR-12044 · 14:38</div></div></div>
+              <div class="money tc-amt">₦250,000</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Type</span><span class="tc-v">Funding · bank transfer</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge warn">Pending Review</span>
+            </div>
+          </div>
+
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark b">LV</div><div><div class="tc-vendor">Lokoja Vending</div><div class="tc-id">#PO-99841 · 14:38</div></div></div>
+              <div class="money tc-amt">₦12,500</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Customer</span><span class="tc-v">Cust 2014</span></span>
+              <span class="tc-pair"><span class="tc-k">Meter</span><span class="tc-v">MTR-77291 · UMAISHA</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge success">Delivered</span>
+              <span class="units">35.7 kWh</span>
+            </div>
+          </div>
+
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark d">GP</div><div><div class="tc-vendor">Greenline Power</div><div class="tc-id">#PO-99839 · 14:38</div></div></div>
+              <div class="money tc-amt">₦3,200</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Customer</span><span class="tc-v">Cust 5538</span></span>
+              <span class="tc-pair"><span class="tc-k">Meter</span><span class="tc-v">MTR-30418 · OGUFA</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge info">Dispatching</span>
+              <span class="units">9.1 kWh</span>
+            </div>
+          </div>
+
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark e">BD</div><div><div class="tc-vendor">Beverly Direct</div><div class="tc-id">#PO-99836 · 14:38</div></div></div>
+              <div class="money tc-amt">₦8,000</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Customer</span><span class="tc-v">Cust 0091</span></span>
+              <span class="tc-pair"><span class="tc-k">Meter</span><span class="tc-v">MTR-91102 · KYAKALE</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge danger">Failed</span>
+              <span class="units">22.9 kWh</span>
+            </div>
+          </div>
+
+          <div class="tc">
+            <div class="tc-top">
+              <div class="vendor-cell"><div class="vendor-mark a">SP</div><div><div class="tc-vendor">Sahara Power</div><div class="tc-id">#RV-00128 · 14:38</div></div></div>
+              <div class="money tc-amt">₦4,500</div>
+            </div>
+            <div class="tc-mid">
+              <span class="tc-pair"><span class="tc-k">Type</span><span class="tc-v">Reversal · Ref #PO-99427</span></span>
+            </div>
+            <div class="tc-bot">
+              <span class="badge success">Processed</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-foot">
+          <span>Showing <strong style="color: var(--text)">8</strong> of <strong style="color: var(--text)">128</strong> activities</span>
+          <div class="pager">
+            <button class="pager-btn"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <button class="pager-btn active">1</button>
+            <button class="pager-btn">2</button>
+            <button class="pager-btn">3</button>
+            <span style="color: var(--text-faint); padding: 0 6px">…</span>
+            <button class="pager-btn">16</button>
+            <button class="pager-btn"><svg class="ic ic-sm" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+          </div>
+        </div>
       </div>
 
     </main>
@@ -1438,47 +2509,86 @@
 </div>
 
 <script>
-  // theme toggle
+  // —— Theme toggle ——
   const themeBtn = document.getElementById('themeBtn');
   themeBtn.addEventListener('click', () => {
     const cur = document.documentElement.getAttribute('data-theme');
     document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
   });
 
-  // segmented selector
-  document.querySelectorAll('.segmented .seg').forEach(el => {
+  // —— Mobile sidebar drawer ——
+  const menuBtn = document.getElementById('menuBtn');
+  const scrim = document.getElementById('scrim');
+  const sidebar = document.querySelector('.sidebar');
+
+  const openSidebar = () => {
+    sidebar.classList.add('open');
+    scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+  const closeSidebar = () => {
+    sidebar.classList.remove('open');
+    scrim.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
+  menuBtn.addEventListener('click', openSidebar);
+  scrim.addEventListener('click', closeSidebar);
+
+  // close sidebar when nav item is tapped (mobile)
+  sidebar.querySelectorAll('.nav-item').forEach(el => {
     el.addEventListener('click', () => {
-      el.parentElement.querySelectorAll('.seg').forEach(s => s.classList.remove('active'));
-      el.classList.add('active');
+      if (window.innerWidth <= 900) closeSidebar();
     });
   });
 
-  // filter tabs
-  document.querySelectorAll('.filter-tabs .filter-tab').forEach(el => {
-    el.addEventListener('click', () => {
-      el.parentElement.querySelectorAll('.filter-tab').forEach(s => s.classList.remove('active'));
-      el.classList.add('active');
+  // close on resize up
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) closeSidebar();
+  });
+
+  // —— Segmented control ——
+  document.querySelectorAll('.segmented').forEach(seg => {
+    seg.querySelectorAll('.seg').forEach(el => {
+      el.addEventListener('click', () => {
+        seg.querySelectorAll('.seg').forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+      });
     });
   });
 
-  // live pulse — simulate new transaction injection
+  // —— Filter pills ——
+  document.querySelectorAll('.filter-bar').forEach(bar => {
+    bar.querySelectorAll('.filter-pill').forEach(el => {
+      el.addEventListener('click', () => {
+        // Only first group (with counts) is mutually exclusive
+        if (el.querySelector('.count')) {
+          bar.querySelectorAll('.filter-pill').forEach(s => {
+            if (s.querySelector('.count')) s.classList.remove('active');
+          });
+          el.classList.add('active');
+        }
+      });
+    });
+  });
+
+  // —— Live pulse simulator ——
   const pulseFeed = document.querySelector('.pulse-feed');
-  const vendors = ['Sahara Power','Lokoja Vending','Energy Hub Abuja','Greenline Power','Nasarawa Retail','Beverly Direct'];
+  const vendors = ['Sahara Power','Lokoja Vending','Energy Hub','Greenline','Nasarawa Retail','Beverly Direct'];
   const stations = ['TUNGA','UMAISHA','OGUFA','KYAKALE','MUSHA'];
   const types = [
-    { tag: 'BUY',  cls: 'buy',  amts: [2000, 3500, 5000, 7500, 12500, 18000] },
-    { tag: 'BUY',  cls: 'buy',  amts: [1500, 2500, 4500, 6000, 8800] },
-    { tag: 'FUND', cls: 'fund', amts: [50000, 100000, 250000, 500000] }
+    { tag:'BUY',  cls:'buy',  amts:[1500,2500,3500,5000,7500,12500,18000,25000] },
+    { tag:'BUY',  cls:'buy',  amts:[800,1200,2000,4500,8800] },
+    { tag:'FUND', cls:'fund', amts:[50000,100000,250000,500000,1000000] },
+    { tag:'BUY',  cls:'buy',  amts:[3000,5000,9000] }
   ];
 
-  function pad(n) { return String(n).padStart(2,'0'); }
-  function now() {
+  const pad = n => String(n).padStart(2,'0');
+  const now = () => {
     const d = new Date();
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-  function fmt(n) {
-    return '₦' + n.toLocaleString();
-  }
+  };
+  const fmt = n => '₦' + n.toLocaleString();
 
   setInterval(() => {
     const t = types[Math.floor(Math.random()*types.length)];
@@ -1487,23 +2597,20 @@
     const s = stations[Math.floor(Math.random()*stations.length)];
     const cust = Math.floor(Math.random()*9000)+1000;
     const desc = t.tag === 'FUND'
-      ? `${v} — bank transfer`
-      : `${v} — Cust. ${cust} · ${s}`;
+      ? `<strong>${v}</strong> · bank transfer`
+      : `<strong>${v}</strong> · Cust ${cust} · ${s}`;
 
     const row = document.createElement('div');
     row.className = 'pulse-row';
     row.innerHTML = `
-      <div class="pulse-time">${now()}</div>
-      <div class="pulse-tag ${t.cls}">${t.tag}</div>
-      <div class="pulse-desc">${desc}</div>
-      <div class="pulse-amt">${fmt(amt)}</div>
+      <span class="pulse-time">${now()}</span>
+      <span class="pulse-tag ${t.cls}">${t.tag}</span>
+      <span class="pulse-desc">${desc}</span>
+      <span class="pulse-amt">${fmt(amt)}</span>
     `;
     pulseFeed.insertBefore(row, pulseFeed.firstChild);
-
-    while (pulseFeed.children.length > 12) {
-      pulseFeed.removeChild(pulseFeed.lastChild);
-    }
-  }, 2800);
+    while (pulseFeed.children.length > 14) pulseFeed.removeChild(pulseFeed.lastChild);
+  }, 2400);
 </script>
 
 </body>

@@ -15,7 +15,8 @@ const tableNames = [
   "print_jobs",
   "write_confirmations",
   "account_bindings",
-  "automation_deliveries"
+  "automation_deliveries",
+  "sms_notifications"
 ];
 
 function slugPart(value, fallback = "artifact") {

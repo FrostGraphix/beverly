@@ -78,7 +78,7 @@ for (const token of [
   assert(tokensCss.includes(token), `Expected token ${token}`);
 }
 
-for (const theme of ["light", "dark", "executive", "ocean", "contrast"]) {
+for (const theme of ["light", "executive", "contrast"]) {
   assert(themesCss.includes(`[data-theme="${theme}"]`), `Expected theme ${theme}`);
 }
 

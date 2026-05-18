@@ -23,7 +23,7 @@ const combinedCss = `${referenceCss}\n${legacyCss}`;
 const themesCss = readProjectFile("src/styles/themes.css");
 const tokensCss = readProjectFile("src/styles/tokens.css");
 
-for (const theme of ["system", "light", "dark", "executive", "ocean", "contrast"]) {
+for (const theme of ["system", "light", "executive", "contrast"]) {
   assertIncludes(app, `id: "${theme}"`);
   assertIncludes(settings, `id: "${theme}"`);
 }
@@ -31,14 +31,12 @@ for (const theme of ["system", "light", "dark", "executive", "ocean", "contrast"
 assertIncludes(app, "data-theme-choice");
 assertIncludes(app, "role=\"menuitemradio\"");
 assertIncludes(themesCss, "[data-theme=\"executive\"]");
-assertIncludes(themesCss, "[data-theme=\"ocean\"]");
 assertIncludes(themesCss, "[data-theme=\"contrast\"]");
 assertIncludes(themesCss, "--color-brand: #22c55e");
-assertIncludes(themesCss, "--color-brand: #047857");
 assertIncludes(tokensCss, "--primary: var(--color-brand)");
 assertIncludes(tokensCss, "--theme-color: var(--color-brand)");
-assertIncludes(app, 'label: "Canopy"');
-assertIncludes(settings, 'label: "Canopy"');
+assertIncludes(app, 'label: "Executive"');
+assertIncludes(settings, 'label: "Executive"');
 assertIncludes(combinedCss, ".theme-command-menu");
 assertIncludes(combinedCss, ".theme-swatch");
 assertIncludes(themesCss, "color-scheme: dark");
@@ -47,8 +45,7 @@ assertIncludes(combinedCss, ".sidebar-logo-icon");
 assertIncludes(combinedCss, "color: var(--text-inverse)");
 
 const greenThemeCss = [
-  themesCss.match(/\[data-theme="executive"\]\s*\{[\s\S]*?\n\}/)?.[0] || "",
-  themesCss.match(/\[data-theme="ocean"\]\s*\{[\s\S]*?\n\}/)?.[0] || ""
+  themesCss.match(/\[data-theme="executive"\]\s*\{[\s\S]*?\n\}/)?.[0] || ""
 ].join("\n");
 
 const forbiddenGreenThemeTokens = [

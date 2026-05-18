@@ -12,6 +12,9 @@ function read(relativePath) {
 
 const vercelSmoke = read("tools/vercel-smoke.cjs");
 const stagingSmoke = read("tools/staging-write-smoke.cjs");
+const rawGapReconcile = read("tools/consumption-raw-gap-reconcile.cjs");
+const rawGapVerify = read("tools/consumption-raw-gap-verify.cjs");
+const packageJson = JSON.parse(read("package.json"));
 const browserQa = read("tests/vue-app.browser.test.cjs");
 
 assert(vercelSmoke.includes("process.env.PREVIEW_TARGET_URL"), "vercel smoke must accept preview target fallback");
@@ -28,6 +31,22 @@ assert(stagingSmoke.includes("set VERCEL_PROTECTION_BYPASS"), "staging smoke mus
 
 assert(browserQa.includes("defaultBrowserTarget"), "browser QA must choose a platform-safe default");
 assert(browserQa.includes('fs.existsSync(edgePath) ? "edge" : "chromium"'), "browser QA must default to Edge on Windows");
+
+assert.strictEqual(
+  packageJson.scripts["consumption:verify"],
+  "node --disable-warning=ExperimentalWarning tools/consumption-raw-gap-verify.cjs",
+  "consumption raw parity verify script missing"
+);
+assert.strictEqual(
+  packageJson.scripts["consumption:raw-reconcile"],
+  "node --disable-warning=ExperimentalWarning tools/consumption-raw-gap-reconcile.cjs",
+  "consumption raw reconciliation script missing"
+);
+assert(rawGapReconcile.includes("clearStationRaw"), "raw gap reconcile must reset station raw extras before recalculating");
+assert(rawGapReconcile.includes("targetGap"), "raw gap reconcile must calculate the live-to-canonical gap");
+assert(rawGapVerify.includes("dailyMeterStationStats"), "raw gap verify must read Supabase station stats");
+assert(rawGapVerify.includes("liveRawTotal"), "raw gap verify must compare against live raw totals");
+assert(rawGapVerify.includes("delta !== 0"), "raw gap verify must fail on drift");
 
 console.log(JSON.stringify({
   status: "smoke tooling passed"

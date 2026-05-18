@@ -1,12 +1,12 @@
 import assert from "node:assert";
 import { actionEndpoint, submitRouteAction } from "../src/services/action-service.mjs";
-import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionInsights, buildConsumptionStatisticsPayload, decorateConsumptionRows, fetchConsumptionStatistics, normalizeConsumptionStatisticsResponse, summarizeConsumptionRows } from "../src/services/consumption-statistics-service.mjs";
+import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionInsights, buildConsumptionStatisticsPayload, decorateConsumptionRows, fetchConsumptionStatistics, normalizeConsumptionDateKey, normalizeConsumptionStatisticsResponse, summarizeConsumptionRows } from "../src/services/consumption-statistics-service.mjs";
 import { fetchDashboardData } from "../src/services/dashboard-service.mjs";
 import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
 import { routeManifest } from "../src/data/route-manifest.js";
 import { managementFields, managementFormSeed } from "../src/services/management-forms.mjs";
-import { defaultTableOptions, resolveRowValue, searchRows, sortRows, tableRequest } from "../src/services/table-service.mjs";
+import { defaultTableOptions, fetchTableData, resolveRowValue, searchRows, sortRows, tableRequest } from "../src/services/table-service.mjs";
 import { needsAuthorizationPassword, stripWriteMeta, validateWriteForm } from "../src/services/write-helpers.mjs";
 
 const accountRoute = {
@@ -361,6 +361,9 @@ const normalizedMonthlyConsumption = normalizeConsumptionStatisticsResponse({
 });
 assert.strictEqual(normalizedMonthlyConsumption.rows[0].collectionDate, "2026-04");
 assert.strictEqual(normalizedMonthlyConsumption.rows[0].consumption, 4.2);
+assert.strictEqual(normalizeConsumptionDateKey("14/04/2026"), "2026-04-14");
+assert.strictEqual(normalizeConsumptionDateKey("2026/04/14"), "2026-04-14");
+assert.strictEqual(normalizeConsumptionDateKey("14/04/2026", "monthly"), "2026-04");
 
 assert.deepStrictEqual(
   aggregateConsumptionRows([
@@ -371,6 +374,40 @@ assert.deepStrictEqual(
   [
     { collectionDate: "2026-04-05", consumption: 0.5 },
     { collectionDate: "2026-05-01", consumption: 1.5 }
+  ]
+);
+
+assert.deepStrictEqual(
+  aggregateConsumptionRows([
+    { collectionDate: "2026-04-14 00:00:00", consumption: 0.07 },
+    { collectionDate: "2026-04-22 00:00:00", consumption: 0.99 }
+  ], "daily", {
+    granularity: "daily",
+    dateFrom: "14/04/2026",
+    dateTo: "17/04/2026"
+  }).map((row) => ({ collectionDate: row.collectionDate, consumption: row.consumption })),
+  [
+    { collectionDate: "2026-04-14", consumption: 0.07 },
+    { collectionDate: "2026-04-15", consumption: 0 },
+    { collectionDate: "2026-04-16", consumption: 0 },
+    { collectionDate: "2026-04-17", consumption: 0 }
+  ]
+);
+
+assert.deepStrictEqual(
+  aggregateConsumptionRows([
+    { collectionDate: "2026-04-14 00:00:00", consumption: 0.07 },
+    { collectionDate: "2026-04-16 00:00:00", consumption: 0.21 }
+  ], "daily", {
+    granularity: "daily",
+    dateFrom: "2026-04-14",
+    dateTo: "2026-04-17"
+  }).map((row) => ({ collectionDate: row.collectionDate, consumption: row.consumption })),
+  [
+    { collectionDate: "2026-04-14", consumption: 0.07 },
+    { collectionDate: "2026-04-15", consumption: 0 },
+    { collectionDate: "2026-04-16", consumption: 0.21 },
+    { collectionDate: "2026-04-17", consumption: 0 }
   ]
 );
 
@@ -451,8 +488,8 @@ assert.strictEqual(
 
 const consumptionCalls = [];
 const liveConsumption = await fetchConsumptionStatistics({
-  dateFrom: "2026-04-01",
-  dateTo: "2026-04-30"
+  dateFrom: "01/04/2026",
+  dateTo: "30/04/2026"
 }, {
   pageNumber: 1,
   pageSize: 20
@@ -473,8 +510,11 @@ assert.strictEqual(liveConsumption.endpoint, "/api/DailyDataMeter/read");
 assert.strictEqual(liveConsumption.source, "live-derived");
 assert.deepStrictEqual(consumptionCalls.map((call) => call.path), ["/api/DailyDataMeter/read"]);
 assert.strictEqual(liveConsumption.rows[0].consumption, 0.5);
+assert.strictEqual(consumptionCalls[0].payload.FROM, "2026-03-31T00:00:00.000Z");
+assert.strictEqual(consumptionCalls[0].payload.TO, "2026-04-30T23:59:59.999Z");
 
 const monthlyConsumptionCalls = [];
+const monthlyConsumptionPayloads = [];
 const monthlyConsumption = await fetchConsumptionStatistics({
   dateFrom: "2026-04-01",
   dateTo: "2026-04-30",
@@ -483,8 +523,9 @@ const monthlyConsumption = await fetchConsumptionStatistics({
   pageNumber: 1,
   pageSize: 20
 }, {
-  async postApi(path) {
+  async postApi(path, payload) {
     monthlyConsumptionCalls.push(path);
+    monthlyConsumptionPayloads.push(payload);
     if (path.includes("readMonthly")) {
       return { code: 0, result: { total: 0, data: [] }, _proxy: { source: "live" } };
     }
@@ -499,6 +540,9 @@ const monthlyConsumption = await fetchConsumptionStatistics({
   }
 });
 assert.deepStrictEqual(monthlyConsumptionCalls, ["/api/DailyDataMeter/readMonthly", "/api/DailyDataMeter/read"]);
+assert.strictEqual(monthlyConsumptionPayloads[0].FROM, "2026-04-01T00:00:00.000Z");
+assert.strictEqual(monthlyConsumptionPayloads[0].TO, "2026-04-30T23:59:59.999Z");
+assert.strictEqual(monthlyConsumptionPayloads[1].FROM, "2026-03-31T00:00:00.000Z");
 assert.strictEqual(monthlyConsumption.endpoint, "/api/DailyDataMeter/read");
 assert.match(monthlyConsumption.warning, /grouped from live daily AMR data/);
 
@@ -549,6 +593,83 @@ const dailyDataMeterRequest = tableRequest({
 assert.strictEqual(dailyDataMeterRequest.payload.stationId, "TUNGA");
 assert.strictEqual(dailyDataMeterRequest.payload.FROM, "2026-01-01T00:00:00.000Z");
 assert.strictEqual(dailyDataMeterRequest.payload.TO, "2026-01-31T23:59:59.999Z");
+
+const lowPurchaseRoute = routeManifest.find((route) => route.hash === "#/prepay-report/low-purchase-situation");
+const lowPurchaseRows = Array.from({ length: 45 }, (_, index) => ({
+  customerId: `C-${String(index + 1).padStart(3, "0")}`,
+  customerName: `Low Purchase ${index + 1}`,
+  meterId: `M-${String(index + 1).padStart(3, "0")}`,
+  tariffId: "RESIDENTIAL",
+  purchaseTotalUnit: 2.8,
+  purchaseTotalPaid: 1000
+}));
+const lowPurchaseCalls = [];
+const lowPurchaseTable = await fetchTableData(lowPurchaseRoute, {}, {
+  async postApi(path, payload = {}) {
+    if (path !== "/api/PrepayReport/LowPurchaseSituation") {
+      return { code: 0, result: { total: 0, data: [] } };
+    }
+    lowPurchaseCalls.push(payload);
+    const pageNumber = Number(payload.pageNumber || 1);
+    const pageSize = Math.min(Number(payload.pageSize || 20), 20);
+    const start = (pageNumber - 1) * pageSize;
+    return {
+      code: 0,
+      result: {
+        total: 20,
+        data: lowPurchaseRows.slice(start, start + pageSize)
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(lowPurchaseCalls[0].pageSize, 500);
+assert.strictEqual(lowPurchaseCalls[1].pageSize, 20);
+assert.strictEqual(lowPurchaseTable.rows.length, 45);
+assert.strictEqual(lowPurchaseTable.total, 45);
+assert.strictEqual(lowPurchaseTable.rows[44].totalPaid, 1000);
+
+const managementCustomerRoute = routeManifest.find((route) => route.hash === "#/management/customer");
+const managementCustomerRows = Array.from({ length: 63 }, (_, index) => ({
+  customerId: `CU-${String(index + 1).padStart(3, "0")}`,
+  customerName: `Management Customer ${index + 1}`,
+  phone: `0800000${String(index + 1).padStart(3, "0")}`,
+  address: "Kyakale",
+  stationId: "KYAKALE"
+}));
+const managementCustomerCalls = [];
+const managementCustomerTable = await fetchTableData(managementCustomerRoute, {}, {
+  async postApi(path, payload = {}) {
+    managementCustomerCalls.push({ path, payload });
+    if (path === "/api/station/read") {
+      return { code: 0, result: { total: 0, data: [] } };
+    }
+    assert.strictEqual(path, "/api/customer/read");
+    const pageNumber = Number(payload.pageNumber || 1);
+    const pageSize = Math.min(Number(payload.pageSize || 20), 20);
+    const start = (pageNumber - 1) * pageSize;
+    return {
+      code: 0,
+      result: {
+        total: 20,
+        data: managementCustomerRows.slice(start, start + pageSize)
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+const customerReadCalls = managementCustomerCalls.filter((call) => call.path === "/api/customer/read");
+assert.strictEqual(customerReadCalls[0].payload.pageSize, 500);
+assert.strictEqual(customerReadCalls[1].payload.pageSize, 20);
+assert.deepStrictEqual(customerReadCalls.map((call) => call.payload.pageNumber), [1, 2, 3, 4]);
+assert.strictEqual(managementCustomerTable.rows.length, 63);
+assert.strictEqual(managementCustomerTable.total, 63);
+assert.strictEqual(managementCustomerTable.rows[0].id, "CU-001");
+assert.strictEqual(managementCustomerTable.rows[62].name, "Management Customer 63");
 
 const action = mapActionResponse({
   code: 0,
@@ -634,7 +755,7 @@ await assert.rejects(
   }, {
     fields: [{ name: "customerId", label: "Customer Id" }]
   }),
-  /queued locally/
+  /not submitted/
 );
 
 const customerDeleteCalls = [];

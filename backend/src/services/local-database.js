@@ -42,7 +42,8 @@ function createMemoryStore() {
     vendor_documents: [],
     wallet_approval_requests: [],
     wallet_reconciliation_runs: [],
-    wallet_risk_events: []
+    wallet_risk_events: [],
+    sms_notifications: []
   };
 }
 
@@ -274,6 +275,23 @@ function ensureDatabase() {
       error_text TEXT NOT NULL,
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sms_notifications (
+      id TEXT PRIMARY KEY,
+      message_sid TEXT NOT NULL UNIQUE,
+      to_number TEXT NOT NULL,
+      from_number TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      error_code TEXT NOT NULL,
+      error_message TEXT NOT NULL,
+      reference TEXT NOT NULL,
+      callback_url TEXT NOT NULL,
+      detail_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      sent_at TEXT,
+      delivered_at TEXT
     );
     CREATE TABLE IF NOT EXISTS vendor_organizations (
       id TEXT PRIMARY KEY,
@@ -850,6 +868,7 @@ function tableCounts() {
     "write_confirmations",
     "account_bindings",
     "automation_deliveries",
+    "sms_notifications",
     "vendor_organizations",
     "vendor_wallets",
     "wallet_ledger_entries",
@@ -958,6 +977,234 @@ function listAutomationDeliveries(options = {}) {
   };
 }
 
+function mapSmsNotificationRow(row = {}) {
+  const details = row.details || parseJson(row.detail_json, {});
+  return {
+    id: row.id,
+    messageSid: row.messageSid || row.message_sid,
+    to: row.to || row.to_number,
+    from: row.from || row.from_number,
+    body: row.body,
+    status: row.status,
+    errorCode: row.errorCode || row.error_code || "",
+    errorMessage: row.errorMessage || row.error_message || "",
+    reference: row.reference || "",
+    callbackUrl: row.callbackUrl || row.callback_url || "",
+    details,
+    createdAt: row.createdAt || row.created_at,
+    updatedAt: row.updatedAt || row.updated_at,
+    sentAt: row.sentAt || row.sent_at || null,
+    deliveredAt: row.deliveredAt || row.delivered_at || null
+  };
+}
+
+function recordSmsNotification(entry) {
+  const db = ensureDatabase();
+  const timestamp = String(entry.createdAt || nowIso());
+  const row = {
+    id: String(entry.id || crypto.randomUUID()),
+    messageSid: String(entry.messageSid || ""),
+    to: String(entry.to || ""),
+    from: String(entry.from || ""),
+    body: String(entry.body || ""),
+    status: String(entry.status || "queued"),
+    errorCode: String(entry.errorCode || ""),
+    errorMessage: String(entry.errorMessage || ""),
+    reference: String(entry.reference || ""),
+    callbackUrl: String(entry.callbackUrl || ""),
+    details: sanitizeValue(entry.details || {}),
+    createdAt: timestamp,
+    updatedAt: String(entry.updatedAt || timestamp),
+    sentAt: entry.sentAt || null,
+    deliveredAt: entry.deliveredAt || null
+  };
+  if (!row.messageSid) throw new Error("messageSid is required");
+
+  if (isMemoryDatabase(db)) {
+    const existingIndex = db.memoryStore.sms_notifications.findIndex((item) => item.messageSid === row.messageSid);
+    if (existingIndex >= 0) db.memoryStore.sms_notifications[existingIndex] = row;
+    else db.memoryStore.sms_notifications.push(row);
+    return mapSmsNotificationRow(row);
+  }
+
+  db.prepare(`
+    INSERT INTO sms_notifications (
+      id, message_sid, to_number, from_number, body, status, error_code, error_message,
+      reference, callback_url, detail_json, created_at, updated_at, sent_at, delivered_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(message_sid) DO UPDATE SET
+      to_number = excluded.to_number,
+      from_number = excluded.from_number,
+      body = excluded.body,
+      status = excluded.status,
+      error_code = excluded.error_code,
+      error_message = excluded.error_message,
+      reference = excluded.reference,
+      callback_url = excluded.callback_url,
+      detail_json = excluded.detail_json,
+      updated_at = excluded.updated_at,
+      sent_at = COALESCE(excluded.sent_at, sms_notifications.sent_at),
+      delivered_at = COALESCE(excluded.delivered_at, sms_notifications.delivered_at)
+  `).run(
+    row.id,
+    row.messageSid,
+    row.to,
+    row.from,
+    row.body,
+    row.status,
+    row.errorCode,
+    row.errorMessage,
+    row.reference,
+    row.callbackUrl,
+    JSON.stringify(row.details),
+    row.createdAt,
+    row.updatedAt,
+    row.sentAt,
+    row.deliveredAt
+  );
+  return getSmsNotification(row.messageSid);
+}
+
+function updateSmsNotificationStatus(entry) {
+  const db = ensureDatabase();
+  const messageSid = String(entry.messageSid || "");
+  if (!messageSid) throw new Error("messageSid is required");
+  const timestamp = String(entry.updatedAt || nowIso());
+  const status = String(entry.status || "unknown");
+  const terminalDeliveredAt = status === "delivered" ? timestamp : null;
+  const sentAt = status === "sent" ? timestamp : null;
+  const event = {
+    status,
+    errorCode: String(entry.errorCode || ""),
+    errorMessage: String(entry.errorMessage || ""),
+    raw: sanitizeValue(entry.raw || {}),
+    receivedAt: timestamp
+  };
+
+  if (isMemoryDatabase(db)) {
+    let existing = db.memoryStore.sms_notifications.find((item) => item.messageSid === messageSid);
+    if (!existing) {
+      existing = {
+        id: String(entry.id || crypto.randomUUID()),
+        messageSid,
+        to: String(entry.to || ""),
+        from: String(entry.from || ""),
+        body: String(entry.body || ""),
+        status,
+        errorCode: "",
+        errorMessage: "",
+        reference: String(entry.reference || ""),
+        callbackUrl: "",
+        details: { events: [] },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        sentAt: null,
+        deliveredAt: null
+      };
+      db.memoryStore.sms_notifications.push(existing);
+    }
+    existing.status = status;
+    existing.errorCode = event.errorCode;
+    existing.errorMessage = event.errorMessage;
+    existing.updatedAt = timestamp;
+    existing.sentAt = existing.sentAt || sentAt;
+    existing.deliveredAt = existing.deliveredAt || terminalDeliveredAt;
+    existing.details = sanitizeValue({
+      ...(existing.details || {}),
+      events: [...((existing.details || {}).events || []), event]
+    });
+    return mapSmsNotificationRow(existing);
+  }
+
+  const current = getSmsNotification(messageSid);
+  const details = sanitizeValue({
+    ...(current?.details || {}),
+    events: [...((current?.details || {}).events || []), event]
+  });
+  db.prepare(`
+    INSERT INTO sms_notifications (
+      id, message_sid, to_number, from_number, body, status, error_code, error_message,
+      reference, callback_url, detail_json, created_at, updated_at, sent_at, delivered_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(message_sid) DO UPDATE SET
+      status = excluded.status,
+      error_code = excluded.error_code,
+      error_message = excluded.error_message,
+      detail_json = excluded.detail_json,
+      updated_at = excluded.updated_at,
+      sent_at = COALESCE(sms_notifications.sent_at, excluded.sent_at),
+      delivered_at = COALESCE(sms_notifications.delivered_at, excluded.delivered_at)
+  `).run(
+    current?.id || String(entry.id || crypto.randomUUID()),
+    messageSid,
+    current?.to || String(entry.to || ""),
+    current?.from || String(entry.from || ""),
+    current?.body || String(entry.body || ""),
+    status,
+    event.errorCode,
+    event.errorMessage,
+    current?.reference || String(entry.reference || ""),
+    current?.callbackUrl || "",
+    JSON.stringify(details),
+    current?.createdAt || timestamp,
+    timestamp,
+    sentAt,
+    terminalDeliveredAt
+  );
+  return getSmsNotification(messageSid);
+}
+
+function getSmsNotification(messageSid) {
+  const db = ensureDatabase();
+  const sid = String(messageSid || "");
+  if (!sid) return null;
+  if (isMemoryDatabase(db)) {
+    const row = db.memoryStore.sms_notifications.find((item) => item.messageSid === sid);
+    return row ? mapSmsNotificationRow(row) : null;
+  }
+  const row = db.prepare(`
+    SELECT id, message_sid, to_number, from_number, body, status, error_code, error_message,
+      reference, callback_url, detail_json, created_at, updated_at, sent_at, delivered_at
+    FROM sms_notifications
+    WHERE message_sid = ?
+  `).get(sid);
+  return row ? mapSmsNotificationRow(row) : null;
+}
+
+function listSmsNotifications(options = {}) {
+  const db = ensureDatabase();
+  const limit = Math.max(1, Math.min(Number(options.limit || 50), 200));
+  const status = String(options.status || "").trim();
+  if (isMemoryDatabase(db)) {
+    let rows = db.memoryStore.sms_notifications.slice();
+    if (status) rows = rows.filter((row) => String(row.status || "") === status);
+    rows = rows
+      .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+      .slice(0, limit);
+    return { rows: rows.map(mapSmsNotificationRow), total: db.memoryStore.sms_notifications.length };
+  }
+  const rows = status
+    ? db.prepare(`
+      SELECT id, message_sid, to_number, from_number, body, status, error_code, error_message,
+        reference, callback_url, detail_json, created_at, updated_at, sent_at, delivered_at
+      FROM sms_notifications
+      WHERE status = ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(status, limit)
+    : db.prepare(`
+      SELECT id, message_sid, to_number, from_number, body, status, error_code, error_message,
+        reference, callback_url, detail_json, created_at, updated_at, sent_at, delivered_at
+      FROM sms_notifications
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(limit);
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM sms_notifications`).get().count;
+  return { rows: rows.map(mapSmsNotificationRow), total };
+}
+
 function resetForTests() {
   if (database && typeof database.close === "function") database.close();
   database = null;
@@ -970,18 +1217,22 @@ module.exports = {
   databasePath,
   deleteAccountBinding,
   ensureDatabase,
+  getSmsNotification,
   listAccountBindings,
   listImportJobs,
   listAutomationDeliveries,
+  listSmsNotifications,
   readCachedApiResponse,
   recordAutomationDelivery,
   recordAuditLog,
   recordExportJob,
   recordImportJob,
   recordPrintJob,
+  recordSmsNotification,
   recordWriteConfirmation,
   resetForTests,
   saveAccountBinding,
   tableCounts,
+  updateSmsNotificationStatus,
   writableRoot
 };

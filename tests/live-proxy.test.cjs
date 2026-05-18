@@ -134,6 +134,29 @@ async function main() {
         return;
       }
 
+      if (req.url.startsWith("/api/customer/read")) {
+        if (req.headers.authorization !== "Bearer env-token") {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ code: 401, reason: "wrong token", result: null }));
+          return;
+        }
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+        const pageNumber = Number(body.pageNumber || 1);
+        const pageSize = Number(body.pageSize || 20);
+        const start = (pageNumber - 1) * pageSize;
+        const rows = Array.from({ length: pageSize }, (_, index) => {
+          const rowNumber = start + index + 1;
+          return {
+            customerId: `LIVE-CUSTOMER-${String(rowNumber).padStart(4, "0")}`,
+            customerName: `Live Customer ${rowNumber}`,
+            stationId: "KYAKALE"
+          };
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 0, reason: "success", result: { total: 2456, data: rows } }));
+        return;
+      }
+
       if (req.url.startsWith("/api/item/read")) {
         if (req.headers.authorization !== "Bearer env-token") {
           res.writeHead(401, { "Content-Type": "application/json" });
@@ -257,6 +280,32 @@ async function main() {
       assert.strictEqual(accountRead.body._proxy.source, "sample");
       assert(accountRead.body.result.data.length > 0);
 
+      const customerRead = await request(proxyPort, "POST", "/api/customer/read", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 500 }))
+      });
+      assert.strictEqual(customerRead.status, 200);
+      assert.strictEqual(customerRead.body._proxy.source, "live");
+      assert.strictEqual(customerRead.body.result.total, 2456);
+      assert.strictEqual(customerRead.body.result.data.length, 500);
+      assert.strictEqual(customerRead.body.result.data[0].customerId, "LIVE-CUSTOMER-0001");
+
+      const customerReadPage2 = await request(proxyPort, "POST", "/api/customer/read", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 2, pageSize: 500 }))
+      });
+      assert.strictEqual(customerReadPage2.status, 200);
+      assert.strictEqual(customerReadPage2.body._proxy.source, "live");
+      assert.strictEqual(customerReadPage2.body.result.total, 2456);
+      assert.strictEqual(customerReadPage2.body.result.data.length, 500);
+      assert.strictEqual(customerReadPage2.body.result.data[0].customerId, "LIVE-CUSTOMER-0501");
+
       const itemRead = await request(proxyPort, "POST", "/api/item/read", {
         headers: {
           "Content-Type": "application/json",
@@ -376,6 +425,24 @@ async function main() {
       });
       assert.strictEqual(tokenConfirm.status, 403);
       assert.strictEqual(tokenConfirm.body._proxy.source, "guard");
+    });
+
+    await withEnv({
+      LOCAL_DB_PATH: dbPath,
+      LIVE_API_PROXY_ENABLED: "true",
+      LIVE_API_BASE_URL: "http://127.0.0.1:1",
+      LIVE_API_BEARER_TOKEN: "env-token",
+      ALLOW_LIVE_WRITES: "true"
+    }, async () => {
+      const customerUnavailable = await request(proxyPort, "POST", "/api/customer/read", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 500 }))
+      });
+      assert.strictEqual(customerUnavailable.status, 502);
+      assert.strictEqual(customerUnavailable.body._proxy.source, "live-required");
     });
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");

@@ -8,7 +8,7 @@ export function isGuardedWriteError(error = {}) {
 }
 
 export function guardedWriteMessage(action = "Action") {
-  return `${action} queued locally. Live writes are off.`;
+  return `${action} not submitted. Live writes are off.`;
 }
 
 export function userFacingError(error = {}, fallback = "Action failed") {

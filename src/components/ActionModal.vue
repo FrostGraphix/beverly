@@ -522,9 +522,9 @@ import { buildErrorReport, buildImportPreview, downloadTextFile, exportCsvText, 
 import { logExportJob, logPrintJob } from "../services/local-jobs.mjs";
 import { columnKey, printModelForRoute, tableSiteOptions } from "../services/table-service";
 import { actionEndpoint, submitRouteAction } from "../services/action-service.mjs";
-import { liveWritesAllowed, postApi } from "../services/api.js";
+import { getCookie, liveWritesAllowed, postApi } from "../services/api.js";
 import { managementFields, managementFormSeed, ROLE_PERMISSIONS } from "../services/management-forms.mjs";
-import { buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf, openBrowserPrint, receiptHtml } from "../services/receipt-tools.mjs";
+import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf, openBrowserPrint, receiptHtml, validateReceiptModel } from "../services/receipt-tools.mjs";
 import { confirmationMessage, isWriteEndpoint, needsAuthorizationPassword } from "../services/write-helpers.mjs";
 import { guardedWriteMessage, userFacingError } from "../services/guarded-write.mjs";
 import { isFileUploadRoute, uploadAcceptValue, uploadSummary, validateUploadFile } from "../services/upload-policy.mjs";
@@ -546,7 +546,6 @@ import {
 } from "../services/token-flow.mjs";
 import {
   buildRemoteTaskPayload,
-  buildLocalRemoteTaskResult,
   defaultRemoteDataItem,
   guardedRemoteTaskError,
   isGprsSupportTaskRoute,
@@ -835,6 +834,9 @@ export default {
     },
     finalReceiptModel() {
       return printModelForRoute(this.route, this.buildTokenReceiptRow(this.tokenFinal));
+    },
+    finalReceiptValidation() {
+      return validateReceiptModel(this.finalReceiptModel);
     },
     isRemoteTaskFlow() {
       return isRemoteTaskAction(this.route, this.action);
@@ -1337,6 +1339,14 @@ export default {
         }
         const receiptRow = this.buildTokenReceiptRow(response);
         const receiptModel = printModelForRoute(this.route, receiptRow);
+        const receiptValidation = validateReceiptModel(receiptModel);
+        if (!receiptValidation.ok) {
+          if (receiptPopup && !receiptPopup.closed) receiptPopup.close();
+          const missingText = receiptValidation.missing.join(", ");
+          this.error = `Receipt is missing: ${missingText}`;
+          toastError(this.error);
+          return;
+        }
         openBrowserPrint(receiptModel, receiptPopup);
         await logPrintJob(this.route, receiptModel, "auto-token", "credit", {
           fileName: this.receiptFilename(receiptModel, "html"),
@@ -1384,21 +1394,16 @@ export default {
       }
     },
     buildTokenReceiptRow(response) {
-      const data = response?.data || response?.result || {};
-      return {
-        ...this.row,
-        ...this.form,
-        ...data,
-        receiptId: data.receiptId || this.form.receiptId || this.row.receiptId || "",
-        customerId: this.form.customerId || this.row.customerId || "",
-        customerName: this.form.customerName || this.row.customerName || "",
-        meterId: this.form.meterId || this.row.meterId || "",
-        stationId: this.form.stationId || this.row.stationId || "",
-        totalPaid: this.form.amount || data.totalPaid || this.row.totalPaid || "",
-        totalUnit: this.form.totalUnit || data.totalUnit || this.row.totalUnit || "",
-        token: data.token || this.form.token || this.row.token || "",
-        time: data.createTime || data.time || new Date().toISOString().replace("T", " ").slice(0, 19)
-      };
+      return buildCanonicalReceiptRow({
+        row: this.row,
+        form: this.form,
+        response,
+        tariff: this.selectedTariff,
+        actor: {
+          name: getCookie("userName"),
+          email: getCookie("userEmail") || getCookie("userId")
+        }
+      });
     },
     tokenStepDone(stepId) {
       const order = { form: 1, confirm: 2, final: 3 };
@@ -1409,6 +1414,10 @@ export default {
       return order[stepId] < order[this.remoteBatchStep];
     },
     async printFinalReceipt() {
+      if (!this.finalReceiptValidation.ok) {
+        toastError(`Receipt is missing: ${this.finalReceiptValidation.missing.join(", ")}`);
+        return;
+      }
       const opened = openBrowserPrint(this.finalReceiptModel);
       await logPrintJob(this.route, this.finalReceiptModel, "browser-repeat", "credit", {
         fileName: this.receiptFilename(this.finalReceiptModel, "html"),
@@ -1419,6 +1428,10 @@ export default {
       this.result = opened ? `Browser print opened: ${this.receiptFilename(this.finalReceiptModel, "pdf")}` : "Browser blocked the print window";
     },
     async downloadFinalReceipt() {
+      if (!this.finalReceiptValidation.ok) {
+        toastError(`Receipt is missing: ${this.finalReceiptValidation.missing.join(", ")}`);
+        return;
+      }
       const result = await downloadReceiptPdf(this.finalReceiptModel);
       await logPrintJob(this.route, this.finalReceiptModel, "pdf-final", "credit", {
         fileName: this.receiptFilename(this.finalReceiptModel, "html"),
@@ -1468,13 +1481,8 @@ export default {
         }, null, 2);
 
         if (!liveWritesAllowed()) {
-          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
-          this.responseLog = JSON.stringify(localResult, null, 2);
-          const succeeded = groupEntries.map(([key, items]) => ({ dataItem: key, count: items.length }));
-          const totalSubmitted = payloads.length;
-          this.result = `${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} queued locally`;
-          toastSuccess(`${totalSubmitted} task${totalSubmitted > 1 ? "s" : ""} queued locally`);
-          this.$emit("done", { endpoint, payloads, succeeded, failed: [], local: true });
+          this.error = guardedWriteMessage("Remote task");
+          toastError(this.error);
           return;
         }
 
@@ -1509,13 +1517,8 @@ export default {
         const totalSubmitted = succeeded.reduce((sum, g) => sum + g.count, 0);
 
         if (failed.length === groupEntries.length && failed.every((failure) => guardedRemoteTaskError(failure.error))) {
-          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
-          this.responseLog = JSON.stringify(localResult, null, 2);
-          const localSucceeded = groupEntries.map(([key, items]) => ({ dataItem: key, count: items.length }));
-          const localTotal = payloads.length;
-          this.result = `${localTotal} task${localTotal > 1 ? "s" : ""} queued locally`;
-          toastSuccess(this.result);
-          this.$emit("done", { endpoint, payloads, succeeded: localSucceeded, failed: [], local: true });
+          this.error = failed.map(f => `${f.dataItem}: ${this.friendlyRemoteTaskError(f.error)}`).join("; ");
+          toastError(this.error);
           return;
         }
 
@@ -1534,13 +1537,8 @@ export default {
         this.$emit("done", { endpoint, payloads, succeeded, failed: [] });
       } catch (error) {
         if (guardedRemoteTaskError(error)) {
-          const endpoint = remoteTaskEndpoint(this.route);
-          const payloads = buildRemoteTaskPayload(this.route, this.action, this.form, this.rows);
-          const localResult = buildLocalRemoteTaskResult(this.route, payloads);
-          this.responseLog = JSON.stringify(localResult, null, 2);
-          this.result = `${payloads.length} task${payloads.length > 1 ? "s" : ""} queued locally`;
-          toastSuccess(this.result);
-          this.$emit("done", { endpoint, payloads, succeeded: [{ dataItem: this.form.dataItem || "Task", count: payloads.length }], failed: [], local: true });
+          this.error = guardedWriteMessage("Remote task");
+          toastError(this.error);
           return;
         }
         this.error = this.friendlyRemoteTaskError(error?.message);

@@ -30,13 +30,16 @@ const suspectLedger = readProjectFile("src/components/consumption/SuspectLedger.
 assertIncludes(globalCss, "TABLE COMMAND CENTER");
 assertIncludes(globalCss, "border-collapse: separate");
 assertIncludes(globalCss, "font-variant-numeric: tabular-nums");
-assertIncludes(globalCss, "[data-theme=\"dark\"] .filter-toolbar");
+assertIncludes(globalCss, "[data-theme=\"executive\"] .filter-toolbar");
 assertIncludes(globalCss, "th.action-column,");
 assertIncludes(globalCss, "min-width: 240px");
 assertIncludes(globalCss, "width: 240px");
 assertIncludes(globalCss, "[data-theme] .link-btn");
 
 assertIncludes(tablePage, "table-command-strip");
+assertIncludes(tablePage, "displayedTotal()");
+assertIncludes(tablePage, "Number(this.total) > this.filteredTotal");
+assertIncludes(tablePage, "Total {{ displayedTotal }}");
 assertIncludes(tablePage, ":aria-label=\"`${action} row ${rowIndex + 1}`\"");
 assertIncludes(tablePage, "min-width: var(--table-action-column-width, 240px)");
 assertIncludes(tablePage, ":data-column-key=\"getColKey(column)\"");

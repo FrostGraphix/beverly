@@ -48,7 +48,6 @@ function runAudit(options = {}) {
   const importExport = read("src/services/import-export.mjs");
 
   const executiveTheme = section(themes, '[data-theme="executive"]');
-  const oceanTheme = section(themes, '[data-theme="ocean"]');
   const contrastTheme = section(themes, '[data-theme="contrast"]');
   const profilePanel = section(styleSource, ".profile-panel");
   const barOption = chartOptions.slice(
@@ -98,9 +97,9 @@ function runAudit(options = {}) {
     result(
       "theme-green-palettes",
       "theme",
-      includesAll(executiveTheme + oceanTheme, ["--color-brand: #22c55e", "--color-brand: #047857"]) &&
-        !/(#d6b15e|#0891b2|#0ea5e9|#7dd3fc|#bae6fd|214,\s*177,\s*94)/i.test(executiveTheme + oceanTheme + styleSource),
-      "Executive and Canopy themes stay in green palettes.",
+      includesAll(executiveTheme, ["--color-brand: #22c55e"]) &&
+        !/(#d6b15e|#0891b2|#0ea5e9|#7dd3fc|#bae6fd|214,\s*177,\s*94)/i.test(executiveTheme + styleSource),
+      "Executive theme stays in the green Beverly palette.",
       ["src/styles/themes.css", "src/styles/reference.css"]
     ),
     result(

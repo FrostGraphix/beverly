@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-16T11:01:00.887Z",
+  "generatedAt": "2026-05-17T20:42:12.793Z",
   "status": "passed",
   "summary": {
     "total": 11,
@@ -46,7 +46,7 @@
       "id": "theme-green-palettes",
       "area": "theme",
       "passed": true,
-      "detail": "Executive and Canopy themes stay in green palettes.",
+      "detail": "Executive theme stays in the green Beverly palette.",
       "files": [
         "src/styles/themes.css",
         "src/styles/reference.css"

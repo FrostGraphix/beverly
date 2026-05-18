@@ -190,14 +190,40 @@ function withPage(request, pageIndex) {
   };
 }
 
-async function sendTableRequest(request) {
-  return request.method === "GET" ? getApi(request.path, request.params) : postApi(request.path, request.payload);
+const defaultTableApi = { getApi, postApi };
+
+function tableRowKey(row) {
+  if (!row || typeof row !== "object") return JSON.stringify(row);
+  const stableId = row.receiptId
+    || row.customerId && row.meterId && `${row.customerId}:${row.meterId}`
+    || row.meterId
+    || row.id
+    || row.gatewayId
+    || row.customerName;
+  return stableId ? String(stableId) : JSON.stringify(row);
 }
 
-async function fetchAllTableRows(request, route) {
-  const firstResponse = await sendTableRequest(request);
+function pushUniqueRows(targetRows, nextRows, seenKeys) {
+  let added = 0;
+  for (const row of nextRows) {
+    const key = tableRowKey(row);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    targetRows.push(row);
+    added += 1;
+  }
+  return added;
+}
+
+async function sendTableRequest(request, api = defaultTableApi) {
+  return request.method === "GET" ? api.getApi(request.path, request.params) : api.postApi(request.path, request.payload);
+}
+
+async function fetchAllTableRows(request, route, api = defaultTableApi) {
+  const firstResponse = await sendTableRequest(request, api);
   const firstCollection = responseRows(firstResponse, route);
   const rows = firstCollection.rows.slice();
+  const seenKeys = new Set(rows.map(tableRowKey));
   let total = firstCollection.total;
   const requestedSize = pageSizeForRequest(request);
 
@@ -219,19 +245,21 @@ async function fetchAllTableRows(request, route) {
         params: { ...request.params, pageLimit: clampedSize }
       }, pageIndex);
       
-      const nextRes = await sendTableRequest(nextReq);
+      const nextRes = await sendTableRequest(nextReq, api);
       const nextCol = responseRows(nextRes, route);
       
       if (!nextCol.rows.length) break;
       
-      rows.push(...nextCol.rows);
-      total = nextCol.total || total; // The API usually returns the real total on page 2+
+      const added = pushUniqueRows(rows, nextCol.rows, seenKeys);
+      if (!added) break;
+      total = Math.max(total || 0, nextCol.total || 0, rows.length);
       
       if (nextCol.rows.length < clampedSize) break;
       pageIndex++;
     }
     
-    return { rows: rows.slice(0, Math.min(total || rows.length, maxTableRows)), total };
+    const cappedTotal = Math.max(total || 0, rows.length);
+    return { rows: rows.slice(0, Math.min(cappedTotal, maxTableRows)), total: cappedTotal };
   }
 
   // Normal logic for well-behaved endpoints
@@ -242,7 +270,7 @@ async function fetchAllTableRows(request, route) {
   const pageCount = Math.min(Math.ceil(total / requestedSize), Math.ceil(maxTableRows / requestedSize));
   const pageRequests = [];
   for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
-    pageRequests.push(sendTableRequest(withPage(request, pageIndex)));
+    pageRequests.push(sendTableRequest(withPage(request, pageIndex), api));
   }
 
   const pageResponses = await Promise.all(pageRequests);
@@ -254,12 +282,12 @@ async function fetchAllTableRows(request, route) {
   return { rows: rows.slice(0, Math.min(total || rows.length, maxTableRows)), total };
 }
 
-export async function fetchTableData(route, options = {}) {
+export async function fetchTableData(route, options = {}, api = defaultTableApi) {
   const request = tableRequest(route, options);
   const dataPath = request.path;
   const backgroundPaths = route.apis.filter((path) => path.toLowerCase() !== dataPath.toLowerCase() && !isWriteEndpoint(path));
-  await Promise.all(backgroundPaths.map((path) => postApi(path, { pageNumber: 1, pageSize: 20 }).catch(() => null)));
-  const collection = await fetchAllTableRows(request, route);
+  await Promise.all(backgroundPaths.map((path) => api.postApi(path, { pageNumber: 1, pageSize: 20 }).catch(() => null)));
+  const collection = await fetchAllTableRows(request, route, api);
   const mapped = mapTableCollection({ data: { rows: collection.rows, total: collection.total } }, route);
   return {
     ...mapped,

@@ -64,10 +64,13 @@ function main() {
   assert(app.includes("#/vendor/login"));
   assert(app.includes("#/wallet/admin/dashboard"));
 
-  assert(vendorAuthPage.includes("Vendor access is separate"));
-  assert(vendorAuthPage.includes("Change Temporary Password"));
-  assert(vendorAuthPage.includes("passwordResetRequired"));
-  assert(vendorAuthPage.includes("vendorOrganizationId"));
+  assert(vendorAuthPage.includes("Beverly Wallet Access"));
+  assert(vendorAuthPage.includes("Designed for fast wallet entry"));
+  assert(vendorAuthPage.includes("Sign up"));
+  assert(vendorAuthPage.includes("Forgot password"));
+  assert(vendorAuthPage.includes("Set a secure password"));
+  assert(vendorAuthPage.includes("wallet-auth-proof"));
+  assert(vendorAuthPage.includes("vendor-authenticated"));
 
   assert(loginPage.includes("Vendor portal"));
   assert(loginPage.includes("Enter admin workspace"));

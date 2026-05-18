@@ -23,7 +23,7 @@ const primitivesCss = read("src/styles/primitives.css");
 
 assert(referenceCss.trimStart().startsWith('@import "./tokens.css";'), "reference.css must remain an import hub first.");
 assert(!/^\s*:root\s*\{/m.test(referenceCss), "Legacy :root token block must stay out of reference.css.");
-assert(!/^\s*\[data-theme="(?:light|dark|executive|ocean|contrast)"\]\s*\{/m.test(referenceCss), "Theme token blocks must stay in themes.css.");
+assert(!/^\s*\[data-theme="(?:light|executive|contrast)"\]\s*\{/m.test(referenceCss), "Theme token blocks must stay in themes.css.");
 
 for (const token of [
   "--theme-color",
@@ -37,7 +37,7 @@ for (const token of [
   assert(tokensCss.includes(token), `Expected promoted legacy alias ${token}.`);
 }
 
-for (const theme of ["dark", "executive", "ocean", "contrast"]) {
+for (const theme of ["executive", "contrast"]) {
   const themeBlock = themesCss.match(new RegExp(`\\[data-theme="${theme}"\\]\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] || "";
   for (const token of ["--color-brand", "--color-surface-page", "--bg-header", "--sidebar-bg-start", "--sidebar-hover-bg"]) {
     assert(themeBlock.includes(token), `${theme} must override ${token}.`);

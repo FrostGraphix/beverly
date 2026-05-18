@@ -12,7 +12,7 @@ const root = path.resolve(__dirname, "..");
 const edgePath = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const distRoot = path.join(root, "dist");
 const artifactDir = path.join(root, "tmp", "design-system-audit");
-const themes = ["light", "dark", "executive", "ocean", "contrast"];
+const themes = ["light", "executive", "contrast"];
 const viewports = [
   { name: "desktop", width: 1365, height: 768 },
   { name: "mobile", width: 390, height: 844 }

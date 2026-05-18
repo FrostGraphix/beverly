@@ -223,30 +223,6 @@ export function buildRemoteTaskPayload(route = {}, action = "", form = {}, rows 
   return sourceRows.map((row) => remoteTaskPayloadForRow(route, row, form));
 }
 
-export function buildLocalRemoteTaskResult(route = {}, payloads = []) {
-  const now = new Date().toISOString();
-  const kind = remoteTaskKind(route);
-  const rows = payloads.map((payload, index) => ({
-    ...payload,
-    taskId: `LOCAL-${kind.toUpperCase()}-${Date.now()}-${index + 1}`,
-    status: "Queued",
-    createDate: now,
-    updateDate: now,
-    remark: payload.remark || "Queued locally. Live write guard is active."
-  }));
-  return {
-    code: 0,
-    msg: "success",
-    reason: "success",
-    data: rows,
-    result: rows,
-    _proxy: {
-      source: "client-remote-task-queue",
-      pathname: remoteTaskEndpoint(route)
-    }
-  };
-}
-
 export function guardedRemoteTaskError(error = {}) {
   return isGuardedWriteError(error);
 }

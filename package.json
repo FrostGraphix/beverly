@@ -22,6 +22,8 @@
     "consumption:report": "node --disable-warning=ExperimentalWarning tools/consumption-store-report.cjs",
     "consumption:backfill": "node --disable-warning=ExperimentalWarning tools/consumption-backfill.cjs",
     "consumption:backfill:smoke": "node --disable-warning=ExperimentalWarning tools/consumption-backfill.cjs --max-pages 1",
+    "consumption:raw-reconcile": "node --disable-warning=ExperimentalWarning tools/consumption-raw-gap-reconcile.cjs",
+    "consumption:verify": "node --disable-warning=ExperimentalWarning tools/consumption-raw-gap-verify.cjs",
     "write:staging": "node --disable-warning=ExperimentalWarning tools/staging-write-smoke.cjs",
     "typecheck": "node --disable-warning=ExperimentalWarning tools/typecheck.cjs",
     "flow:audit": "node --disable-warning=ExperimentalWarning tools/creative-implementation-audit.cjs",
@@ -48,6 +50,7 @@
   "dependencies": {
     "axios": "^1.7.9",
     "echarts": "^5.6.0",
+    "pg": "^8.16.3",
     "pinia": "^3.0.4",
     "vue": "^3.5.24",
     "vue-router": "^4.6.3"

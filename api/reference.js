@@ -61,6 +61,7 @@ const walletPurchase = require("../backend/src/services/wallet-purchase-service"
 const vendorOnboarding = require("../backend/src/services/vendor-onboarding-service");
 const walletApproval = require("../backend/src/services/wallet-approval-service");
 const walletReconciliation = require("../backend/src/services/wallet-reconciliation-service");
+const smsNotifications = require("../backend/src/services/sms-notification-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -68,7 +69,7 @@ const root = path.resolve(__dirname, "..");
 const contractPath = path.join(root, "reference-contract.json");
 const samplesDir = path.join(root, "contracts", "samples");
 const jsonContentType = "application/json";
-const writePattern = /\/(?:create|update|delete|import|generate|cancel|reset|modify|addread|upload)\w*\b/i;
+const writePattern = /\/(?:create|update|delete|import|generate|cancel|reset|modify|addread|upload|send)\w*\b/i;
 const defaultCorsOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
@@ -210,6 +211,7 @@ function protectedPath(pathname) {
   if (!lowerPath.startsWith("/api/")) return false;
   if (lowerPath === "/api/user/login") return false;
   if (lowerPath === "/api/system/health") return false;
+  if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
   return true;
 }
@@ -307,6 +309,12 @@ async function authorizeRequest(request, pathname, requestData) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
+  if (lowerPath.startsWith("/api/notifications/")) {
+    return (normalizedRole === "super-admin" || normalizedRole === "operations-manager")
+      ? null
+      : authFailure(403, pathname, "Insufficient permissions");
+  }
+
   if ((lowerPath.startsWith("/api/wallet/") || lowerPath.startsWith("/api/vendor/"))
     && roleAllowsWalletPath(normalizedRole, lowerPath)) {
     return null;
@@ -338,6 +346,8 @@ function readRequest(request) {
         }
       } else if (contentType.includes("multipart/form-data")) {
         parsedBody = parseMultipartFields(rawBody, rawText, contentType);
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        parsedBody = parseUrlEncodedFields(rawText);
       } else {
         parsedBody = { raw: rawText };
       }
@@ -350,6 +360,19 @@ function readRequest(request) {
     });
     request.on("error", reject);
   });
+}
+
+function parseUrlEncodedFields(rawText) {
+  const fields = {};
+  const params = new URLSearchParams(String(rawText || ""));
+  for (const [key, value] of params.entries()) {
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      fields[key] = Array.isArray(fields[key]) ? [...fields[key], value] : [fields[key], value];
+    } else {
+      fields[key] = value;
+    }
+  }
+  return fields;
 }
 
 function parseMultipartFields(rawBody, rawText, contentType) {
@@ -454,7 +477,9 @@ function isCacheableRequest(pathname, method) {
 }
 
 function requiresLiveRead(pathname) {
-  return /\/api\/DailyDataMeter\/read$/i.test(String(pathname || ""));
+  const normalizedPath = String(pathname || "");
+  return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
+    || /\/api\/customer\/read$/i.test(normalizedPath);
 }
 
 function apiCacheEnabled() {
@@ -743,9 +768,61 @@ function setCollectionRows(payload, rows, total) {
   return payload;
 }
 
-function filterSampleRows(pathname, rows, requestData) {
+function declaredCollectionTotal(payload, fallbackTotal) {
+  const candidates = [
+    payload?.result?.total,
+    payload?.data?.total,
+    payload?.total,
+    payload?.result?.count,
+    payload?.data?.count,
+    payload?.count
+  ];
+  for (const value of candidates) {
+    const total = Number(value);
+    if (Number.isFinite(total) && total >= fallbackTotal) return total;
+  }
+  return fallbackTotal;
+}
+
+function syntheticRowValue(value, rowNumber) {
+  if (value === null || typeof value === "undefined" || value === "") return value;
+  const text = String(value);
+  if (/^\d+$/.test(text)) {
+    const nextValue = BigInt(text) + BigInt(rowNumber);
+    return nextValue.toString().padStart(text.length, "0");
+  }
+  return `${text} ${rowNumber}`;
+}
+
+function synthesizeSampleRow(row, pathname, rowIndex) {
+  const clone = { ...row };
+  const rowNumber = rowIndex + 1;
+  const lowerPath = String(pathname || "").toLowerCase();
+  if (lowerPath === "/api/customer/read") {
+    clone.customerId = syntheticRowValue(row.customerId || row.id || row.customerName || "customer", rowNumber);
+    clone.customerName = rowIndex < 20 ? row.customerName : syntheticRowValue(row.customerName || "Sample Customer", rowNumber);
+    if (clone.id != null) clone.id = clone.customerId;
+    if (clone.name != null) clone.name = clone.customerName;
+    return clone;
+  }
+  if (lowerPath === "/api/account/read") {
+    clone.customerId = syntheticRowValue(row.customerId || "customer", rowNumber);
+    clone.meterId = syntheticRowValue(row.meterId || clone.customerId || "meter", rowNumber);
+    return clone;
+  }
+  if (clone.id != null) clone.id = syntheticRowValue(clone.id, rowNumber);
+  return clone;
+}
+
+function expandSampleRows(pathname, rows, total) {
+  if (!rows.length || total <= rows.length) return rows;
+  const boundedTotal = Math.min(total, 5000);
+  return Array.from({ length: boundedTotal }, (_, index) => synthesizeSampleRow(rows[index % rows.length], pathname, index));
+}
+
+function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.length) {
   const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
-  let filtered = rows.slice();
+  let filtered = expandSampleRows(pathname, rows, declaredTotal);
 
   const stationId = payload.stationId || payload.SITE_ID || "";
   if (stationId) {
@@ -782,7 +859,7 @@ function sampleReadResponse(pathname, requestData) {
       if (!normalized) continue;
       const rows = collectionRowsFromPayload(normalized);
       if (rows.length) {
-        const page = filterSampleRows(pathname, rows, requestData);
+        const page = filterSampleRows(pathname, rows, requestData, declaredCollectionTotal(normalized, rows.length));
         setCollectionRows(normalized, page.rows, page.total);
       }
       return {
@@ -1128,9 +1205,11 @@ async function buildConsumptionAudit() {
     const effectiveCoverageStart = earliestReadingDate || configuredFrom;
     const coverage = classifyCoverage(earliestReadingDate, effectiveCoverageStart);
     const storeRows = Number(stationStat.rows || 0);
+    const logicalRawRows = Number(stationStat.logicalRawRows || storeRows);
     const progressTotalRows = Number(progressStation.totalRows || 0) || null;
     const progressStoredRows = Number(progressStation.storedRows || 0) || null;
-    const deltaStoreVsLive = liveTotalRows == null ? null : storeRows - liveTotalRows;
+    const auditRows = liveMetric === "raw" ? logicalRawRows : storeRows;
+    const deltaStoreVsLive = liveTotalRows == null ? null : auditRows - liveTotalRows;
     const deltaStoreVsProgress = progressTotalRows == null ? null : storeRows - progressTotalRows;
     const warnings = [];
 
@@ -1142,8 +1221,7 @@ async function buildConsumptionAudit() {
           warnings.push(`${stationId}: store differs from live unique rows by ${deltaStoreVsLive}.`);
         }
       } else {
-        completenessStatus = deltaStoreVsLive === 0 ? "estimated-match" : "unverified";
-        warnings.push(`${stationId}: live audit still uses raw row totals, so completeness is not verified.`);
+        completenessStatus = deltaStoreVsLive === 0 ? "complete" : "unverified";
         if (deltaStoreVsLive !== 0) {
           warnings.push(`${stationId}: raw live total differs from store by ${deltaStoreVsLive}.`);
         }
@@ -1169,6 +1247,8 @@ async function buildConsumptionAudit() {
     stations.push({
       station: stationId,
       rows: storeRows,
+      rawDuplicateRows: Number(stationStat.rawDuplicateRows || 0),
+      logicalRawRows,
       liveTotalRows,
       liveMetric,
       auditedAt: uniqueStation?.auditedAt || uniqueAudit.generatedAt || null,
@@ -1392,6 +1472,84 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
+  if (pathname === "/api/notifications/sms/status") {
+    try {
+      return localJobResponse(smsNotifications.recordSmsStatusCallback({ request, pathname, payload }));
+    } catch (error) {
+      const status = Number(error.status || 500);
+      return {
+        status,
+        body: {
+          code: status,
+          msg: error instanceof Error ? error.message : "SMS status callback failed",
+          reason: error instanceof Error ? error.message : "SMS status callback failed",
+          data: null,
+          result: null,
+          _proxy: { source: "twilio-status-callback", pathname }
+        }
+      };
+    }
+  }
+  if (pathname === "/api/notifications/sms/send") {
+    try {
+      return localJobResponse(await smsNotifications.sendSmsNotification(payload));
+    } catch (error) {
+      const status = Number(error.status || (/configured|required|must be/i.test(String(error.message || "")) ? 400 : 502));
+      return {
+        status,
+        body: {
+          code: status,
+          msg: error instanceof Error ? error.message : "SMS send failed",
+          reason: error instanceof Error ? error.message : "SMS send failed",
+          data: null,
+          result: null,
+          details: error.details || null,
+          _proxy: { source: "twilio-send", pathname }
+        }
+      };
+    }
+  }
+  if (pathname === "/api/notifications/sms/list") {
+    return localJobResponse(smsNotifications.listSmsNotifications(payload));
+  }
+  if (pathname === "/api/notifications/verify/send") {
+    try {
+      return localJobResponse(await smsNotifications.sendVerification(payload));
+    } catch (error) {
+      const status = Number(error.status || (/configured|required|must be/i.test(String(error.message || "")) ? 400 : 502));
+      return {
+        status,
+        body: {
+          code: status,
+          msg: error instanceof Error ? error.message : "Verification send failed",
+          reason: error instanceof Error ? error.message : "Verification send failed",
+          data: null,
+          result: null,
+          details: error.details || null,
+          _proxy: { source: "twilio-verify-send", pathname }
+        }
+      };
+    }
+  }
+  if (pathname === "/api/notifications/verify/check") {
+    try {
+      return localJobResponse(await smsNotifications.checkVerification(payload));
+    } catch (error) {
+      const status = Number(error.status || (/configured|required|must be/i.test(String(error.message || "")) ? 400 : 502));
+      return {
+        status,
+        body: {
+          code: status,
+          msg: error instanceof Error ? error.message : "Verification check failed",
+          reason: error instanceof Error ? error.message : "Verification check failed",
+          data: null,
+          result: null,
+          details: error.details || null,
+          _proxy: { source: "twilio-verify-check", pathname }
+        }
+      };
+    }
+  }
   if (isTokenGeneratePath(pathname) && payload.isPreview !== false) {
     return localTokenPreviewResponse(pathname, payload);
   }
@@ -2099,11 +2257,11 @@ async function handler(request, response) {
       }
     }
 
-    if (!result) {
+    if (!result && !requiresLiveRead(pathname)) {
       result = await cachedReadResponse(request, pathname, requestData);
     }
 
-    if (!result && !isWriteRequest(pathname, request.method)) {
+    if (!result && !isWriteRequest(pathname, request.method) && !requiresLiveRead(pathname)) {
       result = sampleReadResponse(pathname, requestData);
     }
 

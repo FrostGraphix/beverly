@@ -46,7 +46,7 @@
     <template #summary>
       <div class="table-command-strip" aria-live="polite">
         <div>
-          <span>{{ filteredTotal }} visible</span>
+          <span>{{ displayedTotal }} visible</span>
         </div>
         <div class="table-command-meta">
           <span>Page {{ currentPage }} / {{ pageCount }}</span>
@@ -184,7 +184,7 @@
     </div>
     <template #footer>
       <div class="pagination">
-        <span>Total {{ filteredTotal }}</span>
+        <span>Total {{ displayedTotal }}</span>
         <BaseSelect v-model="pageSize" class="sort-select" aria-label="Page size" @change="changePageSize">
           <option v-for="option in pageSizeOptions" :key="option" :value="option">{{ option }}/page</option>
         </BaseSelect>
@@ -269,7 +269,12 @@ export default {
       return rowActionButtons(this.route);
     },
     pageCount() {
-      return totalPages(this.filteredTotal, this.pageSize);
+      return totalPages(this.displayedTotal, this.pageSize);
+    },
+    displayedTotal() {
+      const hasClientFilters = Boolean(String(this.searchTerm || "").trim());
+      if (!hasClientFilters && Number(this.total) > this.filteredTotal) return this.total;
+      return this.filteredTotal;
     },
     fixedSortPolicy() {
       return routeSortPolicy(this.route).fixed;
@@ -299,6 +304,9 @@ export default {
         this.selectedSite = "";
         this.sortDirection = routeSortDirection(this.route);
         this.sortField = "";
+        this.searchTerm = "";
+        this.currentPage = 1;
+        this.checkedMeterIds = new Set();
         this.load();
       }
     }
@@ -333,7 +341,7 @@ export default {
       const sortedRows = sortRows(this.route, searchedRows, this.sortDirection, this.sortField);
       this.filteredRows = sortedRows;
       this.filteredTotal = sortedRows.length;
-      this.currentPage = Math.min(this.currentPage, totalPages(this.filteredTotal, this.pageSize));
+      this.currentPage = Math.min(this.currentPage, totalPages(this.displayedTotal, this.pageSize));
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },

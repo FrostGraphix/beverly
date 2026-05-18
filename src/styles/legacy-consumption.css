@@ -38,9 +38,6 @@
 .status-warning { background: var(--warning-bg); color: var(--warning); }
 .status-default { background: var(--info-bg); color: var(--info); }
 
-[data-theme="dark"] .filter-toolbar,
-[data-theme="dark"] thead tr,
-[data-theme="dark"] .table-command-strip,
 [data-theme="executive"] .filter-toolbar,
 [data-theme="executive"] thead tr,
 [data-theme="executive"] .table-command-strip,
@@ -50,20 +47,16 @@
   background: linear-gradient(180deg, var(--bg-card), var(--bg-page));
 }
 
-[data-theme="dark"] tbody tr:hover,
 [data-theme="executive"] tbody tr:hover,
 [data-theme="contrast"] tbody tr:hover {
   background: var(--primary-light);
 }
 
-[data-theme="dark"] td,
 [data-theme="executive"] td,
 [data-theme="contrast"] td {
   border-bottom-color: var(--border-color);
 }
 
-[data-theme="dark"] th.action-column,
-[data-theme="dark"] td.action-column,
 [data-theme="executive"] th.action-column,
 [data-theme="executive"] td.action-column,
 [data-theme="contrast"] th.action-column,
@@ -74,7 +67,6 @@
   box-shadow: -18px 0 30px rgba(0, 0, 0, .38);
 }
 
-[data-theme="dark"] tbody tr.selected td.action-column,
 [data-theme="executive"] tbody tr.selected td.action-column,
 [data-theme="contrast"] tbody tr.selected td.action-column {
   background:
@@ -97,12 +89,6 @@
 [data-theme] .link-btn.danger {
   border-color: rgba(239,68,68,.32);
   color: var(--danger);
-}
-
-[data-theme="ocean"] thead tr,
-[data-theme="ocean"] .filter-toolbar,
-[data-theme="ocean"] .table-command-strip {
-  background: linear-gradient(180deg, #f0fdf4, #ffffff);
 }
 
 /* ============================================================

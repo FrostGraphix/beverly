@@ -143,6 +143,14 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseToggle from "./base/BaseToggle.vue";
 import { changeUserPassword, loadPreferenceState, savePreferenceState } from "../services/profile-store.mjs";
 
+const supportedThemeChoices = ["system", "light", "executive", "contrast"];
+
+function normalizeThemeChoice(theme) {
+  if (theme === "dark") return "executive";
+  if (theme === "ocean") return "light";
+  return supportedThemeChoices.includes(theme) ? theme : "system";
+}
+
 export default {
   name: "SettingsPage",
   components: { BaseButton, BaseIconButton, BaseInput, BaseToggle },
@@ -158,7 +166,7 @@ export default {
       showPw: { current: false, next: false, confirm: false },
       passwordMessage: "",
       prefsMessage: "",
-      prefs: loadPreferenceState(),
+      prefs: savePreferenceState({ ...loadPreferenceState(), theme: normalizeThemeChoice(loadPreferenceState().theme) }),
       sessions: [
         { id: 1, device: "Chrome on Windows", location: "Lagos, NG", time: "Now", current: true, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
         { id: 2, device: "Edge on Windows", location: "Abuja, NG", time: "2h ago", current: false, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
@@ -167,9 +175,7 @@ export default {
       themes: [
         { id: "system", label: "System", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
         { id: "light", label: "Light", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/></svg>' },
-        { id: "dark", label: "Dark", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>' },
         { id: "executive", label: "Executive", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-8h6v8"/></svg>' },
-        { id: "ocean", label: "Canopy", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"/><path d="M6 19c3-5 7-8 13-8"/></svg>' },
         { id: "contrast", label: "Contrast", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v20"/></svg>' }
       ],
       notifOptions: [
@@ -221,8 +227,9 @@ export default {
       this.sessions = this.sessions.filter((session) => session.id !== id);
     },
     applyTheme(theme) {
-      this.prefs = savePreferenceState({ ...this.prefs, theme });
-      this.$emit("theme-change", theme);
+      const nextTheme = normalizeThemeChoice(theme);
+      this.prefs = savePreferenceState({ ...this.prefs, theme: nextTheme });
+      this.$emit("theme-change", nextTheme);
     },
     savePrefs() {
       this.prefs = savePreferenceState(this.prefs);

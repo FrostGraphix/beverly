@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { buildReceiptFilename, buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml } from "../src/services/receipt-tools.mjs";
+import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml, requiredReceiptFields, validateReceiptModel } from "../src/services/receipt-tools.mjs";
 import { columnKey } from "../src/services/table-helpers.mjs";
 
 const route = {
@@ -47,8 +47,45 @@ assert.strictEqual(downloadReceiptPdf.constructor.name, "AsyncFunction");
 assert.strictEqual(String.fromCharCode(...pdfBytes.slice(0, 8)), "%PDF-1.4");
 assert(pdfBytes.length > 900);
 
+const canonicalRow = buildCanonicalReceiptRow({
+  row: { stationId: "TUNGA" },
+  form: {
+    customerId: "47005372686",
+    customerName: "Mohammed Kaura",
+    meterId: "47005372686",
+    tariffId: "RESIDENTIAL",
+    amount: 500,
+    totalUnit: 1.4,
+    paymentMethod: "Cash",
+    purchaseWay: "paid"
+  },
+  response: {
+    result: {
+      receiptId: "1745843400000",
+      token: "0021 2636 8628 4408 6688",
+      createTime: "2026-04-28 09:47:55"
+    }
+  },
+  tariff: { tariffId: "RESIDENTIAL", price: "0~0~350" },
+  actor: { email: "admin@acoblighting.com" }
+});
+const canonicalModel = buildReceiptModel(route, canonicalRow, columnKey);
+const canonicalValidation = validateReceiptModel(canonicalModel);
+const canonicalHtml = receiptHtml(canonicalModel);
+
+assert.deepStrictEqual(canonicalValidation.missing, []);
+for (const label of requiredReceiptFields) {
+  assert(canonicalModel.fields.some((field) => field.label === label), `${label} should exist`);
+}
+assert(canonicalHtml.includes("Tariff Price"));
+assert(canonicalHtml.includes("Payment Method"));
+assert(canonicalHtml.includes("Operator / Vendor"));
+assert(canonicalHtml.includes("Support Reference"));
+assert(canonicalHtml.includes("Audit Status"));
+
 console.log(JSON.stringify({
   receiptFields: model.fields.length,
+  canonicalFields: canonicalModel.fields.length,
   pdfBytes: pdfBytes.length,
   status: "receipt tools passed"
 }, null, 2));

@@ -162,6 +162,7 @@ import {
   decorateConsumptionRows,
   defaultConsumptionStatisticsFilters,
   fetchConsumptionStatistics,
+  normalizeConsumptionDateKey,
   summarizeConsumptionRows
 } from "../services/consumption-statistics-service.mjs";
 
@@ -190,7 +191,7 @@ export default {
   },
   computed: {
     aggregatedRows() {
-      return aggregateConsumptionRows(this.rawRows, this.filters.granularity);
+      return aggregateConsumptionRows(this.rawRows, this.filters.granularity, this.filters);
     },
     sortedRows() {
       const direction = this.sortDirection === "asc" ? 1 : -1;
@@ -342,10 +343,12 @@ export default {
       }
     },
     rowWithinDateRange(row) {
-      const date = String(row.collectionDate || "").slice(0, 10);
+      const date = normalizeConsumptionDateKey(row.collectionDate, "daily");
+      const from = normalizeConsumptionDateKey(this.filters.dateFrom, "daily");
+      const to = normalizeConsumptionDateKey(this.filters.dateTo, "daily");
       if (!date) return true;
-      if (this.filters.dateFrom && date < this.filters.dateFrom) return false;
-      if (this.filters.dateTo && date > this.filters.dateTo) return false;
+      if (from && date < from) return false;
+      if (to && date > to) return false;
       return true;
     },
     setGranularity(granularity) {

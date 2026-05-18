@@ -64,6 +64,30 @@ function rowToRecord(row, requestStation = "") {
   };
 }
 
+function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, eventType = "duplicate", sourcePage = null, sourceRow = null } = {}) {
+  const stationId = normalizeStation(row.stationId || row.station || requestStation);
+  const meterId = normalizeMeter(row.meterId || row.customerId);
+  const readingDate = normalizeDate(row.currentDate || row.readingDate || row.createDate);
+  if (!stationId) return null;
+  return {
+    station_id: stationId,
+    meter_id: meterId || null,
+    reading_date: readingDate || null,
+    duplicate_index: duplicateIndex,
+    event_type: eventType,
+    source_page: Number.isFinite(Number(sourcePage)) ? Number(sourcePage) : null,
+    source_row: Number.isFinite(Number(sourceRow)) ? Number(sourceRow) : null,
+    row_json: {
+      ...row,
+      stationId,
+      meterId,
+      currentDate: readingDate,
+      rawDuplicateIndex: duplicateIndex,
+    },
+    captured_at: new Date().toISOString(),
+  };
+}
+
 async function writeDailyMeterRows({ pathname, requestPayload: payload, responsePayload }) {
   if (!storeEnabled() || !dailyMeterPath(pathname)) return { stored: 0 };
   const request = requestPayload(payload);
@@ -85,6 +109,44 @@ async function writeDailyMeterRows({ pathname, requestPayload: payload, response
   }
 
   return { stored: records.length };
+}
+
+async function writeRawDuplicateRows({ requestPayload: payload, duplicateRows }) {
+  if (!storeEnabled()) return { stored: 0 };
+  const request = requestPayload(payload);
+  const requestStation = request.stationId || request.SITE_ID || request.siteId || "";
+  const records = (Array.isArray(duplicateRows) ? duplicateRows : [])
+    .map((entry) => rowToRawDuplicate(entry.row || entry, {
+      requestStation,
+      duplicateIndex: entry.duplicateIndex,
+      eventType: entry.eventType,
+      sourcePage: entry.sourcePage,
+      sourceRow: entry.sourceRow,
+    }))
+    .filter(Boolean);
+  if (!records.length) return { stored: 0 };
+
+  for (let index = 0; index < records.length; index += 500) {
+    await supabase.restRequest("/daily_meter_raw_duplicates?on_conflict=station_id,event_type,source_page,source_row", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=minimal",
+      body: records.slice(index, index + 500),
+    });
+  }
+  return { stored: records.length };
+}
+
+async function countRawDuplicateRows(stationId = "") {
+  const station = normalizeStation(stationId);
+  const filters = ["select=id"];
+  if (station) filters.push(`station_id=eq.${encodeURIComponent(station)}`);
+  const { response } = await supabase.restRequestWithResponse(`/daily_meter_raw_duplicates?${filters.join("&")}`, {
+    headers: {
+      Prefer: "count=exact",
+      Range: "0-0",
+    },
+  });
+  return totalFromContentRange(response.headers.get("content-range"), 0);
 }
 
 function totalFromContentRange(value, fallback) {
@@ -185,10 +247,16 @@ async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "
     let totalRows = 0;
     for (const station of stations) {
       const rows = await countDailyMeterRows(station);
+      let rawDuplicateRows = 0;
+      try {
+        rawDuplicateRows = await countRawDuplicateRows(station);
+      } catch {
+        rawDuplicateRows = 0;
+      }
       const earliestReadingDate = await dateBoundForStation(station, "asc");
       const latestReadingDate = await dateBoundForStation(station, "desc");
       totalRows += rows;
-      stationStats.push({ station, rows, earliestReadingDate, latestReadingDate });
+      stationStats.push({ station, rows, rawDuplicateRows, logicalRawRows: rows + rawDuplicateRows, earliestReadingDate, latestReadingDate });
     }
     return {
       enabled: true,
@@ -212,7 +280,7 @@ async function dailyMeterTableReport(stations = ["TUNGA", "UMAISHA", "OGUFA", "K
   return {
     ...stats,
     stations: Array.isArray(stats.stations)
-      ? stats.stations.map(({ station, rows }) => ({ station, rows }))
+      ? stats.stations.map(({ station, rows, rawDuplicateRows, logicalRawRows }) => ({ station, rows, rawDuplicateRows, logicalRawRows }))
       : [],
   };
 }
@@ -400,4 +468,5 @@ module.exports = {
   readDailyMeterRows,
   storeEnabled,
   writeDailyMeterRows,
+  writeRawDuplicateRows,
 };
