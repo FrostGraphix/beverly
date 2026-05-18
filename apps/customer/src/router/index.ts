@@ -18,6 +18,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/receipts',   name: 'receipts', component: () => import('../views/Receipts.vue'),  meta: { auth: true } },
     { path: '/profile',    name: 'profile',  component: () => import('../views/Profile.vue'),   meta: { auth: true } },
     { path: '/security',   name: 'security', component: () => import('../views/Security.vue'),  meta: { auth: true } },
+    { path: '/disputes',   name: 'disputes', component: () => import('../views/Disputes.vue'),  meta: { auth: true } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') },
 ];
 

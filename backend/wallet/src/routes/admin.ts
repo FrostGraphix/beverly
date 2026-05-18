@@ -15,6 +15,10 @@ import {
 } from '../services/funding.js';
 import { logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
+import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
+import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } from '../services/refunds.js';
+import { listSettlementBatches } from '../services/settlement.js';
+import { listReconciliationRuns } from '../services/reconciliation.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
@@ -201,6 +205,94 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(500).send({ error: 'resolve_failed', message: e.message });
         }
+    });
+
+    // ── disputes ──
+    fastify.get('/disputes', async (req) => {
+        const { status } = req.query as { status?: string };
+        return { disputes: await listAllDisputes({ status, limit: 200 }) };
+    });
+
+    fastify.get('/disputes/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const d = await getDispute(id);
+        if (!d) return reply.code(404).send({ error: 'not_found' });
+        return d;
+    });
+
+    fastify.patch('/disputes/:id', async (req) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            status:          z.enum(['open','under_review','resolved','rejected','refund_issued']),
+            resolution_note: z.string().optional(),
+            message:         z.string().optional(),
+        });
+        const body = schema.parse(req.body);
+        await updateDisputeStatus({
+            disputeId:        id,
+            status:           body.status,
+            resolutionNote:   body.resolution_note,
+            resolvedByUserId: req.actor!.userId,
+        });
+        if (body.message) {
+            await addMessage({ disputeId: id, senderActorType: 'staff', senderActorId: req.actor!.userId, body: body.message });
+        }
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', action: `dispute.${body.status}`, targetId: id });
+        return { ok: true };
+    });
+
+    // ── refunds ──
+    fastify.get('/refunds', async (req) => {
+        const { status } = req.query as { status?: string };
+        return { refunds: await listRefundRequests({ status, limit: 200 }) };
+    });
+
+    fastify.post('/refunds', async (req, reply) => {
+        const schema = z.object({
+            dispute_id:   z.string().uuid().optional(),
+            wallet_id:    z.string().uuid(),
+            amount_minor: z.number().int().positive(),
+            reason:       z.string().min(5),
+        });
+        const body = schema.parse(req.body);
+        try {
+            const id = await createRefundRequest({ disputeId: body.dispute_id, walletId: body.wallet_id, amountMinor: body.amount_minor, reason: body.reason, requestedByUserId: req.actor!.userId });
+            return { id };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'refund_error', message: e.message });
+        }
+    });
+
+    fastify.post('/refunds/:id/approve', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        try {
+            await approveRefund(id, req.actor!.userId);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'approve_failed', message: e.message });
+        }
+    });
+
+    fastify.post('/refunds/:id/reject', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { reason } = z.object({ reason: z.string().min(2) }).parse(req.body);
+        try {
+            await rejectRefund(id, req.actor!.userId, reason);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'reject_failed', message: e.message });
+        }
+    });
+
+    // ── settlement ──
+    fastify.get('/settlement', async (req) => {
+        const { vendor_id } = req.query as { vendor_id?: string };
+        return { batches: await listSettlementBatches({ vendorOrganizationId: vendor_id, limit: 200 }) };
+    });
+
+    // ── reconciliation ──
+    fastify.get('/reconciliation', async () => {
+        return { runs: await listReconciliationRuns(30) };
     });
 
     // ── audit log viewer ──

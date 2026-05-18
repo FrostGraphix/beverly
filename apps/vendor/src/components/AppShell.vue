@@ -72,6 +72,12 @@ function closeDrawer() { drawerOpen.value = false; }
           Receipts
         </RouterLink>
 
+        <div class="bw-nav-section">Support</div>
+        <RouterLink to="/disputes" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          Disputes
+        </RouterLink>
+
         <div class="bw-nav-section">Account</div>
         <RouterLink to="/profile" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0116 0v2"/></svg>

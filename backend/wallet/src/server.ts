@@ -21,6 +21,7 @@ import authPlugin from './plugins/auth.js';
 import errorHandler from './plugins/error-handler.js';
 import routes from './routes/index.js';
 import { redisConnection, closeQueues } from './queue/index.js';
+import { startScheduler } from './jobs/scheduler.js';
 
 async function build() {
     const app = Fastify({
@@ -88,6 +89,7 @@ async function main() {
 
     try {
         await app.listen({ port: env.PORT, host: '0.0.0.0' });
+        startScheduler();
     } catch (err) {
         app.log.error({ err }, 'failed to start');
         process.exit(1);

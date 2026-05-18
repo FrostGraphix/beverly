@@ -13,7 +13,9 @@ import {
 } from '../services/funding.js';
 import { vendorPurchase, listVendorPurchases, getReceiptByOrder } from '../services/vending.js';
 import { previewPurchase, lookupMeter } from '../services/token-engine.js';
-import { logAction, logSecurityEvent } from '../services/audit.js';
+import { logSecurityEvent } from '../services/audit.js';
+import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
+import { listSettlementBatches } from '../services/settlement.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     // ── me ──
@@ -199,6 +201,87 @@ const route: FastifyPluginAsync = async (fastify) => {
             userAgent: req.headers['user-agent'],
         });
         return { ok: true };
+    });
+
+    // ── disputes ──
+    fastify.post('/disputes', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const schema = z.object({
+            purchase_order_id: z.string().uuid().optional(),
+            subject:           z.string().min(5),
+            description:       z.string().min(10),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const actor = req.actor!;
+        const { data: vu } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', actor.actorId)
+            .single();
+        if (!vu) return reply.code(403).send({ error: 'vendor_not_found' });
+
+        try {
+            const id = await raiseDispute({
+                raisedByActorType:   'vendor',
+                raisedByActorId:     actor.actorId,
+                vendorOrganizationId: (vu as any).vendor_organization_id,
+                purchaseOrderId:     body.purchase_order_id,
+                subject:             body.subject,
+                description:         body.description,
+            });
+            return { id };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'dispute_error', message: e.message });
+        }
+    });
+
+    fastify.get('/disputes', { preHandler: fastify.requireVendor() }, async (req) => {
+        const actor = req.actor!;
+        const { status } = req.query as { status?: string };
+        const { data: vu2 } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', actor.actorId)
+            .single();
+        const orgId = (vu2 as any)?.vendor_organization_id;
+        return { disputes: await listDisputes({ vendorOrganizationId: orgId, status, limit: 100 }) };
+    });
+
+    fastify.get('/disputes/:id', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const d = await getDispute(id);
+        if (!d) return reply.code(404).send({ error: 'not_found' });
+        return d;
+    });
+
+    fastify.post('/disputes/:id/messages', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ body: z.string().min(1) });
+        let parsed: z.infer<typeof schema>;
+        try { parsed = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const actor = req.actor!;
+        try {
+            await addMessage({ disputeId: id, senderActorType: 'vendor', senderActorId: actor.actorId, body: parsed.body });
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'message_error', message: e.message });
+        }
+    });
+
+    // ── settlement ──
+    fastify.get('/settlement', { preHandler: fastify.requireVendor() }, async (req) => {
+        const actor = req.actor!;
+        const { data: vu } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', actor.actorId)
+            .single();
+        if (!vu) return { batches: [] };
+        return { batches: await listSettlementBatches({ vendorOrganizationId: (vu as any).vendor_organization_id, limit: 100 }) };
     });
 };
 

@@ -54,6 +54,7 @@ import { logAction } from '../services/audit.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
+import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 
 const customer: FastifyPluginAsync = async (fastify) => {
 
@@ -558,6 +559,55 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return { ...(order as any), status: 'paid' };
         }
         return order;
+    });
+
+    // ── DISPUTES ─────────────────────────────────────────────────────────────
+
+    fastify.post('/disputes', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            purchase_order_id: z.string().uuid().optional(),
+            subject:           z.string().min(5).max(200),
+            description:       z.string().min(10).max(2000),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const customerId = req.actor!.customerId!;
+        const result = await raiseDispute({
+            raisedByActorType: 'customer',
+            raisedByActorId:   customerId,
+            customerId,
+            purchaseOrderId:   body.purchase_order_id,
+            subject:           body.subject,
+            description:       body.description,
+        });
+        return result;
+    });
+
+    fastify.get('/disputes', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { status } = req.query as { status?: string };
+        return { disputes: await listDisputes({ customerId: req.actor!.customerId!, status, limit: 50 }) };
+    });
+
+    fastify.get('/disputes/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const d = await getDispute(id);
+        if (!d || (d as any).customer_id !== req.actor!.customerId!) {
+            return reply.code(404).send({ error: 'not_found' });
+        }
+        return d;
+    });
+
+    fastify.post('/disputes/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(2000) }).parse(req.body);
+        const d = await getDispute(id);
+        if (!d || (d as any).customer_id !== req.actor!.customerId!) {
+            return reply.code(404).send({ error: 'not_found' });
+        }
+        await addMessage({ disputeId: id, senderActorType: 'customer', senderActorId: req.actor!.customerId!, body: msgBody });
+        return { ok: true };
     });
 
     fastify.get('/receipts/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {

@@ -11,7 +11,11 @@ const routes: RouteRecordRaw[] = [
     { path: '/vending',         name: 'vending',         component: () => import('../views/Vending.vue'),      meta: { auth: true } },
     { path: '/audit',           name: 'audit',           component: () => import('../views/Audit.vue'),        meta: { auth: true } },
     { path: '/meter-orders',    name: 'meter-orders',    component: () => import('../views/MeterOrders.vue'),  meta: { auth: true } },
-    { path: '/fraud',           name: 'fraud',           component: () => import('../views/Fraud.vue'),         meta: { auth: true } },
+    { path: '/fraud',           name: 'fraud',           component: () => import('../views/Fraud.vue'),           meta: { auth: true } },
+    { path: '/disputes',        name: 'disputes',        component: () => import('../views/Disputes.vue'),       meta: { auth: true } },
+    { path: '/refunds',         name: 'refunds',         component: () => import('../views/Refunds.vue'),        meta: { auth: true } },
+    { path: '/settlement',      name: 'settlement',      component: () => import('../views/Settlement.vue'),     meta: { auth: true } },
+    { path: '/reconciliation',  name: 'reconciliation',  component: () => import('../views/Reconciliation.vue'), meta: { auth: true } },
     { path: '/:pathMatch(.*)*', name: 'not-found',       component: () => import('../views/NotFound.vue') },
 ];
 

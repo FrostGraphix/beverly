@@ -67,6 +67,24 @@ function closeDrawer() { drawerOpen.value = false; }
           Meter Orders
         </RouterLink>
 
+        <div class="bw-nav-section">Operations</div>
+        <RouterLink to="/disputes" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          Disputes
+        </RouterLink>
+        <RouterLink to="/refunds" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 6v12"/></svg>
+          Refunds
+        </RouterLink>
+        <RouterLink to="/settlement" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          Settlement
+        </RouterLink>
+        <RouterLink to="/reconciliation" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Reconciliation
+        </RouterLink>
+
         <div class="bw-nav-section">Compliance</div>
         <RouterLink to="/fraud" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
