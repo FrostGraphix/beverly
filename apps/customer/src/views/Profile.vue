@@ -9,7 +9,9 @@ import { api } from '../lib/api';
 const auth   = useAuthStore();
 const router = useRouter();
 
-const editMode = ref(false);
+const editMode    = ref(false);
+const exportLoading = ref(false);
+const exportMsg   = ref('');
 const fullName = ref(auth.customer?.full_name ?? '');
 const email    = ref(auth.customer?.email ?? '');
 const loading  = ref(false);
@@ -38,6 +40,28 @@ async function saveProfile() {
 async function signOut() {
     await auth.logout();
     await router.push('/login');
+}
+
+async function requestExport() {
+    exportLoading.value = true;
+    try {
+        await api.post('/api/v1/customer/privacy/data-export', {});
+        exportMsg.value = 'Your data export has been requested. We will notify you when it is ready (usually within a few minutes).';
+    } catch (e: any) {
+        exportMsg.value = e?.message ?? 'Failed to request export.';
+    } finally {
+        exportLoading.value = false;
+    }
+}
+
+async function confirmDelete() {
+    if (!confirm('Request account deletion? Your account will be permanently deleted after a 30-day cooling-off period. You can cancel this request before then.')) return;
+    try {
+        const res = await api.post<any>('/api/v1/customer/privacy/delete-account', {});
+        alert(res.message);
+    } catch (e: any) {
+        alert(e?.message ?? 'Failed to request deletion.');
+    }
 }
 </script>
 
@@ -133,6 +157,15 @@ async function signOut() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           My Disputes
         </router-link>
+        <p v-if="exportMsg" style="font-size:var(--t-xs); color:var(--bw-text-muted); margin:0 0 4px; padding: 0 2px">{{ exportMsg }}</p>
+        <button class="bw-btn" style="justify-content:flex-start; color: var(--bw-text-muted)" @click="requestExport" :disabled="exportLoading">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          {{ exportLoading ? 'Requesting…' : 'Download my data' }}
+        </button>
+        <button class="bw-btn" style="justify-content:flex-start; color: var(--danger)" @click="confirmDelete">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Delete my account
+        </button>
         <button class="bw-btn" style="justify-content:flex-start; color: var(--danger)" @click="signOut">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
           Sign out
