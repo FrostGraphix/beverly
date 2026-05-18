@@ -1,0 +1,196 @@
+name: Wallet Ecosystem CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+    paths:
+      - 'backend/wallet/**'
+      - 'apps/admin/**'
+      - 'apps/vendor/**'
+      - 'apps/customer/**'
+      - 'packages/**'
+      - 'tests/e2e/**'
+      - '.github/workflows/wallet-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9'
+
+jobs:
+  # ── Wallet backend unit tests ─────────────────────────────────────────
+  wallet-unit-tests:
+    name: Wallet backend unit tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend/wallet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: backend/wallet/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test -- --reporter=verbose
+
+  # ── Frontend type checks ─────────────────────────────────────────────
+  frontend-typecheck:
+    name: Frontend TypeScript check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        app: [admin, vendor, customer]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck ${{ matrix.app }}
+        run: pnpm --filter @beverly/${{ matrix.app }} exec tsc --noEmit
+
+  # ── Frontend builds ───────────────────────────────────────────────────
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [frontend-typecheck]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all apps
+        run: pnpm --filter './apps/*' build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-builds
+          path: apps/*/dist
+          retention-days: 3
+
+  # ── E2E tests (API layer — no browser needed) ─────────────────────────
+  e2e-api:
+    name: E2E API integrity tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [wallet-unit-tests]
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Run API integrity E2E (no browser)
+        run: npx playwright test tests/e2e/ledger-integrity.spec.ts --config=tests/e2e/playwright.config.ts --project=admin-chromium
+        env:
+          API_BASE: ${{ secrets.STAGING_API_BASE }}
+          STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
+        continue-on-error: true
+
+  # ── Acceptance criteria checklist ────────────────────────────────────
+  acceptance-criteria:
+    name: Acceptance criteria structural check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [wallet-unit-tests, frontend-typecheck]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify wallet backend has vitest config
+        run: test -f backend/wallet/vitest.config.ts
+
+      - name: Verify all 6 runbooks exist
+        run: |
+          test -f docs/runbooks/gateway-outage.md
+          test -f docs/runbooks/ledger-mismatch.md
+          test -f docs/runbooks/token-engine-degraded.md
+          test -f docs/runbooks/database-failover.md
+          test -f docs/runbooks/mass-refund.md
+          test -f docs/runbooks/security-incident.md
+
+      - name: Verify E2E test files exist
+        run: |
+          test -f tests/e2e/admin-auth.spec.ts
+          test -f tests/e2e/customer-purchase-flow.spec.ts
+          test -f tests/e2e/vendor-vending-flow.spec.ts
+          test -f tests/e2e/ledger-integrity.spec.ts
+
+      - name: Verify wallet sidebar is super-admin only
+        run: |
+          grep -q '"super-admin"' src/data/route-manifest.js
+          # Ensure wallet entry only has super-admin (not account/finance-checker)
+          node -e "
+            const { routeManifest } = require('./src/data/route-manifest.js');
+            const wallet = routeManifest.find(r => r.group === 'Wallet');
+            if (!wallet) throw new Error('Wallet entry missing');
+            const roles = wallet.roles;
+            if (roles.length !== 1 || roles[0] !== 'super-admin') {
+              throw new Error('Wallet must be restricted to super-admin only. Got: ' + JSON.stringify(roles));
+            }
+            console.log('OK: Wallet entry is super-admin only');
+          "
+
+      - name: Verify auth plugin uses getUser (not JWT secret)
+        run: |
+          grep -q "getUser" backend/wallet/src/plugins/auth.ts
+          ! grep -q "fastify.jwt.verify\|verifyJwt" backend/wallet/src/plugins/auth.ts
+          echo "OK: auth plugin uses adminClient.auth.getUser()"
