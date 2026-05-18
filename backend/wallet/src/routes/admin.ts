@@ -19,6 +19,8 @@ import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '..
 import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns } from '../services/reconciliation.js';
+import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
+import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
@@ -305,6 +307,70 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (since) query = query.gte('created_at', since);
         const { data } = await query;
         return { entries: data ?? [] };
+    });
+
+    // ── feature flags ──
+    fastify.get('/feature-flags', async () => {
+        return { flags: await listFlags() };
+    });
+
+    fastify.post('/feature-flags', async (req, reply) => {
+        const schema = z.object({
+            key:             z.string().min(2).regex(/^[a-z0-9._-]+$/),
+            description:     z.string().min(2),
+            enabled:         z.boolean().optional(),
+            rollout_percent: z.number().int().min(0).max(100).optional(),
+            regions:         z.array(z.string()).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        try {
+            await createFlag(body);
+            await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', action: 'feature_flag.created', targetId: body.key });
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: 'create_failed', message: e.message });
+        }
+    });
+
+    fastify.patch('/feature-flags/:key', async (req, reply) => {
+        const key = (req.params as { key: string }).key;
+        const schema = z.object({
+            enabled:         z.boolean().optional(),
+            rollout_percent: z.number().int().min(0).max(100).optional(),
+            regions:         z.array(z.string()).optional(),
+            description:     z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        await setFlag(key, body);
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', action: 'feature_flag.updated', targetId: key, metadata: body });
+        return { ok: true };
+    });
+
+    // ── NDPR: account deletion queue ──
+    fastify.get('/privacy/deletions', async (req) => {
+        const { status } = req.query as { status?: string };
+        return { requests: await listDeletionRequests({ status, limit: 200 }) };
+    });
+
+    fastify.patch('/privacy/deletions/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            approve: z.boolean(),
+            note:    z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        try {
+            await reviewDeletionRequest(id, req.actor!.userId, body.approve, body.note);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: 'review_failed', message: e.message });
+        }
     });
 };
 

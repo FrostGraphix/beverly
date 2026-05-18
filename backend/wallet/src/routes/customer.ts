@@ -55,6 +55,7 @@ import { initializeTransaction } from '../adapters/paystack.js';
 import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
+import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 
 const customer: FastifyPluginAsync = async (fastify) => {
 
@@ -624,6 +625,49 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(403).send({ error: 'forbidden' });
         }
         return receipt;
+    });
+
+    // ── NDPR: data export (right to access) ──
+    fastify.post('/privacy/data-export', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const customerId = req.actor!.customerId!;
+        try {
+            const result = await requestDataExport(customerId);
+            // Fire-and-forget: build export in background
+            void buildDataExport(customerId, result.requestId);
+            return { request_id: result.requestId, message: 'Export is being prepared. Check status at GET /privacy/data-export.' };
+        } catch (e: any) {
+            return reply.code(500).send({ error: e.code ?? 'export_error', message: e.message });
+        }
+    });
+
+    fastify.get('/privacy/data-export', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const status = await getDataExportStatus(req.actor!.customerId!);
+        return { export: status };
+    });
+
+    // ── NDPR: account deletion (right to erasure) ──
+    fastify.post('/privacy/delete-account', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({ reason: z.string().optional() });
+        const body = schema.parse(req.body);
+        try {
+            const result = await requestAccountDeletion(req.actor!.customerId!, body.reason);
+            return {
+                request_id:    result.requestId,
+                scheduled_for: result.scheduledFor,
+                message:       `Your account is scheduled for deletion on ${new Date(result.scheduledFor).toLocaleDateString()}. You may cancel this request before that date.`,
+            };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'deletion_error', message: e.message });
+        }
+    });
+
+    fastify.delete('/privacy/delete-account', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        try {
+            await cancelDeletionRequest(req.actor!.customerId!);
+            return { ok: true, message: 'Deletion request cancelled.' };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'cancel_error', message: e.message });
+        }
     });
 };
 
