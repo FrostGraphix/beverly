@@ -291,4 +291,24 @@ export default {
     background-position: -200% 0;
   }
 }
+
+@media (max-width: 520px) {
+  .kpi-panel {
+    padding: 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  .kpi-panel-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-metric {
+    min-height: 72px;
+  }
+
+  .kpi-metric-value {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+  }
+}
 </style>

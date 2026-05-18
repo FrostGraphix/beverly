@@ -14,6 +14,7 @@ import { adminClient } from '../db/supabase.js';
 import { verifyTransaction, verifyWebhookSignature } from '../adapters/paystack.js';
 import { postEntry } from '../services/ledger.js';
 import { logAction } from '../services/audit.js';
+import { sendTokenSmsToCustomer } from '../services/customer-purchase.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     // Need raw body for signature verification
@@ -170,6 +171,25 @@ const route: FastifyPluginAsync = async (fastify) => {
                             status: 'delivered',
                             delivery_state: 'token_generated',
                         }).eq('id', purchaseOrderId);
+                        try {
+                            await sendTokenSmsToCustomer({
+                                customerId: (po as any).customer_id,
+                                token: tokenRes.token,
+                                meterId: meter.meterId,
+                                amountMinor: (po as any).amount_minor,
+                                units: preview.units,
+                                receiptId: receipt.id,
+                            });
+                        } catch (smsError: any) {
+                            await logAction({
+                                actorUserId: null,
+                                actorType: 'system',
+                                action: 'customer.purchase.token_sms_failed',
+                                targetType: 'purchase_order',
+                                targetId: purchaseOrderId,
+                                after: { reason: smsError?.message ?? 'sms_failed' },
+                            });
+                        }
                     } catch (e: any) {
                         await adminClient.from('purchase_orders').update({
                             status: 'delivery_pending_review',

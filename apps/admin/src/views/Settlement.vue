@@ -79,7 +79,7 @@ async function load() {
   error.value   = '';
   try {
     const params = vendorFilter.value ? `?vendor_id=${encodeURIComponent(vendorFilter.value)}` : '';
-    const res = await api.get(`/api/v1/admin/settlement${params}`);
+    const res = await api.get<{ batches?: any[] }>(`/api/v1/admin/settlement${params}`);
     batches.value = res.batches ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load settlement batches';

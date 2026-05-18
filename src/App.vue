@@ -197,7 +197,7 @@
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
-          <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" />
+          <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" :role-id="currentRoleId" />
           <TablePage v-else :route="route" />
         </main>
     </section>
@@ -600,4 +600,3 @@ export default {
   }
 };
 </script>
-

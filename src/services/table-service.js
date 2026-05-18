@@ -192,8 +192,25 @@ function withPage(request, pageIndex) {
 
 const defaultTableApi = { getApi, postApi };
 
-function tableRowKey(row) {
+function tableRowKey(row, route = {}) {
   if (!row || typeof row !== "object") return JSON.stringify(row);
+  const hash = String(route.hash || "");
+  if (hash.includes("remote-operation-record/remote-meter-")) {
+    const stableTaskId = row.taskId || row.id || row.taskNo || row.taskCode;
+    if (stableTaskId) return String(stableTaskId);
+    return [
+      row.customerId,
+      row.meterId,
+      row.dataItem || row.name,
+      row.createDate || row.createTime,
+      row.updateDate || row.updateTime,
+      row.status,
+      row.dataValue || row.data || row.token
+    ].map((value) => String(value || "").trim()).join(":");
+  }
+  if (hash.includes("management/customer")) {
+    return String(row.customerId || row.id || row.phone || row.name || JSON.stringify(row));
+  }
   const stableId = row.receiptId
     || row.customerId && row.meterId && `${row.customerId}:${row.meterId}`
     || row.meterId
@@ -203,10 +220,10 @@ function tableRowKey(row) {
   return stableId ? String(stableId) : JSON.stringify(row);
 }
 
-function pushUniqueRows(targetRows, nextRows, seenKeys) {
+function pushUniqueRows(targetRows, nextRows, seenKeys, route = {}) {
   let added = 0;
   for (const row of nextRows) {
-    const key = tableRowKey(row);
+    const key = tableRowKey(row, route);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     targetRows.push(row);
@@ -222,15 +239,16 @@ async function sendTableRequest(request, api = defaultTableApi) {
 async function fetchAllTableRows(request, route, api = defaultTableApi) {
   const firstResponse = await sendTableRequest(request, api);
   const firstCollection = responseRows(firstResponse, route);
-  const rows = firstCollection.rows.slice();
-  const seenKeys = new Set(rows.map(tableRowKey));
+  const rows = [];
+  const seenKeys = new Set();
+  pushUniqueRows(rows, firstCollection.rows, seenKeys, route);
   let total = firstCollection.total;
   const requestedSize = pageSizeForRequest(request);
 
   // Detect C# backend pagination bug: we requested a large page (e.g. 500)
   // but the API clamped the response to exactly 20 items and falsely claims total=20.
   // If we continue using pageSize=500, we skip items (offset=500).
-  const isCappedAt20 = requestedSize > 20 && rows.length === 20;
+  const isCappedAt20 = requestedSize > 20 && firstCollection.rows.length === 20;
 
   if (isCappedAt20) {
     // Switch to page size 20 and fetch sequentially to avoid skipping offsets
@@ -250,7 +268,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
       
       if (!nextCol.rows.length) break;
       
-      const added = pushUniqueRows(rows, nextCol.rows, seenKeys);
+      const added = pushUniqueRows(rows, nextCol.rows, seenKeys, route);
       if (!added) break;
       total = Math.max(total || 0, nextCol.total || 0, rows.length);
       
@@ -275,11 +293,12 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
 
   const pageResponses = await Promise.all(pageRequests);
   for (const pageResponse of pageResponses) {
-    rows.push(...responseRows(pageResponse, route).rows);
+    pushUniqueRows(rows, responseRows(pageResponse, route).rows, seenKeys, route);
     if (rows.length >= maxTableRows) break;
   }
 
-  return { rows: rows.slice(0, Math.min(total || rows.length, maxTableRows)), total };
+  const finalRows = rows.slice(0, Math.min(total || rows.length, maxTableRows));
+  return { rows: finalRows, total: Math.min(total || finalRows.length, finalRows.length) };
 }
 
 export async function fetchTableData(route, options = {}, api = defaultTableApi) {

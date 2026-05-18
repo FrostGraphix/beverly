@@ -27,6 +27,22 @@ export const DAILY_METER_MAX_ROWS = 0;
 let tariffCache = null;
 let tariffCacheExpiry = 0;
 
+function readCookie(name) {
+  if (typeof document === "undefined") return "";
+  return document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${encodeURIComponent(name)}=`))
+    ?.split("=")[1] || "";
+}
+
+function authenticatedHeaders() {
+  const token = readCookie("token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${decodeURIComponent(token)}` } : {}),
+  };
+}
+
 function getController(key) {
   return new AbortController();
 }
@@ -142,11 +158,23 @@ async function postJSON(path, body, signal) {
   try {
     const response = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authenticatedHeaders(),
       body: JSON.stringify(body),
       signal: effectiveSignal,
     });
-    if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body = await response.json();
+        detail = body?.reason || body?.msg || "";
+      } catch {
+        detail = "";
+      }
+      if (response.status === 401) {
+        throw new Error(`${path} returned 401. Sign in again, then refresh.`);
+      }
+      throw new Error(`${path} returned ${response.status}${detail ? `: ${detail}` : ""}`);
+    }
     return response.json();
   } finally {
     clearTimeout(timeoutId);
@@ -364,8 +392,11 @@ export async function fetchAllStationsDailyDataDetailed(from, to, stations = LIV
 }
 
 export async function fetchConsumptionAudit() {
-  const response = await fetch("/api/system/consumption-audit");
+  const response = await fetch("/api/system/consumption-audit", {
+    headers: authenticatedHeaders(),
+  });
   if (!response.ok) {
+    if (response.status === 401) throw new Error("Consumption audit returned 401. Sign in again, then refresh.");
     throw new Error(`Consumption audit failed with status ${response.status}`);
   }
   const payload = await response.json();

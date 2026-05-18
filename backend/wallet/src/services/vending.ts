@@ -23,7 +23,6 @@
 import { adminClient } from '../db/supabase.js';
 import {
     createHold, captureHold, releaseHold,
-    type LedgerEntry,
 } from './ledger.js';
 import {
     lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask,

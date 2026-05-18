@@ -115,10 +115,12 @@ assert.deepStrictEqual(splitRevenueGap(-1750), {
 
 const originalFetch = global.fetch;
 const calls = [];
+global.document = { cookie: "token=qa-token" };
 
 global.fetch = async (path, options = {}) => {
   const payload = JSON.parse(options.body || "{}");
   calls.push({ path, payload });
+  assert.strictEqual(options.headers.Authorization, "Bearer qa-token");
 
   if (path === "/api/token/creditTokenRecord/read") {
     const isPrior = payload.FROM === "2026-04-29";
@@ -268,6 +270,7 @@ assert.strictEqual(
 );
 
 global.fetch = originalFetch;
+delete global.document;
 
 global.fetch = async (path, options = {}) => {
   const payload = JSON.parse(options.body || "{}");

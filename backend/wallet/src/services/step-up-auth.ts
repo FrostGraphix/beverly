@@ -13,7 +13,8 @@
  */
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
-import { sendSms } from '../adapters/twilio.js';
+import { checkVerification, sendSms, sendVerification } from '../adapters/twilio.js';
+import { env } from '../config/env.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;  // 10 minutes
 const MAX_ATTEMPTS = 5;
@@ -33,6 +34,10 @@ function hashOtp(otp: string): string {
     return crypto.createHash('sha256').update(otp + 'beverly-stepup-salt').digest('hex');
 }
 
+function usesTwilioVerify(): boolean {
+    return Boolean(env.TWILIO_VERIFY_SERVICE_SID);
+}
+
 export interface StepUpChallenge {
     challengeId: string;
     expiresAt: string;
@@ -42,19 +47,19 @@ export async function issueStepUpChallenge(customerId: string): Promise<StepUpCh
     // Get customer phone for SMS delivery
     const { data: customer } = await adminClient
         .from('customers')
-        .select('users(phone)')
+        .select('phone')
         .eq('id', customerId)
         .single();
 
-    const phone = (customer as any)?.users?.phone as string | null;
-    const otp = generateOtp();
+    const phone = (customer as any)?.phone as string | null;
+    const otp = usesTwilioVerify() ? null : generateOtp();
     const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
 
     const { data: challenge, error } = await adminClient
         .from('step_up_challenges')
         .insert({
             customer_id: customerId,
-            otp_hash:    hashOtp(otp),
+            otp_hash:    otp ? hashOtp(otp) : 'twilio-verify',
             expires_at:  expiresAt,
         })
         .select('id')
@@ -66,8 +71,16 @@ export async function issueStepUpChallenge(customerId: string): Promise<StepUpCh
 
     // Best-effort SMS — don't block purchase flow if Twilio is down
     if (phone) {
-        sendSms({ to: phone, body: `Beverly security check: your one-time code is ${otp}. Valid for 10 minutes. Do not share this code.` })
-            .catch(() => void 0);
+        try {
+            if (usesTwilioVerify()) {
+                await sendVerification(phone, 'sms');
+            } else if (otp) {
+                await sendSms({ to: phone, body: `Beverly security check: your one-time code is ${otp}. Valid for 10 minutes. Do not share this code.` });
+            }
+        } catch {
+            await adminClient.from('step_up_challenges').delete().eq('id', (challenge as any).id);
+            throw new StepUpError('Could not send security code', 'challenge_send_failed');
+        }
     }
 
     return { challengeId: (challenge as any).id, expiresAt };
@@ -99,7 +112,19 @@ export async function verifyStepUpChallenge(challengeId: string, otp: string): P
         .update({ attempts: (challenge as any).attempts + 1 })
         .eq('id', challengeId);
 
-    if (hashOtp(otp) !== (challenge as any).otp_hash) {
+    if ((challenge as any).otp_hash === 'twilio-verify') {
+        const { data: customer } = await adminClient
+            .from('customers')
+            .select('phone')
+            .eq('id', (challenge as any).customer_id)
+            .single();
+        const phone = (customer as any)?.phone as string | null;
+        if (!phone) throw new StepUpError('Customer phone not found', 'phone_not_found');
+        const check = await checkVerification(phone, otp);
+        if (check.status !== 'approved' || !check.valid) {
+            throw new StepUpError('Incorrect security code', 'invalid_otp');
+        }
+    } else if (hashOtp(otp) !== (challenge as any).otp_hash) {
         throw new StepUpError('Incorrect security code', 'invalid_otp');
     }
 

@@ -249,9 +249,9 @@
 
           <footer class="auth-card-foot">
             <span>{{ copy.switchPrompt }}</span>
-            <button class="auth-foot-link" type="button" @click="switchCompanionMode">
+            <BaseButton class="auth-foot-link" variant="ghost" native-type="button" @click="switchCompanionMode">
               {{ copy.switchLabel }}
-            </button>
+            </BaseButton>
           </footer>
         </form>
       </section>

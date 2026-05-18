@@ -671,6 +671,32 @@ assert.strictEqual(managementCustomerTable.total, 63);
 assert.strictEqual(managementCustomerTable.rows[0].id, "CU-001");
 assert.strictEqual(managementCustomerTable.rows[62].name, "Management Customer 63");
 
+const remoteReadingTaskRoute = routeManifest.find((route) => route.hash === "#/remote-operation-record/remote-meter-reading-task");
+const remoteReadingTaskTable = await fetchTableData(remoteReadingTaskRoute, { pageSize: 2 }, {
+  async postApi(path, payload = {}) {
+    if (path === "/api/station/read") {
+      return { code: 0, result: { total: 0, data: [] } };
+    }
+    assert.strictEqual(path, "/API/RemoteMeterTask/GetReadingTask");
+    const pageNumber = Number(payload.pageNumber || 1);
+    const rows = pageNumber === 1
+      ? [
+        { meterId: "M-1", customerId: "C-1", dataItem: "Power", createDate: "2026-05-18 10:00:00", status: 1 },
+        { meterId: "M-2", customerId: "C-2", dataItem: "Power", createDate: "2026-05-18 10:01:00", status: 1 }
+      ]
+      : [
+        { meterId: "M-2", customerId: "C-2", dataItem: "Power", createDate: "2026-05-18 10:01:00", status: 1 },
+        { meterId: "M-3", customerId: "C-3", dataItem: "Power", createDate: "2026-05-18 10:02:00", status: 1 }
+      ];
+    return { code: 0, result: { total: 4, data: rows } };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.deepStrictEqual(remoteReadingTaskTable.rows.map((row) => row.meterId), ["M-1", "M-2", "M-3"]);
+assert.strictEqual(remoteReadingTaskTable.total, 3);
+
 const action = mapActionResponse({
   code: 0,
   result: {

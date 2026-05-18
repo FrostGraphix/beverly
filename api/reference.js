@@ -48,7 +48,7 @@ const {
   readAutomationControl,
   saveAutomationControl
 } = require("../backend/src/services/automation-control");
-const { refreshTargets } = require("../backend/src/services/refresh-targets");
+const { previousDayRange, refreshTargets } = require("../backend/src/services/refresh-targets");
 const {
   governancePlan,
   rolePermissionAudit,
@@ -478,8 +478,11 @@ function isCacheableRequest(pathname, method) {
 
 function requiresLiveRead(pathname) {
   const normalizedPath = String(pathname || "");
-  return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
-    || /\/api\/customer\/read$/i.test(normalizedPath);
+  return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath);
+}
+
+function canUseSampleFallback(pathname) {
+  return /\/api\/customer\/read$/i.test(String(pathname || ""));
 }
 
 function apiCacheEnabled() {
@@ -1100,6 +1103,31 @@ function classifyCoverage(earliestReadingDate, configuredFrom) {
   };
 }
 
+function expectedMidnightSyncDate(now = new Date()) {
+  return previousDayRange(now).to;
+}
+
+function classifyMidnightSync(latestReadingDate, expectedDate) {
+  if (!latestReadingDate) return { status: "missing", expectedDate, lagDays: null };
+  const lagDays = dayDiff(latestReadingDate, expectedDate);
+  if (lagDays == null) return { status: "unknown", expectedDate, lagDays: null };
+  return {
+    status: lagDays <= 0 ? "synced" : "missed",
+    expectedDate,
+    lagDays: Math.max(0, lagDays),
+  };
+}
+
+function classifyBackfillDrift(deltaStoreVsLive, deltaStoreVsProgress) {
+  const liveDrift = deltaStoreVsLive != null && Number(deltaStoreVsLive) !== 0;
+  const progressDrift = deltaStoreVsProgress != null && Number(deltaStoreVsProgress) !== 0;
+  return {
+    status: liveDrift || progressDrift ? "drift" : "clear",
+    liveDelta: deltaStoreVsLive,
+    progressDelta: deltaStoreVsProgress,
+  };
+}
+
 async function fetchLiveDailyMeterTotal(stationId) {
   const env = getEnv();
   if (!env.liveProxyEnabled || !env.liveBaseUrl) return null;
@@ -1162,19 +1190,31 @@ async function buildConsumptionAudit() {
   const progress = readConsumptionBackfillProgress();
   const uniqueAudit = readConsumptionLiveUniqueAudit();
   const configuredFrom = configuredConsumptionBackfillFrom();
+  const generatedAt = new Date().toISOString();
+  const midnightExpectedDate = expectedMidnightSyncDate();
   const stats = await dailyMeterStationStats();
   if (!stats.tableReady) {
     return {
       enabled: stats.enabled,
       tableReady: false,
       configuredFrom,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       stations: [],
       overall: {
         completenessStatus: "unknown",
         freshnessStatus: "unknown",
         coverageStatus: "unknown",
+        midnightSyncStatus: "unknown",
+        backfillDriftStatus: "unknown",
       },
+      alerts: [{
+        severity: "critical",
+        type: "sync-failure",
+        station: null,
+        title: "Consumption store unavailable",
+        message: stats.error || "Consumption store is not ready",
+      }],
+      syncLogs: [],
       warnings: [stats.error || "Consumption store is not ready"],
     };
   }
@@ -1211,6 +1251,8 @@ async function buildConsumptionAudit() {
     const auditRows = liveMetric === "raw" ? logicalRawRows : storeRows;
     const deltaStoreVsLive = liveTotalRows == null ? null : auditRows - liveTotalRows;
     const deltaStoreVsProgress = progressTotalRows == null ? null : storeRows - progressTotalRows;
+    const midnightSync = classifyMidnightSync(latestReadingDate, midnightExpectedDate);
+    const backfillDrift = classifyBackfillDrift(deltaStoreVsLive, deltaStoreVsProgress);
     const warnings = [];
 
     let completenessStatus = "unknown";
@@ -1242,6 +1284,12 @@ async function buildConsumptionAudit() {
     if (freshness.status === "aging" || freshness.status === "stale") {
       warnings.push(`${stationId}: latest reading is ${freshness.staleDays} days behind today.`);
     }
+    if (midnightSync.status === "missed" || midnightSync.status === "missing") {
+      warnings.push(`${stationId}: midnight sync missing ${midnightExpectedDate}.`);
+    }
+    if (backfillDrift.status === "drift") {
+      warnings.push(`${stationId}: backfill drift requires reconciliation.`);
+    }
     if (liveError) warnings.push(`${stationId}: live total audit unavailable.`);
 
     stations.push({
@@ -1262,11 +1310,55 @@ async function buildConsumptionAudit() {
       deltaStoreVsProgress,
       freshness,
       coverage,
+      midnightSync,
+      backfillDrift,
       warnings,
     });
   }
 
   const overallWarnings = stations.flatMap((station) => station.warnings);
+  const alerts = stations.flatMap((station) => {
+    const items = [];
+    if (station.backfillDrift?.status === "drift") {
+      items.push({
+        severity: "critical",
+        type: "backfill-drift",
+        station: station.station,
+        title: "Backfill drift detected",
+        message: `${station.station} store and audit totals do not match.`,
+      });
+    }
+    if (station.midnightSync?.status === "missed" || station.midnightSync?.status === "missing") {
+      items.push({
+        severity: "warning",
+        type: "midnight-sync",
+        station: station.station,
+        title: "Midnight sync missed",
+        message: `${station.station} has no reading for ${station.midnightSync.expectedDate}.`,
+      });
+    }
+    if (station.liveTotalRows == null) {
+      items.push({
+        severity: "warning",
+        type: "sync-failure",
+        station: station.station,
+        title: "Live audit unavailable",
+        message: `${station.station} live total check could not complete.`,
+      });
+    }
+    return items;
+  });
+  const syncLogs = stations.map((station) => ({
+    station: station.station,
+    generatedAt,
+    latestReadingDate: station.latestReadingDate,
+    expectedMidnightDate: station.midnightSync?.expectedDate || midnightExpectedDate,
+    midnightStatus: station.midnightSync?.status || "unknown",
+    backfillStatus: station.backfillDrift?.status || "unknown",
+    deltaStoreVsLive: station.deltaStoreVsLive,
+    deltaStoreVsProgress: station.deltaStoreVsProgress,
+    liveMetric: station.liveMetric,
+  }));
   const overall = {
     completenessStatus: stations.every((station) => station.completenessStatus === "complete")
       ? "complete"
@@ -1285,6 +1377,16 @@ async function buildConsumptionAudit() {
       : stations.some((station) => station.coverage.status === "partial")
         ? "partial"
         : "unknown",
+    midnightSyncStatus: stations.every((station) => station.midnightSync.status === "synced")
+      ? "synced"
+      : stations.some((station) => station.midnightSync.status === "missed" || station.midnightSync.status === "missing")
+        ? "attention"
+        : "unknown",
+    backfillDriftStatus: stations.every((station) => station.backfillDrift.status === "clear")
+      ? "clear"
+      : stations.some((station) => station.backfillDrift.status === "drift")
+        ? "drift"
+        : "unknown",
     totalRows: stats.totalRows,
     earliestReadingDate: stations.map((station) => station.earliestReadingDate).filter(Boolean).sort()[0] || null,
     latestReadingDate: stations.map((station) => station.latestReadingDate).filter(Boolean).sort().slice(-1)[0] || null,
@@ -1294,7 +1396,8 @@ async function buildConsumptionAudit() {
     enabled: true,
     tableReady: true,
     configuredFrom,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
+    expectedMidnightDate: midnightExpectedDate,
     liveAuditMode: uniqueAudit.stations.size ? "mixed-audit" : "raw-live-total",
     verificationStatus: stations.every((station) => station.liveMetric === "unique")
       ? "verified"
@@ -1303,6 +1406,8 @@ async function buildConsumptionAudit() {
         : "raw-only",
     overall,
     stations,
+    alerts,
+    syncLogs,
     warnings: overallWarnings,
   };
 }
@@ -2254,6 +2359,24 @@ async function handler(request, response) {
         }).catch((error) => {
           console.error("[consumption-store-write]", error instanceof Error ? error.message : String(error));
         });
+      }
+    }
+
+    if (result?.status >= 500 && canUseSampleFallback(pathname)) {
+      const sample = sampleReadResponse(pathname, requestData);
+      if (sample) {
+        result = {
+          ...sample,
+          body: {
+            ...sample.body,
+            _proxy: {
+              ...(sample.body?._proxy || {}),
+              source: "sample-after-live-failure",
+              pathname,
+              upstreamStatus: result.status
+            }
+          }
+        };
       }
     }
 

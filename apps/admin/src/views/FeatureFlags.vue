@@ -147,7 +147,7 @@ async function load() {
   loading.value = true;
   error.value   = '';
   try {
-    const res = await api.get('/api/v1/admin/feature-flags');
+    const res = await api.get<{ flags?: any[] }>('/api/v1/admin/feature-flags');
     flags.value = (res.flags ?? []).sort((a: any, b: any) => a.key.localeCompare(b.key));
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load flags';

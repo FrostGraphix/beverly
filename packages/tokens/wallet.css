@@ -7,6 +7,14 @@
 /* ── Google Fonts ─────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
+/* ── Semantic aliases (used throughout components) ───────────────── */
+:root {
+  --text-2: var(--text-dim);
+  --muted:  var(--text-muted);
+  --red:    var(--danger);
+  --green:  var(--success);
+}
+
 /* ════════════════════════════════════════════════════════════════════
    LAYOUT SHELL
    ════════════════════════════════════════════════════════════════════ */

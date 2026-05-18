@@ -19,6 +19,8 @@ import { findWalletByOwner, getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
 import { ledgerKey, hashIdempotency } from './idempotency.js';
 import { initializeTransaction } from '../adapters/paystack.js';
+import { sendSms } from '../adapters/twilio.js';
+import { env } from '../config/env.js';
 import { createReceipt, type PurchaseOrder } from './vending.js';
 
 export class CustomerPurchaseError extends Error {
@@ -46,6 +48,59 @@ export interface CustomerPurchaseResult {
     receiptId: string | null;
     authorizationUrl: string | null;  // for direct_pay
     reference: string | null;
+}
+
+export interface TokenSmsResult {
+    sent: boolean;
+    sid: string | null;
+    status: string | null;
+    reason?: string;
+}
+
+function tokenSmsBody(input: {
+    token: string;
+    meterId: string;
+    amountMinor: number;
+    units: number;
+    receiptId?: string | null;
+}): string {
+    const amount = (input.amountMinor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' });
+    return [
+        'Beverly token purchase successful.',
+        `Token: ${input.token}`,
+        `Meter: ${input.meterId}`,
+        `Amount: ${amount}`,
+        `Units: ${input.units.toFixed(2)} kWh`,
+        input.receiptId ? `Receipt: ${input.receiptId}` : '',
+        'Keep this token safe. Beverly will never ask for your verification code.',
+    ].filter(Boolean).join('\n');
+}
+
+export async function sendTokenSmsToCustomer(input: {
+    customerId: string;
+    token: string | null;
+    meterId: string;
+    amountMinor: number;
+    units: number;
+    receiptId?: string | null;
+}): Promise<TokenSmsResult> {
+    if (!input.token) return { sent: false, sid: null, status: null, reason: 'token_missing' };
+    const token = input.token;
+    const { data: customer } = await adminClient
+        .from('customers')
+        .select('phone')
+        .eq('id', input.customerId)
+        .single();
+    const phone = (customer as any)?.phone as string | null;
+    if (!phone) return { sent: false, sid: null, status: null, reason: 'customer_phone_missing' };
+    const msg = await sendSms({
+        to: phone,
+        body: tokenSmsBody({ ...input, token }),
+        from: env.TWILIO_TOKEN_SMS_FROM_NUMBER || env.TWILIO_FROM_NUMBER,
+        messagingServiceSid: env.TWILIO_TOKEN_SMS_MESSAGING_SERVICE_SID || undefined,
+        idempotencyKey: `token-sms:${input.receiptId ?? input.meterId}:${input.token}`,
+    });
+    return { sent: true, sid: msg.sid, status: msg.status };
 }
 
 export async function customerPurchase(input: CustomerPurchaseInput): Promise<CustomerPurchaseResult> {
@@ -148,7 +203,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 reference: po.id,
             });
 
-            const ledgerEntry = await captureHold({
+            await captureHold({
                 holdId: hold.id,
                 entryType: 'purchase_debit',
                 referenceType: 'purchase_order',
@@ -191,6 +246,36 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 targetId: po.id,
                 after: { meterId: meter.meterId, amountMinor: input.amountMinor, status: 'delivered' },
             });
+
+            try {
+                const sms = await sendTokenSmsToCustomer({
+                    customerId: input.customerId,
+                    token: tokenRes.token,
+                    meterId: meter.meterId,
+                    amountMinor: input.amountMinor,
+                    units: preview.units,
+                    receiptId: receipt.id,
+                });
+                if (sms.sent) {
+                    await logAction({
+                        actorUserId: input.customerUserId,
+                        actorType: 'system',
+                        action: 'customer.purchase.token_sms_sent',
+                        targetType: 'purchase_order',
+                        targetId: po.id,
+                        after: { sid: sms.sid, status: sms.status },
+                    });
+                }
+            } catch (e: any) {
+                await logAction({
+                    actorUserId: input.customerUserId,
+                    actorType: 'system',
+                    action: 'customer.purchase.token_sms_failed',
+                    targetType: 'purchase_order',
+                    targetId: po.id,
+                    after: { reason: e?.message ?? 'sms_failed' },
+                });
+            }
 
             return {
                 purchaseOrder: po,
@@ -280,10 +365,10 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         tariffId: meter.tariffId,
         amountMinor,
         units: preview.units,
-        tariffRate: preview.tariffRate,
-        vatMinor: preview.vatMinor,
-        serviceChargeMinor: preview.serviceChargeMinor,
-        netMinor: preview.netMinor,
+        tariffRate: preview.effectivePricePerKwh,
+        vatMinor: preview.taxAmountMinor,
+        serviceChargeMinor: 0,
+        netMinor: amountMinor - preview.taxAmountMinor,
     };
 }
 

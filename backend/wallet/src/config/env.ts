@@ -2,7 +2,27 @@
  * Environment loader with Zod validation.
  * Fails fast if required vars missing.
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
+
+function loadEnvFile(filePath: string) {
+    if (!fs.existsSync(filePath)) return;
+    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const separator = trimmed.indexOf('=');
+        if (separator === -1) continue;
+        const key = trimmed.slice(0, separator).trim();
+        const value = trimmed.slice(separator + 1).trim();
+        if (key && !(key in process.env)) process.env[key] = value;
+    }
+}
+
+loadEnvFile(path.resolve(process.cwd(), '.env'));
+loadEnvFile(path.resolve(process.cwd(), '.env.local'));
+loadEnvFile(path.resolve(process.cwd(), '..', '..', '.env'));
 
 const schema = z.object({
     NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
@@ -27,6 +47,10 @@ const schema = z.object({
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM_NUMBER: z.string().optional(),
+    TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
+    TWILIO_VERIFY_SERVICE_SID: z.string().optional(),
+    TWILIO_TOKEN_SMS_FROM_NUMBER: z.string().optional(),
+    TWILIO_TOKEN_SMS_MESSAGING_SERVICE_SID: z.string().optional(),
 
     POSTMARK_SERVER_TOKEN: z.string().optional(),
     POSTMARK_FROM: z.string().default('Beverly <no-reply@beverly.acoblighting.com>'),

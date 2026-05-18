@@ -45,7 +45,7 @@ import {
 } from '../services/customer-kyc.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding,
-    linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases,
+    linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases, sendTokenSmsToCustomer,
     CustomerPurchaseError,
 } from '../services/customer-purchase.js';
 import { findWalletByOwner } from '../services/wallets.js';
@@ -627,6 +627,34 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return receipt;
     });
 
+    fastify.post('/receipts/:id/resend-sms', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const receipt = await getReceiptByOrder(id);
+        if (!receipt) return reply.code(404).send({ error: 'not_found' });
+        const { data: po } = await adminClient
+            .from('purchase_orders')
+            .select('id, customer_id, meter_id, amount_minor, units_kwh, token')
+            .eq('id', receipt.purchase_order_id)
+            .single();
+        if ((po as any)?.customer_id !== req.actor!.customerId!) {
+            return reply.code(403).send({ error: 'forbidden' });
+        }
+        try {
+            const result = await sendTokenSmsToCustomer({
+                customerId: req.actor!.customerId!,
+                token: (po as any)?.token ?? (receipt as any)?.token ?? null,
+                meterId: (po as any)?.meter_id ?? (receipt as any)?.meter_id ?? '',
+                amountMinor: Number((po as any)?.amount_minor ?? (receipt as any)?.amount_minor ?? 0),
+                units: Number((po as any)?.units_kwh ?? (receipt as any)?.units_kwh ?? 0),
+                receiptId: (receipt as any)?.id ?? null,
+            });
+            if (!result.sent) return reply.code(422).send({ error: result.reason, message: 'Token SMS could not be sent.' });
+            return result;
+        } catch (e: any) {
+            return reply.code(502).send({ error: 'sms_send_failed', message: e?.message ?? 'Token SMS could not be sent.' });
+        }
+    });
+
     // ── NDPR: data export (right to access) ──
     fastify.post('/privacy/data-export', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const customerId = req.actor!.customerId!;
@@ -668,6 +696,53 @@ const customer: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'cancel_error', message: e.message });
         }
+    });
+
+    // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+
+    fastify.get('/notifications/preferences', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { data } = await adminClient
+            .from('customers')
+            .select('notification_preferences')
+            .eq('id', req.actor!.customerId!)
+            .single();
+        const defaults = {
+            sms: { token_purchased: true, wallet_funded: true, login_otp: true },
+            email: { token_purchased: false, wallet_funded: false, promotions: false },
+            in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true },
+        };
+        return { preferences: (data as any)?.notification_preferences ?? defaults };
+    });
+
+    fastify.put('/notifications/preferences', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            sms:    z.record(z.boolean()).optional(),
+            email:  z.record(z.boolean()).optional(),
+            in_app: z.record(z.boolean()).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const { data: existing } = await adminClient
+            .from('customers')
+            .select('notification_preferences')
+            .eq('id', req.actor!.customerId!)
+            .single();
+
+        const merged = {
+            ...((existing as any)?.notification_preferences ?? {}),
+            ...(body.sms    ? { sms:    { ...((existing as any)?.notification_preferences?.sms    ?? {}), ...body.sms    } } : {}),
+            ...(body.email  ? { email:  { ...((existing as any)?.notification_preferences?.email  ?? {}), ...body.email  } } : {}),
+            ...(body.in_app ? { in_app: { ...((existing as any)?.notification_preferences?.in_app ?? {}), ...body.in_app } } : {}),
+        };
+
+        const { error } = await adminClient
+            .from('customers')
+            .update({ notification_preferences: merged })
+            .eq('id', req.actor!.customerId!);
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        return { ok: true, preferences: merged };
     });
 };
 

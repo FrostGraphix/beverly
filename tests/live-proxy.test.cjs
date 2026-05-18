@@ -441,8 +441,9 @@ async function main() {
         },
         body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 500 }))
       });
-      assert.strictEqual(customerUnavailable.status, 502);
-      assert.strictEqual(customerUnavailable.body._proxy.source, "live-required");
+      assert.strictEqual(customerUnavailable.status, 200);
+      assert.strictEqual(customerUnavailable.body._proxy.source, "sample");
+      assert(customerUnavailable.body.result.data.length > 0);
     });
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");

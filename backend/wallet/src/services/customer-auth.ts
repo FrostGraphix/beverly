@@ -20,7 +20,7 @@
  */
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
-import { sendSms } from '../adapters/twilio.js';
+import { checkVerification, sendSms, sendVerification } from '../adapters/twilio.js';
 import { sendEmail } from '../adapters/postmark.js';
 import { getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
@@ -53,6 +53,10 @@ function generateOtp(): string {
 
 function hashOtp(otp: string): string {
     return crypto.createHash('sha256').update(otp + 'beverly-otp-salt').digest('hex');
+}
+
+function usesTwilioVerify(): boolean {
+    return Boolean(env.TWILIO_VERIFY_SERVICE_SID);
 }
 
 function b64url(data: string | Buffer): string {
@@ -106,12 +110,12 @@ export async function requestOtp(
         if (cu.status !== 'active') throw new AuthError('Account is not active.', 'account_inactive');
     }
 
-    const otp = generateOtp();
+    const otp = usesTwilioVerify() ? null : generateOtp();
     const { data, error } = await adminClient
         .from('customer_otp_challenges')
         .insert({
             phone: normalised,
-            otp_hash: hashOtp(otp),
+            otp_hash: otp ? hashOtp(otp) : 'twilio-verify',
             purpose,
             metadata,
             expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
@@ -120,11 +124,29 @@ export async function requestOtp(
         .single();
     if (error) throw new AuthError(error.message, 'challenge_create_failed');
 
-    // Send OTP
-    await sendSms({
-        to: normalised,
-        body: `Your Beverly code: ${otp}. Valid for 5 minutes. Do not share this code.`,
-    });
+    try {
+        if (usesTwilioVerify()) {
+            const verification = await sendVerification(normalised, 'sms');
+            await adminClient
+                .from('customer_otp_challenges')
+                .update({
+                    metadata: {
+                        ...metadata,
+                        twilio_verify_sid: verification.sid,
+                        twilio_verify_status: verification.status,
+                    },
+                })
+                .eq('id', (data as { id: string }).id);
+        } else if (otp) {
+            await sendSms({
+                to: normalised,
+                body: `Your Beverly code: ${otp}. Valid for 5 minutes. Do not share this code.`,
+            });
+        }
+    } catch (e: any) {
+        await adminClient.from('customer_otp_challenges').delete().eq('id', (data as { id: string }).id);
+        throw new AuthError(e?.message ?? 'Could not send OTP.', 'otp_send_failed');
+    }
 
     return { challengeId: (data as { id: string }).id };
 }
@@ -159,7 +181,12 @@ export async function verifyOtp(
         .update({ attempts: ch.attempts + 1 })
         .eq('id', challengeId);
 
-    if (ch.otp_hash !== hashOtp(otp)) {
+    if (ch.otp_hash === 'twilio-verify' || (ch.metadata as any)?.twilio_verify_sid) {
+        const check = await checkVerification(ch.phone, otp);
+        if (check.status !== 'approved' || !check.valid) {
+            throw new AuthError('Invalid OTP.', 'invalid_otp');
+        }
+    } else if (ch.otp_hash !== hashOtp(otp)) {
         throw new AuthError('Invalid OTP.', 'invalid_otp');
     }
 

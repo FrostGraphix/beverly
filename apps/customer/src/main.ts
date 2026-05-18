@@ -4,6 +4,8 @@ import App from './App.vue';
 import { router } from './router';
 import { initTheme } from '@beverly/tokens';
 
+import '@beverly/tokens/tokens.css';
+import '@beverly/tokens/theme.css';
 import '@beverly/tokens/wallet.css';
 import './styles/app.css';
 

@@ -107,4 +107,29 @@ export default {
   background: var(--primary);
   color: #fff;
 }
+
+@media (max-width: 700px) {
+  .site-sidebar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0;
+  }
+
+  .site-pill {
+    min-height: 46px;
+    padding: 10px 12px;
+    border-radius: var(--radius-lg);
+  }
+
+  .site-pill-label {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .site-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

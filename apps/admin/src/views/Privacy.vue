@@ -122,7 +122,7 @@ async function load() {
   error.value   = '';
   try {
     const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
-    const res = await api.get(`/api/v1/admin/privacy/deletions${params}`);
+    const res = await api.get<{ requests?: any[] }>(`/api/v1/admin/privacy/deletions${params}`);
     requests.value = res.requests ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load requests';

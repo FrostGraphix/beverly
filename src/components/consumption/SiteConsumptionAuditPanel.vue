@@ -5,7 +5,17 @@
         <h3 class="audit-title">Data Integrity</h3>
         <p class="audit-sub">Supabase coverage, live parity, and backfill verdict.</p>
       </div>
-      <span :class="['audit-status', `audit-status--${overallTone}`]">{{ overallLabel }}</span>
+      <div class="audit-head-actions">
+        <BaseButton
+          v-if="admin"
+          class="audit-export-btn"
+          data-testid="site-consumption-audit-panel-export"
+          @click="$emit('export-audit')"
+        >
+          Export
+        </BaseButton>
+        <span :class="['audit-status', `audit-status--${overallTone}`]">{{ overallLabel }}</span>
+      </div>
     </div>
 
     <div class="audit-story">
@@ -86,6 +96,23 @@
         {{ warning }}
       </article>
     </div>
+
+    <div v-if="admin && syncLogs.length" class="sync-log-panel" data-testid="site-consumption-sync-logs">
+      <div class="sync-log-head">
+        <h4>Sync Logs</h4>
+        <span>{{ syncLogs.length }} stations</span>
+      </div>
+      <div class="sync-log-grid">
+        <article v-for="log in syncLogs" :key="log.station" class="sync-log-card">
+          <strong>{{ log.station }}</strong>
+          <span>Midnight: {{ log.midnightStatus }}</span>
+          <span>Expected: {{ log.expectedMidnightDate || "n/a" }}</span>
+          <span>Latest: {{ log.latestReadingDate || "n/a" }}</span>
+          <span>Drift: {{ log.backfillStatus }}</span>
+          <span>Delta: {{ formatDelta(log.deltaStoreVsLive) }}</span>
+        </article>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -95,9 +122,10 @@ import BaseButton from "../base/BaseButton.vue";
 export default {
   name: "SiteConsumptionAuditPanel",
   components: { BaseButton },
-  emits: ["select-station"],
+  emits: ["export-audit", "select-station"],
   props: {
     activeStation: { type: String, default: null },
+    admin: { type: Boolean, default: false },
     audit: { type: Object, default: null },
   },
   computed: {
@@ -136,6 +164,9 @@ export default {
         return "Current-day reads are available, so the page is useful for live operational review even while historical backfill remains incomplete.";
       }
       return "Freshness drift means even operational review is at risk until reads are brought current.";
+    },
+    syncLogs() {
+      return Array.isArray(this.audit?.syncLogs) ? this.audit.syncLogs : [];
     },
   },
   methods: {
@@ -193,6 +224,24 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.audit-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.audit-export-btn {
+  height: 30px;
+  min-width: 72px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .audit-title {
@@ -371,10 +420,62 @@ export default {
   color: var(--text-strong);
 }
 
+.sync-log-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.sync-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sync-log-head h4 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.sync-log-head span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sync-log-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sync-log-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-main);
+}
+
+.sync-log-card strong {
+  font-size: 12px;
+  color: var(--text-strong);
+}
+
 @media (max-width: 1100px) {
   .audit-story,
   .audit-kpis,
-  .audit-warning-list {
+  .audit-warning-list,
+  .sync-log-grid {
     grid-template-columns: 1fr;
   }
 }

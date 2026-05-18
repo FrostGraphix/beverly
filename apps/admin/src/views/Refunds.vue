@@ -111,7 +111,7 @@ async function load() {
   error.value   = '';
   try {
     const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
-    const res = await api.get(`/api/v1/admin/refunds${params}`);
+    const res = await api.get<{ refunds?: any[] }>(`/api/v1/admin/refunds${params}`);
     refunds.value = res.refunds ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load refunds';

@@ -139,7 +139,7 @@ async function load() {
   error.value   = '';
   try {
     const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
-    const res = await api.get(`/api/v1/admin/disputes${params}`);
+    const res = await api.get<{ disputes?: any[] }>(`/api/v1/admin/disputes${params}`);
     disputes.value = res.disputes ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load disputes';

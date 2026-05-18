@@ -77,7 +77,7 @@ async function load() {
   loading.value = true;
   error.value   = '';
   try {
-    const res = await api.get('/api/v1/admin/reconciliation');
+    const res = await api.get<{ runs?: any[] }>('/api/v1/admin/reconciliation');
     runs.value = res.runs ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load reconciliation runs';

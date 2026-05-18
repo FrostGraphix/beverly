@@ -1,4 +1,27 @@
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+function normalizeBaseUrl(rawBase: unknown): string {
+    const base = String(rawBase ?? '').trim().replace(/\/+$/, '');
+    if (!base) return '';
+
+    if (typeof window === 'undefined') return base;
+
+    try {
+        const apiUrl = new URL(base, window.location.origin);
+        const pageUrl = new URL(window.location.origin);
+        const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+        const isLocalApi = localHosts.has(apiUrl.hostname);
+        const isLocalPage = localHosts.has(pageUrl.hostname);
+
+        if (isLocalApi && isLocalPage && apiUrl.origin !== pageUrl.origin) {
+            return '';
+        }
+    } catch {
+        return base;
+    }
+
+    return base;
+}
+
+const BASE = normalizeBaseUrl(import.meta.env.VITE_API_BASE);
 
 export class ApiError extends Error {
     constructor(public status: number, public code: string, message: string, public details?: unknown) {

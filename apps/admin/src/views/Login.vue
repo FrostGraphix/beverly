@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
+
+const route = useRoute();
+const sessionEnded = computed(() => route.query.reason === 'session_timeout');
 
 const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -75,6 +78,10 @@ async function signIn() {
         <div class="bw-mark" style="width:52px; height:52px; font-size:22px; margin:0 auto var(--s-4)">B</div>
         <div class="bw-h1" style="font-size: var(--t-2xl); margin-bottom: 6px">Wallet Admin</div>
         <p class="bw-muted" style="margin:0; font-size: var(--t-sm)">Staff access only</p>
+      </div>
+
+      <div v-if="sessionEnded" class="bw-alert" style="background: oklch(78% 0.16 75 / 0.10); border: 1px solid oklch(78% 0.16 75 / 0.30); color: var(--warn); font-size: var(--t-sm); margin-bottom: var(--s-4); border-radius: var(--r-md); padding: var(--s-3)">
+        ⓘ Your session timed out for security. Please sign in again.
       </div>
 
       <form class="bw-stack" @submit.prevent="signIn">

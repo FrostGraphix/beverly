@@ -34,8 +34,24 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ spinning: loadingSales || loadingConsumption }"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Refresh
         </BaseButton>
+        <BaseButton
+          v-if="storeAudit"
+          class="eih-btn eih-btn--ghost"
+          data-testid="site-consumption-audit-export"
+          @click="exportAuditReport"
+        >
+          Export Audit
+        </BaseButton>
       </div>
     </div>
+
+    <section v-if="syncAlerts.length" class="sync-alert-banner" data-testid="site-consumption-sync-banner">
+      <div class="sync-alert-icon">!</div>
+      <div>
+        <strong>Sync attention required</strong>
+        <p>{{ syncAlertSummary }}</p>
+      </div>
+    </section>
 
     <div v-if="auditBadges.length" class="eih-badge-row">
       <article
@@ -49,16 +65,22 @@
       </article>
     </div>
 
-    <div v-if="combinedWarnings.length" class="eih-warning-stack">
-      <article v-for="warning in combinedWarnings" :key="warning" class="eih-warning-card">
-        {{ warning }}
+    <div v-if="warningDigest.length" class="eih-warning-stack">
+      <article v-for="warning in warningDigest" :key="warning.title" class="eih-warning-card">
+        <span class="eih-warning-title">{{ warning.title }}</span>
+        <span class="eih-warning-copy">{{ warning.copy }}</span>
       </article>
+      <div v-if="hiddenWarningCount" class="eih-warning-more">
+        {{ hiddenWarningCount }} more audit details are available in Data Integrity.
+      </div>
     </div>
 
     <SiteConsumptionAuditPanel
       v-if="storeAudit"
       :activeStation="filters.stationId"
+      :admin="isAdminRole"
       :audit="storeAudit"
+      @export-audit="exportAuditReport"
       @select-station="setStation"
     />
 
@@ -160,12 +182,14 @@ import SiteConsumptionConsumptionView from "./consumption/SiteConsumptionConsump
 import SiteConsumptionFraudView from "./consumption/SiteConsumptionFraudView.vue";
 import SiteConsumptionOverviewView from "./consumption/SiteConsumptionOverviewView.vue";
 import SiteSidebar from "./consumption/SiteSidebar.vue";
+import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
 
 export default {
   name: "SiteConsumptionPage",
   props: {
     hash: { type: String, default: "" },
     route: { type: Object, default: () => ({}) },
+    roleId: { type: String, default: "" },
   },
   components: {
     BaseButton,
@@ -255,12 +279,46 @@ export default {
       if (!this.storeAudit?.stations?.length || !this.filters.stationId) return null;
       return this.storeAudit.stations.find((station) => station.station === this.filters.stationId) || null;
     },
+    isAdminRole() {
+      return ["admin", "administrator", "super-admin", "superadmin"].includes(String(this.roleId || "").toLowerCase());
+    },
+    syncAlerts() {
+      return Array.isArray(this.storeAudit?.alerts) ? this.storeAudit.alerts : [];
+    },
+    syncAlertSummary() {
+      const critical = this.syncAlerts.filter((alert) => alert.severity === "critical").length;
+      const warning = this.syncAlerts.length - critical;
+      const first = this.syncAlerts[0]?.message || "Review consumption sync logs.";
+      return `${first} ${critical ? `${critical} critical` : ""}${critical && warning ? ", " : ""}${warning ? `${warning} warning` : ""}`.trim();
+    },
     auditDataStart() {
       return this.activeAuditStation?.earliestReadingDate || this.storeAudit?.overall?.earliestReadingDate || null;
     },
     combinedWarnings() {
       const auditWarnings = this.activeAuditStation?.warnings || this.storeAudit?.warnings || [];
       return Array.from(new Set([...(this.qualityWarnings || []), ...auditWarnings]));
+    },
+    warningDigest() {
+      const warnings = this.combinedWarnings;
+      if (!warnings.length) return [];
+      const grouped = new Map();
+      for (const warning of warnings) {
+        const [station, ...rest] = String(warning).split(":");
+        const key = rest.length ? station.trim() : "System";
+        const copy = rest.length ? rest.join(":").trim() : String(warning);
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(copy);
+      }
+      return Array.from(grouped.entries()).slice(0, 4).map(([title, items]) => ({
+        title,
+        copy: items.length === 1 ? items[0] : `${items.length} audit warnings need review.`,
+      }));
+    },
+    hiddenWarningCount() {
+      return Math.max(0, this.combinedWarnings.length - this.warningDigest.reduce((sum, item) => {
+        const stationWarnings = this.combinedWarnings.filter((warning) => String(warning).startsWith(`${item.title}:`));
+        return sum + Math.max(1, stationWarnings.length || 1);
+      }, 0));
     },
     auditBadges() {
       const station = this.activeAuditStation;
@@ -539,6 +597,46 @@ export default {
     handleRelayControl(customer) {
       window.location.hash = `#/remote-operation/remote-meter-control?meterId=${customer.meterId}`;
     },
+    exportAuditReport() {
+      if (!this.storeAudit) return;
+      const columns = [
+        { key: "station", label: "Station" },
+        { key: "rows", label: "Store Rows" },
+        { key: "logicalRawRows", label: "Logical Raw Rows" },
+        { key: "liveTotalRows", label: "Live Rows" },
+        { key: "liveMetric", label: "Live Metric" },
+        { key: "deltaStoreVsLive", label: "Store Vs Live Delta" },
+        { key: "deltaStoreVsProgress", label: "Store Vs Progress Delta" },
+        { key: "earliestReadingDate", label: "Earliest Reading" },
+        { key: "latestReadingDate", label: "Latest Reading" },
+        { key: "midnightStatus", label: "Midnight Sync" },
+        { key: "expectedMidnightDate", label: "Expected Midnight Date" },
+        { key: "backfillStatus", label: "Backfill Drift" },
+        { key: "coverageStatus", label: "Coverage" },
+        { key: "freshnessStatus", label: "Freshness" },
+        { key: "warnings", label: "Warnings" },
+      ];
+      const rows = (this.storeAudit.stations || []).map((station) => ({
+        ...station,
+        midnightStatus: station.midnightSync?.status || "unknown",
+        expectedMidnightDate: station.midnightSync?.expectedDate || this.storeAudit.expectedMidnightDate || "",
+        backfillStatus: station.backfillDrift?.status || "unknown",
+        coverageStatus: station.coverage?.status || "unknown",
+        freshnessStatus: station.freshness?.status || "unknown",
+        warnings: (station.warnings || []).join(" | "),
+      }));
+      const meta = [
+        ["Route", window.location.hash || "#/prepay-report/site-consumption"],
+        ["Generated At", this.storeAudit.generatedAt || new Date().toISOString()],
+        ["Expected Midnight Date", this.storeAudit.expectedMidnightDate || ""],
+        ["Completeness", this.storeAudit.overall?.completenessStatus || ""],
+        ["Midnight Sync", this.storeAudit.overall?.midnightSyncStatus || ""],
+        ["Backfill Drift", this.storeAudit.overall?.backfillDriftStatus || ""],
+      ];
+      const baseName = `site-consumption-audit-${new Date().toISOString().slice(0, 10)}`;
+      downloadTextFile(`${baseName}.csv`, exportReportCsvText("Site Consumption Audit", columns, rows, meta), "text/csv;charset=utf-8");
+      downloadTextFile(`${baseName}.xls`, exportReportExcelXml("Site Consumption Audit", columns, rows, meta), "application/vnd.ms-excel");
+    },
   },
 };
 </script>
@@ -552,6 +650,10 @@ export default {
   min-height: 100%;
   box-sizing: border-box;
   font-family: var(--font-family);
+  background:
+    radial-gradient(circle at top left, rgba(var(--primary-rgb, 59, 130, 246), 0.10), transparent 34rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22rem);
+  overflow-x: clip;
 }
 
 .eih-header {
@@ -559,13 +661,19 @@ export default {
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: calc(var(--radius-lg) + 4px);
+  background: linear-gradient(135deg, var(--bg-card), rgba(var(--primary-rgb, 59, 130, 246), 0.06));
+  box-shadow: var(--shadow-md);
 }
 
 .eih-title {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 220px;
 }
 
 .eih-icon {
@@ -597,6 +705,48 @@ export default {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.eih-btn--ghost {
+  background: var(--bg-card);
+  color: var(--text-strong);
+  border: 1px solid var(--border-color);
+}
+
+.sync-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(244, 81, 108, 0.32);
+  background: rgba(244, 81, 108, 0.08);
+  color: var(--text-strong);
+}
+
+.sync-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #f4516c;
+  color: #fff;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.sync-alert-banner strong {
+  display: block;
+  font-size: 13px;
+}
+
+.sync-alert-banner p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .eih-badge-row {
@@ -646,17 +796,42 @@ export default {
 .eih-warning-stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .eih-warning-card {
-  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: minmax(84px, 140px) 1fr;
+  gap: 12px;
+  padding: 13px 16px;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(244, 81, 108, 0.28);
-  background: rgba(244, 81, 108, 0.08);
-  color: var(--text-strong);
-  font-size: 13px;
+  border: 1px solid rgba(244, 81, 108, 0.34);
+  background: linear-gradient(135deg, rgba(244, 81, 108, 0.11), rgba(15, 23, 42, 0.02));
+  color: var(--text-main);
+  font-size: 12px;
   line-height: 1.4;
+}
+
+.eih-warning-title {
+  color: #f97388;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.eih-warning-copy {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.eih-warning-more {
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 184, 34, 0.10);
+  border: 1px dashed rgba(255, 184, 34, 0.32);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .period-pills {
@@ -666,6 +841,7 @@ export default {
   border: 1px solid var(--border-color);
   border-radius: 24px;
   padding: 3px;
+  min-height: 38px;
 }
 
 .period-pill {
@@ -714,7 +890,7 @@ export default {
 }
 
 .ctrl-input {
-  height: 30px;
+  height: 38px;
   padding: 0 8px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
@@ -725,7 +901,7 @@ export default {
 }
 
 .eih-btn {
-  height: 30px;
+  min-height: 38px;
   padding: 0 14px;
   border-radius: var(--radius-md);
   font-size: 12px;
@@ -772,6 +948,7 @@ export default {
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  min-width: 0;
 }
 
 .eih-sidebar {
@@ -858,13 +1035,123 @@ export default {
 }
 
 @media (max-width: 700px) {
+  .eih-page {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .eih-header {
+    padding: 14px;
+    gap: 14px;
+    border-radius: var(--radius-lg);
+  }
+
+  .eih-title {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .eih-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .eih-h1 {
+    font-size: 17px;
+  }
+
+  .eih-sub {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .eih-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .period-pills {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-radius: 18px;
+  }
+
+  .period-pill {
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  .custom-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 10px;
+  }
+
+  .ctrl-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+
+  .eih-btn {
+    width: 100%;
+    min-height: 46px;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .sync-alert-banner {
+    align-items: flex-start;
+    padding: 14px;
+  }
+
+  .eih-warning-card {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .eih-badge-card {
+    padding: 13px 14px;
+  }
+
   .eih-body {
     flex-direction: column;
+    gap: 14px;
   }
 
   .eih-sidebar {
     width: 100%;
     position: static;
+  }
+
+  .view-pills {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    box-sizing: border-box;
+  }
+
+  .view-pill {
+    min-width: 0;
+    height: 42px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 420px) {
+  .period-pill {
+    font-size: 11px;
+  }
+
+  .custom-range {
+    grid-template-columns: 1fr;
   }
 }
 

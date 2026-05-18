@@ -11,7 +11,7 @@
  *   Tier 2: purchases up to ₦200,000/day
  */
 import { adminClient } from '../db/supabase.js';
-import { resolveNin, resolveBvn } from '../adapters/paystack.js';
+import { resolveNin } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
 
 export class KycError extends Error {

@@ -13,7 +13,17 @@ const initials = computed(() => {
     const n = auth.user?.full_name ?? auth.user?.email ?? 'ST';
     return n.slice(0, 2).toUpperCase();
 });
-const CRM_URL = import.meta.env.VITE_CRM_URL ?? 'https://beverly.acoblighting.com';
+
+const defaultCrmBaseUrl = import.meta.env.DEV
+    ? `${window.location.protocol}//${window.location.hostname}:5173`
+    : 'https://beverly.acoblighting.com';
+
+function toCrmDashboardUrl(baseUrl: string) {
+    const [urlWithoutHash] = baseUrl.split('#');
+    return `${urlWithoutHash.replace(/\/+$/, '')}/#/dashboard`;
+}
+
+const CRM_URL = toCrmDashboardUrl(import.meta.env.VITE_CRM_URL ?? defaultCrmBaseUrl);
 
 function openDrawer()  { drawerOpen.value = true; }
 function closeDrawer() { drawerOpen.value = false; }
