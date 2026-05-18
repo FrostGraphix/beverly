@@ -29,6 +29,16 @@ const loading  = ref(false);
 const error    = ref<string | null>(null);
 const copied   = ref(false);
 
+// Step-up auth
+const stepUpRequired  = ref(false);
+const stepUpChallengeId = ref('');
+const stepUpExpiry    = ref('');
+const stepUpOtp       = ref('');
+const stepUpLoading   = ref(false);
+const stepUpError     = ref<string | null>(null);
+// Keep purchase params so we can resubmit after OTP
+let pendingPurchaseParams: { meter_id: string; amount_minor: number; mode: 'wallet' | 'direct_pay'; idempotency_key: string } | null = null;
+
 onMounted(async () => {
     const [m, w] = await Promise.all([
         api.get<{ meters: any[] }>('/api/v1/customer/meters'),
@@ -61,22 +71,65 @@ async function goToPreview() {
 async function purchase() {
     if (!selMeter.value || !preview.value) return;
     loading.value = true; error.value = null;
+    const params = {
+        meter_id:        selMeter.value.meter_id,
+        amount_minor:    amountMinor.value,
+        mode:            mode.value as 'wallet' | 'direct_pay',
+        idempotency_key: crypto.randomUUID(),
+    };
     try {
-        const r = await api.post<any>('/api/v1/customer/purchase', {
-            meter_id: selMeter.value.meter_id,
-            amount_minor: amountMinor.value,
-            mode: mode.value,
-            idempotency_key: crypto.randomUUID(),
-        });
+        const r = await api.post<any>('/api/v1/customer/purchase', params);
+
+        // Fraud engine: step-up required (202)
+        if (r.step_up_required) {
+            pendingPurchaseParams    = params;
+            stepUpChallengeId.value  = r.challenge_id;
+            stepUpExpiry.value       = r.expires_at;
+            stepUpRequired.value     = true;
+            stepUpOtp.value          = '';
+            stepUpError.value        = null;
+            return;
+        }
+
         if (mode.value === 'direct_pay' && r.authorizationUrl) {
             window.location.href = r.authorizationUrl;
             return;
         }
         result.value = r;
-        step.value = 4;
+        step.value   = 4;
     } catch (e: any) {
         error.value = e?.message ?? 'Purchase failed. Try again.';
     } finally { loading.value = false; }
+}
+
+async function submitStepUp() {
+    if (!pendingPurchaseParams || !stepUpOtp.value) return;
+    stepUpLoading.value = true; stepUpError.value = null;
+    try {
+        const r = await api.post<any>('/api/v1/customer/purchase/step-up-verify', {
+            challenge_id:    stepUpChallengeId.value,
+            otp:             stepUpOtp.value.trim(),
+            ...pendingPurchaseParams,
+        });
+        stepUpRequired.value = false;
+        pendingPurchaseParams = null;
+        if (pendingPurchaseParams === null && r.authorizationUrl) {
+            window.location.href = r.authorizationUrl;
+            return;
+        }
+        result.value = r;
+        step.value   = 4;
+    } catch (e: any) {
+        stepUpError.value = e?.message ?? 'Incorrect code. Try again.';
+    } finally { stepUpLoading.value = false; }
+}
+
+function cancelStepUp() {
+    stepUpRequired.value  = false;
+    stepUpChallengeId.value = '';
+    stepUpOtp.value       = '';
+    stepUpError.value     = null;
+    pendingPurchaseParams = null;
 }
 
 function copyToken() {
@@ -214,6 +267,37 @@ function reset() {
       </div>
     </template>
 
+    <!-- Step-up auth modal -->
+    <div v-if="stepUpRequired" class="bw-stepup-backdrop">
+      <div class="bw-stepup-modal">
+        <div style="width:48px; height:48px; border-radius:50%; background:oklch(75% 0.18 85 / 0.15); display:grid; place-items:center; margin:0 auto var(--s-4)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="oklch(75% 0.18 85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <p style="font-weight:700; text-align:center; margin:0 0 var(--s-2)">Security check</p>
+        <p class="bw-muted" style="font-size:var(--t-sm); text-align:center; margin:0 0 var(--s-5)">
+          We sent a 6-digit code to your registered phone. Enter it below to complete your purchase.
+        </p>
+        <input
+          v-model="stepUpOtp"
+          class="bw-input bw-mono"
+          inputmode="numeric"
+          maxlength="6"
+          placeholder="000000"
+          style="text-align:center; font-size:var(--t-2xl); font-weight:700; letter-spacing:0.2em"
+          @keyup.enter="submitStepUp"
+        />
+        <p v-if="stepUpError" class="bw-alert danger" style="font-size:var(--t-sm); margin-top:var(--s-2)">{{ stepUpError }}</p>
+        <button class="bw-btn primary" style="width:100%; justify-content:center; margin-top:var(--s-4)"
+                :disabled="stepUpOtp.length < 6 || stepUpLoading"
+                @click="submitStepUp">
+          {{ stepUpLoading ? 'Verifying…' : 'Verify & complete purchase' }}
+        </button>
+        <button class="bw-btn" style="width:100%; justify-content:center; margin-top:var(--s-2)" @click="cancelStepUp">
+          Cancel
+        </button>
+      </div>
+    </div>
+
     <!-- Step 4: Token reveal -->
     <template v-if="step === 4 && result">
       <div class="bw-card" style="text-align:center">
@@ -236,3 +320,21 @@ function reset() {
     </template>
   </AppShell>
 </template>
+
+<style scoped>
+.bw-stepup-backdrop {
+  position: fixed; inset: 0;
+  background: oklch(0% 0 0 / 0.6);
+  display: grid; place-items: center;
+  z-index: 300;
+  padding: var(--s-4);
+}
+.bw-stepup-modal {
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--s-7);
+  width: min(420px, 100%);
+  display: flex; flex-direction: column;
+}
+</style>

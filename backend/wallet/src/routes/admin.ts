@@ -14,6 +14,7 @@ import {
     approveFundingRequest, rejectFundingRequest, listPendingFunding,
 } from '../services/funding.js';
 import { logAction } from '../services/audit.js';
+import { resolveAssessment } from '../services/fraud-engine.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
@@ -165,6 +166,41 @@ const route: FastifyPluginAsync = async (fastify) => {
             metadata: { technician_name: body.technician_name, notes: body.notes },
         });
         return order;
+    });
+
+    // ── fraud review queue ──
+    fastify.get('/fraud', async (req) => {
+        const { resolved, min_score, limit } = req.query as { resolved?: string; min_score?: string; limit?: string };
+        const minScore = Number(min_score ?? 50);
+        let query = adminClient
+            .from('fraud_assessments')
+            .select('*, fraud_signals(*), customers(users(full_name, phone))')
+            .gte('score', minScore)
+            .order('created_at', { ascending: false })
+            .limit(Math.min(Number(limit ?? 200), 500));
+        if (resolved === 'true')  query = query.eq('resolved', true);
+        if (resolved === 'false') query = query.eq('resolved', false);
+        const { data } = await query;
+        return { assessments: data ?? [] };
+    });
+
+    fastify.patch('/fraud/:id/resolve', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ note: z.string().optional() });
+        const body = schema.parse(req.body);
+        try {
+            await resolveAssessment(id, req.actor!.userId, body.note);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType:   'staff',
+                action:      'fraud.assessment.resolved',
+                targetId:    id,
+                metadata:    { note: body.note },
+            });
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(500).send({ error: 'resolve_failed', message: e.message });
+        }
     });
 
     // ── audit log viewer ──

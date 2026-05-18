@@ -23,7 +23,8 @@
  *   POST   /wallet/fund
  *
  *   POST   /purchase/preview
- *   POST   /purchase
+ *   POST   /purchase               — runs fraud check; may return step_up_required
+ *   POST   /purchase/step-up-verify — verify OTP then complete purchase
  *   GET    /transactions
  *   GET    /receipts
  *   GET    /receipts/:id
@@ -51,6 +52,8 @@ import { findWalletByOwner } from '../services/wallets.js';
 import { getReceiptByOrder } from '../services/vending.js';
 import { logAction } from '../services/audit.js';
 import { initializeTransaction } from '../adapters/paystack.js';
+import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
+import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 
 const customer: FastifyPluginAsync = async (fastify) => {
 
@@ -304,28 +307,123 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!['wallet', 'direct_pay'].includes(mode)) {
             return reply.code(400).send({ error: 'invalid_mode', message: 'mode must be wallet or direct_pay.' });
         }
+
+        const customerId = req.actor!.customerId!;
+        const clientIp   = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                         ?? req.ip ?? null;
+        const userAgent  = req.headers['user-agent'] ?? null;
+
+        // ── Fraud assessment ──────────────────────────────────────────────────
+        const assessment = await assessPurchase({
+            customerId,
+            meterId:     meter_id.trim().toUpperCase(),
+            amountMinor: amount_minor,
+            clientIp,
+            userAgent,
+        });
+
+        if (assessment.action === 'block') {
+            return reply.code(403).send({
+                error:   'purchase_blocked',
+                message: 'This transaction has been blocked due to a security risk. Contact support if you believe this is an error.',
+                fraud_score: assessment.score,
+            });
+        }
+
+        if (assessment.action === 'step_up') {
+            const challenge = await issueStepUpChallenge(customerId);
+            return reply.code(202).send({
+                step_up_required: true,
+                challenge_id:     challenge.challengeId,
+                expires_at:       challenge.expiresAt,
+                message:          'A security code has been sent to your phone. Please verify to complete this purchase.',
+            });
+        }
+
+        // ── Normal purchase ───────────────────────────────────────────────────
         const { data: cu } = await adminClient
             .from('customers')
             .select('full_name, email')
-            .eq('id', req.actor!.customerId!)
+            .eq('id', customerId)
             .single();
         try {
             const result = await customerPurchase({
-                customerId: req.actor!.customerId!,
+                customerId,
                 customerUserId: req.actor!.userId,
-                customerName: (cu as any)?.full_name ?? null,
-                customerEmail: (cu as any)?.email ?? null,
-                meterId: meter_id.trim().toUpperCase(),
-                amountMinor: amount_minor,
+                customerName:   (cu as any)?.full_name ?? null,
+                customerEmail:  (cu as any)?.email ?? null,
+                meterId:        meter_id.trim().toUpperCase(),
+                amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
             });
+            // Link assessment to the resulting purchase order
+            if (result.purchaseOrder?.id) {
+                void linkAssessmentToPurchase(assessment.assessmentId, result.purchaseOrder.id);
+                void refreshCustomerBaseline(customerId);
+            }
             return result;
         } catch (e: any) {
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
-                    : e.code === 'wallet_inactive' ? 403
+                    : e.code === 'wallet_inactive'    ? 403
+                    : 422,
+                ).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/purchase/step-up-verify', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key } = req.body as {
+            challenge_id: string; otp: string;
+            meter_id: string; amount_minor: number;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
+        };
+        if (!challenge_id || !otp || !meter_id || !amount_minor || !mode || !idempotency_key) {
+            return reply.code(400).send({ error: 'missing_fields' });
+        }
+
+        try {
+            await verifyStepUpChallenge(challenge_id, otp);
+        } catch (e: any) {
+            if (e instanceof StepUpError) {
+                return reply.code(
+                    e.code === 'invalid_otp'        ? 422
+                    : e.code === 'challenge_expired' ? 410
+                    : e.code === 'too_many_attempts' ? 429
+                    : 400,
+                ).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+
+        // OTP verified — run purchase directly, bypassing fraud check
+        const customerId = req.actor!.customerId!;
+        const { data: cu } = await adminClient
+            .from('customers')
+            .select('full_name, email')
+            .eq('id', customerId)
+            .single();
+        try {
+            const result = await customerPurchase({
+                customerId,
+                customerUserId: req.actor!.userId,
+                customerName:   (cu as any)?.full_name ?? null,
+                customerEmail:  (cu as any)?.email ?? null,
+                meterId:        meter_id.trim().toUpperCase(),
+                amountMinor:    amount_minor,
+                mode,
+                clientIdempotencyKey: idempotency_key,
+            });
+            void refreshCustomerBaseline(customerId);
+            return result;
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) {
+                return reply.code(
+                    e.code === 'insufficient_balance' ? 402
+                    : e.code === 'wallet_inactive'    ? 403
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
