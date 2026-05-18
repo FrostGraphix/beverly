@@ -32,7 +32,7 @@ export const routeManifest = [
   // Wallet — opens the standalone wallet admin app in a new tab.
   // Staff: localhost:5175 (dev) / admin.beverly.acoblighting.com (prod)
   // Vendor portal: localhost:5174 (dev) — vendors log in there directly.
-  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "https://admin.beverly.acoblighting.com", devExternalUrl: "http://localhost:5175", roles: ["super-admin", "account", "finance-checker"] },
+  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "https://admin.beverly.acoblighting.com", devExternalUrl: "http://localhost:5175", roles: ["super-admin"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLT645", hash: "#/protocol/dlt645", apis: ["/api/dlt645/read"], columns: ["id", "version", "type", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Remote Support", title: "GPRS Tasks", hash: "#/remote-support/gprs-tasks", apis: ["/api/GPRSMeterTask/GPRSGetReadingTask"], columns: ["id", "gatewayId", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add Task", "Export"], roles: ["super-admin", "operations-manager"] },

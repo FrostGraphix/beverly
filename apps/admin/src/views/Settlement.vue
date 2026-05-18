@@ -12,36 +12,55 @@
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
-    <div v-else class="bw-table-wrapper">
-      <table class="bw-table">
-        <thead>
-          <tr>
-            <th>Period</th>
-            <th>Vendor</th>
-            <th>Gross Sales</th>
-            <th>Platform Fee</th>
-            <th>Net Payable</th>
-            <th>Txns</th>
-            <th>Status</th>
-            <th>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="b in batches" :key="b.id">
-            <td class="bw-mono bw-text-sm">{{ b.period_date }}</td>
-            <td class="bw-mono bw-text-sm">{{ b.vendor_organization_id?.slice(0, 8) }}…</td>
-            <td>₦{{ fmtAmount(b.gross_sales_minor) }}</td>
-            <td>₦{{ fmtAmount(b.platform_fee_minor) }}</td>
-            <td class="bw-font-semibold">₦{{ fmtAmount(b.net_payable_minor) }}</td>
-            <td>{{ b.transaction_count }}</td>
-            <td><span :class="statusClass(b.status)" class="bw-badge">{{ b.status }}</span></td>
-            <td class="bw-text-sm">{{ fmtDate(b.created_at) }}</td>
-          </tr>
-          <tr v-if="!batches.length">
-            <td colspan="8" class="bw-empty">No settlement batches found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Vendor</th>
+              <th>Gross Sales</th>
+              <th>Platform Fee</th>
+              <th>Net Payable</th>
+              <th>Txns</th>
+              <th>Status</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in batches" :key="b.id">
+              <td class="bw-mono bw-text-sm">{{ b.period_date }}</td>
+              <td class="bw-mono bw-text-sm">{{ b.vendor_organization_id?.slice(0, 8) }}…</td>
+              <td>₦{{ fmtAmount(b.gross_sales_minor) }}</td>
+              <td>₦{{ fmtAmount(b.platform_fee_minor) }}</td>
+              <td style="font-weight:600">₦{{ fmtAmount(b.net_payable_minor) }}</td>
+              <td>{{ b.transaction_count }}</td>
+              <td><span :class="statusClass(b.status)" class="bw-badge">{{ b.status }}</span></td>
+              <td class="bw-text-sm">{{ fmtDate(b.created_at) }}</td>
+            </tr>
+            <tr v-if="!batches.length">
+              <td colspan="8" class="bw-empty">No settlement batches found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!batches.length" class="bw-empty">No settlement batches found.</div>
+        <div v-for="b in batches" :key="b.id" class="bw-tc">
+          <div class="bw-tc-head">
+            <span class="bw-mono" style="font-size:var(--t-sm)">{{ b.period_date }}</span>
+            <span :class="statusClass(b.status)" class="bw-badge">{{ b.status }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Net Payable</span><span class="bw-tc-pair-val">₦{{ fmtAmount(b.net_payable_minor) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Gross Sales</span><span class="bw-tc-pair-val">₦{{ fmtAmount(b.gross_sales_minor) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Platform Fee</span><span class="bw-tc-pair-val">₦{{ fmtAmount(b.platform_fee_minor) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Txns</span><span class="bw-tc-pair-val">{{ b.transaction_count }}</span></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -85,5 +104,5 @@ onMounted(load);
 </script>
 
 <style scoped>
-.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; }
+.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 </style>

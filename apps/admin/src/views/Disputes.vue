@@ -18,34 +18,55 @@
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
-    <div v-else class="bw-table-wrapper">
-      <table class="bw-table">
-        <thead>
-          <tr>
-            <th>Reference</th>
-            <th>Subject</th>
-            <th>Raised By</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="d in disputes" :key="d.id">
-            <td class="bw-mono">{{ d.reference }}</td>
-            <td>{{ d.subject }}</td>
-            <td class="bw-text-sm">{{ d.raised_by_actor_type }}</td>
-            <td><span :class="statusClass(d.status)" class="bw-badge">{{ d.status }}</span></td>
-            <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
-            <td>
-              <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDispute(d)">Review</button>
-            </td>
-          </tr>
-          <tr v-if="!disputes.length">
-            <td colspan="6" class="bw-empty">No disputes found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Subject</th>
+              <th>Raised By</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="d in disputes" :key="d.id">
+              <td class="bw-mono">{{ d.reference }}</td>
+              <td>{{ d.subject }}</td>
+              <td class="bw-text-sm">{{ d.raised_by_actor_type }}</td>
+              <td><span :class="statusClass(d.status)" class="bw-badge">{{ d.status }}</span></td>
+              <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
+              <td>
+                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDispute(d)">Review</button>
+              </td>
+            </tr>
+            <tr v-if="!disputes.length">
+              <td colspan="6" class="bw-empty">No disputes found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!disputes.length" class="bw-empty">No disputes found.</div>
+        <div v-for="d in disputes" :key="d.id" class="bw-tc">
+          <div class="bw-tc-head">
+            <span class="bw-mono bw-tc-ref">{{ d.reference }}</span>
+            <span :class="statusClass(d.status)" class="bw-badge">{{ d.status }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Subject</span><span class="bw-tc-pair-val">{{ d.subject }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Raised by</span><span class="bw-tc-pair-val">{{ d.raised_by_actor_type }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Date</span><span class="bw-tc-pair-val">{{ fmtDate(d.created_at) }}</span></div>
+          </div>
+          <div class="bw-tc-foot">
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDispute(d)">Review</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Detail Modal -->
@@ -174,13 +195,14 @@ onMounted(load);
 </script>
 
 <style scoped>
-.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; }
+.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .bw-messages { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 1rem; max-height: 240px; overflow-y: auto; }
-.bw-message { background: var(--bw-surface-2); border-radius: var(--bw-radius-sm); padding: .5rem .75rem; }
-.bw-message-staff { background: var(--bw-brand-50); }
-.bw-message-actor { font-size: .7rem; font-weight: 600; text-transform: uppercase; color: var(--bw-text-muted); display: block; }
+.bw-message { background: var(--surface); border-radius: var(--r-md); padding: .5rem .75rem; }
+.bw-message-staff { background: oklch(from var(--brand) l c h / 0.10); }
+.bw-message-actor { font-size: .7rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; }
 .bw-message-body { margin: .25rem 0; font-size: .875rem; }
-.bw-message-time { font-size: .7rem; color: var(--bw-text-muted); }
-.bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--bw-text-muted); margin: 1rem 0 .25rem; }
-.bw-textarea { width: 100%; margin-bottom: .75rem; }
+.bw-message-time { font-size: .7rem; color: var(--text-muted); }
+.bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin: 1rem 0 .25rem; }
+.bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-tc-ref { font-size: var(--t-sm); }
 </style>

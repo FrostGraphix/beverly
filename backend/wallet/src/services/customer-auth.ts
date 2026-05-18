@@ -71,7 +71,9 @@ function issueJwt(userId: string): string {
         exp: now + 60 * 60 * 24 * 30, // 30 days
     }));
     const sigInput = `${header}.${payload}`;
-    const sig = crypto.createHmac('sha256', env.SUPABASE_JWT_SECRET).update(sigInput).digest();
+    const jwtSecret = env.SUPABASE_JWT_SECRET;
+    if (!jwtSecret) throw new Error('SUPABASE_JWT_SECRET is required for customer JWT issuance');
+    const sig = crypto.createHmac('sha256', jwtSecret).update(sigInput).digest();
     return `${sigInput}.${b64url(sig)}`;
 }
 

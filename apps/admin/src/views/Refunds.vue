@@ -17,38 +17,59 @@
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
-    <div v-else class="bw-table-wrapper">
-      <table class="bw-table">
-        <thead>
-          <tr>
-            <th>Wallet</th>
-            <th>Amount</th>
-            <th>Reason</th>
-            <th>Requested By</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in refunds" :key="r.id">
-            <td class="bw-mono bw-text-sm">{{ r.wallet_id?.slice(0, 8) }}…</td>
-            <td>₦{{ fmtAmount(r.amount_minor) }}</td>
-            <td>{{ r.reason }}</td>
-            <td class="bw-text-sm">{{ r.requested_by_user_id?.slice(0, 8) }}…</td>
-            <td><span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span></td>
-            <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
-            <td v-if="r.status === 'pending'" class="bw-action-cell">
-              <button class="bw-btn bw-btn-success bw-btn-sm" @click="approve(r)">Approve</button>
-              <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
-            </td>
-            <td v-else></td>
-          </tr>
-          <tr v-if="!refunds.length">
-            <td colspan="7" class="bw-empty">No refunds found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Wallet</th>
+              <th>Amount</th>
+              <th>Reason</th>
+              <th>Requested By</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in refunds" :key="r.id">
+              <td class="bw-mono bw-text-sm">{{ r.wallet_id?.slice(0, 8) }}…</td>
+              <td>₦{{ fmtAmount(r.amount_minor) }}</td>
+              <td>{{ r.reason }}</td>
+              <td class="bw-text-sm">{{ r.requested_by_user_id?.slice(0, 8) }}…</td>
+              <td><span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span></td>
+              <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
+              <td v-if="r.status === 'pending'" class="bw-action-cell">
+                <button class="bw-btn bw-btn-primary bw-btn-sm" @click="approve(r)">Approve</button>
+                <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+              </td>
+              <td v-else></td>
+            </tr>
+            <tr v-if="!refunds.length">
+              <td colspan="7" class="bw-empty">No refunds found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!refunds.length" class="bw-empty">No refunds found.</div>
+        <div v-for="r in refunds" :key="r.id" class="bw-tc">
+          <div class="bw-tc-head">
+            <span>₦{{ fmtAmount(r.amount_minor) }}</span>
+            <span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Reason</span><span class="bw-tc-pair-val">{{ r.reason }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Created</span><span class="bw-tc-pair-val">{{ fmtDate(r.created_at) }}</span></div>
+          </div>
+          <div v-if="r.status === 'pending'" class="bw-tc-foot">
+            <button class="bw-btn bw-btn-primary bw-btn-sm" @click="approve(r)">Approve</button>
+            <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Reject modal -->
@@ -146,7 +167,6 @@ onMounted(load);
 </script>
 
 <style scoped>
-.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; }
-.bw-action-cell { display: flex; gap: .5rem; }
-.bw-textarea { width: 100%; }
+.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.bw-tc-foot { display: flex; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 </style>

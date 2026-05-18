@@ -3,28 +3,68 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 
-const router = useRouter();
-const auth   = useStaffAuthStore();
-const email  = ref('');
-const devToken = ref('');
-const error  = ref<string | null>(null);
+const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+const STAFF_ROLES = new Set(['super-admin', 'account', 'finance-checker', 'operations-manager']);
+
+const router  = useRouter();
+const auth    = useStaffAuthStore();
+const email   = ref('');
+const password = ref('');
+const error   = ref<string | null>(null);
 const loading = ref(false);
 
 async function signIn() {
-    loading.value = true; error.value = null;
+    if (!email.value || !password.value) {
+        error.value = 'Email and password are required.';
+        return;
+    }
+    loading.value = true;
+    error.value   = null;
     try {
-        if (devToken.value) {
-            auth.setSession(devToken.value, {
-                id: 'staff-dev',
-                email: email.value || 'dev@beverly',
-                full_name: 'Dev Staff',
-                role: 'super-admin',
-            });
-            await router.push('/');
+        const res = await fetch(
+            `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,
+                },
+                body: JSON.stringify({ email: email.value, password: password.value }),
+            },
+        );
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            error.value = data.error_description ?? data.msg ?? 'Sign-in failed.';
             return;
         }
-        error.value = 'SSO from main CRM coming in next iteration. Paste a Supabase token below.';
-    } finally { loading.value = false; }
+
+        const accessToken: string = data.access_token;
+        const user = data.user;
+        const role: string | undefined =
+            user?.user_metadata?.role ?? user?.app_metadata?.role;
+
+        if (!role || !STAFF_ROLES.has(role)) {
+            error.value = 'Access denied. Staff account required.';
+            return;
+        }
+
+        auth.setSession(accessToken, {
+            id:        user.id,
+            email:     user.email ?? null,
+            full_name: user.user_metadata?.full_name ?? null,
+            role,
+        });
+
+        await router.push('/');
+    } catch {
+        error.value = 'Network error. Please try again.';
+    } finally {
+        loading.value = false;
+    }
 }
 </script>
 
@@ -40,23 +80,35 @@ async function signIn() {
       <form class="bw-stack" @submit.prevent="signIn">
         <div>
           <label class="bw-label">Email</label>
-          <input class="bw-input" v-model="email" type="email" autocomplete="email" placeholder="staff@beverly.ng" />
+          <input
+            class="bw-input"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            placeholder="staff@acoblighting.com"
+            required
+          />
         </div>
         <div>
           <label class="bw-label">Password</label>
-          <input class="bw-input" type="password" autocomplete="current-password" placeholder="••••••••" />
+          <input
+            class="bw-input"
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+          />
         </div>
-
-        <details style="font-size: var(--t-xs)">
-          <summary class="bw-muted" style="cursor:pointer; user-select:none">Dev: paste Supabase token</summary>
-          <div style="margin-top: var(--s-2)">
-            <input class="bw-input bw-mono" v-model="devToken" placeholder="eyJ…" />
-          </div>
-        </details>
 
         <div v-if="error" class="bw-alert danger">{{ error }}</div>
 
-        <button class="bw-btn primary lg" type="submit" :disabled="loading" style="justify-content:center; width:100%">
+        <button
+          class="bw-btn primary lg"
+          type="submit"
+          :disabled="loading"
+          style="justify-content:center; width:100%"
+        >
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>

@@ -1379,3 +1379,63 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
   .bw-table  { display: none; }
   .bw-t-cards { display: block; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   COMPAT ALIASES — dash-form equivalents for modifier classes
+   Allows bw-btn-primary alongside bw-btn primary, etc.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Button variants */
+.bw-btn-primary  { --btn-bg: var(--brand);   --btn-text: #fff; --btn-border: var(--brand); --btn-hover: var(--brand-600); }
+.bw-btn-danger   { --btn-bg: var(--red);     --btn-text: #fff; --btn-border: var(--red);   --btn-hover: oklch(from var(--red) calc(l - 0.05) c h); }
+.bw-btn-ghost    { --btn-bg: transparent;    --btn-text: var(--text); --btn-border: var(--border); --btn-hover: var(--surface); }
+.bw-btn-primary, .bw-btn-danger, .bw-btn-ghost {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  height: 36px; padding: 0 var(--s-4);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm); font-weight: 600;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg); color: var(--btn-text);
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: background var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.bw-btn-primary:hover, .bw-btn-danger:hover, .bw-btn-ghost:hover { background: var(--btn-hover); }
+.bw-btn-sm { height: 30px; padding: 0 var(--s-3); font-size: var(--t-xs); }
+.bw-btn-lg { height: 44px; padding: 0 var(--s-6); font-size: var(--t-base); }
+
+/* Badge variants */
+.bw-badge-success { background: oklch(from var(--green) l c h / 0.15); color: var(--green); border-color: oklch(from var(--green) l c h / 0.30); }
+.bw-badge-warning { background: oklch(from var(--amber) l c h / 0.15); color: var(--amber); border-color: oklch(from var(--amber) l c h / 0.30); }
+.bw-badge-error   { background: oklch(from var(--red)   l c h / 0.15); color: var(--red);   border-color: oklch(from var(--red)   l c h / 0.30); }
+.bw-badge-neutral { background: var(--surface); color: var(--text-muted); border-color: var(--border); }
+.bw-badge-brand   { background: oklch(from var(--brand) l c h / 0.15); color: var(--brand); border-color: oklch(from var(--brand) l c h / 0.30); }
+.bw-badge-success, .bw-badge-warning, .bw-badge-error, .bw-badge-neutral, .bw-badge-brand {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px var(--s-2); border-radius: var(--r-full);
+  font-size: var(--t-2xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid transparent;
+}
+
+/* Modal aliases */
+.bw-modal-header { padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.bw-modal-footer { padding: var(--s-4) var(--s-5); border-top:    1px solid var(--border); display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
+.bw-modal-body   { padding: var(--s-5); }
+
+/* Page layout helpers */
+.bw-page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--s-3);
+  margin-bottom: var(--s-5);
+}
+.bw-page-header h1 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+
+/* Misc utility aliases */
+.bw-error-banner { background: oklch(from var(--red) l c h / 0.10); border: 1px solid oklch(from var(--red) l c h / 0.25); border-radius: var(--r-md); padding: var(--s-3) var(--s-4); color: var(--red); font-size: var(--t-sm); margin-bottom: var(--s-4); }
+.bw-loading      { text-align: center; color: var(--text-muted); padding: var(--s-8) var(--s-4); font-size: var(--t-sm); }
+.bw-empty        { text-align: center; color: var(--text-muted); padding: var(--s-8) var(--s-4); font-size: var(--t-sm); }
+.bw-form-group   { display: flex; flex-direction: column; gap: var(--s-1); }
+.bw-action-cell  { display: flex; align-items: center; gap: var(--s-2); white-space: nowrap; }
+.bw-table-wrapper { overflow-x: auto; border-radius: var(--r-xl); border: 1px solid var(--border); }
+.bw-textarea     { width: 100%; min-height: 80px; padding: var(--s-2) var(--s-3); border-radius: var(--r-md); background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: var(--t-sm); font-family: var(--font-sans); resize: vertical; outline: none; }
+.bw-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }

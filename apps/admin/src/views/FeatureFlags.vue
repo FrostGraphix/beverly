@@ -8,38 +8,58 @@
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
-    <div v-else class="bw-table-wrapper">
-      <table class="bw-table">
-        <thead>
-          <tr>
-            <th>Key</th>
-            <th>Description</th>
-            <th>Status</th>
-            <th>Rollout</th>
-            <th>Regions</th>
-            <th>Updated</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="f in flags" :key="f.key">
-            <td class="bw-mono bw-text-sm">{{ f.key }}</td>
-            <td class="bw-text-sm">{{ f.description }}</td>
-            <td>
-              <span :class="f.enabled ? 'bw-badge-success' : 'bw-badge-neutral'" class="bw-badge">
-                {{ f.enabled ? 'ON' : 'OFF' }}
-              </span>
-            </td>
-            <td class="bw-text-sm">{{ f.rollout_percent }}%</td>
-            <td class="bw-text-sm">{{ f.regions?.length ? f.regions.join(', ') : 'All' }}</td>
-            <td class="bw-text-sm">{{ fmtDate(f.updated_at) }}</td>
-            <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openEdit(f)">Edit</button></td>
-          </tr>
-          <tr v-if="!flags.length">
-            <td colspan="7" class="bw-empty">No flags found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Rollout</th>
+              <th>Regions</th>
+              <th>Updated</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in flags" :key="f.key">
+              <td class="bw-mono bw-text-sm">{{ f.key }}</td>
+              <td class="bw-text-sm">{{ f.description }}</td>
+              <td>
+                <span :class="f.enabled ? 'bw-badge-success' : 'bw-badge-neutral'" class="bw-badge">
+                  {{ f.enabled ? 'ON' : 'OFF' }}
+                </span>
+              </td>
+              <td class="bw-text-sm">{{ f.rollout_percent }}%</td>
+              <td class="bw-text-sm">{{ f.regions?.length ? f.regions.join(', ') : 'All' }}</td>
+              <td class="bw-text-sm">{{ fmtDate(f.updated_at) }}</td>
+              <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openEdit(f)">Edit</button></td>
+            </tr>
+            <tr v-if="!flags.length">
+              <td colspan="7" class="bw-empty">No flags found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!flags.length" class="bw-empty">No flags found.</div>
+        <div v-for="f in flags" :key="f.key" class="bw-tc">
+          <div class="bw-tc-head">
+            <span class="bw-mono" style="font-size:var(--t-sm)">{{ f.key }}</span>
+            <span :class="f.enabled ? 'bw-badge-success' : 'bw-badge-neutral'" class="bw-badge">{{ f.enabled ? 'ON' : 'OFF' }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Rollout</span><span class="bw-tc-pair-val">{{ f.rollout_percent }}%</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Regions</span><span class="bw-tc-pair-val">{{ f.regions?.length ? f.regions.join(', ') : 'All' }}</span></div>
+          </div>
+          <div class="bw-tc-foot">
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openEdit(f)">Edit</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Edit Modal -->
@@ -194,18 +214,15 @@ onMounted(load);
 .bw-flag-toggle { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
 .bw-toggle {
   padding: .25rem .75rem;
-  border-radius: var(--bw-radius-sm);
-  border: 1.5px solid var(--bw-border);
-  background: var(--bw-surface-2);
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
   font-weight: 600;
   font-size: .8rem;
   transition: background 0.15s, border-color 0.15s;
 }
-.bw-toggle-on {
-  background: var(--bw-brand);
-  border-color: var(--bw-brand);
-  color: white;
-}
-.bw-range { width: 100%; accent-color: var(--bw-brand); }
+.bw-toggle-on { background: var(--brand); border-color: var(--brand); color: white; }
+.bw-range { width: 100%; accent-color: var(--brand); }
+.bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 </style>

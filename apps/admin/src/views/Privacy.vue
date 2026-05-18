@@ -18,39 +18,61 @@
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
-    <div v-else class="bw-table-wrapper">
-      <table class="bw-table">
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Reason</th>
-            <th>Status</th>
-            <th>Requested</th>
-            <th>Scheduled For</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in requests" :key="r.id">
-            <td>
-              <div class="bw-text-sm">{{ r.customers?.users?.full_name ?? '—' }}</div>
-              <div class="bw-text-xs bw-text-muted">{{ r.customers?.users?.phone }}</div>
-            </td>
-            <td class="bw-text-sm">{{ r.reason ?? '—' }}</td>
-            <td><span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span></td>
-            <td class="bw-text-sm">{{ fmtDate(r.requested_at) }}</td>
-            <td class="bw-text-sm">{{ fmtDate(r.scheduled_for) }}</td>
-            <td v-if="r.status === 'pending'" class="bw-action-cell">
-              <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
-              <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
-            </td>
-            <td v-else></td>
-          </tr>
-          <tr v-if="!requests.length">
-            <td colspan="6" class="bw-empty">No deletion requests found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Requested</th>
+              <th>Scheduled For</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in requests" :key="r.id">
+              <td>
+                <div class="bw-text-sm">{{ r.customers?.users?.full_name ?? '—' }}</div>
+                <div style="font-size:var(--t-xs);color:var(--text-muted)">{{ r.customers?.users?.phone }}</div>
+              </td>
+              <td class="bw-text-sm">{{ r.reason ?? '—' }}</td>
+              <td><span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span></td>
+              <td class="bw-text-sm">{{ fmtDate(r.requested_at) }}</td>
+              <td class="bw-text-sm">{{ fmtDate(r.scheduled_for) }}</td>
+              <td v-if="r.status === 'pending'" class="bw-action-cell">
+                <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
+                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
+              </td>
+              <td v-else></td>
+            </tr>
+            <tr v-if="!requests.length">
+              <td colspan="6" class="bw-empty">No deletion requests found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!requests.length" class="bw-empty">No deletion requests found.</div>
+        <div v-for="r in requests" :key="r.id" class="bw-tc">
+          <div class="bw-tc-head">
+            <span style="font-size:var(--t-sm);font-weight:600">{{ r.customers?.users?.full_name ?? '—' }}</span>
+            <span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Reason</span><span class="bw-tc-pair-val">{{ r.reason ?? '—' }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Requested</span><span class="bw-tc-pair-val">{{ fmtDate(r.requested_at) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Scheduled</span><span class="bw-tc-pair-val">{{ fmtDate(r.scheduled_for) }}</span></div>
+          </div>
+          <div v-if="r.status === 'pending'" class="bw-tc-foot">
+            <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Review Modal -->
@@ -148,8 +170,7 @@ onMounted(load);
 </script>
 
 <style scoped>
-.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; }
-.bw-action-cell { display: flex; gap: .5rem; }
-.bw-alert-warning { background: oklch(90% 0.12 80); border-radius: var(--bw-radius-sm); padding: .5rem .75rem; border-left: 3px solid oklch(70% 0.18 80); }
-.bw-textarea { width: 100%; }
+.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.bw-alert-warning { background: oklch(90% 0.12 80); border-radius: var(--r-md); padding: .5rem .75rem; border-left: 3px solid oklch(70% 0.18 80); }
+.bw-tc-foot { display: flex; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 </style>
