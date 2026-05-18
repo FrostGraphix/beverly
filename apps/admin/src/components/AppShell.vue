@@ -61,6 +61,12 @@ function closeDrawer() { drawerOpen.value = false; }
           Vending Monitor
         </RouterLink>
 
+        <div class="bw-nav-section">Field Ops</div>
+        <RouterLink to="/meter-orders" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Meter Orders
+        </RouterLink>
+
         <div class="bw-nav-section">Compliance</div>
         <RouterLink to="/audit" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>

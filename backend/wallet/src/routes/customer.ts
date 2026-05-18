@@ -27,8 +27,14 @@
  *   GET    /transactions
  *   GET    /receipts
  *   GET    /receipts/:id
+ *
+ *   POST   /meter-orders
+ *   GET    /meter-orders
+ *   GET    /meter-orders/:id
+ *   POST   /meter-orders/:id/verify-payment
  */
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import {
     requestOtp, verifyOtp, AuthError,
@@ -44,6 +50,7 @@ import {
 import { findWalletByOwner } from '../services/wallets.js';
 import { getReceiptByOrder } from '../services/vending.js';
 import { logAction } from '../services/audit.js';
+import { initializeTransaction } from '../adapters/paystack.js';
 
 const customer: FastifyPluginAsync = async (fastify) => {
 
@@ -350,6 +357,109 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(100);
         return { receipts: data ?? [] };
+    });
+
+    // ── METER ORDERS ─────────────────────────────────────────────────────────
+
+    fastify.post('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            meter_type:      z.enum(['single_phase', 'three_phase']),
+            property_address: z.string().min(5),
+            service_area:    z.string().min(2),
+            contact_phone:   z.string().min(8),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const amount_minor = body.meter_type === 'three_phase' ? 7_500_000 : 5_000_000; // ₦75k / ₦50k
+        const reference    = `mord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        const { data: user } = await adminClient
+            .from('users')
+            .select('email, full_name')
+            .eq('id', req.actor!.userId)
+            .single();
+
+        // Initialize Paystack transaction
+        const ps = await initializeTransaction({
+            email:     (user as any)?.email ?? '',
+            amountMinor: amount_minor,
+            reference,
+            metadata:  { customer_id: req.actor!.customerId, order_type: 'meter_purchase' },
+            callbackUrl: `${process.env.CUSTOMER_APP_URL ?? 'http://localhost:5173'}/meter-orders?ref=${reference}`,
+        });
+        if (!ps.authorization_url) {
+            return reply.code(502).send({ error: 'paystack_error', message: 'Could not initialize payment' });
+        }
+
+        const { data: order, error } = await adminClient
+            .from('meter_purchase_orders')
+            .insert({
+                customer_id:      req.actor!.customerId!,
+                meter_type:       body.meter_type,
+                property_address: body.property_address,
+                service_area:     body.service_area,
+                contact_phone:    body.contact_phone,
+                amount_minor,
+                payment_reference: reference,
+                status:           'pending_payment',
+            })
+            .select()
+            .single();
+        if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
+
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.created', targetId: (order as any).id, metadata: { meter_type: body.meter_type } });
+        return { order, authorization_url: ps.authorization_url };
+    });
+
+    fastify.get('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { data } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*')
+            .eq('customer_id', req.actor!.customerId!)
+            .order('created_at', { ascending: false })
+            .limit(50);
+        return { orders: data ?? [] };
+    });
+
+    fastify.get('/meter-orders/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { data } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .eq('customer_id', req.actor!.customerId!)
+            .single();
+        if (!data) return reply.code(404).send({ error: 'not_found' });
+        return data;
+    });
+
+    fastify.post('/meter-orders/:id/verify-payment', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { data: order } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .eq('customer_id', req.actor!.customerId!)
+            .single();
+        if (!order) return reply.code(404).send({ error: 'not_found' });
+        if ((order as any).status !== 'pending_payment') return order;
+
+        // Verify with Paystack
+        const res = await fetch(`https://api.paystack.co/transaction/verify/${(order as any).payment_reference}`, {
+            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
+        });
+        const ps: any = await res.json();
+        if (ps.data?.status === 'success') {
+            await adminClient
+                .from('meter_purchase_orders')
+                .update({ status: 'paid', updated_at: new Date().toISOString() })
+                .eq('id', id);
+            await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.payment_confirmed', targetId: id });
+            return { ...(order as any), status: 'paid' };
+        }
+        return order;
     });
 
     fastify.get('/receipts/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {

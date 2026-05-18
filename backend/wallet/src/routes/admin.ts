@@ -13,6 +13,7 @@ import {
 import {
     approveFundingRequest, rejectFundingRequest, listPendingFunding,
 } from '../services/funding.js';
+import { logAction } from '../services/audit.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
@@ -120,6 +121,50 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (q) query = query.ilike('meter_id', `%${q}%`);
         const { data } = await query;
         return { purchases: data ?? [] };
+    });
+
+    // ── meter purchase orders ──
+    fastify.get('/meter-orders', async (req) => {
+        const { status, q } = req.query as { status?: string; q?: string };
+        let query = adminClient
+            .from('meter_purchase_orders')
+            .select('*, customers(users(full_name, email, phone))')
+            .order('created_at', { ascending: false })
+            .limit(200);
+        if (status) query = query.eq('status', status);
+        if (q) query = query.or(`property_address.ilike.%${q}%,service_area.ilike.%${q}%`);
+        const { data } = await query;
+        return { orders: data ?? [] };
+    });
+
+    fastify.patch('/meter-orders/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']),
+            technician_name: z.string().optional(),
+            notes: z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const { data: order, error } = await adminClient
+            .from('meter_purchase_orders')
+            .update({ ...body, updated_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
+        if (!order) return reply.code(404).send({ error: 'not_found' });
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            action: `meter_order.${body.status}`,
+            targetId: id,
+            metadata: { technician_name: body.technician_name, notes: body.notes },
+        });
+        return order;
     });
 
     // ── audit log viewer ──
