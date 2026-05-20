@@ -9,6 +9,51 @@ function pad(value) {
   return String(value).padStart(2, "0");
 }
 
+function weekStartDate(dateText) {
+  const text = String(dateText || "").slice(0, 10);
+  if (text.length < 10) return "";
+  const d = new Date(text + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  const dow = d.getUTCDay();
+  const shift = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + shift);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+function groupKeyYearly(dateText) {
+  return String(dateText || "").slice(0, 4);
+}
+
+export function buildConsumptionPeriodRange(periodKey) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const ago = (days) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - days);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  switch (periodKey) {
+    case "daily":    return { from: ago(29),  to: todayStr, granularity: "daily" };
+    case "weekly":   return { from: ago(83),  to: todayStr, granularity: "weekly" };
+    case "monthly": {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() - 11);
+      d.setDate(1);
+      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`, to: todayStr, granularity: "monthly" };
+    }
+    case "annually": {
+      const d = new Date(today);
+      d.setFullYear(d.getFullYear() - 4);
+      d.setMonth(0);
+      d.setDate(1);
+      return { from: `${d.getFullYear()}-01-01`, to: todayStr, granularity: "yearly" };
+    }
+    case "all":
+    default:
+      return { from: "2020-01-01", to: todayStr, granularity: "monthly" };
+  }
+}
+
 export function defaultConsumptionStatisticsFilters(now = new Date()) {
   const end = new Date(now);
   const start = new Date(now);
@@ -216,18 +261,25 @@ function groupKey(row, granularity) {
 
 export function aggregateConsumptionRows(rows = [], granularity = "daily") {
   const grouped = new Map();
+  if (!Array.isArray(rows)) return [];
 
   for (const row of rows) {
-    const key = groupKey(row, granularity);
+    let key;
+    if (granularity === "weekly") {
+      key = weekStartDate(row.collectionDate);
+    } else if (granularity === "yearly") {
+      key = groupKeyYearly(row.collectionDate);
+    } else {
+      key = groupKey(row, granularity);
+    }
     if (!key) continue;
-    const current = grouped.get(key) || 0;
-    grouped.set(key, current + toNumber(row.consumption, 0));
+    grouped.set(key, (grouped.get(key) || 0) + toNumber(row.consumption, 0));
   }
 
   return Array.from(grouped.entries())
-    .sort((left, right) => left[0].localeCompare(right[0]))
-    .map(([collectionDate, consumption], index) => ({
-      id: `${granularity}-${collectionDate}-${index}`,
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([collectionDate, consumption], idx) => ({
+      id: `${granularity}-${collectionDate}-${idx}`,
       collectionDate,
       consumption: Number(consumption.toFixed(3))
     }));
@@ -249,7 +301,21 @@ function inclusiveMonthCount(dateFrom, dateTo) {
   return ((end.getUTCFullYear() - start.getUTCFullYear()) * 12) + (end.getUTCMonth() - start.getUTCMonth()) + 1;
 }
 
+function inclusiveWeekCount(dateFrom, dateTo) {
+  const days = inclusiveDayCount(dateFrom, dateTo);
+  return days ? Math.ceil(days / 7) : 0;
+}
+
+function inclusiveYearCount(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return 0;
+  const start = new Date(`${dateFrom}T00:00:00.000Z`);
+  const end = new Date(`${dateTo}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  return end.getUTCFullYear() - start.getUTCFullYear() + 1;
+}
+
 export function decorateConsumptionRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
   return rows.map((row, index) => {
     const previous = rows[index - 1];
     const previousValue = toNumber(previous?.consumption, 0);
@@ -264,11 +330,16 @@ export function decorateConsumptionRows(rows = []) {
 }
 
 export function summarizeConsumptionRows(rows = [], filters = {}) {
+  if (!Array.isArray(rows)) rows = [];
   const total = rows.reduce((sum, row) => sum + toNumber(row.consumption, 0), 0);
   const reportingDays = rows.length;
-  const expectedDays = filters.granularity === "monthly"
-    ? inclusiveMonthCount(filters.dateFrom, filters.dateTo)
-    : inclusiveDayCount(filters.dateFrom, filters.dateTo);
+  let expectedDays;
+  switch (filters.granularity) {
+    case "monthly": expectedDays = inclusiveMonthCount(filters.dateFrom, filters.dateTo); break;
+    case "weekly":  expectedDays = inclusiveWeekCount(filters.dateFrom, filters.dateTo); break;
+    case "yearly":  expectedDays = inclusiveYearCount(filters.dateFrom, filters.dateTo); break;
+    default:        expectedDays = inclusiveDayCount(filters.dateFrom, filters.dateTo);
+  }
   const zeroDays = rows.filter((row) => toNumber(row.consumption, 0) === 0).length;
   const peak = rows.reduce((best, row) => (toNumber(row.consumption, 0) > toNumber(best?.consumption, -1) ? row : best), null);
 
@@ -382,6 +453,75 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
         ]
       },
       data: rows.map((row) => row.consumption)
+    }]
+  };
+}
+
+export function buildBarChartOption(rows = [], granularity = "daily", theme = {}, title = "") {
+  const primary = theme.primary || "#059669";
+  const textMuted = theme.textMuted || "#64748b";
+  const grid = theme.grid || theme.border || "#d1fae5";
+
+  return {
+    tooltip: {
+      trigger: "axis",
+      valueFormatter: (v) => `${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })} kWh`
+    },
+    grid: { left: 60, right: 16, top: 36, bottom: 48 },
+    xAxis: {
+      type: "category",
+      data: rows.map((r) => r.collectionDate),
+      axisLabel: { color: textMuted, rotate: rows.length > 24 ? 30 : 0, fontSize: 11 },
+      axisLine: { lineStyle: { color: primary } }
+    },
+    yAxis: {
+      type: "value",
+      name: "kWh",
+      min: 0,
+      axisLabel: { color: textMuted },
+      nameTextStyle: { color: textMuted, fontSize: 11 },
+      splitLine: { lineStyle: { color: grid } }
+    },
+    series: [{
+      name: title || "kWh",
+      type: "bar",
+      barMaxWidth: 48,
+      itemStyle: { color: primary, borderRadius: [4, 4, 0, 0] },
+      data: rows.map((r) => r.consumption)
+    }]
+  };
+}
+
+export function buildStationBarChartOption(stationRows = [], theme = {}) {
+  const textMuted = theme.textMuted || "#64748b";
+  const grid = theme.grid || "#d1fae5";
+  const sorted = [...stationRows].sort((a, b) => b.total - a.total);
+
+  return {
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: (v) => `${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+    },
+    grid: { left: 80, right: 24, top: 16, bottom: 24 },
+    xAxis: {
+      type: "value",
+      name: "kWh",
+      axisLabel: { color: textMuted, fontSize: 11 },
+      splitLine: { lineStyle: { color: grid } }
+    },
+    yAxis: {
+      type: "category",
+      data: sorted.map((s) => s.label),
+      axisLabel: { color: textMuted, fontSize: 12, fontWeight: 700 }
+    },
+    series: [{
+      type: "bar",
+      barMaxWidth: 40,
+      data: sorted.map((s) => ({
+        value: s.total,
+        itemStyle: { color: s.color, borderRadius: [0, 4, 4, 0] }
+      }))
     }]
   };
 }
