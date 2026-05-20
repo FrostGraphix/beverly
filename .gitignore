@@ -4,6 +4,7 @@
 node_modules/
 dist/
 backend/data/*.sqlite
+.claude/
 tmp-*.log
 tmp-*.err.log
 replica-screenshots/diffs/

@@ -81,7 +81,6 @@ export function normalizeConsumptionDateKey(value, granularity = "daily") {
   if (Number.isNaN(parsed.getTime())) return "";
   return normalizeDateObject(parsed, granularity);
 }
-
 export function buildConsumptionPeriodRange(periodKey) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
