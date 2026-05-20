@@ -42,7 +42,7 @@ const {
   writeDailyMeterRows,
   ingestWebhookReadings
 } = require("../backend/src/services/consumption-store");
-const { runIncrementalSync, runFullBackfill } = require("../backend/src/services/consumption-sync-service");
+const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -1622,18 +1622,6 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       ...cronQuery(request.url),
       mode: "backfill"
     }));
-  }
-  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/consumption-sync") {
-    if (!cronAuthorized(request)) {
-      return { status: 401, body: { code: 401, msg: "Unauthorized", _proxy: { source: "cron-auth", pathname } } };
-    }
-    return localJobResponse(await runIncrementalSync());
-  }
-  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/consumption-backfill") {
-    if (!cronAuthorized(request)) {
-      return { status: 401, body: { code: 401, msg: "Unauthorized", _proxy: { source: "cron-auth", pathname } } };
-    }
-    return localJobResponse(await runFullBackfill(100));
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
     if (!cronAuthorized(request)) {
