@@ -398,6 +398,9 @@
 <script>
 import EChartPanel from "./EChartPanel.vue";
 import PickerModal from "./PickerModal.vue";
+import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
 import { postApi } from "../services/api.js";
 import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
 import {
@@ -460,7 +463,7 @@ export default {
     hash:  { type: String, default: "" },
     route: { type: Object, default: () => ({}) }
   },
-  components: { EChartPanel, PickerModal },
+  components: { BaseButton, BaseIconButton, BaseInput, EChartPanel, PickerModal },
 
   data() {
     const today = new Date().toISOString().slice(0, 10);
@@ -646,7 +649,7 @@ export default {
     this._doFetchStations();
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
   },
 

@@ -374,8 +374,14 @@ async function emailPasswordToken(email: string, password: string): Promise<{ ac
         },
         body: JSON.stringify({ email, password }),
     });
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch(() => ({})) as {
+        access_token?: unknown;
+        user?: { id?: unknown };
+    };
     if (!res.ok || !body.access_token || !body.user?.id) {
+        throw new AuthError('Invalid email or password.', 'invalid_credentials');
+    }
+    if (typeof body.access_token !== 'string' || typeof body.user.id !== 'string') {
         throw new AuthError('Invalid email or password.', 'invalid_credentials');
     }
     return { accessToken: body.access_token, userId: body.user.id };

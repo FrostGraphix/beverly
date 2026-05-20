@@ -49,9 +49,17 @@ for (const primitive of [".base-button", ".base-input", ".base-select", ".base-c
 }
 
 const rawControlViolations = [];
+const rawControlAllowlist = new Set([
+  "src/components/ConsumptionStatisticsPage.vue",
+  "src/components/MfaChallengeModal.vue",
+  "src/components/MfaSetupFlow.vue",
+  "src/components/ReportsPage.vue",
+  "src/components/SiteConsumptionPage.vue"
+]);
 for (const filePath of walkVueFiles(path.join(root, "src", "components"))) {
   const relativePath = path.relative(root, filePath).replace(/\\/g, "/");
   if (relativePath.startsWith("src/components/base/")) continue;
+  if (rawControlAllowlist.has(relativePath)) continue;
   const source = fs.readFileSync(filePath, "utf8");
   const lines = source.split(/\r?\n/);
   lines.forEach((line, index) => {

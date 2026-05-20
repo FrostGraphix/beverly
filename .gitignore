@@ -4,6 +4,7 @@
 node_modules/
 dist/
 backend/data/*.sqlite
+tmp/*.sqlite
 .claude/
 tmp-*.log
 tmp-*.err.log

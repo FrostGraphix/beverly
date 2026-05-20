@@ -12,7 +12,8 @@
     { "path": "/api/cron/refresh-hot", "schedule": "0 6 * * *" },
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
-    { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" }
+    { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/consumption-sync", "schedule": "0 0,6,12,18 * * *" }
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },

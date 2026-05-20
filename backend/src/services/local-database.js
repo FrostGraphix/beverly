@@ -10,7 +10,7 @@ try {
   DatabaseSync = null;
 }
 
-const defaultDatabasePath = path.resolve(__dirname, "..", "..", "data", "reference-crm.sqlite");
+const defaultDatabasePath = path.resolve(__dirname, "..", "..", "..", "tmp", "reference-crm.sqlite");
 
 let database = null;
 let activePath = "";

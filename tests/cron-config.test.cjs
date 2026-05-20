@@ -14,9 +14,11 @@ assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hot" && cron
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hourly" && cron.schedule === "0 12 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-daily" && cron.schedule === "0 23 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-backfill" && cron.schedule === "0 18 * * *"));
+assert(vercel.crons.some((cron) => cron.path === "/api/cron/consumption-sync" && cron.schedule === "0 0,6,12,18 * * *"));
 assert(api.includes("CRON_SECRET"), "cron secret check missing");
 assert(api.includes("runRefreshJob"), "refresh runner missing");
 assert(api.includes("writeDailyMeterRows"), "refresh runner must store daily meter rows");
+assert(api.includes("runConsumptionSync"), "smart consumption sync missing");
 
 console.log(JSON.stringify({
   crons: vercel.crons.length,

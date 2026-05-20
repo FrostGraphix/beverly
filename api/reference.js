@@ -42,6 +42,7 @@ const {
   writeDailyMeterRows,
   ingestWebhookReadings
 } = require("../backend/src/services/consumption-store");
+const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -550,6 +551,15 @@ function cronAuthorized(request) {
   const secret = process.env.CRON_SECRET || "";
   if (!secret && process.env.NODE_ENV !== "production") return true;
   return String(request.headers.authorization || "") === `Bearer ${secret}`;
+}
+
+function cronQuery(urlValue) {
+  try {
+    const params = new URL(String(urlValue || "/"), "http://localhost").searchParams;
+    return Object.fromEntries(params.entries());
+  } catch {
+    return {};
+  }
 }
 
 function refreshScopeFromPath(pathname) {
@@ -1575,6 +1585,44 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     }
     return localJobResponse(await runRefreshJob(refreshScopeFromPath(pathname)));
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/consumption-sync") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    return localJobResponse(await runConsumptionSync({
+      ...cronQuery(request.url),
+      mode: "incremental"
+    }));
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/consumption-backfill") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    return localJobResponse(await runConsumptionSync({
+      ...cronQuery(request.url),
+      mode: "backfill"
+    }));
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
     if (!cronAuthorized(request)) {
       return {
@@ -1598,7 +1646,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       readMode: getEnv().readMode,
       liveProxyEnabled: getEnv().liveProxyEnabled,
       allowLiveWrites: getEnv().allowLiveWrites,
-      databasePath: process.env.LOCAL_DB_PATH || "backend/data/reference-crm.sqlite"
+      databasePath: process.env.LOCAL_DB_PATH || "tmp/reference-crm.sqlite"
     });
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/live-report") {

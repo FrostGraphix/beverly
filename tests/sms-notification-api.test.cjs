@@ -210,6 +210,22 @@ async function main() {
     assert(list.body.data.rows.some((row) => row.messageSid === "SM1234567890abcdef" && row.status === "delivered"));
     assert(list.body.data.rows.some((row) => row.messageSid === "VE1234567890abcdef" && row.status === "approved"));
 
+    process.env.SMS_ALLOWED_COUNTRY_CODES = "+234";
+    const blocked = await post(port, "/api/notifications/verify/send", {
+      to: "+15558675310",
+      channel: "sms",
+      reference: "blocked-otp-123"
+    });
+    assert.strictEqual(blocked.status, 403);
+    assert.strictEqual(blocked.body.msg, "SMS is only available for approved destinations");
+
+    const auditList = await post(port, "/api/notifications/sms/list", { limit: 10 });
+    assert(auditList.body.data.rows.some((row) => (
+      row.from === "sms-guardrail"
+      && row.status === "blocked"
+      && row.errorCode === "sms_country_not_allowed"
+    )));
+
     console.log(JSON.stringify({
       status: "sms notification api passed",
       messageSid: "SM1234567890abcdef",

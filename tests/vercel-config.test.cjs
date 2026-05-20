@@ -13,6 +13,7 @@ function assert(condition, message) {
 
 assert(!fs.existsSync(path.join(root, "now.json")), "legacy now.json must not exist");
 assert(packageJson.engines?.node === "22.x", "package.json engines.node must pin Vercel to 22.x");
+assert(packageJson.packageManager === "pnpm@10.28.0", "package.json packageManager must pin Vercel pnpm");
 assert(vercelJson.version === 2, "vercel.json must stay on version 2");
 assert(!("functions" in vercelJson), "vercel.json must not set custom runtimes for current api functions");
 assert(Array.isArray(vercelJson.rewrites), "vercel rewrites must exist");

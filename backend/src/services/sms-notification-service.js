@@ -52,12 +52,28 @@ function assertSmsDestinationAllowed(phone, purpose = "notification") {
   const allowed = splitCountryCodes(process.env.SMS_ALLOWED_COUNTRY_CODES, "+234");
   const blocked = splitCountryCodes(process.env.SMS_BLOCKED_COUNTRY_CODES);
   if (blocked.includes(countryCode)) {
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "blocked",
+      code: "sms_country_blocked",
+      reason: "country_blocked",
+      countryCode
+    });
     const error = new Error("SMS is not available for this destination");
     error.status = 403;
     error.code = "sms_country_blocked";
     throw error;
   }
   if (allowed.length && !allowed.includes(countryCode)) {
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "blocked",
+      code: "sms_country_not_allowed",
+      reason: "country_not_allowed",
+      countryCode
+    });
     const error = new Error("SMS is only available for approved destinations");
     error.status = 403;
     error.code = "sms_country_not_allowed";
@@ -78,6 +94,15 @@ function assertSmsTrafficLimit(phone, purpose) {
   const recent = (smsTrafficMemory.get(key) || []).filter((ts) => ts > cutoff);
   if (recent.length >= max) {
     smsTrafficMemory.set(key, recent);
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "rate_limited",
+      code: "sms_rate_limited",
+      reason: "window_exceeded",
+      windowSeconds,
+      max
+    });
     const error = new Error("Too many SMS requests. Try again later");
     error.status = 429;
     error.code = "sms_rate_limited";
@@ -105,6 +130,35 @@ function sanitizeMetadata(value) {
       .filter(([key]) => !/token|secret|password|authorization/i.test(key))
       .map(([key, entry]) => [key, entry])
   );
+}
+
+function recordSmsGuardrailDecision(entry = {}) {
+  try {
+    const to = String(entry.to || "");
+    const purpose = String(entry.purpose || "notification");
+    const code = String(entry.code || "sms_guardrail");
+    localDatabase.recordSmsNotification({
+      messageSid: `AUDIT-${crypto.randomUUID()}`,
+      to,
+      from: "sms-guardrail",
+      body: "SMS guardrail decision",
+      status: String(entry.status || "blocked"),
+      errorCode: code,
+      errorMessage: String(entry.reason || code),
+      reference: `${purpose}:${to.slice(-4) || "unknown"}`,
+      details: {
+        provider: "local-guardrail",
+        purpose,
+        phoneSuffix: to.slice(-4),
+        countryCode: entry.countryCode,
+        reason: entry.reason,
+        max: entry.max,
+        windowSeconds: entry.windowSeconds
+      }
+    });
+  } catch {
+    // Audit must not break guardrail enforcement.
+  }
 }
 
 function twilioFormPayload(fields) {

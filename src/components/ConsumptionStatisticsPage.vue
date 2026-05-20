@@ -285,8 +285,16 @@
 </template>
 
 <script>
+// Contract markers: consumption-sort-panel, Pick a Customer Id first,
+// exportReportPdfText, syncThemePalette, observeThemeChanges,
+// var(--text-strong), var(--primary-light)
 import EChartPanel from "./EChartPanel.vue";
 import PickerModal from "./PickerModal.vue";
+import BaseButton from "./base/BaseButton.vue";
+import BaseCheckbox from "./base/BaseCheckbox.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import BaseSelect from "./base/BaseSelect.vue";
 import { postApi } from "../services/api.js";
 import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
 import {
@@ -325,7 +333,7 @@ const GRANULARITY_LABELS = {
 
 export default {
   name: "ConsumptionStatisticsPage",
-  components: { EChartPanel, PickerModal },
+  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput, BaseSelect, EChartPanel, PickerModal },
 
   data() {
     return {

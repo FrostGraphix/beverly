@@ -67,9 +67,11 @@ assert.match(migration, /add value if not exists 'sms_blocked'/);
 
 assert.match(legacySms, /assertSmsDestinationAllowed/);
 assert.match(legacySms, /assertSmsTrafficLimit/);
+assert.match(legacySms, /recordSmsGuardrailDecision/);
 assert.match(legacySms, /SMS_ALLOWED_COUNTRY_CODES/);
 assert.match(legacySms, /sms_country_not_allowed/);
 assert.match(smsApiTest, /SMS_ALLOWED_COUNTRY_CODES/);
+assert.match(smsApiTest, /sms-guardrail/);
 assert.match(customerOtpTest, /SMS_OTP_RATE_LIMIT_MAX/);
 
 console.log('sms guardrails contract passed');
