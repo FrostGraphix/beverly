@@ -276,9 +276,10 @@ async function main() {
         },
         body: Buffer.from(JSON.stringify({ page: 1 }))
       });
-      assert.strictEqual(accountRead.status, 200);
-      assert.strictEqual(accountRead.body._proxy.source, "sample");
-      assert(accountRead.body.result.data.length > 0);
+      assert.strictEqual(accountRead.status, 502);
+      assert.strictEqual(accountRead.body._proxy.source, "live-required");
+      assert.strictEqual(accountRead.body.data, null);
+      assert.strictEqual(accountRead.body.result, null);
 
       const customerRead = await request(proxyPort, "POST", "/api/customer/read", {
         headers: {
@@ -290,7 +291,7 @@ async function main() {
       assert.strictEqual(customerRead.status, 200);
       assert.strictEqual(customerRead.body._proxy.source, "live");
       assert.strictEqual(customerRead.body.result.total, 2456);
-      assert.strictEqual(customerRead.body.result.data.length, 500);
+      assert.strictEqual(customerRead.body.result.data.length, 20);
       assert.strictEqual(customerRead.body.result.data[0].customerId, "LIVE-CUSTOMER-0001");
 
       const customerReadPage2 = await request(proxyPort, "POST", "/api/customer/read", {
@@ -303,8 +304,8 @@ async function main() {
       assert.strictEqual(customerReadPage2.status, 200);
       assert.strictEqual(customerReadPage2.body._proxy.source, "live");
       assert.strictEqual(customerReadPage2.body.result.total, 2456);
-      assert.strictEqual(customerReadPage2.body.result.data.length, 500);
-      assert.strictEqual(customerReadPage2.body.result.data[0].customerId, "LIVE-CUSTOMER-0501");
+      assert.strictEqual(customerReadPage2.body.result.data.length, 20);
+      assert.strictEqual(customerReadPage2.body.result.data[0].customerId, "LIVE-CUSTOMER-0021");
 
       const itemRead = await request(proxyPort, "POST", "/api/item/read", {
         headers: {
@@ -441,9 +442,64 @@ async function main() {
         },
         body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 500 }))
       });
-      assert.strictEqual(customerUnavailable.status, 200);
-      assert.strictEqual(customerUnavailable.body._proxy.source, "sample");
-      assert(customerUnavailable.body.result.data.length > 0);
+      assert.strictEqual(customerUnavailable.status, 502);
+      assert.strictEqual(customerUnavailable.body._proxy.source, "live-required");
+      assert.strictEqual(customerUnavailable.body.data, null);
+      assert.strictEqual(customerUnavailable.body.result, null);
+    });
+
+    await withEnv({
+      LOCAL_DB_PATH: dbPath,
+      SUPABASE_AUTH_ENABLED: "true",
+      SUPABASE_URL: "http://127.0.0.1:1",
+      SUPABASE_ANON_KEY: "anon-test",
+      LIVE_API_PROXY_ENABLED: "true",
+      LIVE_API_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      LIVE_API_BEARER_TOKEN: "env-token",
+      ALLOW_LIVE_WRITES: "false"
+    }, async () => {
+      const blockedUserRead = await request(proxyPort, "POST", "/api/user/read", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ userId: "admin", pageNumber: 1, pageSize: 1 }))
+      });
+      assert.strictEqual(blockedUserRead.status, 401);
+      assert.strictEqual(blockedUserRead.body._proxy.source, "authz");
+
+      const trustedCustomerRead = await request(proxyPort, "POST", "/api/customer/read", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 2, pageSize: 500, orderBy: "id asc" }))
+      });
+      assert.strictEqual(trustedCustomerRead.status, 200);
+      assert.strictEqual(trustedCustomerRead.body._proxy.source, "live");
+      assert.strictEqual(trustedCustomerRead.body.result.total, 2456);
+      assert.strictEqual(trustedCustomerRead.body.result.data[0].customerId, "LIVE-CUSTOMER-0021");
+      const sanitizedCustomerRequest = upstreamRequests.find((entry) => entry.url === "/api/customer/read" && entry.body.includes("customerId asc"));
+      assert(sanitizedCustomerRequest, "customer live proxy must normalize stale id sort keys");
+      assert(sanitizedCustomerRequest.body.includes('"pageSize":20'), "customer live proxy must cap stale page sizes");
+
+      const trustedAccountRead = await request(proxyPort, "POST", "/api/account/read", {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 500, orderBy: "id asc" }))
+      });
+      assert.strictEqual(trustedAccountRead.status, 502);
+      assert.strictEqual(trustedAccountRead.body._proxy.source, "live-required");
+      const sanitizedAccountRequest = upstreamRequests.find((entry) => entry.url === "/api/account/read" && entry.body.includes("customerId asc"));
+      assert(sanitizedAccountRequest, "account live proxy must normalize stale id sort keys");
+      assert(sanitizedAccountRequest.body.includes('"pageSize":20'), "account live proxy must cap stale page sizes");
+
+      const mfaFactorsAlias = await request(proxyPort, "GET", "/auth/mfa/factors");
+      assert.strictEqual(mfaFactorsAlias.status, 200);
+      assert.deepStrictEqual(mfaFactorsAlias.body.result.factors, []);
+
+      const mfaFactorsApiPath = await request(proxyPort, "GET", "/api/auth/mfa/factors");
+      assert.strictEqual(mfaFactorsApiPath.status, 200);
+      assert.deepStrictEqual(mfaFactorsApiPath.body.result.factors, []);
     });
 
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");

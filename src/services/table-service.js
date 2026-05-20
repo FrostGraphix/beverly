@@ -6,6 +6,7 @@ import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSize
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
+const liveReadPageSize = 20;
 const maxTableRows = 20000;
 export const tableSiteOptions = [
   { value: "", label: "All sites" },
@@ -43,10 +44,76 @@ function stationFilter(options) {
   return options.siteId ? { stationId: options.siteId } : {};
 }
 
+function searchFilter(options) {
+  const searchTerm = String(options.searchTerm || "").trim();
+  return searchTerm ? { searchTerm } : {};
+}
+
+function normalizeLiveReadOrderBy(orderBy, keyMap = {}) {
+  const rawOrderBy = String(orderBy || "").trim();
+  if (!rawOrderBy) return "";
+  const [rawKey, rawDirection = "asc"] = rawOrderBy.split(/\s+/);
+  const mappedKey = keyMap[String(rawKey || "").toLowerCase()];
+  if (!mappedKey) return "";
+  const direction = String(rawDirection || "").toLowerCase() === "desc" ? "desc" : "asc";
+  return `${mappedKey} ${direction}`;
+}
+
+const customerOrderByKeys = {
+  id: "customerId",
+  customerid: "customerId",
+  name: "customerName",
+  customername: "customerName"
+};
+
+const accountOrderByKeys = {
+  id: "customerId",
+  customerid: "customerId",
+  name: "customerName",
+  customername: "customerName",
+  meterid: "meterId",
+  tariffid: "tariffId",
+  communicationway: "communicationWay",
+  ctratio: "ctRatio",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const gatewayOrderByKeys = {
+  id: "gatewayId",
+  gatewayid: "gatewayId",
+  name: "gatewayName",
+  gatewayname: "gatewayName",
+  status: "status",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const tariffOrderByKeys = {
+  id: "tariffId",
+  tariffid: "tariffId",
+  name: "tariffName",
+  tariffname: "tariffName",
+  price: "price",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
 export function routeSupportsSiteFilter(route) {
   return route.hash.startsWith("#/remote-operation-record/")
     || route.hash.startsWith("#/prepay-report/")
     || route.hash.startsWith("#/remote-support/");
+}
+
+function routeUsesServerPagination(route) {
+  const hash = String(route?.hash || "");
+  return hash.includes("management/customer")
+    || hash.includes("management/account")
+    || hash.includes("management/gateway")
+    || hash.includes("management/tariff")
+    || hash.startsWith("#/remote-operation/");
 }
 
 export function tableDataPath(route) {
@@ -124,6 +191,57 @@ function buildTableRequest(route, requestOptions) {
       pagination: "pageNumber"
     };
   }
+  if (lowerPath.includes("/api/customer/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/gateway/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/tariff/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/account/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
   if (lowerPath.includes("/api/prepayreport/longnonpurchasesituation")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
@@ -153,7 +271,17 @@ export function tableRequest(route, options = {}) {
   const requestOptions = tableOptions(options);
   const req = buildTableRequest(route, requestOptions);
   if (requestOptions.orderBy && req.payload && typeof req.payload === 'object') {
-    req.payload.orderBy = requestOptions.orderBy;
+    const lowerPath = req.path.toLowerCase();
+    const orderBy = lowerPath === "/api/customer/read"
+      ? normalizeLiveReadOrderBy(requestOptions.orderBy, customerOrderByKeys)
+      : lowerPath === "/api/account/read"
+        ? normalizeLiveReadOrderBy(requestOptions.orderBy, accountOrderByKeys)
+        : lowerPath === "/api/gateway/read"
+          ? normalizeLiveReadOrderBy(requestOptions.orderBy, gatewayOrderByKeys)
+          : lowerPath === "/api/tariff/read"
+            ? normalizeLiveReadOrderBy(requestOptions.orderBy, tariffOrderByKeys)
+            : requestOptions.orderBy;
+    if (orderBy) req.payload.orderBy = orderBy;
   }
   return req;
 }
@@ -286,6 +414,16 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
   }
 
   const pageCount = Math.min(Math.ceil(total / requestedSize), Math.ceil(maxTableRows / requestedSize));
+  if (request.path.toLowerCase() === "/api/account/read") {
+    for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
+      const pageResponse = await sendTableRequest(withPage(request, pageIndex), api);
+      const added = pushUniqueRows(rows, responseRows(pageResponse, route).rows, seenKeys, route);
+      if (!added || rows.length >= maxTableRows) break;
+    }
+    const finalRows = rows.slice(0, Math.min(total || rows.length, maxTableRows));
+    return { rows: finalRows, total: Math.min(total || finalRows.length, finalRows.length) };
+  }
+
   const pageRequests = [];
   for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
     pageRequests.push(sendTableRequest(withPage(request, pageIndex), api));
@@ -304,6 +442,19 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
 export async function fetchTableData(route, options = {}, api = defaultTableApi) {
   const request = tableRequest(route, options);
   const dataPath = request.path;
+  if (routeUsesServerPagination(route)) {
+    const collection = responseRows(await sendTableRequest(request, api), route);
+    const mapped = mapTableCollection({ data: { rows: collection.rows, total: collection.total } }, route);
+    return {
+      ...mapped,
+      serverPaginated: true,
+      meta: {
+        path: request.path,
+        method: request.method,
+        source: mapped.envelope?._proxy?.source || "mapped"
+      }
+    };
+  }
   const backgroundPaths = route.apis.filter((path) => path.toLowerCase() !== dataPath.toLowerCase() && !isWriteEndpoint(path));
   await Promise.all(backgroundPaths.map((path) => api.postApi(path, { pageNumber: 1, pageSize: 20 }).catch(() => null)));
   const collection = await fetchAllTableRows(request, route, api);
@@ -327,4 +478,4 @@ export function printModelForRoute(route, row) {
 }
 
 
-export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };
+export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, totalPages };

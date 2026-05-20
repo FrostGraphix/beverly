@@ -1,0 +1,39 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "crm",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:web"],
+      "port": 9311
+    },
+    {
+      "name": "wallet-backend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "backend/wallet",
+      "port": 4000
+    },
+    {
+      "name": "customer",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "apps/customer",
+      "port": 5173
+    },
+    {
+      "name": "vendor",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "apps/vendor",
+      "port": 5174
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "cwd": "apps/admin",
+      "port": 5175
+    }
+  ]
+}

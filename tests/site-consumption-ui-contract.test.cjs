@@ -12,9 +12,6 @@ function read(relativePath) {
 
 const appVue = read("src/App.vue");
 const siteConsumptionPage = read("src/components/SiteConsumptionPage.vue");
-const kpiCardGrid = read("src/components/consumption/KpiCardGrid.vue");
-const stationBarChart = read("src/components/consumption/StationBarChart.vue");
-const temporalLineChart = read("src/components/consumption/TemporalLineChart.vue");
 
 assert.match(
   appVue,
@@ -28,85 +25,63 @@ assert.match(
   "App should keep DailyDataMeterPage on its dedicated branch"
 );
 
+// New three-view architecture: All Sites / By Station / By Customer
 assert.match(
   siteConsumptionPage,
-  /onChartsReady: \(\{ sales, consumption \}\) => \{/,
-  "SiteConsumptionPage should accept the nested chart payload contract"
-);
-
-assert.match(
-  siteConsumptionPage,
-  /activePeriod: "all"/,
-  "SiteConsumptionPage should default to the full data view"
+  /key: "all".*key: "station".*key: "customer"/s,
+  "SiteConsumptionPage should expose the All Sites / By Station / By Customer views"
 );
 
 assert.match(
   siteConsumptionPage,
-  /periodRange\("all"\)/,
-  "SiteConsumptionPage should seed the default range from all available data"
+  /activePeriod: "monthly"/,
+  "SiteConsumptionPage should default to the monthly period"
 );
 
 assert.match(
   siteConsumptionPage,
-  /onRangeReady: \(\{ from, to \}\) => \{/,
-  "SiteConsumptionPage should accept the resolved first data date"
+  /periodPlan\(\)/,
+  "SiteConsumptionPage should resolve a period plan (range + fetch granularity + bucket)"
 );
 
 assert.match(
   siteConsumptionPage,
-  /readingDayCount === 0 && meterCount === 0/,
-  "SiteConsumptionPage should only show no-reading copy when no meter readings exist"
+  /fetchConsumptionStatistics\(/,
+  "SiteConsumptionPage should fetch live consumption data per station"
 );
 
 assert.match(
   siteConsumptionPage,
-  /this\.chartData = \{ sales, consumption \};/,
-  "SiteConsumptionPage should store sales and consumption chart groups together"
+  /_doFetchStations/,
+  "SiteConsumptionPage should fetch every station in parallel for the All Sites/By Station views"
 );
 
 assert.match(
   siteConsumptionPage,
-  /chartMode === "sales"\s*\?\s*this\.chartData\.sales\.stationBar\s*:\s*this\.chartData\.consumption\.stationBar/,
-  "SiteConsumptionPage should switch station charts by chart mode"
+  /loadCustomer/,
+  "SiteConsumptionPage should resolve and fetch per-customer consumption"
 );
 
 assert.match(
-  kpiCardGrid,
-  /key: "revenueShortfall"/,
-  "KpiCardGrid should render the revenue shortfall card"
+  siteConsumptionPage,
+  /_aggregate\(rows, bucket\)/,
+  "SiteConsumptionPage should bucket rows into day/week/month/year totals"
+);
+
+// Design-system + scalability hooks
+assert.match(
+  siteConsumptionPage,
+  /_stationGen/,
+  "SiteConsumptionPage should guard against stale station responses with a generation counter"
 );
 
 assert.match(
-  kpiCardGrid,
-  /const netGapSub = kpi\.netRevenueGap == null/,
-  "KpiCardGrid should expose the net gap summary state"
-);
-
-assert.match(
-  stationBarChart,
-  /mode: \{ type: String, default: "sales" \}/,
-  "StationBarChart should accept a chart mode prop"
-);
-
-assert.match(
-  stationBarChart,
-  /renderConsumptionComparison\(echarts\)/,
-  "StationBarChart should support consumption comparison rendering"
-);
-
-assert.match(
-  temporalLineChart,
-  /mode: \{ type: String, default: "sales" \}/,
-  "TemporalLineChart should accept a chart mode prop"
-);
-
-assert.match(
-  temporalLineChart,
-  /renderConsumptionChart\(echarts\)/,
-  "TemporalLineChart should support the consumption trend path"
+  siteConsumptionPage,
+  /BaseButton/,
+  "SiteConsumptionPage controls should consume the shared design system"
 );
 
 console.log(JSON.stringify({
   status: "site consumption ui contract passed",
-  checks: 15
+  checks: 11
 }, null, 2));

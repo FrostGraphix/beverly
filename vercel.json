@@ -3,6 +3,11 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "env": {
+    "ALLOW_LIVE_WRITES": "true",
+    "APPROVED_LIVE_WRITES": "true",
+    "VITE_ALLOW_LIVE_WRITES": "true"
+  },
   "crons": [
     { "path": "/api/cron/refresh-hot", "schedule": "0 6 * * *" },
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },

@@ -48,20 +48,20 @@ assert.match(
 
 assert.match(
   siteConsumptionPageSource,
-  /buildHash\(view = this\.activeView, stationId = this\.filters\.stationId\)/,
+  /buildHash\(view = this\.activeView, station = this\.activeStation\)/,
   "SiteConsumptionPage should build deep-link hashes centrally"
 );
 
 assert.match(
   siteConsumptionPageSource,
-  /window\.location\.hash = this\.buildHash\(view, this\.filters\.stationId\);/,
-  "SiteConsumptionPage should preserve station context when changing subviews"
+  /window\.location\.hash = nextHash/,
+  "SiteConsumptionPage should push the rebuilt hash when view/station changes"
 );
 
 assert.match(
   siteConsumptionPageSource,
-  /window\.location\.hash = this\.buildHash\(nextView, stationId\);/,
-  "SiteConsumptionPage should deep-link station jumps from summary cards"
+  /syncFromHash\(\)/,
+  "SiteConsumptionPage should re-sync view and station when the hash changes"
 );
 
 console.log(JSON.stringify({

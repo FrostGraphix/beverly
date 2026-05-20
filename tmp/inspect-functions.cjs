@@ -1,0 +1,3 @@
+const { Client } = require('pg');
+const client = new Client({host:'db.qpoipyqgrjsjdvfqmxok.supabase.co',port:5432,database:'postgres',user:'postgres',password:'Abdul$amad123',ssl:{rejectUnauthorized:false}});
+(async()=>{ await client.connect(); const r=await client.query(`select p.proname, pg_get_function_arguments(p.oid) args, pg_get_function_result(p.oid) result from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('fn_post_ledger_entry','fn_capture_hold','fn_release_hold')`); console.log(JSON.stringify(r.rows,null,2)); await client.end(); })();

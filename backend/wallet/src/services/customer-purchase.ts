@@ -22,6 +22,12 @@ import { initializeTransaction } from '../adapters/paystack.js';
 import { sendSms } from '../adapters/twilio.js';
 import { env } from '../config/env.js';
 import { createReceipt, type PurchaseOrder } from './vending.js';
+import {
+    assertSmsCountryAllowed,
+    assertTokenSmsResendAllowed,
+    SmsGuardrailError,
+    type SmsTrafficKind,
+} from './sms-guardrails.js';
 
 export class CustomerPurchaseError extends Error {
     constructor(message: string, public code: string) {
@@ -83,6 +89,8 @@ export async function sendTokenSmsToCustomer(input: {
     amountMinor: number;
     units: number;
     receiptId?: string | null;
+    trafficKind?: Extract<SmsTrafficKind, 'token_delivery' | 'token_resend'>;
+    actorUserId?: string | null;
 }): Promise<TokenSmsResult> {
     if (!input.token) return { sent: false, sid: null, status: null, reason: 'token_missing' };
     const token = input.token;
@@ -93,12 +101,45 @@ export async function sendTokenSmsToCustomer(input: {
         .single();
     const phone = (customer as any)?.phone as string | null;
     if (!phone) return { sent: false, sid: null, status: null, reason: 'customer_phone_missing' };
+    let to = phone;
+    try {
+        const decision = input.trafficKind === 'token_resend'
+            ? await assertTokenSmsResendAllowed({
+                kind: 'token_resend',
+                phone,
+                actorUserId: input.actorUserId ?? input.customerId,
+                actorType: input.actorUserId ? 'customer' : 'system',
+                receiptId: input.receiptId,
+                metadata: { meterId: input.meterId },
+            })
+            : await assertSmsCountryAllowed({
+                kind: 'token_delivery',
+                phone,
+                actorUserId: input.actorUserId ?? input.customerId,
+                actorType: 'system',
+                metadata: { meterId: input.meterId },
+            });
+        to = decision.phone;
+    } catch (error) {
+        if (error instanceof SmsGuardrailError) {
+            return { sent: false, sid: null, status: null, reason: error.code };
+        }
+        throw error;
+    }
     const msg = await sendSms({
-        to: phone,
+        to,
         body: tokenSmsBody({ ...input, token }),
         from: env.TWILIO_TOKEN_SMS_FROM_NUMBER || env.TWILIO_FROM_NUMBER,
         messagingServiceSid: env.TWILIO_TOKEN_SMS_MESSAGING_SERVICE_SID || undefined,
         idempotencyKey: `token-sms:${input.receiptId ?? input.meterId}:${input.token}`,
+    });
+    await logAction({
+        actorUserId: input.actorUserId ?? input.customerId,
+        actorType: input.actorUserId ? 'customer' : 'system',
+        action: 'customer.purchase.token_sms_sent',
+        targetType: 'receipt',
+        targetId: input.receiptId ?? input.meterId,
+        after: { sid: msg.sid, status: msg.status, trafficKind: input.trafficKind ?? 'token_delivery' },
     });
     return { sent: true, sid: msg.sid, status: msg.status };
 }
@@ -193,6 +234,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         po = { ...po, hold_id: hold.id, status: 'hold_active' };
 
         // Generate token
+        let issuedToken: string | null = null;
         try {
             const tokenRes = await generateCreditToken({
                 meterId: meter.meterId,
@@ -202,6 +244,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 tariffId: meter.tariffId,
                 reference: po.id,
             });
+            issuedToken = tokenRes.token;
 
             await captureHold({
                 holdId: hold.id,
@@ -286,11 +329,20 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 reference: null,
             };
         } catch (e: any) {
-            try { await releaseHold(hold.id); } catch { /* noop */ }
-            await adminClient.from('purchase_orders').update({
-                status: 'failed',
-                failure_reason: `${e.code ?? 'token_failed'}: ${e.message}`.slice(0, 500),
-            }).eq('id', po.id);
+            if (issuedToken) {
+                await adminClient.from('purchase_orders').update({
+                    token: issuedToken,
+                    status: 'delivery_pending_review',
+                    delivery_state: 'token_generated_needs_reconciliation',
+                    failure_reason: `${e.code ?? 'post_token_failed'}: ${e.message}`.slice(0, 500),
+                }).eq('id', po.id);
+            } else {
+                try { await releaseHold(hold.id); } catch { /* noop */ }
+                await adminClient.from('purchase_orders').update({
+                    status: 'failed',
+                    failure_reason: `${e.code ?? 'token_failed'}: ${e.message}`.slice(0, 500),
+                }).eq('id', po.id);
+            }
             throw new CustomerPurchaseError(e.message, e.code ?? 'token_failed');
         }
     } else {

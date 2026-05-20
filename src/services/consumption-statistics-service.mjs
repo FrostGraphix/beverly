@@ -9,62 +9,49 @@ function pad(value) {
   return String(value).padStart(2, "0");
 }
 
-function formatDayParts(year, month, day) {
-  return `${year}-${pad(month)}-${pad(day)}`;
+function weekStartDate(dateText) {
+  const text = String(dateText || "").slice(0, 10);
+  if (text.length < 10) return "";
+  const d = new Date(text + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  const dow = d.getUTCDay();
+  const shift = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + shift);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
-function formatMonthParts(year, month) {
-  return `${year}-${pad(month)}`;
+function groupKeyYearly(dateText) {
+  return String(dateText || "").slice(0, 4);
 }
 
-function normalizeDateObject(value, granularity = "daily") {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return "";
-  if (granularity === "monthly") {
-    return formatMonthParts(value.getFullYear(), value.getMonth() + 1);
+export function buildConsumptionPeriodRange(periodKey) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const ago = (days) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - days);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  switch (periodKey) {
+    case "daily":    return { from: ago(29),  to: todayStr, granularity: "daily" };
+    case "weekly":   return { from: ago(83),  to: todayStr, granularity: "weekly" };
+    case "monthly": {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() - 11);
+      d.setDate(1);
+      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`, to: todayStr, granularity: "monthly" };
+    }
+    case "annually": {
+      const d = new Date(today);
+      d.setFullYear(d.getFullYear() - 4);
+      d.setMonth(0);
+      d.setDate(1);
+      return { from: `${d.getFullYear()}-01-01`, to: todayStr, granularity: "yearly" };
+    }
+    case "all":
+    default:
+      return { from: "2020-01-01", to: todayStr, granularity: "monthly" };
   }
-  return formatDayParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
-}
-
-function monthEndDate(monthText) {
-  const [year, month] = String(monthText).split("-").map(Number);
-  if (!year || !month) return "";
-  const end = new Date(Date.UTC(year, month, 0));
-  return `${end.getUTCFullYear()}-${pad(end.getUTCMonth() + 1)}-${pad(end.getUTCDate())}`;
-}
-
-export function normalizeConsumptionDateKey(value, granularity = "daily") {
-  if (!value && value !== 0) return "";
-  if (value instanceof Date) return normalizeDateObject(value, granularity);
-
-  const text = String(value).trim();
-  if (!text) return "";
-
-  if (granularity === "monthly") {
-    const isoMonth = text.match(/^(\d{4})-(\d{1,2})(?:$|[T\s/:-])/);
-    if (isoMonth) return formatMonthParts(isoMonth[1], isoMonth[2]);
-
-    const slashMonth = text.match(/^(\d{4})\/(\d{1,2})(?:$|[T\s/:-])/);
-    if (slashMonth) return formatMonthParts(slashMonth[1], slashMonth[2]);
-
-    const dayFirstMonth = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-    if (dayFirstMonth) return formatMonthParts(dayFirstMonth[3], dayFirstMonth[2]);
-  } else {
-    const isoDay = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (isoDay) return formatDayParts(isoDay[1], isoDay[2], isoDay[3]);
-
-    const slashDay = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
-    if (slashDay) return formatDayParts(slashDay[1], slashDay[2], slashDay[3]);
-
-    const compactDay = text.match(/^(\d{4})(\d{2})(\d{2})$/);
-    if (compactDay) return formatDayParts(compactDay[1], compactDay[2], compactDay[3]);
-
-    const dayFirst = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-    if (dayFirst) return formatDayParts(dayFirst[3], dayFirst[2], dayFirst[1]);
-  }
-
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return normalizeDateObject(parsed, granularity);
 }
 
 export function defaultConsumptionStatisticsFilters(now = new Date()) {
@@ -84,28 +71,22 @@ export function defaultConsumptionStatisticsFilters(now = new Date()) {
 export function buildConsumptionStatisticsPayload(filters = {}, paging = {}) {
   const pageSize = Number(paging.pageSize || paging.pageLimit || 5000);
   const pageNumber = Math.max(1, Number(paging.pageNumber || 1));
-  const granularity = paging.granularity || (filters.granularity === "monthly" ? "monthly" : "daily");
-  const includeBaseline = paging.includeBaseline ?? granularity !== "monthly";
-
-  let fromDateStr = normalizeConsumptionDateKey(filters.dateFrom, granularity);
-  if (fromDateStr && includeBaseline) {
-    const fd = new Date(`${fromDateStr}T00:00:00`);
+  
+  let fromDateStr = filters.dateFrom;
+  if (fromDateStr) {
+    const fd = new Date(fromDateStr);
     if (!Number.isNaN(fd.getTime())) {
       fd.setDate(fd.getDate() - 1);
       fromDateStr = `${fd.getFullYear()}-${pad(fd.getMonth() + 1)}-${pad(fd.getDate())}`;
     }
   }
 
-  const toDateStr = normalizeConsumptionDateKey(filters.dateTo, granularity);
-  const fromTimestamp = granularity === "monthly" ? `${fromDateStr}-01` : fromDateStr;
-  const toTimestamp = granularity === "monthly" ? monthEndDate(toDateStr) : toDateStr;
-
   const payload = {
     lang: "en",
     pageNumber,
     pageSize,
-    FROM: fromTimestamp ? `${fromTimestamp}T00:00:00.000Z` : undefined,
-    TO: toTimestamp ? `${toTimestamp}T23:59:59.999Z` : undefined
+    FROM: fromDateStr ? `${fromDateStr}T00:00:00.000Z` : undefined,
+    TO: filters.dateTo ? `${filters.dateTo}T23:59:59.999Z` : undefined
   };
 
   if (filters.stationId) payload.stationId = String(filters.stationId).trim();
@@ -134,7 +115,7 @@ function isFailureEnvelope(response = {}) {
 }
 
 export function normalizeConsumptionStatisticRow(row = {}, index = 0) {
-  const rawCollectionDate = String(
+  const collectionDate = String(
     row.currentDate
     || row.collectionDate
     || row.statDate
@@ -145,10 +126,6 @@ export function normalizeConsumptionStatisticRow(row = {}, index = 0) {
     || row.timestamp
     || ""
   );
-  const collectionDate = normalizeConsumptionDateKey(
-    rawCollectionDate,
-    /^\d{4}-\d{1,2}$/.test(rawCollectionDate) ? "monthly" : "daily"
-  ) || rawCollectionDate;
   const hasCumulativeTotal = row.total1 != null || row.totalEnergy != null;
   const rawConsumption = row.total1 ?? row.totalEnergy ?? row.usage1 ?? row.consumption ?? row.energyConsumptionKwh ?? 0;
   const numericConsumption = Math.max(0, toNumber(rawConsumption, 0));
@@ -204,9 +181,13 @@ export function normalizeConsumptionStatisticsResponse(response = {}) {
   };
 }
 
-function assertConsumptionResponse(response = {}) {
+function assertLiveConsumptionResponse(response = {}) {
   if (isFailureEnvelope(response)) {
     throw new Error(envelopeReason(response) || "Consumption statistics endpoint failed");
+  }
+  const proxySource = response?._proxy?.source || "";
+  if (proxySource && proxySource !== "live") {
+    throw new Error("Live AMR consumption data is unavailable. Static sample data is disabled for Consumption Statistics.");
   }
 }
 
@@ -219,16 +200,13 @@ async function getConsumptionPage(endpoint, filters, paging, api) {
     const reason = error?.response?.data?.reason || error?.response?.data?.msg || error?.message;
     throw new Error(reason || "Consumption statistics endpoint failed");
   }
-  assertConsumptionResponse(response);
+  assertLiveConsumptionResponse(response);
   return normalizeConsumptionStatisticsResponse(response);
 }
 
 async function fetchEndpointRows(endpoint, filters, paging, api) {
   const pageSize = Math.max(1, Number(paging.pageSize || paging.pageLimit || 5000));
-  const includeBaseline = endpoint === CONSUMPTION_STATISTICS_ENDPOINT;
-  const granularity = endpoint === MONTHLY_CONSUMPTION_STATISTICS_ENDPOINT ? "monthly" : "daily";
-  const endpointPaging = { ...paging, granularity, includeBaseline, pageSize };
-  const first = await getConsumptionPage(endpoint, filters, { ...endpointPaging, pageNumber: 1 }, api);
+  const first = await getConsumptionPage(endpoint, filters, { ...paging, pageNumber: 1, pageSize }, api);
   const rows = first.rows.slice();
   const total = Math.min(first.total || rows.length, maxConsumptionRows);
 
@@ -236,7 +214,7 @@ async function fetchEndpointRows(endpoint, filters, paging, api) {
     const requests = [];
     const pageCount = Math.ceil(total / pageSize);
     for (let pageNumber = 2; pageNumber <= pageCount; pageNumber += 1) {
-      requests.push(getConsumptionPage(endpoint, filters, { ...endpointPaging, pageNumber }, api));
+      requests.push(getConsumptionPage(endpoint, filters, { ...paging, pageNumber, pageSize }, api));
     }
     const pages = await Promise.all(requests);
     for (const page of pages) rows.push(...page.rows);
@@ -261,12 +239,9 @@ export async function fetchConsumptionStatistics(filters = {}, paging = {}, api 
   deriveConsumptionFromTotal(result.rows);
 
   // Filter out the extra day we fetched for baseline
-  const dateFromPrefix = normalizeConsumptionDateKey(filters.dateFrom, wantsMonthly ? "monthly" : "daily");
+  const dateFromPrefix = filters.dateFrom ? String(filters.dateFrom).slice(0, wantsMonthly ? 7 : 10) : "";
   const filteredRows = dateFromPrefix 
-    ? result.rows.filter((r) => {
-      const rowKey = normalizeConsumptionDateKey(r.collectionDate, wantsMonthly ? "monthly" : "daily");
-      return rowKey >= dateFromPrefix;
-    })
+    ? result.rows.filter(r => String(r.collectionDate).slice(0, wantsMonthly ? 7 : 10) >= dateFromPrefix)
     : result.rows;
 
   return {
@@ -279,90 +254,68 @@ export async function fetchConsumptionStatistics(filters = {}, paging = {}, api 
 }
 
 function groupKey(row, granularity) {
-  return normalizeConsumptionDateKey(row.collectionDate, granularity);
+  const text = String(row.collectionDate || "");
+  if (granularity === "monthly") return text.slice(0, 7);
+  return text.slice(0, 10);
 }
 
-function addDays(dateText, days) {
-  const date = new Date(`${dateText}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
-}
-
-function addMonths(monthText, months) {
-  const date = new Date(`${monthText}-01T00:00:00.000Z`);
-  date.setUTCMonth(date.getUTCMonth() + months);
-  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}`;
-}
-
-function rangeIsValid(from, to, granularity) {
-  if (!from || !to) return false;
-  const suffix = granularity === "monthly" ? "-01" : "";
-  const start = new Date(`${from}${suffix}T00:00:00.000Z`);
-  const end = new Date(`${to}${suffix}T00:00:00.000Z`);
-  return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start <= end;
-}
-
-export function fillConsumptionDateRange(rows = [], filters = {}) {
-  const granularity = filters.granularity === "monthly" ? "monthly" : "daily";
-  const from = normalizeConsumptionDateKey(filters.dateFrom, granularity);
-  const to = normalizeConsumptionDateKey(filters.dateTo, granularity);
-  if (!rangeIsValid(from, to, granularity)) return rows;
-
-  const byDate = new Map(
-    rows.map((row) => [normalizeConsumptionDateKey(row.collectionDate, granularity) || row.collectionDate, row])
-  );
-  const filled = [];
-  for (let cursor = from; cursor <= to; cursor = granularity === "monthly" ? addMonths(cursor, 1) : addDays(cursor, 1)) {
-    filled.push(byDate.get(cursor) || {
-      id: `${granularity}-${cursor}-empty`,
-      collectionDate: cursor,
-      consumption: 0
-    });
-  }
-  return filled;
-}
-
-export function aggregateConsumptionRows(rows = [], granularity = "daily", filters = {}) {
+export function aggregateConsumptionRows(rows = [], granularity = "daily") {
   const grouped = new Map();
+  if (!Array.isArray(rows)) return [];
 
   for (const row of rows) {
-    const key = groupKey(row, granularity);
+    let key;
+    if (granularity === "weekly") {
+      key = weekStartDate(row.collectionDate);
+    } else if (granularity === "yearly") {
+      key = groupKeyYearly(row.collectionDate);
+    } else {
+      key = groupKey(row, granularity);
+    }
     if (!key) continue;
-    const current = grouped.get(key) || 0;
-    grouped.set(key, current + toNumber(row.consumption, 0));
+    grouped.set(key, (grouped.get(key) || 0) + toNumber(row.consumption, 0));
   }
 
-  const aggregated = Array.from(grouped.entries())
-    .sort((left, right) => left[0].localeCompare(right[0]))
-    .map(([collectionDate, consumption], index) => ({
-      id: `${granularity}-${collectionDate}-${index}`,
+  return Array.from(grouped.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([collectionDate, consumption], idx) => ({
+      id: `${granularity}-${collectionDate}-${idx}`,
       collectionDate,
       consumption: Number(consumption.toFixed(3))
     }));
-  return fillConsumptionDateRange(aggregated, { ...filters, granularity });
 }
 
 function inclusiveDayCount(dateFrom, dateTo) {
-  const from = normalizeConsumptionDateKey(dateFrom, "daily");
-  const to = normalizeConsumptionDateKey(dateTo, "daily");
-  if (!from || !to) return 0;
-  const start = new Date(`${from}T00:00:00.000Z`);
-  const end = new Date(`${to}T00:00:00.000Z`);
+  if (!dateFrom || !dateTo) return 0;
+  const start = new Date(`${dateFrom}T00:00:00.000Z`);
+  const end = new Date(`${dateTo}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
   return Math.floor((end - start) / 86400000) + 1;
 }
 
 function inclusiveMonthCount(dateFrom, dateTo) {
-  const from = normalizeConsumptionDateKey(dateFrom, "monthly");
-  const to = normalizeConsumptionDateKey(dateTo, "monthly");
-  if (!from || !to) return 0;
-  const start = new Date(`${from}-01T00:00:00.000Z`);
-  const end = new Date(`${to}-01T00:00:00.000Z`);
+  if (!dateFrom || !dateTo) return 0;
+  const start = new Date(`${dateFrom}T00:00:00.000Z`);
+  const end = new Date(`${dateTo}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
   return ((end.getUTCFullYear() - start.getUTCFullYear()) * 12) + (end.getUTCMonth() - start.getUTCMonth()) + 1;
 }
 
+function inclusiveWeekCount(dateFrom, dateTo) {
+  const days = inclusiveDayCount(dateFrom, dateTo);
+  return days ? Math.ceil(days / 7) : 0;
+}
+
+function inclusiveYearCount(dateFrom, dateTo) {
+  if (!dateFrom || !dateTo) return 0;
+  const start = new Date(`${dateFrom}T00:00:00.000Z`);
+  const end = new Date(`${dateTo}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  return end.getUTCFullYear() - start.getUTCFullYear() + 1;
+}
+
 export function decorateConsumptionRows(rows = []) {
+  if (!Array.isArray(rows)) return [];
   return rows.map((row, index) => {
     const previous = rows[index - 1];
     const previousValue = toNumber(previous?.consumption, 0);
@@ -377,11 +330,16 @@ export function decorateConsumptionRows(rows = []) {
 }
 
 export function summarizeConsumptionRows(rows = [], filters = {}) {
+  if (!Array.isArray(rows)) rows = [];
   const total = rows.reduce((sum, row) => sum + toNumber(row.consumption, 0), 0);
   const reportingDays = rows.length;
-  const expectedDays = filters.granularity === "monthly"
-    ? inclusiveMonthCount(filters.dateFrom, filters.dateTo)
-    : inclusiveDayCount(filters.dateFrom, filters.dateTo);
+  let expectedDays;
+  switch (filters.granularity) {
+    case "monthly": expectedDays = inclusiveMonthCount(filters.dateFrom, filters.dateTo); break;
+    case "weekly":  expectedDays = inclusiveWeekCount(filters.dateFrom, filters.dateTo); break;
+    case "yearly":  expectedDays = inclusiveYearCount(filters.dateFrom, filters.dateTo); break;
+    default:        expectedDays = inclusiveDayCount(filters.dateFrom, filters.dateTo);
+  }
   const zeroDays = rows.filter((row) => toNumber(row.consumption, 0) === 0).length;
   const peak = rows.reduce((best, row) => (toNumber(row.consumption, 0) > toNumber(best?.consumption, -1) ? row : best), null);
 
@@ -443,7 +401,7 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     xAxis: {
       type: "category",
-      boundaryGap: true,
+      boundaryGap: false,
       data: rows.map((row) => row.collectionDate),
       axisLine: {
         lineStyle: {
@@ -474,13 +432,96 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     series: [{
       name: title,
-      type: "bar",
-      barMaxWidth: 46,
-      itemStyle: {
+      type: "line",
+      smooth: false,
+      symbol: "circle",
+      symbolSize: 7,
+      lineStyle: {
         color: primary,
-        borderRadius: [4, 4, 0, 0]
+        width: 3
+      },
+      itemStyle: {
+        color: primary
+      },
+      areaStyle: {
+        color: primaryLight
+      },
+      markPoint: {
+        data: [
+          { type: "max", name: "Peak" },
+          { type: "min", name: "Low" }
+        ]
       },
       data: rows.map((row) => row.consumption)
+    }]
+  };
+}
+
+export function buildBarChartOption(rows = [], granularity = "daily", theme = {}, title = "") {
+  const primary = theme.primary || "#059669";
+  const textMuted = theme.textMuted || "#64748b";
+  const grid = theme.grid || theme.border || "#d1fae5";
+
+  return {
+    tooltip: {
+      trigger: "axis",
+      valueFormatter: (v) => `${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })} kWh`
+    },
+    grid: { left: 60, right: 16, top: 36, bottom: 48 },
+    xAxis: {
+      type: "category",
+      data: rows.map((r) => r.collectionDate),
+      axisLabel: { color: textMuted, rotate: rows.length > 24 ? 30 : 0, fontSize: 11 },
+      axisLine: { lineStyle: { color: primary } }
+    },
+    yAxis: {
+      type: "value",
+      name: "kWh",
+      min: 0,
+      axisLabel: { color: textMuted },
+      nameTextStyle: { color: textMuted, fontSize: 11 },
+      splitLine: { lineStyle: { color: grid } }
+    },
+    series: [{
+      name: title || "kWh",
+      type: "bar",
+      barMaxWidth: 48,
+      itemStyle: { color: primary, borderRadius: [4, 4, 0, 0] },
+      data: rows.map((r) => r.consumption)
+    }]
+  };
+}
+
+export function buildStationBarChartOption(stationRows = [], theme = {}) {
+  const textMuted = theme.textMuted || "#64748b";
+  const grid = theme.grid || "#d1fae5";
+  const sorted = [...stationRows].sort((a, b) => b.total - a.total);
+
+  return {
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: (v) => `${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} kWh`
+    },
+    grid: { left: 80, right: 24, top: 16, bottom: 24 },
+    xAxis: {
+      type: "value",
+      name: "kWh",
+      axisLabel: { color: textMuted, fontSize: 11 },
+      splitLine: { lineStyle: { color: grid } }
+    },
+    yAxis: {
+      type: "category",
+      data: sorted.map((s) => s.label),
+      axisLabel: { color: textMuted, fontSize: 12, fontWeight: 700 }
+    },
+    series: [{
+      type: "bar",
+      barMaxWidth: 40,
+      data: sorted.map((s) => ({
+        value: s.total,
+        itemStyle: { color: s.color, borderRadius: [0, 4, 4, 0] }
+      }))
     }]
   };
 }

@@ -22,11 +22,22 @@ export const useStaffAuthStore = defineStore('staff-auth', {
         async hydrate() {
             if (this.hydrated) return;
             this.hydrated = true;
-            const token = localStorage.getItem('beverly.staff.access_token');
-            const userJson = localStorage.getItem('beverly.staff.user');
+            let token: string | null = null;
+            let userJson: string | null = null;
+            try {
+                token = localStorage.getItem('beverly.staff.access_token');
+                userJson = localStorage.getItem('beverly.staff.user');
+            } catch {
+                this.logout();
+                return;
+            }
             if (token && userJson) {
                 this.accessToken = token;
-                try { this.user = JSON.parse(userJson); } catch { /* noop */ }
+                try {
+                    this.user = JSON.parse(userJson);
+                } catch {
+                    this.logout();
+                }
             }
         },
         setSession(token: string, user: StaffProfile) {

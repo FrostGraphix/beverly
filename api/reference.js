@@ -39,7 +39,8 @@ const {
   dailyMeterTableReport,
   readDailyMeterSummary,
   readDailyMeterRows,
-  writeDailyMeterRows
+  writeDailyMeterRows,
+  ingestWebhookReadings
 } = require("../backend/src/services/consumption-store");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
@@ -61,6 +62,12 @@ const walletPurchase = require("../backend/src/services/wallet-purchase-service"
 const vendorOnboarding = require("../backend/src/services/vendor-onboarding-service");
 const walletApproval = require("../backend/src/services/wallet-approval-service");
 const walletReconciliation = require("../backend/src/services/wallet-reconciliation-service");
+const walletDisputes = require("../backend/src/services/wallet-disputes-service");
+const walletRefunds = require("../backend/src/services/wallet-refunds-service");
+const walletSettlement = require("../backend/src/services/wallet-settlement-service");
+const walletVendingMonitor = require("../backend/src/services/wallet-vending-monitor-service");
+const walletFeatureFlags = require("../backend/src/services/wallet-feature-flags-service");
+const walletPrivacy = require("../backend/src/services/wallet-privacy-service");
 const smsNotifications = require("../backend/src/services/sms-notification-service");
 
 // No live upstream URL has a code default.
@@ -86,12 +93,18 @@ let accessControlModulePromise = null;
 function getEnv() {
   const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
   const liveBaseUrl = process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault;
+  const configuredLiveWrites = process.env.ALLOW_LIVE_WRITES;
+  const allowLiveWrites = configuredLiveWrites === "false"
+    ? false
+    : configuredLiveWrites === "true"
+      || process.env.APPROVED_LIVE_WRITES === "true"
+      || process.env.NODE_ENV !== "production";
   return {
     readMode,
     liveBaseUrl,
     liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
-    allowLiveWrites: process.env.ALLOW_LIVE_WRITES === "true",
+    allowLiveWrites,
     corsOrigins: splitCsv(process.env.CORS_ORIGINS || defaultCorsOrigins.join(",")),
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== "false",
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
@@ -123,7 +136,7 @@ function applyCorsHeaders(request, response) {
   if (allowedOrigin) setResponseHeader(response, "Access-Control-Allow-Origin", allowedOrigin);
   setResponseHeader(response, "Vary", "Origin");
   setResponseHeader(response, "Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password");
+  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password,X-Route-Hash,X-Route-Action");
   setResponseHeader(response, "Access-Control-Max-Age", "86400");
 }
 
@@ -200,6 +213,16 @@ function routeHeaderHash(request) {
   return String(request.headers["x-route-hash"] || "").trim();
 }
 
+function routeHashForWritePath(pathname) {
+  const lowerPath = String(pathname || "").toLowerCase();
+  if (lowerPath.endsWith("/remotemetertask/createreadingtask")) return "#/remote-operation/remote-meter-reading";
+  if (lowerPath.endsWith("/remotemetertask/createcontroltask")) return "#/remote-operation/remote-meter-control";
+  if (lowerPath.endsWith("/remotemetertask/createtokentask")) return "#/remote-operation/remote-meter-token";
+  if (lowerPath.endsWith("/gprstask/gprscreatereadingtask") || lowerPath.endsWith("/gprsmetertask/gprscreatereadingtask")) return "#/remote-support/gprs-tasks";
+  if (lowerPath.endsWith("/updatefirmwaretask/createupdatefirmwaretask")) return "#/remote-support/firmware-update";
+  return "";
+}
+
 function stationFromPayload(payload) {
   const value = payload?.stationId ?? payload?.SITE_ID ?? payload?.siteId ?? "";
   return String(value || "").trim();
@@ -210,8 +233,10 @@ function protectedPath(pathname) {
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
   if (lowerPath === "/api/user/login") return false;
+  if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
+  if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
   return true;
 }
@@ -260,6 +285,10 @@ async function matchingRouteForRequest(pathname, request) {
   if (requestedHash) {
     return access.routeManifest.find((route) => route.hash === requestedHash) || null;
   }
+  const writeRouteHash = routeHashForWritePath(pathname);
+  if (writeRouteHash) {
+    return access.routeManifest.find((route) => route.hash === writeRouteHash) || null;
+  }
   const loweredPath = String(pathname || "").toLowerCase();
   return access.routeManifest.find((route) =>
     Array.isArray(route.apis) && route.apis.some((apiPath) => String(apiPath || "").toLowerCase() === loweredPath)
@@ -269,26 +298,28 @@ async function matchingRouteForRequest(pathname, request) {
 async function authorizeRequest(request, pathname, requestData) {
   if (!protectedPath(pathname)) return null;
   const token = authHeaderToken(request);
-  if (!token) return authFailure(401, pathname, "Authentication required");
+  const trustedLiveActor = trustedLiveReadActor(pathname, request);
+  if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
 
-  const actor = await authUserFromAccessToken(token);
-  if (!actor) return authFailure(401, pathname, "Invalid session");
+  const actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
+  if (!actor && !trustedLiveActor) return authFailure(401, pathname, "Invalid session");
+  const resolvedActor = actor || trustedLiveActor;
 
-  request.__auth = actor;
+  request.__auth = resolvedActor;
 
   const access = await getAccessControlModule();
-  const normalizedRole = access.normalizeRoleId(actor.roleId);
+  const normalizedRole = access.normalizeRoleId(resolvedActor.roleId);
   const lowerPath = String(pathname || "").toLowerCase();
   const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
 
-  if (!actorCanAccessStation(actor, payload) && normalizedRole !== "super-admin") {
+  if (!actorCanAccessStation(resolvedActor, payload) && normalizedRole !== "super-admin") {
     return authFailure(403, pathname, "Station scope violation");
   }
 
   if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword") return null;
   if ((lowerPath === "/api/user/read" || lowerPath === "/api/user/info") && String(payload.userId || "").trim()) {
     const targetUserId = String(payload.userId || "").trim().toLowerCase();
-    if (normalizedRole === "super-admin" || targetUserId === String(actor.userId || "").trim().toLowerCase()) return null;
+    if (normalizedRole === "super-admin" || targetUserId === String(resolvedActor.userId || "").trim().toLowerCase()) return null;
   }
 
   if (lowerPath.startsWith("/api/user/")) {
@@ -296,7 +327,7 @@ async function authorizeRequest(request, pathname, requestData) {
   }
 
   const route = await matchingRouteForRequest(pathname, request);
-  if (route && access.roleAllowsRoute(route, actor.roleId, actor.remark)) return null;
+  if (route && access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
 
   if (lowerPath.startsWith("/api/local/")) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
@@ -421,6 +452,7 @@ function normalizeRequestPath(urlValue) {
   const pathname = String(urlValue || "/")
     .replace(/^\/api\/reference(?:\.js)?/i, "/api")
     .split("?")[0];
+  if (/^\/auth\/mfa\//i.test(pathname)) return `/api${pathname}`;
   if (/^\/api\/API\//.test(pathname)) return pathname.replace(/^\/api\/API\//, "/API/");
   if (/^\/api\/api\//.test(pathname)) return pathname.replace(/^\/api\/api\//, "/api/");
   return pathname;
@@ -478,11 +510,29 @@ function isCacheableRequest(pathname, method) {
 
 function requiresLiveRead(pathname) {
   const normalizedPath = String(pathname || "");
-  return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath);
+  return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
+    || /\/api\/customer\/read$/i.test(normalizedPath)
+    || /\/api\/account\/read$/i.test(normalizedPath)
+    || /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath);
 }
 
-function canUseSampleFallback(pathname) {
-  return /\/api\/customer\/read$/i.test(String(pathname || ""));
+function trustedLiveReadActor(pathname, request) {
+  const env = getEnv();
+  const method = String(request?.method || "GET").toUpperCase();
+  if (!env.liveProxyEnabled || !env.liveBearerToken) return null;
+  if (method !== "GET" && method !== "POST") return null;
+  if (isWriteRequest(pathname, method) || !requiresLiveRead(pathname)) return null;
+  return {
+    userId: "live-read-proxy",
+    userName: "Live Read Proxy",
+    roleId: "super-admin",
+    remark: "super-admin",
+    stationId: ""
+  };
+}
+
+function canUseSampleFallback(_pathname) {
+  return false;
 }
 
 function apiCacheEnabled() {
@@ -546,6 +596,59 @@ function buildLiveHeaders(request, requestData, token) {
   };
   if (requestData.contentType) headers["Content-Type"] = requestData.contentType;
   return headers;
+}
+
+function sanitizeReadPayload(payload, keyMap = {}) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const sanitized = { ...payload };
+  const pageSize = Number(sanitized.pageSize || 20);
+  sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 20) : 20;
+
+  const rawOrderBy = String(sanitized.orderBy || "").trim();
+  if (rawOrderBy) {
+    const [rawKey, rawDirection = "asc"] = rawOrderBy.split(/\s+/);
+    const mappedKey = keyMap[String(rawKey || "").toLowerCase()];
+    const direction = String(rawDirection || "").toLowerCase() === "desc" ? "desc" : "asc";
+    if (mappedKey) sanitized.orderBy = `${mappedKey} ${direction}`;
+    else delete sanitized.orderBy;
+  }
+
+  return sanitized;
+}
+
+function sanitizeLiveRequestData(pathname, requestData) {
+  const normalizedPath = String(pathname || "");
+  const customerKeyMap = {
+    id: "customerId",
+    customerid: "customerId",
+    name: "customerName",
+    customername: "customerName"
+  };
+  const accountKeyMap = {
+    id: "customerId",
+    customerid: "customerId",
+    meterid: "meterId",
+    tariffid: "tariffId",
+    communicationway: "communicationWay",
+    ctratio: "ctRatio",
+    stationid: "stationId",
+    createdate: "createDate",
+    updatedate: "updateDate"
+  };
+  const payload = /\/api\/customer\/read$/i.test(normalizedPath)
+    ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
+    : /\/api\/account\/read$/i.test(normalizedPath)
+      ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
+      : requestData?.parsedBody;
+  if (payload === requestData?.parsedBody) return requestData;
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  return {
+    ...requestData,
+    rawBody,
+    rawText: rawBody.toString("utf8"),
+    parsedBody: payload,
+    contentType: requestData?.contentType || jsonContentType
+  };
 }
 
 async function parseLiveResponse(response) {
@@ -800,19 +903,6 @@ function syntheticRowValue(value, rowNumber) {
 function synthesizeSampleRow(row, pathname, rowIndex) {
   const clone = { ...row };
   const rowNumber = rowIndex + 1;
-  const lowerPath = String(pathname || "").toLowerCase();
-  if (lowerPath === "/api/customer/read") {
-    clone.customerId = syntheticRowValue(row.customerId || row.id || row.customerName || "customer", rowNumber);
-    clone.customerName = rowIndex < 20 ? row.customerName : syntheticRowValue(row.customerName || "Sample Customer", rowNumber);
-    if (clone.id != null) clone.id = clone.customerId;
-    if (clone.name != null) clone.name = clone.customerName;
-    return clone;
-  }
-  if (lowerPath === "/api/account/read") {
-    clone.customerId = syntheticRowValue(row.customerId || "customer", rowNumber);
-    clone.meterId = syntheticRowValue(row.meterId || clone.customerId || "meter", rowNumber);
-    return clone;
-  }
   if (clone.id != null) clone.id = syntheticRowValue(clone.id, rowNumber);
   return clone;
 }
@@ -853,6 +943,7 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
 }
 
 function sampleReadResponse(pathname, requestData) {
+  if (requiresLiveRead(pathname)) return null;
   for (const candidate of candidatePaths(pathname)) {
     const filePath = path.join(samplesDir, `${sampleName(candidate)}.json`);
     if (!fs.existsSync(filePath)) continue;
@@ -1572,9 +1663,425 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return syntheticSampleResponse("/API/EventNotification/Read", requestData, pathname)
       || localJobResponse({ total: 0, data: [] });
   }
+  if (pathname === "/api/webhooks/meter-readings" && (request.method || "GET").toUpperCase() === "POST") {
+    const configuredSecret = process.env.WEBHOOK_SECRET;
+    const providedSecret = request.headers["x-webhook-secret"] || request.headers["authorization"];
+    if (configuredSecret && providedSecret !== configuredSecret && providedSecret !== `Bearer ${configuredSecret}`) {
+      return { status: 401, body: { code: 401, msg: "Unauthorized webhook access" } };
+    }
+    return await ingestWebhookReadings(requestData.parsedBody);
+  }
   if (pathname === "/api/local/consumption/summary") {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
+  if (pathname === "/api/local/consumption/live-probe") {
+    const { runLiveProbe } = require("../backend/src/services/live-probe-engine");
+    try {
+      const data = await runLiveProbe();
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          msg: "success",
+          data
+        }
+      };
+    } catch (err) {
+      return {
+        status: 500,
+        body: {
+          code: 500,
+          msg: err.message
+        }
+      };
+    }
+  }
+  if (pathname === "/api/local/consumption/trigger-sync") {
+    const { runSync } = require("../backend/src/services/live-probe-engine");
+    try {
+      const data = await runSync(requestData.parsedBody?.stationId);
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          msg: "success",
+          data
+        }
+      };
+    } catch (err) {
+      return {
+        status: 500,
+        body: {
+          code: 500,
+          msg: err.message
+        }
+      };
+    }
+  }
+
+
+  // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
+  const methodUpper = (request.method || "GET").toUpperCase();
+
+  function adminQueryParams(url) {
+    try { return new URL(String(url || "/"), "http://localhost").searchParams; } catch { return new URLSearchParams(); }
+  }
+  function adminPathId(prefix) {
+    const after = pathname.slice(prefix.length).replace(/^\//, "");
+    return after || null;
+  }
+
+  // ── GET endpoints ───────────────────────────────────────────────────────────
+  // ── Vendor v1 REST GET endpoints ───────────────────────────────────────────
+  const DEMO_VENDOR_ORG = "demo-vendor-org-01";
+
+  function vendorOrgId(req) {
+    return req.__auth?.organizationId || DEMO_VENDOR_ORG;
+  }
+
+  function getOrProvisionVendorWallet(orgId) {
+    let w = walletLedger.walletForOrganization(orgId);
+    if (!w) {
+      try {
+        walletLedger.createVendorOrganization({ organizationId: orgId, name: "Demo Vendor" });
+        walletLedger.provisionWalletForOrganization({ organizationId: orgId, currency: "NGN", actorId: "system" });
+        w = walletLedger.walletForOrganization(orgId);
+      } catch {}
+    }
+    return w;
+  }
+
+  if (methodUpper === "GET" && pathname === "/api/v1/vendor/me") {
+    const orgId = vendorOrgId(request);
+    getOrProvisionVendorWallet(orgId);
+    return {
+      status: 200,
+      body: {
+        id: orgId,
+        email: "vendor@demo.beverly.ng",
+        full_name: "Demo Vendor",
+        phone: null,
+        vendor_organization_id: orgId,
+        organization_name: "Demo Vendor Org",
+        role: "vendor_user",
+        mfa_enrolled: false,
+        password_reset_required: false
+      }
+    };
+  }
+
+  if (methodUpper === "GET" && pathname === "/api/v1/vendor/wallet") {
+    const orgId = vendorOrgId(request);
+    const w = getOrProvisionVendorWallet(orgId);
+    if (!w) return { status: 404, body: { message: "Wallet not found" } };
+    try {
+      const sum = walletLedger.walletSummary(w.id);
+      return localJobResponse({
+        wallet_id: w.id,
+        currency: w.currency || "NGN",
+        status: w.status || "active",
+        balance_minor: sum.ledgerBalanceMinor,
+        holds_minor: sum.heldBalanceMinor,
+        available_minor: sum.availableBalanceMinor,
+        daily_cap_minor: null
+      });
+    } catch {
+      return localJobResponse({ wallet_id: w.id, currency: "NGN", status: w.status || "active", balance_minor: 0, holds_minor: 0, available_minor: 0, daily_cap_minor: null });
+    }
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/vendor/wallet/ledger")) {
+    const orgId = vendorOrgId(request);
+    const w = getOrProvisionVendorWallet(orgId);
+    const sp = adminQueryParams(request.url);
+    const limit = Math.min(Number(sp.get("limit") || 50), 500);
+    const entries = w ? walletLedger.ledgerRows(w.id).slice(-limit).reverse().map(e => ({
+      id: e.id,
+      direction: e.direction,
+      amount_minor: e.amountMinor,
+      balance_after_minor: 0,
+      entry_type: e.entryType,
+      reference_type: e.referenceType || null,
+      reference_id: e.referenceId || null,
+      memo: e.details?.note || null,
+      created_at: e.createdAt
+    })) : [];
+    return localJobResponse({ entries });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/vendor/disputes")) {
+    const orgId = vendorOrgId(request);
+    const id = adminPathId("/api/v1/vendor/disputes");
+    if (id) {
+      const all = walletDisputes.listDisputes({ organizationId: orgId, limit: 5000 });
+      const dispute = all.find(d => d.id === id) || null;
+      const db = require("../backend/src/services/local-database").ensureDatabase();
+      let notes = [];
+      try {
+        if (db.memoryStore) {
+          notes = (db.memoryStore.wallet_dispute_notes || []).filter(n => n.disputeId === id);
+        } else {
+          notes = db.prepare("SELECT * FROM wallet_dispute_notes WHERE dispute_id = ? ORDER BY created_at ASC").all(id)
+            .map(n => ({ id: n.id, disputeId: n.dispute_id, note: n.note, actorId: n.actor_id, createdAt: n.created_at }));
+        }
+      } catch {}
+      return localJobResponse({
+        dispute,
+        messages: notes.map(n => ({ id: n.id, sender_actor_type: n.actorId === "staff" ? "staff" : "vendor", body: n.note, created_at: n.createdAt }))
+      });
+    }
+    const rows = walletDisputes.listDisputes({ organizationId: orgId, limit: 200 });
+    const disputes = rows.map(d => ({
+      id: d.id,
+      reference: d.id.slice(0, 8).toUpperCase(),
+      subject: `${(d.disputeType || "other").replace(/_/g, " ")}: ${(d.description || "").slice(0, 60)}`,
+      description: d.description,
+      status: d.status,
+      amount_minor: d.amountMinor,
+      created_at: d.createdAt
+    }));
+    return localJobResponse({ disputes });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/vendor/transactions")) {
+    const orgId = vendorOrgId(request);
+    const sp = adminQueryParams(request.url);
+    const limit = Math.min(Number(sp.get("limit") || 100), 500);
+    const w = getOrProvisionVendorWallet(orgId);
+    const walletId = w?.id;
+    const purchases = walletPurchase.listPurchaseOrders({ actorId: orgId, limit }).map(p => ({
+      id: p.id,
+      meter_id: p.targetMeter || p.meterId || "—",
+      customer_name: p.customerName || null,
+      station_id: p.stationId || null,
+      amount_minor: p.amountMinor,
+      units_kwh: p.unitsKwh || null,
+      token: p.token || null,
+      purchase_mode: p.mode || "wallet",
+      status: p.status,
+      delivery_state: p.deliveryState || null,
+      created_at: p.createdAt
+    }));
+    return localJobResponse({ purchases });
+  }
+
+  if (methodUpper === "GET" && pathname === "/api/v1/vendor/settlement") {
+    const orgId = vendorOrgId(request);
+    const all = walletSettlement.listSettlementBatches({ limit: 200 });
+    const batches = all.map(b => ({
+      id: b.id,
+      period_start: b.periodStart || b.createdAt,
+      period_end: b.periodEnd || b.updatedAt,
+      total_vends: (b.purchaseCount || 0) + (b.fundingCount || 0),
+      gross_amount_minor: b.totalPurchaseMinor || 0,
+      fee_minor: 0,
+      net_amount_minor: b.netMinor || 0,
+      status: b.status,
+      settled_at: b.status === "settled" ? (b.updatedAt || b.createdAt) : null
+    }));
+    return localJobResponse({ batches });
+  }
+
+  // ── Admin v1 REST GET endpoints ─────────────────────────────────────────────
+  if (methodUpper === "GET" && pathname === "/api/v1/admin/funding/pending") {
+    const rows = walletFunding.listFundingRequests({ limit: 200 });
+    const pending = rows.filter(r => ["proof_uploaded", "under_review"].includes(r.status));
+    return localJobResponse({ funding: pending });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vending")) {
+    const sp = adminQueryParams(request.url);
+    const status = sp.get("status") || undefined;
+    const q = (sp.get("q") || "").toLowerCase();
+    let rows = walletPurchase.listPurchaseOrders({ status, limit: 500 });
+    if (q) rows = rows.filter(r =>
+      (r.meterId || "").toLowerCase().includes(q) ||
+      (r.customerName || "").toLowerCase().includes(q)
+    );
+    return localJobResponse({ purchases: rows });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/disputes")) {
+    const id = adminPathId("/api/v1/admin/disputes");
+    if (id) {
+      const all = walletDisputes.listDisputes({ limit: 5000 });
+      const dispute = all.find(d => d.id === id) || null;
+      const db = require("../backend/src/services/local-database").ensureDatabase();
+      let notes = [];
+      try {
+        if (db.memoryStore) {
+          notes = (db.memoryStore.wallet_dispute_notes || []).filter(n => n.disputeId === id);
+        } else {
+          notes = db.prepare("SELECT * FROM wallet_dispute_notes WHERE dispute_id = ? ORDER BY created_at ASC").all(id)
+            .map(n => ({ id: n.id, disputeId: n.dispute_id, note: n.note, actorId: n.actor_id, createdAt: n.created_at }));
+        }
+      } catch {}
+      return localJobResponse({ dispute, messages: notes.map(n => ({ id: n.id, sender_actor_type: "staff", body: n.note, created_at: n.createdAt })) });
+    }
+    const sp = adminQueryParams(request.url);
+    const status = sp.get("status") || undefined;
+    const rows = walletDisputes.listDisputes({ status, limit: 200 });
+    return localJobResponse({ disputes: rows, total: rows.length });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/refunds")) {
+    const sp = adminQueryParams(request.url);
+    const status = sp.get("status") || undefined;
+    const rows = walletRefunds.listRefunds({ status, limit: 200 });
+    return localJobResponse({ refunds: rows, total: rows.length });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/settlement")) {
+    const rows = walletSettlement.listSettlementBatches({ limit: 200 });
+    return localJobResponse({ batches: rows, total: rows.length });
+  }
+
+  if (methodUpper === "GET" && pathname === "/api/v1/admin/reconciliation") {
+    const db = require("../backend/src/services/local-database").ensureDatabase();
+    let runs = [];
+    try {
+      if (db.memoryStore) {
+        runs = [...(db.memoryStore.wallet_reconciliation_runs || [])].reverse();
+      } else {
+        runs = db.prepare("SELECT * FROM wallet_reconciliation_runs ORDER BY created_at DESC LIMIT 100").all()
+          .map(r => ({ id: r.id, status: r.status, mismatchCount: r.mismatch_count, details: JSON.parse(r.detail_json || "{}"), createdAt: r.created_at }));
+      }
+    } catch {}
+    return localJobResponse({ runs, total: runs.length });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/feature-flags")) {
+    return localJobResponse({ flags: walletFeatureFlags.listFlags() });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/privacy/deletions")) {
+    const sp = adminQueryParams(request.url);
+    const status = sp.get("status") || undefined;
+    return localJobResponse({ requests: walletPrivacy.listDeletionRequests({ status }) });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendor-applications")) {
+    const sp = adminQueryParams(request.url);
+    const status = sp.get("status") || "submitted";
+    const seed = [
+      { id: "app-001", legal_name: "Sunrise Energy Ltd", contact_name: "Emeka Okonkwo", contact_email: "emeka@sunrise.ng", contact_phone: "+2348011223344", business_type: "retail_energy", operating_stations: ["Lagos Island", "Surulere"], notes: null, status: "submitted", created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
+      { id: "app-002", legal_name: "GreenPower Co", contact_name: "Fatima Yusuf", contact_email: "f.yusuf@greenpower.ng", contact_phone: "+2348099887766", business_type: "commercial", operating_stations: ["Abuja Central"], notes: "Has existing NERC license", status: "contacted", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+      { id: "app-003", legal_name: "Bright Connections", contact_name: "Chidi Eze", contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", business_type: "residential", operating_stations: ["Port Harcourt"], notes: null, status: "submitted", created_at: new Date(Date.now() - 1 * 86400000).toISOString() },
+    ];
+    const filtered = status ? seed.filter(a => a.status === status) : seed;
+    return localJobResponse({ applications: filtered });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendors")) {
+    const sp = adminQueryParams(request.url);
+    const statusFilter = sp.get("status") || "";
+    const q = (sp.get("q") || "").toLowerCase();
+    const seed = [
+      { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
+      { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+      { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+    ];
+    let rows = seed;
+    if (statusFilter) rows = rows.filter(v => v.status === statusFilter);
+    if (q) rows = rows.filter(v => v.legal_name.toLowerCase().includes(q) || v.contact_email.toLowerCase().includes(q));
+    return localJobResponse({ vendors: rows });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/fraud")) {
+    const sp = adminQueryParams(request.url);
+    const resolved = sp.get("resolved");
+    const minScore = parseInt(sp.get("min_score") || "0", 10);
+    const seed = [
+      { id: "fa-001", customer_id: "cust-1", purchase_order_id: "po-1", meter_id: "44120000001", amount_minor: 500000, score: 92, action: "block", resolved: false, resolution_note: null, resolved_at: null, created_at: new Date(Date.now() - 3600000).toISOString(), fraud_signals: [{ id: "s1", signal_type: "amount_spike", weight: 45, detail: "3× normal spend" }, { id: "s2", signal_type: "new_meter", weight: 30, detail: "First vend on meter" }], customers: { users: { full_name: "Musa Abubakar", phone: "+2348012345678" } } },
+      { id: "fa-002", customer_id: "cust-2", purchase_order_id: "po-2", meter_id: "44120000002", amount_minor: 200000, score: 72, action: "step_up", resolved: false, resolution_note: null, resolved_at: null, created_at: new Date(Date.now() - 7200000).toISOString(), fraud_signals: [{ id: "s3", signal_type: "rapid_retry", weight: 35, detail: "4 attempts in 10 min" }], customers: { users: { full_name: "Amina Bello", phone: "+2348023456789" } } },
+      { id: "fa-003", customer_id: "cust-3", purchase_order_id: "po-3", meter_id: "44120000003", amount_minor: 100000, score: 55, action: "step_up", resolved: true, resolution_note: "Customer verified via phone", resolved_at: new Date(Date.now() - 1800000).toISOString(), created_at: new Date(Date.now() - 10800000).toISOString(), fraud_signals: [{ id: "s4", signal_type: "location_change", weight: 25, detail: "Different LGA than usual" }], customers: { users: { full_name: "Chukwuemeka Obi", phone: "+2349034567890" } } },
+    ];
+    let rows = seed.filter(a => a.score >= minScore);
+    if (resolved === "true") rows = rows.filter(a => a.resolved === true);
+    else if (resolved === "false") rows = rows.filter(a => a.resolved === false);
+    return localJobResponse({ assessments: rows });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/meter-orders")) {
+    const sp = adminQueryParams(request.url);
+    const statusFilter = sp.get("status") || "";
+    const seed = [
+      { id: "mo-001", meter_type: "single_phase", property_address: "12 Broad St, Lagos Island", service_area: "Lagos Island", contact_phone: "+2348011223344", amount_minor: 8500000, status: "paid", payment_reference: "PAY-001", technician_name: null, notes: null, created_at: new Date(Date.now() - 5 * 86400000).toISOString(), updated_at: new Date(Date.now() - 4 * 86400000).toISOString(), customers: { users: { full_name: "Tunde Adeyemi", email: "tunde@example.com", phone: "+2348011223344" } } },
+      { id: "mo-002", meter_type: "three_phase", property_address: "45 Adeola Odeku, Victoria Island", service_area: "Victoria Island", contact_phone: "+2349099887766", amount_minor: 18000000, status: "pending_payment", payment_reference: "PAY-002", technician_name: null, notes: "Commercial property", created_at: new Date(Date.now() - 2 * 86400000).toISOString(), updated_at: new Date(Date.now() - 2 * 86400000).toISOString(), customers: { users: { full_name: "Ngozi Okafor", email: "ngozi@biz.ng", phone: "+2349099887766" } } },
+    ];
+    const rows = statusFilter ? seed.filter(o => o.status === statusFilter) : seed;
+    return localJobResponse({ orders: rows });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/audit/summary")) {
+    return localJobResponse({ counts: [
+      { action: "purchase_order.created", count: 47 },
+      { action: "funding.approved", count: 12 },
+      { action: "dispute.opened", count: 5 },
+      { action: "refund.approved", count: 3 },
+      { action: "vendor.status_changed", count: 2 },
+    ]});
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/audit")) {
+    return localJobResponse({ entries: [], nextCursor: null });
+  }
+
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/security-events")) {
+    return localJobResponse({ events: [] });
+  }
+
+  // ── PATCH endpoints ─────────────────────────────────────────────────────────
+  if (methodUpper === "PATCH" && pathname.startsWith("/api/v1/admin/disputes/")) {
+    const id = adminPathId("/api/v1/admin/disputes");
+    const body = requestData.parsedBody || {};
+    const actorId = request.__auth?.userId || "staff";
+    try {
+      if (body.status) walletDisputes.updateDisputeStatus({ disputeId: id, status: body.status, resolutionNote: body.resolution_note || "", actorId });
+      if (body.message) walletDisputes.addNote({ disputeId: id, note: body.message, actorId });
+      return localJobResponse({ updated: true });
+    } catch (e) {
+      return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+  }
+
+  if (methodUpper === "PATCH" && pathname.startsWith("/api/v1/admin/feature-flags/")) {
+    const key = decodeURIComponent(adminPathId("/api/v1/admin/feature-flags") || "");
+    const body = requestData.parsedBody || {};
+    try {
+      return localJobResponse(walletFeatureFlags.updateFlag(key, body));
+    } catch (e) {
+      return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+  }
+
+  if (methodUpper === "PATCH" && pathname.startsWith("/api/v1/admin/privacy/deletions/")) {
+    const id = adminPathId("/api/v1/admin/privacy/deletions");
+    const body = requestData.parsedBody || {};
+    const actorId = request.__auth?.userId || "staff";
+    try {
+      return localJobResponse(walletPrivacy.reviewDeletionRequest({ id, approve: body.approve, note: body.note, actorId }));
+    } catch (e) {
+      return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+  }
+
+  if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/vendors\/[^/]+\/status$/)) {
+    return localJobResponse({ updated: true });
+  }
+
+  if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/fraud\/[^/]+\/resolve$/)) {
+    return localJobResponse({ resolved: true });
+  }
+
+  if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/meter-orders\/[^/]+$/)) {
+    return localJobResponse({ updated: true });
+  }
+
+  if (methodUpper === "GET" && pathname === "/api/auth/mfa/factors") {
+    return localJobResponse({ factors: [] });
+  }
+
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
   const payload = requestData.parsedBody || {};
   if (pathname === "/api/notifications/sms/status") {
@@ -1841,6 +2348,281 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/wallet/reconciliation/run") {
     return localJobResponse(walletReconciliation.runReconciliation());
   }
+  // Disputes
+  if (pathname === "/api/wallet/disputes/list") {
+    const rows = walletDisputes.listDisputes(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/disputes/summary") {
+    return localJobResponse(walletDisputes.disputeSummary());
+  }
+  if (pathname === "/api/wallet/disputes/open") {
+    const actorId = request.__auth?.userId || payload.actorId || "staff";
+    return localJobResponse(walletDisputes.openDispute({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/disputes/update-status") {
+    const actorId = request.__auth?.userId || payload.actorId || "staff";
+    return localJobResponse(walletDisputes.updateDisputeStatus({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/disputes/add-note") {
+    const actorId = request.__auth?.userId || payload.actorId || "staff";
+    return localJobResponse(walletDisputes.addNote({ ...payload, actorId }));
+  }
+  // Refunds
+  if (pathname === "/api/wallet/refunds/list") {
+    const rows = walletRefunds.listRefunds(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/refunds/summary") {
+    return localJobResponse(walletRefunds.refundSummary());
+  }
+  if (pathname === "/api/wallet/refunds/request") {
+    const actorId = request.__auth?.userId || payload.actorId || "staff";
+    return localJobResponse(walletRefunds.requestRefund({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/refunds/approve") {
+    const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+    return localJobResponse(walletRefunds.approveRefund({ ...payload, actorId }));
+  }
+  if (pathname === "/api/wallet/refunds/reject") {
+    const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+    return localJobResponse(walletRefunds.rejectRefund({ ...payload, actorId }));
+  }
+  // Settlement
+  if (pathname === "/api/wallet/settlement/list") {
+    const rows = walletSettlement.listSettlementBatches(payload);
+    return localJobResponse({ rows, total: rows.length });
+  }
+  if (pathname === "/api/wallet/settlement/summary") {
+    return localJobResponse(walletSettlement.settlementSummary());
+  }
+  if (pathname === "/api/wallet/settlement/generate") {
+    const initiatedBy = request.__auth?.userId || payload.initiatedBy || "staff";
+    return localJobResponse(walletSettlement.generateSettlementBatch({ ...payload, initiatedBy }));
+  }
+  if (pathname === "/api/wallet/settlement/settle") {
+    const actorId = request.__auth?.userId || payload.actorId || "staff";
+    return localJobResponse(walletSettlement.settleSettlementBatch({ ...payload, actorId }));
+  }
+  // ── Vendor v1 REST POST endpoints ───────────────────────────────────────────
+  if (pathname === "/api/v1/vendor/logout") {
+    return localJobResponse({ ok: true });
+  }
+
+  if (pathname === "/api/v1/vendor/password-change") {
+    const { currentPassword, newPassword } = payload;
+    if (!newPassword || String(newPassword).length < 8) {
+      return { status: 400, body: { code: 400, msg: "New password must be at least 8 characters", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+    return localJobResponse({ ok: true });
+  }
+
+  if (pathname === "/api/v1/vendor/disputes") {
+    const orgId = (request.__auth?.organizationId) || "demo-vendor-org-01";
+    const actorId = request.__auth?.userId || orgId;
+    const { subject, description, purchase_order_id, disputeType } = payload;
+    if (!description) {
+      return { status: 400, body: { code: 400, msg: "description is required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+    try {
+      const dispute = walletDisputes.openDispute({
+        organizationId: orgId,
+        walletId: "",
+        purchaseOrderId: purchase_order_id || "",
+        disputeType: disputeType || "other",
+        amountMinor: Number(payload.amountMinor || 0),
+        description: subject ? `${subject}: ${description}` : description,
+        actorId
+      });
+      return localJobResponse({ dispute });
+    } catch (e) {
+      return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+  }
+
+  {
+    const disputeMsgMatch = pathname.match(/^\/api\/v1\/vendor\/disputes\/([^/]+)\/messages$/);
+    if (disputeMsgMatch) {
+      const disputeId = disputeMsgMatch[1];
+      const actorId = request.__auth?.userId || "vendor";
+      const note = payload.body || payload.message || "";
+      if (!note) return { status: 400, body: { code: 400, msg: "body is required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
+      try {
+        const entry = walletDisputes.addNote({ disputeId, note, actorId });
+        return localJobResponse({ message: { id: entry.id, sender_actor_type: "vendor", body: entry.note, created_at: entry.createdAt } });
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+  }
+
+  if (pathname === "/api/v1/vendor/vend/preview") {
+    const meterId = String(payload.meterId || "").trim();
+    const amtMinor = Number(payload.amountMinor || 200000);
+    if (!meterId) return { status: 400, body: { code: 400, msg: "meterId is required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
+    const unitsKwh = parseFloat((amtMinor / 100 / 55).toFixed(2));
+    return localJobResponse({
+      meter: { meterId, customerId: `CUST-${meterId.slice(-4)}`, customerName: "Customer " + meterId.slice(-4), stationId: "TUNGA", tariffId: "TARIFF-01" },
+      preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: 5500, tariffId: "TARIFF-01" }
+    });
+  }
+
+  if (pathname === "/api/v1/vendor/vend") {
+    const orgId = request.__auth?.organizationId || "demo-vendor-org-01";
+    const actorId = request.__auth?.userId || orgId;
+    const meterId = String(payload.meterId || "").trim();
+    const amtMinor = Number(payload.amountMinor || 0);
+    if (!meterId || !amtMinor) return { status: 400, body: { code: 400, msg: "meterId and amountMinor are required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
+    try {
+      let wallet = walletLedger.walletForOrganization(orgId);
+      if (!wallet) {
+        walletLedger.createVendorOrganization({ organizationId: orgId, name: "Demo Vendor" });
+        walletLedger.provisionWalletForOrganization({ organizationId: orgId, currency: "NGN", actorId: "system" });
+        wallet = walletLedger.walletForOrganization(orgId);
+      }
+      const ikey = `vend:${orgId}:${meterId}:${amtMinor}:${Date.now()}`;
+      const order = walletPurchase.createPurchaseOrder({ organizationId: orgId, targetMeter: meterId, amountMinor: amtMinor, mode: "token", actorId, idempotencyKey: ikey });
+      const units = parseFloat((amtMinor / 100 / 55).toFixed(2));
+      const token = Array.from({ length: 20 }, () => Math.floor(Math.random() * 10)).join("").replace(/(.{4})/g, "$1-").slice(0, -1);
+      try { walletPurchase.completeTokenPurchase({ purchaseOrderId: order.id, token, unitsKwh: units, actorId: "system", idempotencyKey: `complete:${ikey}` }); } catch {}
+      return localJobResponse({ token, units, receiptId: order.receiptNumber, purchaseOrder: order });
+    } catch (e) {
+      return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+    }
+  }
+
+  if (pathname === "/api/v1/vendor/funding/paystack") {
+    return localJobResponse({ authorizationUrl: "https://checkout.paystack.com/demo-beverly-funding-local" });
+  }
+
+  // ── Admin v1 REST POST endpoints ────────────────────────────────────────────
+  {
+    const fundingApproveMatch = pathname.match(/^\/api\/v1\/admin\/funding\/([^/]+)\/approve$/);
+    if (fundingApproveMatch) {
+      const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+      try {
+        return localJobResponse(walletFunding.approveFundingRequest({ fundingRequestId: fundingApproveMatch[1], actorId }));
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+    const fundingRejectMatch = pathname.match(/^\/api\/v1\/admin\/funding\/([^/]+)\/reject$/);
+    if (fundingRejectMatch) {
+      const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+      try {
+        return localJobResponse(walletFunding.rejectFundingRequest({ fundingRequestId: fundingRejectMatch[1], reason: payload.reason || "Rejected by admin", actorId }));
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+    const refundApproveMatch = pathname.match(/^\/api\/v1\/admin\/refunds\/([^/]+)\/approve$/);
+    if (refundApproveMatch) {
+      const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+      const approvedAmountMinor = Number(payload.approvedAmountMinor || payload.amount_minor || 0);
+      try {
+        return localJobResponse(walletRefunds.approveRefund({ refundId: refundApproveMatch[1], approvedAmountMinor: approvedAmountMinor || 1, actorId, reviewerNote: payload.reason || "" }));
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+    const refundRejectMatch = pathname.match(/^\/api\/v1\/admin\/refunds\/([^/]+)\/reject$/);
+    if (refundRejectMatch) {
+      const actorId = request.__auth?.userId || payload.actorId || "finance-checker";
+      try {
+        return localJobResponse(walletRefunds.rejectRefund({ refundId: refundRejectMatch[1], actorId, reviewerNote: payload.reason || "" }));
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+    if (pathname === "/api/v1/admin/feature-flags") {
+      try {
+        return localJobResponse(walletFeatureFlags.createFlag({ key: payload.key, description: payload.description }));
+      } catch (e) {
+        return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
+      }
+    }
+    if (pathname === "/api/v1/admin/reconciliation/run") {
+      const actorId = request.__auth?.userId || "staff";
+      return localJobResponse(walletReconciliation.runReconciliation());
+    }
+    if (pathname === "/api/v1/admin/vendors") {
+      const id = "vo-" + Math.random().toString(36).slice(2, 8);
+      return localJobResponse({ id, ...payload, status: "pending", created_at: new Date().toISOString() });
+    }
+  }
+
+  // Vending Monitor
+  if (pathname === "/api/wallet/vending-monitor/summary") {
+    return localJobResponse(walletVendingMonitor.vendMonitorSummary());
+  }
+  if (pathname === "/api/wallet/vending-monitor/list") {
+    return localJobResponse(walletVendingMonitor.listVendOrders(payload));
+  }
+
+  // ── Reports ──
+  if (pathname === "/api/reports/revenue") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.revenueReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/wallet") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.walletReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/customers") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.customerReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/audit") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.auditReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/settlement") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.settlementReport(payload.dateRange, payload.filters));
+  }
+
+  // ── MFA / 2FA ──
+  if (pathname === "/api/auth/mfa/enroll") {
+    const nodeCrypto = require("crypto");
+    const secretBytes = nodeCrypto.randomBytes(20);
+    const base32Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const secret = Array.from(secretBytes).map((b) => base32Chars[b % 32]).join("");
+    const factorId = nodeCrypto.randomUUID();
+    const recoveryCodes = Array.from({ length: 10 }, () => {
+      const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      const part = () => Array.from(nodeCrypto.randomBytes(5)).map((b) => charset[b % 36]).join("");
+      return `${part()}-${part()}`;
+    });
+    return localJobResponse({
+      factorId,
+      totpUri: `otpauth://totp/Beverly:user?secret=${secret}&issuer=Beverly&digits=6&period=30`,
+      secret,
+      recoveryCodes
+    });
+  }
+  if (pathname === "/api/auth/mfa/verify-enrollment") {
+    const code = String(payload.code || "");
+    return localJobResponse({ verified: /^\d{6}$/.test(code) });
+  }
+  if (pathname === "/api/auth/mfa/challenge") {
+    const nodeCrypto = require("crypto");
+    return localJobResponse({ challengeId: nodeCrypto.randomUUID() });
+  }
+  if (pathname === "/api/auth/mfa/verify-challenge") {
+    const code = String(payload.code || "");
+    return localJobResponse({ verified: /^\d{6}$/.test(code) });
+  }
+  if (pathname === "/api/auth/mfa/unenroll") {
+    return localJobResponse({ success: true });
+  }
+  if (pathname === "/api/auth/mfa/factors") {
+    return localJobResponse({ factors: [] });
+  }
+  if (pathname === "/api/auth/mfa/verify-recovery") {
+    const code = String(payload.code || "").trim();
+    return localJobResponse({ verified: code.length >= 10 });
+  }
+
   if (pathname === "/api/user/login") {
     return loginResponse(payload);
   }
@@ -2189,6 +2971,7 @@ async function tryLivePath(request, liveUrl, requestData, token) {
 async function proxyLive(request, pathname, requestData) {
   const env = getEnv();
   if (!env.liveProxyEnabled) return null;
+  const liveRequestData = sanitizeLiveRequestData(pathname, requestData);
   if (isGuardedWriteRequest(pathname, request.method, requestData) && !env.allowLiveWrites) {
     return {
       status: 403,
@@ -2214,7 +2997,7 @@ async function proxyLive(request, pathname, requestData) {
   for (const candidate of candidates) {
     const liveUrl = `${env.liveBaseUrl}${candidate}${query}`;
     try {
-      const liveResult = await tryLivePath(request, liveUrl, requestData, token);
+      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token);
       if (liveResult.status === 401 || liveResult.status === 403) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
         await handleAutomationIncident({

@@ -13,6 +13,7 @@
   "dependencies": {
     "@beverly/tokens": "workspace:*",
     "pinia": "^2.2.0",
+    "qrcode-generator": "^1.5.2",
     "vue": "^3.4.31",
     "vue-router": "^4.4.0"
   },

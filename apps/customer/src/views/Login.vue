@@ -2,12 +2,17 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { api, ApiError } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
 
 const router = useRouter();
 const route = useRoute();
+const auth = useAuthStore();
 const phoneInput = ref<HTMLInputElement | null>(null);
+const loginMode = ref<'email' | 'phone'>('email');
 const phone = ref('');
+const email = ref('');
+const password = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
@@ -29,7 +34,13 @@ function isValidPhone(raw: string): boolean {
 }
 
 async function submit() {
-    if (!isValidPhone(phone.value)) {
+    if (loginMode.value === 'email') {
+        if (!email.value || !password.value) {
+            error.value = 'Enter your email and password.';
+            errorCode.value = null;
+            return;
+        }
+    } else if (!isValidPhone(phone.value)) {
         error.value = 'Enter a valid Nigerian phone number.';
         errorCode.value = null;
         return;
@@ -37,15 +48,37 @@ async function submit() {
     loading.value = true;
     error.value = null;
     errorCode.value = null;
-    const normalised = normalise(phone.value);
     try {
-        const r = await api.post<{ challenge_id: string }>('/api/v1/customer/auth/login', { phone: normalised });
-        await router.push({ name: 'verify', query: { challenge_id: r.challenge_id, phone: normalised } });
+        if (loginMode.value === 'email') {
+            const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/login', {
+                email: email.value.trim(),
+                password: password.value,
+            });
+            auth.setSession(r.access_token, r.customer);
+            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+            return;
+        }
+        const normalised = normalise(phone.value);
+        const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
+            '/api/v1/customer/auth/login',
+            { phone: normalised },
+        );
+        await router.push({
+            name: 'verify',
+            query: {
+                challenge_id: r.challenge_id,
+                phone: normalised,
+                expires_at: r.expires_at,
+                retry_after_seconds: r.retry_after_seconds,
+            },
+        });
     } catch (e: any) {
         if (e instanceof ApiError) {
             errorCode.value = e.code;
             if (e.code === 'customer_not_found') {
                 error.value = 'No account found for this number.';
+            } else if (e.code === 'invalid_credentials') {
+                error.value = 'Invalid email or password.';
             } else if (e.code === 'rate_limit') {
                 error.value = 'Too many requests. Wait a few minutes and try again.';
             } else if (e.code === 'account_inactive') {
@@ -76,9 +109,13 @@ async function submit() {
     </div>
 
     <form class="auth-form" @submit.prevent="submit" novalidate>
+      <div class="mode-switch" role="tablist" aria-label="Login method">
+        <button type="button" :class="{ active: loginMode === 'email' }" @click="loginMode = 'email'">Email</button>
+        <button type="button" :class="{ active: loginMode === 'phone' }" @click="loginMode = 'phone'">Phone OTP</button>
+      </div>
 
       <!-- Phone field -->
-      <div class="field">
+      <div v-if="loginMode === 'phone'" class="field">
         <label class="field-label" for="login-phone">Phone number</label>
         <div class="phone-wrap">
           <span class="phone-prefix">
@@ -99,6 +136,36 @@ async function submit() {
           />
         </div>
       </div>
+
+      <template v-else>
+        <div class="field">
+          <label class="field-label" for="login-email">Email</label>
+          <input
+            id="login-email"
+            v-model="email"
+            class="bw-input"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            :disabled="loading"
+            @input="error = null"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="login-password">Password</label>
+          <input
+            id="login-password"
+            v-model="password"
+            class="bw-input"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Your password"
+            :disabled="loading"
+            @input="error = null"
+          />
+        </div>
+      </template>
 
       <!-- Error -->
       <div v-if="error" class="auth-error" role="alert">
@@ -150,6 +217,29 @@ async function submit() {
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.mode-switch button {
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  padding: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 700;
+  cursor: pointer;
+}
+.mode-switch button.active {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }

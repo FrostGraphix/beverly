@@ -154,7 +154,7 @@ const fixedSortPolicies = [
   [/token-generate\/clear-credit-token/, "customerId", "asc"],
   [/token-generate\/set-maximum-power-limit-token/, "customerId", "asc"],
   [/remote-operation\/remote-meter-(reading|control|token)/, "customerName", "asc"],
-  [/management\/customer/, "id", "asc"],
+  [/management\/customer/, "customerId", "asc"],
   [/management\/tariff/, "id", "asc"],
   [/management\/account/, "customerId", "asc"],
   [/admin\/user/, "userId", "asc"],

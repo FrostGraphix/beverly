@@ -16,7 +16,7 @@ function loadEnvFile(filePath: string) {
         if (separator === -1) continue;
         const key = trimmed.slice(0, separator).trim();
         const value = trimmed.slice(separator + 1).trim();
-        if (key && !(key in process.env)) process.env[key] = value;
+        if (key && !process.env[key]) process.env[key] = value;
     }
 }
 
@@ -39,6 +39,12 @@ const schema = z.object({
 
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
+    ENERGY_AUTHORIZATION_PASSWORD: z.string().optional(),
+    ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
+        if (value === undefined || value === '') return undefined;
+        if (typeof value === 'boolean') return value;
+        return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+    }, z.boolean()).optional(),
 
     PAYSTACK_SECRET_KEY: z.string().optional(),
     PAYSTACK_PUBLIC_KEY: z.string().optional(),
@@ -51,6 +57,14 @@ const schema = z.object({
     TWILIO_VERIFY_SERVICE_SID: z.string().optional(),
     TWILIO_TOKEN_SMS_FROM_NUMBER: z.string().optional(),
     TWILIO_TOKEN_SMS_MESSAGING_SERVICE_SID: z.string().optional(),
+    SMS_ALLOWED_COUNTRY_CODES: z.string().default('+234'),
+    SMS_BLOCKED_COUNTRY_CODES: z.string().default(''),
+    SMS_HIGH_RISK_COUNTRY_CODES: z.string().default('+234'),
+    SMS_OTP_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10).default(2),
+    SMS_OTP_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+    SMS_OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(15).max(600).default(60),
+    SMS_TOKEN_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+    SMS_TOKEN_RESEND_DAILY_MAX: z.coerce.number().int().min(1).max(10).default(3),
 
     POSTMARK_SERVER_TOKEN: z.string().optional(),
     POSTMARK_FROM: z.string().default('Beverly <no-reply@beverly.acoblighting.com>'),
@@ -79,3 +93,22 @@ export const corsOrigins = env.CORS_ORIGINS
 
 export const isProd = env.NODE_ENV === 'production';
 export const isDev = env.NODE_ENV === 'development';
+
+export function isCorsOriginAllowed(origin: string | undefined): boolean {
+    if (!origin) return true;
+    if (corsOrigins.includes(origin)) return true;
+
+    if (isDev) {
+        try {
+            const parsed = new URL(origin);
+            return (
+                (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+                ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    return corsOrigins.length === 0;
+}

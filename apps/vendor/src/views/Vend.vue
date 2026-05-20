@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 
 type Step = 'meter' | 'amount' | 'preview' | 'success';
@@ -10,9 +11,19 @@ const step = ref<Step>('meter');
 const meterId = ref('');
 const amountNaira = ref(2000);
 const loading = ref(false);
-const error = ref<string | null>(null);
+const error = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
+const authOpen = ref(false);
+const authorization = ref('');
 
-interface MeterInfo { meterId: string; customerId: string; customerName: string; stationId: string; tariffId: string; }
+interface MeterInfo {
+    meterId: string;
+    customerId: string;
+    customerName: string;
+    stationId: string;
+    tariffId: string;
+    liveVerified?: boolean;
+    resolutionSource?: string;
+}
 interface Preview { amountMinor: number; units: number; effectivePricePerKwh: number; tariffId: string; }
 
 const meter = ref<MeterInfo | null>(null);
@@ -20,6 +31,40 @@ const preview = ref<Preview | null>(null);
 const result = ref<{ token: string | null; units: number; receiptId: string | null; purchaseOrder: any } | null>(null);
 
 const amountMinor = computed(() => Math.max(0, Math.round(amountNaira.value * 100)));
+const canVend = computed(() => meter.value?.liveVerified !== false);
+const confirmLabel = computed(() => {
+    if (loading.value) return 'Generating token...';
+    if (!canVend.value) return 'Bind meter before vend';
+    return `Confirm - ${naira(preview.value?.amountMinor)}`;
+});
+
+function describeApiError(e: unknown, fallback: string) {
+    if (e instanceof ApiError) {
+        if (e.code === 'meter_lookup_unavailable' || e.status === 503) {
+            return {
+                title: 'Live lookup unavailable',
+                message: e.message,
+                action: 'No wallet debit or vend was attempted. Retry shortly, or ask an admin to bind this meter before selling.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'meter_not_found' || e.status === 404) {
+            return {
+                title: 'Meter not in catalog',
+                message: e.message,
+                action: 'Confirm the meter number, then bind the customer meter in admin if it is a valid live meter.',
+                code: e.code,
+            };
+        }
+        return {
+            title: 'Request failed',
+            message: e.message,
+            action: 'No vend was attempted. Please retry or contact support if this repeats.',
+            code: e.code,
+        };
+    }
+    return { title: 'Request failed', message: fallback };
+}
 
 async function lookupMeter() {
     if (!meterId.value.trim()) return;
@@ -32,7 +77,7 @@ async function lookupMeter() {
         meter.value = r.meter;
         step.value = 'amount';
     } catch (e: any) {
-        error.value = e?.message ?? 'Meter lookup failed';
+        error.value = describeApiError(e, e?.message ?? 'Meter lookup failed');
     } finally {
         loading.value = false;
     }
@@ -49,7 +94,7 @@ async function loadPreview() {
         preview.value = r.preview;
         step.value = 'preview';
     } catch (e: any) {
-        error.value = e?.message ?? 'Preview failed';
+        error.value = describeApiError(e, e?.message ?? 'Preview failed');
     } finally {
         loading.value = false;
     }
@@ -57,16 +102,37 @@ async function loadPreview() {
 
 async function confirm() {
     if (!meter.value || !preview.value) return;
+    if (!canVend.value) {
+        error.value = {
+            title: 'Live vend blocked for safety',
+            message: 'This meter must be live-verified or locally bound before token generation.',
+            action: 'No wallet debit or vend was attempted.',
+            code: 'meter_requires_live_binding',
+        };
+        return;
+    }
+    authOpen.value = true;
+}
+
+async function submitAuthorization() {
+    if (!meter.value || !preview.value || !authorization.value) return;
     loading.value = true; error.value = null;
     try {
         const r = await api.post<{ token: string | null; units: number; receiptId: string | null; purchaseOrder: any }>(
             '/api/v1/vendor/vend',
-            { meterId: meter.value.meterId, amountMinor: amountMinor.value, mode: 'wallet' },
+            {
+                meterId: meter.value.meterId,
+                amountMinor: amountMinor.value,
+                mode: 'wallet',
+                authorization: authorization.value,
+            },
         );
         result.value = r;
+        authorization.value = '';
+        authOpen.value = false;
         step.value = 'success';
     } catch (e: any) {
-        error.value = e?.message ?? 'Vending failed';
+        error.value = describeApiError(e, e?.message ?? 'Vending failed');
     } finally {
         loading.value = false;
     }
@@ -100,7 +166,12 @@ async function copyToken() {
         <input class="bw-input bw-mono" inputmode="numeric"
                v-model="meterId" @keyup.enter="lookupMeter"
                placeholder="44120…" autofocus />
-        <p v-if="error" class="bw-alert danger" style="margin-top: var(--s-3)">{{ error }}</p>
+        <div v-if="error" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
+          <strong>{{ error.title }}</strong>
+          <span>{{ error.message }}</span>
+          <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
+          <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+        </div>
         <button class="bw-btn primary" style="margin-top: var(--s-4); width: 100%; justify-content: center; height: 44px"
                 @click="lookupMeter" :disabled="loading || !meterId.trim()">
           {{ loading ? 'Looking up…' : 'Continue' }}
@@ -116,6 +187,12 @@ async function copyToken() {
           {{ meter?.meterId }} · {{ meter?.stationId }} · {{ meter?.tariffId }}
         </p>
 
+        <div v-if="!canVend" class="bw-alert" style="margin-top: var(--s-3); display: grid; gap: 6px">
+          <strong>Preview-only meter metadata</strong>
+          <span>This meter was resolved from archived read-only records, not the live account catalog. Bind or confirm it live before taking payment.</span>
+          <small v-if="meter?.resolutionSource" class="bw-mono">Source: {{ meter.resolutionSource }}</small>
+        </div>
+
         <div style="margin-top: var(--s-5)">
           <label class="bw-label">Amount (₦)</label>
           <input class="bw-input bw-mono" type="number" min="100" step="100" v-model.number="amountNaira" style="font-size: var(--t-xl)" />
@@ -125,7 +202,12 @@ async function copyToken() {
           </div>
         </div>
 
-        <p v-if="error" class="bw-alert danger" style="margin-top: var(--s-3)">{{ error }}</p>
+        <div v-if="error" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
+          <strong>{{ error.title }}</strong>
+          <span>{{ error.message }}</span>
+          <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
+          <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+        </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
                 @click="loadPreview" :disabled="loading || amountNaira < 100">
           {{ loading ? 'Calculating…' : 'Preview' }}
@@ -145,11 +227,20 @@ async function copyToken() {
           <div class="bw-row"><span class="bw-muted">Station</span><span class="bw-spacer"></span><span>{{ meter?.stationId }}</span></div>
           <div class="bw-row"><span class="bw-muted">Tariff</span><span class="bw-spacer"></span><span>{{ meter?.tariffId }}</span></div>
         </div>
+        <div v-if="!canVend" class="bw-alert" style="margin-top: var(--s-3); display: grid; gap: 6px">
+          <strong>Live vend blocked for safety</strong>
+          <span>This preview is allowed, but token generation is blocked until the meter is live-verified or locally bound.</span>
+        </div>
 
-        <p v-if="error" class="bw-alert danger" style="margin-top: var(--s-3)">{{ error }}</p>
+        <div v-if="error" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
+          <strong>{{ error.title }}</strong>
+          <span>{{ error.message }}</span>
+          <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
+          <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+        </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
-                @click="confirm" :disabled="loading">
-          {{ loading ? 'Generating token…' : `Confirm · ${naira(preview?.amountMinor)}` }}
+                @click="confirm" :disabled="loading || !canVend">
+          {{ confirmLabel }}
         </button>
       </div>
 
@@ -169,5 +260,28 @@ async function copyToken() {
         <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New vend</button>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model:open="authOpen"
+      title="Authorize credit token"
+      description="Enter your vendor PIN or password. Beverly never shows the energy authorization password."
+      confirm-label="Generate token"
+      tone="warn"
+      :loading="loading"
+      :disable-confirm="!authorization"
+      @confirm="submitAuthorization"
+    >
+      <label class="bw-label">Vendor authorization</label>
+      <input
+        class="bw-input bw-mono cd-input-target"
+        v-model="authorization"
+        type="password"
+        autocomplete="off"
+        placeholder="PIN or password"
+      />
+      <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-2)">
+        This confirms the wallet debit.
+      </p>
+    </ConfirmDialog>
   </AppShell>
 </template>

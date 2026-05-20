@@ -18,6 +18,7 @@ import { adminClient } from '../db/supabase.js';
 import { runDailyReconciliation } from '../services/reconciliation.js';
 import { runDailySettlement } from '../services/settlement.js';
 import { refreshCustomerBaseline } from '../services/fraud-engine.js';
+import { reconcileRemoteSendOrders } from '../services/vending.js';
 
 function safe(name: string, fn: () => Promise<void>): () => void {
     return () => {
@@ -36,7 +37,15 @@ async function sweepExpiredHolds(): Promise<void> {
         .lt('created_at', cutoff);
 
     if (!stale?.length) return;
+    const holdIds = (stale as any[]).map((hold) => hold.id);
+    const { data: protectedOrders } = await adminClient
+        .from('purchase_orders')
+        .select('hold_id')
+        .in('hold_id', holdIds)
+        .in('status', ['dispatching', 'delivery_pending_review']);
+    const protectedHoldIds = new Set((protectedOrders ?? []).map((row: any) => row.hold_id));
     for (const hold of stale as any[]) {
+        if (protectedHoldIds.has(hold.id)) continue;
         void adminClient.rpc('fn_release_hold', { p_hold_id: hold.id });
     }
     console.info(`[JOB:holds] released ${stale.length} expired holds`);
@@ -88,6 +97,12 @@ async function scanStuckPurchases(): Promise<void> {
     // Future: add to exception_queue for ops review
 }
 
+async function reconcileRemoteSends(): Promise<void> {
+    const result = await reconcileRemoteSendOrders(25);
+    if (!result.checked) return;
+    console.info(`[JOB:remote-send] checked=${result.checked} delivered=${result.delivered} review=${result.reviewed}`);
+}
+
 // ── Fraud baseline recompute ───────────────────────────────────────────────────
 async function recomputeFraudBaselines(): Promise<void> {
     const { data: customers } = await adminClient
@@ -125,6 +140,7 @@ export function startScheduler(): void {
 
     // Stuck purchase scan — every 10 min
     cron.schedule('*/10 * * * *', safe('stuck-purchases', scanStuckPurchases));
+    cron.schedule('*/3 * * * *', safe('remote-send', reconcileRemoteSends));
 
     // Daily reconciliation — 02:00
     cron.schedule('0 2 * * *', safe('reconciliation', runDailyReconciliation));

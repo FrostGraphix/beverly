@@ -25,7 +25,7 @@ import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
 import {
-    lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask,
+    lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { findWalletByOwner } from './wallets.js';
@@ -171,6 +171,8 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
             const tokenRes = await generateCreditToken({
                 meterId: meter.meterId,
                 customerId: meter.customerId,
+                customerName: meter.customerName,
+                stationId: meter.stationId,
                 amountMinor: input.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
@@ -217,30 +219,59 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
 
         } catch (e: any) {
             // token engine or capture failed → release hold and mark failed
-            try { await releaseHold(hold.id); } catch { /* noop */ }
-            await markFailed(po.id, e.code ?? 'token_engine_failed', e.message);
+            if (token) {
+                await markPendingReview(po.id, e.code ?? 'post_token_failed', e.message, {
+                    token,
+                    deliveryState: 'token_generated_needs_reconciliation',
+                });
+            } else {
+                try { await releaseHold(hold.id); } catch { /* noop */ }
+                await markFailed(po.id, e.code ?? 'token_engine_failed', e.message);
+            }
             throw new VendingError(e.message, e.code ?? 'token_engine_failed');
         }
     } else {
-        // remote_send: dispatch task, hold stays active, worker polls later
+        // remote_send: generate the credit token, then dispatch it to the meter.
+        // The hold stays active until the remote task worker confirms delivery.
         try {
-            const sendRes = await createRemoteSendTask({
+            const tokenRes = await generateCreditToken({
                 meterId: meter.meterId,
+                customerId: meter.customerId,
+                customerName: meter.customerName,
+                stationId: meter.stationId,
                 amountMinor: input.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
                 reference: po.id,
             });
+            token = tokenRes.token;
+            const sendRes = await createRemoteSendTask({
+                customerId: meter.customerId,
+                customerName: meter.customerName,
+                meterId: meter.meterId,
+                stationId: meter.stationId,
+                protocolVersion: meter.protocolVersion,
+                token,
+                reference: po.id,
+            });
             remoteTaskId = sendRes.taskId;
             await adminClient.from('purchase_orders').update({
+                token,
                 remote_task_id: remoteTaskId,
                 status: 'dispatching',
                 delivery_state: 'remote_send_pending',
             }).eq('id', po.id);
-            po = { ...po, remote_task_id: remoteTaskId, status: 'dispatching', delivery_state: 'remote_send_pending' };
+            po = { ...po, token, remote_task_id: remoteTaskId, status: 'dispatching', delivery_state: 'remote_send_pending' };
         } catch (e: any) {
-            try { await releaseHold(hold.id); } catch { /* noop */ }
-            await markFailed(po.id, e.code ?? 'remote_send_failed', e.message);
+            if (token) {
+                await markPendingReview(po.id, e.code ?? 'remote_send_failed', e.message, {
+                    token,
+                    deliveryState: 'token_generated_remote_send_failed',
+                });
+            } else {
+                try { await releaseHold(hold.id); } catch { /* noop */ }
+                await markFailed(po.id, e.code ?? 'remote_send_failed', e.message);
+            }
             throw new VendingError(e.message, e.code ?? 'remote_send_failed');
         }
     }
@@ -274,6 +305,93 @@ async function markFailed(purchaseOrderId: string, code: string, reason: string)
         status: 'failed',
         failure_reason: `${code}: ${reason}`.slice(0, 500),
     }).eq('id', purchaseOrderId);
+}
+
+async function markPendingReview(
+    purchaseOrderId: string,
+    code: string,
+    reason: string,
+    opts: { token?: string | null; deliveryState?: string | null } = {},
+) {
+    await adminClient.from('purchase_orders').update({
+        token: opts.token ?? undefined,
+        status: 'delivery_pending_review',
+        delivery_state: opts.deliveryState ?? 'manual_review_required',
+        failure_reason: `${code}: ${reason}`.slice(0, 500),
+    }).eq('id', purchaseOrderId);
+}
+
+export async function reconcileRemoteSendOrders(limit = 25) {
+    const { data: rows } = await adminClient
+        .from('purchase_orders')
+        .select('*')
+        .eq('purchase_mode', 'remote_send')
+        .eq('status', 'dispatching')
+        .eq('delivery_state', 'remote_send_pending')
+        .not('remote_task_id', 'is', null)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+
+    let checked = 0;
+    let delivered = 0;
+    let reviewed = 0;
+
+    for (const row of (rows ?? []) as PurchaseOrder[]) {
+        checked++;
+        try {
+            const status = await pollRemoteSendStatus(row.remote_task_id!);
+            if (status.status === 'pending' || status.status === 'unknown') continue;
+            if (status.status === 'failed') {
+                await markPendingReview(row.id, 'remote_delivery_failed', 'Remote meter task failed.', {
+                    token: row.token,
+                    deliveryState: 'remote_send_failed_needs_review',
+                });
+                reviewed++;
+                continue;
+            }
+
+            const ledgerEntry = await captureHold({
+                holdId: row.hold_id!,
+                entryType: 'purchase_debit',
+                referenceType: 'purchase_order',
+                referenceId: row.id,
+                idempotencyKey: ledgerKey('purchase', 'capture', row.id, 'remote-final'),
+                memo: `Remote vending · ${row.meter_id}`,
+                createdBy: row.created_by,
+            });
+            const receipt = await createReceipt({
+                purchaseOrderId: row.id,
+                payload: {
+                    receiptNumber: shortReceipt(row.id),
+                    customerId: row.customer_id,
+                    customerName: row.customer_name,
+                    meterId: row.meter_id,
+                    stationId: row.station_id,
+                    tariffId: row.tariff_id,
+                    amountMinor: row.amount_minor,
+                    units: row.units_kwh,
+                    token: row.token,
+                    remoteTaskId: row.remote_task_id,
+                    ledgerEntryId: ledgerEntry.id,
+                    purchaseMode: 'remote_send',
+                },
+            });
+            await adminClient.from('purchase_orders').update({
+                receipt_id: receipt.id,
+                status: 'delivered',
+                delivery_state: 'remote_send_delivered',
+            }).eq('id', row.id);
+            delivered++;
+        } catch (e: any) {
+            await markPendingReview(row.id, e.code ?? 'remote_reconcile_failed', e.message ?? 'Remote reconciliation failed.', {
+                token: row.token,
+                deliveryState: 'remote_reconcile_failed',
+            });
+            reviewed++;
+        }
+    }
+
+    return { checked, delivered, reviewed };
 }
 
 function shortReceipt(orderId: string): string {

@@ -1,0 +1,27 @@
+
+> beverly@0.1.0 dev
+> node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs
+
+[36m[crm     ][0m → http://127.0.0.1:9321  (npm.cmd run dev:web -- --port 9321)
+[35m[wallet  ][0m → http://localhost:4000  (pnpm.cmd dev)
+[32m[admin   ][0m → http://localhost:5175  (pnpm.cmd dev)
+[33m[vendor  ][0m → http://localhost:5174  (pnpm.cmd dev)
+[34m[customer][0m → http://localhost:5173  (pnpm.cmd dev)
+[36m[api     ][0m reference API → http://127.0.0.1:9320
+[35m[wallet  ][0m exited (code 1)
+[32m[admin   ][0m exited (code 1)
+[33m[vendor  ][0m exited (code 1)
+[34m[customer][0m exited (code 1)
+[36m[crm     ][0m > beverly@0.1.0 dev:web
+[36m[crm     ][0m > vite --host 127.0.0.1 --port 9321
+[36m[api     ][0m 
+[36m[api     ][0m ─────────────────── Beverly dev stack ───────────────────
+[36m[crm     ][0m http://127.0.0.1:9321
+[35m[wallet  ][0m http://localhost:4000
+[32m[admin   ][0m http://localhost:5175
+[33m[vendor  ][0m http://localhost:5174
+[34m[customer][0m http://localhost:5173
+[36m[api     ][0m reference API: http://127.0.0.1:9320
+[36m[api     ][0m ─────────────────────────────────────────────────────────
+[36m[crm     ][0m exited (code 1)
+[36m[api     ][0m shutting down…

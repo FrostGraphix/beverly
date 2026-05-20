@@ -29,6 +29,10 @@ function copyToken() {
         navigator.clipboard.writeText(selected.value.payload.token);
     }
 }
+
+function printReceipt() {
+    window.print();
+}
 </script>
 
 <template>
@@ -58,7 +62,7 @@ function copyToken() {
       </div>
       <div class="bw-row" style="gap: var(--s-3); margin-top: var(--s-4)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="copyToken">Copy token</button>
-        <button class="bw-btn" style="flex:1; justify-content:center" @click="window.print()">Print</button>
+        <button class="bw-btn" style="flex:1; justify-content:center" @click="printReceipt">Print</button>
       </div>
     </div>
 

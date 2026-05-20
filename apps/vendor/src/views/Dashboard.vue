@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import VendorOnboardingChecklist from '../components/VendorOnboardingChecklist.vue';
 import { useWalletStore } from '../stores/wallet';
 import { naira } from '../lib/format';
 
@@ -26,6 +27,9 @@ const todayCount = computed(() => wallet.ledger.filter(e => isToday(e.created_at
 
 <template>
   <AppShell title="Dashboard">
+
+    <!-- Onboarding checklist (only shown until complete or dismissed) -->
+    <VendorOnboardingChecklist />
 
     <!-- Hero balance card -->
     <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--surface); border-color: oklch(70% 0.19 145 / 0.22); position: relative; overflow: hidden">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import OnboardingChecklist from '../components/OnboardingChecklist.vue';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
@@ -50,18 +51,8 @@ function greeting() {
       </div>
     </div>
 
-    <!-- KYC nudge -->
-    <div v-if="auth.kycTier === 0" class="bw-card" style="border-color: oklch(75% 0.14 80 / 0.30); background: oklch(75% 0.14 80 / 0.05)">
-      <div class="bw-row">
-        <div style="flex:1">
-          <p style="font-weight:700; font-size: var(--t-sm); margin:0 0 2px">Complete verification</p>
-          <p class="bw-muted" style="font-size: var(--t-xs); margin:0">Verify your identity to start buying tokens</p>
-        </div>
-        <router-link to="/kyc" class="bw-btn" style="text-decoration:none; flex-shrink:0; white-space:nowrap; font-size: var(--t-sm)">
-          Verify →
-        </router-link>
-      </div>
-    </div>
+    <!-- Onboarding checklist -->
+    <OnboardingChecklist />
 
     <!-- Recent activity -->
     <div class="bw-card flush">

@@ -14,6 +14,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/meter-orders', name: 'meter-orders', component: () => import('../views/MeterOrders.vue'), meta: { auth: true } },
     { path: '/wallet',     name: 'wallet',   component: () => import('../views/Wallet.vue'),    meta: { auth: true } },
     { path: '/wallet/fund', name: 'fund-wallet', component: () => import('../views/FundWallet.vue'), meta: { auth: true, kyc: 1 } },
+    { path: '/wallet/funding', name: 'funding-history', component: () => import('../views/FundingHistory.vue'), meta: { auth: true } },
     { path: '/meters',     name: 'meters',   component: () => import('../views/Meters.vue'),    meta: { auth: true } },
     { path: '/transactions', name: 'transactions', component: () => import('../views/Transactions.vue'), meta: { auth: true } },
     { path: '/receipts',      name: 'receipts',       component: () => import('../views/Receipts.vue'),       meta: { auth: true } },

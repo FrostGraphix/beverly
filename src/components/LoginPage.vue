@@ -107,6 +107,13 @@
         </BaseButton>
 
       </form>
+
+      <MfaChallengeModal
+        v-if="mfaRequired"
+        :factor-id="mfaFactorId"
+        @verified="onMfaVerified"
+        @cancelled="onMfaCancelled"
+      />
     </section>
   </main>
 </template>
@@ -114,16 +121,18 @@
 <script>
 import { demoLogin, login } from "../services/api";
 import { recordClientError } from "../services/error-logger.mjs";
+import { getMFAStatus } from "../services/mfa-service.mjs";
 import BaseButton from "./base/BaseButton.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
+import MfaChallengeModal from "./MfaChallengeModal.vue";
 
 const rememberedUserKey = "beverly.rememberedUser";
 
 export default {
   name: "LoginPage",
-  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput },
+  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput, MfaChallengeModal },
   data() {
     return {
       showPassword: false,
@@ -136,6 +145,8 @@ export default {
       maintenanceNotice: "",
       focused: "",
       portal: "admin",
+      mfaRequired: false,
+      mfaFactorId: null,
       form: {
         userId: "",
         password: "",
@@ -198,6 +209,18 @@ export default {
         await login({ userId: this.form.userId, password: this.form.password });
         if (this.rememberUsername) localStorage.setItem(rememberedUserKey, this.form.userId);
         else localStorage.removeItem(rememberedUserKey);
+
+        // Check MFA enrollment
+        try {
+          const mfa = await getMFAStatus();
+          if (mfa.enrolled) {
+            this.mfaRequired = true;
+            this.mfaFactorId = mfa.factorId;
+            this.loading = false;
+            return;
+          }
+        } catch { /* MFA unavailable — proceed without */ }
+
         this.$emit("logged-in");
       } catch (err) {
         this.error = "Sign in failed. Check credentials and retry.";
@@ -225,6 +248,15 @@ export default {
       this.errorReference = recordClientError("login-help-requested", new Error(this.error), {
         userId: this.form.userId || "unknown"
       });
+    },
+    onMfaVerified() {
+      this.mfaRequired = false;
+      this.mfaFactorId = null;
+      this.$emit("logged-in");
+    },
+    onMfaCancelled() {
+      this.mfaRequired = false;
+      this.mfaFactorId = null;
     }
   },
   watch: {

@@ -197,6 +197,14 @@
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
+          <DisputesPage v-else-if="route.customComponent === 'DisputesPage'" :route="route" />
+          <RefundsPage v-else-if="route.customComponent === 'RefundsPage'" :route="route" />
+          <SettlementPage v-else-if="route.customComponent === 'SettlementPage'" :route="route" />
+          <ReconciliationPage v-else-if="route.customComponent === 'ReconciliationPage'" :route="route" />
+          <WalletFundingPage v-else-if="route.customComponent === 'WalletFundingPage'" :route="route" />
+          <VendingMonitorPage v-else-if="route.customComponent === 'VendingMonitorPage'" :route="route" />
+          <ReportsPage v-else-if="route.customComponent === 'ReportsPage'" :route="route" />
+          <LiveProbingPage v-else-if="route.customComponent === 'LiveProbingPage'" />
           <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" :role-id="currentRoleId" />
           <TablePage v-else :route="route" />
         </main>
@@ -256,6 +264,7 @@
 <script>
 import DashboardPage from "./components/DashboardPage.vue";
 import LoginPage from "./components/LoginPage.vue";
+import LiveProbingPage from "./components/LiveProbingPage.vue";
 import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
@@ -264,9 +273,16 @@ import SiteConsumptionPage from "./components/SiteConsumptionPage.vue";
 import TablePage from "./components/TablePage.vue";
 import ProfilePage from "./components/ProfilePage.vue";
 import SettingsPage from "./components/SettingsPage.vue";
+import ReportsPage from "./components/ReportsPage.vue";
 import ToastNotification from "./components/ToastNotification.vue";
 import BaseButton from "./components/base/BaseButton.vue";
 import BaseIconButton from "./components/base/BaseIconButton.vue";
+import DisputesPage from "./components/wallet/DisputesPage.vue";
+import RefundsPage from "./components/wallet/RefundsPage.vue";
+import SettlementPage from "./components/wallet/SettlementPage.vue";
+import ReconciliationPage from "./components/wallet/ReconciliationPage.vue";
+import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
+import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, touchSession } from "./services/api";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
@@ -295,7 +311,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, LoginPage, OnboardingStudioPage, ProfilePage, SettingsPage, SiteConsumptionPage, TablePage, ToastNotification },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, LiveProbingPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, SiteConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -356,7 +372,7 @@ export default {
     themeOptions() {
       return [
         { id: "system", label: "System", description: "Follow device", swatch: "linear-gradient(135deg, #10b981, #0f172a)" },
-        { id: "light", label: "Light", description: "Clean operations", swatch: "linear-gradient(135deg, #ecfdf5, #ffffff)" },
+        { id: "light", label: "Light", description: "Wallet light", swatch: "linear-gradient(135deg, #f2f4f2, #ffffff 58%, #c6e000)" },
         { id: "executive", label: "Executive", description: "Maximum legibility in green", swatch: "linear-gradient(135deg, #020202, #22c55e)" },
         { id: "contrast", label: "Contrast", description: "Maximum legibility", swatch: "linear-gradient(135deg, #000000, #facc15)" }
       ];

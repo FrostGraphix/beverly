@@ -116,7 +116,11 @@ function authUsersFromBody(body) {
 
 function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
   const emailValue = user.email || fallbackEmail || "";
-  const roleId = user.user_metadata?.role_key || user.app_metadata?.role_key || "";
+  const roleId = user.user_metadata?.role_key
+    || user.app_metadata?.role_key
+    || user.user_metadata?.role
+    || user.app_metadata?.role
+    || "";
   return {
     authUserId: user.id || "",
     userId: user.user_metadata?.user_id || (emailValue === adminEmailsFallback() ? "admin" : emailValue),
@@ -259,7 +263,11 @@ async function createAdminUser({ email, password }) {
       email_confirm: true,
       user_metadata: {
         role: "super-admin",
-        user_name: "ACB(admin)"
+        role_key: "super-admin",
+        user_id: "admin",
+        user_name: "ACB(admin)",
+        login_email: email,
+        remark: "super-admin"
       }
     })
   }));
@@ -293,6 +301,7 @@ async function createAuthUser(payload) {
       password,
       email_confirm: true,
       user_metadata: {
+        role: payload.roleId || "operations-manager",
         role_key: payload.roleId || "operations-manager",
         user_name: payload.name || payload.nickName || payload.userName || payload.userId,
         user_id: String(payload.userId || "").trim(),
@@ -317,13 +326,14 @@ async function createAuthUser(payload) {
 async function updateAuthUser(userId, payload) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return null;
-  const user = await getAuthUserByUserId(userId);
+  const user = await getAuthUserByUserId(userId) || (payload.email ? await getAuthUserByIdentifier(payload.email) : null);
   if (!user) throw new Error("User not found in Supabase Auth");
   const nextEmail = await resolveAuthEmail(userId, payload.email);
   
   const updateBody = {
     user_metadata: {
       ...user.user_metadata,
+      ...(payload.roleId ? { role: payload.roleId } : {}),
       ...(payload.roleId ? { role_key: payload.roleId } : {}),
       ...(payload.name || payload.nickName || payload.userName ? { user_name: payload.name || payload.nickName || payload.userName } : {}),
       ...(payload.userId ? { user_id: String(payload.userId).trim() } : {}),
@@ -430,6 +440,28 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
+/* ── MFA / 2FA (production stubs) ── */
+
+async function enrollMFAFactor() {
+  // TODO: Production — call supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'Beverly' })
+  return { factorId: null, totpUri: null, secret: null };
+}
+
+async function verifyMFAFactor(factorId, code) {
+  // TODO: Production — call supabase.auth.mfa.challengeAndVerify({ factorId, code })
+  return { verified: false };
+}
+
+async function listMFAFactors() {
+  // TODO: Production — call supabase.auth.mfa.listFactors()
+  return { factors: [] };
+}
+
+async function unenrollMFAFactor(factorId) {
+  // TODO: Production — call supabase.auth.mfa.unenroll({ factorId })
+  return { success: false };
+}
+
 module.exports = {
   authEnabled,
   configured,
@@ -439,9 +471,11 @@ module.exports = {
   deleteAuthUser,
   resolveAuthEmail,
   emailFromLogin,
+  enrollMFAFactor,
   getAuthUserByIdentifier,
   getAuthUserByUserId,
   ensureStorageBuckets,
+  listMFAFactors,
   restRequest,
   restRequestWithResponse,
   serviceConfigured,
@@ -449,5 +483,7 @@ module.exports = {
   authUserFromAccessToken,
   storageEnabled,
   storageReport,
-  uploadStorageObject
+  unenrollMFAFactor,
+  uploadStorageObject,
+  verifyMFAFactor
 };

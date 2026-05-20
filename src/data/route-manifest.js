@@ -29,6 +29,7 @@ export const routeManifest = [
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
+  { group: "Administration", title: "Reports", hash: "#/admin/reports", apis: [], columns: [], actions: ["Export"], isCustomPage: true, customComponent: "ReportsPage", roles: ["super-admin", "operations-manager", "finance-checker"] },
   // Wallet — opens the standalone wallet admin app in a new tab.
   // Staff: localhost:5175 (dev) / admin.beverly.acoblighting.com (prod)
   // Vendor portal: localhost:5174 (dev) — vendors log in there directly.
@@ -62,6 +63,17 @@ export const routeManifest = [
     actions: ["Export"],
     isCustomPage: true,
     roles: ["super-admin", "operations-manager", "account"]
+  },
+  {
+    group: "System",
+    title: "Live Probing & Sync",
+    hash: "#/system/live-probing",
+    apis: ["/api/local/consumption/live-probe", "/api/local/consumption/trigger-sync"],
+    columns: [],
+    actions: [],
+    isCustomPage: true,
+    customComponent: "LiveProbingPage",
+    roles: ["super-admin", "operations-manager"]
   }
 ];
 
@@ -106,7 +118,8 @@ const referenceVisibleHashes = new Set([
   "#/remote-support/firmware-update",
   "#/remote-support/file-upload",
   "#/system/station-onboarding-studio",
-  "#/system/automation-command"
+  "#/system/automation-command",
+  "#/system/live-probing",
 ]);
 
 

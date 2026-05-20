@@ -5,6 +5,7 @@
  *   • Normalizes errors to { error, message, details?, status }
  */
 const BASE = import.meta.env.VITE_API_BASE ?? '';
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {
     constructor(public status: number, public code: string, message: string, public details?: unknown) {
@@ -22,6 +23,8 @@ function newIdemKey(): string {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(init.headers as Record<string, string> ?? {}),
@@ -32,26 +35,41 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         headers['Idempotency-Key'] = headers['Idempotency-Key'] ?? newIdemKey();
     }
 
-    const res = await fetch(`${BASE}${path}`, {
-        ...init,
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        credentials: 'include',
-    });
+    try {
+        const res = await fetch(`${BASE}${path}`, {
+            ...init,
+            method,
+            headers,
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+            credentials: 'include',
+            signal: init.signal ?? controller.signal,
+        });
 
-    const text = await res.text();
-    const json = text ? JSON.parse(text) : null;
+        const text = await res.text();
+        const json = text ? JSON.parse(text) : null;
 
-    if (!res.ok) {
-        throw new ApiError(
-            res.status,
-            json?.error ?? 'http_error',
-            json?.message ?? res.statusText,
-            json?.details,
-        );
+        if (!res.ok) {
+            throw new ApiError(
+                res.status,
+                json?.error ?? 'http_error',
+                json?.message ?? res.statusText,
+                json?.details,
+            );
+        }
+        return json as T;
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new ApiError(
+                0,
+                'request_timeout',
+                'The server took too long to respond. Please try again.',
+            );
+        }
+        throw error;
+    } finally {
+        window.clearTimeout(timeout);
     }
-    return json as T;
 }
 
 export const api = {

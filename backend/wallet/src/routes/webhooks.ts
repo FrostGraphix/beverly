@@ -139,6 +139,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     .eq('id', purchaseOrderId)
                     .maybeSingle();
                 if (po && (po as any).status !== 'delivered' && (po as any).status !== 'failed') {
+                    let issuedToken: string | null = null;
                     try {
                         const { generateCreditToken, previewPurchase, lookupMeter } = await import('../services/token-engine.js');
                         const { createReceipt } = await import('../services/vending.js');
@@ -152,6 +153,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                             tariffId: meter.tariffId,
                             reference: purchaseOrderId,
                         });
+                        issuedToken = tokenRes.token;
                         const receipt = await createReceipt({
                             purchaseOrderId,
                             payload: {
@@ -192,6 +194,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                         }
                     } catch (e: any) {
                         await adminClient.from('purchase_orders').update({
+                            token: issuedToken ?? undefined,
                             status: 'delivery_pending_review',
                             failure_reason: `direct_pay_token_failed: ${e.message}`.slice(0, 500),
                         }).eq('id', purchaseOrderId);

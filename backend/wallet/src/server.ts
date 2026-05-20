@@ -16,8 +16,9 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
-import { env, corsOrigins, isDev } from './config/env.js';
+import { env, isCorsOriginAllowed, isDev } from './config/env.js';
 import authPlugin from './plugins/auth.js';
+import auditTap from './plugins/audit-tap.js';
 import errorHandler from './plugins/error-handler.js';
 import routes from './routes/index.js';
 import { redisConnection, closeQueues } from './queue/index.js';
@@ -43,7 +44,7 @@ async function build() {
     // CORS
     await app.register(cors, {
         origin: (origin, cb) => {
-            if (!origin || corsOrigins.length === 0 || corsOrigins.includes(origin)) {
+            if (isCorsOriginAllowed(origin)) {
                 cb(null, true);
             } else {
                 cb(new Error('CORS not allowed'), false);
@@ -53,17 +54,20 @@ async function build() {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     });
 
-    // Rate limit
-    await app.register(rateLimit, {
+    // Rate limit. In development we intentionally use Fastify's in-memory
+    // store so a missing local Redis service cannot block every request.
+    const rateLimitOptions: Parameters<typeof rateLimit>[1] = {
         max: 200,
         timeWindow: '1 minute',
-        redis: redisConnection,
         keyGenerator: (req) => (req.headers['x-forwarded-for'] as string | undefined) ?? req.ip,
-    });
+    };
+    if (!isDev) rateLimitOptions.redis = redisConnection;
+    await app.register(rateLimit, rateLimitOptions);
 
     await app.register(sensible);
     await app.register(errorHandler);
     await app.register(authPlugin);
+    await app.register(auditTap);
     await app.register(routes);
 
     return app;

@@ -1,0 +1,32 @@
+(node:13772) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[35m[wallet  ][0m 'pnpm.cmd' is not recognized as an internal or external command,
+[35m[wallet  ][0m operable program or batch file.
+[32m[admin   ][0m 'pnpm.cmd' is not recognized as an internal or external command,
+[32m[admin   ][0m operable program or batch file.
+[33m[vendor  ][0m 'pnpm.cmd' is not recognized as an internal or external command,
+[33m[vendor  ][0m operable program or batch file.
+[34m[customer][0m 'pnpm.cmd' is not recognized as an internal or external command,
+[34m[customer][0m operable program or batch file.
+[36m[crm     ][0m node:fs:439
+[36m[crm     ][0m     return binding.readFileUtf8(path, stringToFlags(options.flag));
+[36m[crm     ][0m                    ^
+[36m[crm     ][0m 
+[36m[crm     ][0m Error: EPERM: operation not permitted, open 'C:\Users\ACOB\Desktop\VS Code\acob-crm-4\node_modules\.pnpm\vite@5.4.21_@types+node@20.19.41_terser@5.47.1\node_modules\vite\bin\vite.js'
+[36m[crm     ][0m     at Object.readFileSync (node:fs:439:20)
+[36m[crm     ][0m     at defaultLoadImpl (node:internal/modules/cjs/loader:1141:17)
+[36m[crm     ][0m     at loadSource (node:internal/modules/cjs/loader:1831:20)
+[36m[crm     ][0m     at Object..js (node:internal/modules/cjs/loader:1929:44)
+[36m[crm     ][0m     at Module.load (node:internal/modules/cjs/loader:1525:32)
+[36m[crm     ][0m     at Module._load (node:internal/modules/cjs/loader:1327:12)
+[36m[crm     ][0m     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[36m[crm     ][0m     at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+[36m[crm     ][0m     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+[36m[crm     ][0m     at node:internal/main/run_main_module:33:47 {
+[36m[crm     ][0m   errno: -4048,
+[36m[crm     ][0m   code: 'EPERM',
+[36m[crm     ][0m   syscall: 'open',
+[36m[crm     ][0m   path: 'C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\node_modules\\.pnpm\\vite@5.4.21_@types+node@20.19.41_terser@5.47.1\\node_modules\\vite\\bin\\vite.js'
+[36m[crm     ][0m }
+[36m[crm     ][0m 
+[36m[crm     ][0m Node.js v24.13.1

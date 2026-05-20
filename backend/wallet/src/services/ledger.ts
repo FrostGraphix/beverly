@@ -242,7 +242,12 @@ export async function getBalance(walletId: string): Promise<Balance> {
         .select('*')
         .eq('wallet_id', walletId)
         .single();
-    if (error) throw new LedgerError(error.message, 'balance_error');
+    if (error) {
+        if (/v_wallet_balances/i.test(error.message)) {
+            return getBalanceFromLedger(walletId);
+        }
+        throw new LedgerError(error.message, 'balance_error');
+    }
     return {
         walletId: data.wallet_id,
         ledgerBalanceMinor: Number(data.ledger_balance_minor),
@@ -250,6 +255,46 @@ export async function getBalance(walletId: string): Promise<Balance> {
         availableMinor: Number(data.available_balance_minor),
         currency: data.currency,
         status: data.status,
+    };
+}
+
+async function getBalanceFromLedger(walletId: string): Promise<Balance> {
+    const { data: wallet, error: walletError } = await adminClient
+        .from('wallets')
+        .select('id, currency, status')
+        .eq('id', walletId)
+        .single();
+    if (walletError || !wallet) {
+        throw new LedgerError(walletError?.message ?? 'wallet not found', 'balance_error');
+    }
+
+    const { data: entries, error: entriesError } = await adminClient
+        .from('wallet_ledger_entries')
+        .select('direction, amount_minor')
+        .eq('wallet_id', walletId);
+    if (entriesError) throw new LedgerError(entriesError.message, 'balance_error');
+
+    const ledgerBalanceMinor = (entries ?? []).reduce((sum, entry) => {
+        const amount = Number(entry.amount_minor ?? 0);
+        return entry.direction === 'credit' ? sum + amount : sum - amount;
+    }, 0);
+
+    const { data: holds, error: holdsError } = await adminClient
+        .from('wallet_holds')
+        .select('amount_minor')
+        .eq('wallet_id', walletId)
+        .eq('status', 'active');
+    if (holdsError) throw new LedgerError(holdsError.message, 'balance_error');
+
+    const activeHoldsMinor = (holds ?? []).reduce((sum, hold) => sum + Number(hold.amount_minor ?? 0), 0);
+
+    return {
+        walletId,
+        ledgerBalanceMinor,
+        activeHoldsMinor,
+        availableMinor: ledgerBalanceMinor - activeHoldsMinor,
+        currency: wallet.currency,
+        status: wallet.status,
     };
 }
 

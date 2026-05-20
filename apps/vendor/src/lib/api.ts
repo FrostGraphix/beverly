@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+const BASE = String(import.meta.env.VITE_API_BASE ?? '').trim().replace(/\/+$/, '');
 
 export class ApiError extends Error {
     constructor(public status: number, public code: string, message: string, public details?: unknown) {

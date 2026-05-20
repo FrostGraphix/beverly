@@ -23,16 +23,21 @@ const status = ref('');
 const station = ref('');
 const q = ref('');
 const loading = ref(false);
+const error = ref('');
 
 async function load() {
     loading.value = true;
+    error.value = '';
     try {
         const params = new URLSearchParams();
         if (status.value) params.set('status', status.value);
         if (station.value) params.set('station', station.value);
         if (q.value) params.set('q', q.value);
-        const r = await api.get<{ purchases: Purchase[] }>(`/api/v1/admin/vending${params.toString() ? '?' + params : ''}`);
+        params.set('limit', '200');
+        const r = await api.get<{ purchases: Purchase[] }>(`/api/v1/admin/purchases${params.toString() ? '?' + params : ''}`);
         items.value = r.purchases;
+    } catch (e: any) {
+        error.value = e.message ?? 'Vending monitor failed to load.';
     } finally { loading.value = false; }
 }
 
@@ -73,6 +78,8 @@ onMounted(load);
         </select>
         <button class="bw-btn sm" @click="load">Refresh</button>
       </div>
+
+      <div v-if="error" class="bw-error-banner" role="alert">{{ error }}</div>
 
       <div class="bw-t-wrap">
         <table class="bw-table">

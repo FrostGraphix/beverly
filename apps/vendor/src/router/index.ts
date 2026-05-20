@@ -4,9 +4,11 @@ import { useVendorAuthStore } from '../stores/auth';
 const routes: RouteRecordRaw[] = [
     { path: '/login',           name: 'login',          component: () => import('../views/Login.vue'),         meta: { guest: true } },
     { path: '/password-change', name: 'password-change',component: () => import('../views/PasswordChange.vue'),meta: { auth: true, allowReset: true } },
+    { path: '/vend-access',     name: 'vend-access',    component: () => import('../views/VendAccess.vue'),    meta: { auth: true } },
     { path: '/',                name: 'dashboard',      component: () => import('../views/Dashboard.vue'),     meta: { auth: true } },
     { path: '/wallet',          name: 'wallet',         component: () => import('../views/Wallet.vue'),        meta: { auth: true } },
     { path: '/wallet/fund',     name: 'fund',           component: () => import('../views/Fund.vue'),          meta: { auth: true } },
+    { path: '/wallet/funding',  name: 'funding-history',component: () => import('../views/FundingHistory.vue'),meta: { auth: true } },
     { path: '/vend',            name: 'vend',           component: () => import('../views/Vend.vue'),          meta: { auth: true } },
     { path: '/remote-send',     name: 'remote-send',    component: () => import('../views/RemoteSend.vue'),    meta: { auth: true } },
     { path: '/transactions',    name: 'transactions',   component: () => import('../views/Transactions.vue'),  meta: { auth: true } },
@@ -37,6 +39,16 @@ router.beforeEach(async (to) => {
     // Force password change before anything else
     if (auth.isAuthenticated && auth.user?.password_reset_required && to.name !== 'password-change' && !to.meta.allowReset) {
         return { name: 'password-change' };
+    }
+    if (auth.isAuthenticated && auth.requiresMfaVerification && to.name !== 'security') {
+        return { name: 'security', query: { mode: 'verify', redirect: to.fullPath } };
+    }
+    if (
+        auth.isAuthenticated &&
+        ['vend', 'remote-send'].includes(String(to.name)) &&
+        !auth.user?.vend_credential_configured
+    ) {
+        return { name: 'vend-access', query: { redirect: to.fullPath } };
     }
     return true;
 });

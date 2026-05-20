@@ -6,7 +6,7 @@ import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
 import { routeManifest } from "../src/data/route-manifest.js";
 import { managementFields, managementFormSeed } from "../src/services/management-forms.mjs";
-import { defaultTableOptions, fetchTableData, resolveRowValue, searchRows, sortRows, tableRequest } from "../src/services/table-service.mjs";
+import { defaultTableOptions, fetchTableData, resolveRowValue, routeUsesServerPagination, searchRows, sortRows, tableRequest } from "../src/services/table-service.mjs";
 import { needsAuthorizationPassword, stripWriteMeta, validateWriteForm } from "../src/services/write-helpers.mjs";
 
 const accountRoute = {
@@ -194,7 +194,147 @@ const request = tableRequest(accountRoute, {
 assert.strictEqual(defaultTableOptions.siteId, "");
 assert.strictEqual(request.path, "/api/account/read");
 assert.strictEqual(request.payload.pageNumber, 2);
-assert.strictEqual(request.payload.pageSize, 25);
+assert.strictEqual(request.payload.pageSize, 20);
+assert.strictEqual(request.payload.stationId, "SITE-1");
+assert.strictEqual(tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, orderBy: "id asc" }).payload.orderBy, "customerId asc");
+assert.strictEqual(tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, orderBy: "meterId desc" }).payload.orderBy, "meterId desc");
+assert.strictEqual("orderBy" in tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, orderBy: "asc" }).payload, false);
+assert.strictEqual(routeUsesServerPagination(accountRoute), true);
+
+const accountPageCalls = [];
+const accountPageTable = await fetchTableData(accountRoute, { pageNumber: 3, pageSize: 10, orderBy: "id asc" }, {
+  async postApi(path, payload = {}) {
+    accountPageCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/account/read");
+    const pageNumber = Number(payload.pageNumber || 1);
+    const pageSize = Number(payload.pageSize || 10);
+    const start = (pageNumber - 1) * pageSize;
+    return {
+      code: 0,
+      result: {
+        total: 2443,
+        data: Array.from({ length: pageSize }, (_, index) => ({
+          customerId: `AC-${String(start + index + 1).padStart(4, "0")}`,
+          meterId: `M-${String(start + index + 1).padStart(4, "0")}`
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(accountPageCalls.length, 1);
+assert.strictEqual(accountPageCalls[0].payload.pageNumber, 3);
+assert.strictEqual(accountPageCalls[0].payload.pageSize, 10);
+assert.strictEqual(accountPageCalls[0].payload.orderBy, "customerId asc");
+assert.strictEqual(accountPageTable.serverPaginated, true);
+assert.strictEqual(accountPageTable.total, 2443);
+assert.strictEqual(accountPageTable.rows.length, 10);
+
+assert.strictEqual(routeUsesServerPagination(gatewayRoute), true);
+assert.strictEqual(tableRequest(gatewayRoute, { pageNumber: 1, pageSize: 50, orderBy: "successRate desc" }).payload.pageSize, 20);
+assert.strictEqual("orderBy" in tableRequest(gatewayRoute, { pageNumber: 1, pageSize: 10, orderBy: "successRate desc" }).payload, false);
+assert.strictEqual(tableRequest(gatewayRoute, { pageNumber: 1, pageSize: 10, orderBy: "id asc" }).payload.orderBy, "gatewayId asc");
+const gatewayCalls = [];
+const gatewayPageTable = await fetchTableData(gatewayRoute, { pageNumber: 2, pageSize: 10, searchTerm: "TUNGA", orderBy: "id asc" }, {
+  async postApi(path, payload = {}) {
+    gatewayCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/gateway/read");
+    return {
+      code: 0,
+      result: {
+        total: 37,
+        data: Array.from({ length: 10 }, (_, index) => ({
+          gatewayId: `GW-${String(index + 11).padStart(3, "0")}`,
+          gatewayName: `Gateway ${index + 11}`
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(gatewayCalls.length, 1);
+assert.strictEqual(gatewayCalls[0].payload.pageNumber, 2);
+assert.strictEqual(gatewayCalls[0].payload.pageSize, 10);
+assert.strictEqual(gatewayCalls[0].payload.searchTerm, "TUNGA");
+assert.strictEqual(gatewayCalls[0].payload.orderBy, "gatewayId asc");
+assert.strictEqual(gatewayPageTable.serverPaginated, true);
+assert.strictEqual(gatewayPageTable.total, 37);
+assert.strictEqual(gatewayPageTable.rows.length, 10);
+
+assert.strictEqual(routeUsesServerPagination(tariffRoute), true);
+assert.strictEqual(tableRequest(tariffRoute, { pageNumber: 1, pageSize: 100, orderBy: "id asc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(tariffRoute, { pageNumber: 1, pageSize: 10, orderBy: "id asc" }).payload.orderBy, "tariffId asc");
+const tariffCalls = [];
+const tariffPageTable = await fetchTableData(tariffRoute, { pageNumber: 3, pageSize: 10, searchTerm: "RES", orderBy: "name desc" }, {
+  async postApi(path, payload = {}) {
+    tariffCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/tariff/read");
+    return {
+      code: 0,
+      result: {
+        total: 26,
+        data: Array.from({ length: 6 }, (_, index) => ({
+          tariffId: `T-${String(index + 21).padStart(3, "0")}`,
+          tariffName: `Tariff ${index + 21}`,
+          price: 350
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(tariffCalls.length, 1);
+assert.strictEqual(tariffCalls[0].payload.pageNumber, 3);
+assert.strictEqual(tariffCalls[0].payload.pageSize, 10);
+assert.strictEqual(tariffCalls[0].payload.searchTerm, "RES");
+assert.strictEqual(tariffCalls[0].payload.orderBy, "tariffName desc");
+assert.strictEqual(tariffPageTable.serverPaginated, true);
+assert.strictEqual(tariffPageTable.total, 26);
+assert.strictEqual(tariffPageTable.rows.length, 6);
+
+const remoteOperationRoute = routeManifest.find((route) => route.hash === "#/remote-operation/remote-meter-reading");
+assert.strictEqual(routeUsesServerPagination(remoteOperationRoute), true);
+assert.strictEqual(tableRequest(remoteOperationRoute, { pageNumber: 1, pageSize: 100, orderBy: "customerName asc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(remoteOperationRoute, { pageNumber: 1, pageSize: 10, orderBy: "customerName asc" }).payload.orderBy, "customerName asc");
+const remoteOperationCalls = [];
+const remoteOperationTable = await fetchTableData(remoteOperationRoute, { pageNumber: 2, pageSize: 10, searchTerm: "ADAMU", orderBy: "customerName asc" }, {
+  async postApi(path, payload = {}) {
+    remoteOperationCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/account/read");
+    return {
+      code: 0,
+      result: {
+        total: 2443,
+        data: Array.from({ length: 10 }, (_, index) => ({
+          customerId: `CU-${String(index + 11).padStart(3, "0")}`,
+          customerName: `Remote Customer ${index + 11}`,
+          meterId: `M-${String(index + 11).padStart(3, "0")}`,
+          meterType: 0,
+          status: index % 2 === 0,
+          stationId: "TUNGA"
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(remoteOperationCalls.length, 1);
+assert.strictEqual(remoteOperationCalls[0].payload.pageNumber, 2);
+assert.strictEqual(remoteOperationCalls[0].payload.pageSize, 10);
+assert.strictEqual(remoteOperationCalls[0].payload.searchTerm, "ADAMU");
+assert.strictEqual(remoteOperationCalls[0].payload.orderBy, "customerName asc");
+assert.strictEqual(remoteOperationTable.serverPaginated, true);
+assert.strictEqual(remoteOperationTable.total, 2443);
+assert.strictEqual(remoteOperationTable.rows.length, 10);
+assert.strictEqual(remoteOperationTable.rows[0].meterType, "Electricity");
 
 const remoteReadingRoute = {
   hash: "#/remote-operation-record/remote-meter-reading-task",
@@ -632,6 +772,10 @@ assert.strictEqual(lowPurchaseTable.total, 45);
 assert.strictEqual(lowPurchaseTable.rows[44].totalPaid, 1000);
 
 const managementCustomerRoute = routeManifest.find((route) => route.hash === "#/management/customer");
+assert.strictEqual(routeUsesServerPagination(managementCustomerRoute), true);
+assert.strictEqual(tableRequest(managementCustomerRoute, { pageNumber: 1, pageSize: 10, orderBy: "customerId asc" }).payload.orderBy, "customerId asc");
+assert.strictEqual(tableRequest(managementCustomerRoute, { pageNumber: 1, pageSize: 10, orderBy: "id asc" }).payload.orderBy, "customerId asc");
+assert.strictEqual("orderBy" in tableRequest(managementCustomerRoute, { pageNumber: 1, pageSize: 10, orderBy: "asc" }).payload, false);
 const managementCustomerRows = Array.from({ length: 63 }, (_, index) => ({
   customerId: `CU-${String(index + 1).padStart(3, "0")}`,
   customerName: `Management Customer ${index + 1}`,
@@ -640,7 +784,7 @@ const managementCustomerRows = Array.from({ length: 63 }, (_, index) => ({
   stationId: "KYAKALE"
 }));
 const managementCustomerCalls = [];
-const managementCustomerTable = await fetchTableData(managementCustomerRoute, {}, {
+const managementCustomerTable = await fetchTableData(managementCustomerRoute, { pageNumber: 2, pageSize: 10, searchTerm: "AHJ" }, {
   async postApi(path, payload = {}) {
     managementCustomerCalls.push({ path, payload });
     if (path === "/api/station/read") {
@@ -653,7 +797,7 @@ const managementCustomerTable = await fetchTableData(managementCustomerRoute, {}
     return {
       code: 0,
       result: {
-        total: 20,
+        total: 63,
         data: managementCustomerRows.slice(start, start + pageSize)
       }
     };
@@ -663,13 +807,16 @@ const managementCustomerTable = await fetchTableData(managementCustomerRoute, {}
   }
 });
 const customerReadCalls = managementCustomerCalls.filter((call) => call.path === "/api/customer/read");
-assert.strictEqual(customerReadCalls[0].payload.pageSize, 500);
-assert.strictEqual(customerReadCalls[1].payload.pageSize, 20);
-assert.deepStrictEqual(customerReadCalls.map((call) => call.payload.pageNumber), [1, 2, 3, 4]);
-assert.strictEqual(managementCustomerTable.rows.length, 63);
+assert.strictEqual(customerReadCalls.length, 1);
+assert.strictEqual(managementCustomerCalls.some((call) => call.path === "/api/station/read"), false);
+assert.strictEqual(customerReadCalls[0].payload.pageNumber, 2);
+assert.strictEqual(customerReadCalls[0].payload.pageSize, 10);
+assert.strictEqual(customerReadCalls[0].payload.searchTerm, "AHJ");
+assert.strictEqual(managementCustomerTable.rows.length, 10);
 assert.strictEqual(managementCustomerTable.total, 63);
-assert.strictEqual(managementCustomerTable.rows[0].id, "CU-001");
-assert.strictEqual(managementCustomerTable.rows[62].name, "Management Customer 63");
+assert.strictEqual(managementCustomerTable.serverPaginated, true);
+assert.strictEqual(managementCustomerTable.rows[0].id, "CU-011");
+assert.strictEqual(managementCustomerTable.rows[9].name, "Management Customer 20");
 
 const remoteReadingTaskRoute = routeManifest.find((route) => route.hash === "#/remote-operation-record/remote-meter-reading-task");
 const remoteReadingTaskTable = await fetchTableData(remoteReadingTaskRoute, { pageSize: 2 }, {

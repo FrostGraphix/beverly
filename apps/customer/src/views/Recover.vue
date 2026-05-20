@@ -30,10 +30,19 @@ async function submit() {
     errorCode.value = null;
     const normalised = normalise(phone.value);
     try {
-        const r = await api.post<{ challenge_id: string }>('/api/v1/customer/auth/login', { phone: normalised });
+        const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
+            '/api/v1/customer/auth/recover',
+            { phone: normalised },
+        );
         await router.push({
             name: 'verify',
-            query: { challenge_id: r.challenge_id, phone: normalised, recovery: '1' },
+            query: {
+                challenge_id: r.challenge_id,
+                phone: normalised,
+                recovery: '1',
+                expires_at: r.expires_at,
+                retry_after_seconds: r.retry_after_seconds,
+            },
         });
     } catch (e: any) {
         if (e instanceof ApiError) {

@@ -44,6 +44,23 @@ assertIncludes(themesCss, "color-scheme: light");
 assertIncludes(combinedCss, ".sidebar-logo-icon");
 assertIncludes(combinedCss, "color: var(--text-inverse)");
 
+const lightThemeCss = themesCss.match(/\[data-theme="light"\]\s*\{[\s\S]*?\n\}/)?.[0] || "";
+const walletLightThemeTokens = [
+  "--color-brand: #008000",
+  "--color-brand-hover: #006600",
+  "--color-brand-soft: #e6f4e6",
+  "--color-surface-page: #f2f4f2",
+  "--color-surface-card: #ffffff",
+  "--color-border: #e5eae5",
+  "--theme-color-bright: #c6e000",
+  "--sidebar-bg-start: #011508",
+  "--sidebar-active-border: #c6e000"
+];
+
+for (const token of walletLightThemeTokens) {
+  assertIncludes(lightThemeCss, token);
+}
+
 const greenThemeCss = [
   themesCss.match(/\[data-theme="executive"\]\s*\{[\s\S]*?\n\}/)?.[0] || ""
 ].join("\n");

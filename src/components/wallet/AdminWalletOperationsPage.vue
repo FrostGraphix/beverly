@@ -16,25 +16,55 @@
 
     <section v-if="activePage === 'dashboard'" class="page-stack">
       <div class="kpi-grid kpi-grid--six">
-        <KpiCard label="Total Vendors" value="1,248" tone="good" note="+12.4% vs last week" />
-        <KpiCard label="Active Wallets" value="98,765" tone="good" note="+8.7% this month" />
-        <KpiCard label="Pending Funding" value="NGN 3.84M" tone="warn" note="253 approval items" />
-        <KpiCard label="Today's Purchases" value="NGN 12.74M" tone="good" note="47 successful vends" />
-        <KpiCard label="Frozen Wallets" value="312" tone="info" note="4.1% reduction" />
-        <KpiCard label="Failed Transactions" value="1,274" tone="danger" note="needs review" />
+        <KpiCard
+          v-for="card in dashboardKpis"
+          :key="card.id"
+          :label="card.label"
+          :value="card.value"
+          :tone="card.tone"
+          :note="card.note"
+          :active="activeDashboardKpi === card.id"
+          :metric="card.metric"
+          :action="card.action"
+          @select="selectDashboardKpi(card.id)"
+        />
       </div>
+      <article class="panel kpi-drilldown" aria-live="polite">
+        <div>
+          <span :class="['status-pill', activeDashboardKpiDetail.tone]">{{ activeDashboardKpiDetail.label }}</span>
+          <h2>{{ activeDashboardKpiDetail.headline }}</h2>
+          <p>{{ activeDashboardKpiDetail.insight }}</p>
+        </div>
+        <div class="drilldown-meter">
+          <span>Signal</span>
+          <b>{{ activeDashboardKpiDetail.signal }}</b>
+          <small>{{ activeDashboardKpiDetail.window }}</small>
+        </div>
+        <a class="primary-button" :href="activeDashboardKpiDetail.hash">{{ activeDashboardKpiDetail.action }}</a>
+      </article>
       <div class="dashboard-grid">
         <article class="panel trend-panel">
           <div class="panel-head">
-            <h2>Wallet Balance Trend</h2>
+            <h2>{{ activeDashboardKpiDetail.chartTitle }}</h2>
             <BaseSelect v-model="chartMode" class="mini-select"><option>Daily</option><option>Weekly</option></BaseSelect>
           </div>
           <EChartPanel :option="walletTrendOption" />
         </article>
-        <article class="panel">
-          <h2>Operational Queues</h2>
-          <a v-for="queue in operationalQueues" :key="queue.label" :href="queue.hash" class="queue-link">
-            <span>{{ queue.label }}</span><b :class="queue.tone">{{ queue.count }}</b>
+        <article class="panel operational-queues-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Operational Queues</h2>
+              <p>Awaiting staff action</p>
+            </div>
+            <a href="#/wallet/admin/funding-credits">View all</a>
+          </div>
+          <a v-for="queue in operationalQueues" :key="queue.label" :href="queue.hash" :class="['queue-card', queue.tone]">
+            <span class="queue-icon">{{ queue.icon }}</span>
+            <span>
+              <strong>{{ queue.label }}</strong>
+              <small>{{ queue.copy }}</small>
+            </span>
+            <b>{{ queue.countLabel }}</b>
           </a>
         </article>
         <article class="panel alerts-panel">
@@ -46,17 +76,140 @@
           </div>
         </article>
       </div>
-      <WalletTable title="Recent Activities" :columns="activityColumns" :rows="filteredActivities">
-        <template #row="{ row }">
-          <td>{{ row.time }}</td>
-          <td><strong>{{ row.activity }}</strong></td>
-          <td>{{ row.entity }}</td>
-          <td :class="row.amount.startsWith('-') ? 'tone-danger' : 'tone-good'">{{ row.amount }}</td>
-          <td><span :class="['status-pill', row.tone]">{{ row.status }}</span></td>
-          <td>{{ row.actor }}</td>
-          <td><BaseButton class="icon-action" size="sm" @click="openAudit(row)">...</BaseButton></td>
-        </template>
-      </WalletTable>
+      <div class="operations-grid">
+        <article class="panel live-pulse-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Live Pulse <span class="status-pill good">Live</span></h2>
+              <p>Last 60 seconds</p>
+            </div>
+          </div>
+          <div v-for="pulse in livePulse" :key="pulse.time + pulse.vendor" class="pulse-row">
+            <code>{{ pulse.time }}</code>
+            <span :class="['activity-type-pill', pulse.tone]">{{ pulse.type }}</span>
+            <strong>{{ pulse.vendor }}</strong>
+            <span>{{ pulse.detail }}</span>
+            <b>{{ pulse.amount }}</b>
+          </div>
+        </article>
+
+        <article class="panel top-vendors-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Top Vendors · 7D</h2>
+              <p>By vending volume</p>
+            </div>
+          </div>
+          <div v-for="vendor in topVendors" :key="vendor.name" class="top-vendor-row">
+            <span>{{ vendor.rank }}</span>
+            <div>
+              <strong>{{ vendor.name }} <em>{{ vendor.delta }}</em></strong>
+              <i><b :style="{ width: vendor.width }"></b></i>
+            </div>
+            <div><strong>{{ vendor.amount }}</strong><small>{{ vendor.tx }} tx</small></div>
+          </div>
+        </article>
+
+        <article class="panel attention-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Needs Attention</h2>
+              <p>Critical & high-priority items</p>
+            </div>
+            <span class="status-pill danger">5 active</span>
+          </div>
+          <div v-for="item in attentionItems" :key="item.title" :class="['attention-row', item.tone]">
+            <div>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.copy }}</small>
+            </div>
+            <a :href="item.hash">{{ item.action }}</a>
+          </div>
+        </article>
+      </div>
+      <article class="panel recent-activity-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Recent Activity</h2>
+            <p>All wallet actions in the last hour · auto-refresh</p>
+          </div>
+          <BaseButton class="quiet-button" @click="showActivityFilters = !showActivityFilters">Filters</BaseButton>
+        </div>
+        <div class="activity-toolbar">
+          <div class="activity-tabs" role="tablist" aria-label="Recent activity types">
+            <BaseButton
+              v-for="tab in recentActivityTabs"
+              :key="tab.id"
+              :class="['activity-tab', activeActivityType === tab.id ? 'active' : '']"
+              @click="selectActivityTab(tab.id)"
+            >
+              {{ tab.label }} <b>{{ tab.count }}</b>
+            </BaseButton>
+          </div>
+          <div :class="['activity-filters', showActivityFilters ? 'open' : '']">
+            <BaseSelect v-model="activityStationFilter" class="mini-select" @change="recentActivityPage = 1">
+              <option value="">All Stations</option>
+              <option v-for="station in activityStations" :key="station">{{ station }}</option>
+            </BaseSelect>
+            <BaseSelect v-model="activityDateFilter" class="mini-select" @change="recentActivityPage = 1">
+              <option>Today</option>
+              <option>Last 7 Days</option>
+              <option>This Month</option>
+            </BaseSelect>
+          </div>
+        </div>
+        <div class="activity-table-wrap">
+          <table class="activity-table">
+            <thead>
+              <tr>
+                <th>Reference</th>
+                <th>Vendor</th>
+                <th>Type</th>
+                <th>Customer / Meter</th>
+                <th>Station</th>
+                <th>Amount</th>
+                <th>Units</th>
+                <th>Status</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in pagedRecentActivities" :key="row.reference" @click="openAudit(row)">
+                <td><code>{{ row.reference }}</code></td>
+                <td>
+                  <div class="activity-vendor">
+                    <span>{{ row.vendorInitials }}</span>
+                    <strong>{{ row.vendor }}</strong>
+                    <small>{{ row.vendorCode }} · {{ row.tier }}</small>
+                  </div>
+                </td>
+                <td><span :class="['activity-type-pill', row.typeTone]">{{ row.type }}</span></td>
+                <td>{{ row.customer || "—" }}</td>
+                <td>{{ row.station || "—" }}</td>
+                <td><strong>{{ row.amount }}</strong></td>
+                <td>{{ row.units || "—" }}</td>
+                <td><span :class="['status-pill', row.statusTone]">{{ row.status }}</span></td>
+                <td>{{ row.time }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="activity-footer">
+          <span>Showing <b>{{ pagedRecentActivities.length }}</b> of <b>{{ filteredRecentActivities.length }}</b> activities</span>
+          <div class="activity-pages">
+            <BaseButton class="page-chip" :disabled="recentActivityPage === 1" @click="recentActivityPage -= 1">‹</BaseButton>
+            <BaseButton
+              v-for="page in recentActivityPages"
+              :key="page"
+              :class="['page-chip', recentActivityPage === page ? 'active' : '']"
+              @click="recentActivityPage = page"
+            >
+              {{ page }}
+            </BaseButton>
+            <BaseButton class="page-chip" :disabled="recentActivityPage === recentActivityPageCount" @click="recentActivityPage += 1">›</BaseButton>
+          </div>
+        </div>
+      </article>
     </section>
 
     <section v-else-if="activePage === 'vendors'" class="page-stack">
@@ -313,6 +466,9 @@
 
     <section v-else class="page-stack">
       <div class="info-banner">No policy permits UPDATE or DELETE on financial evidence. Role, password, approval, and ledger actions appear as immutable audit events.</div>
+      <div style="margin-bottom: 12px;">
+        <ExportToolbar :rows="filteredAuditRows" :columns="auditExportColumns" title="Audit Log Export" filename="beverly-audit-log" :disabled="!filteredAuditRows.length" />
+      </div>
       <WalletTable title="Audit Log" :columns="auditColumns" :rows="filteredAuditRows">
         <template #row="{ row }">
           <td><code>{{ row.time }}</code></td><td>{{ row.actor }}</td><td><span class="status-pill info">{{ row.role }}</span></td><td><code>{{ row.event }}</code></td><td>{{ row.target }}</td><td>{{ row.ip }}</td>
@@ -328,18 +484,40 @@ import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import EChartPanel from "../EChartPanel.vue";
+import ExportToolbar from "../base/ExportToolbar.vue";
 import { createBarOption, dashboardSeries } from "../../services/dashboard-chart-options.mjs";
 
 const KpiCard = {
-  props: { label: String, value: String, note: String, tone: String },
+  props: { label: String, value: String, note: String, tone: String, active: Boolean, metric: String, action: String },
+  emits: ["select"],
+  methods: {
+    onKeydown(event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.$emit("select");
+      }
+    }
+  },
   render() {
+    const interactive = Boolean(this.metric || this.action);
     const children = [
       h("span", this.label),
       h("i", { class: "kpi-icon", "aria-hidden": "true" }),
       h("strong", this.value)
     ];
     if (this.note) children.push(h("small", this.note));
-    return h("article", { class: ["kpi-card", this.tone] }, children);
+    if (this.metric || this.action) {
+      children.push(h("em", { class: "kpi-card-action" }, this.action || "Inspect"));
+      children.push(h("small", { class: "kpi-card-metric" }, this.metric || "Live window"));
+    }
+    return h("article", {
+      class: ["kpi-card", this.tone, { "kpi-card--interactive": interactive, "kpi-card--active": this.active }],
+      role: interactive ? "button" : undefined,
+      tabindex: interactive ? 0 : undefined,
+      "aria-pressed": interactive ? (this.active ? "true" : "false") : undefined,
+      onClick: interactive ? () => this.$emit("select") : undefined,
+      onKeydown: interactive ? this.onKeydown : undefined
+    }, children);
   }
 };
 
@@ -445,7 +623,7 @@ const money = (value) => `NGN ${Number(value).toLocaleString("en-NG")}`;
 
 export default {
   name: "AdminWalletOperationsPage",
-  components: { BaseButton, BaseInput, BaseSelect, EChartPanel, KpiCard, WalletTable },
+  components: { BaseButton, BaseInput, BaseSelect, EChartPanel, ExportToolbar, KpiCard, WalletTable },
   data() {
     return {
       currentHash: window.location.hash,
@@ -456,6 +634,13 @@ export default {
       userRoleFilter: "",
       userStatusFilter: "",
       chartMode: "Daily",
+      activeDashboardKpi: "purchases",
+      activeActivityType: "all",
+      activityStationFilter: "",
+      activityDateFilter: "Today",
+      showActivityFilters: false,
+      recentActivityPage: 1,
+      recentActivityPageSize: 8,
       createVendorStep: 1,
       verificationDecision: "approve",
       verificationComment: "Your verification looks good. We are approving your vendor account.",
@@ -480,7 +665,6 @@ export default {
       fundingColumns: ["Reference", "Vendor", "Amount", "Channel", "Bank Ref", "Submitted", "Status", "Actions"],
       purchaseColumns: ["Order ID", "Date", "Vendor", "Meter SN", "Delivery", "Amount", "Status", "Receipt"],
       walletColumns: ["Wallet", "Available", "Posted Float", "Reserved", "Risk", "Actions"],
-      activityColumns: ["Time", "Activity", "Entity", "Amount", "Status", "Initiated By", "Actions"],
       caseColumns: ["Case ID", "Vendor", "Customer", "Amount", "Status", "Priority", "Action"],
       auditColumns: ["Time (WAT)", "Actor", "Role", "Event", "Target", "IP"],
       vendors: [
@@ -516,6 +700,18 @@ export default {
         { time: "13 May 10:14:22", actor: "admin", role: "super-admin", event: "role_changed", target: "USR-001", ip: "197.211.58.14" },
         { time: "13 May 09:58:01", actor: "finance-checker", role: "finance-checker", event: "funding_approved", target: "FND-20260513-00012", ip: "197.211.58.14" },
         { time: "13 May 09:42:15", actor: "vendor.demo@acob.ng", role: "vendor_user", event: "purchase_successful", target: "PO-00291", ip: "41.203.68.22" }
+      ],
+      recentActivities: [
+        { reference: "#PO-99842", vendor: "Sahara Power", vendorInitials: "SP", vendorCode: "VND-0042", tier: "Tier 2", type: "Token Buy", kind: "purchases", typeTone: "good", customer: "Cust 8842 · MTR-44120", station: "TUNGA", amount: "NGN 5,000", units: "14.3 kWh", status: "Delivered", statusTone: "good", time: "14:38" },
+        { reference: "#FR-12044", vendor: "Nasarawa Retail", vendorInitials: "NR", vendorCode: "VND-0118", tier: "Tier 1", type: "Funding", kind: "funding", typeTone: "info", customer: "", station: "", amount: "NGN 250,000", units: "", status: "Pending Review", statusTone: "warn", time: "14:38" },
+        { reference: "#PO-99841", vendor: "Lokoja Vending", vendorInitials: "LV", vendorCode: "VND-0019", tier: "Tier 3", type: "Token Buy", kind: "purchases", typeTone: "good", customer: "Cust 2014 · MTR-77291", station: "UMAISHA", amount: "NGN 12,500", units: "35.7 kWh", status: "Delivered", statusTone: "good", time: "14:38" },
+        { reference: "#PO-99839", vendor: "Greenline Power", vendorInitials: "GP", vendorCode: "VND-0067", tier: "Tier 2", type: "Remote Send", kind: "purchases", typeTone: "good", customer: "Cust 5538 · MTR-30418", station: "OGUFA", amount: "NGN 3,200", units: "9.1 kWh", status: "Dispatching", statusTone: "info", time: "14:38" },
+        { reference: "#PO-99836", vendor: "Beverly Direct", vendorInitials: "BD", vendorCode: "VND-0211", tier: "Tier 1", type: "Token Buy", kind: "failed", typeTone: "good", customer: "Cust 0091 · MTR-91102", station: "KYAKALE", amount: "NGN 8,000", units: "22.9 kWh", status: "Failed", statusTone: "danger", time: "14:38" },
+        { reference: "#RV-00128", vendor: "Sahara Power", vendorInitials: "SP", vendorCode: "VND-0042", tier: "Tier 2", type: "Reversal", kind: "reversals", typeTone: "warn", customer: "Ref #PO-99427", station: "TUNGA", amount: "NGN 4,500", units: "", status: "Processed", statusTone: "good", time: "14:38" },
+        { reference: "#PO-99834", vendor: "Energy Hub Abuja", vendorInitials: "EH", vendorCode: "VND-0083", tier: "Tier 3", type: "Token Buy", kind: "purchases", typeTone: "good", customer: "Cust 4421 · MTR-58804", station: "MUSHA", amount: "NGN 7,800", units: "22.3 kWh", status: "Delivered", statusTone: "good", time: "14:37" },
+        { reference: "#PO-99832", vendor: "Lokoja Vending", vendorInitials: "LV", vendorCode: "VND-0019", tier: "Tier 3", type: "Token Buy", kind: "purchases", typeTone: "good", customer: "Cust 1196 · MTR-77443", station: "UMAISHA", amount: "NGN 2,500", units: "7.1 kWh", status: "Delivered", statusTone: "good", time: "14:37" },
+        { reference: "#DP-00073", vendor: "Metro Vending", vendorInitials: "MV", vendorCode: "VND-0881", tier: "Tier 2", type: "Dispute", kind: "disputes", typeTone: "danger", customer: "Cust 5510 · MTR-12003", station: "KARU", amount: "NGN 6,000", units: "", status: "Open", statusTone: "danger", time: "14:36" },
+        { reference: "#PO-99830", vendor: "Central Vend", vendorInitials: "CV", vendorCode: "VND-0104", tier: "Tier 1", type: "Token Buy", kind: "purchases", typeTone: "good", customer: "Cust 7751 · MTR-30114", station: "TUNGA", amount: "NGN 10,000", units: "28.6 kWh", status: "Delivered", statusTone: "good", time: "14:35" }
       ],
       caseRows: [
         { id: "REV-001", vendor: "FreshStop Mart", customer: "Ada Okafor", amount: money(5000), status: "Pending", tone: "warn", priority: "Medium" },
@@ -603,26 +799,191 @@ export default {
     filteredAuditRows() {
       return this.auditRows.filter((row) => this.matches(row));
     },
+    auditExportColumns() {
+      return [
+        { key: "time", label: "Time (WAT)" },
+        { key: "actor", label: "Actor" },
+        { key: "role", label: "Role" },
+        { key: "event", label: "Event" },
+        { key: "target", label: "Target" },
+        { key: "ip", label: "IP" }
+      ];
+    },
     filteredCases() {
       return this.caseRows.filter((row) => this.matches(row));
     },
-    filteredActivities() {
-      return this.auditRows.map((row) => ({
-        time: row.time,
-        activity: row.event.replaceAll("_", " "),
-        entity: row.target,
-        amount: row.event.includes("purchase") ? "-NGN 5,000" : "+NGN 125,000",
-        status: row.event.includes("approved") || row.event.includes("successful") ? "Approved" : "Recorded",
-        tone: row.event.includes("successful") || row.event.includes("approved") ? "good" : "info",
-        actor: row.actor
-      })).filter((row) => this.matches(row));
+    dashboardKpis() {
+      return [
+        {
+          id: "vendors",
+          label: "Total Vendors",
+          value: "1,248",
+          tone: "good",
+          note: "+12.4% vs last week",
+          metric: "142 verified this week",
+          action: "Open vendor map",
+          hash: "#/wallet/admin/vendors",
+          headline: "Vendor growth is healthy.",
+          insight: "Verified vendors are compounding faster than pending reviews. Keep the review queue below 200 to protect onboarding speed.",
+          signal: "94%",
+          window: "7 day activation",
+          chartTitle: "Vendor Activation Trend",
+          series: [18, 24, 31, 36, 44, 51, 59, 66, 74, 83]
+        },
+        {
+          id: "wallets",
+          label: "Active Wallets",
+          value: "98,765",
+          tone: "good",
+          note: "+8.7% this month",
+          metric: "4 frozen escapes",
+          action: "Inspect wallets",
+          hash: "#/wallet/admin/all-wallets",
+          headline: "Wallet coverage is strong.",
+          insight: "Active wallets are expanding while freezes contract. The next move is reducing dormant float drift.",
+          signal: "98K",
+          window: "Live wallets",
+          chartTitle: "Active Wallet Trend",
+          series: [28, 34, 38, 43, 49, 55, 61, 67, 73, 79]
+        },
+        {
+          id: "funding",
+          label: "Pending Funding",
+          value: "NGN 3.84M",
+          tone: "warn",
+          note: "253 approval items",
+          metric: "87 manual credits",
+          action: "Clear queue",
+          hash: "#/wallet/admin/funding-credits",
+          headline: "Funding queue needs action.",
+          insight: "Pending value is concentrated in bank-transfer proof checks. Prioritize large approvals first.",
+          signal: "253",
+          window: "Approval items",
+          chartTitle: "Funding Approval Load",
+          series: [35, 29, 41, 55, 49, 62, 58, 71, 76, 69]
+        },
+        {
+          id: "purchases",
+          label: "Today's Purchases",
+          value: "NGN 12.74M",
+          tone: "good",
+          note: "47 successful vends",
+          metric: "20-digit + remote",
+          action: "Monitor vends",
+          hash: "#/wallet/admin/purchase-monitor",
+          headline: "Vending volume is moving.",
+          insight: "Purchase value is strong and delivery completion remains clean. Watch remote-send latency during peak hours.",
+          signal: "47",
+          window: "Successful vends",
+          chartTitle: "Purchase Velocity Trend",
+          series: [22, 31, 26, 49, 42, 56, 47, 44, 54, 68]
+        },
+        {
+          id: "frozen",
+          label: "Frozen Wallets",
+          value: "312",
+          tone: "info",
+          note: "4.1% reduction",
+          metric: "80 frozen vendors",
+          action: "Review freezes",
+          hash: "#/wallet/admin/all-wallets",
+          headline: "Freeze posture is improving.",
+          insight: "Frozen exposure is dropping. Keep reviewing stale freezes so safe vendors return to revenue faster.",
+          signal: "-4.1%",
+          window: "Weekly reduction",
+          chartTitle: "Frozen Wallet Reduction",
+          series: [79, 74, 72, 68, 64, 59, 55, 50, 47, 43]
+        },
+        {
+          id: "failed",
+          label: "Failed Transactions",
+          value: "1,274",
+          tone: "danger",
+          note: "needs review",
+          metric: "23 disputes linked",
+          action: "Triage failures",
+          hash: "#/wallet/admin/exceptions",
+          headline: "Failures need triage.",
+          insight: "Failure volume is elevated enough to treat as an operations lane, not a passive alert.",
+          signal: "1,274",
+          window: "Open failures",
+          chartTitle: "Failure Pressure Trend",
+          series: [16, 19, 22, 28, 31, 37, 44, 42, 49, 56]
+        }
+      ];
+    },
+    activeDashboardKpiDetail() {
+      return this.dashboardKpis.find((card) => card.id === this.activeDashboardKpi) || this.dashboardKpis[0];
     },
     operationalQueues() {
       return [
-        { label: "Funding Approvals", count: 253, tone: "warn", hash: "#/wallet/admin/funding-credits" },
-        { label: "Manual Credits", count: 87, tone: "good", hash: "#/wallet/admin/funding-credits" },
-        { label: "Reversal Requests", count: 41, tone: "warn", hash: "#/wallet/admin/reversals" },
-        { label: "Disputes", count: 23, tone: "danger", hash: "#/wallet/admin/disputes" }
+        { label: "Funding Approvals", count: 23, countLabel: "23", tone: "warn", icon: "$", copy: "3 over SLA · oldest 6h 12m", hash: "#/wallet/admin/funding-credits" },
+        { label: "Vendor Verifications", count: 7, countLabel: "07", tone: "info", icon: "✓", copy: "7 pending · 2 need docs", hash: "#/wallet/admin/verification" },
+        { label: "Exceptions", count: 5, countLabel: "05", tone: "danger", icon: "!", copy: "5 active · 1 critical", hash: "#/wallet/admin/exceptions" },
+        { label: "Reversal Requests", count: 2, countLabel: "02", tone: "good", icon: "↻", copy: "2 ready to process", hash: "#/wallet/admin/reversals" },
+        { label: "Open Disputes", count: 5, countLabel: "05", tone: "warn", icon: "⌕", copy: "4 vendor · 1 customer", hash: "#/wallet/admin/disputes" }
+      ];
+    },
+    recentActivityTabs() {
+      const count = (kind) => (kind === "all" ? this.recentActivities : this.recentActivities.filter((row) => row.kind === kind)).length;
+      return [
+        { id: "all", label: "All", count: count("all") },
+        { id: "purchases", label: "Purchases", count: count("purchases") },
+        { id: "funding", label: "Funding", count: count("funding") },
+        { id: "reversals", label: "Reversals", count: count("reversals") },
+        { id: "disputes", label: "Disputes", count: count("disputes") },
+        { id: "failed", label: "Failed", count: count("failed") }
+      ];
+    },
+    activityStations() {
+      return [...new Set(this.recentActivities.map((row) => row.station).filter(Boolean))].sort();
+    },
+    filteredRecentActivities() {
+      return this.recentActivities.filter((row) => {
+        const matchesType = this.activeActivityType === "all" || row.kind === this.activeActivityType;
+        const matchesStation = !this.activityStationFilter || row.station === this.activityStationFilter;
+        return matchesType && matchesStation && this.matches(row);
+      });
+    },
+    recentActivityPageCount() {
+      return Math.max(1, Math.ceil(this.filteredRecentActivities.length / this.recentActivityPageSize));
+    },
+    recentActivityPages() {
+      return Array.from({ length: this.recentActivityPageCount }, (_, index) => index + 1).slice(0, 5);
+    },
+    pagedRecentActivities() {
+      const safePage = Math.min(this.recentActivityPage, this.recentActivityPageCount);
+      const start = (safePage - 1) * this.recentActivityPageSize;
+      return this.filteredRecentActivities.slice(start, start + this.recentActivityPageSize);
+    },
+    livePulse() {
+      return [
+        { time: "14:29:39", type: "Fund", tone: "info", vendor: "Greenline", detail: "bank transfer", amount: "NGN 1,000,000" },
+        { time: "14:29:37", type: "Buy", tone: "good", vendor: "Beverly Direct", detail: "Cust 4846 · token", amount: "NGN 9,000" },
+        { time: "14:29:34", type: "Fund", tone: "info", vendor: "Greenline", detail: "bank transfer", amount: "NGN 100,000" },
+        { time: "14:29:32", type: "Buy", tone: "good", vendor: "Nasarawa Retail", detail: "Cust 1292 · remote", amount: "NGN 9,000" },
+        { time: "14:29:30", type: "Buy", tone: "good", vendor: "Sahara Power", detail: "Cust 7843 · TUNGA", amount: "NGN 800" },
+        { time: "14:29:25", type: "Buy", tone: "good", vendor: "Nasarawa Retail", detail: "Cust 7966", amount: "NGN 2,000" },
+        { time: "14:29:18", type: "Fund", tone: "info", vendor: "Beverly Direct", detail: "bank transfer", amount: "NGN 250,000" }
+      ];
+    },
+    topVendors() {
+      return [
+        { rank: "01", name: "Sahara Power Co.", delta: "+18%", amount: "NGN 18.4M", tx: "1,204", width: "98%" },
+        { rank: "02", name: "Lokoja Vending Hub", delta: "+12%", amount: "NGN 15.5M", tx: "987", width: "82%" },
+        { rank: "03", name: "Energy Hub Abuja", delta: "+9%", amount: "NGN 12.3M", tx: "812", width: "66%" },
+        { rank: "04", name: "Greenline Power Ltd.", delta: "+6%", amount: "NGN 9.6M", tx: "645", width: "52%" },
+        { rank: "05", name: "Nasarawa Retail", delta: "+4%", amount: "NGN 7.6M", tx: "510", width: "41%" },
+        { rank: "06", name: "Beverly Direct", delta: "+2%", amount: "NGN 6.1M", tx: "402", width: "33%" }
+      ];
+    },
+    attentionItems() {
+      return [
+        { title: "Wallet held — anomalous velocity", copy: "Beverly Direct (Kogi) · 42 tx in 5 min · risk 91", action: "Review", tone: "danger", hash: "#/wallet/admin/exceptions" },
+        { title: "Stuck remote-send · 3 tokens", copy: "KYAKALE meter cluster · pending 2h 14m", action: "Retry", tone: "warn", hash: "#/wallet/admin/purchase-monitor" },
+        { title: "Ledger drift on 02:00 batch", copy: "Energy Hub Abuja · +NGN 12,420 unreconciled", action: "Trace", tone: "warn", hash: "#/wallet/admin/reversals" },
+        { title: "Funding proof flagged", copy: "Nasarawa Retail · duplicate hash · NGN 180K", action: "Open", tone: "info", hash: "#/wallet/admin/funding-credits" },
+        { title: "Customer dispute escalated", copy: "#DSP-3318 · token not received · 24h old", action: "Open", tone: "info", hash: "#/wallet/admin/disputes" }
       ];
     },
     walletAlerts() {
@@ -634,7 +995,8 @@ export default {
       ];
     },
     trendPoints() {
-      return this.chartMode === "Daily" ? [22, 31, 26, 49, 42, 56, 47, 44, 54, 68] : [34, 42, 58, 66, 73, 64];
+      if (this.chartMode === "Daily") return this.activeDashboardKpiDetail.series;
+      return this.activeDashboardKpiDetail.series.filter((_, index) => index % 2 === 0).map((point, index) => point + index * 4);
     },
     trendLabels() {
       return this.chartMode === "Daily"
@@ -660,7 +1022,7 @@ export default {
     walletTrendOption() {
       return createBarOption(
         dashboardSeries(this.trendLabels, this.trendPoints),
-        "Wallet Balance Trend",
+        this.activeDashboardKpiDetail.chartTitle,
         this.walletChartTheme
       );
     },
@@ -778,6 +1140,18 @@ export default {
       this.vendorStatusFilter = "";
       this.vendorKycFilter = "";
       this.globalQuery = "";
+    },
+    selectActivityTab(id) {
+      this.activeActivityType = id;
+      this.recentActivityPage = 1;
+    },
+    selectDashboardKpi(id) {
+      this.activeDashboardKpi = id;
+      const activityMap = { purchases: "purchases", funding: "funding", failed: "failed" };
+      this.activeActivityType = activityMap[id] || "all";
+      this.recentActivityPage = 1;
+      const card = this.activeDashboardKpiDetail;
+      this.auditRows.unshift({ time: "13 May 10:29:00", actor: "admin", role: "super-admin", event: `dashboard_kpi_${id}_focused`, target: card.label, ip: "local" });
     },
     exportCurrentView() {
       this.auditRows.unshift({ time: "13 May 10:30:00", actor: "admin", role: "super-admin", event: `exported_${this.activePage}`, target: this.pageTitle, ip: "local" });
@@ -983,6 +1357,205 @@ th {
 :deep(.kpi-card.warn strong), .tone-warn { color: var(--warning); }
 :deep(.kpi-card.danger strong), .tone-danger { color: var(--danger); }
 :deep(.kpi-card.info strong), .tone-info { color: var(--info); }
+.kpi-card--interactive,
+:deep(.kpi-card--interactive) {
+  cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+}
+:deep(.kpi-card--interactive::after) {
+  content: "";
+  position: absolute;
+  inset: auto 12px 10px 64px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--success), transparent);
+  opacity: 0;
+  transform: scaleX(.35);
+  transform-origin: left;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+:deep(.kpi-card--interactive:hover),
+:deep(.kpi-card--interactive:focus-visible) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border-color));
+  box-shadow: var(--shadow-glow-sm);
+  outline: none;
+}
+:deep(.kpi-card--active) {
+  border-color: var(--success);
+  background:
+    radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--success) 18%, transparent), transparent 36%),
+    var(--bg-card);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 35%, transparent), var(--shadow-sm);
+}
+:deep(.kpi-card--active::after) {
+  opacity: 1;
+  transform: scaleX(1);
+}
+:deep(.kpi-card-action) {
+  align-self: end;
+  color: var(--success);
+  font-style: normal;
+  font-weight: 850;
+}
+:deep(.kpi-card-metric) {
+  color: var(--text-muted);
+}
+.kpi-drilldown {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  align-items: center;
+  gap: 16px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--success) 12%, transparent), transparent 44%),
+    var(--bg-card);
+}
+.kpi-drilldown h2 {
+  margin: 10px 0 6px;
+  font-size: 20px;
+}
+.kpi-drilldown p {
+  margin: 0;
+  color: var(--text-muted);
+}
+.drilldown-meter {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-page);
+}
+.drilldown-meter span,
+.drilldown-meter small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.drilldown-meter b {
+  color: var(--text-strong);
+  font-size: 24px;
+}
+.operations-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.operations-grid .panel {
+  min-width: 0;
+}
+.operations-grid h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.operations-grid p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+.live-pulse-panel,
+.top-vendors-panel,
+.attention-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.pulse-row {
+  display: grid;
+  grid-template-columns: 76px 54px minmax(0, .8fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  border-bottom: 1px dashed var(--border-color);
+}
+.pulse-row code,
+.pulse-row span {
+  color: var(--text-muted);
+}
+.pulse-row strong,
+.pulse-row b {
+  white-space: nowrap;
+}
+.pulse-row b {
+  font-family: var(--font-mono);
+}
+.top-vendor-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 76px;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  border-bottom: 1px solid var(--border-color);
+}
+.top-vendor-row > span {
+  color: var(--warning);
+  font-family: var(--font-mono);
+  font-weight: 900;
+}
+.top-vendor-row strong {
+  display: block;
+}
+.top-vendor-row em {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 11px;
+  font-style: normal;
+}
+.top-vendor-row i {
+  display: block;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--border-color);
+  overflow: hidden;
+}
+.top-vendor-row i b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+}
+.top-vendor-row small {
+  text-align: right;
+}
+.attention-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  min-height: 70px;
+  padding-left: 14px;
+  border-left: 4px solid var(--warning);
+  border-bottom: 1px solid var(--border-color);
+}
+.attention-row.danger { border-left-color: var(--danger); }
+.attention-row.info { border-left-color: var(--info); }
+.attention-row small {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+}
+.attention-row a {
+  color: var(--success);
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
 .tone-muted { color: var(--text-muted); }
 .line-chart {
   display: flex;
@@ -1035,6 +1608,169 @@ th {
 }
 .queue-link b,
 .funnel-row b { border-radius: 999px; padding: 3px 8px; background: var(--success-bg); }
+.operational-queues-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.operational-queues-panel .panel-head {
+  align-items: center;
+}
+.operational-queues-panel .panel-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+.operational-queues-panel .panel-head a {
+  color: var(--success);
+  font-weight: 850;
+  text-decoration: none;
+}
+.queue-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 54px;
+  gap: 14px;
+  align-items: center;
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-page) 82%, var(--bg-card));
+  color: var(--text-main);
+  text-decoration: none;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+.queue-card:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border-color));
+  background: var(--bg-card);
+}
+.queue-card strong,
+.queue-card small {
+  display: block;
+}
+.queue-card small {
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+.queue-card b {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  font-family: var(--font-mono);
+}
+.queue-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-weight: 900;
+}
+.queue-card.warn .queue-icon { background: var(--warning-bg); color: var(--warning); }
+.queue-card.info .queue-icon { background: var(--info-bg); color: var(--info); }
+.queue-card.danger .queue-icon { background: var(--danger-bg); color: var(--danger); }
+.queue-card.good .queue-icon { background: var(--success-bg); color: var(--success); }
+.recent-activity-panel {
+  overflow: hidden;
+  padding: 0;
+}
+.recent-activity-panel > .panel-head {
+  padding: 18px 24px;
+  align-items: center;
+}
+.recent-activity-panel > .panel-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+}
+.activity-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 24px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-page);
+}
+.activity-tabs,
+.activity-filters,
+.activity-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.activity-tab {
+  min-height: 32px;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.activity-tab b {
+  color: var(--success);
+}
+.activity-tab.active {
+  background: var(--success-bg);
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border-color));
+  color: var(--text-strong);
+}
+.activity-table-wrap {
+  overflow-x: auto;
+}
+.activity-table {
+  min-width: 1180px;
+}
+.activity-table code {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 850;
+}
+.activity-vendor {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+}
+.activity-vendor > span {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--success), var(--info));
+  color: var(--text-inverse);
+  font-weight: 900;
+}
+.activity-vendor small {
+  color: var(--text-muted);
+}
+.activity-type-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.activity-type-pill.good { background: var(--success-bg); color: var(--success); }
+.activity-type-pill.warn { background: var(--warning-bg); color: var(--warning); }
+.activity-type-pill.info { background: var(--info-bg); color: var(--info); }
+.activity-type-pill.danger { background: var(--danger-bg); color: var(--danger); }
+.activity-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 24px;
+  color: var(--text-muted);
+}
 .dot {
   display: inline-flex;
   width: 9px;
@@ -1341,6 +2077,7 @@ tbody tr.selected { background: var(--primary-light); }
   .kpi-grid,
   .kpi-grid--six,
   .dashboard-grid,
+  .operations-grid,
   .content-grid,
   .create-grid,
   .verification-grid,
@@ -1352,6 +2089,7 @@ tbody tr.selected { background: var(--primary-light); }
   .kpi-grid,
   .kpi-grid--six,
   .dashboard-grid,
+  .operations-grid,
   .content-grid,
   .create-grid,
   .verification-grid,
@@ -1363,5 +2101,27 @@ tbody tr.selected { background: var(--primary-light); }
   .panel--wide,
   .span-2 { grid-column: span 1; }
   .search-field { width: 100%; }
+  .kpi-drilldown {
+    grid-template-columns: 1fr;
+  }
+  .activity-toolbar,
+  .activity-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .activity-filters:not(.open) {
+    display: none;
+  }
+  .recent-activity-panel > .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pulse-row {
+    grid-template-columns: 1fr auto;
+  }
+  .pulse-row span,
+  .pulse-row strong {
+    grid-column: 1;
+  }
 }
 </style>

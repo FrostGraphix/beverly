@@ -1,9 +1,8 @@
 <template>
-  <div class="bw-page">
-    <div class="bw-page-header">
-      <h1 class="bw-page-title">Feature Flags</h1>
+  <AppShell title="Feature Flags">
+    <template #topbar-end>
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ New Flag</button>
-    </div>
+    </template>
 
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
@@ -125,12 +124,13 @@
         </div>
       </div>
     </div>
-  </div>
+  </AppShell>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
+import AppShell from '../components/AppShell.vue';
 
 const flags   = ref<any[]>([]);
 const loading = ref(false);

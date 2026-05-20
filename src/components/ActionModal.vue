@@ -1383,7 +1383,9 @@ export default {
           stationId: this.form.stationId || this.row.stationId || "",
           remark: "Auto-sent after generation"
         }];
-        const response = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload);
+        const response = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload, {
+          headers: this.remoteTaskHeaders({ hash: "#/remote-operation/remote-meter-token" }, "Add Task")
+        });
         toastSuccess("Token dispatched to meter successfully.");
         this.tokenSentStatus = "success";
       } catch (error) {
@@ -1448,6 +1450,12 @@ export default {
       }
       return text;
     },
+    remoteTaskHeaders(route = this.route, action = this.action) {
+      return {
+        "X-Route-Hash": String(route?.hash || ""),
+        "X-Route-Action": String(action || "Add Task")
+      };
+    },
     async confirmRemoteTask() {
       this.error = "";
       this.result = "";
@@ -1487,8 +1495,9 @@ export default {
         }
 
         // Fire one API call per data-item group, concurrently
+        const headers = this.remoteTaskHeaders();
         const results = await Promise.allSettled(
-          groupEntries.map(([, items]) => postApi(endpoint, items))
+          groupEntries.map(([, items]) => postApi(endpoint, items, { headers }))
         );
 
         const succeeded = [];

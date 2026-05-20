@@ -1,0 +1,9 @@
+
+> beverly@0.1.0 dev
+> node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs
+
+[36m[crm     ][0m → http://127.0.0.1:9311  (npm.cmd run dev:web -- --port 9311)
+[35m[wallet  ][0m → http://localhost:4000  (pnpm.cmd dev)
+[32m[admin   ][0m → http://localhost:5175  (pnpm.cmd dev)
+[33m[vendor  ][0m → http://localhost:5174  (pnpm.cmd dev)
+[34m[customer][0m → http://localhost:5173  (pnpm.cmd dev)

@@ -192,6 +192,16 @@
         <BaseButton v-for="page in pages" :key="page" :class="['page-chip', page === currentPage ? 'active' : '']" size="sm" @click="goToPage(page)">{{ page }}</BaseButton>
         <BaseButton class="page-chip" size="sm" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">&#8250;</BaseButton>
         <span>Go to</span>
+        <BaseInput
+          v-model="gotoPageInput"
+          class="goto-input"
+          type="number"
+          min="1"
+          :max="pageCount"
+          aria-label="Go to page"
+          @keyup.enter="applyGoto"
+        />
+        <BaseButton class="page-chip" size="sm" @click="applyGoto">Go</BaseButton>
       </div>
     </template>
     <ActionModal v-if="modalAction" :action="modalAction" :route="route" :row="activeRow" :rows="batchModalRows" @close="closeModal" @done="handleModalDone" />
@@ -208,7 +218,7 @@ import BaseSelect from "./base/BaseSelect.vue";
 import BaseTableShell from "./base/BaseTableShell.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
-import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
 import { toastWarn } from "../services/toast.js";
 
 export default {
@@ -236,12 +246,13 @@ export default {
       detailRow: null,
       errorMessage: "",
       loading: false,
+      gotoPageInput: "1",
       checkedMeterIds: new Set()
     };
   },
   computed: {
     pageSizeOptions() {
-      return pageSizeOptions;
+      return this.serverPaginated ? pageSizeOptions.filter((size) => size <= 20) : pageSizeOptions;
     },
     isBatchCheckable() {
       return isBatchCheckableRoute(this.route);
@@ -264,6 +275,9 @@ export default {
     },
     supportsSiteFilter() {
       return routeSupportsSiteFilter(this.route);
+    },
+    serverPaginated() {
+      return routeUsesServerPagination(this.route);
     },
     rowActions() {
       return rowActionButtons(this.route);
@@ -306,6 +320,7 @@ export default {
         this.sortField = "";
         this.searchTerm = "";
         this.currentPage = 1;
+        if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
         this.load();
       }
@@ -316,17 +331,25 @@ export default {
       this.errorMessage = "";
       this.loading = true;
       try {
-        const table = await fetchTableData(this.route, {
+        if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
+        const requestOptions = {
           siteId: this.supportsSiteFilter ? this.selectedSite : undefined,
+          searchTerm: this.serverPaginated ? this.searchTerm : undefined,
           orderBy: this.route.actions.includes("Sort")
             ? `${this.sortField || routeSortPolicy(this.route).key} ${this.sortDirection || routeSortDirection(this.route)}`
             : undefined
-        });
+        };
+        if (this.serverPaginated) {
+          requestOptions.pageNumber = this.currentPage;
+          requestOptions.pageSize = this.pageSize;
+        }
+        const table = await fetchTableData(this.route, requestOptions);
         this.allRows = table.rows;
         this.total = table.total;
-        this.applyControls();
+        this.applyControls({ reloadServer: false });
       } catch (error) {
         this.allRows = [];
+        this.total = 0;
         this.filteredRows = [];
         this.visibleRows = [];
         this.filteredTotal = 0;
@@ -336,7 +359,21 @@ export default {
         this.loading = false;
       }
     },
-    applyControls() {
+    applyControls(options = {}) {
+      if (this.serverPaginated && options.reloadServer !== false) {
+        this.currentPage = 1;
+        this.gotoPageInput = "1";
+        this.load();
+        return;
+      }
+      if (this.serverPaginated) {
+        this.filteredRows = this.allRows;
+        this.filteredTotal = this.total;
+        this.visibleRows = this.allRows;
+        this.selectedRow = this.visibleRows[0] || null;
+        this.gotoPageInput = String(this.currentPage);
+        return;
+      }
       const searchedRows = searchRows(this.route, this.allRows, this.searchTerm);
       const sortedRows = sortRows(this.route, searchedRows, this.sortDirection, this.sortField);
       this.filteredRows = sortedRows;
@@ -353,7 +390,7 @@ export default {
       this.pageSize = 10;
       this.currentPage = 1;
       this.checkedMeterIds = new Set();
-      if (this.supportsSiteFilter) {
+      if (this.supportsSiteFilter || this.serverPaginated) {
         this.load();
         return;
       }
@@ -361,11 +398,29 @@ export default {
     },
     goToPage(page) {
       this.currentPage = Math.max(1, Math.min(this.pageCount, page));
+      this.gotoPageInput = String(this.currentPage);
+      if (this.serverPaginated) {
+        this.load();
+        return;
+      }
       this.visibleRows = paginateRows(this.filteredRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
+    applyGoto() {
+      const target = Number(this.gotoPageInput);
+      if (!Number.isFinite(target)) {
+        this.gotoPageInput = String(this.currentPage);
+        return;
+      }
+      this.goToPage(Math.trunc(target));
+    },
     changePageSize() {
       this.currentPage = 1;
+      this.gotoPageInput = "1";
+      if (this.serverPaginated) {
+        this.load();
+        return;
+      }
       this.applyControls();
     },
     cell(row, column, rowIndex) {
@@ -562,6 +617,17 @@ export default {
 .table-scroll td.action-column {
   min-width: var(--table-action-column-width, 240px);
   width: var(--table-action-column-width, 240px);
+}
+
+.goto-input {
+  width: 64px;
+  text-align: center;
+}
+
+.goto-input :deep(input),
+.goto-input:deep(input) {
+  width: 64px;
+  text-align: center;
 }
 
 .data-value-trigger {

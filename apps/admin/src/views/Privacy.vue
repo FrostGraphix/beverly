@@ -1,8 +1,5 @@
 <template>
-  <div class="bw-page">
-    <div class="bw-page-header">
-      <h1 class="bw-page-title">NDPR — Account Deletion Requests</h1>
-    </div>
+  <AppShell title="NDPR / Privacy">
 
     <div class="bw-filter-bar">
       <select v-model="statusFilter" class="bw-select bw-select-sm" @change="load">
@@ -101,12 +98,13 @@
         </div>
       </div>
     </div>
-  </div>
+  </AppShell>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
+import AppShell from '../components/AppShell.vue';
 
 const requests     = ref<any[]>([]);
 const loading      = ref(false);

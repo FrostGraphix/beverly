@@ -108,7 +108,7 @@ async function load() {
   loading.value = true;
   error.value   = '';
   try {
-    const res = await api.get('/api/v1/customer/disputes');
+    const res = await api.get<{ disputes?: any[] }>('/api/v1/customer/disputes');
     disputes.value = res.disputes ?? [];
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load disputes';

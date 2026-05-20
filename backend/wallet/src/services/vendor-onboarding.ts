@@ -8,7 +8,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { getOrCreateWallet } from './wallets.js';
-import { logAction } from './audit.js';
+import { logAction, logSecurityEvent } from './audit.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
@@ -129,6 +129,17 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             legalName: input.legalName,
             primaryUserEmail: input.primaryUserEmail,
             walletId: wallet.id,
+        },
+    });
+
+    // Mark that a temp password was issued for this user.
+    // Note: the password itself is NEVER stored in audit metadata.
+    await logSecurityEvent('temp_password_issued', {
+        actorUserId: authUserId,
+        severity: 'info',
+        metadata: {
+            issued_by: input.createdByStaffId,
+            vendor_organization_id: organization.id,
         },
     });
 

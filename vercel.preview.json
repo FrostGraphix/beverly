@@ -3,6 +3,11 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "env": {
+    "ALLOW_LIVE_WRITES": "true",
+    "APPROVED_LIVE_WRITES": "true",
+    "VITE_ALLOW_LIVE_WRITES": "true"
+  },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

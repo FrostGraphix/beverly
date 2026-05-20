@@ -87,7 +87,8 @@ async function main() {
     TWILIO_FROM_NUMBER: process.env.TWILIO_FROM_NUMBER,
     TWILIO_VERIFY_SERVICE_SID: process.env.TWILIO_VERIFY_SERVICE_SID,
     TWILIO_SMS_STATUS_CALLBACK_URL: process.env.TWILIO_SMS_STATUS_CALLBACK_URL,
-    TWILIO_VALIDATE_WEBHOOKS: process.env.TWILIO_VALIDATE_WEBHOOKS
+    TWILIO_VALIDATE_WEBHOOKS: process.env.TWILIO_VALIDATE_WEBHOOKS,
+    SMS_ALLOWED_COUNTRY_CODES: process.env.SMS_ALLOWED_COUNTRY_CODES
   };
   const originalFetch = global.fetch;
 
@@ -98,6 +99,7 @@ async function main() {
   process.env.TWILIO_VERIFY_SERVICE_SID = "VA1234567890abcdef";
   process.env.TWILIO_SMS_STATUS_CALLBACK_URL = "https://example.test/api/notifications/sms/status";
   process.env.TWILIO_VALIDATE_WEBHOOKS = "false";
+  process.env.SMS_ALLOWED_COUNTRY_CODES = "+1,+234";
   handler._test.resetContractCache();
 
   global.fetch = async (url, init) => {

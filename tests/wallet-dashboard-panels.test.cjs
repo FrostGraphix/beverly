@@ -4,7 +4,7 @@ const path = require("node:path");
 
 const pagePath = path.join(__dirname, "..", "src", "components", "wallet", "AdminWalletOperationsPage.vue");
 const page = fs.readFileSync(pagePath, "utf8");
-const dashboardGrid = page.match(/<div class="dashboard-grid">[\s\S]*?<\/div>\s*<WalletTable title="Recent Activities"/)?.[0] || "";
+const dashboardGrid = page.match(/<div class="dashboard-grid">[\s\S]*?<\/div>\s*<article class="panel recent-activity-panel"/)?.[0] || "";
 
 assert(
   !page.includes("Success vs Failure"),

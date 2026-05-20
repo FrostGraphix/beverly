@@ -38,7 +38,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import {
-    requestOtp, verifyOtp, AuthError,
+    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
 } from '../services/customer-auth.js';
 import {
     submitKycTier1, submitKycTier2Nin, KycError,
@@ -57,6 +57,26 @@ import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../ser
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 
+function customerAuthStatus(code: string): number {
+    return code === 'rate_limit' ? 429
+        : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
+        : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
+        : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
+        : code === 'customer_not_found' ? 404
+        : code === 'email_in_use' || code === 'phone_in_use' ? 409
+        : code === 'invalid_credentials' ? 401
+        : code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401
+        : 400;
+}
+
+function customerAuthPayload(result: { challengeId: string; expiresAt: string; retryAfterSeconds: number }) {
+    return {
+        challenge_id: result.challengeId,
+        expires_at: result.expiresAt,
+        retry_after_seconds: result.retryAfterSeconds,
+    };
+}
+
 const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── AUTH ──────────────────────────────────────────────────────────────────
@@ -68,9 +88,45 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!phone) return reply.code(400).send({ error: 'phone_required', message: 'phone is required.' });
         try {
             const result = await requestOtp(phone, 'signup', { email, full_name });
-            return { challenge_id: result.challengeId };
+            return customerAuthPayload(result);
         } catch (e: any) {
-            if (e instanceof AuthError) return reply.code(e.code === 'rate_limit' ? 429 : 400).send({ error: e.code, message: e.message });
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/email/signup', async (req, reply) => {
+        const { email, password, full_name, phone } = req.body as {
+            email: string; password: string; full_name: string; phone?: string;
+        };
+        if (!email || !password || !full_name) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'email, password, and full_name required.' });
+        }
+        try {
+            const { access_token, customer, isNew } = await signupWithEmail({ email, password, full_name, phone });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/email/login', async (req, reply) => {
+        const { email, password } = req.body as { email: string; password: string };
+        if (!email || !password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'email and password required.' });
+        }
+        try {
+            const { access_token, customer, isNew } = await loginWithEmail({ email, password });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
             throw e;
         }
     });
@@ -80,14 +136,24 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!phone) return reply.code(400).send({ error: 'phone_required', message: 'phone is required.' });
         try {
             const result = await requestOtp(phone, 'login');
-            return { challenge_id: result.challengeId };
+            return customerAuthPayload(result);
         } catch (e: any) {
             if (e instanceof AuthError) {
-                return reply.code(
-                    e.code === 'rate_limit' ? 429
-                    : e.code === 'customer_not_found' ? 404
-                    : 400,
-                ).send({ error: e.code, message: e.message });
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/recover', async (req, reply) => {
+        const { phone } = req.body as { phone: string };
+        if (!phone) return reply.code(400).send({ error: 'phone_required', message: 'phone is required.' });
+        try {
+            const result = await requestOtp(phone, 'recovery');
+            return customerAuthPayload(result);
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
             }
             throw e;
         }
@@ -103,7 +169,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
             if (e instanceof AuthError) {
-                return reply.code(e.code === 'invalid_otp' || e.code === 'otp_expired' ? 401 : 400)
+                return reply.code(customerAuthStatus(e.code))
                     .send({ error: e.code, message: e.message });
             }
             throw e;
@@ -441,6 +507,24 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { purchases };
     });
 
+    // Funding history — wallet top-ups via Paystack (payment_transactions).
+    fastify.get('/funding', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { limit, cursor } = req.query as { limit?: string; cursor?: string };
+        let query = adminClient
+            .from('payment_transactions')
+            .select('id, gateway, gateway_reference, amount_minor, status, created_at, metadata')
+            .eq('actor_type', 'customer')
+            .eq('actor_id', req.actor!.customerId!)
+            .eq('purpose', 'wallet_funding')
+            .order('created_at', { ascending: false })
+            .limit(Math.min(Number(limit ?? 50), 200));
+        if (cursor) query = query.lt('created_at', cursor);
+        const { data } = await query;
+        const rows = data ?? [];
+        const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
+        return { funding: rows, nextCursor };
+    });
+
     fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { data } = await adminClient
             .from('receipts')
@@ -647,8 +731,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 amountMinor: Number((po as any)?.amount_minor ?? (receipt as any)?.amount_minor ?? 0),
                 units: Number((po as any)?.units_kwh ?? (receipt as any)?.units_kwh ?? 0),
                 receiptId: (receipt as any)?.id ?? null,
+                trafficKind: 'token_resend',
+                actorUserId: req.actor!.userId,
             });
-            if (!result.sent) return reply.code(422).send({ error: result.reason, message: 'Token SMS could not be sent.' });
+            if (!result.sent) {
+                const status = String(result.reason ?? '').includes('rate') || String(result.reason ?? '').includes('cooldown') ? 429 : 422;
+                return reply.code(status).send({ error: result.reason, message: 'Token SMS could not be sent.' });
+            }
             return result;
         } catch (e: any) {
             return reply.code(502).send({ error: 'sms_send_failed', message: e?.message ?? 'Token SMS could not be sent.' });

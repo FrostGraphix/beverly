@@ -57,6 +57,10 @@ function closeDrawer() { drawerOpen.value = false; }
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Fund Wallet
         </RouterLink>
+        <RouterLink to="/wallet/funding" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+          Funding History
+        </RouterLink>
         <RouterLink to="/statement" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
           Statement
@@ -86,6 +90,10 @@ function closeDrawer() { drawerOpen.value = false; }
         <RouterLink to="/security" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           Security
+        </RouterLink>
+        <RouterLink to="/vend-access" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v.01"/><path d="M7 10V7a5 5 0 0110 0v3"/><rect x="5" y="10" width="14" height="11" rx="2"/></svg>
+          Vend Authorization
         </RouterLink>
       </nav>
     </aside>

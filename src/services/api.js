@@ -12,6 +12,7 @@ const defaultIdleTimeoutMs = 30 * 60 * 1000;
 
 const sessionCookieKeys = [
   "token",
+  "refreshToken",
   "SiteManager",
   "SiteCom",
   "userId",
@@ -83,6 +84,16 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    const apiMessage = error?.response?.data?.reason
+      || error?.response?.data?.msg
+      || error?.response?.data?.message;
+    if (apiMessage) error.message = apiMessage;
+    if (Number(error?.response?.status) === 401) {
+      clearSessionCookies();
+      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
+        window.location.hash = "#/login";
+      }
+    }
     recordClientError("api-response-error", error, {
       url: error?.config?.url || "",
       method: error?.config?.method || ""
@@ -96,7 +107,8 @@ export function setCookie(name, value) {
 }
 
 export function getCookie(name) {
-  return document.cookie.split("; ").find((row) => row.startsWith(`${encodeURIComponent(name)}=`))?.split("=")[1] || "";
+  const rawValue = document.cookie.split("; ").find((row) => row.startsWith(`${encodeURIComponent(name)}=`))?.split("=")[1] || "";
+  return rawValue ? decodeURIComponent(rawValue) : "";
 }
 
 export function clearCookie(name) {
@@ -169,6 +181,7 @@ export async function login(payload) {
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
   setCookie("token", token);
+  if (response.data?.refreshToken) setCookie("refreshToken", response.data.refreshToken);
   writeSessionState();
   setCookie("SiteManager", payload.userId);
   setCookie("SiteCom", "ACB");
@@ -202,6 +215,7 @@ export function demoLogin(portal = "admin") {
   const userName = isVendor ? "Bright Future Vendor" : "ACOB Finance Admin";
   const roleId = isVendor ? "vendor_user" : "super-admin";
   setCookie("token", `demo-${portal}-session`);
+  setCookie("refreshToken", "");
   setCookie("SiteManager", userId);
   setCookie("SiteCom", isVendor ? "SITE_001" : "ACB");
   writeSessionState();
@@ -252,5 +266,18 @@ export async function currentUserInfo() {
 }
 
 export function liveWritesAllowed() {
-  return (import.meta.env?.VITE_ALLOW_LIVE_WRITES || "false") === "true";
+  const override = typeof window !== "undefined"
+    ? window.localStorage?.getItem("beverly.allow_live_writes")
+    : "";
+  if (override === "true") return true;
+  if (override === "false") return false;
+
+  const host = typeof window !== "undefined" ? window.location?.hostname : "";
+  if (["localhost", "127.0.0.1", "::1"].includes(host)) return true;
+
+  const configured = import.meta.env?.VITE_ALLOW_LIVE_WRITES;
+  if (configured === "true") return true;
+  if (configured === "false") return false;
+
+  return false;
 }

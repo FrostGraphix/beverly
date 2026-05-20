@@ -111,6 +111,29 @@ async function writeDailyMeterRows({ pathname, requestPayload: payload, response
   return { stored: records.length };
 }
 
+async function ingestWebhookReadings(payload) {
+  if (!storeEnabled()) return { status: 503, body: { error: "Consumption store not enabled" } };
+  
+  const rows = Array.isArray(payload) ? payload : (payload.data || payload.readings || []);
+  if (!rows.length) return { status: 400, body: { error: "No readings provided in payload" } };
+
+  const records = rows
+    .map((row) => rowToRecord(row, row.stationId || row.station || ""))
+    .filter(Boolean);
+
+  if (!records.length) return { status: 400, body: { error: "No valid readings could be parsed" } };
+
+  for (let index = 0; index < records.length; index += 500) {
+    await supabase.restRequest("/daily_meter_readings?on_conflict=station_id,meter_id,reading_date", {
+      method: "POST",
+      prefer: "resolution=merge-duplicates,return=minimal",
+      body: records.slice(index, index + 500),
+    });
+  }
+
+  return { status: 200, body: { success: true, stored: records.length } };
+}
+
 async function writeRawDuplicateRows({ requestPayload: payload, duplicateRows }) {
   if (!storeEnabled()) return { stored: 0 };
   const request = requestPayload(payload);
@@ -464,6 +487,7 @@ module.exports = {
   collectionRowsFromPayload,
   dailyMeterStationStats,
   dailyMeterTableReport,
+  ingestWebhookReadings,
   readDailyMeterSummary,
   readDailyMeterRows,
   storeEnabled,

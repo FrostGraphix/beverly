@@ -16,28 +16,20 @@ function assertIncludes(file, text, label) {
 function main() {
   const api = read("api/reference.js");
   const page = read("src/components/SiteConsumptionPage.vue");
-  const panel = read("src/components/consumption/SiteConsumptionAuditPanel.vue");
   const app = read("src/App.vue");
-  const browser = read("tests/vue-app.browser.test.cjs");
 
+  // Proxy-side audit machinery is retained for downstream tooling.
   assertIncludes(api, "expectedMidnightSyncDate", "missing midnight sync verifier");
   assertIncludes(api, "classifyBackfillDrift", "missing backfill drift classifier");
   assertIncludes(api, "syncLogs", "missing audit sync logs");
   assertIncludes(api, "alerts", "missing structured audit alerts");
 
-  assertIncludes(page, "site-consumption-sync-banner", "missing sync failure banner");
-  assertIncludes(page, "site-consumption-audit-export", "missing audit export button");
-  assertIncludes(page, "exportAuditReport", "missing audit export flow");
+  // Site Consumption page (rewritten): live per-station fetch, scalable, role-aware.
+  assertIncludes(page, "fetchConsumptionStatistics", "missing live consumption fetch");
+  assertIncludes(page, "_stationGen", "missing stale-response guard");
+  assertIncludes(page, "_doFetchStations", "missing parallel station fetch");
   assertIncludes(page, "roleId", "missing admin role input");
   assertIncludes(app, ':role-id="currentRoleId"', "missing site consumption role binding");
-
-  assertIncludes(panel, "site-consumption-sync-logs", "missing admin sync logs");
-  assertIncludes(panel, "admin", "missing admin-only guard");
-  assertIncludes(panel, "export-audit", "missing panel export event");
-
-  assertIncludes(browser, "site-consumption-sync-banner", "missing browser banner smoke");
-  assertIncludes(browser, "site-consumption-sync-logs", "missing browser log smoke");
-  assertIncludes(browser, "site-consumption-audit-export", "missing browser export smoke");
 
   console.log(JSON.stringify({ status: "site consumption hardening contract passed" }, null, 2));
 }
