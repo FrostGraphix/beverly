@@ -310,24 +310,26 @@ function doExport() {
 
     <!-- Toolbar -->
     <div class="mo-toolbar">
-      <div class="bw-input-wrap" style="flex: 1; min-width: 200px; max-width: 320px">
-        <svg class="bw-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <div class="mo-search-wrap">
+        <svg class="mo-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input
           v-model="search"
-          class="bw-input"
+          class="bw-input mo-search-input"
           placeholder="Search address, area, phone…"
           @keyup.enter="load"
         />
       </div>
-      <select v-model="filterStatus" class="bw-select" style="width: auto" @change="load">
+      <select v-model="filterStatus" class="bw-select mo-status-select" @change="load">
         <option v-for="o in STATUS_OPTS" :key="o.value" :value="o.value">{{ o.label }}</option>
       </select>
+      <div class="mo-toolbar-actions">
       <button class="bw-btn sm" :disabled="loading" @click="refresh">
         {{ loading ? 'Loading…' : 'Refresh' }}
       </button>
       <button class="bw-btn sm" :disabled="!orders.length" @click="doExport">
         Export CSV
       </button>
+      </div>
     </div>
 
     <!-- Table card -->
@@ -584,6 +586,32 @@ function doExport() {
   display: flex; flex-wrap: wrap; align-items: center;
   gap: var(--s-2); margin-bottom: var(--s-3);
 }
+.mo-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+.mo-search-input {
+  width: 100%;
+  padding-left: 34px;
+}
+.mo-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.mo-status-select {
+  width: 210px;
+}
+.mo-toolbar-actions {
+  display: flex;
+  gap: var(--s-2);
+}
 
 /* Count bar */
 .mo-count-bar {
@@ -636,5 +664,14 @@ function doExport() {
 @media (max-width: 560px) {
   .mo-kpi-row { grid-template-columns: repeat(2, 1fr); }
   .mo-toolbar { flex-direction: column; align-items: stretch; }
+  .mo-search-wrap,
+  .mo-status-select {
+    width: 100%;
+  }
+  .mo-toolbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>
