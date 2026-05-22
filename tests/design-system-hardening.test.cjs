@@ -54,7 +54,7 @@ const rawControlAllowlist = new Set([
   "src/components/MfaChallengeModal.vue",
   "src/components/MfaSetupFlow.vue",
   "src/components/ReportsPage.vue",
-  "src/components/SiteConsumptionPage.vue"
+  "src/components/StationConsumptionPage.vue",
 ]);
 for (const filePath of walkVueFiles(path.join(root, "src", "components"))) {
   const relativePath = path.relative(root, filePath).replace(/\\/g, "/");

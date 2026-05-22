@@ -83,17 +83,36 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const apiMessage = error?.response?.data?.reason
       || error?.response?.data?.msg
       || error?.response?.data?.message;
     if (apiMessage) error.message = apiMessage;
-    if (Number(error?.response?.status) === 401) {
+
+    const status = Number(error?.response?.status);
+    const original = error?.config || {};
+    const isRefreshCall = String(original.url || "").includes("/auth/refresh");
+
+    if (status === 401 && !original.__retried && !isRefreshCall) {
+      // Try to transparently refresh the session, then replay the request once.
+      const newToken = await refreshSession();
+      if (newToken) {
+        original.__retried = true;
+        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
+        return apiClient(original);
+      }
+      // Refresh impossible/failed — fall through to logout.
+      clearSessionCookies();
+      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
+        window.location.hash = "#/login";
+      }
+    } else if (status === 401) {
       clearSessionCookies();
       if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
         window.location.hash = "#/login";
       }
     }
+
     recordClientError("api-response-error", error, {
       url: error?.config?.url || "",
       method: error?.config?.method || ""
@@ -118,6 +137,47 @@ export function clearCookie(name) {
 export function clearSessionCookies() {
   sessionCookieKeys.forEach(clearCookie);
   clearSessionState();
+}
+
+// Single-flight refresh: concurrent 401s share one refresh request.
+let refreshInFlight = null;
+
+/**
+ * Exchange the stored refresh token for a fresh access token.
+ * Updates the `token` (and `refreshToken`) cookies on success.
+ * Returns the new access token, or "" if refresh is impossible/failed.
+ * Uses a raw fetch (not apiClient) to avoid interceptor recursion.
+ */
+export async function refreshSession() {
+  const refreshToken = getCookie("refreshToken");
+  if (!refreshToken) return "";
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return "";
+      const json = await res.json().catch(() => null);
+      const data = json?.data || json?.result || {};
+      const newToken = data.token || "";
+      if (!newToken) return "";
+      setCookie("token", newToken);
+      if (data.refreshToken) setCookie("refreshToken", data.refreshToken);
+      touchSession();
+      return newToken;
+    } catch {
+      return "";
+    } finally {
+      // Clear after the microtask so all awaiters get the same result first.
+      setTimeout(() => { refreshInFlight = null; }, 0);
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 function pickUserRow(response) {

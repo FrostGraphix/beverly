@@ -7,8 +7,6 @@ on:
         description: "Override target URL"
         required: false
         type: string
-  schedule:
-    - cron: "17 * * * *"
 
 permissions:
   contents: read
@@ -21,10 +19,10 @@ jobs:
     if: ${{ vars.PREVIEW_TARGET_URL != '' || github.event.inputs.target_url != '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -45,10 +43,10 @@ jobs:
     if: ${{ vars.PRODUCTION_TARGET_URL != '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm

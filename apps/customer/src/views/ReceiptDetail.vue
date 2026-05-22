@@ -2,12 +2,10 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { useAuthStore } from '../stores/auth';
+import { api } from '../lib/api';
 
 const route  = useRoute();
 const router = useRouter();
-const auth   = useAuthStore();
-const API    = import.meta.env.VITE_API_BASE ?? 'http://localhost:4000';
 
 const loading = ref(true);
 const error   = ref('');
@@ -17,11 +15,7 @@ const copied  = ref(false);
 async function load() {
     loading.value = true;
     try {
-        const res = await fetch(`${API}/api/v1/customer/receipts/${route.params.id}`, {
-            headers: { Authorization: `Bearer ${auth.accessToken}` },
-        });
-        if (!res.ok) throw new Error('Receipt not found');
-        receipt.value = await res.json();
+        receipt.value = await api.get<any>(`/api/v1/customer/receipts/${route.params.id}`);
     } catch (e: any) {
         error.value = e.message ?? 'Failed to load receipt';
     } finally {
@@ -38,10 +32,7 @@ async function copyToken() {
 
 async function resendSms() {
     try {
-        await fetch(`${API}/api/v1/customer/receipts/${route.params.id}/resend-sms`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${auth.accessToken}` },
-        });
+        await api.post(`/api/v1/customer/receipts/${route.params.id}/resend-sms`);
     } catch {}
 }
 

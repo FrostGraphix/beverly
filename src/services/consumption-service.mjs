@@ -35,12 +35,53 @@ function readCookie(name) {
     ?.split("=")[1] || "";
 }
 
-function authenticatedHeaders() {
+export function authenticatedHeaders() {
   const token = readCookie("token");
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${decodeURIComponent(token)}` } : {}),
   };
+}
+
+/**
+ * fetch() wrapper that transparently refreshes an expired Supabase session
+ * and replays the request once. On a second 401 it redirects to login,
+ * matching the axios apiClient behaviour used by the rest of the CRM.
+ *
+ * Always merges current auth headers (so the retry uses the *new* token).
+ */
+async function authedFetch(url, init = {}) {
+  const build = () => ({
+    ...init,
+    headers: { ...authenticatedHeaders(), ...(init.headers || {}) },
+  });
+
+  let response = await fetch(url, build());
+  if (response.status !== 401) return response;
+
+  // Attempt a single transparent refresh + replay.
+  let refreshed = "";
+  try {
+    const api = await import("./api.js");
+    refreshed = await api.refreshSession();
+  } catch {
+    refreshed = "";
+  }
+
+  if (refreshed) {
+    response = await fetch(url, build());
+    if (response.status !== 401) return response;
+  }
+
+  // Refresh impossible or still unauthorized — send the user to re-login.
+  try {
+    const api = await import("./api.js");
+    api.clearSessionCookies();
+  } catch { /* ignore */ }
+  if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
+    window.location.hash = "#/login";
+  }
+  return response;
 }
 
 function getController(key) {
@@ -156,9 +197,8 @@ async function postJSON(path, body, signal) {
     : timeoutController.signal;
 
   try {
-    const response = await fetch(path, {
+    const response = await authedFetch(path, {
       method: "POST",
-      headers: authenticatedHeaders(),
       body: JSON.stringify(body),
       signal: effectiveSignal,
     });
@@ -171,7 +211,7 @@ async function postJSON(path, body, signal) {
         detail = "";
       }
       if (response.status === 401) {
-        throw new Error(`${path} returned 401. Sign in again, then refresh.`);
+        throw new Error(`${path} returned 401. Your session expired — please sign in again.`);
       }
       throw new Error(`${path} returned ${response.status}${detail ? `: ${detail}` : ""}`);
     }
@@ -392,15 +432,75 @@ export async function fetchAllStationsDailyDataDetailed(from, to, stations = LIV
 }
 
 export async function fetchConsumptionAudit() {
-  const response = await fetch("/api/system/consumption-audit", {
-    headers: authenticatedHeaders(),
-  });
+  const response = await authedFetch("/api/system/consumption-audit", {});
   if (!response.ok) {
-    if (response.status === 401) throw new Error("Consumption audit returned 401. Sign in again, then refresh.");
+    if (response.status === 401) throw new Error("Consumption audit returned 401. Your session expired — please sign in again.");
     throw new Error(`Consumption audit failed with status ${response.status}`);
   }
   const payload = await response.json();
   return payload?.result || payload?.data || payload;
+}
+
+/**
+ * Rich station-consumption analytics (league table, trends, seasonality, top meters).
+ * Server-computed from total1 deltas. Uses a generous timeout because wide date
+ * ranges aggregate hundreds of thousands of rows.
+ * @param {{ stationId?: string|null, from: string, to: string, granularity?: "daily"|"weekly"|"monthly", topMeters?: number, signal?: AbortSignal }} params
+ */
+export async function fetchStationConsumptionAnalytics({ stationId = null, from, to, granularity = "daily", topMeters = 25, signal = null }) {
+  if (!from || !to) throw new Error("fetchStationConsumptionAnalytics: date range is required");
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), 120000);
+  const effectiveSignal = signal
+    ? (typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeoutController.signal]) : signal)
+    : timeoutController.signal;
+  const payload = { FROM: from, TO: to, granularity, topMeters };
+  if (stationId) payload.stationId = stationId;
+  try {
+    const response = await authedFetch("/api/local/consumption/station-analytics", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal: effectiveSignal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error("Station analytics returned 401. Your session expired — please sign in again.");
+      let detail = "";
+      try { const body = await response.json(); detail = body?.reason || body?.msg || ""; } catch { detail = ""; }
+      throw new Error(`Station analytics failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    }
+    const data = await response.json();
+    return data?.result || data?.data || data;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Trigger a server-side rebuild of the pre-aggregated meter tables.
+ * Refreshes each station sequentially (per-station RPC) to avoid statement
+ * timeouts. Returns { ok, durationMs } or throws on failure.
+ */
+export async function triggerMeterAggregateRefresh() {
+  const response = await authedFetch("/api/local/consumption/refresh-aggregates", { method: "POST" });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || !json.ok) {
+    throw new Error(json.error || `Aggregate refresh failed (${response.status}).`);
+  }
+  return json;
+}
+
+/**
+ * Per-meter consumption analysis (total1 deltas + remaining-balance trend).
+ * Recharge analysis is layered on top from token records on the client.
+ * @param {{ meterId: string, stationId?: string|null, from: string, to: string, signal?: AbortSignal }} params
+ */
+export async function fetchMeterConsumptionAnalysis({ meterId, stationId = null, from, to, signal = null }) {
+  if (!meterId) throw new Error("fetchMeterConsumptionAnalysis: meterId is required");
+  if (!from || !to) throw new Error("fetchMeterConsumptionAnalysis: date range is required");
+  const payload = { meterId, FROM: from, TO: to };
+  if (stationId) payload.stationId = stationId;
+  const data = await postJSON("/api/local/consumption/meter-analysis", payload, signal);
+  return data?.result || data?.data || data;
 }
 
 export async function fetchConsumptionSummary({ stationId = null, from, to, granularity = "monthly" }) {

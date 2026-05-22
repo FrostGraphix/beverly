@@ -2,16 +2,27 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; }
 interface Application    { id: string; legal_name: string; created_at: string; }
 interface Purchase        { id: string; amount_minor: number; status: string; meter_id?: string; created_at: string; }
+interface WalletSummary   { totalBalanceMinor: number; activeWallets: number; suspendedWallets: number; closedWallets: number; }
 
 const funding = ref<FundingRequest[]>([]);
+const auth = useStaffAuthStore();
 const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
+const walletSummary = ref<WalletSummary>({ totalBalanceMinor: 0, activeWallets: 0, suspendedWallets: 0, closedWallets: 0 });
 const loading = ref(true);
+const feedErrors = ref<string[]>([]);
 let poll: ReturnType<typeof setInterval> | null = null;
+const statPendingFundingMinor = ref(0);
+const statTodayPurchasesMinor = ref(0);
+const statFailedToday = ref(0);
+const statApplications = ref(0);
+const statTotalWalletFloatMinor = ref(0);
+const statTokensDeliveredToday = ref(0);
 
 const pendingFundingTotal = computed(() => funding.value.reduce((s, f) => s + f.amount_minor, 0));
 const todayVendingTotal = computed(() => {
@@ -31,11 +42,40 @@ const deliveredToday = computed(() => {
 const pendingVending = computed(() =>
     vending.value.filter(p => ['hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status))
 );
+const recentTransactions = computed(() => [...vending.value].slice(0, 10));
+
+function animateStat(targetRef: { value: number }, target: number, durationMs = 700) {
+    const from = Number(targetRef.value || 0);
+    const to = Number(target || 0);
+    if (from === to) return;
+    const start = performance.now();
+
+    const step = (now: number) => {
+        const t = Math.min((now - start) / durationMs, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        targetRef.value = Math.round(from + (to - from) * eased);
+        if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+}
+
+function syncAnimatedStats() {
+    animateStat(statPendingFundingMinor, pendingFundingTotal.value);
+    animateStat(statTodayPurchasesMinor, todayVendingTotal.value);
+    animateStat(statFailedToday, failedToday.value);
+    animateStat(statApplications, apps.value.length);
+    animateStat(statTotalWalletFloatMinor, walletSummary.value.totalBalanceMinor ?? 0);
+    animateStat(statTokensDeliveredToday, deliveredToday.value);
+}
 
 async function fetchAll() {
-    try { funding.value = (await api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending')).funding; } catch { /* noop */ }
-    try { apps.value    = (await api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications')).applications; } catch { /* noop */ }
-    try { vending.value = (await api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending')).purchases; } catch { /* noop */ }
+    const errors: string[] = [];
+    try { funding.value = (await api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending')).funding; } catch { errors.push('Funding queue unavailable'); }
+    try { apps.value    = (await api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications')).applications; } catch { errors.push('Applications feed unavailable'); }
+    try { vending.value = (await api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending')).purchases; } catch { errors.push('Vending feed unavailable'); }
+    try { walletSummary.value = await api.get<WalletSummary>('/api/v1/admin/wallets/summary'); } catch { errors.push('Wallet summary unavailable'); }
+    feedErrors.value = errors;
+    syncAnimatedStats();
 }
 
 onMounted(async () => { await fetchAll(); loading.value = false; poll = setInterval(fetchAll, 30_000); });
@@ -57,11 +97,15 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <p>Real-time overview of Beverly vending wallet. Refreshes every 30 s.</p>
       </div>
       <div class="bw-head-actions">
-        <router-link to="/vendors/new" class="bw-btn primary" style="text-decoration:none">
+        <router-link v-if="auth.hasPermission('wallet.vendors.manage')" to="/vendors/new" class="bw-btn primary" style="text-decoration:none">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           New Vendor
         </router-link>
       </div>
+    </div>
+
+    <div v-if="feedErrors.length" class="bw-banner error" role="alert" style="margin-bottom: var(--s-4)">
+      Live dashboard degraded: {{ feedErrors.join(' - ') }}.
     </div>
 
     <!-- KPI grid -->
@@ -76,7 +120,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" style="color: var(--brand)">
-          {{ naira(pendingFundingTotal) }}
+          {{ naira(statPendingFundingMinor) }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', funding.length > 0 ? 'up' : 'flat']">
@@ -104,7 +148,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(todayVendingTotal) }}</div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTodayPurchasesMinor) }}</div>
         <div class="bw-kpi-foot">
           <span class="bw-delta up">{{ deliveredToday }} vends</span>
           <span class="bw-kpi-note">successful today</span>
@@ -124,7 +168,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" :style="{ color: failedToday > 0 ? 'var(--danger)' : 'var(--text-dim)' }">
-          {{ failedToday }}
+          {{ statFailedToday }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', failedToday > 0 ? 'down' : 'flat']">
@@ -142,12 +186,42 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" :style="{ color: apps.length > 0 ? 'var(--info)' : 'var(--text-dim)' }">
-          {{ apps.length }}
+          {{ statApplications }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', apps.length > 0 ? 'flat' : 'flat']" style="background: oklch(72% 0.13 220 / 0.12); color: var(--info)">
             awaiting review
           </span>
+        </div>
+      </div>
+
+      <!-- Total wallet float -->
+      <div class="bw-kpi featured">
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Total Wallet Float</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h20v10H2z"/><path d="M16 12h.01"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTotalWalletFloatMinor) }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ walletSummary.activeWallets }} active</span>
+          <span class="bw-kpi-note">across all wallets</span>
+        </div>
+      </div>
+
+      <!-- Tokens delivered today -->
+      <div class="bw-kpi info-tone">
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Tokens Delivered Today</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--info)">{{ statTokensDeliveredToday }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ deliveredToday }} successful</span>
+          <span class="bw-kpi-note">live delivery count</span>
         </div>
       </div>
 
@@ -185,7 +259,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
 
         <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
-          <router-link to="/funding" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
+          <router-link v-if="auth.hasPermission('wallet.funding.view')" to="/funding" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
             Open queue
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </router-link>
@@ -220,7 +294,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
 
         <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
-          <router-link to="/applications" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
+          <router-link v-if="auth.hasPermission('wallet.vendors.review')" to="/applications" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
             Review all
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </router-link>
@@ -239,7 +313,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
           <div class="bw-card-sub">Orders that haven't resolved yet</div>
         </div>
-        <router-link to="/vending" class="bw-btn sm" style="text-decoration:none">Open monitor</router-link>
+        <router-link v-if="auth.hasPermission('wallet.vending.monitor')" to="/vending" class="bw-btn sm" style="text-decoration:none">Open monitor</router-link>
       </div>
 
       <!-- Desktop table -->
@@ -287,6 +361,42 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="bw-card flush">
+      <div class="bw-table-head-bar">
+        <div>
+          <div class="bw-card-title">Recent Transactions</div>
+          <div class="bw-card-sub">Most recent vending orders</div>
+        </div>
+      </div>
+
+      <div class="bw-t-wrap">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Meter</th>
+              <th>Status</th>
+              <th style="text-align:right">Amount</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
+              <td class="bw-row-id">#{{ p.id.slice(0, 8) }}</td>
+              <td class="bw-mono">{{ p.meter_id || '—' }}</td>
+              <td><span class="bw-badge" :class="p.status === 'delivered' ? 'success' : (p.status === 'failed' ? 'danger' : 'warn')">{{ p.status }}</span></td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
+              <td class="bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
+            </tr>
+            <tr v-if="!recentTransactions.length && !loading">
+              <td colspan="5" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions yet.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

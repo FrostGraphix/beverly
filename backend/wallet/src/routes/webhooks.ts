@@ -15,6 +15,8 @@ import { verifyTransaction, verifyWebhookSignature } from '../adapters/paystack.
 import { postEntry } from '../services/ledger.js';
 import { logAction } from '../services/audit.js';
 import { sendTokenSmsToCustomer } from '../services/customer-purchase.js';
+import { notifyWalletFunded, notifyTokenPurchased } from '../services/notifications.js';
+import { assertWalletCanTransact, findWalletByOwner } from '../services/wallets.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     // Need raw body for signature verification
@@ -90,8 +92,21 @@ const route: FastifyPluginAsync = async (fastify) => {
             if (fundingId) {
                 const { data: fr } = await adminClient.from('funding_requests').select('*').eq('id', fundingId).single();
                 if (fr) {
+                    const wallet = await findWalletByOwner('vendor', (fr as any).vendor_organization_id);
+                    try {
+                        assertWalletCanTransact(wallet, 'receive funding');
+                    } catch (error: any) {
+                        await blockWebhookFulfillment(tx, payload, error);
+                        return reply.code(200).send({ ok: true, blocked: error.code ?? 'wallet_inactive' });
+                    }
+                    if (wallet.id !== (fr as any).wallet_id) {
+                        await adminClient
+                            .from('funding_requests')
+                            .update({ wallet_id: wallet.id })
+                            .eq('id', (fr as any).id);
+                    }
                     await postEntry({
-                        walletId: (fr as any).wallet_id,
+                        walletId: wallet.id,
                         direction: 'credit',
                         amountMinor: (fr as any).amount_minor,
                         entryType: 'payment_credit',
@@ -114,8 +129,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         if ((tx as any).purpose === 'wallet_funding' && (tx as any).actor_type === 'customer') {
             const walletId = (tx as any).metadata?.wallet_id as string | undefined;
             if (walletId) {
+                const wallet = await findWalletForWebhook(walletId);
+                try {
+                    assertWalletCanTransact(wallet, 'receive funding');
+                } catch (error: any) {
+                    await blockWebhookFulfillment(tx, payload, error);
+                    return reply.code(200).send({ ok: true, blocked: error.code ?? 'wallet_inactive' });
+                }
                 await postEntry({
-                    walletId,
+                    walletId: wallet.id,
                     direction: 'credit',
                     amountMinor: verified.amount,
                     entryType: 'payment_credit',
@@ -126,6 +148,11 @@ const route: FastifyPluginAsync = async (fastify) => {
                     createdBy: (tx as any).actor_id,
                     audit: { actorType: 'webhook' },
                 });
+                // Notify customer
+                notifyWalletFunded((tx as any).actor_id, {
+                    amountMinor: verified.amount,
+                    reference,
+                }).catch(() => undefined);
             }
         }
 
@@ -141,6 +168,8 @@ const route: FastifyPluginAsync = async (fastify) => {
                 if (po && (po as any).status !== 'delivered' && (po as any).status !== 'failed') {
                     let issuedToken: string | null = null;
                     try {
+                        const wallet = await findWalletByOwner('customer', (po as any).customer_id ?? (tx as any).actor_id);
+                        if (wallet) assertWalletCanTransact(wallet, 'buy tokens');
                         const { generateCreditToken, previewPurchase, lookupMeter } = await import('../services/token-engine.js');
                         const { createReceipt } = await import('../services/vending.js');
                         const meter = await lookupMeter((po as any).meter_id);
@@ -192,6 +221,13 @@ const route: FastifyPluginAsync = async (fastify) => {
                                 after: { reason: smsError?.message ?? 'sms_failed' },
                             });
                         }
+                        // In-app + email notification
+                        notifyTokenPurchased((po as any).customer_id, {
+                            meterId: meter.meterId,
+                            units: preview.units,
+                            amountMinor: (po as any).amount_minor,
+                            token: tokenRes.token,
+                        }).catch(() => undefined);
                     } catch (e: any) {
                         await adminClient.from('purchase_orders').update({
                             token: issuedToken ?? undefined,
@@ -231,6 +267,75 @@ const route: FastifyPluginAsync = async (fastify) => {
             processed_at: new Date().toISOString(),
             error: error ?? null,
         }).eq('gateway_reference', payload.data?.reference ?? '').eq('processed', false);
+    }
+
+    async function findWalletForWebhook(walletId: string) {
+        const { data, error } = await adminClient
+            .from('wallets')
+            .select('id, owner_type, owner_id, currency, status, daily_debit_cap_minor, monthly_debit_cap_minor, created_at')
+            .eq('id', walletId)
+            .maybeSingle();
+        if (error) throw error;
+        return data as any;
+    }
+
+    async function blockWebhookFulfillment(tx: any, payload: any, error: any) {
+        const code = error?.code ?? 'wallet_inactive';
+        const blockedAt = new Date().toISOString();
+        const metadata = {
+            ...(tx.metadata ?? {}),
+            fulfillment_blocked: true,
+            fulfillment_blocked_reason: code,
+            fulfillment_blocked_at: blockedAt,
+            requires_ops_review: true,
+        };
+
+        // Token purchases were paid; park delivery for ops review instead of hard-failing fulfillment.
+        if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
+            const purchaseOrderId = tx.metadata?.purchase_order_id;
+            if (purchaseOrderId) {
+                await adminClient
+                    .from('purchase_orders')
+                    .update({
+                        status: 'delivery_pending_review',
+                        failure_reason: `wallet_inactive_on_webhook: ${code}`.slice(0, 500),
+                        delivery_state: 'wallet_state_blocked_needs_review',
+                    })
+                    .eq('id', purchaseOrderId);
+            }
+        }
+
+        // Vendor funding remains pending finance review while wallet is inactive.
+        if (tx.purpose === 'wallet_funding' && tx.actor_type === 'vendor') {
+            const fundingRequestId = tx.metadata?.funding_request_id;
+            if (fundingRequestId) {
+                await adminClient
+                    .from('funding_requests')
+                    .update({
+                        status: 'under_review',
+                        rejection_reason: `wallet_inactive_on_webhook: ${code}`.slice(0, 500),
+                    })
+                    .eq('id', fundingRequestId)
+                    .in('status', ['initiated', 'proof_uploaded']);
+            }
+        }
+
+        await adminClient
+            .from('payment_transactions')
+            .update({
+                status: 'succeeded',
+                metadata,
+            })
+            .eq('id', tx.id);
+        await markWebhookProcessed(payload, code);
+        await logAction({
+            actorUserId: null,
+            actorType: 'webhook',
+            action: 'paystack.fulfillment_blocked',
+            targetType: 'payment_transaction',
+            targetId: tx.id,
+            after: { reason: code },
+        });
     }
 };
 

@@ -22,6 +22,7 @@ const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
   signInWithPassword,
+  refreshAccessToken,
   authUserFromAccessToken,
   storageReport,
   createAuthUser,
@@ -38,9 +39,12 @@ const {
   dailyMeterStationStats,
   dailyMeterTableReport,
   readDailyMeterSummary,
+  readStationConsumptionAnalytics,
+  readMeterConsumptionAnalysis,
   readDailyMeterRows,
   writeDailyMeterRows,
-  ingestWebhookReadings
+  ingestWebhookReadings,
+  refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
@@ -234,12 +238,17 @@ function protectedPath(pathname) {
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
   if (lowerPath === "/api/user/login") return false;
+  if (isAuthRefreshPath(lowerPath)) return false;
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
   return true;
+}
+
+function isAuthRefreshPath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/auth/refresh";
 }
 
 function authFailure(status, pathname, reason) {
@@ -454,8 +463,7 @@ function normalizeRequestPath(urlValue) {
     .replace(/^\/api\/reference(?:\.js)?/i, "/api")
     .split("?")[0];
   if (/^\/auth\/mfa\//i.test(pathname)) return `/api${pathname}`;
-  if (/^\/api\/API\//.test(pathname)) return pathname.replace(/^\/api\/API\//, "/API/");
-  if (/^\/api\/api\//.test(pathname)) return pathname.replace(/^\/api\/api\//, "/api/");
+  if (/^\/api\/api\//i.test(pathname)) return pathname.replace(/^\/api\/api\//i, "/api/");
   return pathname;
 }
 
@@ -1722,6 +1730,20 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/local/consumption/summary") {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
+  if (pathname === "/api/local/consumption/station-analytics") {
+    return readStationConsumptionAnalytics({ requestPayload: requestData.parsedBody });
+  }
+  if (pathname === "/api/local/consumption/meter-analysis") {
+    return readMeterConsumptionAnalysis({ requestPayload: requestData.parsedBody });
+  }
+  if (pathname === "/api/local/consumption/refresh-aggregates") {
+    try {
+      const result = await refreshMeterReadingAggregates();
+      return { status: 200, body: { ok: true, durationMs: result.durationMs } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
   if (pathname === "/api/local/consumption/live-probe") {
     const { runLiveProbe } = require("../backend/src/services/live-probe-engine");
     try {
@@ -1931,6 +1953,67 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
 
   // ── Admin v1 REST GET endpoints ─────────────────────────────────────────────
+  if (methodUpper === "GET" && pathname === "/api/v1/admin/me") {
+    const role = String(request.__auth?.roleId || "super-admin");
+    const allPermissions = [
+      "wallet.dashboard.view",
+      "wallet.vendors.review",
+      "wallet.vendors.manage",
+      "wallet.customers.view",
+      "wallet.funding.view",
+      "wallet.funding.approve",
+      "wallet.vending.monitor",
+      "wallet.refunds.manage",
+      "wallet.disputes.manage",
+      "wallet.settlement.view",
+      "wallet.reconciliation.run",
+      "wallet.fraud.review",
+      "wallet.privacy.review",
+      "wallet.audit.view",
+      "wallet.flags.manage",
+      "wallet.access.manage"
+    ];
+    const defaults = {
+      "operations-manager": [
+        "wallet.dashboard.view",
+        "wallet.vendors.review",
+        "wallet.vending.monitor",
+        "wallet.customers.view",
+        "wallet.disputes.manage",
+        "wallet.settlement.view",
+        "wallet.reconciliation.run",
+        "wallet.fraud.review",
+        "wallet.audit.view"
+      ],
+      "finance-checker": [
+        "wallet.dashboard.view",
+        "wallet.funding.view",
+        "wallet.funding.approve",
+        "wallet.refunds.manage",
+        "wallet.settlement.view",
+        "wallet.reconciliation.run",
+        "wallet.audit.view"
+      ],
+      account: [
+        "wallet.dashboard.view",
+        "wallet.funding.view",
+        "wallet.customers.view",
+        "wallet.vending.monitor",
+        "wallet.settlement.view",
+        "wallet.reconciliation.run"
+      ]
+    };
+    return localJobResponse({
+      user: {
+        id: request.__auth?.authUserId || request.__auth?.userId || "admin",
+        email: request.__auth?.email || null,
+        full_name: request.__auth?.userName || "Beverly Admin",
+        role
+      },
+      permissions: role === "super-admin" ? allPermissions : (defaults[role] || defaults.account)
+    });
+  }
+
   if (methodUpper === "GET" && pathname === "/api/v1/admin/funding/pending") {
     const rows = walletFunding.listFundingRequests({ limit: 200 });
     const pending = rows.filter(r => ["proof_uploaded", "under_review"].includes(r.status));
@@ -2673,6 +2756,25 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
   if (pathname === "/api/user/login") {
     return loginResponse(payload);
+  }
+  if (isAuthRefreshPath(pathname)) {
+    const refreshToken = String(payload.refreshToken || payload.refresh_token || "").trim();
+    if (!refreshToken) {
+      return { status: 400, body: { code: 400, msg: "refreshToken required", reason: "refreshToken required", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+    }
+    const refreshed = await refreshAccessToken(refreshToken);
+    if (!refreshed || !refreshed.token) {
+      return { status: 401, body: { code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+    }
+    return {
+      status: 200,
+      body: {
+        code: 0, msg: "success", reason: "success",
+        data: refreshed,
+        result: refreshed,
+        _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" }
+      }
+    };
   }
   if (pathname === "/api/user/profile") {
     return localJobResponse({

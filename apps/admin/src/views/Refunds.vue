@@ -1,11 +1,8 @@
-<template>
+﻿<template>
   <AppShell title="Refunds">
-    <template #topbar-end>
-      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">CSV</button>
-      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-    </template>
-
     <div class="bw-filter-bar">
+      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">CSV</button>
+      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportPdfDoc">PDF</button>
       <select v-model="statusFilter" class="bw-select bw-select-sm" @change="load">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
@@ -14,7 +11,7 @@
       </select>
     </div>
 
-    <div v-if="loading" class="bw-loading">Loading…</div>
+    <div v-if="loading" class="bw-loading">Loadingâ€¦</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
     <div v-else>
@@ -33,10 +30,10 @@
           </thead>
           <tbody>
             <tr v-for="r in refunds" :key="r.id">
-              <td class="bw-mono bw-text-sm">{{ r.wallet_id?.slice(0, 8) || '—' }}…</td>
+              <td class="bw-mono bw-text-sm">{{ r.wallet_id?.slice(0, 8) || 'â€”' }}â€¦</td>
               <td>{{ naira(r.amount_minor) }}</td>
-              <td>{{ r.reason?.replace(/_/g, ' ') || '—' }}</td>
-              <td class="bw-text-sm bw-mono">{{ r.requested_by_user_id?.slice(0, 8) || '—' }}</td>
+              <td>{{ r.reason?.replace(/_/g, ' ') || 'â€”' }}</td>
+              <td class="bw-text-sm bw-mono">{{ r.requested_by_user_id?.slice(0, 8) || 'â€”' }}</td>
               <td><span :class="statusClass(r.status)" class="bw-badge">{{ statusLabel(r.status) }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
               <td v-if="r.status === 'pending'" class="bw-action-cell">
@@ -52,7 +49,7 @@
         </table>
       </div>
 
-      <!-- Mobile cards (≤640px) -->
+      <!-- Mobile cards (â‰¤640px) -->
       <div class="bw-t-cards">
         <div v-if="!refunds.length" class="bw-empty">No refunds found.</div>
         <div v-for="r in refunds" :key="r.id" class="bw-tc">
@@ -77,7 +74,7 @@
       <div class="bw-modal">
         <div class="bw-modal-header">
           <h2>Approve Refund</h2>
-          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="approving = null">✕</button>
+          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="approving = null">âœ•</button>
         </div>
         <div class="bw-modal-body">
           <p class="bw-text-sm bw-text-muted">Amount: <strong>{{ naira(approving.amount_minor) }}</strong></p>
@@ -87,7 +84,7 @@
         <div class="bw-modal-footer">
           <button class="bw-btn bw-btn-ghost" @click="approving = null">Cancel</button>
           <button class="bw-btn bw-btn-primary" :disabled="saving" @click="submitApprove">
-            {{ saving ? 'Approving…' : 'Confirm Approve' }}
+            {{ saving ? 'Approvingâ€¦' : 'Confirm Approve' }}
           </button>
         </div>
       </div>
@@ -98,16 +95,16 @@
       <div class="bw-modal">
         <div class="bw-modal-header">
           <h2>Reject Refund</h2>
-          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="rejecting = null">✕</button>
+          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="rejecting = null">âœ•</button>
         </div>
         <div class="bw-modal-body">
           <label class="bw-label">Reason *</label>
-          <textarea v-model="rejectReason" class="bw-textarea" rows="3" placeholder="Reason for rejection…"></textarea>
+          <textarea v-model="rejectReason" class="bw-textarea" rows="3" placeholder="Reason for rejectionâ€¦"></textarea>
         </div>
         <div class="bw-modal-footer">
           <button class="bw-btn bw-btn-ghost" @click="rejecting = null">Cancel</button>
           <button class="bw-btn bw-btn-danger" :disabled="saving || !rejectReason" @click="submitReject">
-            {{ saving ? 'Rejecting…' : 'Reject' }}
+            {{ saving ? 'Rejectingâ€¦' : 'Reject' }}
           </button>
         </div>
       </div>
@@ -189,13 +186,13 @@ function statusClass(s: string) {
   }[s] ?? 'bw-badge-neutral';
 }
 
-function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
+function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : 'â€”'; }
 
 function exportCsvRows() {
   exportCsv('refunds', refunds.value, [
     { key: 'id', header: 'Refund ID', value: (r) => r.id },
     { key: 'wallet_id', header: 'Wallet', value: (r) => r.wallet_id },
-    { key: 'amount', header: 'Amount (₦)', value: (r) => (r.amount_minor ?? 0) / 100 },
+    { key: 'amount', header: 'Amount (â‚¦)', value: (r) => (r.amount_minor ?? 0) / 100 },
     { key: 'reason', header: 'Reason', value: (r) => r.reason },
     { key: 'status', header: 'Status', value: (r) => statusLabel(r.status) },
     { key: 'requested_by', header: 'Requested By', value: (r) => r.requested_by_user_id ?? '' },
@@ -215,7 +212,7 @@ function exportPdfDoc() {
       title: 'Refund requests',
       columns: ['Wallet', 'Amount', 'Reason', 'Status', 'Created'],
       rows: refunds.value.map((r) => [
-        r.wallet_id?.slice(0, 8) ?? '—', naira(r.amount_minor), (r.reason ?? '').replace(/_/g, ' '), statusLabel(r.status), fmtDate(r.created_at),
+        r.wallet_id?.slice(0, 8) ?? 'â€”', naira(r.amount_minor), (r.reason ?? '').replace(/_/g, ' '), statusLabel(r.status), fmtDate(r.created_at),
       ]),
     }],
   });
@@ -228,3 +225,5 @@ onMounted(load);
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .bw-tc-foot { display: flex; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 </style>
+
+

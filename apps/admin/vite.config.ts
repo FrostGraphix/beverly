@@ -1,11 +1,18 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+    base: process.env.VITE_ADMIN_BASE ?? (command === 'build' ? '/wallet-admin/' : '/'),
     plugins: [vue()],
     server: {
         port: 5175,
         proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } },
     },
-    build: { target: 'es2022', sourcemap: true },
-});
+    build: {
+        target: 'es2022',
+        sourcemap: true,
+        outDir: resolve(__dirname, '../../dist/wallet-admin'),
+        emptyOutDir: false,
+    },
+}));

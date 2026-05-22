@@ -163,6 +163,9 @@ export async function setVendorStatus(
         .select('status')
         .eq('id', vendorOrganizationId)
         .single();
+    if ((before as any)?.status === 'closed' && newStatus !== 'closed') {
+        throw new OnboardingError('Closed vendors cannot be reactivated. Create a replacement vendor profile instead.', 'vendor_closed_final');
+    }
 
     const { error } = await adminClient
         .from('vendor_organizations')
@@ -170,14 +173,14 @@ export async function setVendorStatus(
         .eq('id', vendorOrganizationId);
     if (error) throw new OnboardingError(error.message, 'status_update_failed');
 
-    // mirror wallet state
-    if (newStatus === 'frozen' || newStatus === 'closed') {
-        await adminClient.from('wallets').update({ status: 'frozen' })
-            .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
-    } else if (newStatus === 'approved') {
-        await adminClient.from('wallets').update({ status: 'active' })
-            .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
-    }
+    // Mirror account controls to the wallet so vend/funding paths cannot bypass
+    // an organization-level suspension.
+    const walletStatus =
+        newStatus === 'approved' ? 'active'
+        : newStatus === 'closed' ? 'closed'
+        : 'frozen';
+    await adminClient.from('wallets').update({ status: walletStatus })
+        .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
 
     await logAction({
         actorUserId: staffId,
@@ -186,7 +189,7 @@ export async function setVendorStatus(
         targetType: 'vendor_organization',
         targetId: vendorOrganizationId,
         before: { status: before?.status },
-        after: { status: newStatus, reason: reason ?? null },
+        after: { status: newStatus, walletStatus, reason: reason ?? null },
     });
 }
 

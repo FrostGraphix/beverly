@@ -31,7 +31,11 @@
     
     .sidebar-footer { padding: 12px; border-top: 1px solid var(--sidebar-footer-border); flex-shrink: 0; background: var(--sidebar-footer-bg); backdrop-filter: blur(16px); }
     .sidebar-signout { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; background: rgba(239, 68, 68, 0.08); color: #fca5a5; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-    .sidebar-signout:hover { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #fecaca; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+    /* High-specificity overrides ensure BaseButton variant="ghost" default/hover styles don't bleed in */
+    .sidebar-footer .sidebar-signout,
+    .sidebar-footer .sidebar-signout:not(:disabled) { color: #fca5a5; background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.2); }
+    .sidebar-footer .sidebar-signout:hover,
+    .sidebar-footer .sidebar-signout:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #fecaca; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
     .hideSidebar .sidebar-signout .sidebar-label { opacity: 0; width: 0; overflow: hidden; }
     .sidebar-signout .sidebar-icon { opacity: 0.8; width: 16px; height: 16px; }
     .sidebar-signout:hover .sidebar-icon { opacity: 1; transform: translateX(2px); }

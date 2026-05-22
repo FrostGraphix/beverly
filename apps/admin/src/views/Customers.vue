@@ -119,10 +119,10 @@ watch([fStatus, fTier], () => loadList());
 
 <template>
   <AppShell title="Customers">
-    <template #topbar-end>
+    <div class="page-actions">
       <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">CSV</button>
-      <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-    </template>
+      <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc">PDF</button>
+    </div>
 
     <div v-if="banner" class="bw-banner error">
       {{ banner }}
@@ -265,6 +265,7 @@ watch([fStatus, fTier], () => loadList());
 .bw-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-md); margin-bottom: var(--s-3); font-size: var(--t-sm); border: 1px solid; }
 .bw-banner.error { background: oklch(from var(--danger) l c h / 0.08); border-color: oklch(from var(--danger) l c h / 0.30); color: var(--danger); }
 .bw-banner-x { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 18px; padding: 2px 8px; opacity: 0.7; }
+.page-actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-bottom: var(--s-3); }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
 .kpi-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); position: relative; overflow: hidden; }
@@ -294,5 +295,5 @@ watch([fStatus, fTier], () => loadList());
 .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px dashed var(--border); }
 .cc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 2px; }
 
-@media (max-width: 640px) { .filter-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .filter-grid { grid-template-columns: 1fr; } .page-actions { justify-content: flex-start; } }
 </style>

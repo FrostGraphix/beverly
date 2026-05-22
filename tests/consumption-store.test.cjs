@@ -49,6 +49,29 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
         ]
       };
     }
+    if (pathname.startsWith("/meter_consumption_aggregates")) {
+      return {
+        response: {
+          headers: {
+            get(name) {
+              return String(name).toLowerCase() === "content-range" ? "0-0/1" : "";
+            }
+          }
+        },
+        body: [
+          {
+            station_id: "TUNGA",
+            meter_id: "M-1",
+            customer_id: "C-1",
+            customer_name: "Ada",
+            period_type: "day",
+            period_start: "2026-05-07",
+            kwh_total: 5,
+            reading_count: 1
+          }
+        ]
+      };
+    }
     if (pathname.includes("select=station_id")) {
       return {
         response: {
@@ -169,7 +192,7 @@ const summary = await store.readDailyMeterSummary({
   }
 });
 assert.strictEqual(summary.status, 200);
-assert.strictEqual(summary.body._proxy.source, "supabase-consumption-summary");
+assert.strictEqual(summary.body._proxy.source, "supabase-consumption-summary-agg");
 assert.strictEqual(summary.body.data.consumedKwh, 5);
 assert.deepStrictEqual(summary.body.data.temporal.labels, ["2026-05-07"]);
 

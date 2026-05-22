@@ -9,7 +9,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { postEntry, type LedgerEntry } from './ledger.js';
-import { findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
 import crypto from 'node:crypto';
@@ -74,7 +74,8 @@ export async function initiatePaystackFunding(input: InitiatePaystackInput): Pro
         throw new FundingError('minimum funding is ₦500', 'amount_too_low');
     }
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
-    if (!wallet) throw new FundingError('vendor wallet not provisioned', 'wallet_missing');
+    try { assertWalletCanTransact(wallet, 'receive funding'); }
+    catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
 
     const reference = `FND-${Date.now()}-${input.vendorOrganizationId.slice(0, 8)}`;
 
@@ -165,6 +166,9 @@ export async function uploadBankFundingProof(input: UploadBankProofInput): Promi
     proofFilePath: string;
     proofHash: string;
 }> {
+    const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
+    try { assertWalletCanTransact(wallet, 'upload funding proof'); }
+    catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
     if (!PROOF_ALLOWED_MIME.has(input.mimeType)) {
         throw new FundingError('proof must be a PDF, JPG, PNG, or WebP file', 'invalid_proof_type');
     }
@@ -202,7 +206,7 @@ export async function uploadBankFundingProof(input: UploadBankProofInput): Promi
     return { proofFilePath, proofHash };
 }
 
-async function attachProofUrls(requests: FundingRequest[]): Promise<FundingRequest[]> {
+export async function attachProofUrls(requests: FundingRequest[]): Promise<FundingRequest[]> {
     return Promise.all(requests.map(async (request) => {
         if (!request.proof_file_path) return { ...request, proof_view_url: null };
         const { data } = await adminClient.storage
@@ -217,7 +221,8 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         throw new FundingError('minimum bank funding is ₦1,000', 'amount_too_low');
     }
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
-    if (!wallet) throw new FundingError('vendor wallet not provisioned', 'wallet_missing');
+    try { assertWalletCanTransact(wallet, 'receive funding'); }
+    catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
 
     // Reject obvious duplicate proofs by hash
     const { data: dup } = await adminClient
@@ -287,6 +292,7 @@ async function repairApprovedFundingWallet(input: {
     if (input.existingEntry.wallet_id === input.canonicalWallet.id) {
         return input.existingEntry;
     }
+    assertWalletCanTransact(input.canonicalWallet, 'receive funding');
 
     await postEntry({
         walletId: input.existingEntry.wallet_id,
@@ -345,6 +351,8 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
     if (frErr || !fr) throw new FundingError('funding request not found', 'not_found');
     const funding = fr as FundingRequest;
     const canonicalWallet = await canonicalVendorWallet(funding);
+    try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
+    catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
     const fundingForCredit = { ...funding, wallet_id: canonicalWallet.id };
 
     if (funding.status === 'approved') {
@@ -433,6 +441,7 @@ export async function reconcileApprovedFundingCredits(input: {
     repaired: number;
     missingLedger: number;
     staleWallet: number;
+    blockedInactive: number;
 }> {
     const { data } = await adminClient
         .from('funding_requests')
@@ -444,6 +453,7 @@ export async function reconcileApprovedFundingCredits(input: {
     let repaired = 0;
     let missingLedger = 0;
     let staleWallet = 0;
+    let blockedInactive = 0;
 
     for (const row of data ?? []) {
         const funding = row as FundingRequest;
@@ -451,6 +461,11 @@ export async function reconcileApprovedFundingCredits(input: {
         const existing = await findFundingCredit(funding.id);
 
         if (!existing) {
+            try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
+            catch {
+                blockedInactive += 1;
+                continue;
+            }
             missingLedger += 1;
             await postEntry({
                 walletId: canonicalWallet.id,
@@ -469,6 +484,11 @@ export async function reconcileApprovedFundingCredits(input: {
         }
 
         if (existing.wallet_id !== canonicalWallet.id) {
+            try { assertWalletCanTransact(canonicalWallet, 'receive funding'); }
+            catch {
+                blockedInactive += 1;
+                continue;
+            }
             staleWallet += 1;
             await repairApprovedFundingWallet({
                 funding,
@@ -485,6 +505,7 @@ export async function reconcileApprovedFundingCredits(input: {
         repaired,
         missingLedger,
         staleWallet,
+        blockedInactive,
     };
 }
 

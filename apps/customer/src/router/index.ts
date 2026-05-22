@@ -1,6 +1,12 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 
+function portalHistoryBase(configuredBase: string): string {
+    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '/';
+    if (typeof window === 'undefined' || base === '/') return base;
+    return window.location.pathname.startsWith(base) ? base : '/';
+}
+
 const routes: RouteRecordRaw[] = [
     { path: '/',           name: 'home',     component: () => import('../views/Home.vue'),      meta: { auth: true } },
     { path: '/signup',     name: 'signup',   component: () => import('../views/Signup.vue'),    meta: { guest: true } },
@@ -27,7 +33,7 @@ const routes: RouteRecordRaw[] = [
 ];
 
 export const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(portalHistoryBase(import.meta.env.BASE_URL)),
     routes,
     scrollBehavior: () => ({ top: 0 }),
 });

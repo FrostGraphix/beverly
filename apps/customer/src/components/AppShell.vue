@@ -1,20 +1,39 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { api } from '../lib/api';
 
 defineProps<{ title?: string; hideTabbar?: boolean }>();
 const auth = useAuthStore();
 
 // PWA install prompt
-const installPrompt = ref<any>(null);
+const installPrompt    = ref<any>(null);
 const installDismissed = ref(false);
+
+// Notification bell
+const unreadCount = ref(0);
+let bellPoll: ReturnType<typeof setInterval> | null = null;
+
+async function fetchUnread() {
+    if (!auth.isAuthenticated) return;
+    try {
+        const r = await api.get<{ unreadCount: number }>('/api/v1/customer/notifications?limit=1');
+        unreadCount.value = r.unreadCount ?? 0;
+    } catch { /* best-effort */ }
+}
 
 onMounted(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         installPrompt.value = e;
     });
+    void fetchUnread();
+    bellPoll = setInterval(fetchUnread, 60_000); // poll every minute
+});
+
+onUnmounted(() => {
+    if (bellPoll) clearInterval(bellPoll);
 });
 
 async function promptInstall() {
@@ -44,6 +63,13 @@ async function promptInstall() {
       </RouterLink>
       <span class="bw-appbar-spacer"></span>
       <slot name="appbar-end" />
+      <!-- Notification bell -->
+      <RouterLink to="/notifications" class="bw-bell" aria-label="Notifications">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+        <span v-if="unreadCount > 0" class="bw-bell-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+      </RouterLink>
     </header>
 
     <!-- Main scroll -->
@@ -103,4 +129,34 @@ async function promptInstall() {
   font-size: var(--t-sm);
 }
 .bw-install-banner span { flex: 1; }
+
+/* Notification bell */
+.bw-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-full, 9999px);
+  color: var(--text);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.bw-bell:hover { background: var(--surface-2, oklch(from var(--surface) calc(l - 0.04) c h)); }
+.bw-bell-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--danger, oklch(60% 0.22 25));
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  border-radius: 99px;
+  text-align: center;
+  pointer-events: none;
+}
 </style>

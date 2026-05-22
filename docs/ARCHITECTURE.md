@@ -46,7 +46,7 @@ acob-crm-4/
 │   │   ├── EChartPanel.vue       # ECharts wrapper primitive
 │   │   ├── LoginPage.vue         # Login form + cookie auth
 │   │   ├── PickerModal.vue       # Server-paginated entity picker (Customer/Meter/Tariff)
-│   │   ├── SiteConsumptionPage.vue  # ← EIH root orchestrator
+│   │   ├── StationConsumptionPage.vue  # Station consumption analytics
 │   │   ├── SuccessModal.vue      # Post-action success display
 │   │   ├── TablePage.vue         # Generic table renderer (used by all non-custom routes)
 │   │   ├── TaskOutputModal.vue   # Remote task result viewer
@@ -117,7 +117,7 @@ hash → findRoute(hash, roleId) → route object
 
   if route.hash === '#/dashboard'                      -> <DashboardPage>
   if route.hash === '#/prepay-report/daily-data-meter' -> <DailyDataMeterPage>
-  if route.isCustomPage === true                       -> <SiteConsumptionPage>
+  if route.customComponent is set                      -> explicit custom component
   else                                                 -> <TablePage :route="route">
 ```
 

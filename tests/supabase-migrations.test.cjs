@@ -17,6 +17,7 @@ function main() {
   const snapshots = readMigration("20260507110000_operational_snapshots.sql");
   const dailyMeters = readMigration("20260508120000_daily_meter_readings.sql");
   const rawDuplicates = readMigration("20260516130000_daily_meter_raw_duplicates.sql");
+  const meterAggregates = readMigration("20260521210000_meter_reading_aggregates.sql");
   const hardening = readMigration("20260511150000_harden_role_permissions_rls.sql");
   const governance = readMigration("20260512100000_data_governance.sql");
 
@@ -86,6 +87,26 @@ function main() {
     rawDuplicates.includes("alter table public.daily_meter_raw_duplicates enable row level security"),
     "missing raw duplicate RLS"
   );
+  assert(
+    meterAggregates.includes("create table if not exists public.daily_meter_deltas"),
+    "missing daily meter deltas table"
+  );
+  assert(
+    meterAggregates.includes("create table if not exists public.meter_consumption_aggregates"),
+    "missing meter consumption aggregates table"
+  );
+  assert(
+    meterAggregates.includes("create or replace function public.refresh_meter_reading_aggregates"),
+    "missing meter aggregate refresh function"
+  );
+  assert(
+    meterAggregates.includes("cron.schedule"),
+    "missing meter aggregate cron schedule"
+  );
+  assert(
+    !meterAggregates.includes("select public.refresh_meter_reading_aggregates();"),
+    "meter aggregate migration must not run blocking seed"
+  );
   assert(hardening.includes("create or replace function public.normalized_role_key"), "missing normalized role function");
   assert(hardening.includes("create or replace function public.current_role_key"), "missing current role function");
   assert(hardening.includes("create or replace function public.current_station_id"), "missing current station function");
@@ -107,8 +128,8 @@ function main() {
   assert(governance.includes("cleanup_data_governance"), "missing cleanup function");
 
   console.log(JSON.stringify({
-    migrations: 7,
-    tables: requiredTables.length + 4,
+    migrations: 8,
+    tables: requiredTables.length + 6,
     buckets: 4,
     status: "supabase migrations passed"
   }, null, 2));

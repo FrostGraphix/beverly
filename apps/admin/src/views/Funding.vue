@@ -14,9 +14,14 @@
  *     the submitter so the reviewer can see they are not approving their own.
  */
 import { onMounted, ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
+
+const router = useRouter();
+const auth = useStaffAuthStore();
 
 interface FundingRequest {
     id: string;
@@ -49,12 +54,14 @@ const loading = ref(false);
 const repairing = ref(false);
 const busyId = ref<string | null>(null);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const canApproveFunding = computed(() => auth.hasPermission('wallet.funding.approve'));
 
 // ─ Approve modal ──────────────────────────────────────────────
 const approveOpen = ref(false);
 const approveTarget = ref<FundingRequest | null>(null);
 
 function askApprove(f: FundingRequest) {
+    if (!canApproveFunding.value) return;
     approveTarget.value = f;
     approveOpen.value = true;
 }
@@ -91,6 +98,7 @@ const rejectTarget = ref<FundingRequest | null>(null);
 const rejectReason = ref('');
 
 function askReject(f: FundingRequest) {
+    if (!canApproveFunding.value) return;
     rejectTarget.value = f;
     rejectReason.value = '';
     rejectOpen.value = true;
@@ -131,6 +139,7 @@ async function load() {
 }
 
 async function repairApprovedCredits() {
+    if (!canApproveFunding.value) return;
     repairing.value = true;
     banner.value = null;
     try {
@@ -199,11 +208,14 @@ onMounted(load);
           </p>
         </div>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="repairing || loading" @click="repairApprovedCredits">
+        <button v-if="canApproveFunding" class="bw-btn sm" :disabled="repairing || loading" @click="repairApprovedCredits">
           {{ repairing ? 'Repairing…' : 'Repair approved credits' }}
         </button>
         <button class="bw-btn sm" :disabled="loading" @click="load">
           {{ loading ? 'Loading…' : 'Refresh' }}
+        </button>
+        <button class="bw-btn sm" @click="router.push('/funding/history')">
+          View History
         </button>
       </div>
 
@@ -218,7 +230,7 @@ onMounted(load);
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
-              <th class="actions-col"></th>
+              <th v-if="canApproveFunding" class="actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -236,7 +248,7 @@ onMounted(load);
               </td>
               <td class="bw-money" style="text-align: right">{{ naira(f.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span></td>
-              <td class="actions-col">
+              <td v-if="canApproveFunding" class="actions-col">
                 <div class="action-cluster">
                   <button class="bw-btn sm primary" :disabled="busyId === f.id" @click="askApprove(f)">
                     Approve
@@ -248,7 +260,7 @@ onMounted(load);
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="7" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
+              <td :colspan="canApproveFunding ? 7 : 6" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
             </tr>
           </tbody>
         </table>
@@ -275,7 +287,7 @@ onMounted(load);
             <span v-else-if="f.proof_file_path" class="bw-muted bw-mono" style="font-size: var(--t-xs)">stored</span>
             <span v-else class="bw-muted">—</span>
           </div>
-          <div class="fc-actions">
+          <div v-if="canApproveFunding" class="fc-actions">
             <button class="bw-btn primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
             <button class="bw-btn danger"  :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
           </div>

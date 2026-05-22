@@ -9,7 +9,7 @@
 
     <section class="wallet-auth-shell">
       <aside class="wallet-auth-story" aria-label="Wallet access overview">
-        <a class="wallet-auth-backlink" href="#/login">Back to Beverly CRM</a>
+        <a class="wallet-auth-backlink" href="https://acob-beverly.vercel.app/#/login">Back to Beverly CRM</a>
         <div class="wallet-auth-badge">
           <span class="wallet-auth-badge-mark">B</span>
           <strong>Beverly Wallet Access</strong>

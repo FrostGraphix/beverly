@@ -102,8 +102,15 @@ function maxPagesForMode(mode, input) {
   const explicit = Number(input.maxPagesPerStation ?? input.maxPages);
   if (Number.isFinite(explicit) && explicit >= 0) return Math.floor(explicit);
   const envName = mode === "backfill" ? "CONSUMPTION_SYNC_BACKFILL_MAX_PAGES" : "CONSUMPTION_SYNC_INCREMENTAL_MAX_PAGES";
-  const fallback = mode === "backfill" ? 0 : 20;
+  const fallback = mode === "backfill" ? 8 : 20;
   return positiveInteger(process.env[envName], fallback);
+}
+
+function stationAttemptsForMode(mode, input) {
+  const explicit = Number(input.stationAttempts ?? input.stationRetries);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  const envName = mode === "backfill" ? "CONSUMPTION_SYNC_BACKFILL_STATION_ATTEMPTS" : "CONSUMPTION_SYNC_STATION_ATTEMPTS";
+  return positiveInteger(process.env[envName], mode === "backfill" ? 3 : 1);
 }
 
 function syncWindow(mode, stationStats, input) {
@@ -198,13 +205,28 @@ async function runConsumptionSync(input = {}) {
   const stations = [];
   const failures = [];
   for (const stationId of stationIds) {
-    try {
-      stations.push(await syncStation(stationId, statsByStation.get(stationId), { ...input, mode }));
-    } catch (error) {
+    const attempts = stationAttemptsForMode(mode, input);
+    let stationResult = null;
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        stationResult = await syncStation(stationId, statsByStation.get(stationId), { ...input, mode });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, Math.min(30000, attempt * attempt * 5000)));
+        }
+      }
+    }
+    if (stationResult) {
+      stations.push(stationResult);
+    } else {
       failures.push({
         stationId,
         mode,
-        error: error instanceof Error ? error.message : String(error),
+        attempts,
+        error: lastError instanceof Error ? lastError.message : String(lastError),
       });
     }
   }
@@ -227,5 +249,6 @@ async function runConsumptionSync(input = {}) {
 
 module.exports = {
   runConsumptionSync,
+  stationAttemptsForMode,
   syncWindow,
 };

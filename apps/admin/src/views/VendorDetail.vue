@@ -18,10 +18,14 @@ import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
 
 const route  = useRoute();
 const router = useRouter();
+const auth = useStaffAuthStore();
 const id     = route.params.id as string;
+const canManageVendors = computed(() => auth.hasPermission('wallet.vendors.manage'));
+const canViewWallets = computed(() => auth.hasPermission('wallet.funding.view'));
 
 type Tab = 'overview' | 'wallet' | 'transactions' | 'funding' | 'staff';
 const tab = ref<Tab>('overview');
@@ -42,6 +46,41 @@ async function loadDetail() {
     try {
         detail.value = await api.get<any>(`/api/v1/admin/vendors/${id}`);
     } catch (e: any) {
+        const status = (e as any)?.status ?? (e as any)?.response?.status;
+        // If the detail endpoint is 404 (stale backend build), reconstruct from
+        // the vendor list which is always available, plus a best-effort wallet call.
+        if (status === 404) {
+            try {
+                const list = await api.get<{ vendors: any[] }>('/api/v1/admin/vendors');
+                const vendor = (list.vendors ?? []).find((v: any) => v.id === id);
+                if (vendor) {
+                    // Hydrate a detail-shaped object so the template renders cleanly.
+                    let walletData: any = null;
+                    try {
+                        walletData = await api.get<any>(`/api/v1/admin/vendors/${id}/wallet`);
+                    } catch { /* wallet is optional */ }
+                    detail.value = {
+                        vendor,
+                        wallet: walletData?.wallet ?? null,
+                        balance_minor:   walletData?.balance_minor   ?? 0,
+                        available_minor: walletData?.available_minor ?? 0,
+                        holds_minor:     walletData?.holds_minor     ?? 0,
+                        stats: {
+                            vendingCount:      0,
+                            vendingValueMinor: 0,
+                            fundingCount:      0,
+                            fundingValueMinor: 0,
+                            stationCount:      (vendor.operating_stations ?? []).length,
+                        },
+                    };
+                    banner.value = {
+                        tone: 'error',
+                        text: 'Detail endpoint unavailable — showing summary data. Restart the backend to restore full view.',
+                    };
+                    return;
+                }
+            } catch { /* fall through to original error */ }
+        }
         banner.value = { tone: 'error', text: e?.message ?? 'Could not load vendor.' };
     } finally { loading.value = false; }
 }
@@ -107,6 +146,7 @@ const reasonValid = computed(() =>
 );
 
 function askStatus(next: 'approved' | 'frozen' | 'suspended') {
+    if (!canManageVendors.value) return;
     statusTarget.value = next;
     statusReason.value = '';
     statusOpen.value   = true;
@@ -186,22 +226,22 @@ onMounted(loadDetail);
         </div>
         <div class="head-actions">
           <button
-            v-if="detail.vendor.status === 'pending'"
+            v-if="canManageVendors && detail.vendor.status === 'pending'"
             class="bw-btn primary"
             @click="askStatus('approved')"
           >Approve</button>
           <button
-            v-if="detail.vendor.status === 'approved'"
+            v-if="canManageVendors && detail.vendor.status === 'approved'"
             class="bw-btn"
             @click="askStatus('suspended')"
           >Suspend</button>
           <button
-            v-if="detail.vendor.status === 'approved'"
+            v-if="canManageVendors && detail.vendor.status === 'approved'"
             class="bw-btn danger"
             @click="askStatus('frozen')"
           >Freeze</button>
           <button
-            v-if="detail.vendor.status === 'frozen' || detail.vendor.status === 'suspended'"
+            v-if="canManageVendors && (detail.vendor.status === 'frozen' || detail.vendor.status === 'suspended')"
             class="bw-btn primary"
             @click="askStatus('approved')"
           >Reactivate</button>
@@ -288,7 +328,7 @@ onMounted(loadDetail);
               <p class="wallet-bal">{{ naira(wallet.balance_minor) }}</p>
               <p class="stat-sub">Available {{ naira(wallet.available_minor) }} · Holds {{ naira(wallet.holds_minor) }}</p>
             </div>
-            <router-link to="/wallets" class="bw-btn sm" style="text-decoration: none">All wallets →</router-link>
+            <router-link v-if="canViewWallets" to="/wallets" class="bw-btn sm" style="text-decoration: none">All wallets →</router-link>
           </div>
           <ul class="ledger-list">
             <li v-for="e in wallet.entries" :key="e.id" class="ledger-row">

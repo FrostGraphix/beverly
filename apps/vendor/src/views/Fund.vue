@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api } from '../lib/api';
+import { api, redirectToPayment } from '../lib/api';
 import { naira } from '../lib/format';
 
 type Mode = 'paystack' | 'bank';
@@ -77,7 +77,7 @@ async function payNow() {
             amountMinor: amountNaira.value * 100,
             callbackUrl: `${window.location.origin}/wallet?funded=1`,
         });
-        window.location.assign(r.authorizationUrl);
+        redirectToPayment(r.authorizationUrl);
     } catch (e: any) {
         error.value = e?.message ?? 'Failed to initiate payment';
         loading.value = false;

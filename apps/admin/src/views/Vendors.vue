@@ -4,8 +4,11 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { api, shortDate, ApiError } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
 
 const router = useRouter();
+const auth = useStaffAuthStore();
+const canManageVendors = computed(() => auth.hasPermission('wallet.vendors.manage'));
 
 interface Vendor {
     id: string;
@@ -53,6 +56,7 @@ const reasonValid = computed(() =>
 );
 
 function ask(v: Vendor, next: 'approved' | 'frozen' | 'suspended') {
+    if (!canManageVendors.value) return;
     target.value = v;
     targetAction.value = next;
     reason.value = '';
@@ -129,7 +133,7 @@ onMounted(load);
           <option value="closed">Closed</option>
         </select>
         <span class="bw-spacer"></span>
-        <router-link to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
+        <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
       </div>
 
       <div class="bw-t-wrap">
@@ -160,9 +164,9 @@ onMounted(load);
               <td class="actions-col" @click.stop>
                 <div class="action-cluster">
                   <router-link :to="`/vendors/${v.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
-                  <button v-if="v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
-                  <button v-if="v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
-                  <button v-if="v.status === 'frozen' || v.status === 'suspended'" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
+                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
                 </div>
               </td>
             </tr>

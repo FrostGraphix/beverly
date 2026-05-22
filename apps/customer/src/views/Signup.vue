@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
+import { isValidNigerianPhone, normaliseNigerianPhone } from '../lib/auth-flow';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -14,24 +15,18 @@ const fullName = ref('');
 const phone = ref('');
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
 
 onMounted(() => nameInput.value?.focus());
 
-function normalise(raw: string): string {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.startsWith('234')) return `+${digits}`;
-    if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
-    return `+234${digits}`;
-}
-
 function validate(): string | null {
     if (!fullName.value.trim() || fullName.value.trim().length < 2) {
         return 'Enter your full name (at least 2 characters).';
     }
-    if (accountMode.value === 'phone' && phone.value.replace(/\D/g, '').length < 10) {
+    if (accountMode.value === 'phone' && !isValidNigerianPhone(phone.value)) {
         return 'Enter a valid Nigerian phone number.';
     }
     if (accountMode.value === 'email' && !email.value) {
@@ -59,16 +54,16 @@ async function submit() {
     try {
         if (accountMode.value === 'email') {
             const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/signup', {
-                email: email.value.trim(),
+                email: email.value.trim().toLowerCase(),
                 password: password.value,
                 full_name: fullName.value.trim(),
-                phone: phone.value.trim() ? normalise(phone.value) : undefined,
+                phone: phone.value.trim() ? normaliseNigerianPhone(phone.value) : undefined,
             });
             auth.setSession(r.access_token, r.customer);
             await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
             return;
         }
-        const normalised = normalise(phone.value);
+        const normalised = normaliseNigerianPhone(phone.value);
         const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>('/api/v1/customer/auth/signup', {
             phone: normalised,
             email: email.value.trim() || undefined,
@@ -142,7 +137,7 @@ async function submit() {
         <label class="field-label" for="signup-phone">Phone number</label>
         <div class="phone-wrap">
           <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">🇳🇬</span>
+            <span class="flag" aria-hidden="true">NG</span>
             +234
           </span>
           <input
@@ -182,16 +177,21 @@ async function submit() {
 
       <div v-if="accountMode === 'email'" class="field">
         <label class="field-label" for="signup-password">Password</label>
-        <input
-          id="signup-password"
-          v-model="password"
-          class="bw-input"
-          type="password"
-          autocomplete="new-password"
-          placeholder="At least 8 characters"
-          :disabled="loading"
-          @input="error = null"
-        />
+          <div class="password-field">
+            <input
+              id="signup-password"
+              v-model="password"
+              class="bw-input"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="At least 8 characters"
+              :disabled="loading"
+              @input="error = null"
+            />
+            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
       </div>
 
       <!-- Error -->
@@ -206,7 +206,7 @@ async function submit() {
       <!-- Submit -->
       <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading">
         <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-        {{ loading ? 'Sending code…' : 'Continue' }}
+        {{ loading ? (accountMode === 'email' ? 'Creating account...' : 'Sending code...') : (accountMode === 'email' ? 'Create account' : 'Send code') }}
       </button>
 
     </form>
@@ -250,6 +250,19 @@ async function submit() {
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
+.password-field { position: relative; }
+.password-field .bw-input { padding-right: 76px; }
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+}
 
 .field-label {
   font-size: 11px;

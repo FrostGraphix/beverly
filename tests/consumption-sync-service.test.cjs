@@ -71,7 +71,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
     };
   };
 
-  const { runConsumptionSync, syncWindow } = require("../backend/src/services/consumption-sync-service");
+  const { runConsumptionSync, stationAttemptsForMode, syncWindow } = require("../backend/src/services/consumption-sync-service");
 
   const incrementalWindow = syncWindow("incremental", { latestReadingDate: "2026-05-10" }, { to: "2026-05-12" });
   assert.equal(incrementalWindow.from, "2026-05-10");
@@ -80,6 +80,7 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   const backfillWindow = syncWindow("backfill", {}, { from: "2025-01-01", to: "2026-05-12" });
   assert.equal(backfillWindow.from, "2025-01-01");
   assert.equal(backfillWindow.reason, "full_backfill");
+  assert.equal(stationAttemptsForMode("backfill", {}), 3);
 
   const incremental = await runConsumptionSync({
     mode: "incremental",
@@ -108,6 +109,40 @@ function responseWithCount(total, body = [{ id: "row" }]) {
   assert.equal(backfill.mode, "backfill");
   assert.equal(liveCalls[0].payload.FROM, "2025-01-01");
   assert.equal(backfill.storedRows, 2);
+
+  let failedOnce = false;
+  global.fetch = async (url, init) => {
+    const payload = JSON.parse(String(init.body || "{}"));
+    liveCalls.push({ url, payload });
+    if (!failedOnce) {
+      failedOnce = true;
+      throw new TypeError("fetch failed");
+    }
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          code: 0,
+          result: {
+            total: 1,
+            data: [{ stationId: payload.stationId, meterId: "M-9", customerId: "C-9", currentDate: payload.FROM, total1: 900 }],
+          },
+        };
+      },
+    };
+  };
+  const retried = await runConsumptionSync({
+    mode: "backfill",
+    stations: "KYAKALE",
+    from: "2025-01-01",
+    to: "2026-05-12",
+    pageSize: 2,
+    maxPages: 1,
+    stationAttempts: 2,
+  });
+  assert.equal(retried.ok, true);
+  assert.equal(retried.syncedStations, 1);
 
   console.log(JSON.stringify({
     status: "consumption sync service passed",

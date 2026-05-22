@@ -339,7 +339,7 @@
           <div class="sop-review-grid">
             <div v-for="field in fields" :key="field.name" class="sop-review-row">
               <span class="sop-review-label">{{ field.label }}</span>
-              <span class="sop-review-value">{{ field.type === 'password' ? '••••••••' : (form[field.name] || '—') }}</span>
+              <span class="sop-review-value">{{ sopReviewValue(field) }}</span>
             </div>
           </div>
         </div>
@@ -1058,6 +1058,13 @@ export default {
       this.error = "";
       this.sopStep = 2;
     },
+    sopReviewValue(field) {
+      if (field.type === "password") return "••••••••";
+      if (field.name === "status" && this.route?.hash === "#/admin/user") {
+        return String(this.form.status).toLowerCase() === "false" ? "Inactive" : "Active";
+      }
+      return this.form[field.name] || "—";
+    },
     fieldOptions(field) {
       if (field.name === "stationId") {
         const staticSites = tableSiteOptions.filter(opt => opt.value !== "");
@@ -1444,10 +1451,24 @@ export default {
       this.result = result?.mode === "fallback" ? `PDF fallback downloaded: ${result.filename}` : `PDF receipt downloaded: ${result.filename}`;
     },
     friendlyRemoteTaskError(message) {
-      const text = String(message || "Task failed");
-      if (guardedRemoteTaskError(text)) {
+      // message may be a string OR the original error object — handle both.
+      const errorObj = (typeof message === "object" && message !== null) ? message : null;
+      const text = String(errorObj?.message || message || "Task failed");
+
+      // Only classify as "live writes off" when it truly is a frontend guard.
+      if (guardedRemoteTaskError(errorObj || text)) {
         return guardedWriteMessage("Remote task");
       }
+
+      // Surface real backend permission errors instead of hiding them.
+      const status = Number(errorObj?.response?.status || errorObj?.status || 0);
+      const backendReason = errorObj?.response?.data?.reason
+        || errorObj?.response?.data?.msg
+        || errorObj?.response?.data?.message;
+      if (status === 403 || /route permission required|session lacks permission/i.test(text)) {
+        return `Permission denied: ${backendReason || text}. Ensure your CRM role has access to this operation.`;
+      }
+
       return text;
     },
     remoteTaskHeaders(route = this.route, action = this.action) {
@@ -1506,7 +1527,9 @@ export default {
           const r = results[i];
           const [key] = groupEntries[i];
           if (r.status === "rejected") {
-            failed.push({ dataItem: key, error: r.reason?.message || String(r.reason) });
+            // Preserve the full error object so friendlyRemoteTaskError can
+            // inspect r.reason.response.status (e.g. a real 403 vs a guard).
+            failed.push({ dataItem: key, error: r.reason });
           } else {
             const code = Number(r.value?.code);
             if (Number.isFinite(code) && code !== 0 && code !== 200) {

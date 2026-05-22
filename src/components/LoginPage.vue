@@ -195,7 +195,7 @@ export default {
 
         this.$emit("logged-in");
       } catch (err) {
-        this.error = "Sign in failed. Check credentials and retry.";
+        this.error = err?.message || "Sign in failed. Check credentials and retry.";
         this.errorReference = recordClientError("login-submit-error", err, {
           userId: this.form.userId
         });

@@ -38,6 +38,25 @@ async function unlink(id: string) {
       </router-link>
     </div>
 
+    <!-- Meter installation CTA -->
+    <div class="bw-card" style="display:flex; align-items:center; gap: var(--s-4); margin-bottom: var(--s-4); padding: var(--s-4)">
+      <div style="width:40px; height:40px; border-radius: var(--r-md); background: oklch(70% 0.19 145 / 0.12); display:grid; place-items:center; flex-shrink:0; color: var(--brand)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div style="flex:1; min-width:0">
+        <p style="font-weight:700; margin:0 0 2px; font-size: var(--t-sm)">Need a meter installed?</p>
+        <p class="bw-muted" style="font-size: var(--t-xs); margin:0">Order a certified prepaid meter — ₦50,000 (1-phase) or ₦75,000 (3-phase)</p>
+      </div>
+      <div style="display:flex; gap: var(--s-2); flex-shrink:0">
+        <router-link to="/meter-orders" class="bw-btn" style="text-decoration:none; font-size: var(--t-sm); padding:0 var(--s-3); height:36px">
+          My orders
+        </router-link>
+        <router-link to="/buy-meter" class="bw-btn primary" style="text-decoration:none; font-size: var(--t-sm); padding:0 var(--s-3); height:36px">
+          Order meter
+        </router-link>
+      </div>
+    </div>
+
     <div v-if="loading" class="bw-muted" style="text-align:center; padding: var(--s-8); font-size: var(--t-sm)">Loading…</div>
 
     <div v-else-if="!meters.length" class="bw-card" style="text-align:center; padding: var(--s-8)">

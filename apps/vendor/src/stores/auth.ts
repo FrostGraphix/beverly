@@ -8,6 +8,7 @@ export interface VendorUserProfile {
     full_name: string | null;
     phone: string | null;
     email: string | null;
+    profile_picture_url: string | null;
     mfa_enrolled: boolean;
     mfa_verified: boolean;
     password_reset_required: boolean;
@@ -26,15 +27,16 @@ const TOKEN_KEY = 'beverly.vendor.access_token';
 
 function readStoredToken(): string | null {
     try {
-        return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
+        return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
     } catch {
-        try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+        try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
     }
 }
 
-function storeToken(token: string) {
-    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* noop */ }
-    try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* noop */ }
+function storeToken(token: string, remember = true) {
+    clearStoredToken();
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem(TOKEN_KEY, token);
 }
 
 function clearStoredToken() {
@@ -66,10 +68,10 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
                 clearStoredToken();
             }
         },
-        setSession(token: string, user: VendorUserProfile) {
+        setSession(token: string, user: VendorUserProfile, remember = true) {
             this.accessToken = token;
             this.user = user;
-            storeToken(token);
+            storeToken(token, remember);
         },
         async refreshMe() {
             const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');

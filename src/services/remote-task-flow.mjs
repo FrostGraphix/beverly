@@ -223,6 +223,14 @@ export function buildRemoteTaskPayload(route = {}, action = "", form = {}, rows 
   return sourceRows.map((row) => remoteTaskPayloadForRow(route, row, form));
 }
 
+/**
+ * Returns true only when the error is a FRONTEND guard (live writes off),
+ * NOT when it is a real backend 403 on a live-write-enabled environment.
+ *
+ * Previously this delegated straight to isGuardedWriteError which matched
+ * any 403 — including "Route permission required" from the upstream API —
+ * causing "Live writes are off." to appear even when live writes were on.
+ */
 export function guardedRemoteTaskError(error = {}) {
   return isGuardedWriteError(error);
 }

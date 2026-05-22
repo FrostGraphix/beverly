@@ -169,7 +169,7 @@ const fixedSortPolicies = [
   [/admin\/log/, "createDate", "desc"],
   [/admin\/debt/, "createDate", "desc"],
   [/remote-support\/gprs-tasks/, "createDate", "desc"],
-  [/remote-support\/load-profile/, "createDate", "desc"],
+  [/remote-support\/load-profile/, "currentDate", "desc"],
   [/remote-support\/event-notification/, "createDate", "desc"],
   [/remote-support\/firmware-update/, "createDate", "desc"],
   [/prepay-report\/long-nonpurchase-situation/, "nonpurchaseDays", "desc"],

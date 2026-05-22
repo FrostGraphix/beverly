@@ -535,9 +535,13 @@
   background: var(--scrim);
   z-index: calc(var(--z-modal) - 1);
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-out);
 }
-.bw-scrim.open { opacity: 1; }
+.bw-scrim.open {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* ════════════════════════════════════════════════════════════════════
    CONTENT AREA
@@ -1553,8 +1557,8 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
     right: -4px;
     width: min(260px, calc(100vw - 24px));
   }
-  .bw-table  { display: none; }
-  .bw-t-cards { display: block; }
+  .bw-table  { display: table; }
+  .bw-t-cards { display: none; }
 }
 
 /* ════════════════════════════════════════════════════════════════════

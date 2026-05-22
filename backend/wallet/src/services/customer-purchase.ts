@@ -15,7 +15,7 @@ import {
     lookupMeter, previewPurchase, generateCreditToken,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
-import { findWalletByOwner, getOrCreateWallet } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
 import { ledgerKey, hashIdempotency } from './idempotency.js';
 import { initializeTransaction } from '../adapters/paystack.js';
@@ -28,6 +28,7 @@ import {
     SmsGuardrailError,
     type SmsTrafficKind,
 } from './sms-guardrails.js';
+import { notifyTokenPurchased } from './notifications.js';
 
 export class CustomerPurchaseError extends Error {
     constructor(message: string, public code: string) {
@@ -149,6 +150,15 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         throw new CustomerPurchaseError('Minimum purchase is ₦500.', 'amount_too_low');
     }
 
+    const customerWallet = await findWalletByOwner('customer', input.customerId);
+    if (customerWallet) {
+        try {
+            assertWalletCanTransact(customerWallet, 'buy tokens');
+        } catch (error: any) {
+            throw new CustomerPurchaseError(error.message, error.code ?? 'wallet_inactive');
+        }
+    }
+
     const idemKey = hashIdempotency([
         'customer_purchase', input.customerId, input.meterId,
         input.amountMinor, input.mode, input.clientIdempotencyKey,
@@ -203,9 +213,8 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     let po = createdRow as PurchaseOrder;
 
     if (input.mode === 'wallet') {
-        const wallet = await findWalletByOwner('customer', input.customerId);
+        const wallet = customerWallet;
         if (!wallet) throw new CustomerPurchaseError('Wallet not provisioned.', 'wallet_missing');
-        if (wallet.status !== 'active') throw new CustomerPurchaseError('Wallet is not active.', 'wallet_inactive');
 
         // Update order with wallet id
         await adminClient.from('purchase_orders').update({ wallet_id: wallet.id }).eq('id', po.id);
@@ -319,6 +328,14 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                     after: { reason: e?.message ?? 'sms_failed' },
                 });
             }
+
+            // In-app + email notification (SMS handled above by token SMS system)
+            notifyTokenPurchased(input.customerId, {
+                meterId: meter.meterId,
+                units: preview.units,
+                amountMinor: input.amountMinor,
+                token: tokenRes.token,
+            }).catch(() => undefined);
 
             return {
                 purchaseOrder: po,
@@ -443,6 +460,11 @@ export async function initiateCustomerFunding(input: CustomerFundingInput): Prom
     }
 
     const wallet = await getOrCreateWallet('customer', input.customerId);
+    try {
+        assertWalletCanTransact(wallet, 'receive funding');
+    } catch (error: any) {
+        throw new CustomerPurchaseError(error.message, error.code ?? 'wallet_inactive');
+    }
     const reference = `CFD-${Date.now()}-${input.customerId.slice(0, 8)}`;
 
     await adminClient.from('payment_transactions').insert({

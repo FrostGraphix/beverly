@@ -52,6 +52,8 @@ const manifestEventRoute = routeManifest.find((route) => route.hash === "#/remot
 const manifestFirmwareRoute = routeManifest.find((route) => route.hash === "#/remote-support/firmware-update");
 const manifestFileUploadRoute = routeManifest.find((route) => route.hash === "#/remote-support/file-upload");
 const manifestMeterRoute = routeManifest.find((route) => route.hash === "#/admin/meter");
+const manifestUserRoute = routeManifest.find((route) => route.hash === "#/admin/user");
+const manifestLogRoute = routeManifest.find((route) => route.hash === "#/admin/log");
 const manifestOnboardingRoute = routeManifest.find((route) => route.hash === "#/system/station-onboarding-studio");
 
 assert.strictEqual(actionEndpoint(accountRoute, "Add"), "/api/account/create");
@@ -60,6 +62,8 @@ assert.strictEqual(actionEndpoint(accountRoute, "Delete"), "/api/account/delete"
 assert.strictEqual(actionEndpoint(meterRoute, "Add"), "/api/meter/create");
 assert.strictEqual(actionEndpoint(meterRoute, "Edit"), "/api/meter/update");
 assert.strictEqual(actionEndpoint(meterRoute, "Delete"), "/api/meter/delete");
+assert.strictEqual(actionEndpoint(manifestUserRoute, "Add"), "/api/user/create");
+assert.strictEqual(actionEndpoint(manifestUserRoute, "Edit"), "/api/user/update");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Edit"), "/api/dlms/update");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Delete"), "/api/dlms/delete");
 assert.strictEqual(actionEndpoint({ hash: "#/remote-support/firmware-update" }, "Add"), "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask");
@@ -74,8 +78,12 @@ const creditTokenRecordRoute = {
   apis: ["/api/token/creditTokenRecord/read"],
   columns: ["Receipt Id", "Customer Id", "Meter Id", "Actions"]
 };
+const creditTokenGenerateRoute = routeManifest.find((route) => route.hash === "#/token-generate/credit-token");
 
 assert.strictEqual(actionEndpoint(creditTokenRecordRoute, "Cancel"), "/api/token/creditTokenRecord/cancel");
+assert(managementFields(manifestUserRoute, "Add").some((field) => field.name === "status" && field.type === "select"));
+assert.strictEqual(managementFormSeed(manifestUserRoute, "Add", {}).status, "true");
+assert.strictEqual(managementFormSeed(manifestUserRoute, "Edit", { status: false }).status, "false");
 
 const aliasedCreditRecordRow = {
   transactionId: "TX-1001",
@@ -200,6 +208,17 @@ assert.strictEqual(tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, ord
 assert.strictEqual(tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, orderBy: "meterId desc" }).payload.orderBy, "meterId desc");
 assert.strictEqual("orderBy" in tableRequest(accountRoute, { pageNumber: 1, pageSize: 10, orderBy: "asc" }).payload, false);
 assert.strictEqual(routeUsesServerPagination(accountRoute), true);
+assert.strictEqual(routeUsesServerPagination(creditTokenGenerateRoute), true);
+assert.strictEqual(routeUsesServerPagination(meterRoute), true);
+assert.strictEqual(routeUsesServerPagination(manifestLogRoute), true);
+assert.strictEqual(tableRequest(creditTokenGenerateRoute, { pageNumber: 4, pageSize: 50, orderBy: "meterId asc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 100, orderBy: "meterId asc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "meterId asc" }).payload.orderBy, "meterId asc");
+assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "protocolVersion desc" }).payload.orderBy, "protocolVersion desc");
+assert.strictEqual("orderBy" in tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "asc" }).payload, false);
+assert.strictEqual(tableRequest(manifestLogRoute, { pageNumber: 3, pageSize: 100, searchTerm: "admin", orderBy: "createDate desc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(manifestLogRoute, { pageNumber: 3, pageSize: 10, searchTerm: "admin", orderBy: "createDate desc" }).payload.searchTerm, "admin");
+assert.strictEqual(tableRequest(manifestLogRoute, { pageNumber: 1, pageSize: 10, orderBy: "unknown desc" }).payload.orderBy, undefined);
 
 const accountPageCalls = [];
 const accountPageTable = await fetchTableData(accountRoute, { pageNumber: 3, pageSize: 10, orderBy: "id asc" }, {
@@ -231,6 +250,96 @@ assert.strictEqual(accountPageCalls[0].payload.orderBy, "customerId asc");
 assert.strictEqual(accountPageTable.serverPaginated, true);
 assert.strictEqual(accountPageTable.total, 2443);
 assert.strictEqual(accountPageTable.rows.length, 10);
+
+const creditTokenPageCalls = [];
+const creditTokenPageTable = await fetchTableData(creditTokenGenerateRoute, { pageNumber: 4, pageSize: 10, orderBy: "meterId asc" }, {
+  async postApi(path, payload = {}) {
+    creditTokenPageCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/account/read");
+    return {
+      code: 0,
+      result: {
+        total: 9814,
+        data: Array.from({ length: 10 }, (_, index) => ({
+          customerId: `CT-${index + 1}`,
+          meterId: `4700530${index + 1}`
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(creditTokenPageCalls.length, 1);
+assert.strictEqual(creditTokenPageCalls[0].payload.pageNumber, 4);
+assert.strictEqual(creditTokenPageCalls[0].payload.pageSize, 10);
+assert.strictEqual(creditTokenPageCalls[0].payload.orderBy, "meterId asc");
+assert.strictEqual(creditTokenPageTable.serverPaginated, true);
+assert.strictEqual(creditTokenPageTable.total, 9814);
+assert.strictEqual(creditTokenPageTable.rows.length, 10);
+
+const meterPageCalls = [];
+const meterPageTable = await fetchTableData(meterRoute, { pageNumber: 5, pageSize: 10, searchTerm: "4700", orderBy: "meterId asc" }, {
+  async postApi(path, payload = {}) {
+    meterPageCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/meter/read");
+    return {
+      code: 0,
+      result: {
+        total: 7662,
+        data: Array.from({ length: 10 }, (_, index) => ({
+          meterId: `470053${String(index + 41).padStart(4, "0")}`,
+          meterType: "Electricity",
+          stationId: "TUNGA"
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(meterPageCalls.length, 1);
+assert.strictEqual(meterPageCalls[0].payload.pageNumber, 5);
+assert.strictEqual(meterPageCalls[0].payload.pageSize, 10);
+assert.strictEqual(meterPageCalls[0].payload.searchTerm, "4700");
+assert.strictEqual(meterPageCalls[0].payload.orderBy, "meterId asc");
+assert.strictEqual(meterPageTable.serverPaginated, true);
+assert.strictEqual(meterPageTable.total, 7662);
+assert.strictEqual(meterPageTable.rows.length, 10);
+
+const logPageCalls = [];
+const logPageTable = await fetchTableData(manifestLogRoute, { pageNumber: 3, pageSize: 10, searchTerm: "admin", orderBy: "createDate desc" }, {
+  async postApi(path, payload = {}) {
+    logPageCalls.push({ path, payload });
+    assert.strictEqual(path, "/api/log/read");
+    return {
+      code: 0,
+      result: {
+        total: 1340,
+        data: Array.from({ length: 10 }, (_, index) => ({
+          id: `LOG-${index + 21}`,
+          createId: "admin",
+          method: "POST",
+          status: 200,
+          createDate: `2026-05-${String(22 - index).padStart(2, "0")}`
+        }))
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(logPageCalls.length, 1);
+assert.strictEqual(logPageCalls[0].payload.pageNumber, 3);
+assert.strictEqual(logPageCalls[0].payload.pageSize, 10);
+assert.strictEqual(logPageCalls[0].payload.searchTerm, "admin");
+assert.strictEqual(logPageCalls[0].payload.orderBy, "createDate desc");
+assert.strictEqual(logPageTable.serverPaginated, true);
+assert.strictEqual(logPageTable.total, 1340);
+assert.strictEqual(logPageTable.rows.length, 10);
 
 assert.strictEqual(routeUsesServerPagination(gatewayRoute), true);
 assert.strictEqual(tableRequest(gatewayRoute, { pageNumber: 1, pageSize: 50, orderBy: "successRate desc" }).payload.pageSize, 20);
@@ -699,7 +808,7 @@ await assert.rejects(() => fetchConsumptionStatistics({
   }
 }), /Value does not fall within the expected range/);
 
-const sampleBackedConsumption = await fetchConsumptionStatistics({
+await assert.rejects(() => fetchConsumptionStatistics({
   dateFrom: "2026-04-01",
   dateTo: "2026-04-30"
 }, {
@@ -715,8 +824,28 @@ const sampleBackedConsumption = await fetchConsumptionStatistics({
       _proxy: { source: "sample" }
     };
   }
+}), /Live AMR consumption data is unavailable/);
+
+const supabaseBackedConsumption = await fetchConsumptionStatistics({
+  dateFrom: "2026-04-01",
+  dateTo: "2026-04-30"
+}, {
+  pageNumber: 1,
+  pageSize: 20
+}, {
+  async postApi(path) {
+    assert.strictEqual(path, "/api/DailyDataMeter/read");
+    return {
+      code: 0,
+      result: {
+        total: 1,
+        data: [{ currentDate: "2026-04-10 00:00:00", usage1: "0.9", meterId: "A" }]
+      },
+      _proxy: { source: "supabase-consumption" }
+    };
+  }
 });
-assert.strictEqual(sampleBackedConsumption.rows.length, 0);
+assert.strictEqual(supabaseBackedConsumption.rows.length, 1);
 
 const dailyDataMeterRequest = tableRequest({
   hash: "#/prepay-report/daily-data-meter",
@@ -744,19 +873,20 @@ const lowPurchaseRows = Array.from({ length: 45 }, (_, index) => ({
   purchaseTotalPaid: 1000
 }));
 const lowPurchaseCalls = [];
-const lowPurchaseTable = await fetchTableData(lowPurchaseRoute, {}, {
+assert.strictEqual(routeUsesServerPagination(lowPurchaseRoute), true);
+const lowPurchaseTable = await fetchTableData(lowPurchaseRoute, { pageNumber: 2, pageSize: 10 }, {
   async postApi(path, payload = {}) {
     if (path !== "/api/PrepayReport/LowPurchaseSituation") {
       return { code: 0, result: { total: 0, data: [] } };
     }
     lowPurchaseCalls.push(payload);
     const pageNumber = Number(payload.pageNumber || 1);
-    const pageSize = Math.min(Number(payload.pageSize || 20), 20);
+    const pageSize = Math.min(Number(payload.pageSize || 10), 20);
     const start = (pageNumber - 1) * pageSize;
     return {
       code: 0,
       result: {
-        total: 20,
+        total: lowPurchaseRows.length,
         data: lowPurchaseRows.slice(start, start + pageSize)
       }
     };
@@ -765,11 +895,70 @@ const lowPurchaseTable = await fetchTableData(lowPurchaseRoute, {}, {
     return { code: 0, result: { total: 0, data: [] } };
   }
 });
+assert.strictEqual(lowPurchaseCalls.length, 18);
+assert.strictEqual(lowPurchaseCalls.filter((call) => !call.stationId).length, 3);
+assert.deepStrictEqual([...new Set(lowPurchaseCalls.map((call) => call.stationId).filter(Boolean))], ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA"]);
+assert.strictEqual(lowPurchaseCalls[0].pageNumber, 1);
 assert.strictEqual(lowPurchaseCalls[0].pageSize, 500);
-assert.strictEqual(lowPurchaseCalls[1].pageSize, 20);
-assert.strictEqual(lowPurchaseTable.rows.length, 45);
+assert.strictEqual(lowPurchaseTable.rows.length, 10);
 assert.strictEqual(lowPurchaseTable.total, 45);
-assert.strictEqual(lowPurchaseTable.rows[44].totalPaid, 1000);
+assert.strictEqual(lowPurchaseTable.meta.source, "all-sites-aggregate");
+assert.strictEqual(lowPurchaseTable.rows[0].customerId, "C-011");
+assert.strictEqual(lowPurchaseTable.rows[9].totalPaid, 1000);
+assert.strictEqual(tableRequest(lowPurchaseRoute, { pageNumber: 1, pageSize: 10 }).payload.dateRange.length, 2);
+
+const lowPurchaseMixedRows = {
+  KYAKALE: lowPurchaseRows.slice(0, 12),
+  MUSHA: lowPurchaseRows.slice(12, 24),
+  UMAISHA: lowPurchaseRows.slice(24, 36),
+  TUNGA: lowPurchaseRows.slice(36, 45),
+  OGUFA: lowPurchaseRows.slice(0, 12)
+};
+const lowPurchaseMixedTable = await fetchTableData(lowPurchaseRoute, { pageNumber: 1, pageSize: 20 }, {
+  async postApi(path, payload = {}) {
+    assert.strictEqual(path, "/api/PrepayReport/LowPurchaseSituation");
+    const sourceRows = payload.stationId ? lowPurchaseMixedRows[payload.stationId] || [] : lowPurchaseRows.slice(0, 20);
+    const pageNumber = Number(payload.pageNumber || 1);
+    const pageSize = Math.min(Number(payload.pageSize || 20), 20);
+    const start = (pageNumber - 1) * pageSize;
+    return {
+      code: 0,
+      result: {
+        total: sourceRows.length,
+        data: sourceRows.slice(start, start + pageSize)
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(lowPurchaseMixedTable.total, 45);
+assert.strictEqual(lowPurchaseMixedTable.rows.length, 20);
+assert.strictEqual(new Set(lowPurchaseMixedTable.rows.map((row) => row.customerId)).size, 20);
+
+const lowPurchaseSiteCalls = [];
+const lowPurchaseSiteTable = await fetchTableData(lowPurchaseRoute, { siteId: "TUNGA", pageNumber: 2, pageSize: 10 }, {
+  async postApi(path, payload = {}) {
+    lowPurchaseSiteCalls.push(payload);
+    assert.strictEqual(path, "/api/PrepayReport/LowPurchaseSituation");
+    return {
+      code: 0,
+      result: {
+        total: lowPurchaseRows.length,
+        data: lowPurchaseRows.slice(10, 20)
+      }
+    };
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.strictEqual(lowPurchaseSiteCalls.length, 1);
+assert.strictEqual(lowPurchaseSiteCalls[0].stationId, "TUNGA");
+assert.strictEqual(lowPurchaseSiteCalls[0].pageNumber, 2);
+assert.strictEqual(lowPurchaseSiteCalls[0].dateRange.length, 2);
+assert.strictEqual(lowPurchaseSiteTable.total, 45);
 
 const managementCustomerRoute = routeManifest.find((route) => route.hash === "#/management/customer");
 assert.strictEqual(routeUsesServerPagination(managementCustomerRoute), true);
@@ -1050,16 +1239,21 @@ assert(dashboard.top.labels.length >= 1);
 assert.deepStrictEqual(dashboard.success.labels, ["10:00", "12:00", "14:00", "16:00", "18:00", "20:00"]);
 assert.deepStrictEqual(dashboard.success.values, [91, 95, 93, 94, 96, 92]);
 assert.deepStrictEqual(dashboard.alarms, [
-  { label: "Battery Low", value: 2, color: "#059669" },
-  { label: "Relay Open", value: 4, color: "#10b981" },
-  { label: "Current Reverse", value: 1, color: "#34d399" },
-  { label: "No Data Report", value: 3, color: "#ffb26a" }
+  { label: "No Data Report", color: "#2ec7c9", value: 3 },
+  { label: "Current Unbalance", color: "#b6a2de", value: 0 },
+  { label: "Current Reverse", color: "#5ab1ef", value: 1 },
+  { label: "Cover Open", color: "#ffb26a", value: 0 },
+  { label: "Terminal Cover Open", color: "#d87a80", value: 0 },
+  { label: "Magnetic Interference", color: "#8d98b3", value: 0 },
+  { label: "Battery Low", color: "#e5cf0d", value: 2 },
+  { label: "Relay Open", color: "#97b552", value: 4 }
 ]);
 assert.strictEqual(dashboard.meta.siteId, "KYAKALE");
 
 const dashboardCalls = [];
-await fetchDashboardData({
+const monthlyDashboard = await fetchDashboardData({
   activeType: 2,
+  consumptionType: 5,
   pageSize: 50,
   api: {
     postApi(path, payload = {}) {
@@ -1073,6 +1267,9 @@ await fetchDashboardData({
   }
 });
 
+assert.strictEqual(monthlyDashboard.consumption.title, "Monthly Consumption");
+assert.deepStrictEqual(monthlyDashboard.consumption.labels, ["2026-03", "2026-04"]);
+
 assert.deepStrictEqual(
   dashboardCalls.filter((call) => call.method === "POST" && call.path === "/api/dashboard/readLineChart"),
   [
@@ -1084,7 +1281,7 @@ assert.deepStrictEqual(
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 4, days: 30 }
+      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 5, days: 30 }
     },
     {
       method: "POST",

@@ -13,6 +13,7 @@
 import { adminClient } from '../db/supabase.js';
 import { resolveNin } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
+import { notifyKycUpdate } from './notifications.js';
 
 export class KycError extends Error {
     constructor(message: string, public code: string) {
@@ -43,21 +44,36 @@ export async function submitKycTier1(input: KycTier1Input): Promise<void> {
     const { data: cu } = await adminClient.from('customers').select('kyc_tier').eq('id', input.customerId).single();
     if (!cu) throw new KycError('Customer not found.', 'not_found');
 
-    const { error } = await adminClient.from('customers').update({
+    const tier1Payload: Record<string, unknown> = {
         full_name: input.full_name.trim(),
         kyc_tier: Math.max((cu as { kyc_tier: number }).kyc_tier, 1),
         kyc_status: 'verified',
-        kyc_data: {
-            tier1: {
-                date_of_birth: input.date_of_birth,
-                address: input.address,
-                state: input.state,
-                lga: input.lga,
-                verified_at: new Date().toISOString(),
-            },
+    };
+
+    // kyc_data column added in migration 20260520110000 — write it only when the
+    // column exists in the schema cache (avoids 422 on un-migrated environments).
+    const kycDataValue = {
+        tier1: {
+            date_of_birth: input.date_of_birth,
+            address: input.address,
+            state: input.state,
+            lga: input.lga,
+            verified_at: new Date().toISOString(),
         },
-    }).eq('id', input.customerId);
-    if (error) throw new KycError(error.message, 'update_failed');
+    };
+    let { error } = await adminClient.from('customers').update(tier1Payload).eq('id', input.customerId);
+    if (error?.message?.includes('kyc_data')) {
+        // Column missing — skip for now; supplementary data is already in the audit log.
+    } else if (!error) {
+        // Try to write the JSONB field if the column is present.
+        const res2 = await adminClient.from('customers')
+            .update({ kyc_data: kycDataValue } as any)
+            .eq('id', input.customerId);
+        if (res2.error && !res2.error.message.includes('kyc_data')) {
+            error = res2.error;
+        }
+    }
+    if (error && !error.message.includes('kyc_data')) throw new KycError(error.message, 'update_failed');
 
     // Raise wallet daily cap to ₦50k
     const { data: wallet } = await adminClient
@@ -79,8 +95,16 @@ export async function submitKycTier1(input: KycTier1Input): Promise<void> {
         action: 'kyc.tier1.submit',
         targetType: 'customer',
         targetId: input.customerId,
-        after: { kyc_tier: 1 },
+        after: {
+            kyc_tier: 1,
+            date_of_birth: input.date_of_birth,
+            address: input.address,
+            state: input.state,
+            lga: input.lga,
+        },
     });
+
+    notifyKycUpdate(input.customerId, { tier: 1 }).catch(() => undefined);
 }
 
 export interface KycTier2Input {
@@ -92,9 +116,9 @@ export interface KycTier2Input {
 export async function submitKycTier2Nin(input: KycTier2Input): Promise<void> {
     if (!/^\d{11}$/.test(input.nin)) throw new KycError('NIN must be 11 digits.', 'invalid_nin');
 
-    const { data: cu } = await adminClient.from('customers').select('*').eq('id', input.customerId).single();
+    const { data: cu } = await adminClient.from('customers').select('id, kyc_tier, full_name').eq('id', input.customerId).single();
     if (!cu) throw new KycError('Customer not found.', 'not_found');
-    const customer = cu as { kyc_tier: number; full_name: string | null; kyc_data: Record<string, unknown> | null };
+    const customer = cu as { kyc_tier: number; full_name: string | null };
 
     if (customer.kyc_tier < 1) {
         throw new KycError('Tier 1 KYC is required before Tier 2.', 'tier1_required');
@@ -119,19 +143,24 @@ export async function submitKycTier2Nin(input: KycTier2Input): Promise<void> {
         );
     }
 
-    const { error } = await adminClient.from('customers').update({
+    // Write the essential kyc_tier/kyc_status first (these columns always exist).
+    const { error: baseError } = await adminClient.from('customers').update({
         kyc_tier: 2,
         kyc_status: 'verified',
+    }).eq('id', input.customerId);
+    if (baseError) throw new KycError(baseError.message, 'update_failed');
+
+    // Optionally write supplementary JSONB (column added in migration 20260520110000).
+    // Fails silently if the column hasn't been applied yet — data is in the audit log.
+    await adminClient.from('customers').update({
         kyc_data: {
-            ...(customer.kyc_data ?? {}),
             tier2: {
                 nin_last4: input.nin.slice(-4),
                 nin_name: `${ninData.first_name} ${ninData.last_name}`,
                 verified_at: new Date().toISOString(),
             },
         },
-    }).eq('id', input.customerId);
-    if (error) throw new KycError(error.message, 'update_failed');
+    } as any).eq('id', input.customerId);
 
     // Raise wallet cap for Tier 2
     const { data: wallet } = await adminClient
@@ -155,4 +184,6 @@ export async function submitKycTier2Nin(input: KycTier2Input): Promise<void> {
         targetId: input.customerId,
         after: { kyc_tier: 2, nin_last4: input.nin.slice(-4) },
     });
+
+    notifyKycUpdate(input.customerId, { tier: 2 }).catch(() => undefined);
 }

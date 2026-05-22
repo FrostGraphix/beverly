@@ -13,6 +13,7 @@ const initials = computed(() => {
     const name = auth.user?.organization_name ?? auth.user?.full_name ?? auth.user?.email ?? 'V';
     return name.slice(0, 2).toUpperCase();
 });
+const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 
 function openDrawer()  { drawerOpen.value = true; }
 function closeDrawer() { drawerOpen.value = false; }
@@ -122,7 +123,10 @@ function closeDrawer() { drawerOpen.value = false; }
 
         <!-- User chip -->
         <div class="bw-user-chip">
-          <div class="bw-avatar green">{{ initials }}</div>
+          <div class="bw-avatar green" style="overflow:hidden">
+            <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Profile" style="width:100%; height:100%; object-fit:cover" />
+            <template v-else>{{ initials }}</template>
+          </div>
           <div class="bw-user-meta">
             <strong>{{ auth.user?.organization_name?.split(' ')[0] || 'Vendor' }}</strong>
             <span>{{ auth.user?.role || 'portal' }}</span>

@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { api, ApiError } from '../lib/api';
 
+const REMEMBERED_EMAIL_KEY = 'beverly.staff.remembered_email';
+
 const route = useRoute();
 const router = useRouter();
 const auth = useStaffAuthStore();
@@ -13,25 +15,36 @@ const sessionEnded = computed(() => {
     return reason === 'session_timeout' || reason === 'session_expired';
 });
 const reasonMfa = computed(() => String(route.query.reason ?? '') === 'mfa_required');
+const showSessionEnded = computed(() => sessionEnded.value && !email.value && !password.value && !error.value);
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const STAFF_ROLES = new Set(['super-admin', 'account', 'finance-checker', 'operations-manager']);
 
 const step = ref<'password' | 'challenge'>('password');
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
+const rememberEmail = ref(true);
 const challengeCode = ref('');
 const useRecovery = ref(false);
 const error = ref<string | null>(null);
 const loading = ref(false);
 
 const redirectTarget = computed(() => {
-    const r = route.query.redirect;
-    return typeof r === 'string' && r.startsWith('/') ? r : '/';
+    return safeRedirectTarget(route.query.redirect);
 });
 
+function safeRedirectTarget(raw: unknown, fallback = '/') {
+    if (typeof raw !== 'string') return fallback;
+    const value = raw.trim();
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return fallback;
+    return value;
+}
+
 function readableError(err: unknown, fallback: string): string {
+    if (err instanceof ApiError && err.status === 401) {
+        return 'This Supabase account signed in, but no active Beverly Wallet Admin staff profile is linked.';
+    }
     if (err instanceof ApiError) return err.message || fallback;
     if (err instanceof Error) return err.message || fallback;
     return fallback;
@@ -52,8 +65,13 @@ async function afterAuthenticated() {
 }
 
 async function signIn() {
-    if (!email.value || !password.value) {
+    const normalizedEmail = email.value.trim().toLowerCase();
+    if (!normalizedEmail || !password.value) {
         error.value = 'Email and password are required.';
+        return;
+    }
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        error.value = 'Authentication is not configured. Contact your administrator.';
         return;
     }
     loading.value = true;
@@ -62,7 +80,7 @@ async function signIn() {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-            body: JSON.stringify({ email: email.value, password: password.value }),
+            body: JSON.stringify({ email: normalizedEmail, password: password.value }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -70,20 +88,25 @@ async function signIn() {
             return;
         }
         const accessToken: string = data.access_token;
-        const user = data.user;
-        const role: string | undefined =
-            user?.user_metadata?.role_key ?? user?.app_metadata?.role_key
-            ?? user?.user_metadata?.role ?? user?.app_metadata?.role;
-        if (!role || !STAFF_ROLES.has(role)) {
-            error.value = 'Access denied. Staff account required.';
+        if (!accessToken || !data.user?.id) {
+            error.value = 'Sign-in response was incomplete. Try again.';
             return;
         }
         auth.setSession(accessToken, {
-            id: user.id,
-            email: user.email ?? null,
-            full_name: user.user_metadata?.full_name ?? null,
-            role,
+            id: data.user.id,
+            email: data.user.email ?? null,
+            full_name: data.user.user_metadata?.full_name ?? null,
+            role: data.user?.user_metadata?.role_key ?? data.user?.user_metadata?.role ?? 'staff',
         });
+        try {
+            await auth.refreshSession();
+        } catch (err) {
+            auth.logout();
+            error.value = readableError(err, 'Access denied. Staff account required.');
+            return;
+        }
+        if (rememberEmail.value) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
+        else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
         await afterAuthenticated();
     } catch {
         error.value = 'Network error. Please try again.';
@@ -118,6 +141,9 @@ function backToPassword() {
 }
 
 onMounted(async () => {
+    const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+    if (rememberedEmail) email.value = rememberedEmail;
+    rememberEmail.value = Boolean(rememberedEmail);
     await auth.hydrate();
     // Mid-session re-challenge: token already present, MFA grant expired.
     if (reasonMfa.value && auth.isAuthenticated) {
@@ -139,7 +165,7 @@ onMounted(async () => {
         <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
       </div>
 
-      <div v-if="sessionEnded" class="login-flash warn">
+      <div v-if="showSessionEnded" class="login-flash warn">
         Your session expired or is invalid. Please sign in again.
       </div>
       <div v-else-if="reasonMfa && step === 'challenge'" class="login-flash warn">
@@ -150,14 +176,26 @@ onMounted(async () => {
       <form v-if="step === 'password'" class="bw-stack" @submit.prevent="signIn">
         <div>
           <label class="bw-label">Email</label>
-          <input class="bw-input" v-model="email" type="email" autocomplete="email" placeholder="staff@acoblighting.com" required />
+          <input class="bw-input" v-model.trim="email" type="email" autocomplete="username" placeholder="staff@acoblighting.com" required @input="error = null" />
         </div>
         <div>
           <label class="bw-label">Password</label>
-          <input class="bw-input" v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+          <div class="password-field">
+            <input class="bw-input" v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="Password" required @input="error = null" />
+            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+        <div class="login-row">
+          <label class="login-check">
+            <input v-model="rememberEmail" type="checkbox" />
+            Remember email
+          </label>
+          <button type="button" class="login-link" @click="error = 'Ask a Beverly super admin to reset your password.'">Forgot password?</button>
         </div>
         <div v-if="error" class="bw-alert danger">{{ error }}</div>
-        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading">
+        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
@@ -222,4 +260,9 @@ onMounted(async () => {
 .login-mfa-actions { display: flex; justify-content: space-between; gap: var(--s-3); }
 .login-link { background: none; border: none; color: var(--brand); font-size: var(--t-sm); font-weight: 600; cursor: pointer; padding: 4px; }
 .login-link:hover { text-decoration: underline; }
+.password-field { position: relative; }
+.password-field .bw-input { padding-right: 76px; }
+.password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--brand); font-weight: 700; cursor: pointer; }
+.login-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.login-check { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim, var(--muted)); font-size: var(--t-sm); cursor: pointer; }
 </style>

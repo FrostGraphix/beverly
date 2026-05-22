@@ -77,6 +77,12 @@ assertIncludes(consumptionStatisticsPage, "syncThemePalette");
 assertIncludes(consumptionStatisticsPage, "observeThemeChanges");
 assertIncludes(consumptionStatisticsPage, "var(--text-strong)");
 assertIncludes(consumptionStatisticsPage, "var(--primary-light)");
+assertIncludes(consumptionStatisticsPage, "Customer Id");
+assertIncludes(consumptionStatisticsPage, "Meter Id");
+assertIncludes(consumptionStatisticsPage, "Date Range");
+assertIncludes(consumptionStatisticsPage, "Collection Date");
+assertIncludes(consumptionStatisticsPage, "Consumption");
+assertIncludes(consumptionStatisticsPage, "csp-reference-shell");
 
 const consumptionStyle = consumptionStatisticsPage.match(/<style scoped>([\s\S]*?)<\/style>/)?.[1] || "";
 assert(

@@ -1,13 +1,13 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * Wallets admin view (super-admin).
  *
  * KPI strip + filterable list + click-to-drawer with:
- *   • Owner block (vendor org or customer profile)
- *   • Computed balance / holds / available
- *   • Ledger history (paginated)
- *   • Freeze/unfreeze (ConfirmDialog + reason)
- *   • Daily / monthly cap edit (ConfirmDialog + reason)
+ *   â€¢ Owner block (vendor org or customer profile)
+ *   â€¢ Computed balance / holds / available
+ *   â€¢ Ledger history (paginated)
+ *   â€¢ Freeze/unfreeze (ConfirmDialog + reason)
+ *   â€¢ Daily / monthly cap edit (ConfirmDialog + reason)
  *
  * Endpoints:
  *   GET    /api/v1/admin/wallets[?ownerType,status,q,minBalance,maxBalance,cursor]
@@ -60,7 +60,7 @@ interface LedgerEntry {
     created_at: string;
 }
 
-// ─ List + filters ─────────────────────────────────────────────
+// â”€ List + filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const summary = ref<WalletSummary | null>(null);
 const wallets = ref<Wallet[]>([]);
 const cursor = ref<string | null>(null);
@@ -75,7 +75,7 @@ const fMaxBal    = ref<number | ''>('');
 
 async function loadSummary() {
     try { summary.value = await api.get<WalletSummary>('/api/v1/admin/wallets/summary'); }
-    catch { /* silent — summary is supplementary */ }
+    catch { /* silent â€” summary is supplementary */ }
 }
 
 async function loadList(reset = true) {
@@ -108,7 +108,7 @@ function resetFilters() {
     void loadList();
 }
 
-// ─ Detail drawer ──────────────────────────────────────────────
+// â”€ Detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const detail = ref<{ wallet: Wallet; owner: any; balance_minor: number; holds_minor: number; available_minor: number } | null>(null);
 const ledger = ref<LedgerEntry[]>([]);
 const ledgerCursor = ref<string | null>(null);
@@ -146,7 +146,7 @@ function closeDetail() {
     ledgerCursor.value = null;
 }
 
-// ─ Freeze / unfreeze ─────────────────────────────────────────
+// â”€ Freeze / unfreeze â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const statusOpen = ref(false);
 const statusTarget = ref<'active' | 'frozen' | 'closed'>('frozen');
 const statusReason = ref('');
@@ -183,7 +183,7 @@ async function doStatus() {
         if (statusReason.value.trim()) body.reason = statusReason.value.trim();
         await api.patch(`/api/v1/admin/wallets/${detail.value.wallet.id}/status`, body);
         statusOpen.value = false;
-        banner.value = { tone: 'success', text: `Wallet → ${statusTarget.value}.` };
+        banner.value = { tone: 'success', text: `Wallet â†’ ${statusTarget.value}.` };
         await Promise.all([loadList(), loadSummary(), openDetail(detail.value.wallet)]);
     } catch (e: any) {
         const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Update failed.';
@@ -194,7 +194,7 @@ async function doStatus() {
     }
 }
 
-// ─ Limit edit ────────────────────────────────────────────────
+// â”€ Limit edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const limitsOpen = ref(false);
 const limitDailyNaira = ref<number | ''>('');
 const limitMonthlyNaira = ref<number | ''>('');
@@ -237,7 +237,7 @@ async function doLimits() {
     }
 }
 
-// ─ Helpers ───────────────────────────────────────────────────
+// â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function statusBadge(s: string) {
     return ({ active: 'success', frozen: 'warn', closed: 'danger' } as Record<string, string>)[s] ?? 'neutral';
 }
@@ -246,7 +246,7 @@ function ownerBadge(t: string) {
     return t === 'vendor' ? 'info' : 'neutral';
 }
 
-function dirSign(d: string) { return d === 'credit' ? '+' : '−'; }
+function dirSign(d: string) { return d === 'credit' ? '+' : 'âˆ’'; }
 
 function exportCsvRows() {
     exportCsv('wallets', wallets.value, [
@@ -254,9 +254,9 @@ function exportCsvRows() {
         { key: 'owner_type', header: 'Owner Type', value: (w) => w.owner_type },
         { key: 'owner_name', header: 'Owner', value: (w) => w.owner_name ?? '' },
         { key: 'status', header: 'Status', value: (w) => w.status },
-        { key: 'balance', header: 'Balance (₦)', value: (w) => (w.balance_minor ?? 0) / 100 },
-        { key: 'holds', header: 'Holds (₦)', value: (w) => (w.holds_minor ?? 0) / 100 },
-        { key: 'available', header: 'Available (₦)', value: (w) => (w.available_minor ?? 0) / 100 },
+        { key: 'balance', header: 'Balance (â‚¦)', value: (w) => (w.balance_minor ?? 0) / 100 },
+        { key: 'holds', header: 'Holds (â‚¦)', value: (w) => (w.holds_minor ?? 0) / 100 },
+        { key: 'available', header: 'Available (â‚¦)', value: (w) => (w.available_minor ?? 0) / 100 },
         { key: 'created_at', header: 'Created', value: (w) => w.created_at },
     ]);
 }
@@ -287,16 +287,11 @@ watch([fOwnerType, fStatus], () => loadList());
 
 <template>
   <AppShell title="Wallets">
-    <template #topbar-end>
-      <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">CSV</button>
-      <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-    </template>
-
-    <!-- Banner -->
+<!-- Banner -->
     <transition name="banner">
       <div v-if="banner" :class="['bw-banner', banner.tone]" role="status">
         {{ banner.text }}
-        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
+        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">Ã—</button>
       </div>
     </transition>
 
@@ -349,11 +344,11 @@ watch([fOwnerType, fStatus], () => loadList());
           <input class="bw-input bw-mono" v-model="fQ" placeholder="id / name / phone / email" @keyup.enter="loadList()" />
         </div>
         <div>
-          <label class="bw-label">Min balance (₦)</label>
+          <label class="bw-label">Min balance (â‚¦)</label>
           <input class="bw-input bw-mono" v-model.number="fMinBal" type="number" min="0" />
         </div>
         <div>
-          <label class="bw-label">Max balance (₦)</label>
+          <label class="bw-label">Max balance (â‚¦)</label>
           <input class="bw-input bw-mono" v-model.number="fMaxBal" type="number" min="0" />
         </div>
         <div class="filter-actions">
@@ -368,7 +363,10 @@ watch([fOwnerType, fStatus], () => loadList());
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
         <span class="bw-spacer"></span>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
+        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">CSV</button>
+        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
+        <span style="width:6px"></span>
+        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
       </div>
 
       <!-- Desktop table -->
@@ -388,17 +386,17 @@ watch([fOwnerType, fStatus], () => loadList());
           <tbody>
             <tr v-for="w in wallets" :key="w.id" @click="openDetail(w)" class="w-row">
               <td>
-                <div class="bw-truncate" style="max-width: 240px">{{ w.owner_name || '—' }}</div>
+                <div class="bw-truncate" style="max-width: 240px">{{ w.owner_name || 'â€”' }}</div>
                 <div class="bw-mono row-sub">{{ w.id.slice(0, 8) }}</div>
               </td>
               <td><span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span></td>
               <td class="bw-money" style="text-align: right">{{ naira(w.balance_minor) }}</td>
               <td class="bw-money" style="text-align: right; color: var(--brand)">{{ naira(w.available_minor) }}</td>
               <td class="bw-money bw-muted" style="text-align: right; font-size: var(--t-xs)">
-                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : '—' }}
+                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : 'â€”' }}
               </td>
               <td><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
-              <td class="row-arrow">→</td>
+              <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!wallets.length && !loading">
               <td colspan="7" class="bw-muted empty">No wallets match the filters.</td>
@@ -412,7 +410,7 @@ watch([fOwnerType, fStatus], () => loadList());
         <div v-for="w in wallets" :key="w.id" class="w-card" @click="openDetail(w)">
           <div class="wc-head">
             <div>
-              <div class="bw-truncate" style="font-weight: 700">{{ w.owner_name || '—' }}</div>
+              <div class="bw-truncate" style="font-weight: 700">{{ w.owner_name || 'â€”' }}</div>
               <div class="bw-mono row-sub">{{ w.id.slice(0, 8) }}</div>
             </div>
             <span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span>
@@ -437,12 +435,12 @@ watch([fOwnerType, fStatus], () => loadList());
 
       <div v-if="cursor" class="load-more">
         <button class="bw-btn" :disabled="loading" @click="loadList(false)">
-          {{ loading ? 'Loading…' : 'Load more' }}
+          {{ loading ? 'Loadingâ€¦' : 'Load more' }}
         </button>
       </div>
     </div>
 
-    <!-- ═══ DETAIL DRAWER ═══ -->
+    <!-- â•â•â• DETAIL DRAWER â•â•â• -->
     <Teleport to="body">
       <Transition name="drawer">
         <div v-if="detail" class="drawer-scrim" @click.self="closeDetail">
@@ -450,11 +448,11 @@ watch([fOwnerType, fStatus], () => loadList());
 
             <header class="drawer-head">
               <div>
-                <p class="drawer-eyebrow">Wallet · {{ detail.wallet.owner_type }}</p>
+                <p class="drawer-eyebrow">Wallet Â· {{ detail.wallet.owner_type }}</p>
                 <h2 class="drawer-title">{{ detail.owner?.legal_name ?? detail.owner?.trading_name ?? detail.owner?.full_name ?? detail.wallet.owner_id.slice(0, 8) }}</h2>
                 <p class="bw-mono drawer-id">{{ detail.wallet.id }}</p>
               </div>
-              <button class="drawer-x" @click="closeDetail" aria-label="Close">×</button>
+              <button class="drawer-x" @click="closeDetail" aria-label="Close">Ã—</button>
             </header>
 
             <!-- Balance tile -->
@@ -463,7 +461,7 @@ watch([fOwnerType, fStatus], () => loadList());
                 <p class="dr-balance-label">Available</p>
                 <p class="dr-balance-value">{{ naira(detail.available_minor) }}</p>
                 <p class="dr-balance-sub">
-                  Balance {{ naira(detail.balance_minor) }} · Holds {{ naira(detail.holds_minor) }}
+                  Balance {{ naira(detail.balance_minor) }} Â· Holds {{ naira(detail.holds_minor) }}
                 </p>
               </div>
               <span :class="['bw-badge', statusBadge(detail.wallet.status)]">{{ detail.wallet.status }}</span>
@@ -475,16 +473,16 @@ watch([fOwnerType, fStatus], () => loadList());
               <dl class="dr-dl">
                 <template v-if="detail.wallet.owner_type === 'vendor' && detail.owner">
                   <dt>Legal name</dt><dd>{{ detail.owner.legal_name }}</dd>
-                  <dt>Trading name</dt><dd>{{ detail.owner.trading_name || '—' }}</dd>
-                  <dt>Email</dt><dd class="bw-mono">{{ detail.owner.contact_email || '—' }}</dd>
-                  <dt>Phone</dt><dd class="bw-mono">{{ detail.owner.contact_phone || '—' }}</dd>
+                  <dt>Trading name</dt><dd>{{ detail.owner.trading_name || 'â€”' }}</dd>
+                  <dt>Email</dt><dd class="bw-mono">{{ detail.owner.contact_email || 'â€”' }}</dd>
+                  <dt>Phone</dt><dd class="bw-mono">{{ detail.owner.contact_phone || 'â€”' }}</dd>
                   <dt>Status</dt><dd>{{ detail.owner.status }}</dd>
                   <dt>Risk</dt><dd>{{ detail.owner.risk_level }}</dd>
                 </template>
                 <template v-else-if="detail.wallet.owner_type === 'customer' && detail.owner">
-                  <dt>Full name</dt><dd>{{ detail.owner.full_name || '—' }}</dd>
-                  <dt>Email</dt><dd class="bw-mono">{{ detail.owner.email || '—' }}</dd>
-                  <dt>Phone</dt><dd class="bw-mono">{{ detail.owner.phone || '—' }}</dd>
+                  <dt>Full name</dt><dd>{{ detail.owner.full_name || 'â€”' }}</dd>
+                  <dt>Email</dt><dd class="bw-mono">{{ detail.owner.email || 'â€”' }}</dd>
+                  <dt>Phone</dt><dd class="bw-mono">{{ detail.owner.phone || 'â€”' }}</dd>
                   <dt>KYC tier</dt><dd>Tier {{ detail.owner.kyc_tier }}</dd>
                   <dt>Status</dt><dd>{{ detail.owner.status }}</dd>
                 </template>
@@ -515,7 +513,7 @@ watch([fOwnerType, fStatus], () => loadList());
 
             <!-- Ledger -->
             <div class="dr-block">
-              <p class="dr-block-title">Ledger · {{ ledger.length }} entries</p>
+              <p class="dr-block-title">Ledger Â· {{ ledger.length }} entries</p>
               <div v-if="!ledger.length" class="bw-muted empty">No movements yet.</div>
               <ul v-else class="ledger-list">
                 <li v-for="e in ledger" :key="e.id" class="ledger-row">
@@ -532,7 +530,7 @@ watch([fOwnerType, fStatus], () => loadList());
               </ul>
               <div v-if="ledgerCursor" class="load-more">
                 <button class="bw-btn sm" :disabled="ledgerLoading" @click="loadMoreLedger">
-                  {{ ledgerLoading ? 'Loading…' : 'Load older' }}
+                  {{ ledgerLoading ? 'Loadingâ€¦' : 'Load older' }}
                 </button>
               </div>
             </div>
@@ -542,12 +540,12 @@ watch([fOwnerType, fStatus], () => loadList());
       </Transition>
     </Teleport>
 
-    <!-- ═══ STATUS CONFIRM ═══ -->
+    <!-- â•â•â• STATUS CONFIRM â•â•â• -->
     <ConfirmDialog
       v-model:open="statusOpen"
       :title="statusLabel"
       :description="detail
-        ? `Change wallet #${detail.wallet.id.slice(0, 8)} from ${detail.wallet.status} → ${statusTarget}. Audit-logged.`
+        ? `Change wallet #${detail.wallet.id.slice(0, 8)} from ${detail.wallet.status} â†’ ${statusTarget}. Audit-logged.`
         : ''"
       :confirm-label="statusLabel"
       :tone="statusTone"
@@ -561,13 +559,13 @@ watch([fOwnerType, fStatus], () => loadList());
           v-model="statusReason"
           rows="3"
           class="cd-input"
-          placeholder="e.g. Suspicious vending pattern — under fraud review."
+          placeholder="e.g. Suspicious vending pattern â€” under fraud review."
         />
         <p class="cd-input-hint">Minimum 4 characters.</p>
       </template>
     </ConfirmDialog>
 
-    <!-- ═══ LIMITS CONFIRM ═══ -->
+    <!-- â•â•â• LIMITS CONFIRM â•â•â• -->
     <ConfirmDialog
       v-model:open="limitsOpen"
       title="Update wallet limits"
@@ -580,11 +578,11 @@ watch([fOwnerType, fStatus], () => loadList());
     >
       <div class="cd-grid-2">
         <div>
-          <label class="cd-input-label">Daily cap (₦)</label>
+          <label class="cd-input-label">Daily cap (â‚¦)</label>
           <input v-model.number="limitDailyNaira" type="number" min="0" class="cd-input" />
         </div>
         <div>
-          <label class="cd-input-label">Monthly cap (₦)</label>
+          <label class="cd-input-label">Monthly cap (â‚¦)</label>
           <input v-model.number="limitMonthlyNaira" type="number" min="0" class="cd-input" />
         </div>
       </div>
@@ -817,3 +815,5 @@ watch([fOwnerType, fStatus], () => loadList());
   :deep(.cd-body) .cd-grid-2 { grid-template-columns: 1fr; }
 }
 </style>
+
+

@@ -52,7 +52,14 @@ const isVerified = computed(() => status.value?.verified === true || auth.user?.
 const safeRecoveryCount = computed(() => status.value?.recovery_codes_remaining ?? 0);
 const displaySecret = computed(() => setup.value?.secret.match(/.{1,4}/g)?.join(' ') ?? '');
 const setupHref = computed(() => setup.value?.otpauth_uri ?? '#');
-const redirectTarget = computed(() => typeof route.query.redirect === 'string' ? route.query.redirect : '/');
+const redirectTarget = computed(() => safeRedirectTarget(route.query.redirect));
+
+function safeRedirectTarget(raw: unknown, fallback = '/') {
+    if (typeof raw !== 'string') return fallback;
+    const value = raw.trim();
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return fallback;
+    return value;
+}
 
 function readableError(err: unknown, fallback: string): string {
     if (err instanceof ApiError) return err.message || fallback;

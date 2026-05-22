@@ -4,7 +4,7 @@
  * Staff actions: vendor onboarding, funding approval, monitoring.
  * All actions audit-logged.
  */
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
@@ -12,7 +12,7 @@ import {
     createVendorOrganization, setVendorStatus,
 } from '../services/vendor-onboarding.js';
 import {
-    approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits,
+    approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls,
 } from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
 import { logAction } from '../services/audit.js';
@@ -36,10 +36,15 @@ function isUuid(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function cleanSearchTerm(value: unknown): string {
+    return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
+}
+
 const PERMISSION_CATALOG = [
     { key: 'wallet.dashboard.view', label: 'View operations dashboard', group: 'Overview', risk: 'low' },
     { key: 'wallet.vendors.review', label: 'Review vendor applications', group: 'Vendors', risk: 'medium' },
     { key: 'wallet.vendors.manage', label: 'Create and manage vendors', group: 'Vendors', risk: 'high' },
+    { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
     { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
@@ -52,14 +57,15 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.audit.view', label: 'View audit and security events', group: 'Compliance', risk: 'high' },
     { key: 'wallet.flags.manage', label: 'Manage feature flags', group: 'Launch', risk: 'critical' },
     { key: 'wallet.access.manage', label: 'Manage roles and permissions', group: 'Access', risk: 'critical' },
+    { key: 'wallet.consumption.view', label: 'View consumption analytics', group: 'Analytics', risk: 'low' },
 ];
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'super-admin': PERMISSION_CATALOG.map((p) => p.key),
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.disputes.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
-        'wallet.fraud.review', 'wallet.audit.view',
+        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
     ],
     'finance-checker': [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
@@ -67,7 +73,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
         'wallet.audit.view',
     ],
     account: [
-        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.vending.monitor',
+        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.customers.view', 'wallet.vending.monitor',
         'wallet.settlement.view', 'wallet.reconciliation.run',
     ],
 };
@@ -86,6 +92,124 @@ const ROLE_LEGACY_NAMES: Record<string, string> = {
     account: 'finance',
 };
 
+const OPEN_ADMIN_ROUTES = new Set(['GET /me']);
+
+const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
+    'GET /access': 'wallet.access.manage',
+    'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
+    'POST /access/users': 'wallet.access.manage',
+    'PATCH /access/users/:userId/role': 'wallet.access.manage',
+    'GET /stations': 'wallet.vending.monitor',
+    'POST /stations/refresh': 'wallet.vending.monitor',
+    'GET /vendor-applications': 'wallet.vendors.review',
+    'POST /vendors': 'wallet.vendors.manage',
+    'GET /vendors': 'wallet.vendors.review',
+    'PATCH /vendors/:id/status': 'wallet.vendors.manage',
+    'GET /vendors/:id': 'wallet.vendors.review',
+    'GET /vendors/:id/wallet': 'wallet.vendors.review',
+    'GET /vendors/:id/transactions': 'wallet.vending.monitor',
+    'GET /vendors/:id/funding': 'wallet.funding.view',
+    'GET /vendors/:id/staff': 'wallet.vendors.review',
+    'GET /funding/pending': 'wallet.funding.view',
+    'GET /funding/history': 'wallet.funding.view',
+    'POST /funding/reconcile-approved': 'wallet.funding.approve',
+    'POST /funding/:id/approve': 'wallet.funding.approve',
+    'POST /funding/:id/reject': 'wallet.funding.approve',
+    'GET /wallets': 'wallet.funding.view',
+    'GET /wallets/summary': 'wallet.funding.view',
+    'GET /wallets/:id': 'wallet.funding.view',
+    'GET /wallets/:id/ledger': 'wallet.funding.view',
+    'PATCH /wallets/:id/status': 'wallet.funding.approve',
+    'PATCH /wallets/:id/limits': 'wallet.funding.approve',
+    'GET /customers': 'wallet.customers.view',
+    'GET /customers/summary': 'wallet.customers.view',
+    'GET /customers/:id': 'wallet.customers.view',
+    'GET /customers/:id/wallet': 'wallet.customers.view',
+    'GET /customers/:id/purchases': 'wallet.vending.monitor',
+    'GET /customers/:id/funding': 'wallet.funding.view',
+    'PATCH /customers/:id/status': 'wallet.funding.approve',
+    'GET /purchases': 'wallet.vending.monitor',
+    'GET /vending': 'wallet.vending.monitor',
+    'GET /purchases/summary': 'wallet.vending.monitor',
+    'GET /purchases/:id': 'wallet.vending.monitor',
+    'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
+    'GET /meter-orders': 'wallet.vendors.review',
+    'GET /meter-orders/stats': 'wallet.vendors.review',
+    'GET /meter-orders/:id': 'wallet.vendors.review',
+    'PATCH /meter-orders/:id': 'wallet.vendors.manage',
+    'GET /fraud': 'wallet.fraud.review',
+    'PATCH /fraud/:id/resolve': 'wallet.fraud.review',
+    'GET /disputes': 'wallet.disputes.manage',
+    'GET /disputes/:id': 'wallet.disputes.manage',
+    'PATCH /disputes/:id': 'wallet.disputes.manage',
+    'GET /refunds': 'wallet.refunds.manage',
+    'POST /refunds': 'wallet.refunds.manage',
+    'POST /refunds/:id/approve': 'wallet.refunds.manage',
+    'POST /refunds/:id/reject': 'wallet.refunds.manage',
+    'GET /settlement': 'wallet.settlement.view',
+    'GET /reconciliation': 'wallet.reconciliation.run',
+    'POST /reconciliation/run': 'wallet.reconciliation.run',
+    'GET /audit': 'wallet.audit.view',
+    'GET /audit/:id': 'wallet.audit.view',
+    'GET /audit/export.csv': 'wallet.audit.view',
+    'GET /security-events': 'wallet.audit.view',
+    'GET /audit/summary': 'wallet.audit.view',
+    'GET /reports/overview': 'wallet.dashboard.view',
+    'GET /reports/export.csv': 'wallet.dashboard.view',
+    'GET /feature-flags': 'wallet.flags.manage',
+    'POST /feature-flags': 'wallet.flags.manage',
+    'PATCH /feature-flags/:key': 'wallet.flags.manage',
+    'GET /privacy/deletions': 'wallet.privacy.review',
+    'PATCH /privacy/deletions/:id': 'wallet.privacy.review',
+    'GET /consumption': 'wallet.consumption.view',
+    'GET /consumption/meters': 'wallet.consumption.view',
+    'POST /consumption/refresh': 'wallet.consumption.view',
+};
+
+function adminRouteKey(req: FastifyRequest): string {
+    const routeUrl = (req.routeOptions?.url ?? req.url.split('?')[0] ?? '').replace(/^\/api\/v1\/admin/, '') || '/';
+    return `${req.method.toUpperCase()} ${routeUrl}`;
+}
+
+async function permissionsForRole(role: string): Promise<Set<string>> {
+    await ensureAccessDefaults();
+    if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((p) => p.key));
+    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    return new Set((data ?? []).map((p: any) => p.route_hash));
+}
+
+async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+    const key = adminRouteKey(req);
+    if (OPEN_ADMIN_ROUTES.has(key)) return true;
+    const permission = ADMIN_ROUTE_PERMISSIONS[key];
+    if (!permission) {
+        reply.code(403).send({
+            error: 'permission_not_mapped',
+            message: `No access policy is mapped for ${key}.`,
+        });
+        return false;
+    }
+    const grants = await permissionsForRole(req.actor!.role);
+    if (!grants.has(permission)) {
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'access.permission_denied',
+            targetType: 'admin_route',
+            targetId: key,
+            metadata: { permission },
+        }).catch(() => undefined);
+        reply.code(403).send({
+            error: 'permission_denied',
+            message: `Missing permission: ${permission}.`,
+            details: { permission },
+        });
+        return false;
+    }
+    return true;
+}
+
 function requireAccessManager(req: any, reply: any): boolean {
     if (req.actor?.role !== 'super-admin') {
         reply.code(403).send({
@@ -97,30 +221,66 @@ function requireAccessManager(req: any, reply: any): boolean {
     return true;
 }
 
+// Seed flag — runs once per server lifetime, not on every request.
+let _accessDefaultsSeeded = false;
+let _accessDefaultsPromise: Promise<void> | null = null;
+
 async function ensureAccessDefaults() {
-    for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
-        await adminClient.from('roles').upsert({
-            name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
-            role_key: roleKey,
-            role_name: label,
-            label,
-            description: roleKey === 'super-admin'
-                ? 'Full wallet administration and access control.'
-                : 'Wallet administration role managed by Beverly access policy.',
-        }, { onConflict: 'role_key' });
-    }
-    for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-        for (const permission of permissions) {
-            await adminClient.from('permissions').upsert({
+    if (_accessDefaultsSeeded) return;
+    // Deduplicate concurrent calls during startup (e.g. multiple requests arriving before the first finishes).
+    if (_accessDefaultsPromise) return _accessDefaultsPromise;
+    _accessDefaultsPromise = (async () => {
+        for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
+            await adminClient.from('roles').upsert({
+                name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
                 role_key: roleKey,
-                route_hash: permission,
-            }, { onConflict: 'role_key,route_hash' });
+                role_name: label,
+                label,
+                description: roleKey === 'super-admin'
+                    ? 'Full wallet administration and access control.'
+                    : 'Wallet administration role managed by Beverly access policy.',
+            }, { onConflict: 'role_key' });
         }
-    }
+        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+            for (const permission of permissions) {
+                await adminClient.from('permissions').upsert({
+                    role_key: roleKey,
+                    route_hash: permission,
+                }, { onConflict: 'role_key,route_hash' });
+            }
+        }
+        _accessDefaultsSeeded = true;
+    })();
+    return _accessDefaultsPromise;
 }
 
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
+    fastify.addHook('preHandler', async (req, reply) => {
+        // ensureAccessDefaults() is called inside requireAdminPermission → permissionsForRole
+        // and is cached after the first run — no need to call it again here.
+        if (!(await requireAdminPermission(req, reply))) return undefined;
+        return undefined;
+    });
+
+    fastify.get('/me', async (req) => {
+        const permissions = Array.from(await permissionsForRole(req.actor!.role));
+        const { data: staff } = await adminClient
+            .from('users')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, updated_at')
+            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+            .maybeSingle();
+        return {
+            user: {
+                id: req.actor!.userId,
+                email: staff?.email ?? req.actor!.email,
+                full_name: staff?.user_name ?? null,
+                role: staff?.role_key ?? req.actor!.role,
+            },
+            permissions,
+            catalog: PERMISSION_CATALOG,
+        };
+    });
 
     fastify.get('/access', async () => {
         await ensureAccessDefaults();
@@ -456,6 +616,49 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { funding: list };
     });
 
+    // ── funding history (all statuses, filterable) ──
+    fastify.get('/funding/history', async (req) => {
+        const { status, channel, from, to, limit, cursor } = req.query as {
+            status?: string; channel?: string; from?: string; to?: string;
+            limit?: string; cursor?: string;
+        };
+        const pageSize = Math.min(Number(limit ?? 50), 200);
+        let query = adminClient
+            .from('funding_requests')
+            .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (status === 'pending') query = query.in('status', ['initiated', 'proof_uploaded', 'under_review']);
+        else if (status && status !== 'all') query = query.eq('status', status);
+        if (channel && channel !== 'all') query = query.eq('channel', channel);
+        if (from)   query = query.gte('created_at', new Date(from).toISOString());
+        if (to)     query = query.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
+        if (cursor) query = query.lt('created_at', cursor);
+        const { data } = await query;
+        const rows = (data ?? []) as any[];
+        const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
+        const withUrls = await attachProofUrls(rows);
+        // KPI aggregates (only on first page / no cursor)
+        let summary: Record<string, number> | null = null;
+        if (!cursor) {
+            let aggQ = adminClient.from('funding_requests').select('status, amount_minor');
+            if (from)    aggQ = aggQ.gte('created_at', new Date(from).toISOString());
+            if (to)      aggQ = aggQ.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
+            if (channel && channel !== 'all') aggQ = aggQ.eq('channel', channel);
+            const { data: agg } = await aggQ.limit(10_000);
+            const rows2 = (agg ?? []) as any[];
+            const sumMinor = (s: string) => rows2.filter((r) => r.status === s).reduce((acc, r) => acc + Number(r.amount_minor ?? 0), 0);
+            summary = {
+                totalCount:    rows2.length,
+                approvedCount: rows2.filter((r) => r.status === 'approved').length,
+                pendingCount:  rows2.filter((r) => ['initiated', 'proof_uploaded', 'under_review'].includes(r.status)).length,
+                rejectedCount: rows2.filter((r) => r.status === 'rejected').length,
+                approvedMinor: sumMinor('approved'),
+            };
+        }
+        return { funding: withUrls, nextCursor, summary };
+    });
+
     fastify.post('/funding/reconcile-approved', async (req, reply) => {
         try {
             const result = await reconcileApprovedFundingCredits({
@@ -514,12 +717,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         const {
             ownerType, status, q, minBalance, maxBalance, limit, cursor,
         } = req.query as Record<string, string | undefined>;
+        const hasComputedFilters = !!(q || minBalance || maxBalance);
+        const pageSize = Math.min(Number(limit ?? 100), 500);
+        const fetchSize = hasComputedFilters ? 5000 : pageSize;
 
         let query = adminClient
             .from('wallets')
             .select('*')
             .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 100), 500));
+            .limit(fetchSize);
         if (ownerType) query = query.eq('owner_type', ownerType);
         if (status)    query = query.eq('status',     status);
         if (cursor)    query = query.lt('created_at', cursor);
@@ -560,7 +766,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
 
         if (q) {
-            const ql = q.toLowerCase();
+            const ql = cleanSearchTerm(q).toLowerCase();
             enriched = enriched.filter((w: any) =>
                 w.id.toLowerCase().includes(ql) ||
                 (w.owner_name ?? '').toLowerCase().includes(ql) ||
@@ -571,10 +777,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (minBalance) enriched = enriched.filter((w: any) => w.balance_minor >= Number(minBalance));
         if (maxBalance) enriched = enriched.filter((w: any) => w.balance_minor <= Number(maxBalance));
 
-        const nextCursor = rows.length === Math.min(Number(limit ?? 100), 500)
+        const paged = enriched.slice(0, pageSize);
+        const nextCursor = !hasComputedFilters && rows.length === pageSize
             ? rows[rows.length - 1].created_at : null;
 
-        return { wallets: enriched, nextCursor };
+        return { wallets: paged, nextCursor };
     });
 
     // KPI summary across the entire wallet system.
@@ -673,6 +880,23 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const { setWalletStatus } = await import('../services/wallets.js');
         const updated = await setWalletStatus(id, body.status);
+        const ownerType = (before as any).owner_type as 'vendor' | 'customer';
+        const ownerId = (before as any).owner_id as string;
+        const ownerStatus =
+            ownerType === 'vendor'
+                ? body.status === 'active' ? 'approved' : body.status
+                : body.status === 'active' ? 'active' : body.status === 'frozen' ? 'suspended' : 'closed';
+        if (ownerType === 'vendor') {
+            await adminClient
+                .from('vendor_organizations')
+                .update({ status: ownerStatus })
+                .eq('id', ownerId);
+        } else if (ownerType === 'customer') {
+            await adminClient
+                .from('customers')
+                .update({ status: ownerStatus })
+                .eq('id', ownerId);
+        }
         await logAction({
             actorUserId: req.actor!.userId,
             actorType:   'staff',
@@ -681,7 +905,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetType:  'wallet',
             targetId:    id,
             before:      { status: (before as any).status },
-            after:       { status: body.status, reason: body.reason ?? null },
+            after:       { status: body.status, ownerType, ownerStatus, reason: body.reason ?? null },
         });
         return { ok: true, wallet: updated };
     });
@@ -735,25 +959,35 @@ const route: FastifyPluginAsync = async (fastify) => {
     // List customers with wallet balance + filters.
     fastify.get('/customers', async (req) => {
         const { status, kycTier, q, limit, cursor } = req.query as Record<string, string | undefined>;
+        const pageSize = Math.min(Number(limit ?? 100), 500);
+        const { data: walletRows, error: walletErr } = await adminClient
+            .from('wallets')
+            .select('id, owner_id, status')
+            .eq('owner_type', 'customer');
+        if (walletErr) return { customers: [], error: walletErr.message };
+        const walletByOwner = new Map((walletRows ?? []).map((w: any) => [w.owner_id, w]));
+        const walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        if (!walletOwnerIds.length) return { customers: [], nextCursor: null };
+
         let query = adminClient
             .from('customers')
             .select('id, auth_user_id, full_name, phone, email, kyc_tier, kyc_status, status, created_at')
+            .in('id', walletOwnerIds)
             .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 100), 500));
+            .limit(pageSize);
         if (status)  query = query.eq('status', status);
         if (kycTier) query = query.eq('kyc_tier', Number(kycTier));
         if (cursor)  query = query.lt('created_at', cursor);
-        if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%`);
+        if (q) {
+            const safeQ = cleanSearchTerm(q);
+            if (safeQ) query = query.or(`full_name.ilike.%${safeQ}%,phone.ilike.%${safeQ}%,email.ilike.%${safeQ}%`);
+        }
         const { data, error } = await query;
         if (error) return { customers: [], error: error.message };
         const rows = data ?? [];
         if (!rows.length) return { customers: [], nextCursor: null };
 
         // Batch wallet balances
-        const ids = rows.map((c: any) => c.id);
-        const { data: wallets } = await adminClient
-            .from('wallets').select('id, owner_id, status').eq('owner_type', 'customer').in('owner_id', ids);
-        const walletByOwner = new Map((wallets ?? []).map((w: any) => [w.owner_id, w]));
         const { getBalance } = await import('../services/ledger.js');
         const balances = await Promise.all(
             rows.map((c: any) => {
@@ -773,14 +1007,19 @@ const route: FastifyPluginAsync = async (fastify) => {
                 available_minor: b?.availableMinor ?? 0,
             };
         });
-        const nextCursor = rows.length === Math.min(Number(limit ?? 100), 500)
+        const nextCursor = rows.length === pageSize
             ? rows[rows.length - 1].created_at : null;
         return { customers: enriched, nextCursor };
     });
 
     // Customer KPI summary.
     fastify.get('/customers/summary', async () => {
-        const { data: rows } = await adminClient.from('customers').select('id, kyc_tier, status');
+        const { data: wallets } = await adminClient.from('wallets').select('id, owner_id').eq('owner_type', 'customer');
+        const walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
+        if (!walletOwnerIds.length) {
+            return { total: 0, byTier: {}, byStatus: {}, totalFloatMinor: 0 };
+        }
+        const { data: rows } = await adminClient.from('customers').select('id, kyc_tier, status').in('id', walletOwnerIds);
         const customers = rows ?? [];
         const byTier: Record<string, number> = {};
         const byStatus: Record<string, number> = {};
@@ -789,7 +1028,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
         }
         // Total customer float
-        const { data: wallets } = await adminClient.from('wallets').select('id').eq('owner_type', 'customer');
         const { getBalance } = await import('../services/ledger.js');
         const balances = await Promise.all((wallets ?? []).map((w: any) => getBalance(w.id).catch(() => null)));
         const totalFloat = balances.reduce((s, b) => s + (b?.ledgerBalanceMinor ?? 0), 0);
@@ -902,11 +1140,26 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const { data: before } = await adminClient.from('customers').select('status').eq('id', id).maybeSingle();
         if (!before) return reply.code(404).send({ error: 'not_found', message: 'Customer not found.' });
+        if ((before as any).status === 'closed' && body.status !== 'closed') {
+            return reply.code(409).send({
+                error: 'customer_closed_final',
+                message: 'Closed customer accounts cannot be reactivated. Create a replacement account instead.',
+            });
+        }
 
         const { data: updated, error: updErr } = await adminClient
             .from('customers').update({ status: body.status }).eq('id', id)
             .select('id, full_name, status').single();
         if (updErr) return reply.code(400).send({ error: 'update_failed', message: updErr.message });
+        const walletStatus =
+            body.status === 'active' ? 'active'
+            : body.status === 'closed' ? 'closed'
+            : 'frozen';
+        await adminClient
+            .from('wallets')
+            .update({ status: walletStatus })
+            .eq('owner_type', 'customer')
+            .eq('owner_id', id);
 
         await logAction({
             actorUserId: req.actor!.userId,
@@ -916,7 +1169,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetType:  'customer',
             targetId:    id,
             before:      { status: (before as any).status },
-            after:       { status: body.status, reason: body.reason ?? null },
+            after:       { status: body.status, walletStatus, reason: body.reason ?? null },
         });
         return { ok: true, customer: updated };
     });
@@ -940,9 +1193,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (until)     query = query.lte('created_at', until);
         if (cursor)    query = query.lt('created_at', cursor);
         if (q) {
-            const filters = [`meter_id.ilike.%${q}%`, `customer_name.ilike.%${q}%`];
-            if (isUuid(q)) filters.push(`id.eq.${q}`);
-            query = query.or(filters.join(','));
+            const safeQ = cleanSearchTerm(q);
+            if (safeQ) {
+                const filters = [`meter_id.ilike.%${safeQ}%`, `customer_name.ilike.%${safeQ}%`];
+                if (isUuid(safeQ)) filters.push(`id.eq.${safeQ}`);
+                query = query.or(filters.join(','));
+            }
         }
         const { data, error } = await query;
         if (error) return { purchases: [], error: error.message };
@@ -962,9 +1218,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (station) query = query.eq('station_id', station);
         if (cursor)  query = query.lt('created_at', cursor);
         if (q) {
-            const filters = [`meter_id.ilike.%${q}%`, `customer_name.ilike.%${q}%`];
-            if (isUuid(q)) filters.push(`id.eq.${q}`);
-            query = query.or(filters.join(','));
+            const safeQ = cleanSearchTerm(q);
+            if (safeQ) {
+                const filters = [`meter_id.ilike.%${safeQ}%`, `customer_name.ilike.%${safeQ}%`];
+                if (isUuid(safeQ)) filters.push(`id.eq.${safeQ}`);
+                query = query.or(filters.join(','));
+            }
         }
         const { data, error } = await query;
         if (error) {
@@ -1074,17 +1333,57 @@ const route: FastifyPluginAsync = async (fastify) => {
 
 
     // ── meter purchase orders ──
+    fastify.get('/meter-orders/stats', async () => {
+        const { data } = await adminClient
+            .from('meter_purchase_orders')
+            .select('status, amount_minor, updated_at, created_at')
+            .limit(10_000);
+        const rows = (data ?? []) as any[];
+        const count = (s: string) => rows.filter((r) => r.status === s).length;
+        const inProgress = ['paid', 'assigned', 'dispatched'].reduce((n, s) => n + count(s), 0);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const installedToday = rows.filter((r) =>
+            r.status === 'installed' && String(r.updated_at ?? r.created_at).slice(0, 10) === todayKey
+        ).length;
+        return {
+            total:           rows.length,
+            pending_payment: count('pending_payment'),
+            in_progress:     inProgress,
+            installed:       count('installed'),
+            installed_today: installedToday,
+            cancelled:       count('cancelled'),
+        };
+    });
+
     fastify.get('/meter-orders', async (req) => {
-        const { status, q } = req.query as { status?: string; q?: string };
+        const { status, q, limit, cursor } = req.query as { status?: string; q?: string; limit?: string; cursor?: string };
+        const pageSize = Math.min(Number(limit ?? 100), 200);
         let query = adminClient
             .from('meter_purchase_orders')
             .select('*, customers(users(full_name, email, phone))')
             .order('created_at', { ascending: false })
-            .limit(200);
+            .limit(pageSize);
         if (status) query = query.eq('status', status);
-        if (q) query = query.or(`property_address.ilike.%${q}%,service_area.ilike.%${q}%`);
+        if (q) {
+            const safeQ = cleanSearchTerm(q);
+            if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%`);
+        }
+        if (cursor) query = query.lt('created_at', cursor);
         const { data } = await query;
-        return { orders: data ?? [] };
+        const rows = data ?? [];
+        const nextCursor = rows.length === pageSize ? (rows[rows.length - 1] as any).created_at : null;
+        return { orders: rows, nextCursor };
+    });
+
+    fastify.get('/meter-orders/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { data, error } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*, customers(users(full_name, email, phone))')
+            .eq('id', id)
+            .single();
+        if (error || !data) return reply.code(404).send({ error: 'not_found' });
+        return data;
     });
 
     fastify.patch('/meter-orders/:id', async (req, reply) => {
@@ -1114,6 +1413,20 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetId: id,
             metadata: { technician_name: body.technician_name, notes: body.notes },
         });
+
+        // Notify customer for meaningful status changes
+        if (['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
+            const customerId = (order as any).customer_id as string | null;
+            if (customerId) {
+                const { notifyMeterOrderUpdate } = await import('../services/notifications.js');
+                notifyMeterOrderUpdate(customerId, {
+                    orderId: id,
+                    status: body.status,
+                    technicianName: body.technician_name ?? null,
+                }).catch(() => undefined);
+            }
+        }
+
         return order;
     });
 
@@ -1564,6 +1877,60 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/privacy/deletions', async (req) => {
         const { status } = req.query as { status?: string };
         return { requests: await listDeletionRequests({ status, limit: 200 }) };
+    });
+
+    // ── Consumption analytics ────────────────────────────────────────────────
+
+    fastify.get('/consumption', async (req, reply) => {
+        const qs = req.query as Record<string, string>;
+        const scope      = qs.scope as 'meter' | 'station' | 'cumulative' ?? 'station';
+        const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
+        const scope_id   = qs.scope_id ?? undefined;
+        const from       = qs.from ?? undefined;
+        const to         = qs.to ?? undefined;
+        const limit      = Math.min(Number(qs.limit ?? 120), 500);
+
+        if (!['meter','station','cumulative'].includes(scope)) {
+            return reply.code(400).send({ error: 'bad_scope', message: 'scope must be meter | station | cumulative' });
+        }
+        if (!['day','week','month','year'].includes(period)) {
+            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        }
+
+        const { queryConsumption } = await import('../services/consumption.js');
+        const rows = await queryConsumption({ scope, scope_id, period_type: period, from, to, limit });
+        return { rows, count: rows.length };
+    });
+
+    fastify.get('/consumption/meters', async (req, reply) => {
+        const qs         = req.query as Record<string, string>;
+        const station_id = qs.station_id;
+        const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
+        const from       = qs.from ?? undefined;
+        const to         = qs.to ?? undefined;
+
+        if (!station_id) {
+            return reply.code(400).send({ error: 'missing_station_id', message: 'station_id is required' });
+        }
+        if (!['day','week','month','year'].includes(period)) {
+            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        }
+
+        const { queryMeterBreakdown } = await import('../services/consumption.js');
+        const rows = await queryMeterBreakdown(station_id, period, from, to);
+        return { rows, count: rows.length };
+    });
+
+    fastify.post('/consumption/refresh', async (req, reply) => {
+        try {
+            const body = (req.body ?? {}) as { stationId?: string; station_id?: string; stationIds?: string[]; station_ids?: string[] };
+            const stationIds = body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
+            const { refreshConsumptionAggregates } = await import('../services/consumption.js');
+            const result = await refreshConsumptionAggregates(stationIds);
+            return { ok: true, ...result };
+        } catch (e: any) {
+            return reply.code(500).send({ error: 'refresh_failed', message: e.message, result: e.result });
+        }
     });
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {

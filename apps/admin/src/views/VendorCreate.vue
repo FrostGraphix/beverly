@@ -198,7 +198,7 @@ const dailyLimitFmt = computed(() =>
           <h2 class="bw-h2">Next steps</h2>
           <ol class="next-steps">
             <li>Send credentials via approved channel (encrypted email or in-person).</li>
-            <li>Vendor logs in at <span class="bw-mono">vendor.beverly.acoblighting.com</span>.</li>
+            <li>Vendor logs in at <a class="bw-mono" href="https://acob-beverly.vercel.app/wallet-vendor/" target="_blank" rel="noopener">acob-beverly.vercel.app/wallet-vendor</a>.</li>
             <li>Vendor changes password and sets up 2FA.</li>
             <li>Vendor begins funding + vending.</li>
           </ol>

@@ -4,7 +4,7 @@ Status:
 - This is the canonical architecture file.
 - Update this file first.
 - Treat `docs/ARCHITECTURE.md` as legacy reference.
-- Release is blocked until remote CI and preview smoke pass.
+- Release is blocked until remote CI, preview smoke, and staging write guard pass.
 
 ## Goal
 
@@ -20,8 +20,8 @@ Keep write safety strict.
 - `src/components/wallet/` owns staff wallet operations surfaces.
 - `src/components/TablePage.vue` renders generic routes.
 - `src/components/DailyDataMeterPage.vue` owns interval data.
-- `src/components/SiteConsumptionPage.vue` owns the EIH flow.
-- `src/components/consumption/` owns EIH subcomponents.
+- `src/components/StationConsumptionPage.vue` owns station-level consumption analytics.
+- `src/components/consumption/` contains legacy EIH helpers only. Do not route new pages there.
 - `src/services/api.js` owns auth helpers.
 - `src/services/dashboard-service.mjs` owns dashboard reads.
 - `src/services/table-service.js` owns table reads.
@@ -68,8 +68,13 @@ Keep write safety strict.
 
 - `#/dashboard` renders `DashboardPage`.
 - `#/prepay-report/daily-data-meter` renders `DailyDataMeterPage`.
-- Routes with `isCustomPage` render `SiteConsumptionPage`.
+- Custom report routes render their explicit `customComponent`.
+- `#/prepay-report/site-consumption` is retired and redirects to `#/prepay-report/station-consumption`.
+- `#/system/live-probing` is retired and redirects to `#/system/automation-command`.
 - All other routes render `TablePage`.
+- Wallet Admin is built into `/wallet-admin/` for same-Vercel hosting.
+- Wallet Admin dev stays on `http://localhost:5175`.
+- Wallet Admin must not route to unprovisioned custom domains.
 
 ## Data Policy
 

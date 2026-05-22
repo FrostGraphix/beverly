@@ -399,6 +399,8 @@
 .tom-close,
 .drawer-close,
 .profile-close-btn {
+  margin-left: auto;
+  flex: 0 0 38px;
   min-width: 38px;
   min-height: 38px;
   border: 1px solid var(--border-color) !important;

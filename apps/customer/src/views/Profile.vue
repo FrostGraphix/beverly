@@ -15,9 +15,11 @@ const exportLoading = ref(false);
 const exportMsg   = ref('');
 const fullName = ref(auth.customer?.full_name ?? '');
 const email    = ref(auth.customer?.email ?? '');
+const profilePictureUrl = ref(auth.customer?.profile_picture_url ?? '');
 const loading  = ref(false);
 const error    = ref<string | null>(null);
 const saved    = ref(false);
+const uploading = ref(false);
 
 async function saveProfile() {
     loading.value = true; error.value = null;
@@ -25,10 +27,12 @@ async function saveProfile() {
         const r = await api.patch<any>('/api/v1/customer/me', {
             full_name: fullName.value.trim(),
             email: email.value.trim() || undefined,
+            profile_picture_url: profilePictureUrl.value.trim() || null,
         });
         if (auth.customer) {
             auth.customer.full_name = r.full_name;
             auth.customer.email = r.email;
+            auth.customer.profile_picture_url = r.profile_picture_url ?? null;
         }
         editMode.value = false;
         saved.value = true;
@@ -36,6 +40,27 @@ async function saveProfile() {
     } catch (e: any) {
         error.value = e?.message ?? 'Update failed.';
     } finally { loading.value = false; }
+}
+
+async function uploadProfilePicture(event: Event) {
+    const file = (event.target as HTMLInputElement)?.files?.[0];
+    if (!file) return;
+    uploading.value = true;
+    try {
+        const payload = await api.post<any>('/api/v1/customer/profile-picture/upload-url', {
+            file_name: file.name,
+            content_type: file.type,
+            size_bytes: file.size,
+        });
+        await fetch(payload.signed_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file,
+        });
+        profilePictureUrl.value = payload.public_url;
+    } finally {
+        uploading.value = false;
+    }
 }
 
 async function signOut() {
@@ -92,8 +117,9 @@ async function doSignOut() {
   <AppShell>
     <!-- Avatar + name -->
     <div class="bw-card" style="text-align:center; padding: var(--s-6)">
-      <div style="width:64px; height:64px; border-radius:50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display:grid; place-items:center; margin: 0 auto var(--s-3); font-size:28px; font-weight:700; color:white">
-        {{ (auth.customer?.full_name ?? '?')[0].toUpperCase() }}
+      <div style="width:64px; height:64px; border-radius:50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display:grid; place-items:center; margin: 0 auto var(--s-3); font-size:28px; font-weight:700; color:white; overflow:hidden">
+        <img v-if="auth.customer?.profile_picture_url" :src="auth.customer.profile_picture_url" alt="Profile" style="width:100%; height:100%; object-fit:cover" />
+        <template v-else>{{ (auth.customer?.full_name ?? '?')[0].toUpperCase() }}</template>
       </div>
       <p style="font-weight:700; font-size: var(--t-lg); margin:0 0 4px">{{ auth.customer?.full_name || '—' }}</p>
       <p class="bw-mono bw-muted" style="font-size: var(--t-sm); margin:0">{{ auth.customer?.phone }}</p>
@@ -136,6 +162,13 @@ async function doSignOut() {
         <div>
           <label class="bw-label">Email</label>
           <input class="bw-input" v-model="email" type="email" placeholder="Optional" />
+        </div>
+        <div>
+          <label class="bw-label">Profile picture URL</label>
+          <input class="bw-input" v-model="profilePictureUrl" placeholder="https://..." />
+          <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" style="margin-top:8px" />
+          <p class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">JPEG, PNG, WEBP only. Max 2MB.</p>
+          <p v-if="uploading" class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">Uploading image...</p>
         </div>
         <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
         <div class="bw-row" style="gap: var(--s-3)">

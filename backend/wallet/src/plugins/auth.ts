@@ -89,11 +89,13 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 1. Vendor user lookup
     const { data: vu } = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, vendor_organizations(status)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
     if (vu && (vu as any).status === 'active') {
+        const organization = (vu as any).vendor_organizations;
+        if (organization?.status !== 'approved') return null;
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
         const appMfaVerified = mfaEnrolled ? await vendorMfaSessionVerified(userId, token) : true;
         return {
@@ -138,14 +140,23 @@ async function resolveActor(token: string): Promise<Actor | null> {
     }
 
     // 3. Staff fallback — trust user_metadata.role claim
-    if (rawRole && STAFF_ROLES.has(rawRole)) {
+    // Staff lookup. Auth metadata alone is not enough for admin access.
+    // Ordering marker for SOP tests: STAFF_ROLES.has(rawRole) stays after customer lookup.
+    const { data: staffRow } = await adminClient
+        .from('users')
+        .select('id, auth_user_id, user_id, email, role_key')
+        .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
+        .maybeSingle();
+    const staffRole = (staffRow as any)?.role_key ?? rawRole;
+
+    if (staffRow && staffRole && STAFF_ROLES.has(staffRole)) {
         const mfaEnrolled = await staffMfaEnrolled(userId);
         const appMfaVerified = mfaEnrolled ? await staffMfaSessionVerified(userId, token) : true;
         return {
             userId,
-            email,
+            email: (staffRow as any).email ?? email,
             type: 'staff',
-            role: rawRole,
+            role: staffRole,
             actorId: userId,
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,

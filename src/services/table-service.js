@@ -101,6 +101,28 @@ const tariffOrderByKeys = {
   updatedate: "updateDate"
 };
 
+const meterOrderByKeys = {
+  id: "meterId",
+  meterid: "meterId",
+  metertype: "meterType",
+  communicationway: "communicationWay",
+  protocolversion: "protocolVersion",
+  status: "status",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const logOrderByKeys = {
+  id: "id",
+  userid: "userId",
+  action: "action",
+  status: "status",
+  remark: "remark",
+  createdate: "createDate",
+  stationid: "stationId"
+};
+
 export function routeSupportsSiteFilter(route) {
   return route.hash.startsWith("#/remote-operation-record/")
     || route.hash.startsWith("#/prepay-report/")
@@ -113,7 +135,46 @@ function routeUsesServerPagination(route) {
     || hash.includes("management/account")
     || hash.includes("management/gateway")
     || hash.includes("management/tariff")
+    || hash.includes("admin/log")
+    || hash.includes("admin/meter")
+    || hash.includes("token-generate")
+    || hash.includes("prepay-report/low-purchase-situation")
     || hash.startsWith("#/remote-operation/");
+}
+
+function isLowPurchaseAllSites(route, options = {}) {
+  return String(route?.hash || "").includes("prepay-report/low-purchase-situation") && !String(options.siteId || "").trim();
+}
+
+function isPrepaySituationRoute(route) {
+  const hash = String(route?.hash || "");
+  return hash.includes("prepay-report/low-purchase-situation") || hash.includes("prepay-report/long-nonpurchase-situation");
+}
+
+function parseOrderBy(orderBy, route) {
+  const raw = String(orderBy || "").trim();
+  if (!raw) return { direction: routeSortDirection(route), field: routeSortPolicy(route).key };
+  const parts = raw.split(/\s+/);
+  const field = parts[0] || routeSortPolicy(route).key;
+  const direction = String(parts[1] || "").toLowerCase() === "desc" ? "desc" : "asc";
+  return { direction, field };
+}
+
+function lowPurchaseAggregateKey(row = {}) {
+  return [
+    row.customerId,
+    row.meterId,
+    row.customerName
+  ].map((value) => String(value || "").trim().toUpperCase()).join(":");
+}
+
+function pushUniqueLowPurchaseRows(targetRows, nextRows, seenKeys) {
+  for (const row of nextRows) {
+    const key = lowPurchaseAggregateKey(row);
+    if (!key || seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    targetRows.push(row);
+  }
 }
 
 export function tableDataPath(route) {
@@ -229,6 +290,31 @@ function buildTableRequest(route, requestOptions) {
       pagination: "pageNumber"
     };
   }
+  if (lowerPath.includes("/api/meter/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/log/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
   if (lowerPath.includes("/api/account/read")) {
     return {
       path,
@@ -255,7 +341,19 @@ function buildTableRequest(route, requestOptions) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   if (lowerPath.includes("/loadprofile/")) {
-    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+    return {
+      path,
+      method: "POST",
+      payload: {
+        lang: "en",
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions),
+        currentDateRange: [requestOptions.from, requestOptions.to],
+        pageNumber: requestOptions.pageNumber,
+        pageSize: requestOptions.pageSize
+      },
+      pagination: "pageNumber"
+    };
   }
   if (lowerPath.includes("/eventnotification/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), currentDateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
@@ -280,7 +378,11 @@ export function tableRequest(route, options = {}) {
           ? normalizeLiveReadOrderBy(requestOptions.orderBy, gatewayOrderByKeys)
           : lowerPath === "/api/tariff/read"
             ? normalizeLiveReadOrderBy(requestOptions.orderBy, tariffOrderByKeys)
-            : requestOptions.orderBy;
+            : lowerPath === "/api/meter/read"
+              ? normalizeLiveReadOrderBy(requestOptions.orderBy, meterOrderByKeys)
+              : lowerPath === "/api/log/read"
+                ? normalizeLiveReadOrderBy(requestOptions.orderBy, logOrderByKeys)
+                : requestOptions.orderBy;
     if (orderBy) req.payload.orderBy = orderBy;
   }
   return req;
@@ -440,8 +542,71 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
 }
 
 export async function fetchTableData(route, options = {}, api = defaultTableApi) {
+  const requestOptions = tableOptions(options);
+  const { direction: requestedDirection, field: requestedField } = parseOrderBy(requestOptions.orderBy, route);
+  if (isLowPurchaseAllSites(route, requestOptions)) {
+    const seenKeys = new Set();
+    const aggregateRows = [];
+    const baseRequest = tableRequest(route, {
+      ...requestOptions,
+      pageNumber: 1,
+      pageSize: tableFetchPageSize
+    });
+    const baseCollection = await fetchAllTableRows(baseRequest, route, api);
+    pushUniqueLowPurchaseRows(aggregateRows, baseCollection.rows, seenKeys);
+    for (const site of tableSiteOptions.filter((option) => option.value)) {
+      const siteRequest = tableRequest(route, {
+        ...requestOptions,
+        siteId: site.value,
+        pageNumber: 1,
+        pageSize: tableFetchPageSize
+      });
+      const siteCollection = await fetchAllTableRows(siteRequest, route, api);
+      pushUniqueLowPurchaseRows(
+        aggregateRows,
+        siteCollection.rows.map((row) => ({ ...row, stationId: row.stationId || site.value })),
+        seenKeys
+      );
+    }
+    const rows = aggregateRows.length ? aggregateRows : baseCollection.rows;
+    const mappedAll = mapTableCollection({ data: { rows, total: rows.length } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), 20);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: "/api/PrepayReport/LowPurchaseSituation",
+        method: "POST",
+        source: "all-sites-aggregate"
+      }
+    };
+  }
   const request = tableRequest(route, options);
   const dataPath = request.path;
+  if (isPrepaySituationRoute(route)) {
+    const fullCollection = await fetchAllTableRows(request, route, api);
+    const mappedAll = mapTableCollection({ data: { rows: fullCollection.rows, total: fullCollection.total } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), 20);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: request.path,
+        method: request.method,
+        source: "verified-live-total"
+      }
+    };
+  }
   if (routeUsesServerPagination(route)) {
     const collection = responseRows(await sendTableRequest(request, api), route);
     const mapped = mapTableCollection({ data: { rows: collection.rows, total: collection.total } }, route);

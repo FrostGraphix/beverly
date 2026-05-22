@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia';
 import { api } from '../lib/api';
+import { clearCustomerToken, readCustomerToken, storeCustomerToken } from '../lib/auth-flow';
 
 export interface CustomerProfile {
     id: string;
     full_name: string | null;
     email: string | null;
     phone: string | null;
+    profile_picture_url: string | null;
     kyc_tier: number;
     kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected';
     status: 'active' | 'suspended' | 'closed';
@@ -28,7 +30,7 @@ export const useAuthStore = defineStore('auth', {
             if (this.hydrated) return;
             this.hydrated = true;
             try {
-                const token = localStorage.getItem('beverly.access_token');
+                const token = readCustomerToken();
                 if (!token) return;
                 this.accessToken = token;
                 const me = await api.get<CustomerProfile>('/api/v1/customer/me');
@@ -36,19 +38,19 @@ export const useAuthStore = defineStore('auth', {
             } catch {
                 this.accessToken = null;
                 this.customer = null;
-                localStorage.removeItem('beverly.access_token');
+                clearCustomerToken();
             }
         },
-        setSession(token: string, customer: CustomerProfile) {
+        setSession(token: string, customer: CustomerProfile, remember = true) {
             this.accessToken = token;
             this.customer = customer;
-            localStorage.setItem('beverly.access_token', token);
+            storeCustomerToken(token, remember);
         },
         async logout() {
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }
             this.accessToken = null;
             this.customer = null;
-            localStorage.removeItem('beverly.access_token');
+            clearCustomerToken();
         },
     },
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api } from '../lib/api';
+import { api, redirectToPayment } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { useAuthStore } from '../stores/auth';
 
@@ -92,7 +92,7 @@ async function purchase() {
         }
 
         if (mode.value === 'direct_pay' && r.authorizationUrl) {
-            window.location.href = r.authorizationUrl;
+            redirectToPayment(r.authorizationUrl);
             return;
         }
         result.value = r;
@@ -114,7 +114,7 @@ async function submitStepUp() {
         stepUpRequired.value = false;
         pendingPurchaseParams = null;
         if (pendingPurchaseParams === null && r.authorizationUrl) {
-            window.location.href = r.authorizationUrl;
+            redirectToPayment(r.authorizationUrl);
             return;
         }
         result.value = r;

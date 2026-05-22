@@ -8,11 +8,11 @@
   },
   "generatedAt": "2026-04-29T05:15:15.261Z",
   "documentedTotal": 144,
-  "endpointCount": 155,
+  "endpointCount": 158,
   "endpointCountNote": "matches overview plus wallet migration routes",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 42,
-  "liveWriteEndpointCount": 83,
+  "visibleEndpointCount": 45,
+  "liveWriteEndpointCount": 84,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
     "crawlMissingEndpointCount": 0,
@@ -4784,6 +4784,81 @@
       "registryOnly": false,
       "casingVariants": ["/api/vendor/onboarding/submit"],
       "uiRouteConsumers": ["#/wallet/admin/vendors/create"],
+      "writeRiskLevel": "medium"
+    },
+    {
+      "module": "Local Consumption",
+      "path": "/api/local/consumption/station-analytics",
+      "operationId": "LocalConsumptionStationAnalytics",
+      "method": "POST",
+      "requestSchema": "StationAnalyticsRequest",
+      "responseSchema": "StationAnalyticsResponse",
+      "operation": "analytics-read",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Station Consumption",
+          "hash": "#/prepay-report/station-consumption",
+          "status": 200
+        }
+      ],
+      "observed": false,
+      "aliases": ["/api/local/consumption/station-analytics"],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "registryOnly": false,
+      "casingVariants": ["/api/local/consumption/station-analytics"],
+      "uiRouteConsumers": ["#/prepay-report/station-consumption"],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Local Consumption",
+      "path": "/api/local/consumption/live-probe",
+      "operationId": "LocalConsumptionLiveProbe",
+      "method": "POST",
+      "requestSchema": "LiveProbeRequest",
+      "responseSchema": "LiveProbeResponse",
+      "operation": "diagnostic-read",
+      "consumers": [
+        {
+          "group": "Automation Command",
+          "title": "Live Probing",
+          "hash": "#/automation-command/live-probing",
+          "status": 200
+        }
+      ],
+      "observed": false,
+      "aliases": ["/api/local/consumption/live-probe"],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "registryOnly": false,
+      "casingVariants": ["/api/local/consumption/live-probe"],
+      "uiRouteConsumers": ["#/automation-command/live-probing"],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Local Consumption",
+      "path": "/api/local/consumption/trigger-sync",
+      "operationId": "LocalConsumptionTriggerSync",
+      "method": "POST",
+      "requestSchema": "TriggerSyncRequest",
+      "responseSchema": "TriggerSyncResponse",
+      "operation": "sync-write",
+      "consumers": [
+        {
+          "group": "Automation Command",
+          "title": "Live Probing",
+          "hash": "#/automation-command/live-probing",
+          "status": 200
+        }
+      ],
+      "observed": false,
+      "aliases": ["/api/local/consumption/trigger-sync"],
+      "liveWrite": true,
+      "visibleRoute": true,
+      "registryOnly": false,
+      "casingVariants": ["/api/local/consumption/trigger-sync"],
+      "uiRouteConsumers": ["#/automation-command/live-probing"],
       "writeRiskLevel": "medium"
     }
   ]

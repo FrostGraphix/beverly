@@ -177,6 +177,15 @@ function isFailureEnvelope(response = {}) {
   return code !== undefined && ![0, 200, "0", "200"].includes(code);
 }
 
+function isTrustedConsumptionProxySource(source = "") {
+  const normalized = String(source || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    normalized === "live" ||
+    normalized.startsWith("supabase-consumption")
+  );
+}
+
 export function normalizeConsumptionStatisticRow(row = {}, index = 0) {
   const rawCollectionDate = String(
     row.currentDate
@@ -253,7 +262,7 @@ function assertLiveConsumptionResponse(response = {}) {
     throw new Error(envelopeReason(response) || "Consumption statistics endpoint failed");
   }
   const proxySource = response?._proxy?.source || "";
-  if (proxySource && proxySource !== "live") {
+  if (!isTrustedConsumptionProxySource(proxySource)) {
     throw new Error("Live AMR consumption data is unavailable. Static sample data is disabled for Consumption Statistics.");
   }
 }
@@ -329,9 +338,38 @@ function groupKey(row, granularity) {
   return text.slice(0, 10);
 }
 
-export function aggregateConsumptionRows(rows = [], granularity = "daily") {
+function addDateUnit(date, granularity) {
+  const next = new Date(date);
+  if (granularity === "monthly") next.setMonth(next.getMonth() + 1, 1);
+  else if (granularity === "yearly") next.setFullYear(next.getFullYear() + 1, 0, 1);
+  else if (granularity === "weekly") next.setDate(next.getDate() + 7);
+  else next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function bucketDateKey(date, granularity) {
+  const y = date.getFullYear();
+  const m = pad(date.getMonth() + 1);
+  const d = pad(date.getDate());
+  if (granularity === "monthly") return `${y}-${m}`;
+  if (granularity === "yearly") return String(y);
+  return `${y}-${m}-${d}`;
+}
+
+function buildBucketRange(filters = {}, granularity = "daily") {
+  const fromKey = normalizeConsumptionDateKey(filters.dateFrom, granularity);
+  const toKey = normalizeConsumptionDateKey(filters.dateTo, granularity);
+  if (!fromKey || !toKey) return null;
+  const fromDate = new Date(`${granularity === "monthly" ? `${fromKey}-01` : fromKey}T00:00:00`);
+  const toDate = new Date(`${granularity === "monthly" ? `${toKey}-01` : toKey}T00:00:00`);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || toDate < fromDate) return null;
+  return { fromKey, toKey, fromDate, toDate };
+}
+
+export function aggregateConsumptionRows(rows = [], granularity = "daily", filters = {}) {
   const grouped = new Map();
   if (!Array.isArray(rows)) return [];
+  const range = buildBucketRange(filters, granularity);
 
   for (const row of rows) {
     let key;
@@ -343,7 +381,15 @@ export function aggregateConsumptionRows(rows = [], granularity = "daily") {
       key = groupKey(row, granularity);
     }
     if (!key) continue;
+    if (range && (key < range.fromKey || key > range.toKey)) continue;
     grouped.set(key, (grouped.get(key) || 0) + toNumber(row.consumption, 0));
+  }
+
+  if (range) {
+    for (let cursor = new Date(range.fromDate); cursor <= range.toDate; cursor = addDateUnit(cursor, granularity)) {
+      const key = bucketDateKey(cursor, granularity);
+      grouped.set(key, grouped.get(key) || 0);
+    }
   }
 
   return Array.from(grouped.entries())
@@ -471,7 +517,7 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     xAxis: {
       type: "category",
-      boundaryGap: false,
+      boundaryGap: true,
       data: rows.map((row) => row.collectionDate),
       axisLine: {
         lineStyle: {
@@ -502,7 +548,7 @@ export function buildConsumptionChartOption(rows = [], granularity = "daily", th
     },
     series: [{
       name: title,
-      type: "line",
+      type: "bar",
       smooth: false,
       symbol: "circle",
       symbolSize: 7,

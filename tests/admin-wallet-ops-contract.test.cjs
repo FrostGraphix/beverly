@@ -67,7 +67,7 @@ function main() {
   assert(vendingPage.includes("bw-error-banner"), "Vending monitor must show load failures.");
   assert(adminRoute.includes("nextCursor"), "Purchases/vending routes must expose pagination cursors.");
   assert(adminRoute.includes("function isUuid"), "Purchase search must guard UUID equality filters.");
-  assert(adminRoute.includes("if (isUuid(q)) filters.push(`id.eq.${q}`);"), "Purchase search must avoid invalid UUID filters.");
+  assert(adminRoute.includes("if (isUuid(safeQ)) filters.push(`id.eq.${safeQ}`);"), "Purchase search must avoid invalid UUID filters.");
 
   console.log(JSON.stringify({
     status: "admin wallet ops contract passed",

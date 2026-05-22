@@ -1,5 +1,122 @@
 <template>
-  <section class="csp">
+  <section class="csp csp--reference">
+    <section class="csp-reference-shell" aria-label="consumption-sort-panel">
+      <div class="csp-reference-filters">
+        <label class="csp-reference-field">
+          <span>Customer Id</span>
+          <div class="csp-reference-picker">
+            <BaseInput v-model.trim="custFilters.customerId" placeholder="No customer selected" readonly />
+            <BaseIconButton aria-label="Pick customer" @click="activePicker = 'customer'">...</BaseIconButton>
+          </div>
+        </label>
+
+        <label class="csp-reference-field">
+          <span>Meter Id</span>
+          <div class="csp-reference-picker">
+            <BaseInput v-model.trim="custFilters.meterId" placeholder="No meter selected" />
+            <BaseIconButton aria-label="Pick meter" @click="activePicker = 'meter'">...</BaseIconButton>
+          </div>
+        </label>
+
+        <label v-if="activeView === 'station'" class="csp-reference-field">
+          <span>Station</span>
+          <BaseSelect v-model="activeStation" @change="loadActive">
+            <option value="">All stations</option>
+            <option v-for="station in STATION_LIST" :key="station.id" :value="station.id">{{ station.label }}</option>
+          </BaseSelect>
+        </label>
+
+        <label class="csp-reference-field csp-reference-date">
+          <span>Date Range</span>
+          <div class="csp-reference-range">
+            <BaseInput v-model="effectiveFrom" type="date" @change="onManualDateChange" />
+            <strong>To</strong>
+            <BaseInput v-model="effectiveTo" type="date" @change="onManualDateChange" />
+          </div>
+        </label>
+
+        <div class="csp-reference-mode" role="group" aria-label="Consumption mode">
+          <BaseButton :variant="granularity === 'daily' ? 'primary' : 'secondary'" size="sm" @click="pickPeriod('daily')">Daily</BaseButton>
+          <BaseButton :variant="granularity === 'monthly' ? 'primary' : 'secondary'" size="sm" @click="pickPeriod('monthly')">Monthly</BaseButton>
+        </div>
+      </div>
+
+      <div class="csp-reference-actions">
+        <BaseIconButton class="csp-reference-round" aria-label="Search" @click="searchActive">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="20" y1="20" x2="16.5" y2="16.5"></line>
+          </svg>
+        </BaseIconButton>
+        <BaseButton variant="primary" :loading="isBusy" @click="searchActive">Search</BaseButton>
+        <BaseButton variant="primary" @click="resetFilters">Reset</BaseButton>
+        <BaseButton variant="primary" :disabled="!canExport" @click="exportCsv">Export</BaseButton>
+      </div>
+    </section>
+
+    <p v-if="customerHint" class="csp-reference-error">Pick a Customer Id first</p>
+    <p v-if="stationError" class="csp-reference-error">{{ stationError }}</p>
+    <p v-if="custError" class="csp-reference-error">{{ custError }}</p>
+
+    <div class="csp-reference-tabs">
+      <button :class="['csp-reference-tab', activeResultTab === 'data' ? 'active' : '']" @click="activeResultTab = 'data'">Data</button>
+      <button :class="['csp-reference-tab', activeResultTab === 'chart' ? 'active' : '']" @click="activeResultTab = 'chart'">Chart</button>
+    </div>
+
+    <section v-if="activeResultTab === 'data'" class="csp-reference-table">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="csp-reference-check">
+                <BaseCheckbox
+                  aria-label="Select all visible consumption rows"
+                  :model-value="allVisibleResultRowsSelected"
+                  @update:modelValue="toggleSelectAllVisibleRows"
+                />
+              </th>
+              <th>Collection Date</th>
+              <th>Consumption</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="isBusy && !resultRows.length">
+              <td colspan="3" class="csp-empty">Loading...</td>
+            </tr>
+            <tr v-else-if="!resultRows.length">
+              <td colspan="3" class="csp-empty">No Data</td>
+            </tr>
+            <tr v-for="row in resultVisibleRows" :key="row.id">
+              <td class="csp-reference-check">
+                <BaseCheckbox
+                  :aria-label="`Select ${row.collectionDate}`"
+                  :model-value="isResultRowSelected(row.id)"
+                  @update:modelValue="toggleResultRowSelection(row.id, $event)"
+                />
+              </td>
+              <td>{{ row.collectionDate }}</td>
+              <td class="csp-num">{{ fmt(row.consumption) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="csp-pagination">
+        <span>{{ resultRows.length }} total</span>
+        <BaseSelect v-model.number="resultPageSize" class="csp-page-size" @change="resultPage = 1">
+          <option :value="10">10/page</option>
+          <option :value="20">20/page</option>
+          <option :value="50">50/page</option>
+        </BaseSelect>
+        <BaseButton size="sm" :disabled="resultPage <= 1" @click="resultPage--">Prev</BaseButton>
+        <span class="csp-page-count">{{ resultPage }} / {{ resultPageCount || 1 }}</span>
+        <BaseButton size="sm" :disabled="resultPage >= resultPageCount" @click="resultPage++">Next</BaseButton>
+      </div>
+    </section>
+
+    <section v-else class="csp-reference-chart">
+      <EChartPanel :option="resultChartOption" />
+    </section>
+    <template v-if="false">
     <!-- View Tabs -->
     <div class="csp-view-tabs">
       <button :class="['csp-vtab', activeView === 'all' ? 'active' : '']" @click="switchView('all')">All Sites</button>
@@ -261,13 +378,14 @@
     </template>
 
     <!-- Pickers -->
+    </template>
+
     <PickerModal
       v-if="activePicker === 'customer'"
       api="/api/customer/read"
       :columns="['customerId', 'customerName', 'stationId']"
       :column-labels="['ID', 'Name', 'Station']"
       label="Customer"
-      :auto-confirm="true"
       @close="activePicker = ''"
       @select="onCustomerPick"
     />
@@ -277,7 +395,6 @@
       :columns="['meterId', 'meterType', 'stationId']"
       :column-labels="['ID', 'Type', 'Station']"
       label="Meter"
-      :auto-confirm="true"
       @close="activePicker = ''"
       @select="onMeterPick"
     />
@@ -341,6 +458,7 @@ export default {
       STATION_LIST,
       activeView: "all",
       activePeriod: "monthly",
+      customGranularity: "daily",
       customFrom: "",
       customTo: "",
       stationDataMap: Object.fromEntries(STATION_LIST.map((s) => [s.id, { rows: [], loading: false, error: "" }])),
@@ -359,6 +477,11 @@ export default {
       drillPageSize: 20,
       custPage: 1,
       custPageSize: 20,
+      resultPage: 1,
+      resultPageSize: 10,
+      activeResultTab: "data",
+      selectedResultRowIds: [],
+      customerHint: false,
       chartTheme: null,
       themeObserver: null
     };
@@ -369,9 +492,17 @@ export default {
       if (this.activePeriod === "custom") {
         const from = this.customFrom || "2020-01-01";
         const to = this.customTo || new Date().toISOString().slice(0, 10);
-        return { from, to, granularity: "daily" };
+        return { from, to, granularity: this.customGranularity };
       }
       return buildConsumptionPeriodRange(this.activePeriod);
+    },
+    effectiveFrom: {
+      get() { return this.periodRange.from; },
+      set(value) { this.customFrom = value; }
+    },
+    effectiveTo: {
+      get() { return this.periodRange.to; },
+      set(value) { this.customTo = value; }
     },
     granularity() { return this.periodRange.granularity; },
     granularityLabel() { return GRANULARITY_LABELS[this.granularity] || this.granularity; },
@@ -485,6 +616,32 @@ export default {
     canExport() {
       if (this.activeView === "customer") return this.custDecoratedRows.length > 0;
       return this.allDecoratedRows.length > 0;
+    },
+    isBusy() {
+      return this.loadingStations || this.custLoading;
+    },
+    resultRows() {
+      if (this.activeView === "customer") return this.custDecoratedRows;
+      if (this.activeView === "station" && this.activeStation) return this.drillRows;
+      return this.allDecoratedRows;
+    },
+    resultChartOption() {
+      if (this.activeView === "customer") return this.custChartOption;
+      if (this.activeView === "station") {
+        return this.activeStation ? this.drillChartOption : this.stationBarOption;
+      }
+      return this.allChartOption;
+    },
+    resultPageCount() {
+      return Math.max(1, Math.ceil(this.resultRows.length / this.resultPageSize));
+    },
+    resultVisibleRows() {
+      const start = (this.resultPage - 1) * this.resultPageSize;
+      return this.resultRows.slice(start, start + this.resultPageSize);
+    },
+    allVisibleResultRowsSelected() {
+      if (!this.resultVisibleRows.length) return false;
+      return this.resultVisibleRows.every((row) => this.selectedResultRowIds.includes(String(row.id)));
     }
   },
 
@@ -508,10 +665,44 @@ export default {
 
     pickPeriod(key) {
       this.activePeriod = key;
-      if (key !== "custom") this.loadActive();
+      if (key === "daily" || key === "monthly") {
+        this.customFrom = "";
+        this.customTo = "";
+      }
+    },
+
+    onManualDateChange() {
+      this.customGranularity = this.granularity;
+      this.activePeriod = "custom";
+    },
+
+    searchActive() {
+      this.customerHint = false;
+      if (this.custFilters.customerId) this.activeView = "customer";
+      if (this.activeView === "customer" && !this.custFilters.customerId) {
+        this.customerHint = true;
+        return;
+      }
+      this.loadActive();
+    },
+
+    resetFilters() {
+      this.activeView = "all";
+      this.activePeriod = "monthly";
+      this.customGranularity = "daily";
+      this.customFrom = "";
+      this.customTo = "";
+      this.activeStation = "";
+      this.activeResultTab = "data";
+      this.resultPage = 1;
+      this.customerHint = false;
+      this.clearCustomer();
+      this._fetchAllStations();
     },
 
     loadActive() {
+      this.resultPage = 1;
+      this.selectedResultRowIds = [];
       if (this.activeView === "customer") {
         if (this.custFilters.customerId) this.loadCustomer();
       } else {
@@ -577,16 +768,29 @@ export default {
       this.drillPage = 1;
     },
 
+    async resolveMeterIdForCustomer(customerId, stationId = "") {
+      const safeCustomerId = String(customerId || "").trim();
+      if (!safeCustomerId) return "";
+      try {
+        const payload = { lang: "en", pageNumber: 1, pageSize: 20, customerId: safeCustomerId };
+        if (stationId) payload.stationId = String(stationId).trim();
+        const response = await postApi("/api/account/read", payload);
+        const result = response?.result || response?.data?.result || response?.data || {};
+        const rows = Array.isArray(result.data) ? result.data : Array.isArray(result.rows) ? result.rows : Array.isArray(result) ? result : [];
+        const account = rows.find((item) => item?.meterId || item?.meter_id || item?.id) || null;
+        return account ? String(account.meterId || account.meter_id || account.id || "").trim() : "";
+      } catch {
+        return "";
+      }
+    },
+
     async onCustomerPick(row) {
       this.custFilters.customerId = String(row.customerId || row.id || "");
       this.custFilters.customerName = String(row.customerName || row.name || "");
       this.custFilters.stationId = String(row.stationId || "");
-      if (row.meterId) this.custFilters.meterId = String(row.meterId);
-      else if (!this.custFilters.meterId) {
-        const linked = await this._linkedAccount({ customerId: this.custFilters.customerId });
-        if (linked?.meterId) this.custFilters.meterId = String(linked.meterId);
-        if (linked?.stationId && !this.custFilters.stationId) this.custFilters.stationId = String(linked.stationId);
-      }
+      const linkedMeterId = row.meterId ? String(row.meterId) : await this.resolveMeterIdForCustomer(this.custFilters.customerId, this.custFilters.stationId);
+      this.custFilters.meterId = linkedMeterId || "";
+      this.activeView = "customer";
       this.activePicker = "";
     },
 
@@ -597,6 +801,7 @@ export default {
         this.custFilters.customerId = String(row.customerId);
         this.custFilters.customerName = String(row.customerName || "");
       }
+      this.activeView = "customer";
       this.activePicker = "";
     },
 
@@ -607,21 +812,33 @@ export default {
       this.custError = "";
     },
 
-    async _linkedAccount(criteria = {}) {
-      try {
-        const payload = { lang: "en", pageNumber: 1, pageSize: 50, ...criteria };
-        const res = await postApi("/api/account/read", payload);
-        const result = res?.result || res?.data?.result || res?.data || {};
-        const rows = Array.isArray(result.data) ? result.data : Array.isArray(result.rows) ? result.rows : Array.isArray(result) ? result : [];
-        return rows[0] || null;
-      } catch {
-        return null;
+    isResultRowSelected(rowId) {
+      return this.selectedResultRowIds.includes(String(rowId));
+    },
+
+    toggleResultRowSelection(rowId, checked) {
+      const key = String(rowId);
+      if (checked) {
+        if (!this.selectedResultRowIds.includes(key)) this.selectedResultRowIds.push(key);
+        return;
       }
+      this.selectedResultRowIds = this.selectedResultRowIds.filter((id) => id !== key);
+    },
+
+    toggleSelectAllVisibleRows(checked) {
+      if (!checked) {
+        const visible = new Set(this.resultVisibleRows.map((row) => String(row.id)));
+        this.selectedResultRowIds = this.selectedResultRowIds.filter((id) => !visible.has(id));
+        return;
+      }
+      const next = new Set(this.selectedResultRowIds);
+      this.resultVisibleRows.forEach((row) => next.add(String(row.id)));
+      this.selectedResultRowIds = Array.from(next);
     },
 
     exportCsv() {
       const view = this.activeView;
-      const rows = view === "customer" ? this.custDecoratedRows : this.allDecoratedRows;
+      const rows = view === "customer" ? this.custDecoratedRows : view === "station" && this.activeStation ? this.drillRows : this.allDecoratedRows;
       const meta = [
         ["View", view],
         ["Period", this.activePeriod],
@@ -677,6 +894,170 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.csp--reference > .csp-view-tabs,
+.csp--reference > .csp-period-bar,
+.csp--reference > .csp-kpi-grid,
+.csp--reference > .csp-card,
+.csp--reference > .csp-station-grid,
+.csp--reference > .csp-cust-empty,
+.csp--reference > .csp-error {
+  display: none;
+}
+
+.csp-reference-shell {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.csp-reference-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+
+.csp-reference-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(300px, 1.7fr) auto;
+  align-items: end;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.csp-reference-field {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid var(--border-color);
+}
+
+.csp-reference-field > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.csp-reference-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 66px;
+}
+
+.csp-reference-picker .base-input,
+.csp-reference-picker .base-select {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.csp-reference-picker .base-icon-button {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.csp-reference-date {
+  grid-column: span 1;
+}
+
+.csp-reference-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.csp-reference-range strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.csp-reference-mode {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  justify-content: center;
+  padding: 8px 14px;
+  min-width: 110px;
+}
+
+.csp-reference-mode .base-button {
+  border-radius: var(--radius-sm);
+}
+
+.csp-reference-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0 18px;
+}
+
+.csp-reference-round {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--text-inverse);
+  border-color: var(--primary);
+}
+
+.csp-reference-tabs {
+  display: flex;
+  gap: 36px;
+  margin-top: 26px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.csp-reference-tab {
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  padding: 0 0 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.csp-reference-tab.active {
+  color: var(--primary);
+  border-bottom: 3px solid var(--primary);
+}
+
+.csp-reference-table,
+.csp-reference-chart {
+  min-height: 380px;
+  border: 1px solid var(--border-color);
+  border-top: 0;
+  background: var(--bg-card);
+}
+
+.csp-reference-chart {
+  padding: 16px;
+}
+
+.csp-reference-chart .echart-panel {
+  min-height: 420px;
+}
+
+.csp-reference-check {
+  width: 34px;
+  min-width: 34px !important;
+  max-width: 34px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  text-align: center;
+}
+
+.csp-reference-error {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* ── View Tabs ── */
@@ -1158,6 +1539,18 @@ export default {
 @media (max-width: 900px) {
   .csp-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .csp-station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .csp-reference-filters {
+    grid-template-columns: 1fr;
+  }
+  .csp-reference-field {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .csp-reference-mode {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -1166,5 +1559,22 @@ export default {
   .csp-view-tabs { flex-wrap: wrap; }
   .csp-period-bar { flex-direction: column; align-items: flex-start; }
   .csp-period-info { margin-left: 0; }
+  .csp-reference-scope,
+  .csp-reference-actions {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .csp-reference-shell,
+  .csp-reference-table,
+  .csp-reference-chart {
+    min-width: 0;
+  }
+  .csp-reference-range {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+  }
+  .csp-reference-range strong {
+    text-align: left;
+  }
 }
 </style>

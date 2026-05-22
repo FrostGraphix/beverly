@@ -21,8 +21,20 @@ function main() {
   const fundingService = read("src/services/vendor-funding-service.mjs");
   const purchaseService = read("src/services/vendor-purchase-service.mjs");
   const migration = read("supabase/migrations/20260512190000_vendor_wallet_foundation.sql");
+  const customerApi = read("apps/customer/src/lib/api.ts");
+  const vendorApi = read("apps/vendor/src/lib/api.ts");
+  const buyToken = read("apps/customer/src/views/BuyToken.vue");
+  const buyMeter = read("apps/customer/src/views/BuyMeter.vue");
+  const fundWallet = read("apps/customer/src/views/FundWallet.vue");
+  const customerReceipt = read("apps/customer/src/views/ReceiptDetail.vue");
+  const vendorFund = read("apps/vendor/src/views/Fund.vue");
 
   assert(routeManifest.includes("#/wallet"));
+  assert(routeManifest.includes('externalUrl: "/wallet-admin/"'));
+  assert(!routeManifest.includes('#/admin/reports'));
+  assert(!routeManifest.includes('customComponent: "ReportsPage"'));
+  assert(!routeManifest.includes('devExternalUrl: "http://localhost:5175"'));
+  assert(!routeManifest.includes("admin.beverly.acoblighting.com"));
   assert(routeManifest.includes("vendor_user"));
   assert(routeManifest.includes("finance-checker"));
   assert(routeManifest.includes("normalizeRoleId"));
@@ -30,6 +42,9 @@ function main() {
   assert(app.includes("LoginPage"));
   assert(app.includes("handleSignOut"));
   assert(app.includes("userDropdownOpen"));
+  assert(app.includes('normalizeHash(nextHash) === "#/admin/reports"'));
+  assert(app.includes('window.location.href = "/wallet-admin/reports"'));
+  assert(!app.includes('ReportsPage v-else-if="route.customComponent'));
 
   assert(vendorAuthPage.includes("Beverly Wallet Access"));
   assert(vendorAuthPage.includes("Designed for fast wallet entry"));
@@ -80,6 +95,21 @@ function main() {
   assert(service.includes("/api/wallet/reconciliation/run"));
   assert(fundingService.includes("createFundingRequest"));
   assert(purchaseService.includes("createTokenPurchase"));
+
+  assert(customerApi.includes("redirectToPayment"));
+  assert(customerApi.includes("checkout.paystack.com"));
+  assert(vendorApi.includes("redirectToPayment"));
+  assert(vendorApi.includes("checkout.paystack.com"));
+  assert(buyToken.includes("redirectToPayment(r.authorizationUrl)"));
+  assert(buyMeter.includes("redirectToPayment(data.authorization_url)"));
+  assert(fundWallet.includes("redirectToPayment(r.authorizationUrl)"));
+  assert(vendorFund.includes("redirectToPayment(r.authorizationUrl)"));
+  assert(!buyToken.includes("window.location.href = r.authorizationUrl"));
+  assert(!buyMeter.includes("window.location.href = data.authorization_url"));
+  assert(!fundWallet.includes("window.location.href = r.authorizationUrl"));
+  assert(!vendorFund.includes("window.location.assign(r.authorizationUrl)"));
+  assert(customerReceipt.includes("api.get<any>"));
+  assert(!customerReceipt.includes("http://localhost:4000"));
 
   assert(migration.includes("current_vendor_organization_id"));
   assert(migration.includes("vendors read own wallet"));

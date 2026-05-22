@@ -4,34 +4,42 @@ import { useRouter, useRoute } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
+import {
+    isValidNigerianPhone,
+    normaliseNigerianPhone,
+    readRememberedLogin,
+    safeAuthRedirect,
+    writeRememberedLogin,
+} from '../lib/auth-flow';
 
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
 const phoneInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<HTMLInputElement | null>(null);
 const loginMode = ref<'email' | 'phone'>('email');
 const phone = ref('');
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
+const rememberLogin = ref(true);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
 
-const sessionEnded = computed(() => route.query.reason === 'session_timeout');
+const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
+const redirectTarget = computed(() => safeAuthRedirect(route.query.redirect));
+const submitLabel = computed(() => loginMode.value === 'email' ? 'Sign in' : 'Send code');
+const loadingLabel = computed(() => loginMode.value === 'email' ? 'Signing in...' : 'Sending code...');
 
-onMounted(() => phoneInput.value?.focus());
-
-function normalise(raw: string): string {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.startsWith('234')) return `+${digits}`;
-    if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
-    if (digits.length >= 10) return `+234${digits}`;
-    return `+234${digits}`;
-}
-
-function isValidPhone(raw: string): boolean {
-    return raw.replace(/\D/g, '').length >= 10;
-}
+onMounted(() => {
+    const remembered = readRememberedLogin();
+    if (remembered.includes('@')) email.value = remembered;
+    else if (remembered) phone.value = remembered;
+    rememberLogin.value = Boolean(remembered);
+    if (loginMode.value === 'email') emailInput.value?.focus();
+    else phoneInput.value?.focus();
+});
 
 async function submit() {
     if (loginMode.value === 'email') {
@@ -40,7 +48,7 @@ async function submit() {
             errorCode.value = null;
             return;
         }
-    } else if (!isValidPhone(phone.value)) {
+    } else if (!isValidNigerianPhone(phone.value)) {
         error.value = 'Enter a valid Nigerian phone number.';
         errorCode.value = null;
         return;
@@ -51,14 +59,15 @@ async function submit() {
     try {
         if (loginMode.value === 'email') {
             const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/login', {
-                email: email.value.trim(),
+                email: email.value.trim().toLowerCase(),
                 password: password.value,
             });
-            auth.setSession(r.access_token, r.customer);
-            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+            auth.setSession(r.access_token, r.customer, rememberLogin.value);
+            writeRememberedLogin(email.value.trim().toLowerCase(), rememberLogin.value);
+            await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
             return;
         }
-        const normalised = normalise(phone.value);
+        const normalised = normaliseNigerianPhone(phone.value);
         const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
             '/api/v1/customer/auth/login',
             { phone: normalised },
@@ -70,8 +79,11 @@ async function submit() {
                 phone: normalised,
                 expires_at: r.expires_at,
                 retry_after_seconds: r.retry_after_seconds,
+                redirect: redirectTarget.value,
+                remember: rememberLogin.value ? '1' : '0',
             },
         });
+        writeRememberedLogin(normalised, rememberLogin.value);
     } catch (e: any) {
         if (e instanceof ApiError) {
             errorCode.value = e.code;
@@ -98,7 +110,7 @@ async function submit() {
 <template>
   <CustomerAuthShell
     title="Welcome back"
-    subtitle="Enter your phone number to receive a sign-in code"
+    :subtitle="loginMode === 'email' ? 'Enter your email and password' : 'Enter your phone number to receive a sign-in code'"
   >
     <div v-if="sessionEnded" class="session-banner" role="status">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -119,7 +131,7 @@ async function submit() {
         <label class="field-label" for="login-phone">Phone number</label>
         <div class="phone-wrap">
           <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">🇳🇬</span>
+            <span class="flag" aria-hidden="true">NG</span>
             +234
           </span>
           <input
@@ -142,6 +154,7 @@ async function submit() {
           <label class="field-label" for="login-email">Email</label>
           <input
             id="login-email"
+            ref="emailInput"
             v-model="email"
             class="bw-input"
             type="email"
@@ -154,18 +167,28 @@ async function submit() {
         </div>
         <div class="field">
           <label class="field-label" for="login-password">Password</label>
-          <input
-            id="login-password"
-            v-model="password"
-            class="bw-input"
-            type="password"
-            autocomplete="current-password"
-            placeholder="Your password"
-            :disabled="loading"
-            @input="error = null"
-          />
+          <div class="password-field">
+            <input
+              id="login-password"
+              v-model="password"
+              class="bw-input"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="Your password"
+              :disabled="loading"
+              @input="error = null"
+            />
+            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </div>
       </template>
+
+      <label class="remember-row">
+        <input v-model="rememberLogin" type="checkbox" />
+        Remember this login
+      </label>
 
       <!-- Error -->
       <div v-if="error" class="auth-error" role="alert">
@@ -180,7 +203,7 @@ async function submit() {
       <!-- Submit -->
       <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading">
         <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-        {{ loading ? 'Sending code…' : 'Send code' }}
+        {{ loading ? loadingLabel : submitLabel }}
       </button>
 
     </form>
@@ -243,6 +266,26 @@ async function submit() {
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
+.password-field { position: relative; }
+.password-field .bw-input { padding-right: 76px; }
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+}
+.remember-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--t-sm);
+}
 
 .field-label {
   font-size: var(--t-sm);

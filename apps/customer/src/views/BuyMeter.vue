@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { useAuthStore } from '../stores/auth';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, redirectToPayment } from '../lib/api';
 
 const auth = useAuthStore();
 
@@ -42,7 +42,7 @@ async function submitOrder() {
             service_area: serviceArea.value.trim(),
             contact_phone: contactPhone.value.trim(),
         });
-        window.location.href = data.authorization_url;
+        redirectToPayment(data.authorization_url);
     } catch (e: any) {
         error.value = e instanceof ApiError ? e.message : 'Could not create order';
     } finally {

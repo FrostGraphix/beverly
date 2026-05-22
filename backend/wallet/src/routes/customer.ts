@@ -56,6 +56,7 @@ import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } fro
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
+import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' ? 429
@@ -75,6 +76,25 @@ function customerAuthPayload(result: { challengeId: string; expiresAt: string; r
         expires_at: result.expiresAt,
         retry_after_seconds: result.retryAfterSeconds,
     };
+}
+
+const NOTIFICATION_PREF_DEFAULTS = {
+    sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false },
+    email: { token_purchased: false, wallet_funded: false, promotions: false, kyc_update: false, dispute_update: false, payment_failed: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+};
+
+function mergeNotificationPrefs(existing: any, incoming: any = {}) {
+    return {
+        sms: { ...NOTIFICATION_PREF_DEFAULTS.sms, ...(existing?.sms ?? {}), ...(incoming.sms ?? {}) },
+        email: { ...NOTIFICATION_PREF_DEFAULTS.email, ...(existing?.email ?? {}), ...(incoming.email ?? {}) },
+        in_app: { ...NOTIFICATION_PREF_DEFAULTS.in_app, ...(existing?.in_app ?? {}), ...(incoming.in_app ?? {}) },
+    };
+}
+
+function isMissingNotificationsStorage(error: any) {
+    const text = `${error?.code ?? ''} ${error?.message ?? ''}`;
+    return /notifications|notification_preferences/i.test(text) && /exist|schema cache|column|relation/i.test(text);
 }
 
 const customer: FastifyPluginAsync = async (fastify) => {
@@ -181,7 +201,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, kyc_tier, kyc_status, status, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
@@ -189,20 +209,42 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.patch('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const { full_name, email } = req.body as { full_name?: string; email?: string };
+        const { full_name, email, profile_picture_url } = req.body as { full_name?: string; email?: string; profile_picture_url?: string | null };
         const updates: Record<string, unknown> = {};
         if (full_name !== undefined) updates.full_name = full_name.trim();
         if (email !== undefined) updates.email = email.trim().toLowerCase() || null;
+        if (profile_picture_url !== undefined) updates.profile_picture_url = (profile_picture_url ?? '').trim() || null;
         if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
 
         const { data, error } = await adminClient
             .from('customers')
             .update(updates)
             .eq('id', req.actor!.customerId!)
-            .select('id, phone, email, full_name, kyc_tier, kyc_status, status')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return data;
+    });
+
+    fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        let sop;
+        try {
+            sop = assertProfilePictureSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: 'invalid_profile_picture', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toProfilePicturePath('customer', req.actor!.customerId!, sop.file_name);
+        const { data, error } = await adminClient.storage.from(PROFILE_PICTURE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        const { data: pub } = adminClient.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(path);
+        return {
+            bucket: PROFILE_PICTURE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            public_url: pub?.publicUrl ?? null,
+            sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
+        };
     });
 
     fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {
@@ -302,9 +344,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
             id: wallet.id,
             currency: wallet.currency,
             status: wallet.status,
-            balance_minor: (summary as any)?.balance_minor ?? 0,
-            holds_minor: (summary as any)?.holds_minor ?? 0,
-            available_minor: (summary as any)?.available_minor ?? 0,
+            balance_minor: (summary as any)?.ledger_balance_minor ?? 0,
+            holds_minor: (summary as any)?.active_holds_minor ?? 0,
+            available_minor: (summary as any)?.available_balance_minor ?? 0,
             daily_debit_cap_minor: wallet.daily_debit_cap_minor,
             monthly_debit_cap_minor: wallet.monthly_debit_cap_minor,
         };
@@ -343,7 +385,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
             });
             return result;
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(400).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) {
+                return reply.code(
+                    e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403 : 400,
+                ).send({ error: e.code, message: e.message });
+            }
             throw e;
         }
     });
@@ -435,7 +481,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
-                    : e.code === 'wallet_inactive'    ? 403
+                    : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -491,7 +537,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
-                    : e.code === 'wallet_inactive'    ? 403
+                    : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -789,18 +835,82 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
 
+    // ── Notifications inbox ───────────────────────────────────────────────────
+
+    fastify.get('/notifications', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { limit, cursor, unread_only } = req.query as {
+            limit?: string; cursor?: string; unread_only?: string;
+        };
+        const pageSize = Math.min(Number(limit ?? 30), 100);
+
+        let query = adminClient
+            .from('notifications')
+            .select('*')
+            .eq('customer_id', req.actor!.customerId!)
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+
+        if (unread_only === 'true') query = query.eq('read', false);
+        if (cursor) query = query.lt('created_at', cursor);
+
+        const { data, error } = await query;
+        if (error) {
+            // Table may not exist yet — return empty rather than 500
+            if (isMissingNotificationsStorage(error)) {
+                return { notifications: [], nextCursor: null, unreadCount: 0 };
+            }
+            throw error;
+        }
+        const rows = data ?? [];
+        const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
+
+        // Unread count (only on first page, no cursor)
+        let unreadCount = 0;
+        if (!cursor) {
+            const { count, error: countError } = await adminClient
+                .from('notifications')
+                .select('id', { count: 'exact', head: true })
+                .eq('customer_id', req.actor!.customerId!)
+                .eq('read', false);
+            if (countError && !isMissingNotificationsStorage(countError)) throw countError;
+            unreadCount = countError ? 0 : count ?? 0;
+        }
+
+        return { notifications: rows, nextCursor, unreadCount };
+    });
+
+    fastify.post('/notifications/read-all', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('customer_id', req.actor!.customerId!)
+            .eq('read', false);
+        if (error && !isMissingNotificationsStorage(error)) throw error;
+        return { ok: true };
+    });
+
+    fastify.patch('/notifications/:id/read', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id)
+            .eq('customer_id', req.actor!.customerId!);
+        if (isMissingNotificationsStorage(error)) return { ok: true };
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        return { ok: true };
+    });
+
+    // ── Notification preferences ──────────────────────────────────────────────
+
     fastify.get('/notifications/preferences', { preHandler: fastify.requireCustomer() }, async (req) => {
-        const { data } = await adminClient
+        const { data, error } = await adminClient
             .from('customers')
             .select('notification_preferences')
             .eq('id', req.actor!.customerId!)
             .single();
-        const defaults = {
-            sms: { token_purchased: true, wallet_funded: true, login_otp: true },
-            email: { token_purchased: false, wallet_funded: false, promotions: false },
-            in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true },
-        };
-        return { preferences: (data as any)?.notification_preferences ?? defaults };
+        if (error && !isMissingNotificationsStorage(error)) throw error;
+        return { preferences: mergeNotificationPrefs((data as any)?.notification_preferences) };
     });
 
     fastify.put('/notifications/preferences', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -819,17 +929,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .eq('id', req.actor!.customerId!)
             .single();
 
-        const merged = {
-            ...((existing as any)?.notification_preferences ?? {}),
-            ...(body.sms    ? { sms:    { ...((existing as any)?.notification_preferences?.sms    ?? {}), ...body.sms    } } : {}),
-            ...(body.email  ? { email:  { ...((existing as any)?.notification_preferences?.email  ?? {}), ...body.email  } } : {}),
-            ...(body.in_app ? { in_app: { ...((existing as any)?.notification_preferences?.in_app ?? {}), ...body.in_app } } : {}),
-        };
+        const merged = mergeNotificationPrefs((existing as any)?.notification_preferences, body);
 
         const { error } = await adminClient
             .from('customers')
             .update({ notification_preferences: merged })
             .eq('id', req.actor!.customerId!);
+        if (isMissingNotificationsStorage(error)) return reply.code(503).send({ error: 'notification_storage_missing', message: 'Notification preferences storage is not migrated.' });
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return { ok: true, preferences: merged };
     });

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira } from '../lib/api';
@@ -79,7 +79,7 @@ const daily = computed(() => report.value?.series.daily ?? []);
 function fmtMoney(minor: number) { return naira(minor); }
 function fmtNum(n: number) { return Number(n ?? 0).toLocaleString('en-NG'); }
 
-// ── Main chart geometry (area + line) ──────────────────────────────────────
+// â”€â”€ Main chart geometry (area + line) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CHART_W = 720;
 const CHART_H = 220;
 const chart = computed(() => {
@@ -115,7 +115,7 @@ const axisLabels = computed(() => {
     }));
 });
 
-// ── Breakdown helpers ──────────────────────────────────────────────────────
+// â”€â”€ Breakdown helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const statusRows = computed(() => {
     const obj = report.value?.breakdowns.purchasesByStatus ?? {};
     const total = Object.values(obj).reduce((s, n) => s + n, 0) || 1;
@@ -148,7 +148,7 @@ function exportPdf() {
     const kp = report.value.kpis;
     printPdf({
         title: 'Wallet Operations Report',
-        subtitle: `${report.value.range.since.slice(0, 10)} → ${report.value.range.until.slice(0, 10)} (${report.value.range.days} days)`,
+        subtitle: `${report.value.range.since.slice(0, 10)} â†’ ${report.value.range.until.slice(0, 10)} (${report.value.range.days} days)`,
         meta: [
             { label: 'Revenue', value: naira(kp.revenueMinor) },
             { label: 'Purchases', value: fmtNum(kp.deliveredCount) },
@@ -181,12 +181,7 @@ onMounted(() => applyPreset(30, '30d'));
 
 <template>
   <AppShell title="Reports">
-    <template #topbar-end>
-      <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportCsv">CSV</button>
-      <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportPdf" style="margin-left:6px">PDF</button>
-    </template>
-
-    <!-- Controls -->
+<!-- Controls -->
     <div class="rp-controls">
       <div class="rp-presets">
         <button
@@ -197,9 +192,11 @@ onMounted(() => applyPreset(30, '30d'));
       </div>
       <div class="rp-range">
         <input v-model="since" type="date" class="bw-input bw-input-sm" />
-        <span class="rp-range-sep">→</span>
+        <span class="rp-range-sep">?</span>
         <input v-model="until" type="date" class="bw-input bw-input-sm" />
         <button class="bw-btn bw-btn-sm bw-btn-ghost" @click="applyCustom">Apply</button>
+        <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportCsv">CSV</button>
+        <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportPdf">PDF</button>
       </div>
     </div>
 
@@ -209,37 +206,37 @@ onMounted(() => applyPreset(30, '30d'));
     <div class="rp-kpis">
       <div class="rp-kpi rp-kpi--hero">
         <span class="rp-kpi-label">Revenue</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.deliveredCount ?? 0) }} delivered · avg {{ fmtMoney(k?.avgOrderValueMinor ?? 0) }}</span>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
+        <span class="rp-kpi-sub">{{ fmtNum(k?.deliveredCount ?? 0) }} delivered Â· avg {{ fmtMoney(k?.avgOrderValueMinor ?? 0) }}</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Success rate</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : (k?.successRate ?? 0) + '%' }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : (k?.successRate ?? 0) + '%' }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.failedCount ?? 0) }} failed</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Funding inflow</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.fundingCount ?? 0) }} top-ups</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Settlement (net)</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtMoney(k?.settlementNetMinor ?? 0) }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtMoney(k?.settlementNetMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.settlementBatches ?? 0) }} batches</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Refunds approved</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtMoney(k?.refundApprovedMinor ?? 0) }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtMoney(k?.refundApprovedMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.refundCount ?? 0) }} requests</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Disputes</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtNum(k?.disputesOpened ?? 0) }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtNum(k?.disputesOpened ?? 0) }}</strong>
         <span class="rp-kpi-sub">opened in range</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">New customers</span>
-        <strong class="rp-kpi-value">{{ loading ? '—' : fmtNum(k?.newCustomers ?? 0) }}</strong>
+        <strong class="rp-kpi-value">{{ loading ? 'â€”' : fmtNum(k?.newCustomers ?? 0) }}</strong>
         <span class="rp-kpi-sub">in range</span>
       </div>
     </div>
@@ -260,7 +257,7 @@ onMounted(() => applyPreset(30, '30d'));
         </div>
       </div>
 
-      <div v-if="loading" class="bw-loading">Loading…</div>
+      <div v-if="loading" class="bw-loading">Loadingâ€¦</div>
       <div v-else-if="!daily.length" class="bw-empty">No data for this range.</div>
       <svg v-else class="rp-chart" :viewBox="`0 0 ${CHART_W} ${CHART_H + 24}`" preserveAspectRatio="none">
         <defs>
@@ -291,7 +288,7 @@ onMounted(() => applyPreset(30, '30d'));
         <div v-for="r in statusRows" :key="r.key" class="rp-bar-row">
           <span class="rp-bar-key">{{ r.key }}</span>
           <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%', background: r.color }" /></div>
-          <span class="rp-bar-val">{{ fmtNum(r.count) }} · {{ r.pct }}%</span>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} Â· {{ r.pct }}%</span>
         </div>
       </section>
 
@@ -362,3 +359,5 @@ onMounted(() => applyPreset(30, '30d'));
   .rp-controls { flex-direction: column; align-items: stretch; }
 }
 </style>
+
+

@@ -9,9 +9,9 @@ import { adminClient } from '../db/supabase.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries } from '../services/ledger.js';
 import {
-    initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof,
+    initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, FundingError,
 } from '../services/funding.js';
-import { vendorPurchase, listVendorPurchases, getReceiptByOrder } from '../services/vending.js';
+import { vendorPurchase, listVendorPurchases, getReceiptByOrder, VendingError } from '../services/vending.js';
 import {
     previewPurchase,
     lookupMeter,
@@ -37,6 +37,7 @@ import {
     VendorVendCredentialError,
     verifyVendorVendCredential,
 } from '../services/vendor-vend-credential.js';
+import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -107,7 +108,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor!;
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status)')
             .eq('id', actor.actorId).single();
         const org = (vu as any)?.vendor_organizations;
         return {
@@ -117,6 +118,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             full_name: (vu as any)?.full_name,
             phone: (vu as any)?.phone,
             email: (vu as any)?.email,
+            profile_picture_url: (vu as any)?.profile_picture_url ?? null,
             mfa_enrolled: (vu as any)?.mfa_enrolled,
             mfa_verified: actor.mfaVerified,
             password_reset_required: (vu as any)?.password_reset_required,
@@ -124,6 +126,69 @@ const route: FastifyPluginAsync = async (fastify) => {
             vend_credential_type: (vu as any)?.vend_credential_type ?? null,
             organization_name: org?.trading_name ?? org?.legal_name,
             organization_status: org?.status,
+        };
+    });
+
+    fastify.patch('/me', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const schema = z.object({
+            full_name: z.string().trim().min(1).max(120).optional(),
+            phone: z.string().trim().min(6).max(32).optional(),
+            profile_picture_url: z.union([z.string().url().max(1000), z.literal(''), z.null()]).optional(),
+        });
+        const body = schema.parse(req.body ?? {});
+        const updates: Record<string, unknown> = {};
+        if (body.full_name !== undefined) updates.full_name = body.full_name;
+        if (body.phone !== undefined) updates.phone = body.phone;
+        if (body.profile_picture_url !== undefined) {
+            updates.profile_picture_url = body.profile_picture_url ? body.profile_picture_url : null;
+        }
+        if (!Object.keys(updates).length) {
+            return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
+        }
+        const { data, error } = await adminClient
+            .from('vendor_users')
+            .update(updates)
+            .eq('id', req.actor!.actorId)
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status)')
+            .single();
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        const org = (data as any)?.vendor_organizations;
+        return {
+            id: (data as any)?.id,
+            vendor_organization_id: (data as any)?.vendor_organization_id,
+            role: (data as any)?.role,
+            full_name: (data as any)?.full_name,
+            phone: (data as any)?.phone,
+            email: (data as any)?.email,
+            profile_picture_url: (data as any)?.profile_picture_url ?? null,
+            mfa_enrolled: (data as any)?.mfa_enrolled,
+            mfa_verified: req.actor?.mfaVerified,
+            password_reset_required: (data as any)?.password_reset_required,
+            vend_credential_configured: Boolean((data as any)?.vend_credential_set_at),
+            vend_credential_type: (data as any)?.vend_credential_type ?? null,
+            organization_name: org?.trading_name ?? org?.legal_name,
+            organization_status: org?.status,
+        };
+    });
+
+    fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        let sop;
+        try {
+            sop = assertProfilePictureSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: 'invalid_profile_picture', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toProfilePicturePath('vendor', req.actor!.actorId, sop.file_name);
+        const { data, error } = await adminClient.storage.from(PROFILE_PICTURE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        const { data: pub } = adminClient.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(path);
+        return {
+            bucket: PROFILE_PICTURE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            public_url: pub?.publicUrl ?? null,
+            sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
         };
     });
 
@@ -327,27 +392,35 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── funding: initiate Paystack ──
-    fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req) => {
+    fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const orgId = req.actor!.vendorOrganizationId!;
         const schema = z.object({
             amountMinor: z.number().int().min(50000),
             callbackUrl: z.string().url().optional(),
         });
         const body = schema.parse(req.body);
-        return initiatePaystackFunding({
-            vendorOrganizationId: orgId,
-            amountMinor: body.amountMinor,
-            submittedBy: req.actor!.userId,
-            email: req.actor!.email ?? 'no-email@example.com',
-            callbackUrl: body.callbackUrl,
-        });
+        try {
+            return await initiatePaystackFunding({
+                vendorOrganizationId: orgId,
+                amountMinor: body.amountMinor,
+                submittedBy: req.actor!.userId,
+                email: req.actor!.email ?? 'no-email@example.com',
+                callbackUrl: body.callbackUrl,
+            });
+        } catch (e: any) {
+            if (e instanceof FundingError) {
+                return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(e.code) ? 403 : 422)
+                    .send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
     });
 
     // ── funding: bank transfer proof ──
     fastify.post('/funding/bank-transfer', {
         preHandler: fastify.requireVendor(),
         bodyLimit: 12 * 1024 * 1024,
-    }, async (req) => {
+    }, async (req, reply) => {
         const orgId = req.actor!.vendorOrganizationId!;
         const schema = z.object({
             amountMinor: z.number().int().min(100000),
@@ -356,20 +429,28 @@ const route: FastifyPluginAsync = async (fastify) => {
             proofBase64: z.string().min(1),
         });
         const body = schema.parse(req.body);
-        const proof = await uploadBankFundingProof({
-            vendorOrganizationId: orgId,
-            submittedBy: req.actor!.userId,
-            fileName: body.proofFileName,
-            mimeType: body.proofMimeType,
-            base64: body.proofBase64,
-        });
-        return initiateBankProofFunding({
-            vendorOrganizationId: orgId,
-            amountMinor: body.amountMinor,
-            submittedBy: req.actor!.userId,
-            proofFilePath: proof.proofFilePath,
-            proofHash: proof.proofHash,
-        });
+        try {
+            const proof = await uploadBankFundingProof({
+                vendorOrganizationId: orgId,
+                submittedBy: req.actor!.userId,
+                fileName: body.proofFileName,
+                mimeType: body.proofMimeType,
+                base64: body.proofBase64,
+            });
+            return await initiateBankProofFunding({
+                vendorOrganizationId: orgId,
+                amountMinor: body.amountMinor,
+                submittedBy: req.actor!.userId,
+                proofFilePath: proof.proofFilePath,
+                proofHash: proof.proofHash,
+            });
+        } catch (e: any) {
+            if (e instanceof FundingError) {
+                return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(e.code) ? 403 : 422)
+                    .send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
     });
 
     fastify.get('/funding', { preHandler: fastify.requireVendor() }, async (req) => {
@@ -484,14 +565,25 @@ const route: FastifyPluginAsync = async (fastify) => {
             return sendVendCredentialError(reply, error);
         }
         const clientKey = (req.headers['idempotency-key'] as string | undefined) ?? `${Date.now()}-${Math.random()}`;
-        return vendorPurchase({
-            vendorOrganizationId: req.actor!.vendorOrganizationId!,
-            vendorUserId: req.actor!.userId,
-            meterId: body.meterId,
-            amountMinor: body.amountMinor,
-            mode: body.mode,
-            clientIdempotencyKey: clientKey,
-        });
+        try {
+            return await vendorPurchase({
+                vendorOrganizationId: req.actor!.vendorOrganizationId!,
+                vendorUserId: req.actor!.userId,
+                meterId: body.meterId,
+                amountMinor: body.amountMinor,
+                mode: body.mode,
+                clientIdempotencyKey: clientKey,
+            });
+        } catch (error) {
+            if (error instanceof VendingError) {
+                const status = error.code === 'insufficient_balance' ? 402
+                    : error.code === 'wallet_missing' ? 404
+                    : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
+                    : 422;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
     });
 
     // ── purchases history ──

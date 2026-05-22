@@ -3,10 +3,16 @@ Final Release Checklist
 
 Release Status
 --------------
-- blocked as of 2026-05-12
-- public Vercel smoke fails behind Vercel Authentication
-- remote CI is red
-- preview Supabase envs are missing
+- blocked as of 2026-05-20
+- local build passes
+- local security gates pass
+- local wallet gates pass
+- Supabase migrations are applied
+- Wallet Admin now deploys at `/wallet-admin/`
+- public Vercel smoke still needs `TARGET_URL`
+- GitHub monitoring smoke is manual until target URLs exist
+- staging write guard still needs `STAGING_TARGET_URL`
+- remote CI status is unverified locally
 - do not promote to production
 
 Local Gates
@@ -29,6 +35,9 @@ npm run smoke:vercel
 $env:STAGING_TARGET_URL=$env:TARGET_URL
 npm run write:staging
 ```
+
+Run `.github/workflows/monitoring-smoke.yml` with `workflow_dispatch`.
+Re-enable schedules only after target repository variables exist.
 
 Manual QA
 ---------

@@ -132,6 +132,24 @@ function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
   };
 }
 
+async function staffActorFromAuthUser(user = {}, fallback = {}) {
+  if (!serviceConfigured() || !user.id) return null;
+  const encodedUserId = encodeURIComponent(user.id);
+  const rows = await restRequest(`/users?select=id,auth_user_id,user_id,email,name,role_key,remark,station_id&or=(auth_user_id.eq.${encodedUserId},user_id.eq.${encodedUserId})&limit=1`);
+  const staff = Array.isArray(rows) ? rows[0] : null;
+  const roleId = staff?.role_key || fallback.roleId || "";
+  if (!staff || !roleId) return null;
+  return {
+    authUserId: staff.auth_user_id || user.id,
+    userId: staff.user_id || staff.id || fallback.userId || user.id,
+    userName: staff.name || staff.email || fallback.userName || user.email || "",
+    roleId,
+    remark: staff.remark || fallback.remark || "",
+    stationId: staff.station_id || fallback.stationId || "",
+    email: staff.email || user.email || fallback.email || ""
+  };
+}
+
 async function listAuthUsers() {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return [];
@@ -167,15 +185,37 @@ async function resolveAuthEmail(identifier, explicitEmail = "") {
 async function signInWithPassword({ userId, password }) {
   if (!authEnabled() || !configured()) return null;
   const key = anonKey() || serviceRoleKey();
-  const email = await resolveAuthEmail(userId);
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: jsonHeaders(key),
-    body: JSON.stringify({
-      email,
-      password
-    })
-  }));
+  let email = "";
+  let response;
+  let body;
+  try {
+    email = await resolveAuthEmail(userId);
+    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: jsonHeaders(key),
+      body: JSON.stringify({
+        email,
+        password
+      })
+    })));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      status: 503,
+      body: {
+        code: 503,
+        msg: "Authentication service unavailable",
+        reason: "Authentication service unavailable",
+        data: null,
+        result: null,
+        _proxy: {
+          source: "supabase-auth",
+          pathname: "/api/user/login",
+          detail: message
+        }
+      }
+    };
+  }
 
   if (!response.ok) {
     return {
@@ -232,6 +272,37 @@ async function signInWithPassword({ userId, password }) {
   };
 }
 
+async function refreshAccessToken(refreshToken) {
+  const token = String(refreshToken || "").trim();
+  const key = anonKey() || serviceRoleKey();
+  if (!authEnabled() || !configured() || !token || !key) return null;
+  let response;
+  let body;
+  try {
+    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: jsonHeaders(key),
+      body: JSON.stringify({ refresh_token: token })
+    })));
+  } catch {
+    return null;
+  }
+  if (!response.ok || !body?.access_token) return null;
+  const user = body.user || {};
+  const actor = normalizedActorFromAuthUser(user);
+  return {
+    token: body.access_token,
+    refreshToken: body.refresh_token,
+    expiresIn: body.expires_in,
+    userId: actor.userId,
+    userName: actor.userName,
+    roleId: actor.roleId,
+    remark: actor.remark,
+    stationId: actor.stationId,
+    email: actor.email
+  };
+}
+
 async function authUserFromAccessToken(accessToken) {
   const token = String(accessToken || "").trim();
   const key = anonKey() || serviceRoleKey();
@@ -244,7 +315,13 @@ async function authUserFromAccessToken(accessToken) {
     }
   }));
   if (!response.ok) return null;
-  return normalizedActorFromAuthUser(body || {});
+  const actor = normalizedActorFromAuthUser(body || {});
+  if (actor.roleId) return actor;
+  try {
+    return await staffActorFromAuthUser(body || {}, actor);
+  } catch {
+    return actor;
+  }
 }
 
 function adminEmailsFallback() {
@@ -280,11 +357,25 @@ async function getAuthUserByUserId(userId) {
   return getAuthUserByIdentifier(userId);
 }
 
+function userStatusFromPayload(payload = {}) {
+  const value = payload.status;
+  if (value === undefined || value === null || value === "") return "active";
+  const normalized = String(value).trim().toLowerCase();
+  return value === false || value === 0 || ["false", "inactive", "disabled", "suspended"].includes(normalized)
+    ? "inactive"
+    : "active";
+}
+
+function authBanDurationForStatus(status) {
+  return status === "inactive" ? "876000h" : "none";
+}
+
 async function createAuthUser(payload) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return null;
   const email = await resolveAuthEmail(payload.userId, payload.email);
   const password = payload.password;
+  const status = userStatusFromPayload(payload);
   if (!password) {
     return {
       code: 400,
@@ -300,6 +391,7 @@ async function createAuthUser(payload) {
       email,
       password,
       email_confirm: true,
+      ban_duration: authBanDurationForStatus(status),
       user_metadata: {
         role: payload.roleId || "operations-manager",
         role_key: payload.roleId || "operations-manager",
@@ -307,6 +399,7 @@ async function createAuthUser(payload) {
         user_id: String(payload.userId || "").trim(),
         login_email: email,
         station_id: String(payload.stationId || "").trim(),
+        status,
         remark: payload.remark || ""
       }
     })
@@ -329,6 +422,7 @@ async function updateAuthUser(userId, payload) {
   const user = await getAuthUserByUserId(userId) || (payload.email ? await getAuthUserByIdentifier(payload.email) : null);
   if (!user) throw new Error("User not found in Supabase Auth");
   const nextEmail = await resolveAuthEmail(userId, payload.email);
+  const status = payload.status !== undefined ? userStatusFromPayload(payload) : "";
   
   const updateBody = {
     user_metadata: {
@@ -339,9 +433,13 @@ async function updateAuthUser(userId, payload) {
       ...(payload.userId ? { user_id: String(payload.userId).trim() } : {}),
       ...(nextEmail ? { login_email: nextEmail } : {}),
       ...(payload.stationId !== undefined ? { station_id: String(payload.stationId || "").trim() } : {}),
+      ...(status ? { status } : {}),
       ...(payload.remark !== undefined ? { remark: payload.remark } : {})
     }
   };
+  if (status) {
+    updateBody.ban_duration = authBanDurationForStatus(status);
+  }
   if (nextEmail && normalizeIdentifier(nextEmail) !== normalizeIdentifier(user.email)) {
     updateBody.email = nextEmail;
   }
@@ -480,6 +578,7 @@ module.exports = {
   restRequestWithResponse,
   serviceConfigured,
   signInWithPassword,
+  refreshAccessToken,
   authUserFromAccessToken,
   storageEnabled,
   storageReport,

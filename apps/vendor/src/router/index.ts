@@ -1,6 +1,12 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 
+function portalHistoryBase(configuredBase: string): string {
+    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '/';
+    if (typeof window === 'undefined' || base === '/') return base;
+    return window.location.pathname.startsWith(base) ? base : '/';
+}
+
 const routes: RouteRecordRaw[] = [
     { path: '/login',           name: 'login',          component: () => import('../views/Login.vue'),         meta: { guest: true } },
     { path: '/password-change', name: 'password-change',component: () => import('../views/PasswordChange.vue'),meta: { auth: true, allowReset: true } },
@@ -21,7 +27,7 @@ const routes: RouteRecordRaw[] = [
 ];
 
 export const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(portalHistoryBase(import.meta.env.BASE_URL)),
     routes,
     scrollBehavior: () => ({ top: 0 }),
 });

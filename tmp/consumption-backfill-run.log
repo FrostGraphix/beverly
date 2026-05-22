@@ -1,0 +1,55 @@
+[sync] command=backfill upstream=http://8.208.16.168... stations=TUNGA,UMAISHA,OGUFA,KYAKALE,MUSHA
+[backfill] done in 46317.1s ok=false fetched=211512 stored=211512 synced=3/5 failed=2
+   - TUNGA: 2025-01-01..2026-05-20 pages=139 fetched=69153 stored=69153 detect=full_backfill
+   - UMAISHA: 2025-01-01..2026-05-20 pages=165 fetched=82128 stored=82128 detect=full_backfill
+   - OGUFA: 2025-01-01..2026-05-20 pages=121 fetched=60231 stored=60231 detect=full_backfill
+[failures] [
+  {
+    "stationId": "KYAKALE",
+    "mode": "backfill",
+    "error": "fetch failed"
+  },
+  {
+    "stationId": "MUSHA",
+    "mode": "backfill",
+    "error": "fetch failed"
+  }
+]
+[after] {
+  "enabled": true,
+  "tableReady": true,
+  "totalRows": 292707,
+  "stations": [
+    {
+      "station": "TUNGA",
+      "rows": 69586,
+      "rawDuplicateRows": 2,
+      "logicalRawRows": 69588
+    },
+    {
+      "station": "UMAISHA",
+      "rows": 82577,
+      "rawDuplicateRows": 8,
+      "logicalRawRows": 82585
+    },
+    {
+      "station": "OGUFA",
+      "rows": 60344,
+      "rawDuplicateRows": 338,
+      "logicalRawRows": 60682
+    },
+    {
+      "station": "KYAKALE",
+      "rows": 43176,
+      "rawDuplicateRows": 473,
+      "logicalRawRows": 43649
+    },
+    {
+      "station": "MUSHA",
+      "rows": 37024,
+      "rawDuplicateRows": 114,
+      "logicalRawRows": 37138
+    }
+  ]
+}
+BACKFILL EXIT: 1

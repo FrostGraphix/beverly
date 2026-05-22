@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
+import { safeAuthRedirect } from '../lib/auth-flow';
 
 const route = useRoute();
 const router = useRouter();
@@ -14,6 +15,8 @@ const phone = route.query.phone as string;
 const isSignup = route.query.signup === '1';
 const isRecovery = route.query.recovery === '1';
 const authPurpose = isRecovery ? 'recovery' : isSignup ? 'signup' : 'login';
+const rememberSession = route.query.remember !== '0';
+const redirectTarget = computed(() => safeAuthRedirect(route.query.redirect));
 // Stored for signup resend
 const storedFullName = route.query.full_name as string | undefined;
 const storedEmail = route.query.email as string | undefined;
@@ -123,9 +126,9 @@ async function submit() {
             { challenge_id: challengeId.value, otp },
         );
         success.value = true;
-        auth.setSession(r.access_token, r.customer);
+        auth.setSession(r.access_token, r.customer, rememberSession);
         await new Promise((res) => setTimeout(res, 600)); // brief success pause
-        await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+        await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
     } catch (e: any) {
         if (e instanceof ApiError) {
             if (e.code === 'otp_expired') {

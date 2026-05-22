@@ -14,6 +14,14 @@ const credential = ref('');
 const confirm = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
+const redirectTarget = computed(() => safeRedirectTarget(route.query.redirect, '/vend'));
+
+function safeRedirectTarget(raw: unknown, fallback = '/vend') {
+    if (typeof raw !== 'string') return fallback;
+    const value = raw.trim();
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return fallback;
+    return value;
+}
 
 const valid = computed(() => {
     if (credential.value !== confirm.value) return false;
@@ -35,7 +43,7 @@ async function submit() {
             auth.user.vend_credential_type = type.value;
         }
         await auth.refreshMe();
-        await router.push(String(route.query.redirect || '/vend'));
+        await router.push(redirectTarget.value);
     } catch (e: any) {
         error.value = e instanceof ApiError ? e.message : e?.message ?? 'Could not save authorization.';
     } finally {

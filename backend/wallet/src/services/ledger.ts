@@ -16,6 +16,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
+import { assertWalletCanTransact } from './wallets.js';
 
 export type EntryType =
     | 'funding_credit'
@@ -160,6 +161,18 @@ export async function createHold(input: HoldInput): Promise<Hold> {
     if (input.amountMinor <= 0) throw new LedgerError('amount must be positive', 'invalid_amount');
     const ttl = input.ttlSeconds ?? 900;
     const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+
+    const { data: wallet, error: walletError } = await adminClient
+        .from('wallets')
+        .select('id, status')
+        .eq('id', input.walletId)
+        .maybeSingle();
+    if (walletError) throw new LedgerError(walletError.message, 'wallet_lookup_failed');
+    try {
+        assertWalletCanTransact(wallet as any, 'place holds');
+    } catch (error: any) {
+        throw new LedgerError(error.message, error.code ?? 'wallet_inactive');
+    }
 
     // pre-check: balance must cover this hold + existing
     const bal = await getBalance(input.walletId);

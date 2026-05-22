@@ -12,11 +12,22 @@
         </BaseIconButton>
         </div>
       </template>
+        <div class="picker-sop-stepper" aria-label="Selection progress">
+          <div class="picker-sop-step" :class="{ active: pickerStep === 1, done: pickerStep > 1 }">
+            <span class="picker-sop-dot"><span v-if="pickerStep > 1">&#10003;</span><span v-else>1</span></span>
+            <span>Select</span>
+          </div>
+          <div class="picker-sop-line" :class="{ done: pickerStep > 1 }"></div>
+          <div class="picker-sop-step" :class="{ active: pickerStep === 2 }">
+            <span class="picker-sop-dot">2</span>
+            <span>Review</span>
+          </div>
+        </div>
+      <template v-if="pickerStep === 1">
         <div class="picker-search-bar">
           <BaseInput v-model="searchTerm" :placeholder="`Search ${label || 'records'}`" class="picker-search-input" @keyup.enter="load" />
-          <BaseButton variant="primary" class="picker-search-btn" @click="search">
+          <BaseButton variant="primary" class="picker-search-btn" aria-label="Search" @click="search">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            Search
           </BaseButton>
         </div>
 
@@ -70,10 +81,21 @@
             </div>
           </template>
         </BaseTableShell>
+      </template>
+      <section v-else class="picker-review" aria-label="Review selected record">
+        <h3>Review selected record</h3>
+        <div class="picker-review-grid">
+          <div v-for="item in selectedReview" :key="item.label" class="picker-review-row">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </div>
+      </section>
       <template #footer>
         <div class="modal-actions picker-footer">
-          <BaseButton @click="$emit('close')">Cancel</BaseButton>
-          <BaseButton variant="primary" :disabled="!selectedRow" @click="confirmSelection">Confirm</BaseButton>
+          <BaseButton @click="pickerStep === 1 ? $emit('close') : pickerStep = 1">{{ pickerStep === 1 ? "Cancel" : "Back" }}</BaseButton>
+          <BaseButton v-if="pickerStep === 1" variant="primary" :disabled="!selectedRow" @click="pickerStep = 2">Continue</BaseButton>
+          <BaseButton v-else variant="primary" @click="confirmSelection">Confirm</BaseButton>
           </div>
       </template>
     </BaseModalShell>
@@ -105,6 +127,7 @@ export default {
       loading: false,
       searchTerm: "",
       selectedRow: null,
+      pickerStep: 1,
       pageSize: 20,
       currentPage: 1,
       totalRecords: 0,
@@ -122,6 +145,13 @@ export default {
       const end = Math.min(this.totalPages, start + 4);
       for (let i = start; i <= end; i++) pages.push(i);
       return pages;
+    },
+    selectedReview() {
+      if (!this.selectedRow) return [];
+      return this.columns.map((col, index) => ({
+        label: this.columnLabels[index] || col,
+        value: this.cellValue(this.selectedRow, col) === "" ? "-" : this.cellValue(this.selectedRow, col)
+      }));
     }
   },
   created() {
@@ -142,6 +172,8 @@ export default {
         this.rows = result.data || result.list || result.rows || (Array.isArray(result) ? result : []);
         // Total count — support different field names backends use
         this.totalRecords = result.total ?? result.totalCount ?? result.count ?? this.rows.length;
+        this.pickerStep = 1;
+        this.selectedRow = null;
       } catch (err) {
         console.error("PickerModal: Load failed", err);
       } finally {
@@ -222,6 +254,7 @@ export default {
   background: linear-gradient(135deg, var(--primary-light), var(--bg-card));
 }
 .picker-title-block {
+  min-width: 0;
   display: grid;
   gap: 3px;
 }
@@ -233,14 +266,17 @@ export default {
   text-transform: uppercase;
 }
 .modal-title {
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 800;
   color: var(--text-strong);
+  line-height: 1.25;
   margin: 0;
 }
 .modal-close {
   width: 38px;
   height: 38px;
+  margin-left: auto;
+  flex: 0 0 38px;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   background: var(--bg-card);
@@ -260,15 +296,57 @@ export default {
 .picker-body {
   padding-top: 0 !important;
 }
+.picker-sop-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 2px;
+}
+.picker-sop-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.picker-sop-dot {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-card);
+}
+.picker-sop-step.active,
+.picker-sop-step.done {
+  color: var(--primary);
+}
+.picker-sop-step.active .picker-sop-dot,
+.picker-sop-step.done .picker-sop-dot {
+  color: var(--text-inverse);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.picker-sop-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border-color);
+}
+.picker-sop-line.done {
+  background: var(--primary);
+}
 .picker-search-bar {
   display: flex;
   gap: 12px;
   margin: 16px 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 .picker-search-input {
   flex: 1;
-  min-width: min(360px, 100%);
+  min-width: 0;
   height: 42px;
   padding: 0 14px;
   border: 1px solid var(--border-color);
@@ -285,14 +363,21 @@ export default {
   background: var(--bg-card);
 }
 .picker-search-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   height: 42px;
-  padding: 0 22px;
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
   background: var(--primary);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: 0;
+  line-height: 0;
+}
+.picker-search-btn svg {
+  width: 18px;
+  height: 18px;
 }
 .picker-table-container {
   border-top: 0;
@@ -308,7 +393,11 @@ export default {
   background: rgba(236,253,245,.68);
 }
 .radio-col {
-  width: 48px;
+  width: 34px;
+  min-width: 34px !important;
+  max-width: 34px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
   border-right: 1px solid var(--border-color);
 }
 .selected-row td {
@@ -357,6 +446,46 @@ export default {
 .picker-footer {
   width: 100%;
 }
+.picker-review {
+  min-height: 280px;
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+}
+.picker-review h3 {
+  margin: 0 0 14px;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+.picker-review-grid {
+  display: grid;
+  gap: 8px;
+}
+.picker-review-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.picker-review-row:last-child {
+  border-bottom: 0;
+}
+.picker-review-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.picker-review-row strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: right;
+  word-break: break-word;
+}
 .picker-state-cell {
   height: 128px;
   color: var(--text-muted);
@@ -378,8 +507,9 @@ export default {
 @media (max-width: 760px) {
   .picker-modal { width: calc(100vw - 18px) !important; max-height: calc(100vh - 18px) !important; }
   .picker-body { padding-inline: 14px !important; }
-  .picker-search-bar { gap: 8px; }
-  .picker-search-input, .picker-search-btn { width: 100%; min-width: 0; }
+  .picker-search-bar { gap: 8px; flex-wrap: nowrap; }
+  .picker-search-input { width: auto; min-width: 0; }
+  .picker-search-btn { width: 42px; min-width: 42px; }
   .picker-pagination, .pagination-controls { width: 100%; }
 }
 </style>

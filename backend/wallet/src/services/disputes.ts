@@ -6,6 +6,7 @@
  * A resolved dispute can trigger a refund_request.
  */
 import { adminClient } from '../db/supabase.js';
+import { notifyDisputeUpdate } from './notifications.js';
 
 export class DisputeError extends Error {
     constructor(message: string, public code: string) {
@@ -72,6 +73,20 @@ export async function updateDisputeStatus(input: {
         patch.resolved_at = new Date().toISOString();
     }
     await adminClient.from('disputes').update(patch).eq('id', input.disputeId);
+
+    // Notify the customer who raised the dispute (if any)
+    const { data: dispute } = await adminClient
+        .from('disputes')
+        .select('customer_id')
+        .eq('id', input.disputeId)
+        .maybeSingle();
+    if ((dispute as any)?.customer_id) {
+        notifyDisputeUpdate((dispute as any).customer_id, {
+            disputeId: input.disputeId,
+            status: input.status,
+            message: input.resolutionNote,
+        }).catch(() => undefined);
+    }
 }
 
 export async function getDispute(disputeId: string) {

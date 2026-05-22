@@ -1,13 +1,13 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * Purchases admin view (super-admin / operations).
  *
  * KPI strip + filterable list + detail drawer with:
- *   • Full lifecycle timeline (created → hold → captured → token → SMS)
- *   • Ledger entries tied to the purchase
- *   • Token (mono + copy), receipt link
- *   • Resend token SMS (ConfirmDialog)
- *   • Request refund — routes to the maker-checker refund flow (ConfirmDialog)
+ *   â€¢ Full lifecycle timeline (created â†’ hold â†’ captured â†’ token â†’ SMS)
+ *   â€¢ Ledger entries tied to the purchase
+ *   â€¢ Token (mono + copy), receipt link
+ *   â€¢ Resend token SMS (ConfirmDialog)
+ *   â€¢ Request refund â€” routes to the maker-checker refund flow (ConfirmDialog)
  *
  * Endpoints:
  *   GET  /api/v1/admin/purchases[?status,station,actorType,q,since,until,cursor]
@@ -68,7 +68,7 @@ interface PurchaseDetail {
     receipt: any;
 }
 
-// ─ List ───────────────────────────────────────────────────────
+// â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const summary = ref<PurchaseSummary | null>(null);
 const items = ref<Purchase[]>([]);
 const cursor = ref<string | null>(null);
@@ -113,7 +113,7 @@ function resetFilters() {
     void loadList();
 }
 
-// ─ Detail drawer ──────────────────────────────────────────────
+// â”€ Detail drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const detail = ref<PurchaseDetail | null>(null);
 const copied = ref(false);
 
@@ -158,7 +158,7 @@ const timeline = computed(() => {
     return steps;
 });
 
-// ─ Resend SMS ─────────────────────────────────────────────────
+// â”€ Resend SMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const resendOpen = ref(false);
 const resendBusy = ref(false);
 
@@ -177,7 +177,7 @@ async function doResend() {
     } finally { resendBusy.value = false; }
 }
 
-// ─ Request refund ─────────────────────────────────────────────
+// â”€ Request refund â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const refundOpen = ref(false);
 const refundReason = ref('');
 const refundBusy = ref(false);
@@ -187,7 +187,7 @@ async function doRefund() {
     if (!detail.value || !refundValid.value) return;
     const po = detail.value.purchase;
     if (!po.wallet_id) {
-        banner.value = { tone: 'error', text: 'This purchase has no wallet linked — cannot refund.' };
+        banner.value = { tone: 'error', text: 'This purchase has no wallet linked â€” cannot refund.' };
         refundOpen.value = false;
         return;
     }
@@ -209,7 +209,7 @@ async function doRefund() {
     } finally { refundBusy.value = false; }
 }
 
-// ─ Helpers ───────────────────────────────────────────────────
+// â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function statusBadge(s: string) {
     return ({
         delivered: 'success', completed: 'success', token_issued: 'success',
@@ -227,7 +227,7 @@ function exportCsvRows() {
         { key: 'buyer', header: 'Buyer', value: (p) => p.customer_name ?? '' },
         { key: 'meter_id', header: 'Meter', value: (p) => p.meter_id },
         { key: 'station_id', header: 'Station', value: (p) => p.station_id ?? '' },
-        { key: 'amount', header: 'Amount (₦)', value: (p) => (p.amount_minor ?? 0) / 100 },
+        { key: 'amount', header: 'Amount (â‚¦)', value: (p) => (p.amount_minor ?? 0) / 100 },
         { key: 'units_kwh', header: 'Units (kWh)', value: (p) => p.units_kwh ?? '' },
         { key: 'status', header: 'Status', value: (p) => p.status },
     ]);
@@ -245,7 +245,7 @@ function exportPdfDoc() {
             title: 'Purchases',
             columns: ['When', 'Buyer', 'Meter', 'Station', 'Amount', 'Status'],
             rows: items.value.map((p) => [
-                shortDate(p.created_at), p.customer_name ?? '—', p.meter_id, p.station_id ?? '—', naira(p.amount_minor), p.status,
+                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, p.station_id ?? 'â€”', naira(p.amount_minor), p.status,
             ]),
         }],
     });
@@ -257,15 +257,10 @@ watch([fStatus, fActorType], () => loadList());
 
 <template>
   <AppShell title="Purchases">
-    <template #topbar-end>
-      <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">CSV</button>
-      <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-    </template>
-
-    <transition name="banner">
+<transition name="banner">
       <div v-if="banner" :class="['bw-banner', banner.tone]" role="status">
         {{ banner.text }}
-        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
+        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">Ã—</button>
       </div>
     </transition>
 
@@ -347,7 +342,10 @@ watch([fStatus, fActorType], () => loadList());
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ items.length }} purchases</h2>
         <span class="bw-spacer"></span>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
+        <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">CSV</button>
+        <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
+        <span style="width:6px"></span>
+        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
       </div>
 
       <!-- Desktop -->
@@ -368,14 +366,14 @@ watch([fStatus, fActorType], () => loadList());
             <tr v-for="p in items" :key="p.id" @click="openDetail(p)" class="p-row">
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td>
-                <div class="bw-truncate" style="max-width: 180px">{{ p.customer_name || '—' }}</div>
+                <div class="bw-truncate" style="max-width: 180px">{{ p.customer_name || 'â€”' }}</div>
                 <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span>
               </td>
               <td class="bw-mono">{{ p.meter_id }}</td>
-              <td class="bw-mono bw-muted">{{ p.station_id || '—' }}</td>
+              <td class="bw-mono bw-muted">{{ p.station_id || 'â€”' }}</td>
               <td class="bw-money" style="text-align: right">{{ naira(p.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
-              <td class="row-arrow">→</td>
+              <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!items.length && !loading">
               <td colspan="7" class="bw-muted empty">No purchases match the filters.</td>
@@ -390,17 +388,17 @@ watch([fStatus, fActorType], () => loadList());
           <div class="pc-head">
             <div>
               <div class="bw-money pc-amount">{{ naira(p.amount_minor) }}</div>
-              <div class="bw-mono pc-meta">{{ p.meter_id }} · {{ shortDate(p.created_at) }}</div>
+              <div class="bw-mono pc-meta">{{ p.meter_id }} Â· {{ shortDate(p.created_at) }}</div>
             </div>
             <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Buyer</span>
-            <span>{{ p.customer_name || '—' }} <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span></span>
+            <span>{{ p.customer_name || 'â€”' }} <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span></span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Station</span>
-            <span class="bw-mono">{{ p.station_id || '—' }}</span>
+            <span class="bw-mono">{{ p.station_id || 'â€”' }}</span>
           </div>
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty">No purchases.</div>
@@ -408,12 +406,12 @@ watch([fStatus, fActorType], () => loadList());
 
       <div v-if="cursor" class="load-more">
         <button class="bw-btn" :disabled="loading" @click="loadList(false)">
-          {{ loading ? 'Loading…' : 'Load more' }}
+          {{ loading ? 'Loadingâ€¦' : 'Load more' }}
         </button>
       </div>
     </div>
 
-    <!-- ═══ DETAIL DRAWER ═══ -->
+    <!-- â•â•â• DETAIL DRAWER â•â•â• -->
     <Teleport to="body">
       <Transition name="drawer">
         <div v-if="detail" class="drawer-scrim" @click.self="closeDetail">
@@ -421,18 +419,18 @@ watch([fStatus, fActorType], () => loadList());
 
             <header class="drawer-head">
               <div>
-                <p class="drawer-eyebrow">Purchase · {{ detail.purchase.actor_type }}</p>
+                <p class="drawer-eyebrow">Purchase Â· {{ detail.purchase.actor_type }}</p>
                 <h2 class="drawer-title">{{ naira(detail.purchase.amount_minor) }}</h2>
                 <p class="bw-mono drawer-id">{{ detail.purchase.id }}</p>
               </div>
-              <button class="drawer-x" @click="closeDetail" aria-label="Close">×</button>
+              <button class="drawer-x" @click="closeDetail" aria-label="Close">Ã—</button>
             </header>
 
             <!-- Status + key facts -->
             <div class="dr-facts">
               <span :class="['bw-badge', statusBadge(detail.purchase.status)]">{{ detail.purchase.status }}</span>
               <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(2) }} kWh</span>
-              <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || '—' }}</span>
+              <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || 'â€”' }}</span>
             </div>
 
             <!-- Token -->
@@ -440,7 +438,7 @@ watch([fStatus, fActorType], () => loadList());
               <p class="dr-token-label">Token</p>
               <div class="dr-token-row">
                 <span class="dr-token-value bw-mono">{{ detail.purchase.token }}</span>
-                <button class="bw-btn sm" @click="copyToken">{{ copied ? 'Copied ✓' : 'Copy' }}</button>
+                <button class="bw-btn sm" @click="copyToken">{{ copied ? 'Copied âœ“' : 'Copy' }}</button>
               </div>
             </div>
 
@@ -467,14 +465,14 @@ watch([fStatus, fActorType], () => loadList());
             <div class="dr-block">
               <p class="dr-block-title">Details</p>
               <dl class="dr-dl">
-                <dt>Buyer</dt><dd>{{ detail.purchase.customer_name || '—' }}</dd>
+                <dt>Buyer</dt><dd>{{ detail.purchase.customer_name || 'â€”' }}</dd>
                 <dt>Meter</dt><dd class="bw-mono">{{ detail.purchase.meter_id }}</dd>
-                <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || '—' }}</dd>
+                <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || 'â€”' }}</dd>
                 <dt>Mode</dt><dd>{{ detail.purchase.purchase_mode }}</dd>
                 <dt>Receipt</dt>
                 <dd>
                   <span v-if="detail.receipt" class="bw-mono">#{{ String(detail.receipt.id).slice(0, 8) }}</span>
-                  <span v-else class="bw-muted">—</span>
+                  <span v-else class="bw-muted">â€”</span>
                 </dd>
                 <dt v-if="detail.purchase.failure_reason">Failure</dt>
                 <dd v-if="detail.purchase.failure_reason" style="color: var(--danger)">{{ detail.purchase.failure_reason }}</dd>
@@ -483,14 +481,14 @@ watch([fStatus, fActorType], () => loadList());
 
             <!-- Ledger -->
             <div class="dr-block">
-              <p class="dr-block-title">Ledger · {{ detail.ledger_entries.length }}</p>
+              <p class="dr-block-title">Ledger Â· {{ detail.ledger_entries.length }}</p>
               <div v-if="!detail.ledger_entries.length" class="bw-muted empty">No ledger movements.</div>
               <ul v-else class="ledger-list">
                 <li v-for="e in detail.ledger_entries" :key="e.id" class="ledger-row">
                   <span class="bw-mono ledger-when">{{ shortDate(e.created_at) }}</span>
                   <span class="bw-mono ledger-type">{{ e.entry_type.replace(/_/g, ' ') }}</span>
                   <span class="bw-money ledger-amt" :class="e.direction">
-                    {{ e.direction === 'credit' ? '+' : '−' }}{{ naira(e.amount_minor) }}
+                    {{ e.direction === 'credit' ? '+' : 'âˆ’' }}{{ naira(e.amount_minor) }}
                   </span>
                 </li>
               </ul>
@@ -533,7 +531,7 @@ watch([fStatus, fActorType], () => loadList());
       v-model:open="refundOpen"
       title="Request refund"
       :description="detail
-        ? `Create a refund request for ${naira(detail.purchase.amount_minor)}. This does NOT immediately move money — a second staff member must approve it (maker-checker).`
+        ? `Create a refund request for ${naira(detail.purchase.amount_minor)}. This does NOT immediately move money â€” a second staff member must approve it (maker-checker).`
         : ''"
       confirm-label="Create refund request"
       tone="danger"
@@ -690,3 +688,5 @@ watch([fStatus, fActorType], () => loadList());
   .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }
 }
 </style>
+
+

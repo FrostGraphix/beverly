@@ -42,9 +42,17 @@
       </article>
     </section>
 
-    <section class="dashboard-chart-card dashboard-consumption-card" aria-label="Daily consumption chart">
+    <section class="dashboard-chart-card dashboard-consumption-card" :aria-label="`${consumptionTitle} chart`">
       <div class="dashboard-consumption-top">
-        <BaseButton class="dashboard-daily-chip" size="sm">Daily</BaseButton>
+        <BaseButton
+          v-for="mode in consumptionModes"
+          :key="mode.id"
+          :class="['dashboard-period-chip', consumptionMode === mode.id ? 'active' : '']"
+          size="sm"
+          @click="setConsumptionMode(mode.id)"
+        >
+          {{ mode.label }}
+        </BaseButton>
       </div>
       <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
       <EChartPanel v-else :option="consumptionChartOption" />
@@ -73,6 +81,11 @@ const dashboardCards = [
   { type: 3, key: "totalPurchaseMoney", label: "Purchase Money", icon: iconMarkup.money, colorKey: "primary" }
 ];
 
+const consumptionModes = [
+  { id: "daily", label: "Daily", type: 4 },
+  { id: "monthly", label: "Monthly", type: 5 }
+];
+
 const referenceConsumption = {
   labels: [
     "2026-03-29", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04",
@@ -86,6 +99,11 @@ const referenceConsumption = {
     1580, 0, 3080, 0, 2050, 0, 5450, 80, 850, 0,
     1980, 3480, 1380, 0, 0, 1200, 6150, 580, 1980
   ]
+};
+
+const referenceMonthlyConsumption = {
+  labels: ["2026-03", "2026-04"],
+  values: [4200, 40020]
 };
 
 export default {
@@ -109,11 +127,14 @@ export default {
       },
       top: { title: dashboardChartTitles[3], labels: [], values: [] },
       consumption: { title: dashboardChartTitles[4], labels: [], values: [] },
+      dailyConsumption: { title: dashboardChartTitles[4], labels: [], values: [] },
       success: { labels: [], values: [] },
       alarms: [],
+      consumptionMode: "daily",
       chartTheme: null,
       themeObserver: null,
-      countFrame: null
+      countFrame: null,
+      dashboardLoadId: 0
     };
   },
   computed: {
@@ -124,11 +145,20 @@ export default {
         color: theme[card.colorKey] || "var(--primary)"
       }));
     },
+    consumptionModes() {
+      return consumptionModes;
+    },
+    consumptionType() {
+      return consumptionModes.find((mode) => mode.id === this.consumptionMode)?.type || 4;
+    },
     topChartOption() {
       return createBarOption(dashboardSeries(this.top.labels, this.top.values), this.top.title || dashboardChartTitles[this.activeType], this.chartTheme);
     },
     consumptionChartOption() {
-      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), "Daily Consumption", this.chartTheme);
+      return createBarOption(dashboardSeries(this.consumption.labels, this.consumption.values), this.consumptionTitle, this.chartTheme);
+    },
+    consumptionTitle() {
+      return this.consumption.title || dashboardChartTitles[this.consumptionType] || "Daily Consumption";
     },
     successChartOption() {
       return createLineOption(dashboardSeries(this.success.labels, this.success.values), "Hourly Success Rate", this.chartTheme);
@@ -167,23 +197,58 @@ export default {
       this.activeType = type;
       await this.loadDataset(type);
     },
+    setConsumptionMode(mode) {
+      if (this.consumptionMode === mode) return;
+      this.consumptionMode = mode;
+      this.consumption = mode === "monthly"
+        ? this.toMonthlyConsumption(this.dailyConsumption)
+        : this.dailyConsumption;
+    },
     async loadDataset(activeType) {
+      const loadId = ++this.dashboardLoadId;
       this.loading = true;
       try {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
+        if (loadId !== this.dashboardLoadId) return;
         this.panel = dataset.panel;
         this.animatePanel(dataset.panel);
         this.top = dataset.top;
-        this.consumption = dataset.consumption.labels.length > 5 ? dataset.consumption : {
-          title: "Daily Consumption",
-          labels: referenceConsumption.labels,
-          values: referenceConsumption.values
-        };
+        this.dailyConsumption = this.resolveConsumptionDataset(dataset.consumption, 4);
+        this.consumption = this.consumptionMode === "monthly"
+          ? this.toMonthlyConsumption(this.dailyConsumption)
+          : this.dailyConsumption;
         this.success = dataset.success;
         this.alarms = dataset.alarms;
       } finally {
-        this.loading = false;
+        if (loadId === this.dashboardLoadId) this.loading = false;
       }
+    },
+    resolveConsumptionDataset(consumption, type = this.consumptionType) {
+      const hasVisibleValues = consumption.values.some((value) => Number(value) > 0);
+      const hasExpectedData = type === 5
+        ? consumption.labels.length > 0 && hasVisibleValues
+        : consumption.labels.length > 5 && hasVisibleValues;
+      if (hasExpectedData) return consumption;
+      const fallback = type === 5 ? referenceMonthlyConsumption : referenceConsumption;
+      return {
+        title: dashboardChartTitles[type] || "Daily Consumption",
+        labels: fallback.labels,
+        values: fallback.values
+      };
+    },
+    toMonthlyConsumption(daily) {
+      const totals = new Map();
+      daily.labels.forEach((label, index) => {
+        const month = String(label || "").slice(0, 7) || "Unknown";
+        totals.set(month, (totals.get(month) || 0) + Number(daily.values[index] || 0));
+      });
+      const labels = [...totals.keys()];
+      const values = labels.map((label) => Number((totals.get(label) || 0).toFixed(2)));
+      return this.resolveConsumptionDataset({
+        title: "Monthly Consumption",
+        labels,
+        values
+      }, 5);
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {

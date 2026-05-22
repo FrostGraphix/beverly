@@ -28,7 +28,7 @@ import {
     lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
-import { findWalletByOwner } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
 import { logAction } from './audit.js';
 import { ledgerKey, hashIdempotency } from './idempotency.js';
 
@@ -105,8 +105,11 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
     }
 
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
-    if (!wallet) throw new VendingError('vendor wallet not provisioned', 'wallet_missing');
-    if (wallet.status !== 'active') throw new VendingError('vendor wallet not active', 'wallet_inactive');
+    try {
+        assertWalletCanTransact(wallet, 'vend');
+    } catch (error: any) {
+        throw new VendingError(error.message, error.code ?? 'wallet_inactive');
+    }
 
     // resolve meter + tariff
     let meter: MeterInfo;

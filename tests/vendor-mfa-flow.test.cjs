@@ -45,7 +45,7 @@ for (const endpoint of [
 
 assert(auth.includes("mfa_required"), "vendor guard must block unverified MFA sessions");
 assert(auth.includes("vendorMfaSessionVerified"), "auth plugin must consult vendor MFA sessions");
-assert(/select\('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required'\)/.test(auth), "auth plugin must load vendor mfa_enrolled before enforcing MFA");
+assert(/select\('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required[^']*'\)/.test(auth), "auth plugin must load vendor mfa_enrolled before enforcing MFA");
 assert(routes.includes("beginVendorMfaReplacement(actor, code"), "MFA reset route must not disable before replacement setup");
 assert(authStore.includes("requiresMfaVerification"), "auth store must expose MFA verification gate");
 assert(router.includes("mode: 'verify'"), "router must force unverified MFA users into security check");

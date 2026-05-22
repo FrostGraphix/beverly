@@ -75,6 +75,12 @@ function mapRowShape(row, route) {
     if (record.totalPaid == null && record.purchaseTotalPaid != null) record.totalPaid = record.purchaseTotalPaid;
   }
 
+  if (route.hash.includes("remote-support/load-profile")) {
+    if (record.currentDate == null && record.createDate != null) record.currentDate = record.createDate;
+    if (record.data == null && record.totalEnergy != null) record.data = record.totalEnergy;
+    if (record.headline == null && record.power != null) record.headline = `Power ${record.power}`;
+  }
+
   if (route.hash.includes("admin/user")) {
     if (record.name == null) record.name = record.nickName || record.fullName || record.userId || "";
     if (record.status === true || record.status === 1) record.status = "Active";

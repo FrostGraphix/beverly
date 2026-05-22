@@ -75,42 +75,42 @@
           </BaseIconButton>
           <div class="breadcrumb">{{ breadcrumb }}</div>
           <div class="right-menu">
-            <div class="theme-dropdown-container" ref="accountMenuWrap">
-              <BaseButton class="topbar-create" variant="ghost" :disabled="!primaryCreateTarget" @click="openPrimaryCreate" aria-label="Create Beverly task">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M12 5v14"></path>
-                  <path d="M5 12h14"></path>
-                </svg>
-                <span>Create Task</span>
-              </BaseButton>
-              <BaseButton
-                class="user-avatar-button"
-                variant="ghost"
+            <div class="bw-account-menu" ref="accountMenuWrap">
+              <button
+                type="button"
+                class="bw-user-chip bw-user-chip-btn"
                 @click="openUserMenu"
                 :aria-label="`User menu for ${currentUserName}`"
                 aria-haspopup="menu"
                 :aria-expanded="String(userDropdownOpen)"
               >
-                <span class="user-avatar">{{ userInitials }}</span>
-              </BaseButton>
+                <span class="bw-avatar green">{{ userInitials }}</span>
+                <span class="bw-user-meta">
+                  <strong>{{ currentUserName.split(/[\\s(]+/)[0] || 'User' }}</strong>
+                  <span>{{ currentRoleName }}</span>
+                </span>
+                <svg class="bw-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </button>
               <transition name="dropdown">
-                <div v-show="userDropdownOpen" class="theme-dropdown user-dropdown" role="menu" aria-label="Beverly account menu">
-                  <div class="user-dropdown-brand">
-                    <span class="user-dropdown-logo">B</span>
+                <div v-show="userDropdownOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly account menu">
+                  <div class="bw-user-dropdown-brand">
+                    <span class="bw-user-dropdown-logo">B</span>
                     <span>
                       <strong>Beverly</strong>
                       <small>{{ currentUserName }} - {{ currentRoleName }}</small>
                     </span>
                   </div>
-                  <button type="button" class="user-menu-item active" role="menuitem" @click="openProfile">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M20 21a8 8 0 0 0-16 0"></path>
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                     <span>Profile</span>
                   </button>
-                  <button type="button" class="user-menu-item" role="menuitem" @click="openSettings">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSettings">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"></path>
                       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z"></path>
                     </svg>
@@ -118,17 +118,17 @@
                   </button>
                   <button
                     type="button"
-                    class="user-menu-item"
+                    class="bw-user-menu-item"
                     role="menuitem"
                     :aria-expanded="String(userThemePanelOpen)"
                     @click="userThemePanelOpen = !userThemePanelOpen"
                   >
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"></path>
                       <path d="M6 19c3-5 7-8 13-8"></path>
                     </svg>
                     <span>Theme</span>
-                    <svg class="user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <svg class="bw-user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                       <path d="m9 18 6-6-6-6"></path>
                     </svg>
                   </button>
@@ -145,28 +145,20 @@
                       <span class="theme-swatch" :style="{ background: theme.swatch }"></span>
                       <span>
                         <strong>{{ theme.label }}</strong>
-                        <small>{{ theme.description }}</small>
                       </span>
                     </button>
                   </div>
-                  <div class="user-menu-separator"></div>
-                  <button type="button" class="user-menu-item" role="menuitem" @click="openSearchFromMenu">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                      <path d="M15 6H9a3 3 0 0 0 0 6h6a3 3 0 0 0 0-6z"></path>
-                      <path d="M9 12a3 3 0 0 0 0 6h6a3 3 0 0 0 0-6"></path>
-                    </svg>
-                    <span>Keyboard shortcuts</span>
-                    <kbd>Ctrl K</kbd>
-                  </button>
-                  <button type="button" class="user-menu-item" role="menuitem" @click="openSearchFromMenu">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <div class="bw-user-menu-separator"></div>
+                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSearchFromMenu">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <circle cx="11" cy="11" r="7"></circle>
                       <path d="m21 21-4.3-4.3"></path>
                     </svg>
                     <span>Global search</span>
+                    <kbd>Ctrl K</kbd>
                   </button>
-                  <button type="button" class="user-menu-item" role="menuitem" @click="openFullscreenFromMenu">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openFullscreenFromMenu">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
                       <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
                       <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
@@ -174,8 +166,8 @@
                     </svg>
                     <span>Fullscreen</span>
                   </button>
-                  <button type="button" class="user-menu-item user-menu-item--danger" role="menuitem" @click="handleSignOut">
-                    <svg class="user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <button type="button" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="handleSignOut">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                       <path d="m16 17 5-5-5-5"></path>
                       <path d="M21 12H9"></path>
@@ -203,9 +195,7 @@
           <ReconciliationPage v-else-if="route.customComponent === 'ReconciliationPage'" :route="route" />
           <WalletFundingPage v-else-if="route.customComponent === 'WalletFundingPage'" :route="route" />
           <VendingMonitorPage v-else-if="route.customComponent === 'VendingMonitorPage'" :route="route" />
-          <ReportsPage v-else-if="route.customComponent === 'ReportsPage'" :route="route" />
-          <LiveProbingPage v-else-if="route.customComponent === 'LiveProbingPage'" />
-          <SiteConsumptionPage v-else-if="route.isCustomPage" :route="route" :hash="hash" :role-id="currentRoleId" />
+          <StationConsumptionPage v-else-if="route.customComponent === 'StationConsumptionPage'" :route="route" :hash="hash" :role-id="currentRoleId" />
           <TablePage v-else :route="route" />
         </main>
     </section>
@@ -264,16 +254,14 @@
 <script>
 import DashboardPage from "./components/DashboardPage.vue";
 import LoginPage from "./components/LoginPage.vue";
-import LiveProbingPage from "./components/LiveProbingPage.vue";
 import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
 import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
-import SiteConsumptionPage from "./components/SiteConsumptionPage.vue";
+import StationConsumptionPage from "./components/StationConsumptionPage.vue";
 import TablePage from "./components/TablePage.vue";
 import ProfilePage from "./components/ProfilePage.vue";
 import SettingsPage from "./components/SettingsPage.vue";
-import ReportsPage from "./components/ReportsPage.vue";
 import ToastNotification from "./components/ToastNotification.vue";
 import BaseButton from "./components/base/BaseButton.vue";
 import BaseIconButton from "./components/base/BaseIconButton.vue";
@@ -311,7 +299,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, LiveProbingPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, SiteConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, SettingsPage, SettlementPage, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -503,6 +491,18 @@ export default {
     },
     syncHash() {
       const nextHash = window.location.hash || "#/login?redirect=%2Fdashboard";
+      if (normalizeHash(nextHash) === "#/prepay-report/site-consumption") {
+        window.location.hash = "#/prepay-report/station-consumption";
+        return;
+      }
+      if (normalizeHash(nextHash) === "#/system/live-probing") {
+        window.location.hash = "#/system/automation-command";
+        return;
+      }
+      if (normalizeHash(nextHash) === "#/admin/reports") {
+        window.location.href = "/wallet-admin/reports";
+        return;
+      }
       this.hash = nextHash.startsWith("#/login")
         ? nextHash
         : (this.routeExists(nextHash) ? nextHash : this.nextRoute(nextHash).hash);
