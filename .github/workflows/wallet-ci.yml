@@ -113,7 +113,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: frontend-builds
-          path: apps/*/dist
+          path: |
+            dist/wallet-admin
+            dist/wallet-vendor
+            dist/wallet-customer
           retention-days: 3
 
   # ── E2E tests (API layer — no browser needed) ─────────────────────────
