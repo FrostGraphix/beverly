@@ -588,7 +588,7 @@ export async function fetchTableData(route, options = {}, api = defaultTableApi)
   }
   const request = tableRequest(route, options);
   const dataPath = request.path;
-  if (isPrepaySituationRoute(route)) {
+  if (isPrepaySituationRoute(route) && !String(requestOptions.siteId || "").trim()) {
     const fullCollection = await fetchAllTableRows(request, route, api);
     const mappedAll = mapTableCollection({ data: { rows: fullCollection.rows, total: fullCollection.total } }, route);
     const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");

@@ -20,7 +20,7 @@
   --color-text-inverse: #ffffff;
 
   /* ── Surfaces — wallet light surface scale ── */
-  --color-surface-page:    #ffffff;
+  --color-surface-page:    oklch(98% 0.004 240);
   --color-surface-card:    oklch(100% 0 0);
   --color-surface-glass:   oklch(100% 0 0 / 0.88);
   --color-surface-overlay: oklch(20% 0.020 240 / 0.55);

@@ -7,7 +7,7 @@
       </div>
     </template>
     <template #toolbar>
-      <div class="filter-toolbar ddm-toolbar" @click="closeSortDirectionMenu">
+      <div class="filter-toolbar ddm-toolbar" data-testid="table-apply-controls" @click="closeSortDirectionMenu">
         <div class="ddm-toolbar-group ddm-search-group">
           <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Site filter" @change="load">
             <option v-for="option in siteOptions" :key="option.value || 'all-sites'" :value="option.value">{{ option.label }}</option>
