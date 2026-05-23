@@ -780,7 +780,8 @@ export default {
       this.refreshingAgg = true;
       this.error = "";
       try {
-        await triggerMeterAggregateRefresh();
+        const stationIds = this.stationFilter ? [this.stationFilter] : this.STATIONS;
+        await triggerMeterAggregateRefresh(stationIds);
         this.lastAggRefresh = new Date().toLocaleTimeString();
         await this.load();
       } catch (err) {

@@ -57,6 +57,7 @@ import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../ser
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { runMalwareScan } from '../services/file-scan.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' ? 429
@@ -245,6 +246,30 @@ const customer: FastifyPluginAsync = async (fastify) => {
             public_url: pub?.publicUrl ?? null,
             sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
         };
+    });
+
+    fastify.post('/profile-picture/scan', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            file_name: z.string().min(1).max(160),
+            content_base64: z.string().min(8),
+        });
+        const body = schema.parse(req.body ?? {});
+        const scan = await runMalwareScan(Buffer.from(body.content_base64, 'base64'), body.file_name);
+        if (!scan.ok) return reply.code(422).send({ error: 'malware_scan_failed', details: scan.output ?? null });
+        return { ok: true, mode: scan.mode };
+    });
+
+    fastify.delete('/profile-picture', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const customerId = req.actor!.customerId!;
+        await adminClient.from('customers').update({ profile_picture_url: null }).eq('id', customerId);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'customer',
+            action: 'customer.profile_picture.deleted',
+            targetType: 'customer',
+            targetId: customerId,
+        });
+        return { ok: true };
     });
 
     fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {

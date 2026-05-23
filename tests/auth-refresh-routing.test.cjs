@@ -90,7 +90,7 @@ async function main() {
       LIVE_READ_MODE: "live",
       SUPABASE_AUTH_ENABLED: "false",
     }, async () => {
-      for (const path of ["/api/auth/refresh", "/API/auth/refresh", "/api/API/auth/refresh"]) {
+      for (const path of ["/api/auth/refresh", "/API/auth/refresh", "/api/API/auth/refresh", "/api/reference.js?__pathname=/api/auth/refresh"]) {
         const res = await request(server.address().port, path);
         assert.strictEqual(res.status, 400, `${path} must fail locally`);
         assert.strictEqual(res.body._proxy.source, "auth-refresh", `${path} must not proxy live`);

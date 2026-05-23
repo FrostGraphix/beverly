@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 import { api, ApiError } from '../lib/api';
@@ -20,6 +21,8 @@ const loading  = ref(false);
 const error    = ref<string | null>(null);
 const saved    = ref(false);
 const uploading = ref(false);
+const cropOpen = ref(false);
+const cropFile = ref<File | null>(null);
 
 async function saveProfile() {
     loading.value = true; error.value = null;
@@ -41,12 +44,29 @@ async function saveProfile() {
         error.value = e?.message ?? 'Update failed.';
     } finally { loading.value = false; }
 }
+async function removeProfilePicture() {
+    await api.del('/api/v1/customer/profile-picture');
+    profilePictureUrl.value = '';
+    if (auth.customer) auth.customer.profile_picture_url = null;
+}
 
 async function uploadProfilePicture(event: Event) {
-    const file = (event.target as HTMLInputElement)?.files?.[0];
-    if (!file) return;
+    const file = (event.target as HTMLInputElement)?.files?.[0]; if (!file) return;
+    cropFile.value = file; cropOpen.value = true;
+}
+
+async function uploadProcessedProfilePicture(file: File) {
     uploading.value = true;
     try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i += 1) binary += String.fromCharCode(bytes[i]);
+        const contentBase64 = btoa(binary);
+        await api.post('/api/v1/customer/profile-picture/scan', {
+            file_name: file.name,
+            content_base64: contentBase64,
+        });
         const payload = await api.post<any>('/api/v1/customer/profile-picture/upload-url', {
             file_name: file.name,
             content_type: file.type,
@@ -115,6 +135,12 @@ async function doSignOut() {
 
 <template>
   <AppShell>
+    <ProfilePictureCropModal
+      :open="cropOpen"
+      :file="cropFile"
+      @close="cropOpen = false"
+      @done="(f) => { cropOpen = false; uploadProcessedProfilePicture(f); }"
+    />
     <!-- Avatar + name -->
     <div class="bw-card" style="text-align:center; padding: var(--s-6)">
       <div style="width:64px; height:64px; border-radius:50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display:grid; place-items:center; margin: 0 auto var(--s-3); font-size:28px; font-weight:700; color:white; overflow:hidden">
@@ -177,6 +203,7 @@ async function doSignOut() {
             {{ loading ? 'Saving…' : 'Save' }}
           </button>
         </div>
+        <button type="button" class="bw-btn" @click="removeProfilePicture">Remove picture</button>
       </form>
     </div>
 

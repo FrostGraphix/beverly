@@ -3121,6 +3121,7 @@ async function tryLivePath(request, liveUrl, requestData, token) {
 async function proxyLive(request, pathname, requestData) {
   const env = getEnv();
   if (!env.liveProxyEnabled) return null;
+  if (isAuthRefreshPath(normalizeRequestPath(pathname))) return null;
   const liveRequestData = sanitizeLiveRequestData(pathname, requestData);
   if (isGuardedWriteRequest(pathname, request.method, requestData) && !env.allowLiveWrites) {
     return {

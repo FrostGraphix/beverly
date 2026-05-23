@@ -480,13 +480,21 @@ export async function fetchStationConsumptionAnalytics({ stationId = null, from,
  * Refreshes each station sequentially (per-station RPC) to avoid statement
  * timeouts. Returns { ok, durationMs } or throws on failure.
  */
-export async function triggerMeterAggregateRefresh() {
-  const response = await authedFetch("/api/local/consumption/refresh-aggregates", { method: "POST" });
+export async function triggerMeterAggregateRefresh(stationIds = LIVE_STATIONS) {
+  const stationList = Array.isArray(stationIds) && stationIds.length ? stationIds : LIVE_STATIONS;
+  const response = await authedFetch("/api/v1/admin/consumption/refresh", {
+    method: "POST",
+    body: JSON.stringify({ stationIds: stationList }),
+  });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok || !json.ok) {
-    throw new Error(json.error || `Aggregate refresh failed (${response.status}).`);
+  if (response.ok && json?.ok) return json;
+
+  const fallback = await authedFetch("/api/local/consumption/refresh-aggregates", { method: "POST" });
+  const fallbackJson = await fallback.json().catch(() => ({}));
+  if (!fallback.ok || !fallbackJson.ok) {
+    throw new Error(fallbackJson.error || json?.error || `Aggregate refresh failed (${fallback.status}).`);
   }
-  return json;
+  return fallbackJson;
 }
 
 /**

@@ -43,6 +43,7 @@ const loading       = ref(false);
 const meterLoading  = ref(false);
 const refreshing    = ref(false);
 const error         = ref('');
+const refreshInfo   = ref('');
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ async function loadStations() {
 async function loadData() {
     loading.value = true;
     error.value   = '';
+    refreshInfo.value = '';
     try {
         const [stnRes, cumRes] = await Promise.all([
             api.get<{ rows: AggRow[] }>(`/api/v1/admin/consumption?scope=station&period=${period.value}&limit=500`),
@@ -124,11 +126,17 @@ async function loadMeterBreakdown() {
 
 async function triggerRefresh() {
     refreshing.value = true;
+    refreshInfo.value = '';
     try {
         const stationIds = selectedStn.value
             ? [selectedStn.value]
             : stations.value.map((station) => station.stationId).filter(Boolean);
-        await api.post('/api/v1/admin/consumption/refresh', { stationIds });
+        const result = await api.post('/api/v1/admin/consumption/refresh', { stationIds }) as { refreshedStations?: number; failedStations?: number };
+        const refreshed = Number(result?.refreshedStations ?? 0);
+        const failed = Number(result?.failedStations ?? 0);
+        refreshInfo.value = failed > 0
+            ? `Rebuild finished: ${refreshed} station(s) refreshed, ${failed} failed.`
+            : `Rebuild finished: ${refreshed} station(s) refreshed.`;
         await loadData();
     } catch (e: any) {
         error.value = e.message ?? 'Refresh failed.';
@@ -218,12 +226,13 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
         </div>
         <button class="bw-btn sm" :disabled="refreshing || loading" @click="triggerRefresh">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="refreshing ? 'animation:spin .7s linear infinite' : ''"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-          {{ refreshing ? 'Refreshing…' : 'Refresh now' }}
+          {{ refreshing ? 'Rebuilding…' : 'Rebuild aggregates' }}
         </button>
       </div>
     </div>
 
     <div v-if="error" class="bw-error-banner" role="alert" style="margin-bottom: var(--s-4)">{{ error }}</div>
+    <div v-else-if="refreshInfo" class="bw-success-banner" role="status" style="margin-bottom: var(--s-4)">{{ refreshInfo }}</div>
 
     <!-- Loading skeleton -->
     <div v-if="loading" style="text-align:center; padding: var(--s-10)">

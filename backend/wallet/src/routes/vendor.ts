@@ -20,6 +20,7 @@ import {
     buildRemoteTokenTaskPayload,
 } from '../services/token-engine.js';
 import { logSecurityEvent } from '../services/audit.js';
+import { logAction } from '../services/audit.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import {
@@ -38,6 +39,7 @@ import {
     verifyVendorVendCredential,
 } from '../services/vendor-vend-credential.js';
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { runMalwareScan } from '../services/file-scan.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -190,6 +192,30 @@ const route: FastifyPluginAsync = async (fastify) => {
             public_url: pub?.publicUrl ?? null,
             sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
         };
+    });
+
+    fastify.post('/profile-picture/scan', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const schema = z.object({
+            file_name: z.string().min(1).max(160),
+            content_base64: z.string().min(8),
+        });
+        const body = schema.parse(req.body ?? {});
+        const scan = await runMalwareScan(Buffer.from(body.content_base64, 'base64'), body.file_name);
+        if (!scan.ok) return reply.code(422).send({ error: 'malware_scan_failed', details: scan.output ?? null });
+        return { ok: true, mode: scan.mode };
+    });
+
+    fastify.delete('/profile-picture', { preHandler: fastify.requireVendor() }, async (req) => {
+        const actorId = req.actor!.actorId;
+        await adminClient.from('vendor_users').update({ profile_picture_url: null }).eq('id', actorId);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'vendor_user',
+            action: 'vendor.profile_picture.deleted',
+            targetType: 'vendor_user',
+            targetId: actorId,
+        });
+        return { ok: true };
     });
 
     fastify.get('/vend-credential/status', { preHandler: fastify.requireVendor() }, async (req) => {

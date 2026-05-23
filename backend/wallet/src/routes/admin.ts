@@ -105,6 +105,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
+    'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
     'GET /vendors/:id': 'wallet.vendors.review',
     'GET /vendors/:id/wallet': 'wallet.vendors.review',
     'GET /vendors/:id/transactions': 'wallet.vending.monitor',
@@ -128,6 +129,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /customers/:id/purchases': 'wallet.vending.monitor',
     'GET /customers/:id/funding': 'wallet.funding.view',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
+    'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
     'GET /purchases': 'wallet.vending.monitor',
     'GET /vending': 'wallet.vending.monitor',
     'GET /purchases/summary': 'wallet.vending.monitor',
@@ -517,6 +519,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { data: vendor, error } = await adminClient
             .from('vendor_organizations').select('*').eq('id', id).maybeSingle();
         if (error || !vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+        const { data: vendorUser } = await adminClient
+            .from('vendor_users').select('profile_picture_url').eq('vendor_organization_id', id).limit(1).maybeSingle();
 
         const { data: wallet } = await adminClient
             .from('wallets').select('*').eq('owner_type', 'vendor').eq('owner_id', id).maybeSingle();
@@ -534,7 +538,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const stationCount = ((vendor as any).operating_stations ?? []).length;
 
         return {
-            vendor,
+            vendor: { ...vendor, profile_picture_url: (vendorUser as any)?.profile_picture_url ?? null },
             wallet: wallet ?? null,
             balance_minor:   balance?.ledgerBalanceMinor   ?? 0,
             holds_minor:     balance?.activeHoldsMinor     ?? 0,
@@ -547,6 +551,26 @@ const route: FastifyPluginAsync = async (fastify) => {
                 stationCount,
             },
         };
+    });
+
+    fastify.patch('/vendors/:id/profile-picture', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
+        const body = schema.parse(req.body);
+        const { data: before } = await adminClient.from('vendor_users').select('profile_picture_url').eq('vendor_organization_id', id).limit(1).maybeSingle();
+        const { error } = await adminClient.from('vendor_users').update({ profile_picture_url: body.profile_picture_url }).eq('vendor_organization_id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vendor.profile_picture.override',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
+            after: { profile_picture_url: body.profile_picture_url ?? null },
+        });
+        return { ok: true };
     });
 
     // ── vendor wallet ledger ──
@@ -1927,10 +1951,30 @@ const route: FastifyPluginAsync = async (fastify) => {
             const stationIds = body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
             const { refreshConsumptionAggregates } = await import('../services/consumption.js');
             const result = await refreshConsumptionAggregates(stationIds);
-            return { ok: true, ...result };
+            return { ...result, ok: true };
         } catch (e: any) {
             return reply.code(500).send({ error: 'refresh_failed', message: e.message, result: e.result });
         }
+    });
+
+    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
+        const body = schema.parse(req.body);
+        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
+        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.profile_picture.override',
+            targetType: 'customer',
+            targetId: id,
+            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
+            after: { profile_picture_url: body.profile_picture_url ?? null },
+        });
+        return { ok: true };
     });
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {
