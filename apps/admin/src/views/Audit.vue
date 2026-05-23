@@ -64,6 +64,7 @@ const fTargetType = ref('');
 const fTarget = ref('');
 const fSince = ref('');
 const fUntil = ref('');
+const showAdvancedFilters = ref(false);
 
 async function loadAudit(reset = true) {
     loading.value = true;
@@ -205,6 +206,43 @@ function sevBadge(s: string) {
 }
 
 function shortId(s: string | null) { return s ? s.slice(0, 8) : '—'; }
+function actorName(entry: AuditEntry): string {
+    const meta = entry?.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+    const candidates = [
+        (entry as any).actor_name,
+        (entry as any).registration_name,
+        (meta as any).registrationName,
+        (meta as any).registration_name,
+        (meta as any).actorName,
+        (meta as any).actor_name,
+        (meta as any).fullName,
+        (meta as any).full_name,
+        (meta as any).userName,
+        (meta as any).user_name,
+        (meta as any).name,
+        (meta as any).email,
+        (meta as any).vendorName,
+        (meta as any).vendor_name,
+        (meta as any).customerName,
+        (meta as any).customer_name,
+    ];
+    for (const value of candidates) {
+        const text = String(value ?? '').trim();
+        if (text) return text;
+    }
+    const role = String(entry?.actor_role ?? '').trim();
+    if (role) {
+        return role
+            .replace(/[_-]+/g, ' ')
+            .replace(/\b\w/g, (ch) => ch.toUpperCase());
+    }
+    const actorType = String(entry?.actor_type ?? '').trim();
+    const actorId = shortId(entry?.actor_user_id ?? null);
+    if (actorType && actorId !== '—') return `${actorType} #${actorId}`;
+    if (actorType) return actorType;
+    if (actorId !== '—') return `User #${actorId}`;
+    return 'System';
+}
 
 function readableError(error: unknown, fallback: string) {
     if (error instanceof ApiError) return `${fallback} ${error.message}`;
@@ -261,7 +299,7 @@ onMounted(loadAudit);
     <!-- ═══ TAB: AUDIT TRAIL ═══ -->
     <section v-if="tab === 'audit'">
       <div class="bw-card filter-card">
-        <div class="filter-grid">
+        <div :class="['filter-grid', { 'show-advanced': showAdvancedFilters }]">
           <div>
             <label class="bw-label">Action prefix</label>
             <input class="bw-input bw-mono" v-model="fAction" placeholder="e.g. wallet.funding" @keyup.enter="loadAudit()" />
@@ -277,15 +315,20 @@ onMounted(loadAudit);
               <option value="system">system</option>
             </select>
           </div>
-          <div>
+          <div class="filter-toggle-wrap">
+            <button class="bw-btn sm" type="button" @click="showAdvancedFilters = !showAdvancedFilters">
+              {{ showAdvancedFilters ? 'Hide advanced' : 'More filters' }}
+            </button>
+          </div>
+          <div class="advanced-field">
             <label class="bw-label">Actor user id</label>
             <input class="bw-input bw-mono" v-model="fActor" placeholder="uuid" @keyup.enter="loadAudit()" />
           </div>
-          <div>
+          <div class="advanced-field">
             <label class="bw-label">Target type</label>
             <input class="bw-input bw-mono" v-model="fTargetType" placeholder="vendor_organization, wallet…" @keyup.enter="loadAudit()" />
           </div>
-          <div>
+          <div class="advanced-field">
             <label class="bw-label">Target id</label>
             <input class="bw-input bw-mono" v-model="fTarget" placeholder="uuid" @keyup.enter="loadAudit()" />
           </div>
@@ -328,6 +371,7 @@ onMounted(loadAudit);
               <tr>
                 <th>When</th>
                 <th>Actor</th>
+                <th>Name</th>
                 <th>Action</th>
                 <th>Target</th>
                 <th>IP</th>
@@ -350,6 +394,9 @@ onMounted(loadAudit);
                   <span :class="['bw-badge', actorBadge(e.actor_type)]">{{ e.actor_type || '—' }}</span>
                   <div class="bw-mono bw-muted row-sub">{{ e.actor_role || shortId(e.actor_user_id) }}</div>
                 </td>
+                <td>
+                  <div class="row-sub-strong">{{ actorName(e) }}</div>
+                </td>
                 <td class="bw-mono">{{ e.action }}</td>
                 <td>
                   <div class="bw-muted row-sub-strong">{{ e.target_type || '—' }}</div>
@@ -359,7 +406,7 @@ onMounted(loadAudit);
                 <td class="row-arrow">→</td>
               </tr>
               <tr v-if="!entries.length && !loading">
-                <td colspan="6" class="bw-muted empty">No matching entries.</td>
+                <td colspan="7" class="bw-muted empty">No matching entries.</td>
               </tr>
             </tbody>
           </table>
@@ -561,13 +608,13 @@ onMounted(loadAudit);
 .audit-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s-3);
+  gap: var(--s-2);
   margin-bottom: var(--s-4);
 }
 .audit-stat {
-  padding: var(--s-4);
+  padding: var(--s-3);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background:
     linear-gradient(135deg, color-mix(in oklch, var(--brand) 12%, transparent), transparent 48%),
     var(--surface);
@@ -576,14 +623,15 @@ onMounted(loadAudit);
 .audit-stat small {
   display: block;
   color: var(--text-muted);
-  font-size: var(--t-xs);
+  font-size: 11px;
+  line-height: 1.3;
 }
 .audit-stat strong {
   display: block;
-  margin: 4px 0;
+  margin: 3px 0;
   color: var(--text);
-  font-size: clamp(22px, 4vw, 34px);
-  line-height: 1;
+  font-size: clamp(18px, 2.4vw, 30px);
+  line-height: 1.15;
 }
 .audit-alert {
   display: flex;
@@ -606,6 +654,7 @@ onMounted(loadAudit);
   gap: var(--s-3);
   align-items: end;
 }
+.filter-toggle-wrap { display: none; }
 .filter-actions {
   display: flex;
   gap: var(--s-2);
@@ -747,9 +796,14 @@ onMounted(loadAudit);
 .drawer-leave-to .drawer { transform: translateX(40px); }
 
 @media (max-width: 640px) {
-  .audit-overview { grid-template-columns: 1fr; }
+  .audit-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .audit-alert { align-items: stretch; flex-direction: column; }
   .filter-grid { grid-template-columns: 1fr; }
+  .filter-toggle-wrap { display: block; }
+  .advanced-field { display: none; }
+  .filter-grid.show-advanced .advanced-field { display: block; }
+  .filter-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .filter-actions .bw-btn { min-height: 34px; font-size: 12px; }
   .drawer { width: 100%; padding: var(--s-4); }
   .drawer-dl { grid-template-columns: 1fr; }
   .drawer-dl dt { font-weight: 700; margin-top: var(--s-2); }

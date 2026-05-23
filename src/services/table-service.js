@@ -138,6 +138,7 @@ function routeUsesServerPagination(route) {
     || hash.includes("admin/log")
     || hash.includes("admin/meter")
     || hash.includes("token-generate")
+    || hash.includes("prepay-report/abnormal-alarm")
     || hash.includes("prepay-report/low-purchase-situation")
     || hash.startsWith("#/remote-operation/");
 }
@@ -189,6 +190,7 @@ export function tableDataPath(route) {
   if (route.hash.includes("low-purchase-situation")) return "/api/PrepayReport/LowPurchaseSituation";
   if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
+  if (route.hash.includes("abnormal-alarm")) return "/api/local/abnormal-alarms";
   if (route.hash.includes("remote-support/file-upload")) return "/api/local/importJobs/read";
   if (route.hash.includes("management/gateway")) return "/api/gateway/read";
   if (route.hash.includes("management/customer")) return "/api/customer/read";
@@ -288,6 +290,24 @@ function buildTableRequest(route, requestOptions) {
         ...searchFilter(requestOptions)
       },
       pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/local/abnormal-alarms")) {
+    const hash = String(route.hash || "");
+    const query = hash.includes("?") ? hash.split("?")[1] : "";
+    const params = new URLSearchParams(query);
+    const alarm = params.get("alarm") || "";
+    return {
+      path,
+      method: "GET",
+      params: {
+        alarm,
+        station_id: requestOptions.siteId || "",
+        from: requestOptions.from,
+        to: requestOptions.to,
+        limit: requestOptions.pageSize
+      },
+      pagination: "offset"
     };
   }
   if (lowerPath.includes("/api/meter/read")) {

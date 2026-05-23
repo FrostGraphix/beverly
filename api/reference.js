@@ -2776,6 +2776,35 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       }
     };
   }
+  if (pathname === "/api/local/abnormal-alarms") {
+    const alarm = String(payload.alarm || "").trim();
+    const stationId = String(payload.station_id || "").trim();
+    const from = String(payload.from || "").trim();
+    const to = String(payload.to || "").trim();
+    const offset = Math.max(0, Number(payload.offset || 0));
+    const pageLimit = Math.min(1000, Math.max(10, Number(payload.pageLimit || payload.limit || 200)));
+    const base = await readDailyMeterRows({
+      pathname: "/api/DailyDataMeter/read",
+      requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from || undefined, TO: to || undefined }
+    });
+    const list = base?.body?.result?.data || base?.body?.data?.data || [];
+    const rows = [];
+    for (const r of list) {
+      const pushes = [
+        ["noData", "No Data Report", Number(r.usage1 ?? r.energyConsumptionKwh ?? 0) === 0],
+        ["magneticInterference", "Magnetic Interference", Number(r.magneticInterference ?? r.magneticStatus ?? 0) > 0 || String(r.magneticStatus || "").toLowerCase() === "abnormal"],
+        ["batteryLow", "Battery Low", Number(r.batteryLow ?? 0) > 0 || String(r.batteryStatus || "").toLowerCase() === "low"],
+        ["terminalCoverOpen", "Terminal Cover Open", Number(r.terminalCoverOpen ?? 0) > 0 || String(r.terminalCoverOpen || "").toLowerCase() === "open"],
+        ["coverOpen", "Upper Open", Number(r.coverOpen ?? 0) > 0 || String(r.coverOpen || "").toLowerCase() === "open"],
+        ["currentReverse", "Current Reverse", Number(r.currentReverse ?? 0) > 0 || String(r.currentReverse || "").toLowerCase() === "yes"],
+        ["currentUnbalance", "Current Unbalance", Number(r.currentUnbalance ?? 0) > 0 || String(r.currentUnbalance || "").toLowerCase() === "yes"]
+      ];
+      for (const [key, label, hit] of pushes) if (hit) rows.push({ ...r, alarmKey: key, alarmLabel: label });
+    }
+    const filtered = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
+    const paged = filtered.slice(offset, offset + pageLimit);
+    return localJobResponse({ total: filtered.length, rows: paged, data: paged, result: { total: filtered.length, data: paged } });
+  }
   if (pathname === "/api/user/profile") {
     return localJobResponse({
       saved: true,

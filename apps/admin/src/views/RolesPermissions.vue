@@ -36,6 +36,7 @@ const activeTab   = ref<'matrix' | 'staff'>('matrix');
 const selectedRole = ref('super-admin');
 const staffSearch  = ref('');
 const staffRole    = ref('');
+const expandedStaff = ref<string[]>([]);
 
 /* invite */
 const inviteOpen = ref(false);
@@ -113,6 +114,18 @@ function toast(msg: string, kind: 'ok' | 'err' = 'ok') {
 }
 function groupProgress(items: PermissionCatalogItem[]) {
     return Math.round((items.filter(i => rolePermSet.value.has(i.key)).length / items.length) * 100);
+}
+function staffKey(u: StaffRow) {
+    return String(u.auth_user_id || u.user_id || u.email || u.id || `${u.user_name}:${u.role_key}`);
+}
+function isStaffExpanded(u: StaffRow) {
+    return expandedStaff.value.includes(staffKey(u));
+}
+function toggleStaffExpanded(u: StaffRow) {
+    const key = staffKey(u);
+    expandedStaff.value = isStaffExpanded(u)
+        ? expandedStaff.value.filter((k) => k !== key)
+        : [...expandedStaff.value, key];
 }
 
 /* ─── API ─────────────────────────────────────────────────────────────── */
@@ -316,40 +329,44 @@ onMounted(load);
                 </div>
               </div>
 
-              <!-- Role picker -->
-              <div class="ac-field ac-field--full">
-                <label class="bw-label">Assign role</label>
-                <div class="ac-role-grid">
-                  <button
-                    v-for="r in roles.filter(r => r.role_key !== 'super-admin')"
-                    :key="r.role_key"
-                    type="button"
-                    :class="['ac-role-pick', `rc-${rc(r.role_key)}`, draft.roleKey === r.role_key && 'is-picked']"
-                    @click="draft.roleKey = r.role_key"
-                  >
-                    <span class="ac-role-pick-badge">{{ initials(r.role_key) }}</span>
-                    <span class="ac-role-pick-name">{{ r.role_name }}</span>
-                    <span class="ac-role-pick-count">{{ permCount(r.role_key) }} perms</span>
-                  </button>
+              <div class="ac-invite-grid">
+                <!-- Role picker -->
+                <div class="ac-field ac-field--full">
+                  <label class="bw-label">Assign role</label>
+                  <div class="ac-role-grid">
+                    <button
+                      v-for="r in roles.filter(r => r.role_key !== 'super-admin')"
+                      :key="r.role_key"
+                      type="button"
+                      :class="['ac-role-pick', `rc-${rc(r.role_key)}`, draft.roleKey === r.role_key && 'is-picked']"
+                      @click="draft.roleKey = r.role_key"
+                    >
+                      <span class="ac-role-pick-badge">{{ initials(r.role_key) }}</span>
+                      <span class="ac-role-pick-name">{{ r.role_name }}</span>
+                      <span class="ac-role-pick-count">{{ permCount(r.role_key) }} perms</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <!-- Permission preview for picked role -->
-              <div class="ac-perm-preview">
-                <p class="bw-label" style="margin-bottom:8px">What they can do</p>
-                <div class="ac-perm-chips">
-                  <span
-                    v-for="item in catalog.filter(i => permissions.some(p => p.role_key === draft.roleKey && p.route_hash === i.key))"
-                    :key="item.key"
-                    :class="['ac-chip', `risk-${item.risk}`]"
-                  >{{ item.label }}</span>
-                  <span v-if="!catalog.filter(i => permissions.some(p => p.role_key === draft.roleKey && p.route_hash === i.key)).length" class="ac-empty-chips">No permissions assigned to this role yet.</span>
+                <div class="ac-stack-col">
+                  <!-- Permission preview for picked role -->
+                  <div class="ac-perm-preview">
+                    <p class="bw-label" style="margin-bottom:8px">What they can do</p>
+                    <div class="ac-perm-chips">
+                      <span
+                        v-for="item in catalog.filter(i => permissions.some(p => p.role_key === draft.roleKey && p.route_hash === i.key))"
+                        :key="item.key"
+                        :class="['ac-chip', `risk-${item.risk}`]"
+                      >{{ item.label }}</span>
+                      <span v-if="!catalog.filter(i => permissions.some(p => p.role_key === draft.roleKey && p.route_hash === i.key)).length" class="ac-empty-chips">No permissions assigned to this role yet.</span>
+                    </div>
+                  </div>
+
+                  <div class="ac-field ac-field--full">
+                    <label class="bw-label">Temp password <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-faint)">(auto-generated if blank)</span></label>
+                    <input v-model="draft.tempPassword" class="bw-input bw-mono" minlength="12" placeholder="Leave blank to auto-generate" />
+                  </div>
                 </div>
-              </div>
-
-              <div class="ac-field ac-field--full">
-                <label class="bw-label">Temp password <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-faint)">(auto-generated if blank)</span></label>
-                <input v-model="draft.tempPassword" class="bw-input bw-mono" minlength="12" placeholder="Leave blank to auto-generate" />
               </div>
 
               <div class="ac-invite-actions">
@@ -511,48 +528,63 @@ onMounted(load);
 
           <!-- Groups -->
           <div v-else class="ac-groups">
-            <div v-for="grp in grouped" :key="grp.g" class="ac-group">
-              <!-- Group header with progress bar -->
-              <div class="ac-group-head">
-                <span class="ac-section-label">{{ grp.g }}</span>
-                <div class="ac-group-progress">
-                  <div class="ac-group-bar">
-                    <div class="ac-group-fill" :style="{ width: groupProgress(grp.items) + '%' }" />
-                  </div>
-                  <span class="ac-group-tally">{{ grp.items.filter(i => rolePermSet.has(i.key)).length }}/{{ grp.items.length }}</span>
-                </div>
-              </div>
-
-              <div class="ac-perm-list">
-                <button
-                  v-for="item in grp.items"
-                  :key="item.key"
-                  :class="[
-                    'ac-perm-row',
-                    rolePermSet.has(item.key) && 'is-on',
-                    selectedRole === 'super-admin' && 'is-locked',
-                  ]"
-                  :disabled="saving || !canManage || selectedRole === 'super-admin'"
-                  @click="requestToggle(item)"
-                >
-                  <!-- Left: label + key -->
-                  <div class="ac-perm-left">
-                    <div :class="['ac-perm-dot', `risk-${item.risk}`]" />
-                    <div>
-                      <span class="ac-perm-label">{{ item.label }}</span>
-                      <code class="ac-perm-key">{{ item.key }}</code>
-                    </div>
-                  </div>
-
-                  <!-- Risk badge -->
-                  <span :class="['ac-risk-badge', `risk-${item.risk}`]">{{ item.risk }}</span>
-
-                  <!-- Toggle -->
-                  <div :class="['ac-toggle', rolePermSet.has(item.key) && 'is-on', selectedRole === 'super-admin' && 'is-locked']">
-                    <div class="ac-toggle-thumb" />
-                  </div>
-                </button>
-              </div>
+            <div class="ac-table-scroll">
+              <table class="ac-perm-table">
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th>Permission</th>
+                    <th>Route key</th>
+                    <th>Risk</th>
+                    <th class="ac-access-col">Access</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="grp in grouped" :key="grp.g">
+                    <tr class="ac-group-row">
+                      <td class="ac-group-cell">{{ grp.g }}</td>
+                      <td />
+                      <td />
+                      <td />
+                      <td class="ac-group-progress-cell">
+                        <div class="ac-group-progress">
+                          <div class="ac-group-bar">
+                            <div class="ac-group-fill" :style="{ width: groupProgress(grp.items) + '%' }" />
+                          </div>
+                          <span class="ac-group-tally">{{ grp.items.filter(i => rolePermSet.has(i.key)).length }}/{{ grp.items.length }}</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-for="item in grp.items" :key="item.key" :class="['ac-perm-table-row', rolePermSet.has(item.key) && 'is-on']">
+                      <td class="ac-empty-group-cell" />
+                      <td>
+                        <div class="ac-perm-left">
+                          <div :class="['ac-perm-dot', `risk-${item.risk}`]" />
+                          <span class="ac-perm-label">{{ item.label }}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <code class="ac-perm-key">{{ item.key }}</code>
+                      </td>
+                      <td>
+                        <span :class="['ac-risk-badge', `risk-${item.risk}`]">{{ item.risk }}</span>
+                      </td>
+                      <td class="ac-access-cell">
+                        <button
+                          :class="['ac-toggle-btn', rolePermSet.has(item.key) && 'is-on', selectedRole === 'super-admin' && 'is-locked']"
+                          :disabled="saving || !canManage || selectedRole === 'super-admin'"
+                          @click="requestToggle(item)"
+                        >
+                          <div :class="['ac-toggle', rolePermSet.has(item.key) && 'is-on', selectedRole === 'super-admin' && 'is-locked']">
+                            <div class="ac-toggle-thumb" />
+                          </div>
+                          <span class="ac-toggle-label">{{ rolePermSet.has(item.key) ? 'On' : 'Off' }}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -602,10 +634,11 @@ onMounted(load);
 
         <!-- Grid -->
         <div v-else class="ac-staff-grid">
-          <article v-for="u in filteredStaff" :key="u.auth_user_id || u.user_id || u.email || u.id" :class="['ac-staff-card', `rc-${rc(u.role_key)}`]">
+          <article v-for="u in filteredStaff" :key="staffKey(u)" :class="['ac-staff-card', `rc-${rc(u.role_key)}`, isStaffExpanded(u) && 'is-expanded']">
             <!-- Card accent line -->
             <div class="ac-card-accent" />
 
+            <button class="ac-staff-summary" @click="toggleStaffExpanded(u)">
             <div class="ac-staff-top">
               <div :class="['ac-staff-avatar', `rc-${rc(u.role_key)}`]">{{ initials(u.role_key) }}</div>
               <div class="ac-staff-identity">
@@ -613,8 +646,14 @@ onMounted(load);
                 <span>{{ u.email || 'No email' }}</span>
               </div>
               <span :class="['ac-status-pip', u.confirmed_at ? 'pip-ok' : 'pip-wait']" :title="u.confirmed_at ? 'Confirmed' : 'Invitation pending'" />
+                <div class="ac-staff-role-pill">{{ roles.find(r => r.role_key === u.role_key)?.role_name || u.role_key }}</div>
+                <svg :class="['ac-expand-caret', isStaffExpanded(u) && 'is-open']" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 7l5 6 5-6" />
+                </svg>
             </div>
+            </button>
 
+            <div v-if="isStaffExpanded(u)" class="ac-staff-details">
             <dl class="ac-staff-meta">
               <div>
                 <dt>Last active</dt>
@@ -641,9 +680,10 @@ onMounted(load);
                 +{{ [...new Set(catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).map(i => i.group))].length - 4 }}
               </span>
             </div>
+            </div>
 
             <!-- Role selector -->
-            <div class="ac-staff-role">
+            <div v-if="isStaffExpanded(u)" class="ac-staff-role">
               <label class="bw-label" style="margin-bottom:5px">Role</label>
               <div class="ac-select-wrap">
                 <select
@@ -773,46 +813,69 @@ onMounted(load);
 
 /* Invite modal */
 .ac-invite {
-  width: min(620px, 100%);
+  width: min(780px, 100%);
+  max-height: min(92vh, 860px);
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-2xl); overflow: hidden;
+  border-radius: var(--r-2xl);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 24px 80px rgba(0,0,0,.5);
 }
 .ac-invite-head {
   display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 2rem 2rem 0;
+  padding: 1.35rem 1.35rem 0;
 }
 .ac-invite-head h3 { margin: 4px 0 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em; }
-.ac-invite form { padding: 1.5rem 2rem 2rem; display: flex; flex-direction: column; gap: 1.25rem; }
-.ac-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.ac-field { display: flex; flex-direction: column; gap: 6px; }
+.ac-invite form {
+  padding: 1rem 1.35rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+.ac-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.ac-field { display: flex; flex-direction: column; gap: 4px; }
 .ac-field--full { grid-column: 1 / -1; }
 
-.ac-role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ac-invite-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .95fr);
+  gap: .85rem;
+  align-items: start;
+}
+.ac-stack-col { display: flex; flex-direction: column; gap: .75rem; }
+
+.ac-role-grid { display: grid; grid-template-columns: 1fr; gap: 7px; }
 .ac-role-pick {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 14px 10px; border-radius: var(--r-lg);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
   border: 1px solid var(--border); background: var(--surface-2);
   cursor: pointer; transition: all var(--dur-fast);
 }
 .ac-role-pick:hover { border-color: rgba(var(--rc), .4); background: rgba(var(--rc), .06); }
 .ac-role-pick.is-picked { border-color: rgba(var(--rc), .55); background: rgba(var(--rc), .12); box-shadow: 0 0 0 3px rgba(var(--rc), .12); }
-.ac-role-pick-badge { width: 36px; height: 36px; border-radius: var(--r-md); display: grid; place-items: center; background: rgba(var(--rc), .22); color: rgb(var(--rc)); font-size: var(--t-xs); font-weight: 900; }
-.ac-role-pick-name  { font-size: var(--t-sm); font-weight: 700; color: var(--text-dim); }
+.ac-role-pick-badge { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; background: rgba(var(--rc), .22); color: rgb(var(--rc)); font-size: 10px; font-weight: 900; }
+.ac-role-pick-name  { font-size: var(--t-xs); font-weight: 700; color: var(--text-dim); text-align: left; }
 .ac-role-pick.is-picked .ac-role-pick-name { color: rgb(var(--rc)); }
-.ac-role-pick-count { font-size: var(--t-2xs); color: var(--text-muted); font-family: var(--font-mono); }
+.ac-role-pick-count { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); text-align: right; }
 
-.ac-perm-preview { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1rem; }
-.ac-perm-chips  { display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-perm-preview { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: .75rem; }
+.ac-perm-chips  { display: flex; flex-wrap: wrap; gap: 5px; max-height: 174px; overflow: auto; }
 .ac-chip {
-  padding: 3px 10px; border-radius: var(--r-full);
+  padding: 2px 8px; border-radius: var(--r-full);
   border: 1px solid rgba(var(--rk), .3);
   background: rgba(var(--rk), .12);
   color: rgb(var(--rk)); font-size: var(--t-2xs); font-weight: 700;
   text-transform: capitalize;
 }
 .ac-empty-chips { font-size: var(--t-sm); color: var(--text-muted); }
-.ac-invite-actions { display: flex; justify-content: flex-end; gap: .75rem; padding-top: .5rem; }
+.ac-invite-actions { display: flex; justify-content: flex-end; gap: .6rem; padding-top: .25rem; }
 
 /* ═══════════════════════════════════════════════════════════════════════
    PAGE BODY
@@ -821,6 +884,7 @@ onMounted(load);
 
 /* ── Command header ──────────────────────────────────────────────────── */
 .ac-header {
+  display: none;
   position: relative; overflow: hidden;
   padding: clamp(2rem, 5vw, 3.5rem) clamp(1.5rem, 4vw, 3rem);
   border-radius: var(--r-2xl);
@@ -924,43 +988,43 @@ onMounted(load);
   display: flex; flex-direction: column;
 }
 .ac-matrix-head {
-  padding: 1.75rem 2rem; display: flex; justify-content: space-between;
+  padding: 1rem 1.1rem; display: flex; justify-content: space-between;
   align-items: flex-start; gap: 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, var(--surface-2), var(--surface));
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface-2) 92%, #000), var(--surface));
 }
-.ac-matrix-identity { display: flex; gap: 1.125rem; align-items: flex-start; min-width: 0; }
+.ac-matrix-identity { display: flex; gap: .75rem; align-items: flex-start; min-width: 0; }
 .ac-matrix-avatar {
-  width: 54px; height: 54px; border-radius: var(--r-xl); flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
   display: grid; place-items: center; font-size: var(--t-md); font-weight: 900;
   background: rgba(var(--rc), .22); color: rgb(var(--rc));
   border: 1px solid rgba(var(--rc), .3);
   box-shadow: 0 4px 16px rgba(var(--rc), .2);
 }
-.ac-matrix-identity h2 { margin: 3px 0 0; font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 800; letter-spacing: -0.03em; }
-.ac-matrix-desc { margin: .4rem 0 0; color: var(--text-muted); font-size: var(--t-sm); max-width: 480px; line-height: 1.55; }
-.ac-matrix-gauges { display: flex; gap: 1rem; align-items: center; flex-shrink: 0; }
+.ac-matrix-identity h2 { margin: 1px 0 0; font-size: clamp(1.05rem, 2.1vw, 1.35rem); font-weight: 800; letter-spacing: -0.02em; }
+.ac-matrix-desc { margin: .25rem 0 0; color: var(--text-muted); font-size: 12px; max-width: 380px; line-height: 1.4; }
+.ac-matrix-gauges { display: flex; gap: .75rem; align-items: center; flex-shrink: 0; }
 
 /* Coverage ring */
-.ac-ring-wrap { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
-.ac-ring { width: 84px; height: 84px; }
+.ac-ring-wrap { position: relative; width: 62px; height: 62px; flex-shrink: 0; }
+.ac-ring { width: 62px; height: 62px; }
 .ac-ring-bg { stroke: var(--surface-3); }
 .ac-ring-fg { stroke: var(--brand); stroke-linecap: round; transition: stroke-dasharray .7s cubic-bezier(.4,0,.2,1); filter: drop-shadow(0 0 6px var(--brand-glow)); }
 .ac-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.ac-ring-center strong { font-size: 1.05rem; font-weight: 900; line-height: 1; font-family: var(--font-mono); }
-.ac-ring-center span   { font-size: 9px; color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
+.ac-ring-center strong { font-size: .85rem; font-weight: 900; line-height: 1; font-family: var(--font-mono); }
+.ac-ring-center span   { font-size: 8px; color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
 
 /* Risk grid */
 .ac-risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .ac-risk-tile {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 7px 10px; border-radius: var(--r-md);
+  padding: 5px 7px; border-radius: 8px;
   border: 1px solid rgba(var(--rk), .25);
   background: rgba(var(--rk), .1);
-  min-width: 46px;
+  min-width: 38px;
 }
-.ac-risk-tile strong { font-size: var(--t-md); font-weight: 900; color: rgb(var(--rk)); font-family: var(--font-mono); line-height: 1; }
-.ac-risk-tile span   { font-size: 9px; color: rgb(var(--rk)); font-weight: 700; letter-spacing: .07em; }
+.ac-risk-tile strong { font-size: var(--t-sm); font-weight: 900; color: rgb(var(--rk)); font-family: var(--font-mono); line-height: 1; }
+.ac-risk-tile span   { font-size: 8px; color: rgb(var(--rk)); font-weight: 700; letter-spacing: .07em; }
 
 /* Locked bar */
 .ac-locked-bar {
@@ -973,43 +1037,98 @@ onMounted(load);
 .ac-locked-bar svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 /* Permission groups */
-.ac-groups { display: flex; flex-direction: column; gap: 0; padding: .5rem 0; }
-.ac-group { padding: 1.25rem 2rem; border-bottom: 1px solid var(--border); }
-.ac-group:last-child { border-bottom: none; }
-.ac-group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .875rem; }
-.ac-group-progress { display: flex; align-items: center; gap: .6rem; }
-.ac-group-bar { width: 72px; height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
-.ac-group-fill { height: 100%; background: linear-gradient(90deg, var(--brand-300), var(--brand)); border-radius: 2px; transition: width .5s cubic-bezier(.4,0,.2,1); }
-.ac-group-tally { font-size: var(--t-2xs); font-weight: 700; font-family: var(--font-mono); color: var(--text-muted); }
-.ac-perm-list { display: flex; flex-direction: column; gap: 4px; }
-.ac-perm-row {
-  display: grid; grid-template-columns: 1fr auto 48px; gap: .75rem; align-items: center;
-  padding: .875rem 1rem; border: 1px solid transparent; border-radius: var(--r-lg);
-  background: transparent; color: var(--fg, inherit); text-align: left;
-  cursor: pointer; transition: all var(--dur-fast);
+.ac-groups { padding: .5rem 0; }
+.ac-table-scroll { overflow-x: auto; }
+.ac-perm-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
-.ac-perm-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); transform: translateX(2px); }
-.ac-perm-row.is-on { background: oklch(from var(--brand) l c h / .07); border-color: oklch(from var(--brand) l c h / .25); }
-.ac-perm-row.is-locked { cursor: default; }
-.ac-perm-row:disabled { opacity: .6; }
+.ac-perm-table th {
+  text-align: left;
+  padding: .62rem .9rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 92%, #000);
+  white-space: nowrap;
+}
+.ac-perm-table td {
+  padding: .48rem .9rem;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.ac-group-row td {
+  background: color-mix(in oklab, var(--surface-2) 88%, #000);
+  border-bottom: 1px solid var(--border);
+}
+.ac-group-cell {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ac-empty-group-cell { width: 1px; padding: 0 !important; }
+.ac-group-progress-cell { text-align: right; }
+.ac-group-progress { display: flex; align-items: center; gap: .6rem; }
+.ac-group-bar { width: 64px; height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+.ac-group-fill { height: 100%; background: linear-gradient(90deg, var(--brand-300), var(--brand)); border-radius: 2px; transition: width .5s cubic-bezier(.4,0,.2,1); }
+.ac-group-tally { font-size: 10px; font-weight: 700; font-family: var(--font-mono); color: var(--text-muted); }
+.ac-perm-table-row.is-on td { background: oklch(from var(--brand) l c h / .06); }
+.ac-perm-table-row:hover td { background: color-mix(in oklab, var(--surface-2) 82%, #000); }
 
 .ac-perm-left { display: flex; align-items: flex-start; gap: .75rem; min-width: 0; }
-.ac-perm-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(var(--rk), .4); border: 1.5px solid rgb(var(--rk)); margin-top: 5px; flex-shrink: 0; }
+.ac-perm-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(var(--rk), .4); border: 1.5px solid rgb(var(--rk)); margin-top: 5px; flex-shrink: 0; }
 .is-on .ac-perm-dot { background: rgb(var(--rk)); box-shadow: 0 0 8px rgba(var(--rk), .5); }
-.ac-perm-label { display: block; font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; color: var(--text-dim); }
+.ac-perm-label { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--text-dim); white-space: nowrap; }
 .is-on .ac-perm-label { color: var(--text); }
-.ac-perm-key { display: block; font-family: var(--font-mono); font-size: var(--t-2xs); color: var(--text-faint); margin-top: 2px; }
+.ac-perm-key {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 0;
+  max-width: 270px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .ac-risk-badge {
-  padding: 3px 9px; border-radius: var(--r-sm);
+  padding: 2px 7px; border-radius: 6px;
   border: 1px solid rgba(var(--rk), .3);
   background: rgba(var(--rk), .12);
-  color: rgb(var(--rk)); font-size: var(--t-2xs); font-weight: 700;
+  color: rgb(var(--rk)); font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em; white-space: nowrap;
+}
+.ac-access-col,
+.ac-access-cell { text-align: right; }
+.ac-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+}
+.ac-toggle-btn:disabled { opacity: .6; cursor: default; }
+.ac-toggle-label {
+  min-width: 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
 }
 /* Toggle */
 .ac-toggle {
-  width: 42px; height: 24px; border-radius: 999px; flex-shrink: 0;
+  width: 36px; height: 20px; border-radius: 999px; flex-shrink: 0;
   background: var(--surface-3); border: 1px solid var(--border);
   position: relative; transition: background .2s, border-color .2s;
   cursor: pointer;
@@ -1017,13 +1136,13 @@ onMounted(load);
 .ac-toggle.is-on { background: var(--brand); border-color: oklch(from var(--brand) l c h / .6); box-shadow: 0 0 0 3px var(--brand-glow); }
 .ac-toggle.is-locked { background: var(--brand); border-color: oklch(from var(--brand) l c h / .6); opacity: .75; }
 .ac-toggle-thumb {
-  width: 18px; height: 18px; border-radius: 50%; background: var(--text-faint);
+  width: 14px; height: 14px; border-radius: 50%; background: var(--text-faint);
   position: absolute; top: 2px; left: 2px;
   transition: transform .2s cubic-bezier(.34,1.56,.64,1), background .2s;
   box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
 .ac-toggle.is-on .ac-toggle-thumb,
-.ac-toggle.is-locked .ac-toggle-thumb { transform: translateX(18px); background: #fff; }
+.ac-toggle.is-locked .ac-toggle-thumb { transform: translateX(16px); background: #fff; }
 
 /* ─────────────────────────────────────────────────────────────────────
    STAFF TAB
@@ -1063,6 +1182,14 @@ onMounted(load);
   background: linear-gradient(90deg, rgb(var(--rc)), rgba(var(--rc), .3));
   border-radius: 0 0 2px 2px;
 }
+.ac-staff-summary {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
 .ac-staff-top { display: flex; align-items: center; gap: .75rem; }
 .ac-staff-avatar {
   width: 42px; height: 42px; border-radius: var(--r-lg); flex-shrink: 0;
@@ -1074,9 +1201,35 @@ onMounted(load);
 .ac-staff-identity { flex: 1; min-width: 0; }
 .ac-staff-identity strong { display: block; font-size: var(--t-sm); font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ac-staff-identity span   { display: block; font-size: var(--t-xs); color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-staff-role-pill {
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  border: 1px solid rgba(var(--rc), .3);
+  color: rgb(var(--rc));
+  background: rgba(var(--rc), .11);
+  font-size: var(--t-2xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
 .ac-status-pip { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .pip-ok   { background: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
 .pip-wait { background: var(--warn);  box-shadow: 0 0 0 3px oklch(from var(--warn) l c h / .2); }
+.ac-expand-caret {
+  width: 16px;
+  height: 16px;
+  color: var(--text-faint);
+  transition: transform var(--dur-fast), color var(--dur-fast);
+}
+.ac-expand-caret.is-open {
+  transform: rotate(180deg);
+  color: var(--text-dim);
+}
+.ac-staff-details {
+  margin-top: .85rem;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
 
 .ac-staff-meta {
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .4rem;
@@ -1146,7 +1299,8 @@ onMounted(load);
   .ac-matrix-identity { flex-direction: column; }
   .ac-kpi-strip { flex-wrap: wrap; }
   .ac-fields { grid-template-columns: 1fr; }
-  .ac-role-grid { grid-template-columns: 1fr 1fr; }
+  .ac-invite-grid { grid-template-columns: 1fr; }
+  .ac-role-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .ac-header-inner { flex-direction: column; }
@@ -1154,9 +1308,7 @@ onMounted(load);
   .ac-kpi { flex: 1; min-width: 0; padding: 1rem; }
   .ac-tab { padding: .6rem .875rem; font-size: var(--t-xs); }
   .ac-staff-grid { grid-template-columns: 1fr; }
-  .ac-perm-row { grid-template-columns: 1fr auto; }
-  .ac-perm-row .ac-toggle { display: none; }
-  .ac-perm-row.is-on { background: oklch(from var(--brand) l c h / .1); }
+  .ac-perm-table { min-width: 680px; }
   .ac-staff-meta { grid-template-columns: 1fr 1fr; }
   .ac-staff-bar { flex-direction: column; align-items: stretch; }
 }

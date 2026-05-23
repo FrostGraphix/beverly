@@ -202,8 +202,6 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </button>
 
         <div class="bw-crumb">
-          <span class="bw-crumb-link">Wallet Admin</span>
-          <span class="bw-crumb-sep">/</span>
           <strong>{{ title || 'Dashboard' }}</strong>
         </div>
 

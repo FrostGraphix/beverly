@@ -10,9 +10,11 @@ const route = useRoute();
 const router = useRouter();
 const auth = useStaffAuthStore();
 
-const sessionEnded = computed(() => {
-    const reason = String(route.query.reason ?? '');
-    return reason === 'session_timeout' || reason === 'session_expired';
+const authReason = computed(() => String(route.query.reason ?? ''));
+const sessionEnded = computed(() => authReason.value === 'session_timeout' || authReason.value === 'session_expired');
+const sessionEndedMsg = computed(() => {
+    if (authReason.value === 'session_timeout') return 'Session timed out after inactivity. Sign in to continue.';
+    return 'Session ended. Sign in to continue.';
 });
 const reasonMfa = computed(() => String(route.query.reason ?? '') === 'mfa_required');
 const showSessionEnded = computed(() => sessionEnded.value && !email.value && !password.value && !error.value);
@@ -165,8 +167,13 @@ onMounted(async () => {
         <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
       </div>
 
-      <div v-if="showSessionEnded" class="login-flash warn">
-        Your session expired or is invalid. Please sign in again.
+      <div v-if="showSessionEnded" class="login-flash warn" role="status" aria-live="polite">
+        <svg class="login-flash-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="10" cy="10" r="7.5" />
+          <path d="M10 6.6v4.2" />
+          <circle cx="10" cy="13.8" r=".7" fill="currentColor" stroke="none" />
+        </svg>
+        <span>{{ sessionEndedMsg }}</span>
       </div>
       <div v-else-if="reasonMfa && step === 'challenge'" class="login-flash warn">
         Confirm your identity to continue — your 2FA grant expired.
@@ -250,7 +257,25 @@ onMounted(async () => {
 .login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-4); }
 .login-title { font-size: var(--t-2xl); margin-bottom: 6px; }
 .login-sub { margin: 0; font-size: var(--t-sm); }
-.login-flash { background: oklch(78% 0.16 75 / .10); border: 1px solid oklch(78% 0.16 75 / .30); color: var(--warn); font-size: var(--t-sm); margin-bottom: var(--s-4); border-radius: var(--r-md); padding: var(--s-3); }
+.login-flash {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  background: oklch(78% 0.16 75 / .08);
+  border: 1px solid oklch(78% 0.16 75 / .24);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: var(--s-4);
+  border-radius: 10px;
+  padding: .55rem .7rem;
+}
+.login-flash-ic {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: .9;
+}
 .login-submit { justify-content: center; width: 100%; }
 .login-foot { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); }
 .login-mfa-icon { width: 56px; height: 56px; margin: 0 auto; display: grid; place-items: center; border-radius: 16px; background: oklch(from var(--brand) l c h / .14); color: var(--brand); }

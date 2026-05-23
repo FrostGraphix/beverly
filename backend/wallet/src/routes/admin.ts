@@ -165,6 +165,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'PATCH /privacy/deletions/:id': 'wallet.privacy.review',
     'GET /consumption': 'wallet.consumption.view',
     'GET /consumption/meters': 'wallet.consumption.view',
+    'GET /abnormal-alarms': 'wallet.consumption.view',
     'POST /consumption/refresh': 'wallet.consumption.view',
 };
 
@@ -1613,6 +1614,51 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── audit log viewer ──
+    async function resolveRegisteredActorNames(actorIds: string[]): Promise<Map<string, string>> {
+        const ids = [...new Set(actorIds.map((value) => String(value || '').trim()).filter(Boolean))];
+        if (!ids.length) return new Map();
+        const [byAuth, byUser] = await Promise.all([
+            adminClient
+                .from('users')
+                .select('auth_user_id, user_name, email')
+                .in('auth_user_id', ids),
+            adminClient
+                .from('users')
+                .select('user_id, user_name, email')
+                .in('user_id', ids),
+        ]);
+        const out = new Map<string, string>();
+        for (const row of (byAuth.data ?? []) as any[]) {
+            const id = String(row.auth_user_id ?? '').trim();
+            const name = String(row.user_name ?? row.email ?? '').trim();
+            if (id && name) out.set(id, name);
+        }
+        for (const row of (byUser.data ?? []) as any[]) {
+            const id = String(row.user_id ?? '').trim();
+            const name = String(row.user_name ?? row.email ?? '').trim();
+            if (id && name) out.set(id, name);
+        }
+        return out;
+    }
+
+    function enrichAuditActors(rows: any[], actorNames: Map<string, string>): any[] {
+        return rows.map((row) => {
+            const actorId = String(row.actor_user_id ?? '').trim();
+            const registrationName = actorNames.get(actorId);
+            if (!registrationName) return row;
+            const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+            return {
+                ...row,
+                actor_name: registrationName,
+                metadata: {
+                    ...metadata,
+                    actor_name: registrationName,
+                    registration_name: registrationName,
+                },
+            };
+        });
+    }
+
     fastify.get('/audit', async (req, reply) => {
         const { actor, actorType, action, targetType, target, since, until, limit, cursor } =
             req.query as Record<string, string | undefined>;
@@ -1637,7 +1683,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                 details: error.message,
             });
         }
-        const entries = data ?? [];
+        const rows = data ?? [];
+        const actorNames = await resolveRegisteredActorNames(rows.map((entry: any) => String(entry.actor_user_id ?? '')).filter(Boolean));
+        const entries = enrichAuditActors(rows as any[], actorNames);
         const nextCursor = entries.length === Math.min(Number(limit ?? 100), 500)
             ? entries[entries.length - 1].created_at
             : null;
@@ -1649,7 +1697,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { id } = req.params as { id: string };
         const { data, error } = await adminClient.from('wallet_audit_log').select('*').eq('id', id).maybeSingle();
         if (error || !data) return reply.code(404).send({ error: 'not_found', message: 'Audit entry not found.' });
-        return data;
+        const actorNames = await resolveRegisteredActorNames([String((data as any).actor_user_id ?? '')].filter(Boolean));
+        const [entry] = enrichAuditActors([data as any], actorNames);
+        return entry;
     });
 
     // ── CSV export (capped at 10k rows for safety) ──
@@ -1673,7 +1723,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                 details: error.message,
             });
         }
-        const rows = data ?? [];
+        const rowsRaw = data ?? [];
+        const actorNames = await resolveRegisteredActorNames(rowsRaw.map((entry: any) => String(entry.actor_user_id ?? '')).filter(Boolean));
+        const rows = enrichAuditActors(rowsRaw as any[], actorNames);
         const header = ['created_at', 'actor_type', 'actor_user_id', 'actor_role', 'action',
                         'target_type', 'target_id', 'ip', 'correlation_id'];
         const csv = [
@@ -1955,6 +2007,45 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(500).send({ error: 'refresh_failed', message: e.message, result: e.result });
         }
+    });
+
+    fastify.get('/abnormal-alarms', async (req, reply) => {
+        const qs = req.query as Record<string, string>;
+        const alarm = String(qs.alarm ?? '').trim();
+        const stationId = String(qs.station_id ?? '').trim();
+        const from = String(qs.from ?? '').trim();
+        const to = String(qs.to ?? '').trim();
+        const limit = Math.min(Number(qs.limit ?? qs.pageLimit ?? 200), 1000);
+        const offset = Math.max(0, Number(qs.offset ?? 0));
+        let query = adminClient
+            .from('daily_meter_readings')
+            .select('meter_id, customer_id, customer_name, station_id, gateway_id, current_date, total1, usage1, battery_low, magnetic_interference, terminal_cover_open, cover_open, current_reverse, current_unbalance, update_date')
+            .order('current_date', { ascending: false })
+            .range(offset, offset + limit - 1);
+        if (stationId) query = query.eq('station_id', stationId);
+        if (from) query = query.gte('current_date', from);
+        if (to) query = query.lte('current_date', to);
+        const { data, error } = await query;
+        if (error) return reply.code(500).send({ error: 'read_failed', message: error.message });
+        const rows = (data ?? []).flatMap((r: any) => {
+            const signals = [
+                { key: 'noData', label: 'No Data Report', hit: Number(r.usage1 ?? 0) === 0 },
+                { key: 'magneticInterference', label: 'Magnetic Interference', hit: Number(r.magnetic_interference ?? 0) > 0 },
+                { key: 'batteryLow', label: 'Battery Low', hit: Number(r.battery_low ?? 0) > 0 },
+                { key: 'terminalCoverOpen', label: 'Terminal Cover Open', hit: Number(r.terminal_cover_open ?? 0) > 0 },
+                { key: 'coverOpen', label: 'Upper Open', hit: Number(r.cover_open ?? 0) > 0 },
+                { key: 'currentReverse', label: 'Current Reverse', hit: Number(r.current_reverse ?? 0) > 0 },
+                { key: 'currentUnbalance', label: 'Current Unbalance', hit: Number(r.current_unbalance ?? 0) > 0 },
+            ].filter((s) => s.hit).map((s) => ({
+                alarmKey: s.key, alarmLabel: s.label,
+                meterId: r.meter_id, customerId: r.customer_id, customerName: r.customer_name, stationId: r.station_id, gatewayId: r.gateway_id,
+                total1: r.total1, usage1: r.usage1, batteryLow: r.battery_low, magneticInterference: r.magnetic_interference,
+                terminalCoverOpen: r.terminal_cover_open, coverOpen: r.cover_open, currentReverse: r.current_reverse, currentUnbalance: r.current_unbalance,
+                currentDate: r.current_date, updateDate: r.update_date,
+            }));
+            return signals;
+        }).filter((row: any) => !alarm || row.alarmKey === alarm);
+        return { rows, total: rows.length, count: rows.length };
     });
 
     fastify.patch('/customers/:id/profile-picture', async (req, reply) => {

@@ -19,6 +19,7 @@ import { loadECharts } from "../services/echarts-loader.mjs";
 
 export default {
   name: "EChartPanel",
+  emits: ["chart-click"],
   props: {
     option: { type: Object, required: true }
   },
@@ -68,6 +69,8 @@ export default {
         if (!this.echarts) this.echarts = await loadECharts();
         if (!this.$refs.chart) return;
         if (!this.chart) this.chart = this.echarts.init(this.$refs.chart);
+        this.chart.off("click");
+        this.chart.on("click", (params) => this.$emit("chart-click", params));
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
         if (this.animationTimer) clearTimeout(this.animationTimer);
         const option = this.option || {};

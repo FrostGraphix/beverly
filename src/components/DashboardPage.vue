@@ -38,7 +38,7 @@
       </article>
       <article class="dashboard-chart-card">
         <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
-        <EChartPanel v-else :option="alarmChartOption" />
+        <EChartPanel v-else :option="alarmChartOption" @chart-click="openAbnormalAlarmPage" />
       </article>
     </section>
 
@@ -305,6 +305,20 @@ export default {
         attributes: true,
         attributeFilter: ["data-theme"]
       });
+    },
+    openAbnormalAlarmPage(params) {
+      const label = String(params?.name || "").trim();
+      const map = {
+        "No Data Report": "noData",
+        "Magnetic Interference": "magneticInterference",
+        "Battery Low": "batteryLow",
+        "Terminal Cover Open": "terminalCoverOpen",
+        "Cover Open": "coverOpen",
+        "Current Reverse": "currentReverse",
+        "Current Unbalance": "currentUnbalance"
+      };
+      const alarm = map[label] || "";
+      window.location.hash = `#/prepay-report/abnormal-alarm${alarm ? `?alarm=${encodeURIComponent(alarm)}` : ""}`;
     }
   }
 };
