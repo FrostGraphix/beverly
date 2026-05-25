@@ -12,6 +12,10 @@
           <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Site filter" @change="load">
             <option v-for="option in siteOptions" :key="option.value || 'all-sites'" :value="option.value">{{ option.label }}</option>
           </BaseSelect>
+          <BaseSelect v-if="supportsMeterPhaseFilter" v-model="meterPhaseFilter" class="sort-select" aria-label="Meter phase filter" @change="applyControls">
+            <option value="all">All phases</option>
+            <option value="three-phase">3-phase only</option>
+          </BaseSelect>
           <BaseInput v-if="route.actions.includes('Search')" v-model="searchTerm" class="search-input" type="search" placeholder="Search Term" aria-label="Search Term" @keyup.enter="applyControls" />
         </div>
         
@@ -268,6 +272,7 @@ import BaseTableShell from "./base/BaseTableShell.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
 import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mjs";
 import { toastWarn } from "../services/toast.js";
 
 export default {
@@ -297,6 +302,7 @@ export default {
       loading: false,
       gotoPageInput: "1",
       checkedMeterIds: new Set(),
+      meterPhaseFilter: "all",
       openRowActionIndex: null,
       sortDirectionMenuOpen: false,
       loadToken: 0
@@ -317,6 +323,7 @@ export default {
     },
     toolbarActions() {
       return this.route.actions.filter((name) => {
+        if (name === "Confirm" && String(this.route.hash || "").startsWith("#/remote-operation-record/")) return true;
         if (["Sort", "Search", "Reset", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
         if (name === "Add Task" && this.route.columns.includes("Actions")) return false;
         return true;
@@ -334,6 +341,9 @@ export default {
     supportsSiteFilter() {
       return routeSupportsSiteFilter(this.route);
     },
+    supportsMeterPhaseFilter() {
+      return isCreditTokenRoute(this.route);
+    },
     serverPaginated() {
       return routeUsesServerPagination(this.route);
     },
@@ -344,7 +354,7 @@ export default {
       return totalPages(this.displayedTotal, this.pageSize);
     },
     displayedTotal() {
-      const hasClientFilters = Boolean(String(this.searchTerm || "").trim());
+      const hasClientFilters = Boolean(String(this.searchTerm || "").trim() || this.meterPhaseFilter !== "all");
       if (!hasClientFilters && Number(this.total) > this.filteredTotal) return this.total;
       return this.filteredTotal;
     },
@@ -377,6 +387,7 @@ export default {
         this.sortDirection = routeSortDirection(this.route);
         this.sortField = "";
         this.searchTerm = "";
+        this.meterPhaseFilter = "all";
         this.currentPage = 1;
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
@@ -393,6 +404,7 @@ export default {
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         const requestOptions = {
           siteId: this.supportsSiteFilter ? this.selectedSite : undefined,
+          meterPhaseFilter: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : undefined,
           searchTerm: this.serverPaginated ? this.searchTerm : undefined,
           orderBy: this.route.actions.includes("Sort")
             ? `${this.sortField || routeSortPolicy(this.route).key} ${this.sortDirection || routeSortDirection(this.route)}`
@@ -436,16 +448,22 @@ export default {
         return;
       }
       const searchedRows = searchRows(this.route, this.allRows, this.searchTerm);
-      const sortedRows = sortRows(this.route, searchedRows, this.sortDirection, this.sortField);
+      const phaseRows = this.filterRowsByPhase(searchedRows);
+      const sortedRows = sortRows(this.route, phaseRows, this.sortDirection, this.sortField);
       this.filteredRows = sortedRows;
       this.filteredTotal = sortedRows.length;
       this.currentPage = Math.min(this.currentPage, totalPages(this.displayedTotal, this.pageSize));
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
+    filterRowsByPhase(rows) {
+      if (this.meterPhaseFilter !== "three-phase") return rows;
+      return rows.filter((row) => meterPhaseFromRow(row) === "three-phase");
+    },
     resetControls() {
       this.searchTerm = "";
       this.selectedSite = "";
+      this.meterPhaseFilter = "all";
       this.sortDirection = routeSortDirection(this.route);
       this.sortField = "";
       this.pageSize = 10;
@@ -646,7 +664,12 @@ export default {
         return;
       }
       this.closeRowActionMenu();
-      this.activeRow = { ...(row || {}), ...createFormSeed(this.route, action, row) };
+      this.activeRow = {
+        ...(row || {}),
+        ...createFormSeed(this.route, action, row),
+        meterPhaseMode: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : "all",
+        requireThreePhase: this.supportsMeterPhaseFilter && this.meterPhaseFilter === "three-phase"
+      };
       this.selectedRow = row || null;
       this.modalAction = action;
     },

@@ -179,6 +179,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                 amountMinor: input.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
+                isThreePhase: meter.isThreePhase,
                 reference: po.id,
             });
             token = tokenRes.token;
@@ -245,6 +246,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                 amountMinor: input.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
+                isThreePhase: meter.isThreePhase,
                 reference: po.id,
             });
             token = tokenRes.token;

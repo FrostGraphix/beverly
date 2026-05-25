@@ -3,6 +3,7 @@ import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapp
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
+import { isCreditTokenRoute, meterPhaseFromRow } from "./token-flow.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
@@ -161,6 +162,27 @@ function parseOrderBy(orderBy, route) {
   return { direction, field };
 }
 
+function requiresThreePhaseServerFilter(route, options = {}) {
+  return isCreditTokenRoute(route) && String(options.meterPhaseFilter || "") === "three-phase";
+}
+
+function meterReadRoute() {
+  return {
+    hash: "#/admin/meter",
+    title: "Meter",
+    apis: ["/api/meter/read"],
+    columns: ["meterId"]
+  };
+}
+
+function meterIdSet(rows = []) {
+  return new Set(
+    rows
+      .map((row) => String(row?.meterId || row?.id || "").trim())
+      .filter(Boolean)
+  );
+}
+
 function lowPurchaseAggregateKey(row = {}) {
   return [
     row.customerId,
@@ -317,6 +339,7 @@ function buildTableRequest(route, requestOptions) {
       payload: {
         pageNumber: requestOptions.pageNumber,
         pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...(String(requestOptions.meterPhaseFilter || "") === "three-phase" ? { isThreePhase: true } : {}),
         ...stationFilter(requestOptions),
         ...searchFilter(requestOptions)
       },
@@ -564,6 +587,56 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
 export async function fetchTableData(route, options = {}, api = defaultTableApi) {
   const requestOptions = tableOptions(options);
   const { direction: requestedDirection, field: requestedField } = parseOrderBy(requestOptions.orderBy, route);
+  if (requiresThreePhaseServerFilter(route, requestOptions)) {
+    const meterRoute = meterReadRoute();
+    const meterRequest = tableRequest(meterRoute, {
+      pageNumber: 1,
+      pageSize: tableFetchPageSize,
+      siteId: requestOptions.siteId,
+      meterPhaseFilter: "three-phase"
+    });
+    const meterCollection = await fetchAllTableRows(meterRequest, meterRoute, api);
+    const threePhaseMeterIds = meterIdSet(meterCollection.rows);
+    if (!threePhaseMeterIds.size) {
+      return {
+        envelope: {},
+        rows: [],
+        total: 0,
+        serverPaginated: true,
+        meta: {
+          path: "/api/account/read",
+          method: "POST",
+          source: "meter-phase-filter"
+        }
+      };
+    }
+
+    const accountRequest = tableRequest(route, {
+      ...requestOptions,
+      pageNumber: 1,
+      pageSize: tableFetchPageSize
+    });
+    const accountCollection = await fetchAllTableRows(accountRequest, route, api);
+    const phaseRows = accountCollection.rows
+      .filter((row) => threePhaseMeterIds.has(String(row?.meterId || "").trim()))
+      .map((row) => ({ ...row, isThreePhase: true, meterPhase: meterPhaseFromRow({ ...row, isThreePhase: true }) }));
+    const mappedAll = mapTableCollection({ data: { rows: phaseRows, total: phaseRows.length } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), liveReadPageSize);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: "/api/account/read",
+        method: "POST",
+        source: "meter-phase-filter"
+      }
+    };
+  }
   if (isLowPurchaseAllSites(route, requestOptions)) {
     const seenKeys = new Set();
     const aggregateRows = [];

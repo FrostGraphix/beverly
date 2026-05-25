@@ -101,3 +101,25 @@ export async function setWalletStatus(
     if (error) throw new Error(`wallet status update failed: ${error.message}`);
     return data as Wallet;
 }
+
+export async function setOwnerWalletStatus(
+    ownerType: OwnerType,
+    ownerId: string,
+    status: 'active' | 'frozen' | 'closed',
+): Promise<Wallet[]> {
+    const { data, error } = await adminClient
+        .from('wallets')
+        .select('id')
+        .eq('owner_type', ownerType)
+        .eq('owner_id', ownerId);
+    if (error) {
+        throw new WalletStateError(error.message, 'wallet_lookup_failed', 400);
+    }
+
+    const wallets = data ?? [];
+    const updated: Wallet[] = [];
+    for (const wallet of wallets as Array<{ id: string }>) {
+        updated.push(await setWalletStatus(wallet.id, status));
+    }
+    return updated;
+}

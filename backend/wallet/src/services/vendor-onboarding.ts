@@ -7,7 +7,7 @@
  *   freezeVendor / unfreeze  → wallet status + audit.
  */
 import { adminClient } from '../db/supabase.js';
-import { getOrCreateWallet } from './wallets.js';
+import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
 import { logAction, logSecurityEvent } from './audit.js';
 import crypto from 'node:crypto';
 
@@ -167,20 +167,26 @@ export async function setVendorStatus(
         throw new OnboardingError('Closed vendors cannot be reactivated. Create a replacement vendor profile instead.', 'vendor_closed_final');
     }
 
-    const { error } = await adminClient
-        .from('vendor_organizations')
-        .update({ status: newStatus, notes: reason ?? null })
-        .eq('id', vendorOrganizationId);
-    if (error) throw new OnboardingError(error.message, 'status_update_failed');
-
     // Mirror account controls to the wallet so vend/funding paths cannot bypass
     // an organization-level suspension.
     const walletStatus =
         newStatus === 'approved' ? 'active'
         : newStatus === 'closed' ? 'closed'
         : 'frozen';
-    await adminClient.from('wallets').update({ status: walletStatus })
-        .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
+    try {
+        await setOwnerWalletStatus('vendor', vendorOrganizationId, walletStatus);
+    } catch (error) {
+        if (error instanceof WalletStateError) {
+            throw new OnboardingError(error.message, error.code);
+        }
+        throw error;
+    }
+
+    const { error } = await adminClient
+        .from('vendor_organizations')
+        .update({ status: newStatus, notes: reason ?? null })
+        .eq('id', vendorOrganizationId);
+    if (error) throw new OnboardingError(error.message, 'status_update_failed');
 
     await logAction({
         actorUserId: staffId,

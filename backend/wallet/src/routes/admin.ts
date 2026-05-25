@@ -15,6 +15,7 @@ import {
     approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls,
 } from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
+import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
 import { listStations, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
@@ -218,6 +219,17 @@ function requireAccessManager(req: any, reply: any): boolean {
         reply.code(403).send({
             error: 'forbidden',
             message: 'Only Super Admins can change roles and permissions.',
+        });
+        return false;
+    }
+    return true;
+}
+
+function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): boolean {
+    if (req.actor?.role !== 'super-admin') {
+        reply.code(403).send({
+            error: 'forbidden',
+            message: 'Only Super Admins can freeze, unfreeze, close, or reactivate wallets.',
         });
         return false;
     }
@@ -884,6 +896,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // Freeze / unfreeze wallet. Audit-logged with reason.
     fastify.patch('/wallets/:id/status', async (req, reply) => {
+        if (!requireWalletStatusManager(req, reply)) return undefined;
         const id = (req.params as { id: string }).id;
         const schema = z.object({
             status: z.enum(['active', 'frozen', 'closed']),
@@ -903,24 +916,48 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { data: before } = await adminClient.from('wallets').select('*').eq('id', id).maybeSingle();
         if (!before) return reply.code(404).send({ error: 'not_found', message: 'Wallet not found.' });
 
-        const { setWalletStatus } = await import('../services/wallets.js');
-        const updated = await setWalletStatus(id, body.status);
         const ownerType = (before as any).owner_type as 'vendor' | 'customer';
         const ownerId = (before as any).owner_id as string;
         const ownerStatus =
             ownerType === 'vendor'
                 ? body.status === 'active' ? 'approved' : body.status
                 : body.status === 'active' ? 'active' : body.status === 'frozen' ? 'suspended' : 'closed';
+        const ownerTable = ownerType === 'vendor' ? 'vendor_organizations' : 'customers';
+        const { data: owner } = await adminClient
+            .from(ownerTable)
+            .select('status')
+            .eq('id', ownerId)
+            .maybeSingle();
+        if ((owner as any)?.status === 'closed' && ownerStatus !== 'closed') {
+            return reply.code(409).send({
+                error: `${ownerType}_closed_final`,
+                message: `Closed ${ownerType} accounts cannot be reactivated. Create a replacement account instead.`,
+            });
+        }
+
+        let updated;
+        try {
+            updated = await setWalletStatus(id, body.status);
+        } catch (error: any) {
+            const status = error instanceof WalletStateError ? error.status : 400;
+            return reply.code(status).send({
+                error: error.code ?? 'wallet_status_failed',
+                message: error.message,
+            });
+        }
+
         if (ownerType === 'vendor') {
-            await adminClient
+            const { error } = await adminClient
                 .from('vendor_organizations')
                 .update({ status: ownerStatus })
                 .eq('id', ownerId);
+            if (error) return reply.code(400).send({ error: 'owner_status_failed', message: error.message });
         } else if (ownerType === 'customer') {
-            await adminClient
+            const { error } = await adminClient
                 .from('customers')
                 .update({ status: ownerStatus })
                 .eq('id', ownerId);
+            if (error) return reply.code(400).send({ error: 'owner_status_failed', message: error.message });
         }
         await logAction({
             actorUserId: req.actor!.userId,
@@ -1172,19 +1209,24 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
-        const { data: updated, error: updErr } = await adminClient
-            .from('customers').update({ status: body.status }).eq('id', id)
-            .select('id, full_name, status').single();
-        if (updErr) return reply.code(400).send({ error: 'update_failed', message: updErr.message });
         const walletStatus =
             body.status === 'active' ? 'active'
             : body.status === 'closed' ? 'closed'
             : 'frozen';
-        await adminClient
-            .from('wallets')
-            .update({ status: walletStatus })
-            .eq('owner_type', 'customer')
-            .eq('owner_id', id);
+        try {
+            await setOwnerWalletStatus('customer', id, walletStatus);
+        } catch (error: any) {
+            const status = error instanceof WalletStateError ? error.status : 400;
+            return reply.code(status).send({
+                error: error.code ?? 'wallet_status_failed',
+                message: error.message,
+            });
+        }
+
+        const { data: updated, error: updErr } = await adminClient
+            .from('customers').update({ status: body.status }).eq('id', id)
+            .select('id, full_name, status').single();
+        if (updErr) return reply.code(400).send({ error: 'update_failed', message: updErr.message });
 
         await logAction({
             actorUserId: req.actor!.userId,

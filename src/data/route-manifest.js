@@ -1,6 +1,6 @@
 export const routeManifest = [
   { group: "Dashboard", title: "Dashboard", hash: "#/dashboard", apis: ["/api/dashboard/readPanelGroup", "/api/dashboard/readLineChart"], columns: [], actions: [], roles: ["super-admin", "operations-manager", "account"] },
-  { group: "Token Generate", title: "Credit Token", hash: "#/token-generate/credit-token", apis: ["/api/item/readItemList", "/api/user/read", "/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "protocolVersion", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Recharge", "Cancel", "Confirm"], note: "Quota(kwh): No Limit", roles: ["super-admin", "account"] },
+  { group: "Token Generate", title: "Credit Token", hash: "#/token-generate/credit-token", apis: ["/api/item/readItemList", "/api/user/read", "/api/station/read", "/api/account/read", "/api/token/changeMeterKeyToken/generate", "/api/token/meterKey/update"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "protocolVersion", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Recharge", "Cancel", "Confirm"], note: "Quota(kwh): No Limit", roles: ["super-admin", "account"] },
   { group: "Token Generate", title: "Clear Tamper Token", hash: "#/token-generate/clear-tamper-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
   { group: "Token Generate", title: "Clear Credit Token", hash: "#/token-generate/clear-credit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
   { group: "Token Generate", title: "Set Maximum Power Limit Token", hash: "#/token-generate/set-maximum-power-limit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
@@ -114,7 +114,7 @@ export function normalizeRoleId(roleId = "super-admin") {
 }
 
 const permissionAliases = {
-  "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken"],
+  "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken", "Token.ChangeMeterKeyToken", "ChangeMeterKeyToken", "Token.MeterKey"],
   "#/token-record/credit-token-record": ["TokenRecord.CreditTokenRecord", "CreditTokenRecord"],
   "#/remote-operation/remote-meter-reading": ["RemoteMeterTask.CreateReadingTask", "GetReadingTask", "RemoteMeterTask.GetReadingTask"],
   "#/remote-operation/remote-meter-control": ["RemoteMeterTask.CreateControlTask", "GetControlTask", "RemoteMeterTask.GetControlTask"],

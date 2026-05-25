@@ -10,7 +10,9 @@ const reference = fs.readFileSync(path.join(root, "api", "reference.js"), "utf8"
 assert.match(actionModal, /remoteTaskHeaders\(route = this\.route, action = this\.action\)/);
 assert.match(actionModal, /"X-Route-Hash": String\(route\?\.hash \|\| ""\)/);
 assert.match(actionModal, /postApi\(endpoint, items, \{ headers \}\)/);
+assert.match(actionModal, /postApi\(endpoint, payload, \{\s*headers: this\.remoteTaskHeaders\(this\.route, this\.action\)\s*\}\)/s);
 assert.match(actionModal, /CreateTokenTask", payload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation\/remote-meter-token" \}, "Add Task"\)/s);
+assert.match(actionModal, /postApi\(remoteTaskConfirmEndpoint\(\{ hash: "#\/remote-operation\/remote-meter-token" \}\), confirmPayload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation-record\/remote-meter-token-task" \}, "Confirm"\)/s);
 
 assert.match(api, /window\.localStorage\?\.getItem\("beverly\.allow_live_writes"\)/);
 assert.match(api, /\["localhost", "127\.0\.0\.1", "::1"\]\.includes\(host\)/);

@@ -17,6 +17,9 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/api/RemoteMeterTask/CreateReadingTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/api/RemoteMeterTask/CreateControlTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/RemoteMeterTask/CreateTokenTask";
+  if (action === "Confirm" && route.hash.includes("remote-meter-reading-task")) return "/api/RemoteMeterTask/UpdateReadingTask";
+  if (action === "Confirm" && route.hash.includes("remote-meter-control-task")) return "/api/RemoteMeterTask/UpdateControlTask";
+  if (action === "Confirm" && route.hash.includes("remote-meter-token-task")) return "/api/RemoteMeterTask/UpdateTokenTask";
   if (action === "Add" && route.hash.includes("remote-support/firmware-update")) return "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask";
 
   let moduleName = "";
@@ -119,6 +122,17 @@ function isCustomerDelete(route, action) {
   return action === "Delete" && route?.hash === "#/management/customer";
 }
 
+function isRemoteTaskConfirm(route, action) {
+  return action === "Confirm" && String(route?.hash || "").startsWith("#/remote-operation-record/");
+}
+
+function isRemoteTaskConfirmAccepted(response, route, action) {
+  if (!isRemoteTaskConfirm(route, action)) return false;
+  const responseCode = Number(response?.code);
+  const reason = String(response?.reason || response?.msg || response?.message || "").toLowerCase();
+  return responseCode === 99 && reason.includes("no data has been changed");
+}
+
 async function deleteCustomerDependencies(form, api) {
   const customerId = String(form.customerId || "").trim();
   if (!customerId) return;
@@ -194,11 +208,16 @@ export async function submitRouteAction(route, action, form, options = {}) {
     await deleteCustomerDependencies(form, api);
   }
 
-  const payload = action === "Import"
+  const payload = isRemoteTaskConfirm(route, action)
+    ? [{ id: Number(form.id || form.taskId || form.recordId) }]
+    : action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
       ? buildWritePayload(endpoint, { ...form, ...meta }, fields)
       : form;
+  if (isRemoteTaskConfirm(route, action) && !Number.isFinite(payload[0].id)) {
+    throw new Error("task id is required");
+  }
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
   if (!uploadMode && shouldMirrorUserWrite(route, action, endpoint)) {
     await mirrorUserWrite(route, action, endpoint, payload);
@@ -210,13 +229,13 @@ export async function submitRouteAction(route, action, form, options = {}) {
       ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200) {
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
   }
   if (isCustomerDelete(route, action)) {
     await verifyCustomerDeleted(form, api);
   }
-  const mapped = mapActionResponse(response, action);
+  const mapped = mapActionResponse(response, action, isRemoteTaskConfirmAccepted(response, route, action) ? "submitted" : "success");
 
   return {
     endpoint,

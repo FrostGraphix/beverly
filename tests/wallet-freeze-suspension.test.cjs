@@ -10,6 +10,12 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
 
+function after(source, marker) {
+  const index = source.indexOf(marker);
+  assert(index >= 0, `Missing marker: ${marker}`);
+  return source.slice(index);
+}
+
 function main() {
   const wallets = read("backend/wallet/src/services/wallets.ts");
   const ledger = read("backend/wallet/src/services/ledger.ts");
@@ -52,6 +58,13 @@ function main() {
 
   assert(adminRoutes.includes("customer_closed_final"), "Closed customer reactivation must be rejected.");
   assert(onboarding.includes("vendor_closed_final"), "Closed vendor reactivation must be rejected.");
+  assert(wallets.includes("setOwnerWalletStatus"), "Owner status changes must reuse closed-wallet guards.");
+  assert(adminRoutes.includes("requireWalletStatusManager"), "Direct wallet status changes must be super-admin gated.");
+  assert(adminRoutes.includes("Only Super Admins can freeze, unfreeze, close, or reactivate wallets."), "Wallet status route must not depend only on funding approval permission.");
+  const customerStatusRoute = after(adminRoutes, "fastify.patch('/customers/:id/status'");
+  const vendorStatusService = after(onboarding, "export async function setVendorStatus");
+  assert(customerStatusRoute.indexOf("await setOwnerWalletStatus('customer', id, walletStatus)") < customerStatusRoute.indexOf(".from('customers').update({ status: body.status })"), "Customer status changes must update guarded wallets before owner state.");
+  assert(vendorStatusService.indexOf("await setOwnerWalletStatus('vendor', vendorOrganizationId, walletStatus)") < vendorStatusService.indexOf(".update({ status: newStatus"), "Vendor status changes must update guarded wallets before owner state.");
   assert(migration.includes("trg_wallet_hold_guard"), "Database must block holds on frozen wallets.");
   assert(migration.includes("trg_wallet_closed_final_guard"), "Database must block closed-wallet reactivation.");
 

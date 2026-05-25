@@ -9,10 +9,15 @@ import {
   normalizeRemoteDataItem,
   normalizeAccountStatus,
   normalizeRemoteStatus,
+  remoteTokenTaskStatus,
+  remoteTaskConfirmEndpoint,
+  remoteTaskConfirmPayload,
   remoteTaskEndpoint,
   remoteTaskNeedsAuthorization,
   remoteTaskTitle,
-  remoteTaskValidationError
+  remoteTaskValidationError,
+  remoteTokenStandbyConfirmPayload,
+  remoteTokenTaskLookupPayload
 } from "../src/services/remote-task-flow.mjs";
 
 const tokenRoute = { hash: "#/remote-operation/remote-meter-token" };
@@ -24,6 +29,38 @@ assert.equal(remoteTaskEndpoint(tokenRoute), "/API/RemoteMeterTask/CreateTokenTa
 assert.equal(remoteTaskEndpoint(readingRoute), "/API/RemoteMeterTask/CreateReadingTask");
 assert.equal(remoteTaskEndpoint(controlRoute), "/API/RemoteMeterTask/CreateControlTask");
 assert.equal(remoteTaskEndpoint(gprsRoute), "/API/GPRSMeterTask/GPRSCreateReadingTask");
+assert.equal(remoteTaskConfirmEndpoint(tokenRoute), "/API/RemoteMeterTask/UpdateTokenTask");
+assert.equal(remoteTaskConfirmEndpoint(readingRoute), "/API/RemoteMeterTask/UpdateReadingTask");
+assert.deepEqual(remoteTaskConfirmPayload({ result: [{ id: 8361 }, { id: 8361 }, { taskId: 8362 }] }), [{ id: 8361 }, { id: 8362 }]);
+assert.deepEqual(remoteTokenTaskLookupPayload({ meterId: "47300481810" }), {
+  lang: "en",
+  meterId: "47300481810",
+  pageNumber: 1,
+  pageSize: 10,
+  orderBy: "createDate desc"
+});
+assert.deepEqual(remoteTokenStandbyConfirmPayload({
+  result: {
+    data: [
+      { id: 8364, meterId: "47300481810", data: "61688642353365376881", status: 0 },
+      { id: 8361, meterId: "47300481810", data: "53054944972209363232", status: 0 },
+      { id: 8291, meterId: "47300481810", data: "48811717073300952793", status: 2 }
+    ]
+  }
+}, { meterId: "47300481810", token: "6168 8642 3533 6537 6881" }), [{ id: 8364 }]);
+assert.deepEqual(remoteTokenTaskStatus({
+  result: {
+    data: [
+      { id: 8370, meterId: "47300481810", data: "63751343398450415494", status: 2, remark: "TokenReject" }
+    ]
+  }
+}, { id: 8370, meterId: "47300481810", token: "6375 1343 3984 5041 5494" }), {
+  id: 8370,
+  meterId: "47300481810",
+  data: "63751343398450415494",
+  status: 2,
+  remark: "TokenReject"
+});
 assert.equal(remoteTaskNeedsAuthorization(readingRoute), false);
 assert.equal(remoteTaskNeedsAuthorization(controlRoute), false);
 assert.equal(remoteTaskNeedsAuthorization(tokenRoute), false);

@@ -67,6 +67,7 @@ assert.strictEqual(actionEndpoint(manifestUserRoute, "Edit"), "/api/user/update"
 assert.strictEqual(actionEndpoint(dlmsRoute, "Edit"), "/api/dlms/update");
 assert.strictEqual(actionEndpoint(dlmsRoute, "Delete"), "/api/dlms/delete");
 assert.strictEqual(actionEndpoint({ hash: "#/remote-support/firmware-update" }, "Add"), "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask");
+assert.strictEqual(actionEndpoint({ hash: "#/remote-operation-record/remote-meter-token-task" }, "Confirm"), "/api/RemoteMeterTask/UpdateTokenTask");
 assert.deepStrictEqual(
   routeManifest.find((route) => route.hash === "#/management/customer").apis,
   ["/api/customer/read", "/api/station/read"]
@@ -188,6 +189,22 @@ assert.strictEqual(tariffTable.rows[0].name, "Residential");
 
 const emptyTable = mapTableCollection({ code: 0, result: { data: [] }, _proxy: { source: "cache" } }, accountRoute);
 assert.strictEqual(emptyTable.rows.length, 0);
+
+const remoteTokenTaskRoute = routeManifest.find((route) => route.hash === "#/remote-operation-record/remote-meter-token-task");
+const rejectedTokenTaskTable = mapTableCollection({
+  code: 0,
+  result: {
+    data: [{
+      id: 8370,
+      meterId: "47300481810",
+      data: "63751343398450415494",
+      status: 3,
+      remark: "TokenReject"
+    }]
+  }
+}, remoteTokenTaskRoute);
+assert.strictEqual(rejectedTokenTaskTable.rows[0].status, "Failure");
+assert.strictEqual(rejectedTokenTaskTable.rows[0].token, "6375 1343 3984 5041 5494");
 assert.strictEqual(emptyTable.total, 0);
 assert.strictEqual(emptyTable.envelope._proxy.source, "cache");
 
@@ -213,6 +230,7 @@ assert.strictEqual(routeUsesServerPagination(meterRoute), true);
 assert.strictEqual(routeUsesServerPagination(manifestLogRoute), true);
 assert.strictEqual(tableRequest(creditTokenGenerateRoute, { pageNumber: 4, pageSize: 50, orderBy: "meterId asc" }).payload.pageSize, 20);
 assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 100, orderBy: "meterId asc" }).payload.pageSize, 20);
+assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, meterPhaseFilter: "three-phase" }).payload.isThreePhase, true);
 assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "meterId asc" }).payload.orderBy, "meterId asc");
 assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "protocolVersion desc" }).payload.orderBy, "protocolVersion desc");
 assert.strictEqual("orderBy" in tableRequest(meterRoute, { pageNumber: 1, pageSize: 10, orderBy: "asc" }).payload, false);
@@ -278,6 +296,50 @@ assert.strictEqual(creditTokenPageCalls[0].payload.orderBy, "meterId asc");
 assert.strictEqual(creditTokenPageTable.serverPaginated, true);
 assert.strictEqual(creditTokenPageTable.total, 9814);
 assert.strictEqual(creditTokenPageTable.rows.length, 10);
+
+const creditTokenPhaseCalls = [];
+const creditTokenPhaseTable = await fetchTableData(creditTokenGenerateRoute, { pageNumber: 1, pageSize: 10, meterPhaseFilter: "three-phase", orderBy: "meterId asc" }, {
+  async postApi(path, payload = {}) {
+    creditTokenPhaseCalls.push({ path, payload });
+    if (path === "/api/meter/read") {
+      return {
+        code: 0,
+        result: {
+          total: 2,
+          data: [
+            { meterId: "M-3P-002", isThreePhase: true },
+            { meterId: "M-3P-001", isThreePhase: true }
+          ]
+        }
+      };
+    }
+    if (path === "/api/account/read") {
+      return {
+        code: 0,
+        result: {
+          total: 4,
+          data: [
+            { customerId: "A-1", meterId: "M-1P-001" },
+            { customerId: "A-2", meterId: "M-3P-002" },
+            { customerId: "A-3", meterId: "M-3P-001" },
+            { customerId: "A-4", meterId: "M-1P-002" }
+          ]
+        }
+      };
+    }
+    throw new Error(`Unexpected path ${path}`);
+  },
+  async getApi() {
+    return { code: 0, result: { total: 0, data: [] } };
+  }
+});
+assert.deepStrictEqual(creditTokenPhaseCalls.map((call) => call.path), ["/api/meter/read", "/api/account/read"]);
+assert.strictEqual(creditTokenPhaseCalls[0].payload.isThreePhase, true);
+assert.strictEqual(creditTokenPhaseTable.serverPaginated, true);
+assert.strictEqual(creditTokenPhaseTable.meta.source, "meter-phase-filter");
+assert.strictEqual(creditTokenPhaseTable.total, 2);
+assert.deepStrictEqual(creditTokenPhaseTable.rows.map((row) => row.meterId), ["M-3P-001", "M-3P-002"]);
+assert.deepStrictEqual(creditTokenPhaseTable.rows.map((row) => row.isThreePhase), [true, true]);
 
 const meterPageCalls = [];
 const meterPageTable = await fetchTableData(meterRoute, { pageNumber: 5, pageSize: 10, searchTerm: "4700", orderBy: "meterId asc" }, {
@@ -1119,6 +1181,39 @@ await assert.rejects(
   }),
   /not submitted/
 );
+
+const remoteConfirmCalls = [];
+const remoteConfirmRoute = routeManifest.find((route) => route.hash === "#/remote-operation-record/remote-meter-token-task");
+const remoteConfirmResult = await submitRouteAction(remoteConfirmRoute, "Confirm", {
+  id: 8364,
+  meterId: "47300481810",
+  data: "61688642353365376881"
+}, {
+  liveWritesAllowed: true,
+  api: {
+    async postApi(path, payload, options = {}) {
+      remoteConfirmCalls.push({ path, payload, headers: options.headers });
+      return { code: 0, result: [{ id: 8364 }] };
+    }
+  }
+});
+assert.strictEqual(remoteConfirmResult.endpoint, "/api/RemoteMeterTask/UpdateTokenTask");
+assert.deepStrictEqual(remoteConfirmCalls[0].payload, [{ id: 8364 }]);
+assert.strictEqual(remoteConfirmCalls[0].headers["X-Route-Action"], "Confirm");
+
+const remoteConfirmAcceptedResult = await submitRouteAction(remoteConfirmRoute, "Confirm", {
+  id: 8370,
+  meterId: "47300481810",
+  data: "63751343398450415494"
+}, {
+  liveWritesAllowed: true,
+  api: {
+    async postApi() {
+      return { code: 99, reason: "No data has been changed", result: null };
+    }
+  }
+});
+assert.strictEqual(remoteConfirmAcceptedResult.resultText, "Confirm submitted");
 
 const customerDeleteCalls = [];
 const customerDeleteApi = {

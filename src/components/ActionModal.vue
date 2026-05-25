@@ -261,6 +261,10 @@
                 <span>Meter</span>
                 <strong>{{ form.meterId || 'No meter' }}</strong>
               </div>
+              <div v-if="meterPhaseLabel">
+                <span>Meter Phase</span>
+                <strong>{{ meterPhaseLabel }}</strong>
+              </div>
               <div>
                 <span>Tariff</span>
                 <strong>{{ form.tariffId || 'No tariff' }}</strong>
@@ -530,22 +534,34 @@ import { guardedWriteMessage, userFacingError } from "../services/guarded-write.
 import { isFileUploadRoute, uploadAcceptValue, uploadSummary, validateUploadFile } from "../services/upload-policy.mjs";
 import {
   buildTokenPayload,
+  buildChangeMeterKeyTokenPayload,
   buildLocalTokenPreview,
+  buildMeterKeyUpdatePayload,
   calculateTokenAmount,
   calculateTokenUnits,
+  extractChangeMeterKeyTokens,
   findTariff,
   guardedPreviewError,
   isCreditTokenRoute,
+  isTokenRejectRemark,
   isTokenGenerateAction,
+  keySyncEligible,
+  meterPhaseFromRow,
   parseTariffUnitPrice,
   paymentMethods,
   purchaseWays,
   tokenEndpoint,
   tokenResultFields,
-  tokenValidationError
+  tokenValidationError,
+  usesLocalTokenPreview
 } from "../services/token-flow.mjs";
 import {
   buildRemoteTaskPayload,
+  remoteTaskConfirmEndpoint,
+  remoteTaskConfirmPayload,
+  remoteTokenStandbyConfirmPayload,
+  remoteTokenTaskStatus,
+  remoteTokenTaskLookupPayload,
   defaultRemoteDataItem,
   guardedRemoteTaskError,
   isGprsSupportTaskRoute,
@@ -769,6 +785,12 @@ export default {
       if (!this.tokenUnitPrice) return "Tariff price is invalid";
       return `Tariff price: ${this.tokenUnitPrice} MMK/kWh`;
     },
+    meterPhaseLabel() {
+      const phase = meterPhaseFromRow(this.form);
+      if (phase === "three-phase") return "3-phase";
+      if (phase === "single-phase") return "Single-phase";
+      return this.form.requireThreePhase ? "3-phase required" : "";
+    },
     tokenFormError() {
       return tokenValidationError(this.route, this.form, this.selectedTariff, { requireAuthorization: !this.isSimpleTokenRoute });
     },
@@ -804,6 +826,7 @@ export default {
         ["Customer Id", this.form.customerId],
         ["Customer Name", this.form.customerName],
         ["Meter Id", this.form.meterId],
+        ["Meter Phase", this.meterPhaseLabel],
         ["Pay Debt(MMK)", this.form.payDebtPercent || "0"],
         ["Monthly Charge(MMK)", this.form.monthlyCharge || "0"],
         ["Total Unit(kWh)", this.form.totalUnit],
@@ -1290,14 +1313,16 @@ export default {
         const endpoint = tokenEndpoint(this.route, this.action);
         const payload = buildTokenPayload(this.route, this.form, { isPreview: true });
         this.requestLog = "";
-        if (!liveWritesAllowed()) {
+        if (usesLocalTokenPreview(this.route) || !liveWritesAllowed()) {
           const fallback = buildLocalTokenPreview(this.route, this.form);
           this.responseLog = JSON.stringify(fallback, null, 2);
           this.tokenPreview = fallback;
           if (this.isCreditToken) this.tokenStep = "confirm";
           return;
         }
-        const response = await postApi(endpoint, payload);
+        const response = await postApi(endpoint, payload, {
+          headers: this.remoteTaskHeaders(this.route, this.action)
+        });
         this.responseLog = "";
         this.tokenPreview = response;
         if (this.isCreditToken) this.tokenStep = "confirm";
@@ -1335,7 +1360,9 @@ export default {
         const endpoint = tokenEndpoint(this.route, this.action);
         const payload = buildTokenPayload(this.route, this.form, { isPreview: false });
         this.requestLog = "";
-        const response = await postApi(endpoint, payload);
+        const response = await postApi(endpoint, payload, {
+          headers: this.remoteTaskHeaders(this.route, this.action)
+        });
         this.responseLog = "";
         this.tokenFinal = response;
         if (this.tokenFinalFailed) {
@@ -1376,31 +1403,104 @@ export default {
       this.tokenSendLoading = true;
       this.tokenSentStatus = "";
       try {
-        const payload = [{
-          customerId: this.form.customerId || this.row.customerId || "",
-          customerName: this.form.customerName || this.row.customerName || "",
-          meterId: this.form.meterId || this.row.meterId || "",
-          version: this.form.protocolVersion || this.row.protocolVersion || "2.2",
-          flag: "A120",
-          name: "Send Token",
-          dataItem: "Send Token",
-          dataDefault: "",
-          dataPrefix: "",
-          data: String(this.finalTokenValue).replace(/\s+/g, ""),
-          stationId: this.form.stationId || this.row.stationId || "",
-          remark: "Auto-sent after generation"
-        }];
-        const response = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload, {
-          headers: this.remoteTaskHeaders({ hash: "#/remote-operation/remote-meter-token" }, "Add Task")
-        });
-        toastSuccess("Token dispatched to meter successfully.");
+        await this.sendRemoteTokenValue(this.finalTokenValue, "Auto-sent after generation");
         this.tokenSentStatus = "success";
+        toastSuccess("Token delivered to meter successfully.");
       } catch (error) {
-        toastError(error?.message || "Failed to send token to meter.");
-        this.tokenSentStatus = "error";
+        try {
+          if (!this.shouldAttemptKeySync(error)) throw error;
+          toastWarn("Token rejected. Syncing meter keys.");
+          await this.syncMeterKeysToMeter();
+          await this.sendRemoteTokenValue(this.finalTokenValue, "Auto-sent after key sync");
+          this.tokenSentStatus = "success";
+          toastSuccess("Key sync complete. Token delivered.");
+        } catch (syncError) {
+          toastError(syncError?.message || "Failed to send token to meter.");
+          this.tokenSentStatus = "error";
+        }
       } finally {
         this.tokenSendLoading = false;
       }
+    },
+    shouldAttemptKeySync(error) {
+      return keySyncEligible({ ...this.row, ...this.form }) && isTokenRejectRemark(error?.message || "");
+    },
+    remoteTokenPayload(token, remark = "") {
+      return {
+        customerId: this.form.customerId || this.row.customerId || "",
+        customerName: this.form.customerName || this.row.customerName || "",
+        meterId: this.form.meterId || this.row.meterId || "",
+        version: this.form.protocolVersion || this.row.protocolVersion || "2.2",
+        flag: "A120",
+        name: "Send Token",
+        dataItem: "Send Token",
+        dataDefault: "",
+        dataPrefix: "",
+        data: String(token || "").replace(/\s+/g, ""),
+        stationId: this.form.stationId || this.row.stationId || "",
+        remark
+      };
+    },
+    async sendRemoteTokenValue(token, remark = "") {
+      const payload = [this.remoteTokenPayload(token, remark)];
+      const response = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload, {
+        headers: this.remoteTaskHeaders({ hash: "#/remote-operation/remote-meter-token" }, "Add Task")
+      });
+      let confirmPayload = remoteTaskConfirmPayload(response);
+      let taskId = Number(confirmPayload[0]?.id);
+      if (!confirmPayload.length) {
+        const lookup = await postApi("/API/RemoteMeterTask/GetTokenTask", remoteTokenTaskLookupPayload(payload[0]), {
+          headers: this.remoteTaskHeaders({ hash: "#/remote-operation-record/remote-meter-token-task" }, "Confirm")
+        });
+        confirmPayload = remoteTokenStandbyConfirmPayload(lookup, payload[0]);
+        taskId = Number(confirmPayload[0]?.id);
+      }
+      if (!confirmPayload.length) throw new Error("Token task created but confirm id was not returned");
+      const confirmResponse = await postApi(remoteTaskConfirmEndpoint({ hash: "#/remote-operation/remote-meter-token" }), confirmPayload, {
+        headers: this.remoteTaskHeaders({ hash: "#/remote-operation-record/remote-meter-token-task" }, "Confirm")
+      });
+      const confirmCode = Number(confirmResponse?.code);
+      const confirmReason = String(confirmResponse?.reason || confirmResponse?.msg || "").toLowerCase();
+      if (Number.isFinite(confirmCode) && confirmCode !== 0 && confirmCode !== 200 && !(confirmCode === 99 && confirmReason.includes("no data has been changed"))) {
+        throw new Error(confirmResponse?.reason || confirmResponse?.msg || `Confirm failed with code ${confirmCode}`);
+      }
+      const finalTask = await this.pollRemoteTokenDelivery({ ...payload[0], id: taskId });
+      const status = String(finalTask?.status || "").toLowerCase();
+      const finalRemark = String(finalTask?.remark || "");
+      if (status === "1" || status === "success") return finalTask;
+      throw new Error(finalRemark ? `Remote send failed: ${finalRemark}` : "Remote send failed");
+    },
+    async syncMeterKeysToMeter() {
+      const keyUpdatePayload = buildMeterKeyUpdatePayload({ ...this.row, ...this.form });
+      if (keyUpdatePayload) {
+        const updateResponse = await postApi("/api/token/meterKey/update", keyUpdatePayload, {
+          headers: this.remoteTaskHeaders(this.route, this.action)
+        });
+        const updateCode = Number(updateResponse?.code);
+        if (Number.isFinite(updateCode) && updateCode !== 0 && updateCode !== 200) {
+          throw new Error(updateResponse?.reason || updateResponse?.msg || "Meter key update failed");
+        }
+      }
+      const response = await postApi("/api/token/changeMeterKeyToken/generate", buildChangeMeterKeyTokenPayload(this.form), {
+        headers: this.remoteTaskHeaders(this.route, this.action)
+      });
+      const keyTokens = extractChangeMeterKeyTokens(response);
+      if (keyTokens.length < 2) throw new Error("Meter key tokens were not returned");
+      await this.sendRemoteTokenValue(keyTokens[0], "Auto key sync token 1");
+      await this.sendRemoteTokenValue(keyTokens[1], "Auto key sync token 2");
+    },
+    async pollRemoteTokenDelivery(form) {
+      let latestTask = null;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        if (attempt) await new Promise((resolve) => setTimeout(resolve, 5000));
+        const lookup = await postApi("/API/RemoteMeterTask/GetTokenTask", remoteTokenTaskLookupPayload(form), {
+          headers: this.remoteTaskHeaders({ hash: "#/remote-operation-record/remote-meter-token-task" }, "Confirm")
+        });
+        latestTask = remoteTokenTaskStatus(lookup, form);
+        const status = String(latestTask?.status || "").toLowerCase();
+        if (status === "1" || status === "success" || status === "2" || status === "failure" || status === "failed") return latestTask;
+      }
+      throw new Error("Remote send still pending after polling");
     },
     buildTokenReceiptRow(response) {
       return buildCanonicalReceiptRow({

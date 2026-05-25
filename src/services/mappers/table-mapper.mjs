@@ -68,6 +68,7 @@ function mapRowShape(row, route) {
     record.dataValue = record.dataValue || (!route.hash.includes("remote-meter-token-task") ? record.data : "");
     record.token = route.hash.includes("remote-meter-token-task") ? formatToken(record.token || record.data) : record.token;
     record.status = normalizeRemoteStatus(record.status);
+    if (String(record.remark || "").toLowerCase().includes("tokenreject")) record.status = "Failure";
   }
 
   if (route.hash.includes("prepay-report/low-purchase-situation")) {
