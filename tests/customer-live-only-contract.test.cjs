@@ -9,9 +9,9 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.match(reference, /function requiresLiveRead\(pathname\) \{/);
 assert.match(reference, /\/\\\/api\\\/customer\\\/read\$\/i\.test\(normalizedPath\)/);
 assert.match(reference, /\/\\\/api\\\/account\\\/read\$\/i\.test\(normalizedPath\)/);
-assert.match(reference, /\/\\\/api\\\/RemoteMeterTask\\\/Get\(\?:Reading\|Control\|Token\)Task\$\/i\.test\(normalizedPath\)/);
-assert.match(reference, /function canUseSampleFallback\(_pathname\) \{\s*return false;\s*\}/s);
-assert.match(reference, /function sampleReadResponse\(pathname, requestData\) \{\s*if \(requiresLiveRead\(pathname\)\) return null;/s);
+assert.match(reference, /\/\\\/api\\\/RemoteMeterTask\\\/Get\(\?:Reading\|Control\)Task\$\/i\.test\(normalizedPath\)/);
+assert.match(reference, /function canUseSampleFallback\(pathname\) \{\s*return \/\\\/api\\\/RemoteMeterTask\\\/GetTokenTask\$\/i\.test\(String\(pathname \|\| ""\)\);\s*\}/s);
+assert.match(reference, /function sampleReadResponse\(pathname, requestData\) \{\s*if \(requiresLiveRead\(pathname\) && !canUseSampleFallback\(pathname\)\) return null;/s);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/customer\/read"/);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/account\/read"/);
 assert.doesNotMatch(reference, /clone\.customerName = rowIndex < 20/);

@@ -435,6 +435,17 @@ async function main() {
       LIVE_API_BEARER_TOKEN: "env-token",
       ALLOW_LIVE_WRITES: "true"
     }, async () => {
+      const tokenTaskFallback = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/GetTokenTask", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 20 }))
+      });
+      assert.strictEqual(tokenTaskFallback.status, 200);
+      assert(["sample", "sample-after-live-failure"].includes(tokenTaskFallback.body._proxy.source));
+      assert(Array.isArray(tokenTaskFallback.body.result?.data), "token task fallback rows missing");
+
       const customerUnavailable = await request(proxyPort, "POST", "/api/customer/read", {
         headers: {
           "Content-Type": "application/json",

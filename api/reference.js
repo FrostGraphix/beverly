@@ -522,7 +522,7 @@ function requiresLiveRead(pathname) {
   return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
     || /\/api\/customer\/read$/i.test(normalizedPath)
     || /\/api\/account\/read$/i.test(normalizedPath)
-    || /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath);
+    || /\/api\/RemoteMeterTask\/Get(?:Reading|Control)Task$/i.test(normalizedPath);
 }
 
 function trustedLiveReadActor(pathname, request) {
@@ -540,8 +540,8 @@ function trustedLiveReadActor(pathname, request) {
   };
 }
 
-function canUseSampleFallback(_pathname) {
-  return false;
+function canUseSampleFallback(pathname) {
+  return /\/api\/RemoteMeterTask\/GetTokenTask$/i.test(String(pathname || ""));
 }
 
 function apiCacheEnabled() {
@@ -961,7 +961,7 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
 }
 
 function sampleReadResponse(pathname, requestData) {
-  if (requiresLiveRead(pathname)) return null;
+  if (requiresLiveRead(pathname) && !canUseSampleFallback(pathname)) return null;
   for (const candidate of candidatePaths(pathname)) {
     const filePath = path.join(samplesDir, `${sampleName(candidate)}.json`);
     if (!fs.existsSync(filePath)) continue;
