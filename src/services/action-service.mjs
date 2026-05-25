@@ -4,6 +4,7 @@ import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
 import { validateUploadFile } from "./upload-policy.mjs";
 import { guardedWriteMessage } from "./guarded-write.mjs";
+import { remoteTaskConfirmPayloadFromRow } from "./remote-task-flow.mjs";
 
 export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/api/File/Upload";
@@ -209,13 +210,13 @@ export async function submitRouteAction(route, action, form, options = {}) {
   }
 
   const payload = isRemoteTaskConfirm(route, action)
-    ? [{ id: Number(form.id || form.taskId || form.recordId) }]
+    ? remoteTaskConfirmPayloadFromRow(form)
     : action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
       ? buildWritePayload(endpoint, { ...form, ...meta }, fields)
       : form;
-  if (isRemoteTaskConfirm(route, action) && !Number.isFinite(payload[0].id)) {
+  if (isRemoteTaskConfirm(route, action) && !payload.length) {
     throw new Error("task id is required");
   }
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);

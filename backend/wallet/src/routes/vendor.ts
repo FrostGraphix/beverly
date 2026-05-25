@@ -22,6 +22,10 @@ import {
 import { logSecurityEvent } from '../services/audit.js';
 import { logAction } from '../services/audit.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
+import {
+    createTicket, listTickets, getTicket, addTicketMessage,
+    getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
+} from '../services/support.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import {
     beginVendorMfaEnrollment,
@@ -531,6 +535,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 amountMinor: body.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
+                isThreePhase: meter.isThreePhase,
                 reference,
             };
             const tokenPlan = buildCreditTokenPreviewPlan(tokenInput);
@@ -713,6 +718,131 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'message_error', message: e.message });
         }
+    });
+
+    // ── Support tickets ───────────────────────────────────────────────────
+    async function vendorContext(actorId: string): Promise<{ orgId?: string; name?: string }> {
+        const { data } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id, full_name, vendor_organizations(trading_name, legal_name)')
+            .eq('id', actorId)
+            .maybeSingle();
+        if (!data) return {};
+        const org = (data as any).vendor_organizations;
+        return {
+            orgId: (data as any).vendor_organization_id,
+            name: org?.trading_name ?? org?.legal_name ?? (data as any).full_name ?? undefined,
+        };
+    }
+
+    fastify.post('/support/tickets', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const schema = z.object({
+            subject:     z.string().min(5).max(200),
+            description: z.string().min(10).max(4000),
+            category:    z.string().max(60).optional(),
+            priority:    z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const actor = req.actor!;
+        const ctx = await vendorContext(actor.actorId);
+        return createTicket({
+            requesterActorType:   'vendor',
+            requesterActorId:     actor.actorId,
+            requesterName:        ctx.name,
+            vendorOrganizationId: ctx.orgId,
+            category:             body.category,
+            subject:              body.subject,
+            description:          body.description,
+            priority:             body.priority,
+        });
+    });
+
+    fastify.get('/support/tickets', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { status } = req.query as { status?: string };
+        const ctx = await vendorContext(req.actor!.actorId);
+        return { tickets: await listTickets({ vendorOrganizationId: ctx.orgId, status, limit: 100 }) };
+    });
+
+    fastify.get('/support/tickets/:id', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const ctx = await vendorContext(req.actor!.actorId);
+        const t = await getTicket(id);
+        if (!t || (t as any).vendor_organization_id !== ctx.orgId) return reply.code(404).send({ error: 'not_found' });
+        if ((t as any).support_ticket_messages) {
+            (t as any).support_ticket_messages = (t as any).support_ticket_messages.filter((m: any) => !m.is_internal);
+        }
+        return t;
+    });
+
+    fastify.post('/support/tickets/:id/messages', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
+        const ctx = await vendorContext(req.actor!.actorId);
+        const t = await getTicket(id);
+        if (!t || (t as any).vendor_organization_id !== ctx.orgId) return reply.code(404).send({ error: 'not_found' });
+        await addTicketMessage({
+            ticketId: id, senderActorType: 'vendor', senderActorId: req.actor!.actorId,
+            senderName: ctx.name, body: msgBody,
+        });
+        return { ok: true };
+    });
+
+    // ── Quick chat ────────────────────────────────────────────────────────
+    fastify.post('/support/chat/session', { preHandler: fastify.requireVendor() }, async (req) => {
+        const actor = req.actor!;
+        const ctx = await vendorContext(actor.actorId);
+        const { subject } = (req.body ?? {}) as { subject?: string };
+        return getOrCreateChatSession({
+            requesterActorType:   'vendor',
+            requesterActorId:     actor.actorId,
+            displayName:          ctx.name,
+            vendorOrganizationId: ctx.orgId,
+            subject,
+        });
+    });
+
+    fastify.get('/support/chat/:id/messages', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { since } = req.query as { since?: string };
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.actorId) return reply.code(404).send({ error: 'not_found' });
+        const messages = await getChatMessages(id, { since, viewer: 'user' });
+        return { session: s, messages };
+    });
+
+    fastify.post('/support/chat/:id/messages', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(2000) }).parse(req.body);
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.actorId) return reply.code(404).send({ error: 'not_found' });
+        await sendChatMessage({
+            sessionId: id, senderActorType: 'vendor', senderActorId: req.actor!.actorId,
+            senderName: (s as any).display_name ?? undefined, body: msgBody,
+        });
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/end', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.actorId) return reply.code(404).send({ error: 'not_found' });
+        await endChatSession(id);
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/escalate', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { subject } = z.object({ subject: z.string().min(3).max(200) }).parse(req.body);
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.actorId) return reply.code(404).send({ error: 'not_found' });
+        const ctx = await vendorContext(req.actor!.actorId);
+        return escalateChatToTicket({
+            sessionId: id, requesterActorType: 'vendor', requesterActorId: req.actor!.actorId,
+            requesterName: ctx.name, vendorOrganizationId: ctx.orgId, subject,
+        });
     });
 
     // ── settlement ──

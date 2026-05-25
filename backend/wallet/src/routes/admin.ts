@@ -20,6 +20,11 @@ import { logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
 import { listStations, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
 import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
+import {
+    listFaqCategories, listFaqs, upsertFaqCategory, deleteFaqCategory, upsertFaq, deleteFaq,
+    listTickets, getTicket, addTicketMessage, updateTicket, ticketStats,
+    listChatSessions, getChatSession, getChatMessages, sendChatMessage, endChatSession, assignChatSession,
+} from '../services/support.js';
 import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
@@ -51,6 +56,7 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
     { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
     { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
+    { key: 'wallet.support.manage', label: 'Manage support (FAQ, tickets, chat)', group: 'Operations', risk: 'medium' },
     { key: 'wallet.settlement.view', label: 'View settlement batches', group: 'Operations', risk: 'medium' },
     { key: 'wallet.reconciliation.run', label: 'Run reconciliation', group: 'Operations', risk: 'high' },
     { key: 'wallet.fraud.review', label: 'Resolve fraud reviews', group: 'Compliance', risk: 'high' },
@@ -65,7 +71,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'super-admin': PERMISSION_CATALOG.map((p) => p.key),
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
     ],
     'finance-checker': [
@@ -145,6 +151,25 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /disputes': 'wallet.disputes.manage',
     'GET /disputes/:id': 'wallet.disputes.manage',
     'PATCH /disputes/:id': 'wallet.disputes.manage',
+    'GET /support/faqs': 'wallet.support.manage',
+    'GET /support/faq-categories': 'wallet.support.manage',
+    'POST /support/faqs': 'wallet.support.manage',
+    'PUT /support/faqs/:id': 'wallet.support.manage',
+    'DELETE /support/faqs/:id': 'wallet.support.manage',
+    'POST /support/faq-categories': 'wallet.support.manage',
+    'PUT /support/faq-categories/:id': 'wallet.support.manage',
+    'DELETE /support/faq-categories/:id': 'wallet.support.manage',
+    'GET /support/tickets': 'wallet.support.manage',
+    'GET /support/tickets/stats': 'wallet.support.manage',
+    'GET /support/tickets/:id': 'wallet.support.manage',
+    'PATCH /support/tickets/:id': 'wallet.support.manage',
+    'POST /support/tickets/:id/messages': 'wallet.support.manage',
+    'GET /support/chat/sessions': 'wallet.support.manage',
+    'GET /support/chat/:id': 'wallet.support.manage',
+    'GET /support/chat/:id/messages': 'wallet.support.manage',
+    'POST /support/chat/:id/messages': 'wallet.support.manage',
+    'POST /support/chat/:id/assign': 'wallet.support.manage',
+    'POST /support/chat/:id/end': 'wallet.support.manage',
     'GET /refunds': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
     'POST /refunds/:id/approve': 'wallet.refunds.manage',
@@ -1247,7 +1272,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/purchases', async (req) => {
         const {
-            status, station, actorType, q, since, until, limit, cursor,
+            status, station, actorType, meterType, q, since, until, limit, cursor,
         } = req.query as Record<string, string | undefined>;
 
         let query = adminClient.from('purchase_orders').select('*')
@@ -1256,6 +1281,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (status)    query = query.eq('status', status);
         if (station)   query = query.eq('station_id', station);
         if (actorType) query = query.eq('actor_type', actorType);
+        if (meterType) query = query.eq('meter_type', meterType);
         if (since)     query = query.gte('created_at', since);
         if (until)     query = query.lte('created_at', until);
         if (cursor)    query = query.lt('created_at', cursor);
@@ -1277,12 +1303,13 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // Back-compat alias for old /vending consumers.
     fastify.get('/vending', async (req) => {
-        const { status, station, q, cursor, limit } = req.query as Record<string, string | undefined>;
+        const { status, station, meterType, q, cursor, limit } = req.query as Record<string, string | undefined>;
         let query = adminClient.from('purchase_orders').select('*')
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 200), 500));
         if (status)  query = query.eq('status', status);
         if (station) query = query.eq('station_id', station);
+        if (meterType) query = query.eq('meter_type', meterType);
         if (cursor)  query = query.lt('created_at', cursor);
         if (q) {
             const safeQ = cleanSearchTerm(q);
@@ -1579,6 +1606,172 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetType: 'dispute',
             targetId: id,
         });
+        return { ok: true };
+    });
+
+    // ── support: FAQ knowledge base ──
+    fastify.get('/support/faq-categories', async () => {
+        return { categories: await listFaqCategories('all') };
+    });
+
+    fastify.get('/support/faqs', async (req) => {
+        const { category, search } = req.query as { category?: string; search?: string };
+        return { faqs: await listFaqs({ audience: 'all', categoryId: category, search, includeUnpublished: true }) };
+    });
+
+    fastify.post('/support/faq-categories', async (req, reply) => {
+        const schema = z.object({
+            slug: z.string().min(2).max(60), title: z.string().min(2).max(120),
+            description: z.string().max(500).optional(), icon: z.string().max(40).optional(),
+            audience: z.enum(['all', 'customer', 'vendor']).optional(), sort_order: z.number().int().optional(),
+        });
+        const body = schema.parse(req.body);
+        const result = await upsertFaqCategory({ ...body, sortOrder: body.sort_order });
+        return reply.code(201).send(result);
+    });
+
+    fastify.put('/support/faq-categories/:id', async (req) => {
+        const { id } = req.params as { id: string };
+        const schema = z.object({
+            slug: z.string().min(2).max(60), title: z.string().min(2).max(120),
+            description: z.string().max(500).optional(), icon: z.string().max(40).optional(),
+            audience: z.enum(['all', 'customer', 'vendor']).optional(), sort_order: z.number().int().optional(),
+        });
+        const body = schema.parse(req.body);
+        return upsertFaqCategory({ id, ...body, sortOrder: body.sort_order });
+    });
+
+    fastify.delete('/support/faq-categories/:id', async (req) => {
+        const { id } = req.params as { id: string };
+        await deleteFaqCategory(id);
+        return { ok: true };
+    });
+
+    fastify.post('/support/faqs', async (req, reply) => {
+        const schema = z.object({
+            category_id: z.string().uuid().nullable().optional(),
+            question: z.string().min(5).max(500), answer: z.string().min(5).max(8000),
+            audience: z.enum(['all', 'customer', 'vendor']).optional(),
+            tags: z.array(z.string()).optional(), sort_order: z.number().int().optional(),
+            published: z.boolean().optional(),
+        });
+        const body = schema.parse(req.body);
+        const result = await upsertFaq({ categoryId: body.category_id, question: body.question, answer: body.answer, audience: body.audience, tags: body.tags, sortOrder: body.sort_order, published: body.published });
+        return reply.code(201).send(result);
+    });
+
+    fastify.put('/support/faqs/:id', async (req) => {
+        const { id } = req.params as { id: string };
+        const schema = z.object({
+            category_id: z.string().uuid().nullable().optional(),
+            question: z.string().min(5).max(500), answer: z.string().min(5).max(8000),
+            audience: z.enum(['all', 'customer', 'vendor']).optional(),
+            tags: z.array(z.string()).optional(), sort_order: z.number().int().optional(),
+            published: z.boolean().optional(),
+        });
+        const body = schema.parse(req.body);
+        return upsertFaq({ id, categoryId: body.category_id, question: body.question, answer: body.answer, audience: body.audience, tags: body.tags, sortOrder: body.sort_order, published: body.published });
+    });
+
+    fastify.delete('/support/faqs/:id', async (req) => {
+        const { id } = req.params as { id: string };
+        await deleteFaq(id);
+        return { ok: true };
+    });
+
+    // ── support: tickets ──
+    fastify.get('/support/tickets/stats', async () => {
+        return ticketStats();
+    });
+
+    fastify.get('/support/tickets', async (req) => {
+        const { status, search, assigned } = req.query as { status?: string; search?: string; assigned?: string };
+        return { tickets: await listTickets({ status, search, assignedToUserId: assigned === 'me' ? req.actor!.userId : undefined, limit: 300 }) };
+    });
+
+    fastify.get('/support/tickets/:id', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const t = await getTicket(id);
+        if (!t) return reply.code(404).send({ error: 'not_found' });
+        return t;
+    });
+
+    fastify.patch('/support/tickets/:id', async (req) => {
+        const { id } = req.params as { id: string };
+        const schema = z.object({
+            status: z.enum(['open', 'pending', 'awaiting_customer', 'resolved', 'closed']).optional(),
+            priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+            category: z.string().max(60).optional(),
+            assign_to_me: z.boolean().optional(),
+            unassign: z.boolean().optional(),
+        });
+        const body = schema.parse(req.body);
+        await updateTicket({
+            ticketId: id,
+            status: body.status, priority: body.priority, category: body.category,
+            assignedToUserId: body.assign_to_me ? req.actor!.userId : body.unassign ? null : undefined,
+        });
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: body.status ? `support.ticket.${body.status}` : 'support.ticket.update',
+            targetType: 'support_ticket', targetId: id,
+        }).catch(() => undefined);
+        return { ok: true };
+    });
+
+    fastify.post('/support/tickets/:id/messages', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const schema = z.object({ body: z.string().min(1).max(4000), internal: z.boolean().optional() });
+        const body = schema.parse(req.body);
+        const t = await getTicket(id);
+        if (!t) return reply.code(404).send({ error: 'not_found' });
+        await addTicketMessage({
+            ticketId: id, senderActorType: 'staff', senderActorId: req.actor!.userId,
+            senderName: req.actor!.role, body: body.body, isInternal: body.internal,
+        });
+        return { ok: true };
+    });
+
+    // ── support: chat console ──
+    fastify.get('/support/chat/sessions', async (req) => {
+        const { status } = req.query as { status?: string };
+        return { sessions: await listChatSessions({ status, limit: 150 }) };
+    });
+
+    fastify.get('/support/chat/:id', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const s = await getChatSession(id);
+        if (!s) return reply.code(404).send({ error: 'not_found' });
+        return s;
+    });
+
+    fastify.get('/support/chat/:id/messages', async (req) => {
+        const { id } = req.params as { id: string };
+        const { since } = req.query as { since?: string };
+        return { messages: await getChatMessages(id, { since, viewer: 'staff' }) };
+    });
+
+    fastify.post('/support/chat/:id/messages', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(2000) }).parse(req.body);
+        const s = await getChatSession(id);
+        if (!s) return reply.code(404).send({ error: 'not_found' });
+        await sendChatMessage({
+            sessionId: id, senderActorType: 'staff', senderActorId: req.actor!.userId,
+            senderName: 'Beverly Support', body: msgBody,
+        });
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/assign', async (req) => {
+        const { id } = req.params as { id: string };
+        await assignChatSession(id, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/end', async (req) => {
+        const { id } = req.params as { id: string };
+        await endChatSession(id);
         return { ok: true };
     });
 

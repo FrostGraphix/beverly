@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import { API_BASE } from '../lib/api';
+import { PORTAL_URLS } from '../lib/portals';
 
 const REMEMBERED_VENDOR_EMAIL_KEY = 'beverly.vendor.remembered_email';
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
@@ -92,7 +93,9 @@ rememberEmail.value = Boolean(rememberedEmail);
   <main style="min-height:100dvh; display:grid; place-items:center; padding: var(--s-5); background: var(--canvas)">
     <div class="bw-card" style="width:100%; max-width:420px">
       <div style="text-align:center; margin-bottom: var(--s-6)">
-        <div class="bw-mark" style="width:52px; height:52px; font-size:22px; margin:0 auto var(--s-4)">B</div>
+        <a :href="PORTAL_URLS.landing" class="vendor-brand-link" aria-label="Beverly home">
+          <div class="bw-mark" style="width:52px; height:52px; font-size:22px; margin:0 auto var(--s-4)">B</div>
+        </a>
         <div class="bw-h1" style="font-size: var(--t-2xl); margin-bottom: 6px">Vendor Portal</div>
         <p class="bw-muted" style="margin:0; font-size: var(--t-sm)">Sign in to start vending</p>
       </div>
@@ -133,6 +136,11 @@ rememberEmail.value = Boolean(rememberedEmail);
       <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-5)">
         Vendor accounts are created by Beverly staff. Need access? Contact your account manager.
       </p>
+
+      <div class="vendor-cross">
+        <a :href="PORTAL_URLS.customer + 'login'" class="vendor-cross-link">Buy electricity instead →</a>
+        <a :href="PORTAL_URLS.landing" class="vendor-cross-link vendor-cross-link--muted">← Back to Beverly home</a>
+      </div>
     </div>
   </main>
 </template>
@@ -171,5 +179,31 @@ rememberEmail.value = Boolean(rememberedEmail);
   color: var(--brand);
   font-weight: 700;
   cursor: pointer;
+}
+.vendor-brand-link {
+  display: inline-block;
+  text-decoration: none;
+  transition: opacity var(--dur-fast);
+}
+.vendor-brand-link:hover { opacity: 0.85; }
+.vendor-cross {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border);
+}
+.vendor-cross-link {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: none;
+}
+.vendor-cross-link:hover { text-decoration: underline; }
+.vendor-cross-link--muted {
+  color: var(--text-2);
+  font-weight: 500;
 }
 </style>

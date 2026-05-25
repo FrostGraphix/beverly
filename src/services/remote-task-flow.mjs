@@ -238,7 +238,7 @@ function collectTaskIds(value, target = []) {
     return target;
   }
   if (typeof value !== "object") return target;
-  const id = Number(value.id ?? value.taskId ?? value.taskID ?? value.recordId);
+  const id = remoteTaskId(value);
   if (Number.isFinite(id) && id > 0) target.push(id);
   collectTaskIds(value.result, target);
   collectTaskIds(value.data, target);
@@ -249,6 +249,23 @@ export function remoteTaskConfirmPayload(response = {}) {
   return [...new Set(collectTaskIds(response))].map((id) => ({ id }));
 }
 
+export function remoteTaskId(value = {}) {
+  return Number(
+    value.id ??
+    value.taskId ??
+    value.taskID ??
+    value.recordId ??
+    value.remoteTaskId ??
+    value.tokenTaskId ??
+    value.meterTaskId
+  );
+}
+
+export function remoteTaskConfirmPayloadFromRow(row = {}) {
+  const id = remoteTaskId(row);
+  return Number.isFinite(id) && id > 0 ? [{ id }] : [];
+}
+
 function collectTaskRows(value, target = []) {
   if (!value) return target;
   if (Array.isArray(value)) {
@@ -256,7 +273,7 @@ function collectTaskRows(value, target = []) {
     return target;
   }
   if (typeof value !== "object") return target;
-  if (value.id || value.taskId || value.recordId) target.push(value);
+  if (Number.isFinite(remoteTaskId(value))) target.push(value);
   collectTaskRows(value.result, target);
   collectTaskRows(value.data, target);
   return target;
@@ -278,9 +295,9 @@ export function isRemoteTaskTerminalStatus(value) {
 export function remoteTokenTaskStatus(response = {}, form = {}) {
   const meterId = String(form.meterId || "").trim();
   const token = normalizeTaskToken(form.token || form.data);
-  const id = Number(form.id || form.taskId || form.recordId);
+  const id = remoteTaskId(form);
   return collectTaskRows(response)
-    .filter((row) => !Number.isFinite(id) || Number(row.id ?? row.taskId ?? row.recordId) === id)
+    .filter((row) => !Number.isFinite(id) || remoteTaskId(row) === id)
     .find((row) => String(row.meterId || "").trim() === meterId && (!token || normalizeTaskToken(row.data || row.token) === token)) || null;
 }
 
@@ -289,7 +306,7 @@ export function remoteTokenTaskLookupPayload(form = {}) {
     lang: "en",
     meterId: form.meterId || "",
     pageNumber: 1,
-    pageSize: 10,
+    pageSize: 100,
     orderBy: "createDate desc"
   };
 }
@@ -299,9 +316,9 @@ export function remoteTokenStandbyConfirmPayload(response = {}, form = {}) {
   const token = normalizeTaskToken(form.token || form.data);
   const ids = collectTaskRows(response)
     .filter((row) => String(row.meterId || "").trim() === meterId)
-    .filter((row) => normalizeTaskToken(row.data || row.token) === token)
+    .filter((row) => !token || normalizeTaskToken(row.data || row.token) === token)
     .filter((row) => isStandbyStatus(row.status))
-    .map((row) => Number(row.id ?? row.taskId ?? row.recordId))
+    .map((row) => remoteTaskId(row))
     .filter((id) => Number.isFinite(id) && id > 0);
   return [...new Set(ids)].map((id) => ({ id }));
 }

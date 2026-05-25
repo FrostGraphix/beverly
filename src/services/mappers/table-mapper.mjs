@@ -64,10 +64,15 @@ function mapRowShape(row, route) {
   }
 
   if (route.hash.includes("remote-operation-record/remote-meter-")) {
+    if (record.id == null) {
+      record.id = record.taskId ?? record.taskID ?? record.recordId ?? record.remoteTaskId ?? record.tokenTaskId ?? record.meterTaskId;
+    }
+    if (record.taskId == null && record.id != null) record.taskId = record.id;
     record.dataItem = record.dataItem || record.name || "";
     record.dataValue = record.dataValue || (!route.hash.includes("remote-meter-token-task") ? record.data : "");
     record.token = route.hash.includes("remote-meter-token-task") ? formatToken(record.token || record.data) : record.token;
     record.status = normalizeRemoteStatus(record.status);
+    if (route.hash.includes("remote-meter-token-task") && record.status === "StandBy") record.status = "Queued";
     if (String(record.remark || "").toLowerCase().includes("tokenreject")) record.status = "Failure";
   }
 

@@ -14,6 +14,9 @@
           <div class="bw-card-title">{{ d.subject }}</div>
           <div class="bw-card-sub">{{ d.reference }} · {{ fmtDate(d.created_at) }}</div>
         </div>
+          <div v-if="d.purchase_order" class="bw-card-sub">
+            {{ d.purchase_order.meter_id }} Â· {{ meterTypeLabel(d.purchase_order.meter_type) }}
+          </div>
         <span :class="statusClass(d.status)" class="bw-badge">{{ d.status }}</span>
       </div>
       <div v-if="!disputes.length" class="bw-empty-state">
@@ -63,6 +66,13 @@
         <div class="bw-modal-body">
           <p class="bw-text-sm"><strong>{{ selected.subject }}</strong></p>
           <p class="bw-text-sm bw-text-muted">{{ selected.description }}</p>
+
+          <div v-if="detail?.purchase_order" class="bw-dispute-purchase">
+            <span>Meter</span><strong class="bw-mono">{{ detail.purchase_order.meter_id }}</strong>
+            <span>Phase</span><strong>{{ meterTypeLabel(detail.purchase_order.meter_type) }}</strong>
+            <span>Amount</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Status</span><strong>{{ detail.purchase_order.status }}</strong>
+          </div>
 
           <div class="bw-section-label">Conversation</div>
           <div class="bw-messages">
@@ -170,6 +180,13 @@ function statusClass(s: string) {
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 
+function fmtMoney(minor?: number | null) { return typeof minor === 'number' ? (minor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' }) : 'â€”'; }
+function meterTypeLabel(type?: string | null) {
+  if (type === 'three_phase') return 'Three Phase';
+  if (type === 'single_phase') return 'Single Phase';
+  return 'Unknown';
+}
+
 onMounted(load);
 </script>
 
@@ -189,4 +206,6 @@ onMounted(load);
 .bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--bw-text-muted); margin: 1rem 0 .25rem; }
 .bw-textarea { width: 100%; }
 .bw-empty-state { text-align: center; padding: 2rem; color: var(--bw-text-muted); }
+.bw-dispute-purchase { display: grid; grid-template-columns: 80px 1fr; gap: .35rem .75rem; margin: .75rem 0 1rem; padding: .75rem; border: 1px solid var(--bw-border); border-radius: var(--bw-radius-sm); background: var(--bw-surface-2); font-size: .8rem; }
+.bw-dispute-purchase span { color: var(--bw-text-muted); }
 </style>

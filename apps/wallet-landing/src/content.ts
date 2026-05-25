@@ -1,20 +1,19 @@
 /**
  * Beverly Wallet landing — content + portal wiring.
- * Portal URLs are env-overridable so dev (separate ports) and prod
- * (path-based: /wallet-customer/, /wallet-vendor/) both work.
+ * Portal URLs resolve via ./portals (dev ports / prod paths / env override).
  */
 
-const env = import.meta.env;
+import { PORTAL_URLS } from './portals';
 
 export const PORTALS = {
     customer: {
-        login: (env.VITE_CUSTOMER_URL ?? '/wallet-customer/') + 'login',
-        signup: (env.VITE_CUSTOMER_URL ?? '/wallet-customer/') + 'signup',
-        home: env.VITE_CUSTOMER_URL ?? '/wallet-customer/',
+        login: PORTAL_URLS.customer + 'login',
+        signup: PORTAL_URLS.customer + 'signup',
+        home: PORTAL_URLS.customer,
     },
     vendor: {
-        login: (env.VITE_VENDOR_URL ?? '/wallet-vendor/') + 'login',
-        home: env.VITE_VENDOR_URL ?? '/wallet-vendor/',
+        login: PORTAL_URLS.vendor + 'login',
+        home: PORTAL_URLS.vendor,
     },
 } as const;
 

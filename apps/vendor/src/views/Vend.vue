@@ -21,6 +21,7 @@ interface MeterInfo {
     customerName: string;
     stationId: string;
     tariffId: string;
+    isThreePhase?: boolean | null;
     liveVerified?: boolean;
     resolutionSource?: string;
 }
@@ -37,6 +38,10 @@ const confirmLabel = computed(() => {
     if (!canVend.value) return 'Bind meter before vend';
     return `Confirm - ${naira(preview.value?.amountMinor)}`;
 });
+
+function meterTypeLabel(isThreePhase?: boolean | null) {
+    return isThreePhase ? 'Three Phase' : 'Single Phase';
+}
 
 function describeApiError(e: unknown, fallback: string) {
     if (e instanceof ApiError) {
@@ -187,6 +192,10 @@ async function copyToken() {
           {{ meter?.meterId }} · {{ meter?.stationId }} · {{ meter?.tariffId }}
         </p>
 
+        <span :class="['bw-badge', meter?.isThreePhase ? 'info' : 'neutral']">
+          {{ meterTypeLabel(meter?.isThreePhase) }}
+        </span>
+
         <div v-if="!canVend" class="bw-alert" style="margin-top: var(--s-3); display: grid; gap: 6px">
           <strong>Preview-only meter metadata</strong>
           <span>This meter was resolved from archived read-only records, not the live account catalog. Bind or confirm it live before taking payment.</span>
@@ -224,6 +233,7 @@ async function copyToken() {
         <div style="border-top: 1px solid var(--border); margin-top: var(--s-4); padding-top: var(--s-4); display: grid; gap: var(--s-2)">
           <div class="bw-row"><span class="bw-muted">Customer</span><span class="bw-spacer"></span><strong>{{ meter?.customerName }}</strong></div>
           <div class="bw-row"><span class="bw-muted">Meter</span><span class="bw-spacer"></span><span class="bw-mono">{{ meter?.meterId }}</span></div>
+          <div class="bw-row"><span class="bw-muted">Phase</span><span class="bw-spacer"></span><span>{{ meterTypeLabel(meter?.isThreePhase) }}</span></div>
           <div class="bw-row"><span class="bw-muted">Station</span><span class="bw-spacer"></span><span>{{ meter?.stationId }}</span></div>
           <div class="bw-row"><span class="bw-muted">Tariff</span><span class="bw-spacer"></span><span>{{ meter?.tariffId }}</span></div>
         </div>
@@ -255,6 +265,7 @@ async function copyToken() {
         <div class="bw-card">
           <div class="bw-row"><span class="bw-muted">Customer</span><span class="bw-spacer"></span><strong>{{ meter?.customerName }}</strong></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Meter</span><span class="bw-spacer"></span><span class="bw-mono">{{ meter?.meterId }}</span></div>
+          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Phase</span><span class="bw-spacer"></span><span>{{ meterTypeLabel(meter?.isThreePhase) }}</span></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Order</span><span class="bw-spacer"></span><span class="bw-mono">#{{ String(result?.purchaseOrder?.id).slice(0, 8) }}</span></div>
         </div>
         <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New vend</button>

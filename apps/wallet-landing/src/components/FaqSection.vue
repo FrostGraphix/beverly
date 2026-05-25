@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import IconSvg from './IconSvg.vue';
-import { FAQS } from '../content';
+import { FAQS, PORTALS } from '../content';
 
 const open = ref<number>(0);
 function toggle(i: number) {
@@ -32,5 +32,27 @@ function toggle(i: number) {
         </div>
       </div>
     </div>
+
+    <div class="lp-faq-foot" v-reveal>
+      <p>Can’t find what you’re looking for? Our Help Center has more articles, and live chat is one tap away inside the app.</p>
+      <div class="lp-faq-foot-actions">
+        <a class="lp-btn lp-btn--primary" :href="PORTALS.customer.home">Visit the Help Center <IconSvg name="arrow" /></a>
+        <a class="lp-btn lp-btn--ghost" :href="PORTALS.vendor.home">Vendor support</a>
+      </div>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.lp-faq-foot {
+  max-width: 760px;
+  margin: 28px auto 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.lp-faq-foot p { margin: 0; color: var(--text-dim); font-size: var(--t-lg); line-height: 1.6; max-width: 560px; }
+.lp-faq-foot-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+</style>

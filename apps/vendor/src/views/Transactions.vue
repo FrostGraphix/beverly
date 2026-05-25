@@ -6,6 +6,7 @@ import { naira, kwh, shortDate } from '../lib/format';
 
 interface PurchaseOrder {
     id: string; meter_id: string; customer_name: string | null;
+    meter_type: 'single_phase' | 'three_phase' | null;
     station_id: string | null; amount_minor: number; units_kwh: number | null;
     token: string | null; purchase_mode: 'wallet' | 'direct_pay' | 'remote_send';
     status: string; delivery_state: string | null; created_at: string;
@@ -29,6 +30,12 @@ function statusBadge(s: string) {
     if (s === 'delivery_pending_review')  return 'warn';
     if (s === 'reversed')                 return 'warn';
     return 'neutral';
+}
+
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Unknown';
 }
 
 onMounted(async () => {
@@ -70,6 +77,7 @@ onMounted(async () => {
               <th>When</th>
               <th>Customer</th>
               <th>Meter</th>
+              <th>Phase</th>
               <th>Station</th>
               <th>Mode</th>
               <th style="text-align:right">Amount</th>
@@ -83,6 +91,11 @@ onMounted(async () => {
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td>{{ p.customer_name || '—' }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
+              <td>
+                <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                  {{ meterTypeLabel(p.meter_type) }}
+                </span>
+              </td>
               <td class="bw-muted">{{ p.station_id || '—' }}</td>
               <td><span class="bw-badge neutral">{{ p.purchase_mode }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
@@ -91,7 +104,7 @@ onMounted(async () => {
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0, 12) + '…' : '—' }}</td>
             </tr>
             <tr v-if="!filtered().length && !loading">
-              <td colspan="9" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
+              <td colspan="10" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
             </tr>
           </tbody>
         </table>
@@ -115,6 +128,12 @@ onMounted(async () => {
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Mode</span>
               <span class="bw-badge neutral">{{ p.purchase_mode }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Phase</span>
+              <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                {{ meterTypeLabel(p.meter_type) }}
+              </span>
             </div>
             <div class="bw-tc-pair" v-if="p.units_kwh">
               <span class="bw-tc-pair-label">Units</span>

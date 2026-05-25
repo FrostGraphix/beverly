@@ -24,7 +24,7 @@ defineEmits<{ (e: 'launch'): void }>();
           <span class="lp-grad">instantly.</span>
         </h1>
         <p class="lp-hero-sub" v-reveal="120">
-          Beverly Wallet is the fastest way to buy prepaid electricity tokens —
+          Beverly Wallet is the fastest way to buy prepaid electricity tokens -
           and the smartest way to run a vending business. One platform, two front doors.
         </p>
 
@@ -45,18 +45,33 @@ defineEmits<{ (e: 'launch'): void }>();
       </div>
 
       <div class="lp-hero-art" v-reveal="200">
-        <div class="lp-phone">
-          <div class="lp-phone-notch" />
+        <div class="lp-phone" aria-label="Beverly Wallet on iPhone 17">
+          <span class="lp-phone-side lp-phone-side--action" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--volume" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--power" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--camera" aria-hidden="true" />
+          <div class="lp-phone-island" aria-hidden="true">
+            <span class="lp-phone-camera" />
+          </div>
+
           <div class="lp-phone-screen">
+            <div class="lp-ios-status" aria-hidden="true">
+              <span>9:41</span>
+              <span class="lp-ios-signals"><i /><i /><i /></span>
+            </div>
+
             <div class="lp-app-bar">
               <span class="lp-app-brand"><span class="lp-app-mark"><IconSvg name="bolt" /></span> Beverly</span>
-              <span class="lp-app-avatar">A</span>
+              <span class="lp-app-status">Live</span>
             </div>
 
             <div class="lp-balance-card">
-              <span class="lp-balance-label">Wallet balance</span>
-              <span class="lp-balance-value">₦ 24,500<sup>.00</sup></span>
-              <span class="lp-balance-meta"><IconSvg name="spark" /> +₦5,000 funded today</span>
+              <div class="lp-balance-head">
+                <span class="lp-balance-label">Wallet balance</span>
+                <span class="lp-app-avatar">A</span>
+              </div>
+              <span class="lp-balance-value">&#8358;24,500<sup>.00</sup></span>
+              <span class="lp-balance-meta"><IconSvg name="spark" /> +&#8358;5,000 today</span>
             </div>
 
             <div class="lp-buy-row">
@@ -66,17 +81,23 @@ defineEmits<{ (e: 'launch'): void }>();
               </div>
               <div class="lp-buy-field">
                 <small>Amount</small>
-                <strong>₦ 5,000</strong>
+                <strong>&#8358;5,000</strong>
               </div>
             </div>
 
             <div class="lp-token">
-              <span class="lp-token-label"><IconSvg name="check" /> Token delivered</span>
+              <div class="lp-token-head">
+                <span class="lp-token-label"><IconSvg name="check" /> Delivered</span>
+                <span>68.4 kWh</span>
+              </div>
               <span class="lp-token-value">4829 1075 6634 2218 9051</span>
-              <span class="lp-token-units">68.4 kWh · receipt saved</span>
+              <span class="lp-token-units">Receipt saved</span>
             </div>
 
-            <button class="lp-app-cta">Buy again <IconSvg name="arrow" /></button>
+            <div class="lp-phone-dock">
+              <button class="lp-phone-dock-item" type="button"><IconSvg name="wallet" /> Wallet</button>
+              <button class="lp-app-cta" type="button">Buy <IconSvg name="arrow" /></button>
+            </div>
           </div>
         </div>
         <div class="lp-art-chip lp-art-chip--a"><IconSvg name="clock" /> &lt; 15s delivery</div>

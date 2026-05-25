@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning tools/run-dev-stack.cjs",
     "dev:web": "vite --host 127.0.0.1",
-    "build": "vite build && corepack pnpm --filter @beverly/admin-app build && corepack pnpm --filter @beverly/vendor-app build && corepack pnpm --filter @beverly/customer-app build",
+    "build": "vite build && corepack pnpm --filter @beverly/admin-app build && corepack pnpm --filter @beverly/vendor-app build && corepack pnpm --filter @beverly/customer-app build && corepack pnpm --filter @beverly/landing-app build",
     "preview": "vite preview --host 127.0.0.1",
     "contract:generate": "node --disable-warning=ExperimentalWarning tools/generate-reference-contract.cjs",
     "samples:capture": "node --disable-warning=ExperimentalWarning tools/capture-live-samples.cjs",

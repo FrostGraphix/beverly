@@ -10,6 +10,7 @@ import {
   normalizeAccountStatus,
   normalizeRemoteStatus,
   remoteTokenTaskStatus,
+  remoteTaskConfirmPayloadFromRow,
   remoteTaskConfirmEndpoint,
   remoteTaskConfirmPayload,
   remoteTaskEndpoint,
@@ -31,12 +32,13 @@ assert.equal(remoteTaskEndpoint(controlRoute), "/API/RemoteMeterTask/CreateContr
 assert.equal(remoteTaskEndpoint(gprsRoute), "/API/GPRSMeterTask/GPRSCreateReadingTask");
 assert.equal(remoteTaskConfirmEndpoint(tokenRoute), "/API/RemoteMeterTask/UpdateTokenTask");
 assert.equal(remoteTaskConfirmEndpoint(readingRoute), "/API/RemoteMeterTask/UpdateReadingTask");
-assert.deepEqual(remoteTaskConfirmPayload({ result: [{ id: 8361 }, { id: 8361 }, { taskId: 8362 }] }), [{ id: 8361 }, { id: 8362 }]);
+assert.deepEqual(remoteTaskConfirmPayload({ result: [{ id: 8361 }, { id: 8361 }, { taskId: 8362 }, { tokenTaskId: 8363 }] }), [{ id: 8361 }, { id: 8362 }, { id: 8363 }]);
+assert.deepEqual(remoteTaskConfirmPayloadFromRow({ tokenTaskId: 9001 }), [{ id: 9001 }]);
 assert.deepEqual(remoteTokenTaskLookupPayload({ meterId: "47300481810" }), {
   lang: "en",
   meterId: "47300481810",
   pageNumber: 1,
-  pageSize: 10,
+  pageSize: 100,
   orderBy: "createDate desc"
 });
 assert.deepEqual(remoteTokenStandbyConfirmPayload({
@@ -48,6 +50,14 @@ assert.deepEqual(remoteTokenStandbyConfirmPayload({
     ]
   }
 }, { meterId: "47300481810", token: "6168 8642 3533 6537 6881" }), [{ id: 8364 }]);
+assert.deepEqual(remoteTokenStandbyConfirmPayload({
+  result: {
+    data: [
+      { tokenTaskId: 8401, meterId: "47300481810", data: "61688642353365376881", status: "StandBy" },
+      { tokenTaskId: 8402, meterId: "47300481810", data: "53054944972209363232", status: "Success" }
+    ]
+  }
+}, { meterId: "47300481810" }), [{ id: 8401 }]);
 assert.deepEqual(remoteTokenTaskStatus({
   result: {
     data: [

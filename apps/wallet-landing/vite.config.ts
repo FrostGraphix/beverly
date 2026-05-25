@@ -6,7 +6,7 @@ export default defineConfig(({ command }) => ({
     base: process.env.VITE_LANDING_BASE ?? (command === 'build' ? '/wallet/' : '/'),
     plugins: [vue()],
     server: {
-        port: 5175,
+        port: 5176,
         proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } },
     },
     build: {

@@ -50,8 +50,8 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
           <IconSvg :name="isDark ? 'sun' : 'moon'" />
         </button>
         <a class="lp-btn lp-btn--ghost lp-nav-signin" :href="PORTALS.customer.login">Sign in</a>
-        <button class="lp-btn lp-btn--primary" type="button" @click="emit('launch')">
-          Get started <IconSvg name="arrow" />
+        <button class="lp-icon-toggle lp-icon-toggle--primary lp-nav-launch" type="button" aria-label="Get started" title="Get started" @click="emit('launch')">
+          <IconSvg name="user" />
         </button>
         <button class="lp-burger" type="button" aria-label="Menu" @click="menuOpen = !menuOpen">
           <span /><span /><span />

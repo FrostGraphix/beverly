@@ -37,7 +37,19 @@ const stepUpOtp       = ref('');
 const stepUpLoading   = ref(false);
 const stepUpError     = ref<string | null>(null);
 // Keep purchase params so we can resubmit after OTP
-let pendingPurchaseParams: { meter_id: string; amount_minor: number; mode: 'wallet' | 'direct_pay'; idempotency_key: string } | null = null;
+let pendingPurchaseParams: {
+    meter_id: string;
+    meter_type?: 'single_phase' | 'three_phase';
+    amount_minor: number;
+    mode: 'wallet' | 'direct_pay';
+    idempotency_key: string;
+} | null = null;
+
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Phase Unknown';
+}
 
 onMounted(async () => {
     const [m, w] = await Promise.all([
@@ -73,6 +85,7 @@ async function purchase() {
     loading.value = true; error.value = null;
     const params = {
         meter_id:        selMeter.value.meter_id,
+        meter_type:      selMeter.value.meter_type,
         amount_minor:    amountMinor.value,
         mode:            mode.value as 'wallet' | 'direct_pay',
         idempotency_key: crypto.randomUUID(),
@@ -174,6 +187,9 @@ function reset() {
             <div style="flex:1">
               <div style="font-weight:700; font-size: var(--t-sm)">{{ m.nickname || m.meter_id }}</div>
               <div class="bw-muted bw-mono" style="font-size: var(--t-xs)">{{ m.meter_id }}</div>
+              <span :class="['bw-badge', m.meter_type === 'three_phase' ? 'info' : 'neutral']" style="margin-top:4px">
+                {{ meterTypeLabel(m.meter_type) }}
+              </span>
             </div>
             <div v-if="selMeter?.id === m.id" style="color: var(--brand)">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -197,6 +213,9 @@ function reset() {
         <p class="bw-page-title" style="margin-bottom: var(--s-1)">How much?</p>
         <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-4)">
           Meter: <span class="bw-mono">{{ selMeter?.meter_id }}</span>
+          <span :class="['bw-badge', selMeter?.meter_type === 'three_phase' ? 'info' : 'neutral']" style="margin-left:6px">
+            {{ meterTypeLabel(selMeter?.meter_type) }}
+          </span>
         </p>
         <label class="bw-label">Amount (₦)</label>
         <input class="bw-input bw-mono" v-model="amountRaw" type="number" min="500"
@@ -228,6 +247,12 @@ function reset() {
           <div class="bw-row" style="justify-content:space-between">
             <span class="bw-muted" style="font-size: var(--t-sm)">Meter</span>
             <span class="bw-mono" style="font-size: var(--t-sm)">{{ preview.meterId }}</span>
+          </div>
+          <div class="bw-row" style="justify-content:space-between">
+            <span class="bw-muted" style="font-size: var(--t-sm)">Phase</span>
+            <span :class="['bw-badge', preview.meterType === 'three_phase' ? 'info' : 'neutral']">
+              {{ meterTypeLabel(preview.meterType) }}
+            </span>
           </div>
           <div class="bw-row" style="justify-content:space-between">
             <span class="bw-muted" style="font-size: var(--t-sm)">Units</span>

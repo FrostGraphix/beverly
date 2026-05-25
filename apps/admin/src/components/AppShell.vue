@@ -47,6 +47,7 @@ const navGroups = computed(() => [
         label: 'Operations',
         items: [
             { to: '/disputes', text: 'Disputes', permission: 'wallet.disputes.manage', icon: 'disputes' },
+            { to: '/support', text: 'Support Desk', permission: 'wallet.support.manage', icon: 'support' },
             { to: '/refunds', text: 'Refunds', permission: 'wallet.refunds.manage', icon: 'refunds' },
             { to: '/settlement', text: 'Settlement', permission: 'wallet.settlement.view', icon: 'settlement' },
             { to: '/reconciliation', text: 'Reconciliation', permission: 'wallet.reconciliation.run', icon: 'reconciliation' },
@@ -102,6 +103,7 @@ const navIconPath: Record<string, string> = {
     vending: 'M5 12h14M12 5l7 7-7 7',
     meter: 'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
     disputes: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
+    support: 'M12 21a9 9 0 100-18 9 9 0 000 18M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4M12 17h.01',
     refunds: 'M3 12h18M3 12l4-4M3 12l4 4M21 6v12',
     settlement: 'M2 5h20v14H2zM2 10h20',
     reconciliation: 'M9 11l3 3L22 4M21 12v7H3V5h13',

@@ -55,6 +55,10 @@ import { initializeTransaction } from '../adapters/paystack.js';
 import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
+import {
+    createTicket, listTickets, getTicket, addTicketMessage,
+    getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
+} from '../services/support.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
@@ -96,6 +100,23 @@ function mergeNotificationPrefs(existing: any, incoming: any = {}) {
 function isMissingNotificationsStorage(error: any) {
     const text = `${error?.code ?? ''} ${error?.message ?? ''}`;
     return /notifications|notification_preferences/i.test(text) && /exist|schema cache|column|relation/i.test(text);
+}
+
+function shapeReceipt(row: any, purchase?: any) {
+    const payload = row?.payload ?? {};
+    return {
+        ...row,
+        ...payload,
+        token: payload.token ?? purchase?.token ?? row?.token ?? null,
+        meter_id: payload.meterId ?? payload.meter_id ?? purchase?.meter_id ?? null,
+        meter_type: payload.meterType ?? payload.meter_type ?? purchase?.meter_type ?? null,
+        amount_minor: payload.amountMinor ?? payload.amount_minor ?? purchase?.amount_minor ?? null,
+        units_kwh: payload.units ?? payload.units_kwh ?? purchase?.units_kwh ?? null,
+        tariff_id: payload.tariffId ?? payload.tariff_id ?? purchase?.tariff_id ?? null,
+        station_id: payload.stationId ?? payload.station_id ?? purchase?.station_id ?? null,
+        reference: row?.purchase_order_id ?? purchase?.id ?? null,
+        status: purchase?.status ?? payload.status ?? 'completed',
+    };
 }
 
 const customer: FastifyPluginAsync = async (fastify) => {
@@ -331,10 +352,14 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/meters', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { meter_id, nickname } = req.body as { meter_id: string; nickname?: string };
+        const { meter_id, nickname, meter_type } = req.body as {
+            meter_id: string;
+            nickname?: string;
+            meter_type?: 'single_phase' | 'three_phase';
+        };
         if (!meter_id) return reply.code(400).send({ error: 'meter_id_required' });
         try {
-            const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname);
+            const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname, meter_type);
             return { meter };
         } catch (e: any) {
             if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
@@ -427,7 +452,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'meter_id and amount_minor required.' });
         }
         try {
-            const preview = await previewCustomerPurchase(meter_id, amount_minor);
+            const preview = await previewCustomerPurchase(meter_id, amount_minor, req.actor!.customerId!);
             return preview;
         } catch (e: any) {
             if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
@@ -597,21 +622,21 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { data: purchaseRows } = await adminClient
+            .from('purchase_orders')
+            .select('id, meter_id, meter_type, amount_minor, units_kwh, tariff_id, station_id, status')
+            .eq('customer_id', req.actor!.customerId!);
+        const purchaseById = new Map((purchaseRows ?? []).map((p: any) => [p.id, p]));
         const { data } = await adminClient
             .from('receipts')
-            .select('id, receipt_number, purchase_order_id, created_at')
+            .select('id, receipt_number, purchase_order_id, payload, created_at')
             .in(
                 'purchase_order_id',
-                (
-                    await adminClient
-                        .from('purchase_orders')
-                        .select('id')
-                        .eq('customer_id', req.actor!.customerId!)
-                ).data?.map((r: any) => r.id) ?? [],
+                (purchaseRows ?? []).map((r: any) => r.id),
             )
             .order('created_at', { ascending: false })
             .limit(100);
-        return { receipts: data ?? [] };
+        return { receipts: (data ?? []).map((row: any) => shapeReceipt(row, purchaseById.get(row.purchase_order_id))) };
     });
 
     // ── METER ORDERS ─────────────────────────────────────────────────────────
@@ -766,6 +791,117 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    // ── Support tickets ───────────────────────────────────────────────────
+    async function customerName(customerId: string): Promise<string | undefined> {
+        const { data } = await adminClient.from('customers').select('full_name').eq('id', customerId).maybeSingle();
+        return (data as any)?.full_name ?? undefined;
+    }
+
+    fastify.post('/support/tickets', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            subject:     z.string().min(5).max(200),
+            description: z.string().min(10).max(4000),
+            category:    z.string().max(60).optional(),
+            priority:    z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const customerId = req.actor!.customerId!;
+        return createTicket({
+            requesterActorType: 'customer',
+            requesterActorId:   customerId,
+            requesterName:      await customerName(customerId),
+            customerId,
+            category:           body.category,
+            subject:            body.subject,
+            description:        body.description,
+            priority:           body.priority,
+        });
+    });
+
+    fastify.get('/support/tickets', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { status } = req.query as { status?: string };
+        return { tickets: await listTickets({ customerId: req.actor!.customerId!, status, limit: 100 }) };
+    });
+
+    fastify.get('/support/tickets/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const t = await getTicket(id);
+        if (!t || (t as any).customer_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        if ((t as any).support_ticket_messages) {
+            (t as any).support_ticket_messages = (t as any).support_ticket_messages.filter((m: any) => !m.is_internal);
+        }
+        return t;
+    });
+
+    fastify.post('/support/tickets/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
+        const t = await getTicket(id);
+        if (!t || (t as any).customer_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        await addTicketMessage({
+            ticketId: id, senderActorType: 'customer', senderActorId: req.actor!.customerId!,
+            senderName: await customerName(req.actor!.customerId!), body: msgBody,
+        });
+        return { ok: true };
+    });
+
+    // ── Quick chat ────────────────────────────────────────────────────────
+    fastify.post('/support/chat/session', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const customerId = req.actor!.customerId!;
+        const { subject } = (req.body ?? {}) as { subject?: string };
+        return getOrCreateChatSession({
+            requesterActorType: 'customer',
+            requesterActorId:   customerId,
+            displayName:        await customerName(customerId),
+            customerId,
+            subject,
+        });
+    });
+
+    fastify.get('/support/chat/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { since } = req.query as { since?: string };
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        const messages = await getChatMessages(id, { since, viewer: 'user' });
+        return { session: s, messages };
+    });
+
+    fastify.post('/support/chat/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { body: msgBody } = z.object({ body: z.string().min(1).max(2000) }).parse(req.body);
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        await sendChatMessage({
+            sessionId: id, senderActorType: 'customer', senderActorId: req.actor!.customerId!,
+            senderName: (s as any).display_name ?? undefined, body: msgBody,
+        });
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/end', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        await endChatSession(id);
+        return { ok: true };
+    });
+
+    fastify.post('/support/chat/:id/escalate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { subject } = z.object({ subject: z.string().min(3).max(200) }).parse(req.body);
+        const s = await getChatSession(id);
+        if (!s || (s as any).requester_actor_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        const customerId = req.actor!.customerId!;
+        return escalateChatToTicket({
+            sessionId: id, requesterActorType: 'customer', requesterActorId: customerId,
+            requesterName: await customerName(customerId), customerId, subject,
+        });
+    });
+
     fastify.get('/receipts/:id', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const receipt = await getReceiptByOrder(id);
@@ -773,13 +909,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
         // Ensure receipt belongs to this customer
         const { data: po } = await adminClient
             .from('purchase_orders')
-            .select('customer_id')
+            .select('*')
             .eq('id', receipt.purchase_order_id)
             .single();
         if ((po as any)?.customer_id !== req.actor!.customerId!) {
             return reply.code(403).send({ error: 'forbidden' });
         }
-        return receipt;
+        return shapeReceipt(receipt, po);
     });
 
     fastify.post('/receipts/:id/resend-sms', { preHandler: fastify.requireCustomer() }, async (req, reply) => {

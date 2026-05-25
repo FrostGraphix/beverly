@@ -21,7 +21,7 @@ import { ledgerKey, hashIdempotency } from './idempotency.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { sendSms } from '../adapters/twilio.js';
 import { env } from '../config/env.js';
-import { createReceipt, type PurchaseOrder } from './vending.js';
+import { createReceipt, meterTypeFromInfo, type MeterType, type PurchaseOrder } from './vending.js';
 import {
     assertSmsCountryAllowed,
     assertTokenSmsResendAllowed,
@@ -55,6 +55,38 @@ export interface CustomerPurchaseResult {
     receiptId: string | null;
     authorizationUrl: string | null;  // for direct_pay
     reference: string | null;
+}
+
+function assertRequestedMeterType(actual: MeterType, requested?: MeterType) {
+    if (requested && requested !== actual) {
+        throw new CustomerPurchaseError('Selected meter phase does not match the live meter record.', 'meter_type_mismatch');
+    }
+}
+
+/**
+ * Phase the customer declared when onboarding this meter (customer_meters.meter_type).
+ * Used only as a fallback when the live energy catalog does not state the phase.
+ */
+export async function declaredMeterType(customerId: string, meterId: string): Promise<MeterType | null> {
+    const { data } = await adminClient
+        .from('customer_meters')
+        .select('meter_type')
+        .eq('customer_id', customerId)
+        .eq('meter_id', meterId)
+        .maybeSingle();
+    const t = (data as any)?.meter_type;
+    return t === 'three_phase' || t === 'single_phase' ? t : null;
+}
+
+/**
+ * Authoritative phase resolution for token generation.
+ * The live energy record wins when it states a phase (true OR false);
+ * the customer's onboarding declaration only fills a null/unknown.
+ */
+export function effectiveThreePhase(liveValue: boolean | null | undefined, declared: MeterType | null): boolean {
+    if (liveValue === true) return true;
+    if (liveValue === false) return false;
+    return declared === 'three_phase';
 }
 
 export interface TokenSmsResult {
@@ -191,6 +223,10 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     }
 
     const preview = previewPurchase(input.amountMinor, meter.tariffId);
+    // Resolve phase: live record wins; customer's onboarding declaration fills any gap.
+    const declared = await declaredMeterType(input.customerId, meter.meterId);
+    const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
+    const meterType: MeterType = isThreePhase ? 'three_phase' : 'single_phase';
 
     // Create order
     const { data: createdRow, error: createErr } = await adminClient.from('purchase_orders').insert({
@@ -200,6 +236,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         customer_id: input.customerId,
         customer_name: input.customerName,
         meter_id: meter.meterId,
+        meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
         amount_minor: input.amountMinor,
@@ -251,6 +288,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 amountMinor: input.amountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
+                isThreePhase,
                 reference: po.id,
             });
             issuedToken = tokenRes.token;
@@ -272,6 +310,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                     customerId: input.customerId,
                     customerName: input.customerName,
                     meterId: meter.meterId,
+                    meterType,
                     stationId: meter.stationId,
                     tariffId: meter.tariffId,
                     amountMinor: input.amountMinor,
@@ -402,7 +441,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             action: 'customer.purchase.direct_pay.init',
             targetType: 'purchase_order',
             targetId: po.id,
-            after: { meterId: meter.meterId, amountMinor: input.amountMinor, reference },
+        after: { meterId: meter.meterId, amountMinor: input.amountMinor, reference },
         });
 
         return {
@@ -416,7 +455,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     }
 }
 
-export async function previewCustomerPurchase(meterId: string, amountMinor: number) {
+export async function previewCustomerPurchase(meterId: string, amountMinor: number, customerId?: string) {
     if (amountMinor < 50000) {
         throw new CustomerPurchaseError('Minimum purchase is ₦500.', 'amount_too_low');
     }
@@ -427,8 +466,12 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         throw e;
     }
     const preview = previewPurchase(amountMinor, meter.tariffId);
+    const declared = customerId ? await declaredMeterType(customerId, meter.meterId) : null;
+    const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
     return {
         meterId: meter.meterId,
+        meterType: isThreePhase ? 'three_phase' : 'single_phase',
+        isThreePhase,
         customerName: meter.customerName,
         stationId: meter.stationId,
         tariffId: meter.tariffId,
@@ -502,7 +545,7 @@ export async function initiateCustomerFunding(input: CustomerFundingInput): Prom
 
 // ── Meter linking ─────────────────────────────────────────────────────────────
 
-export async function linkMeter(customerId: string, customerUserId: string, meterId: string, nickname?: string) {
+export async function linkMeter(customerId: string, customerUserId: string, meterId: string, nickname?: string, requestedMeterType?: MeterType) {
     // Verify meter exists
     let meter: MeterInfo;
     try { meter = await lookupMeter(meterId); }
@@ -510,6 +553,8 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         if (e instanceof TokenEngineError) throw new CustomerPurchaseError(e.message, (e as TokenEngineError).code);
         throw e;
     }
+    const meterType = meterTypeFromInfo(meter);
+    assertRequestedMeterType(meterType, requestedMeterType);
 
     // Check not already linked
     const { data: existing } = await adminClient
@@ -530,6 +575,7 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
     const { data, error } = await adminClient.from('customer_meters').insert({
         customer_id: customerId,
         meter_id: meterId,
+        meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
         nickname: nickname ?? null,
@@ -543,7 +589,7 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         action: 'customer.meter.link',
         targetType: 'customer_meter',
         targetId: (data as { id: string }).id,
-        after: { meterId, stationId: meter.stationId },
+        after: { meterId, meterType, stationId: meter.stationId },
     });
 
     return data;

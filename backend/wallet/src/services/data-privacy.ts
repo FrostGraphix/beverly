@@ -75,8 +75,8 @@ export async function buildDataExport(customerId: string, requestId: string): Pr
         adminClient.from('customers').select('*, users(full_name, email, phone, created_at)').eq('id', customerId).single(),
         adminClient.from('wallets').select('id, balance_minor, currency, created_at').eq('owner_id', customerId).eq('owner_type', 'customer'),
         adminClient.from('wallet_transactions').select('id, type, amount_minor, description, created_at').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(500),
-        adminClient.from('customer_meters').select('meter_id, alias, registered_at').eq('customer_id', customerId),
-        adminClient.from('purchase_orders').select('id, meter_id, amount_minor, status, created_at').eq('customer_id', customerId).limit(200),
+        adminClient.from('customer_meters').select('meter_id, meter_type, alias, nickname, registered_at, created_at').eq('customer_id', customerId),
+        adminClient.from('purchase_orders').select('id, meter_id, meter_type, amount_minor, units_kwh, status, created_at').eq('customer_id', customerId).limit(200),
         adminClient.from('disputes').select('id, reference, subject, status, created_at').eq('customer_id', customerId).limit(100),
         adminClient.from('meter_purchase_orders').select('id, meter_type, status, created_at').eq('customer_id', customerId).limit(50),
     ]);

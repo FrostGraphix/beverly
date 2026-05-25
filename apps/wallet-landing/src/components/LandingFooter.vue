@@ -15,10 +15,11 @@ const year = new Date().getFullYear();
         <p>Create a free account in under a minute — or open the vendor portal to start selling.</p>
       </div>
       <div class="lp-cta-banner-actions">
-        <button class="lp-btn lp-btn--primary lp-btn--lg" type="button" @click="$emit('launch')">
+        <button class="lp-btn lp-btn--primary lp-cta-btn" type="button" @click="$emit('launch')">
           Get started <IconSvg name="arrow" />
         </button>
-        <a class="lp-btn lp-btn--glass lp-btn--lg" :href="PORTALS.vendor.login">Vendor portal</a>
+        <a class="lp-btn lp-btn--glass lp-cta-btn" :href="PORTALS.vendor.login">Vendor portal</a>
+        <a class="lp-btn lp-btn--ghost lp-cta-btn" href="#support">SOP</a>
       </div>
     </div>
   </section>
@@ -31,7 +32,7 @@ const year = new Date().getFullYear();
           <span class="lp-brand-text">Beverly<em>Wallet</em></span>
         </a>
         <p>Electricity, instantly. Buy prepaid tokens or run a vending business — all in one place.</p>
-        <p class="lp-footer-by">An <strong>ACOB Lighting</strong> product.</p>
+        <p class="lp-footer-by">An <strong>ACOB Lighting Technology Limited</strong> product.</p>
       </div>
 
       <div class="lp-footer-cols">
@@ -50,18 +51,18 @@ const year = new Date().getFullYear();
         </div>
         <div class="lp-footer-col">
           <h4>Company</h4>
-          <a href="https://acoblighting.com" target="_blank" rel="noopener">About ACOB</a>
-          <a href="mailto:wallet@acoblighting.com">Contact</a>
-          <a href="mailto:support@acoblighting.com">Support</a>
+          <a href="#about">About ACOB</a>
+          <a href="#contact">Contact</a>
+          <a href="#support">Support</a>
         </div>
       </div>
     </div>
 
     <div class="lp-footer-base">
-      <span>© {{ year }} ACOB Lighting Technology. All rights reserved.</span>
+      <span>© {{ year }} ACOB Lighting Technology Limited. All rights reserved.</span>
       <span class="lp-footer-legal">
-        <a href="#">Privacy</a>
-        <a href="#">Terms</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#terms">Terms</a>
       </span>
     </div>
   </footer>

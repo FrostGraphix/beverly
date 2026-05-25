@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { PORTAL_URLS } from '../lib/portals';
+
 defineProps<{
   title: string;
   subtitle?: string;
@@ -11,14 +13,14 @@ defineProps<{
     <div class="auth-bg-glow" aria-hidden="true" />
 
     <div class="auth-card">
-      <!-- Brand header -->
-      <div class="auth-brand">
+      <!-- Brand header → back to Beverly landing -->
+      <a class="auth-brand" :href="PORTAL_URLS.landing" aria-label="Beverly home">
         <div class="bw-mark auth-mark">B</div>
         <div class="auth-wordmark">
           <strong>Beverly</strong>
           <span>Electricity · Wallet</span>
         </div>
-      </div>
+      </a>
 
       <!-- Back link -->
       <router-link v-if="back" :to="back" class="auth-back">
@@ -39,6 +41,11 @@ defineProps<{
         <slot />
       </div>
     </div>
+
+    <p class="auth-cross">
+      Selling electricity?
+      <a :href="PORTAL_URLS.vendor + 'login'" class="auth-cross-link">Open the vendor portal →</a>
+    </p>
 
     <p class="auth-legal">
       By continuing you agree to Beverly's
@@ -104,7 +111,12 @@ defineProps<{
   align-items: center;
   gap: var(--s-3);
   margin-bottom: var(--s-6);
+  text-decoration: none;
+  cursor: pointer;
+  width: max-content;
+  transition: opacity var(--dur-fast);
 }
+.auth-brand:hover { opacity: 0.85; }
 
 .auth-mark {
   width: 44px;
@@ -172,8 +184,22 @@ defineProps<{
   gap: var(--s-4);
 }
 
-.auth-legal {
+.auth-cross {
   margin-top: var(--s-5);
+  font-size: var(--t-sm);
+  color: var(--text-2);
+  text-align: center;
+}
+.auth-cross-link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+}
+.auth-cross-link:hover { text-decoration: underline; }
+
+.auth-legal {
+  margin-top: var(--s-3);
   font-size: var(--t-xs);
   color: var(--text-2);
   text-align: center;

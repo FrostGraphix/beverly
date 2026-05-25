@@ -29,6 +29,7 @@ interface Purchase {
     customer_id: string | null;
     customer_name: string | null;
     meter_id: string;
+    meter_type: 'single_phase' | 'three_phase' | null;
     station_id: string | null;
     tariff_id: string | null;
     amount_minor: number;
@@ -78,6 +79,7 @@ const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const fStatus    = ref('');
 const fActorType = ref('');
 const fStation   = ref('');
+const fMeterType = ref('');
 const fQ         = ref('');
 const fSince     = ref('');
 const fUntil     = ref('');
@@ -94,6 +96,7 @@ async function loadList(reset = true) {
         if (fStatus.value)    p.set('status',    fStatus.value);
         if (fActorType.value) p.set('actorType', fActorType.value);
         if (fStation.value)   p.set('station',   fStation.value);
+        if (fMeterType.value) p.set('meterType', fMeterType.value);
         if (fQ.value)         p.set('q',         fQ.value);
         if (fSince.value)     p.set('since',     new Date(fSince.value).toISOString());
         if (fUntil.value)     p.set('until',     new Date(fUntil.value).toISOString());
@@ -108,7 +111,7 @@ async function loadList(reset = true) {
 }
 
 function resetFilters() {
-    fStatus.value = ''; fActorType.value = ''; fStation.value = '';
+    fStatus.value = ''; fActorType.value = ''; fStation.value = ''; fMeterType.value = '';
     fQ.value = ''; fSince.value = ''; fUntil.value = '';
     void loadList();
 }
@@ -218,6 +221,11 @@ function statusBadge(s: string) {
     } as Record<string, string>)[s] ?? 'neutral';
 }
 function actorBadge(t: string) { return t === 'vendor' ? 'info' : 'neutral'; }
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Unknown';
+}
 
 function exportCsvRows() {
     exportCsv('purchases', items.value, [
@@ -226,6 +234,7 @@ function exportCsvRows() {
         { key: 'actor_type', header: 'Actor', value: (p) => p.actor_type },
         { key: 'buyer', header: 'Buyer', value: (p) => p.customer_name ?? '' },
         { key: 'meter_id', header: 'Meter', value: (p) => p.meter_id },
+        { key: 'meter_type', header: 'Phase', value: (p) => meterTypeLabel(p.meter_type) },
         { key: 'station_id', header: 'Station', value: (p) => p.station_id ?? '' },
         { key: 'amount', header: 'Amount (â‚¦)', value: (p) => (p.amount_minor ?? 0) / 100 },
         { key: 'units_kwh', header: 'Units (kWh)', value: (p) => p.units_kwh ?? '' },
@@ -243,9 +252,9 @@ function exportPdfDoc() {
         ],
         tables: [{
             title: 'Purchases',
-            columns: ['When', 'Buyer', 'Meter', 'Station', 'Amount', 'Status'],
+            columns: ['When', 'Buyer', 'Meter', 'Phase', 'Station', 'Amount', 'Status'],
             rows: items.value.map((p) => [
-                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, p.station_id ?? 'â€”', naira(p.amount_minor), p.status,
+                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, meterTypeLabel(p.meter_type), p.station_id ?? 'â€”', naira(p.amount_minor), p.status,
             ]),
         }],
     });
@@ -319,6 +328,14 @@ watch([fStatus, fActorType], () => loadList());
           <input class="bw-input bw-mono" v-model="fStation" placeholder="e.g. TUNGA" @keyup.enter="loadList()" />
         </div>
         <div>
+          <label class="bw-label">Phase</label>
+          <select class="bw-input" v-model="fMeterType">
+            <option value="">All</option>
+            <option value="single_phase">Single Phase</option>
+            <option value="three_phase">Three Phase</option>
+          </select>
+        </div>
+        <div>
           <label class="bw-label">Search</label>
           <input class="bw-input bw-mono" v-model="fQ" placeholder="meter / customer / id" @keyup.enter="loadList()" />
         </div>
@@ -356,6 +373,7 @@ watch([fStatus, fActorType], () => loadList());
               <th>When</th>
               <th>Buyer</th>
               <th>Meter</th>
+              <th>Phase</th>
               <th>Station</th>
               <th style="text-align: right">Amount</th>
               <th>Status</th>
@@ -370,13 +388,18 @@ watch([fStatus, fActorType], () => loadList());
                 <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span>
               </td>
               <td class="bw-mono">{{ p.meter_id }}</td>
+              <td>
+                <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                  {{ meterTypeLabel(p.meter_type) }}
+                </span>
+              </td>
               <td class="bw-mono bw-muted">{{ p.station_id || 'â€”' }}</td>
               <td class="bw-money" style="text-align: right">{{ naira(p.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
               <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="7" class="bw-muted empty">No purchases match the filters.</td>
+              <td colspan="8" class="bw-muted empty">No purchases match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -399,6 +422,12 @@ watch([fStatus, fActorType], () => loadList());
           <div class="pc-row">
             <span class="pc-label">Station</span>
             <span class="bw-mono">{{ p.station_id || 'â€”' }}</span>
+          </div>
+          <div class="pc-row">
+            <span class="pc-label">Phase</span>
+            <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+              {{ meterTypeLabel(p.meter_type) }}
+            </span>
           </div>
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty">No purchases.</div>
@@ -429,6 +458,9 @@ watch([fStatus, fActorType], () => loadList());
             <!-- Status + key facts -->
             <div class="dr-facts">
               <span :class="['bw-badge', statusBadge(detail.purchase.status)]">{{ detail.purchase.status }}</span>
+              <span :class="['bw-badge', detail.purchase.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                {{ meterTypeLabel(detail.purchase.meter_type) }}
+              </span>
               <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(2) }} kWh</span>
               <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || 'â€”' }}</span>
             </div>
@@ -467,6 +499,7 @@ watch([fStatus, fActorType], () => loadList());
               <dl class="dr-dl">
                 <dt>Buyer</dt><dd>{{ detail.purchase.customer_name || 'â€”' }}</dd>
                 <dt>Meter</dt><dd class="bw-mono">{{ detail.purchase.meter_id }}</dd>
+                <dt>Phase</dt><dd>{{ meterTypeLabel(detail.purchase.meter_type) }}</dd>
                 <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || 'â€”' }}</dd>
                 <dt>Mode</dt><dd>{{ detail.purchase.purchase_mode }}</dd>
                 <dt>Receipt</dt>

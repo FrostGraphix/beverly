@@ -25,13 +25,19 @@ async function viewReceipt(purchaseOrderId: string) {
 }
 
 function copyToken() {
-    if (selected.value?.payload?.token) {
-        navigator.clipboard.writeText(selected.value.payload.token);
+    if (selected.value?.token) {
+        navigator.clipboard.writeText(selected.value.token);
     }
 }
 
 function printReceipt() {
     window.print();
+}
+
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Unknown';
 }
 </script>
 
@@ -51,14 +57,14 @@ function printReceipt() {
         </button>
       </div>
       <div class="bw-stack" style="gap: var(--s-3)">
-        <div v-for="[k,v] in [['Meter', selected.payload.meterId], ['Amount', naira(selected.payload.amountMinor)], ['Units', kwh(selected.payload.units)], ['Date', shortDate(selected.created_at)]]" :key="k"
+        <div v-for="[k,v] in [['Meter', selected.meter_id], ['Phase', meterTypeLabel(selected.meter_type)], ['Amount', naira(selected.amount_minor)], ['Units', kwh(selected.units_kwh)], ['Date', shortDate(selected.created_at)]]" :key="k"
              class="bw-row" style="justify-content:space-between">
           <span class="bw-muted" style="font-size: var(--t-sm)">{{ k }}</span>
           <span style="font-weight:600; font-size: var(--t-sm)">{{ v }}</span>
         </div>
       </div>
       <div class="bw-token-box" style="margin-top: var(--s-4)" v-if="selected.payload.token">
-        <div class="bw-token-value">{{ selected.payload.token }}</div>
+        <div class="bw-token-value">{{ selected.token }}</div>
       </div>
       <div class="bw-row" style="gap: var(--s-3); margin-top: var(--s-4)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="copyToken">Copy token</button>
@@ -79,7 +85,9 @@ function printReceipt() {
       <div class="bw-row">
         <div style="flex:1">
           <div class="bw-mono" style="font-size: var(--t-sm); font-weight:700">{{ r.receipt_number }}</div>
-          <div class="bw-dim" style="font-size: var(--t-xs)">{{ shortDate(r.created_at) }}</div>
+          <div class="bw-dim" style="font-size: var(--t-xs)">
+            {{ meterTypeLabel(r.meter_type) }} Â· {{ shortDate(r.created_at) }}
+          </div>
         </div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="bw-muted"><path d="M9 18l6-6-6-6"/></svg>
       </div>

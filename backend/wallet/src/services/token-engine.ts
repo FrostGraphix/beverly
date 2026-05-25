@@ -282,7 +282,7 @@ async function lookupMeterPhase(meterId: string): Promise<boolean | null> {
 async function lookupLocalAccountBinding(meterId: string): Promise<MeterInfo | null> {
     const { data } = await adminClient
         .from('account_bindings')
-        .select('customer_id, meter_id, tariff_id, station_id, remark')
+        .select('customer_id, meter_id, tariff_id, station_id, remark, meter_type, detail_json')
         .eq('meter_id', meterId)
         .eq('status', 'active')
         .limit(1)
@@ -296,6 +296,8 @@ async function lookupLocalAccountBinding(meterId: string): Promise<MeterInfo | n
         tariffId: String(data.tariff_id || 'RESIDENTIAL'),
         protocolVersion: null,
         communicationWay: null,
+        isThreePhase: data.meter_type === 'three_phase'
+            || normalizeBoolean((data.detail_json as any)?.isThreePhase ?? (data.detail_json as any)?.is_three_phase) === true,
         resolutionSource: 'local_binding',
         liveVerified: true,
     };

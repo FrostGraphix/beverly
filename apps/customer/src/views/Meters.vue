@@ -8,6 +8,12 @@ const loading = ref(false);
 const confirm = ref<string | null>(null);
 const deleting = ref(false);
 
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Phase Unknown';
+}
+
 onMounted(async () => {
     loading.value = true;
     try {
@@ -78,7 +84,12 @@ async function unlink(id: string) {
         <div style="flex:1; min-width:0">
           <div style="font-weight:700">{{ m.nickname || m.meter_id }}</div>
           <div class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ m.meter_id }}</div>
-          <div v-if="m.station_id" class="bw-muted" style="font-size: var(--t-xs)">{{ m.station_id }}</div>
+          <div class="bw-row" style="gap: var(--s-2); margin-top:4px; flex-wrap:wrap">
+            <span :class="['bw-badge', m.meter_type === 'three_phase' ? 'info' : 'neutral']">
+              {{ meterTypeLabel(m.meter_type) }}
+            </span>
+            <span v-if="m.station_id" class="bw-muted" style="font-size: var(--t-xs)">{{ m.station_id }}</span>
+          </div>
         </div>
         <div class="bw-row" style="gap: var(--s-2); flex-shrink:0">
           <router-link :to="{ name: 'buy-token', query: { meter: m.meter_id } }"

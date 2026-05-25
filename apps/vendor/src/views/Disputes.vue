@@ -14,6 +14,7 @@
             <tr>
               <th>Reference</th>
               <th>Subject</th>
+              <th>Phase</th>
               <th>Status</th>
               <th>Created</th>
               <th></th>
@@ -23,12 +24,13 @@
             <tr v-for="d in disputes" :key="d.id">
               <td class="bw-mono bw-text-sm">{{ d.reference }}</td>
               <td class="bw-text-sm" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.subject }}</td>
+              <td class="bw-text-sm">{{ d.purchase_order ? meterTypeLabel(d.purchase_order.meter_type) : 'â€”' }}</td>
               <td><span :class="statusClass(d.status)" class="bw-badge">{{ statusLabel(d.status) }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
               <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDetail(d)">View</button></td>
             </tr>
             <tr v-if="!disputes.length">
-              <td colspan="5" class="bw-empty">No disputes yet. Raise one if you have a vending issue.</td>
+              <td colspan="6" class="bw-empty">No disputes yet. Raise one if you have a vending issue.</td>
             </tr>
           </tbody>
         </table>
@@ -44,6 +46,10 @@
           </div>
           <div class="bw-tc-mid">
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Subject</span><span class="bw-tc-pair-val">{{ d.subject }}</span></div>
+            <div v-if="d.purchase_order" class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Phase</span>
+              <span class="bw-tc-pair-val">{{ d.purchase_order.meter_id }} Â· {{ meterTypeLabel(d.purchase_order.meter_type) }}</span>
+            </div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Created</span><span class="bw-tc-pair-val">{{ fmtDate(d.created_at) }}</span></div>
           </div>
           <div class="bw-tc-foot">
@@ -101,6 +107,13 @@
         <div class="bw-modal-body">
           <p class="bw-text-sm"><strong>{{ selected.subject }}</strong></p>
           <p class="bw-text-sm bw-text-muted">{{ detail?.description || selected.description }}</p>
+
+          <div v-if="detail?.purchase_order" class="bw-dispute-purchase">
+            <span>Meter</span><strong class="bw-mono">{{ detail.purchase_order.meter_id }}</strong>
+            <span>Phase</span><strong>{{ meterTypeLabel(detail.purchase_order.meter_type) }}</strong>
+            <span>Amount</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Status</span><strong>{{ detail.purchase_order.status }}</strong>
+          </div>
 
           <div class="bw-section-label">Thread</div>
           <div class="bw-messages">
@@ -231,6 +244,13 @@ function statusClass(s: string) {
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 
+function fmtMoney(minor?: number | null) { return typeof minor === 'number' ? (minor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' }) : 'â€”'; }
+function meterTypeLabel(type?: string | null) {
+  if (type === 'three_phase') return 'Three Phase';
+  if (type === 'single_phase') return 'Single Phase';
+  return 'Unknown';
+}
+
 onMounted(load);
 </script>
 
@@ -243,4 +263,6 @@ onMounted(load);
 .bw-message-time { font-size: .7rem; color: var(--text-muted); }
 .bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin: 1rem 0 .25rem; }
 .bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-dispute-purchase { display: grid; grid-template-columns: 80px 1fr; gap: .35rem .75rem; margin: .75rem 0 1rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); font-size: .8rem; }
+.bw-dispute-purchase span { color: var(--text-muted); }
 </style>

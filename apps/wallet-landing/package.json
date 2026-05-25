@@ -5,9 +5,9 @@
   "description": "Beverly Wallet — public landing experience (front door to customer + vendor portals)",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5175",
+    "dev": "vite --port 5176",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview --port 5175",
+    "preview": "vite preview --port 5176",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

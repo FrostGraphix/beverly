@@ -8,6 +8,7 @@ interface Purchase {
     actor_id: string;
     customer_name: string | null;
     meter_id: string;
+    meter_type: 'single_phase' | 'three_phase' | null;
     station_id: string | null;
     amount_minor: number;
     units_kwh: number | null;
@@ -24,6 +25,7 @@ const items      = ref<Purchase[]>([]);
 const stations   = ref<Station[]>([]);
 const status     = ref('');
 const station    = ref('');
+const meterType  = ref('');
 const q          = ref('');
 const loading    = ref(false);
 const error      = ref('');
@@ -40,10 +42,17 @@ function statusBadge(s: string) {
     return 'neutral';
 }
 
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Unknown';
+}
+
 function buildParams(cursor?: string) {
     const p = new URLSearchParams();
     if (status.value)  p.set('status', status.value);
     if (station.value) p.set('station', station.value);
+    if (meterType.value) p.set('meterType', meterType.value);
     if (q.value.trim()) p.set('q', q.value.trim());
     p.set('limit', String(PAGE));
     if (cursor) p.set('cursor', cursor);
@@ -84,7 +93,7 @@ async function loadStations() {
     } catch { /* use empty */ }
 }
 
-watch([status, station], () => load());
+watch([status, station, meterType], () => load());
 
 onMounted(async () => {
     await Promise.all([load(), loadStations()]);
@@ -135,6 +144,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
         <option value="">All stations</option>
         <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name || s.stationId }}</option>
       </select>
+      <select class="bw-select" v-model="meterType" style="min-width:140px">
+        <option value="">All phases</option>
+        <option value="single_phase">Single Phase</option>
+        <option value="three_phase">Three Phase</option>
+      </select>
     </div>
 
     <div v-if="error" class="bw-error-banner" role="alert" style="margin-bottom: var(--s-4)">{{ error }}</div>
@@ -149,6 +163,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <th>Vendor</th>
               <th>Customer</th>
               <th>Meter</th>
+              <th>Phase</th>
               <th>Station</th>
               <th>Mode</th>
               <th style="text-align:right">Amount</th>
@@ -157,7 +172,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
           </thead>
           <tbody>
             <tr v-if="loading && !items.length">
-              <td colspan="8" style="text-align:center; padding: var(--s-8)">
+              <td colspan="9" style="text-align:center; padding: var(--s-8)">
                 <div class="bw-spinner" style="margin: auto" />
               </td>
             </tr>
@@ -166,6 +181,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <td class="bw-mono" style="font-size: var(--t-xs)">#{{ p.actor_id.slice(0, 8) }}</td>
               <td>{{ p.customer_name || 'â€”' }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
+              <td>
+                <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                  {{ meterTypeLabel(p.meter_type) }}
+                </span>
+              </td>
               <td>{{ p.station_id || 'â€”' }}</td>
               <td><span class="bw-badge neutral">{{ p.purchase_mode }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
@@ -175,7 +195,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="8" class="bw-muted" style="text-align:center; padding: var(--s-8)">No purchases match your filters.</td>
+              <td colspan="9" class="bw-muted" style="text-align:center; padding: var(--s-8)">No purchases match your filters.</td>
             </tr>
           </tbody>
         </table>
@@ -199,6 +219,12 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
             <div class="bw-tc-pair" v-if="p.station_id">
               <span class="bw-tc-pair-label">Station</span>
               <span class="bw-tc-pair-val">{{ p.station_id }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Phase</span>
+              <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
+                {{ meterTypeLabel(p.meter_type) }}
+              </span>
             </div>
             <div class="bw-tc-pair" v-if="p.failure_reason">
               <span class="bw-tc-pair-label">Reason</span>

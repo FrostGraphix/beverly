@@ -50,6 +50,17 @@ const table = mapTableCollection({
 assert.strictEqual(table.rows[0].customerId, "123");
 assert.strictEqual(table.total, 1);
 
+const tokenTaskTable = mapTableCollection({
+  result: {
+    data: [{ id: 8389, meterId: "47300481810", data: "25567208030653711606", status: 0 }]
+  }
+}, { hash: "#/remote-operation-record/remote-meter-token-task" });
+
+assert.strictEqual(tokenTaskTable.rows[0].id, 8389);
+assert.strictEqual(tokenTaskTable.rows[0].taskId, 8389);
+assert.strictEqual(tokenTaskTable.rows[0].token, "2556 7208 0306 5371 1606");
+assert.strictEqual(tokenTaskTable.rows[0].status, "Queued");
+
 const action = mapActionResponse({
   code: 0,
   result: {

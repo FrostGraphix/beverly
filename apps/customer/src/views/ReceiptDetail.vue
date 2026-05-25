@@ -44,6 +44,12 @@ function fmtDate(s: string) {
     return s ? new Date(s).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 }
 
+function meterTypeLabel(type?: string | null) {
+    if (type === 'three_phase') return 'Three Phase';
+    if (type === 'single_phase') return 'Single Phase';
+    return 'Unknown';
+}
+
 onMounted(load);
 </script>
 
@@ -78,6 +84,7 @@ onMounted(load);
           <!-- Details -->
           <div class="rcpt-rows">
             <div class="rcpt-row"><span>Meter</span><span class="bw-mono">{{ receipt.meter_id }}</span></div>
+            <div class="rcpt-row"><span>Phase</span><span>{{ meterTypeLabel(receipt.meter_type) }}</span></div>
             <div class="rcpt-row"><span>Amount</span><span>{{ fmtAmount(receipt.amount_minor) }}</span></div>
             <div class="rcpt-row"><span>Units</span><span>{{ receipt.units_kwh?.toFixed(2) }} kWh</span></div>
             <div class="rcpt-row"><span>Tariff</span><span>{{ receipt.tariff_id }}</span></div>

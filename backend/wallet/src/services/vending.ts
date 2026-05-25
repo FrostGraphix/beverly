@@ -44,6 +44,7 @@ export interface PurchaseOrder {
     customer_id: string | null;
     customer_name: string | null;
     meter_id: string;
+    meter_type?: 'single_phase' | 'three_phase' | null;
     station_id: string | null;
     tariff_id: string | null;
     amount_minor: number;
@@ -60,6 +61,12 @@ export interface PurchaseOrder {
     failure_reason: string | null;
     created_by: string;
     created_at: string;
+}
+
+export type MeterType = 'single_phase' | 'three_phase';
+
+export function meterTypeFromInfo(meter: Pick<MeterInfo, 'isThreePhase'>): MeterType {
+    return meter.isThreePhase === true ? 'three_phase' : 'single_phase';
 }
 
 export interface VendorPurchaseInput {
@@ -120,6 +127,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
     }
 
     const preview = previewPurchase(input.amountMinor, meter.tariffId);
+    const meterType = meterTypeFromInfo(meter);
 
     // create order in 'created' state
     const { data: createdRow, error: createErr } = await adminClient.from('purchase_orders').insert({
@@ -129,6 +137,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
         customer_id: meter.customerId,
         customer_name: meter.customerName,
         meter_id: meter.meterId,
+        meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
         amount_minor: input.amountMinor,
@@ -203,6 +212,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                     customerId: meter.customerId,
                     customerName: meter.customerName,
                     meterId: meter.meterId,
+                    meterType,
                     stationId: meter.stationId,
                     tariffId: meter.tariffId,
                     amountMinor: input.amountMinor,
@@ -371,6 +381,7 @@ export async function reconcileRemoteSendOrders(limit = 25) {
                     customerId: row.customer_id,
                     customerName: row.customer_name,
                     meterId: row.meter_id,
+                    meterType: row.meter_type ?? null,
                     stationId: row.station_id,
                     tariffId: row.tariff_id,
                     amountMinor: row.amount_minor,

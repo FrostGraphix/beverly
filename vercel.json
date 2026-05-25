@@ -17,6 +17,8 @@
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
+    { "source": "/wallet", "destination": "/wallet/index.html" },
+    { "source": "/wallet/:path*", "destination": "/wallet/index.html" },
     { "source": "/wallet-admin", "destination": "/wallet-admin/index.html" },
     { "source": "/wallet-admin/:path*", "destination": "/wallet-admin/index.html" },
     { "source": "/wallet-vendor", "destination": "/wallet-vendor/index.html" },

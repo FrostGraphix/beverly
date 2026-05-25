@@ -172,14 +172,20 @@ const route: FastifyPluginAsync = async (fastify) => {
                         if (wallet) assertWalletCanTransact(wallet, 'buy tokens');
                         const { generateCreditToken, previewPurchase, lookupMeter } = await import('../services/token-engine.js');
                         const { createReceipt } = await import('../services/vending.js');
+                        const { declaredMeterType, effectiveThreePhase } = await import('../services/customer-purchase.js');
                         const meter = await lookupMeter((po as any).meter_id);
                         const preview = previewPurchase((po as any).amount_minor, meter.tariffId);
+                        // Phase: live record wins; customer's onboarding declaration fills any gap.
+                        const declared = await declaredMeterType((po as any).customer_id, meter.meterId);
+                        const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
+                        const meterType = isThreePhase ? 'three_phase' : 'single_phase';
                         const tokenRes = await generateCreditToken({
                             meterId: meter.meterId,
                             customerId: meter.customerId,
                             amountMinor: (po as any).amount_minor,
                             units: preview.units,
                             tariffId: meter.tariffId,
+                            isThreePhase,
                             reference: purchaseOrderId,
                         });
                         issuedToken = tokenRes.token;
@@ -189,6 +195,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                                 receiptNumber: `BV-${purchaseOrderId.replace(/-/g,'').slice(0,12).toUpperCase()}`,
                                 customerId: (po as any).customer_id,
                                 meterId: meter.meterId,
+                                meterType,
                                 amountMinor: (po as any).amount_minor,
                                 units: preview.units,
                                 token: tokenRes.token,
@@ -199,6 +206,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                         await adminClient.from('purchase_orders').update({
                             token: tokenRes.token,
                             receipt_id: receipt.id,
+                            meter_type: meterType,
                             status: 'delivered',
                             delivery_state: 'token_generated',
                         }).eq('id', purchaseOrderId);

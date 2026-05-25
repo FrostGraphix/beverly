@@ -458,10 +458,14 @@ function parseMultipartFields(rawBody, rawText, contentType) {
 
 function normalizeRequestPath(urlValue) {
   const overridePath = requestPathOverride(urlValue);
-  if (overridePath) return overridePath;
+  if (overridePath) return normalizeApiPath(overridePath);
   const pathname = String(urlValue || "/")
     .replace(/^\/api\/reference(?:\.js)?/i, "/api")
     .split("?")[0];
+  return normalizeApiPath(pathname);
+}
+
+function normalizeApiPath(pathname) {
   if (/^\/auth\/mfa\//i.test(pathname)) return `/api${pathname}`;
   if (/^\/api\/api\//i.test(pathname)) return pathname.replace(/^\/api\/api\//i, "/api/");
   return pathname;
@@ -541,7 +545,7 @@ function trustedLiveReadActor(pathname, request) {
 }
 
 function canUseSampleFallback(pathname) {
-  return /\/api\/RemoteMeterTask\/GetTokenTask$/i.test(String(pathname || ""));
+  return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(String(pathname || ""));
 }
 
 function apiCacheEnabled() {
@@ -616,11 +620,12 @@ function buildLiveHeaders(request, requestData, token) {
   return headers;
 }
 
-function sanitizeReadPayload(payload, keyMap = {}) {
+function sanitizeReadPayload(payload, keyMap = {}, options = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const sanitized = { ...payload };
   const pageSize = Number(sanitized.pageSize || 20);
   sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 20) : 20;
+  if (options.requireLang && !sanitized.Lang && !sanitized.lang) sanitized.Lang = "en";
 
   const rawOrderBy = String(sanitized.orderBy || "").trim();
   if (rawOrderBy) {
@@ -657,7 +662,9 @@ function sanitizeLiveRequestData(pathname, requestData) {
     ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
     : /\/api\/account\/read$/i.test(normalizedPath)
       ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
-      : requestData?.parsedBody;
+      : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
+        ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
+        : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {
@@ -3337,6 +3344,24 @@ async function handler(request, response) {
               source: "sample-after-live-failure",
               pathname,
               upstreamStatus: result.status
+            }
+          }
+        };
+      }
+    }
+
+    if (!result && canUseSampleFallback(pathname)) {
+      const sample = sampleReadResponse(pathname, requestData);
+      if (sample) {
+        result = {
+          ...sample,
+          body: {
+            ...sample.body,
+            _proxy: {
+              ...(sample.body?._proxy || {}),
+              source: "sample-after-live-failure",
+              pathname,
+              upstreamStatus: 0
             }
           }
         };

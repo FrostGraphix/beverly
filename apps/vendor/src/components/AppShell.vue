@@ -3,6 +3,8 @@ import { ref, computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
+import { PORTAL_URLS } from '../lib/portals';
+import ChatWidget from './ChatWidget.vue';
 
 defineProps<{ title?: string }>();
 
@@ -78,6 +80,10 @@ function closeDrawer() { drawerOpen.value = false; }
         </RouterLink>
 
         <div class="bw-nav-section">Support</div>
+        <RouterLink to="/help" class="bw-nav-item" @click="closeDrawer">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4"/><path d="M12 17h.01"/></svg>
+          Help &amp; FAQ
+        </RouterLink>
         <RouterLink to="/disputes" class="bw-nav-item" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           Disputes
@@ -97,6 +103,13 @@ function closeDrawer() { drawerOpen.value = false; }
           Vend Authorization
         </RouterLink>
       </nav>
+
+      <div class="bw-sidebar-foot">
+        <a :href="PORTAL_URLS.landing" class="bw-back">
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Beverly home
+        </a>
+      </div>
     </aside>
 
     <!-- Main column -->
@@ -138,5 +151,8 @@ function closeDrawer() { drawerOpen.value = false; }
         <slot />
       </main>
     </div>
+
+    <!-- Global quick-chat widget -->
+    <ChatWidget />
   </div>
 </template>

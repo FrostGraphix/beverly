@@ -7,6 +7,7 @@ import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 import { api, ApiError } from '../lib/api';
+import { PORTAL_URLS } from '../lib/portals';
 
 const auth   = useAuthStore();
 const router = useRouter();
@@ -240,6 +241,10 @@ async function doSignOut() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           My Disputes
         </router-link>
+        <a :href="PORTAL_URLS.landing" class="bw-btn" style="text-decoration:none; justify-content:flex-start">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l9-9 9 9M5 11v9h14v-9"/></svg>
+          Beverly home
+        </a>
         <p v-if="exportMsg" style="font-size:var(--t-xs); color:var(--bw-text-muted); margin:0 0 4px; padding: 0 2px">{{ exportMsg }}</p>
         <button class="bw-btn" style="justify-content:flex-start; color: var(--bw-text-muted)" @click="requestExport" :disabled="exportLoading">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>

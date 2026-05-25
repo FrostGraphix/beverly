@@ -446,6 +446,17 @@ async function main() {
       assert(["sample", "sample-after-live-failure"].includes(tokenTaskFallback.body._proxy.source));
       assert(Array.isArray(tokenTaskFallback.body.result?.data), "token task fallback rows missing");
 
+      const readingTaskFallback = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/GetReadingTask", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer caller-token"
+        },
+        body: Buffer.from(JSON.stringify({ pageNumber: 1, pageSize: 20 }))
+      });
+      assert.strictEqual(readingTaskFallback.status, 200);
+      assert(["sample", "sample-after-live-failure"].includes(readingTaskFallback.body._proxy.source));
+      assert(Array.isArray(readingTaskFallback.body.result?.data), "reading task fallback rows missing");
+
       const customerUnavailable = await request(proxyPort, "POST", "/api/customer/read", {
         headers: {
           "Content-Type": "application/json",
@@ -516,6 +527,7 @@ async function main() {
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE"), "query string or path normalization failed");
     assert(upstreamRequests.some((entry) => entry.url === "/API/GPRSMeterTask/GPRSGetReadingTask"), "uppercase API proxy prefix normalization failed");
     assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE" && entry.authorization === "Bearer env-token"), "env bearer token not used for remote reads");
+    assert(upstreamRequests.some((entry) => entry.url === "/API/RemoteMeterTask/GetReadingTask?SITE_ID=KYAKALE" && entry.body.includes('"Lang":"en"')), "remote task reads must send Lang");
     assert(upstreamRequests.some((entry) => entry.url === "/api/account/read" && entry.authorization === "Bearer env-token"), "env bearer token not used for account reads");
     assert(upstreamRequests.some((entry) => entry.url === "/api/item/read" && entry.authorization === "Bearer env-token"), "env bearer token not used for item reads");
     assert(upstreamRequests.some((entry) => entry.url === "/API/File/Upload" && entry.contentType.includes("multipart/form-data") && entry.body.includes("hello")), "upload passthrough failed");
