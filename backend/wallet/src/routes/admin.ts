@@ -3559,7 +3559,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { fileCtr } = await import('../services/compliance-ctr.js');
+        const { fileCtr, CtrError } = await import('../services/compliance-ctr.js');
         try {
             await fileCtr(id, req.actor!.userId, body.filing_reference);
             await logAction({
@@ -3716,7 +3716,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { reviewDocument } = await import('../services/kyc-documents.js');
+        const { reviewDocument, KycDocumentError } = await import('../services/kyc-documents.js');
         try {
             await reviewDocument({
                 docId,

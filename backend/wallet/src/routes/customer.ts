@@ -1394,58 +1394,41 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { ok: true, preferences: merged };
     });
 
-    // ── Consumption ─────────────────────────────────────────────────────────
-    // A customer sees only their own meters. "Own" is the union of meters they
-    // registered and meters they have actually bought tokens for — a customer
-    // who paid for a meter but never registered it still sees its usage.
+    // ── KYC document upload ───────────────────────────────────────────────────
 
-    /** Meter ids this customer is entitled to. Empty array means "no meters". */
-    async function customerMeterIds(customerId: string): Promise<string[]> {
-        const [registered, purchased] = await Promise.all([
-            adminClient
-                .from('customer_meters')
-                .select('meter_id')
-                .eq('customer_id', customerId),
-            adminClient
-                .from('purchase_orders')
-                .select('meter_id')
-                .eq('actor_type', 'customer')
-                .eq('actor_id', customerId),
-        ]);
-        if (registered.error) throw registered.error;
-        if (purchased.error) throw purchased.error;
+    fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            doc_type:       z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie', 'signature']),
+            kyc_tier:       z.literal(1).or(z.literal(2)),
+            mime_type:      z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+            size_bytes:     z.number().int().positive().max(10 * 1024 * 1024),
+            doc_expires_at: z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
 
-        return [...new Set([...(registered.data ?? []), ...(purchased.data ?? [])]
-            .map((row: any) => String(row.meter_id ?? '').trim())
-            .filter(Boolean))];
-    }
-
-    fastify.get('/consumption', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const qs = req.query as Record<string, string>;
-        const period = (qs.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
-        if (!['day', 'week', 'month', 'year'].includes(period)) {
-            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        const { generateUploadUrl, KycDocumentError } = await import('../services/kyc-documents.js');
+        try {
+            const result = await generateUploadUrl({
+                customerId:   req.actor!.customerId!,
+                docType:      body.doc_type,
+                kycTier:      body.kyc_tier,
+                mimeType:     body.mime_type,
+                sizeBytes:    body.size_bytes,
+                docExpiresAt: body.doc_expires_at,
+            });
+            return result;
+        } catch (e: any) {
+            const code = e instanceof KycDocumentError ? 400 : 500;
+            return reply.code(code).send({ error: e.code ?? 'upload_url_failed', message: e.message });
         }
+    });
 
-        const customerId = req.actor!.customerId!;
-        const meterIds = await customerMeterIds(customerId);
-
-        const { queryConsumption, metersAuthority } = await import('../services/consumption.js');
-        // metersAuthority([]) resolves to "see nothing", so a customer with no
-        // meters gets an empty series rather than the whole estate.
-        const rows = await queryConsumption(
-            {
-                scope: 'meter',
-                scope_id: qs.meter_id || undefined,
-                period_type: period,
-                from: qs.from ?? undefined,
-                to: qs.to ?? undefined,
-                limit: Math.min(Number(qs.limit ?? 120), 500),
-                withSpend: qs.spend !== 'false',
-            },
-            metersAuthority(meterIds),
-        );
-        return { rows, count: rows.length, meters: meterIds };
+    fastify.get('/kyc/documents', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { listDocuments } = await import('../services/kyc-documents.js');
+        const docs = await listDocuments(req.actor!.customerId!);
+        return { documents: docs };
     });
 };
 

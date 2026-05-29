@@ -281,22 +281,69 @@ function exportPdfDoc() {
     });
 }
 
-function viewWalletReceipt(w: Wallet) {
-    viewReceipt(walletReceipt(w));
+// ── Bulk operations ───────────────────────────────────────────────────────────
+const selectedIds = ref<Set<string>>(new Set());
+const bulkPanelOpen = ref(false);
+const bulkAction = ref<'frozen' | 'active' | 'limits'>('frozen');
+const bulkReason = ref('');
+const bulkDailyNaira = ref<number | ''>('');
+const bulkMonthlyNaira = ref<number | ''>('');
+const bulkBusy = ref(false);
+
+const allSelected = computed(() =>
+    wallets.value.length > 0 && wallets.value.every((w) => selectedIds.value.has(w.id)),
+);
+
+function toggleAll() {
+    if (allSelected.value) {
+        selectedIds.value = new Set();
+    } else {
+        selectedIds.value = new Set(wallets.value.map((w) => w.id));
+    }
 }
 
-function printWalletReceipt(w: Wallet) {
-    printReceipt(walletReceipt(w));
+function toggleOne(id: string) {
+    const s = new Set(selectedIds.value);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    selectedIds.value = s;
 }
 
-function viewDetailReceipt() {
-    if (!detail.value) return;
-    viewReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
-}
-
-function printDetailReceipt() {
-    if (!detail.value) return;
-    printReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
+async function runBulkAction() {
+    if (selectedIds.value.size === 0 || bulkBusy.value) return;
+    bulkBusy.value = true;
+    banner.value = null;
+    try {
+        const ids = [...selectedIds.value];
+        if (bulkAction.value === 'limits') {
+            if (!bulkDailyNaira.value && !bulkMonthlyNaira.value) {
+                banner.value = { tone: 'error', text: 'Provide at least one cap value.' };
+                return;
+            }
+            const body: Record<string, unknown> = { walletIds: ids, reason: bulkReason.value || 'Bulk limit update' };
+            if (bulkDailyNaira.value)   body.dailyCapMinor   = Math.round(Number(bulkDailyNaira.value) * 100);
+            if (bulkMonthlyNaira.value) body.monthlyCapMinor = Math.round(Number(bulkMonthlyNaira.value) * 100);
+            await api.post('/api/v1/admin/wallets/bulk-limits', body);
+            banner.value = { tone: 'success', text: `Limits updated for ${ids.length} wallet(s).` };
+        } else {
+            const r = await api.post<{ results: Array<{ id: string; ok: boolean; error?: string }> }>(
+                '/api/v1/admin/wallets/bulk-status',
+                { walletIds: ids, status: bulkAction.value, reason: bulkReason.value || `Bulk ${bulkAction.value}` },
+            );
+            const failed = r.results.filter((x) => !x.ok).length;
+            banner.value = { tone: failed ? 'error' : 'success', text: `${ids.length - failed}/${ids.length} wallets → ${bulkAction.value}. ${failed ? `${failed} failed.` : ''}` };
+        }
+        selectedIds.value = new Set();
+        bulkPanelOpen.value = false;
+        bulkReason.value = '';
+        bulkDailyNaira.value = '';
+        bulkMonthlyNaira.value = '';
+        await Promise.all([loadSummary(), loadList()]);
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Bulk action failed.';
+        banner.value = { tone: 'error', text: msg };
+    } finally {
+        bulkBusy.value = false;
+    }
 }
 
 onMounted(() => { void loadSummary(); void loadList(); });
@@ -383,10 +430,34 @@ watch([fOwnerType, fStatus], () => loadList());
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
+        <template v-if="selectedIds.size > 0">
+          <span class="bw-muted" style="font-size:.85rem;margin-right:.5rem">{{ selectedIds.size }} selected</span>
+          <button class="bw-btn sm primary" @click="bulkPanelOpen = !bulkPanelOpen">Bulk Action</button>
+          <button class="bw-btn sm" style="margin-left:4px" @click="selectedIds = new Set()">Clear</button>
+        </template>
+        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows" style="margin-left:6px">CSV</button>
         <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-        <span style="width:6px"></span>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
+        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs);margin-left:8px">loading…</span>
+      </div>
+
+      <!-- Bulk action panel -->
+      <div v-if="bulkPanelOpen && selectedIds.size > 0" class="bulk-panel">
+        <div class="bulk-panel-row">
+          <select v-model="bulkAction" class="bw-input" style="width:160px">
+            <option value="frozen">Freeze selected</option>
+            <option value="active">Unfreeze selected</option>
+            <option value="limits">Update limits</option>
+          </select>
+          <input v-model="bulkReason" class="bw-input" placeholder="Reason (required)" style="flex:1" />
+          <template v-if="bulkAction === 'limits'">
+            <input v-model.number="bulkDailyNaira" type="number" class="bw-input" placeholder="Daily cap (₦)" style="width:140px" />
+            <input v-model.number="bulkMonthlyNaira" type="number" class="bw-input" placeholder="Monthly cap (₦)" style="width:160px" />
+          </template>
+          <button class="bw-btn sm primary" :disabled="bulkBusy || !bulkReason" @click="runBulkAction">
+            {{ bulkBusy ? 'Working…' : 'Apply' }}
+          </button>
+          <button class="bw-btn sm" @click="bulkPanelOpen = false">Cancel</button>
+        </div>
       </div>
 
       <!-- Desktop table -->
@@ -394,39 +465,35 @@ watch([fOwnerType, fStatus], () => loadList());
         <table class="bw-table">
           <thead>
             <tr>
+              <th style=”width:36px”><input type=”checkbox” :checked=”allSelected” @change=”toggleAll” /></th>
               <th>Owner</th>
               <th>Type</th>
-              <th style="text-align: right">Balance</th>
-              <th style="text-align: right">Available</th>
-              <th style="text-align: right">Daily cap</th>
+              <th style=”text-align: right”>Balance</th>
+              <th style=”text-align: right”>Available</th>
+              <th style=”text-align: right”>Daily cap</th>
               <th>Status</th>
               <th>Receipt</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="w in wallets" :key="w.id" @click="openDetail(w)" class="w-row">
-              <td>
-                <div class="bw-truncate" style="max-width: 240px">{{ w.owner_name || 'â€”' }}</div>
-                <div class="bw-mono row-sub">{{ w.id.slice(0, 8) }}</div>
+            <tr v-for=”w in wallets” :key=”w.id” class=”w-row” :class=”{ ‘w-row-selected’: selectedIds.has(w.id) }”>
+              <td @click.stop><input type=”checkbox” :checked=”selectedIds.has(w.id)” @change=”toggleOne(w.id)” /></td>
+              <td @click=”openDetail(w)”>
+                <div class=”bw-truncate” style=”max-width: 220px”>{{ w.owner_name || ‘—‘ }}</div>
+                <div class=”bw-mono row-sub”>{{ w.id.slice(0, 8) }}</div>
               </td>
-              <td><span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span></td>
-              <td class="bw-money" style="text-align: right">{{ naira(w.balance_minor) }}</td>
-              <td class="bw-money" style="text-align: right; color: var(--brand)">{{ naira(w.available_minor) }}</td>
-              <td class="bw-money bw-muted" style="text-align: right; font-size: var(--t-xs)">
-                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : 'â€”' }}
+              <td @click=”openDetail(w)”><span :class=”[‘bw-badge’, ownerBadge(w.owner_type)]”>{{ w.owner_type }}</span></td>
+              <td class=”bw-money” style=”text-align: right” @click=”openDetail(w)”>{{ naira(w.balance_minor) }}</td>
+              <td class=”bw-money” style=”text-align: right; color: var(--brand)” @click=”openDetail(w)”>{{ naira(w.available_minor) }}</td>
+              <td class=”bw-money bw-muted” style=”text-align: right; font-size: var(--t-xs)” @click=”openDetail(w)”>
+                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : ‘—‘ }}
               </td>
-              <td><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
-              <td>
-                <div class="receipt-actions">
-                  <button class="bw-btn sm" @click.stop="viewWalletReceipt(w)">View</button>
-                  <button class="bw-btn sm" @click.stop="printWalletReceipt(w)">Print</button>
-                </div>
-              </td>
-              <td class="row-arrow">â†’</td>
+              <td @click=”openDetail(w)”><span :class=”[‘bw-badge’, statusBadge(w.status)]”>{{ w.status }}</span></td>
+              <td class=”row-arrow” @click=”openDetail(w)”>→</td>
             </tr>
-            <tr v-if="!wallets.length && !loading">
-              <td colspan="8" class="bw-muted empty">No wallets match the filters.</td>
+            <tr v-if=”!wallets.length && !loading”>
+              <td colspan=”8” class=”bw-muted empty”>No wallets match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -703,9 +770,11 @@ watch([fOwnerType, fStatus], () => loadList());
 /* Table */
 .w-row { cursor: pointer; }
 .w-row:hover { background: var(--surface-2); }
+.w-row-selected { background: oklch(from var(--brand) l c h / 0.08); }
 .row-sub { font-size: 10px; margin-top: 2px; color: var(--text-muted); }
 .row-arrow { color: var(--text-muted); text-align: right; width: 24px; }
-.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
+.bulk-panel { background: var(--surface-2); border-bottom: 1px solid var(--border); padding: .75rem 1rem; }
+.bulk-panel-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

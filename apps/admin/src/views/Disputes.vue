@@ -1,3 +1,139 @@
+<template>
+  <AppShell title="Disputes">
+
+    <div class="bw-filter-bar">
+      <select v-model="statusFilter" class="bw-select bw-select-sm" @change="load">
+        <option value="">All statuses</option>
+        <option value="open">Open</option>
+        <option value="under_review">Under Review</option>
+        <option value="resolved">Resolved</option>
+        <option value="rejected">Rejected</option>
+        <option value="refund_issued">Refund Issued</option>
+      </select>
+    </div>
+
+    <div v-if="loading" class="bw-loading">Loading…</div>
+    <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
+
+    <div v-else>
+      <div class="bw-table-wrapper">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Subject</th>
+              <th>Org</th>
+              <th>Status</th>
+              <th>SLA</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="d in disputes" :key="d.id" :class="{ 'bw-row-escalated': d.escalated_at }">
+              <td class="bw-mono bw-text-sm">{{ d.reference || d.id?.slice(0, 8).toUpperCase() }}</td>
+              <td class="bw-text-sm" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.subject || '—' }}</td>
+              <td class="bw-mono bw-text-sm">{{ d.vendor_organizations?.trading_name || d.vendor_organizations?.legal_name || '—' }}</td>
+              <td>
+                <span :class="statusClass(d.status)" class="bw-badge">{{ statusLabel(d.status) }}</span>
+                <span v-if="d.escalated_at" class="bw-badge bw-badge-danger" style="margin-left:.25rem;font-size:.65rem">ESC</span>
+              </td>
+              <td class="bw-text-sm">
+                <span v-if="d.sla_deadline && !d.resolved_at" :class="slaClass(d)" :title="fmtDate(d.sla_deadline)">
+                  {{ slaLabel(d) }}
+                </span>
+                <span v-else class="bw-text-muted">—</span>
+              </td>
+              <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
+              <td>
+                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDetail(d)">Review</button>
+              </td>
+            </tr>
+            <tr v-if="!disputes.length">
+              <td colspan="6" class="bw-empty">No disputes found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards (≤640px) -->
+      <div class="bw-t-cards">
+        <div v-if="!disputes.length" class="bw-empty">No disputes found.</div>
+        <div v-for="d in disputes" :key="d.id" class="bw-tc">
+          <div class="bw-tc-head">
+            <span class="bw-mono bw-tc-ref">{{ d.reference || d.id?.slice(0, 8).toUpperCase() }}</span>
+            <span :class="statusClass(d.status)" class="bw-badge">{{ statusLabel(d.status) }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Subject</span><span class="bw-tc-pair-val">{{ d.subject || '—' }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Org</span><span class="bw-tc-pair-val">{{ d.vendor_organizations?.legal_name || '—' }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Date</span><span class="bw-tc-pair-val">{{ fmtDate(d.created_at) }}</span></div>
+          </div>
+          <div class="bw-tc-foot">
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDetail(d)">Review</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div v-if="selected" class="bw-modal-backdrop" @click.self="selected = null">
+      <div class="bw-modal bw-modal-lg">
+        <div class="bw-modal-header">
+          <h2>{{ selected.reference || selected.id?.slice(0, 8).toUpperCase() }}</h2>
+          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="selected = null">✕</button>
+        </div>
+        <div class="bw-modal-body">
+          <p class="bw-text-sm"><strong>{{ selected.subject }}</strong></p>
+          <p class="bw-text-sm bw-text-muted">{{ detail?.description || selected.description }}</p>
+          <div class="bw-dispute-meta">
+            <span>Org: <code class="bw-mono">{{ selected.vendor_organizations?.legal_name || selected.vendor_organization_id?.slice(0, 8) }}</code></span>
+            <span>Actor: <code class="bw-mono">{{ selected.raised_by_actor_id?.slice(0, 8) }}</code></span>
+            <span v-if="selected.sla_deadline">
+              SLA: <strong :class="slaClass(selected)">{{ fmtDate(selected.sla_deadline) }}</strong>
+            </span>
+            <span v-if="selected.escalated_at" class="bw-badge bw-badge-danger">ESCALATED {{ fmtDate(selected.escalated_at) }}</span>
+          </div>
+
+          <div class="bw-section-label">Thread</div>
+          <div class="bw-messages">
+            <div v-for="m in detail?.dispute_messages" :key="m.id" :class="['bw-message', m.sender_actor_type === 'staff' ? 'bw-message-staff' : '']">
+              <span class="bw-message-actor">{{ m.sender_actor_type === 'staff' ? 'Beverly Support' : m.sender_actor_type }}</span>
+              <p class="bw-message-body">{{ m.body }}</p>
+              <span class="bw-message-time">{{ fmtDate(m.created_at) }}</span>
+            </div>
+            <p v-if="!detail?.dispute_messages?.length" class="bw-text-sm bw-text-muted">No messages yet.</p>
+          </div>
+
+          <textarea v-model="replyText" class="bw-textarea" placeholder="Add a note / message to vendor…" rows="3"></textarea>
+
+          <div class="bw-form-group">
+            <label class="bw-label">Update Status</label>
+            <select v-model="newStatus" class="bw-select">
+              <option value="">— no change —</option>
+              <option value="open">Open</option>
+              <option value="under_review">Under Review</option>
+              <option value="resolved">Resolved</option>
+              <option value="rejected">Rejected</option>
+              <option value="refund_issued">Refund Issued</option>
+            </select>
+          </div>
+          <div v-if="newStatus === 'resolved' || newStatus === 'rejected'">
+            <label class="bw-label">Resolution Note</label>
+            <textarea v-model="resolutionNote" class="bw-textarea" rows="2" placeholder="Internal resolution note…"></textarea>
+          </div>
+        </div>
+        <div class="bw-modal-footer">
+          <button class="bw-btn bw-btn-ghost" @click="selected = null">Cancel</button>
+          <button class="bw-btn bw-btn-primary" :disabled="saving" @click="submitUpdate">
+            {{ saving ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </AppShell>
+</template>
+
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { api, naira, shortDate } from '../lib/api';
@@ -171,23 +307,25 @@ function orgName(d: DisputeRow) {
   return d.vendor_organizations?.trading_name || d.vendor_organizations?.legal_name || 'Unassigned';
 }
 
-function actorName(d: DisputeRow) {
-  return d.customers?.users?.full_name || d.purchase_order?.customer_name || d.raised_by_actor_type || 'Unknown';
+function slaClass(d: any) {
+  if (!d.sla_deadline) return '';
+  if (d.escalated_at)  return 'bw-sla-breached';
+  const remaining = new Date(d.sla_deadline).getTime() - Date.now();
+  if (remaining < 0)            return 'bw-sla-breached';
+  if (remaining < 4 * 3600000) return 'bw-sla-warning';
+  return 'bw-sla-ok';
 }
 
-function refLabel(d: DisputeRow) {
-  return d.reference || d.id?.slice(0, 8).toUpperCase();
+function slaLabel(d: any) {
+  if (!d.sla_deadline) return '—';
+  const remaining = new Date(d.sla_deadline).getTime() - Date.now();
+  if (remaining < 0) return 'Overdue';
+  const h = Math.floor(remaining / 3600000);
+  const m = Math.floor((remaining % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function onEsc(e: KeyboardEvent) {
-  if (e.key === 'Escape' && selected.value) closeDetail();
-}
-
-onMounted(() => {
-  void load();
-  window.addEventListener('keydown', onEsc);
-});
-onUnmounted(() => window.removeEventListener('keydown', onEsc));
+onMounted(load);
 </script>
 
 <template>
@@ -393,280 +531,19 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
 </template>
 
 <style scoped>
-.bw-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  border: 1px solid;
-  border-radius: var(--r-md);
-  margin-bottom: var(--s-3);
-  font-size: var(--t-sm);
-}
-.bw-banner.success { background: oklch(from var(--brand) l c h / 0.08); border-color: oklch(from var(--brand) l c h / 0.3); color: var(--brand); }
-.bw-banner.error { background: oklch(from var(--danger) l c h / 0.08); border-color: oklch(from var(--danger) l c h / 0.3); color: var(--danger); }
-.bw-banner-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; }
-
-.dispute-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s-3);
-  margin-bottom: var(--s-4);
-}
-.dispute-stat {
-  min-height: 104px;
-  padding: var(--s-4);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--r-lg);
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  box-shadow: var(--glass-shine), var(--glass-shadow-card);
-}
-.dispute-stat strong {
-  display: block;
-  margin: 8px 0 3px;
-  font-size: var(--t-2xl);
-  color: var(--brand);
-  line-height: 1;
-}
-.dispute-stat span:not(.stat-label) {
-  color: var(--text-muted);
-  font-size: var(--t-xs);
-}
-.stat-label {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.dispute-controls {
-  display: grid;
-  grid-template-columns: 180px minmax(220px, 1fr) auto;
-  gap: var(--s-3);
-  align-items: center;
-  margin-bottom: var(--s-4);
-}
-.dispute-table-card { overflow: hidden; }
-.bw-table-head-bar h2 { margin: 0; }
-.dispute-table-wrap { max-height: none; }
-.row-main {
-  display: block;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--t-sm);
-}
-.row-sub {
-  display: block;
-  max-width: 240px;
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-.dispute-actions-col { min-width: 96px; text-align: right; }
-.dispute-empty {
-  display: grid;
-  place-items: center;
-  gap: 5px;
-  min-height: 112px;
-  padding: var(--s-5);
-  color: var(--text-muted);
-  text-align: center;
-  font-size: var(--t-sm);
-}
-
-.bw-tc-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--s-3) var(--s-4);
-  border-top: 1px solid var(--border);
-}
-.dispute-card strong {
-  font-size: var(--t-sm);
-}
-
-.bw-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  display: grid;
-  place-items: center;
-  padding: var(--s-4);
-  background: oklch(0 0 0 / 0.58);
-}
-.dispute-modal {
-  width: min(760px, 100%);
-  max-height: min(86vh, 760px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.bw-modal-header {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding: var(--s-5);
-  border-bottom: 1px solid var(--border);
-}
-.bw-modal-header h2,
-.bw-modal-header p {
-  margin: 0;
-}
-.bw-modal-header p:last-child {
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: var(--t-sm);
-}
-.modal-eyebrow {
-  margin-bottom: 6px;
-  color: var(--brand);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.bw-modal-body {
-  flex: 1;
-  overflow: auto;
-  padding: var(--s-5);
-}
-.bw-modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--s-2);
-  padding: var(--s-4) var(--s-5);
-  border-top: 1px solid var(--border);
-}
-.case-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--s-2);
-  margin-bottom: var(--s-4);
-}
-.case-grid div,
-.case-panel {
-  padding: var(--s-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-}
-.case-grid span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.case-grid strong {
-  font-size: var(--t-sm);
-}
-.case-panel {
-  margin-bottom: var(--s-3);
-}
-.case-panel h3 {
-  margin: 0 0 var(--s-2);
-  font-size: var(--t-sm);
-}
-.case-panel p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--t-sm);
-  line-height: 1.5;
-}
-.bw-messages {
-  display: grid;
-  gap: var(--s-2);
-  max-height: 240px;
-  overflow: auto;
-}
-.bw-message {
-  padding: var(--s-3);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--r-md);
-  background: var(--glass-bg);
-}
-.bw-message-staff {
-  background: oklch(from var(--brand) l c h / 0.1);
-}
-.bw-message-actor,
-.bw-message-time {
-  display: block;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.bw-message-body {
-  margin: 6px 0;
-  color: var(--text);
-  font-size: var(--t-sm);
-}
-.update-panel {
-  display: grid;
-  gap: var(--s-3);
-}
-.update-grid {
-  display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: var(--s-3);
-}
-
-@media (max-width: 720px) {
-  .dispute-stat-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--s-2);
-  }
-  .dispute-stat {
-    min-height: 90px;
-    padding: var(--s-3);
-  }
-  .dispute-stat strong {
-    font-size: var(--t-xl);
-  }
-  .dispute-controls {
-    grid-template-columns: 1fr;
-    padding: var(--s-3);
-  }
-  .dispute-actions-col {
-    min-width: 72px;
-    position: sticky;
-    right: 0;
-    z-index: 3;
-    background: var(--glass-bg-strong);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-  }
-  .dispute-row-action {
-    display: none;
-  }
-  .case-grid,
-  .update-grid {
-    grid-template-columns: 1fr;
-  }
-  .bw-modal-backdrop {
-    align-items: end;
-    padding: 0;
-  }
-  .dispute-modal {
-    width: 100%;
-    max-height: 92vh;
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
-  }
-  .bw-modal-header,
-  .bw-modal-body,
-  .bw-modal-footer {
-    padding: var(--s-4);
-  }
-}
+.bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.bw-dispute-meta { display: flex; gap: 1rem; font-size: .8rem; color: var(--text-muted); margin: .5rem 0 1rem; flex-wrap: wrap; }
+.bw-messages { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 1rem; max-height: 240px; overflow-y: auto; }
+.bw-message { background: var(--surface); border-radius: var(--r-md); padding: .5rem .75rem; }
+.bw-message-staff { background: oklch(from var(--brand) l c h / 0.10); }
+.bw-message-actor { font-size: .7rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; }
+.bw-message-body { margin: .25rem 0; font-size: .875rem; }
+.bw-message-time { font-size: .7rem; color: var(--text-muted); }
+.bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin: 1rem 0 .25rem; }
+.bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-tc-ref { font-size: var(--t-sm); }
+.bw-row-escalated { background: oklch(from var(--danger, #ef4444) l c h / 0.04); }
+.bw-sla-ok      { color: var(--success, #22c55e); font-weight: 600; font-size: .8rem; }
+.bw-sla-warning { color: var(--warn, #f59e0b);    font-weight: 600; font-size: .8rem; }
+.bw-sla-breached{ color: var(--danger, #ef4444);  font-weight: 700; font-size: .8rem; }
 </style>
