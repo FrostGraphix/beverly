@@ -1,25 +1,23 @@
 /**
- * Unified notification service.
+ * Notification service — Phase 4 (queue-backed pipeline).
  *
- * sendNotification() fires all enabled channels for a customer event:
- *   • in-app  — always written (inbox row) when in_app pref is on
- *   • SMS     — sent via Twilio when sms pref is on and flag is live
- *   • email   — sent via Resend when email pref is on and flag is live
+ * Flow:
+ *   sendNotification(customerId, payload)
+ *     │
+ *     ├── 1. Write in-app row SYNCHRONOUSLY → customer sees it instantly
+ *     └── 2. Enqueue job to BullMQ 'notifications' queue
+ *               │
+ *               └── NotificationsWorker picks up:
+ *                     • SMS   → Twilio  → delivery receipt
+ *                     • Email → Postmark → delivery receipt
+ *                     • Push  → FCM     → delivery receipt
+ *                     └── Retry on failure (3× exponential backoff)
  *
- * All channels are best-effort: failures are logged but never thrown.
+ * In-app is written synchronously to avoid UX lag from queue latency.
  */
 import { adminClient } from '../db/supabase.js';
-import { sendSms }   from '../adapters/twilio.js';
-import { sendEmail } from '../adapters/resend.js';
-import {
-    walletFundedEmail, paymentFailedEmail, kycUpdateEmail,
-    disputeUpdateEmail, meterOrderUpdateEmail, genericEmail,
-    type EmailContent,
-} from '../emails/templates.js';
-import { logAction } from './audit.js';
-import { isFlagEnabled } from './feature-flags.js';
-import { env }       from '../config/env.js';
 import { notificationsQueue } from '../queue/index.js';
+import { isFlagEnabled } from './feature-flags.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,10 +35,27 @@ export interface NotificationPayload {
     type: NotificationType;
     title: string;
     body: string;
-    /** Optional email subject — falls back to title */
     subject?: string;
-    /** Structured data attached to in-app notification for deep-linking */
     metadata?: Record<string, unknown>;
+}
+
+export interface NotificationJobData {
+    notificationId: string;
+    customerId: string;
+    type: string;
+    title: string;
+    body: string;
+    subject?: string;
+    metadata?: Record<string, unknown>;
+    channels: {
+        sms:   boolean;
+        email: boolean;
+        push:  boolean;
+    };
+    phone?:      string | null;
+    email?:      string | null;
+    pushTokens?: string[];
+    firstName?:  string;
 }
 
 interface CustomerRow {
@@ -55,190 +70,129 @@ interface PreferencesShape {
     sms?:    Record<string, boolean>;
     email?:  Record<string, boolean>;
     in_app?: Record<string, boolean>;
+    push?:   Record<string, boolean>;
 }
 
-// ── Default preferences (mirrors backend get endpoint defaults) ────────────────
+// ── Default preferences ───────────────────────────────────────────────────────
 
 const PREF_DEFAULTS: Required<PreferencesShape> = {
-    // token_purchased SMS is false here because the dedicated token-SMS system
-    // (sendTokenSmsToCustomer) already delivers the actual token code via SMS.
-    // The notification service handles in-app + email for this event.
-    sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
-    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, meter_order_update: true },
-    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
+    sms:    { token_purchased: false, wallet_funded: true, low_balance: true },
+    email:  { token_purchased: false, wallet_funded: false, promotions: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    push:   { token_purchased: true, wallet_funded: true, low_balance: true, dispute_update: true, payment_failed: true },
 };
 
-function prefEnabled(prefs: PreferencesShape | null, channel: 'sms' | 'email' | 'in_app', type: NotificationType): boolean {
-    const channelPrefs = prefs?.[channel] ?? PREF_DEFAULTS[channel];
-    const key = type as string;
-    return channelPrefs[key] ?? (PREF_DEFAULTS[channel] as Record<string, boolean>)[key] ?? false;
+function prefEnabled(prefs: PreferencesShape | null, channel: keyof PreferencesShape, type: NotificationType): boolean {
+    const channelPrefs = prefs?.[channel] ?? PREF_DEFAULTS[channel] ?? {};
+    return (channelPrefs as Record<string, boolean>)[type]
+        ?? (PREF_DEFAULTS[channel] as Record<string, boolean>)[type]
+        ?? false;
 }
 
-// ── Main function ─────────────────────────────────────────────────────────────
+// ── Main entry point ──────────────────────────────────────────────────────────
 
 export async function sendNotification(
     customerId: string,
     payload: NotificationPayload,
 ): Promise<void> {
-    try {
-        await notificationsQueue.add('deliver', { customerId, payload }, {
-            jobId: `notification:${customerId}:${payload.type}:${Date.now()}`,
-            attempts: 5,
-            backoff: { type: 'exponential', delay: 30_000 },
-            removeOnComplete: 100,
-            removeOnFail: 500,
-        });
-    } catch (error) {
-        if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') throw error;
-        await deliverNotification(customerId, payload);
-    }
-}
-
-export async function deliverNotification(
-    customerId: string,
-    payload: NotificationPayload,
-): Promise<void> {
-    // Fetch customer in one query
-    const { data: customer } = await adminClient
-        .from('customers')
-        .select('id, phone, email, full_name, notification_preferences')
-        .eq('id', customerId)
-        .maybeSingle();
-
-    if (!customer) return; // customer not found — silently skip
-
-    const cu = customer as CustomerRow;
-    const prefs = cu.notification_preferences as PreferencesShape | null;
-
-    await Promise.allSettled([
-        writeInApp(cu, payload, prefs),
-        sendSmsNotification(cu, payload, prefs),
-        sendEmailNotification(cu, payload, prefs),
+    const [customerRes, tokensRes] = await Promise.all([
+        adminClient
+            .from('customers')
+            .select('id, phone, email, full_name, notification_preferences')
+            .eq('id', customerId)
+            .maybeSingle(),
+        adminClient
+            .from('customer_push_tokens')
+            .select('token')
+            .eq('customer_id', customerId)
+            .eq('active', true),
     ]);
-}
 
-// ── In-app inbox ──────────────────────────────────────────────────────────────
+    if (!customerRes.data) return;
 
-async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
-    if (!prefEnabled(prefs, 'in_app', payload.type)) return;
-    try {
-        await adminClient.from('notifications').insert({
-            customer_id: cu.id,
-            recipient_type: 'customer',
-            recipient_id: cu.id,
+    const cu        = customerRes.data as CustomerRow;
+    const prefs     = cu.notification_preferences as PreferencesShape | null;
+    const pushTokens = (tokensRes.data ?? []).map((r: any) => r.token as string);
+
+    // Step 1: write in-app row synchronously for immediate inbox visibility
+    const notificationId = await writeInApp(cu, payload, prefs);
+
+    // Step 2: enqueue external channel job (SMS / email / push)
+    const channels = {
+        sms:   prefEnabled(prefs, 'sms', payload.type),
+        email: prefEnabled(prefs, 'email', payload.type),
+        push:  prefEnabled(prefs, 'push', payload.type) && pushTokens.length > 0,
+    };
+
+    if ((channels.sms || channels.email || channels.push) && notificationId) {
+        const job: NotificationJobData = {
+            notificationId,
+            customerId:  cu.id,
             type:        payload.type,
             title:       payload.title,
             body:        payload.body,
-            metadata:    payload.metadata ?? {},
-            read:        false,
-        });
+            subject:     payload.subject,
+            metadata:    payload.metadata,
+            channels,
+            phone:       cu.phone,
+            email:       cu.email,
+            pushTokens,
+            firstName:   cu.full_name?.split(' ')[0] ?? cu.email ?? 'there',
+        };
+        try {
+            await notificationsQueue.add('send', job, {
+                jobId: `notif:${notificationId}`,
+            });
+        } catch (err) {
+            console.error('[notifications] enqueue failed:', err);
+        }
+    }
+}
+
+// ── In-app inbox (synchronous) ────────────────────────────────────────────────
+
+async function writeInApp(
+    cu: CustomerRow,
+    payload: NotificationPayload,
+    prefs: PreferencesShape | null,
+): Promise<string | null> {
+    if (!prefEnabled(prefs, 'in_app', payload.type)) return null;
+    try {
+        const { data } = await adminClient
+            .from('notifications')
+            .insert({
+                customer_id: cu.id,
+                type:        payload.type,
+                title:       payload.title,
+                body:        payload.body,
+                metadata:    payload.metadata ?? {},
+                read:        false,
+            })
+            .select('id')
+            .single();
+        return (data as any)?.id ?? null;
     } catch (err) {
         console.error('[notifications] in-app write failed:', err);
+        return null;
     }
 }
 
-// ── SMS ───────────────────────────────────────────────────────────────────────
+// ── Feature-flag helpers used by worker ──────────────────────────────────────
 
-async function sendSmsNotification(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
-    if (!prefEnabled(prefs, 'sms', payload.type)) return;
-    if (!cu.phone) return;
-
-    // Gate behind feature flag
-    let flagOn = false;
-    try { flagOn = await isFlagEnabled('notifications.sms'); } catch { /* flag missing = disabled */ }
-    if (!flagOn) return;
-
-    try {
-        const msg = await sendSms({
-            to:   cu.phone,
-            body: `Beverly: ${payload.body}`,
-            from: env.TWILIO_FROM_NUMBER,
-        });
-        await logAction({
-            actorUserId: cu.id,
-            actorType:   'system',
-            action:      `notification.sms.sent`,
-            targetType:  'customer',
-            targetId:    cu.id,
-            after:       { type: payload.type, sid: msg.sid, status: msg.status },
-        }).catch(() => undefined);
-    } catch (err) {
-        console.error('[notifications] SMS send failed:', err);
-    }
+export async function isSmsEnabled(): Promise<boolean> {
+    try { return await isFlagEnabled('notifications.sms'); } catch { return false; }
 }
 
-// ── Email ─────────────────────────────────────────────────────────────────────
-
-function formatNaira(amountMinor: number): string {
-    return `₦${(amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+export async function isEmailEnabled(): Promise<boolean> {
+    try { return await isFlagEnabled('notifications.email'); } catch { return false; }
 }
 
-function buildEmailContent(cu: CustomerRow, payload: NotificationPayload): EmailContent {
-    const fullName = cu.full_name ?? cu.email ?? 'there';
-    const md = payload.metadata ?? {};
-    switch (payload.type) {
-        case 'wallet_funded':
-            return walletFundedEmail({
-                fullName,
-                amountLabel: formatNaira(Number(md.amountMinor ?? 0)),
-                reference: String(md.reference ?? ''),
-            });
-        case 'payment_failed':
-            return paymentFailedEmail({
-                fullName,
-                amountLabel: formatNaira(Number(md.amountMinor ?? 0)),
-                reason: typeof md.reason === 'string' ? md.reason : undefined,
-            });
-        case 'kyc_update': {
-            const tier = Number(md.tier ?? 0);
-            return kycUpdateEmail({ fullName, tierLabel: tier === 1 ? 'Tier 1 (₦50k/day)' : 'Tier 2 (₦200k/day)' });
-        }
-        case 'dispute_update':
-            return disputeUpdateEmail({ fullName, message: payload.body });
-        case 'meter_order_update':
-            return meterOrderUpdateEmail({ fullName, message: payload.body });
-        default:
-            return genericEmail({ fullName, title: payload.subject ?? payload.title, body: payload.body });
-    }
-}
-
-async function sendEmailNotification(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
-    if (!prefEnabled(prefs, 'email', payload.type)) return;
-    if (!cu.email) return;
-
-    // Gate behind feature flag
-    let flagOn = false;
-    try { flagOn = await isFlagEnabled('notifications.email'); } catch { /* flag missing = disabled */ }
-    if (!flagOn) return;
-
-    try {
-        const content = buildEmailContent(cu, payload);
-        await sendEmail({
-            to:      cu.email,
-            subject: content.subject,
-            html:    content.html,
-            text:    content.text,
-            tag:     payload.type,
-        });
-        await logAction({
-            actorUserId: cu.id,
-            actorType:   'system',
-            action:      `notification.email.sent`,
-            targetType:  'customer',
-            targetId:    cu.id,
-            after:       { type: payload.type },
-        }).catch(() => undefined);
-    } catch (err) {
-        console.error('[notifications] email send failed:', err);
-    }
-}
-
-// ── Convenience helpers (pre-composed for each event type) ────────────────────
+// ── Convenience helpers ───────────────────────────────────────────────────────
 
 export function notifyTokenPurchased(customerId: string, opts: {
     meterId: string; units?: number | null; amountMinor: number; token: string;
 }): Promise<void> {
-    const units = opts.units ? ` · ${opts.units.toFixed(4)} kWh` : '';
+    const units  = opts.units ? ` · ${opts.units.toFixed(2)} kWh` : '';
     const amount = `₦${(opts.amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
     return sendNotification(customerId, {
         type:  'token_purchased',
@@ -260,14 +214,12 @@ export function notifyWalletFunded(customerId: string, opts: {
     });
 }
 
-export function notifyKycUpdate(customerId: string, opts: {
-    tier: number;
-}): Promise<void> {
+export function notifyKycUpdate(customerId: string, opts: { tier: number }): Promise<void> {
     const tierLabel = opts.tier === 1 ? 'Tier 1 (₦50k/day)' : 'Tier 2 (₦200k/day)';
     return sendNotification(customerId, {
         type:  'kyc_update',
         title: 'KYC verified',
-        body:  `Your identity has been verified to ${tierLabel}. You can now buy tokens and fund your wallet.`,
+        body:  `Your identity has been verified to ${tierLabel}.`,
         metadata: { tier: opts.tier },
     });
 }

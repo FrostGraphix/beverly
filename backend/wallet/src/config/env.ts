@@ -87,6 +87,9 @@ const schema = z.object({
     VENDOR_PORTAL_URL: z.string().url(),
     STAFF_PORTAL_URL: z.string().url(),
 
+    // Firebase Cloud Messaging — push notifications
+    FCM_SERVER_KEY: z.string().optional(),
+
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
     // services decrypt oem_credentials rows written by the CRM's Settings UI).
