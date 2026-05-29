@@ -1,22 +1,20 @@
 /**
- * Transaction Fraud Engine — Phase 5
+ * Transaction Fraud Engine — Phase 5 (Phase 1 hardened)
  *
  * Scores every purchase attempt in real-time using weighted signals.
  * Score 0–100:
  *   < 70  → allow
- *   70–89 → step_up  (customer must re-verify OTP before purchase completes)
+ *   70–89 → step_up  (customer must re-verify OTP)
  *   ≥ 90  → block
  *
- * Signals and weights (master design §16.1):
- *   new_device      :  10
- *   new_ip          :   5
- *   new_geo         :  15   (not implemented v1 — requires GeoIP DB)
- *   velocity_5hr    :  20   (≥5 purchases in last hour)
- *   amount_anomaly  :  15   (>3σ above customer baseline)
- *   card_bin_risk   :  10   (direct_pay mode only — not yet wired v1)
- *   meter_mismatch  :  25   (meter_id not in customer's linked meters)
- *
- * Max attainable in v1: 75 (velocity + amount_anomaly + meter_mismatch + new_ip + new_device)
+ * Signals and weights:
+ *   new_device      : 10
+ *   new_ip          :  5
+ *   new_geo         : 15  (non-NG country from CF-IPCountry / X-Vercel-IP-Country)
+ *   velocity_5hr    : 20  (≥5 purchases in last hour)
+ *   amount_anomaly  : 15  (>3σ above customer baseline)
+ *   card_bin_risk   : 10  (first card payment — no prior direct_pay history)
+ *   meter_mismatch  : 25  (meter_id not in customer's linked meters)
  */
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
@@ -42,14 +40,24 @@ export interface AssessInput {
     amountMinor: number;
     clientIp: string | null;
     userAgent: string | null;
+    /** Combined fingerprint: UA + Accept-Language + Sec-CH-UA + Sec-CH-UA-Platform */
+    deviceFingerprint?: string | null;
+    /** ISO 3166-1 alpha-2 country from CF-IPCountry or X-Vercel-IP-Country header */
+    clientCountry?: string | null;
+    /** Purchase mode — used to gate card_bin_risk signal */
+    mode?: 'wallet' | 'direct_pay';
 }
 
 function ipHash(ip: string): string {
-    return crypto.createHash('sha256').update(ip + 'beverly-ip-salt').digest('hex');
+    return crypto.createHash('sha256').update(ip + 'beverly-ip-salt').digest('hex').slice(0, 32);
 }
 
 function uaHash(ua: string): string {
-    return crypto.createHash('sha256').update(ua + 'beverly-ua-salt').digest('hex');
+    return crypto.createHash('sha256').update(ua + 'beverly-ua-salt').digest('hex').slice(0, 32);
+}
+
+function fingerprintHash(fp: string): string {
+    return crypto.createHash('sha256').update(fp + 'beverly-fp-salt').digest('hex').slice(0, 32);
 }
 
 function actionFromScore(score: number): FraudAction {
@@ -59,7 +67,7 @@ function actionFromScore(score: number): FraudAction {
 }
 
 export async function assessPurchase(input: AssessInput): Promise<FraudAssessmentResult> {
-    const { customerId, meterId, amountMinor, clientIp, userAgent } = input;
+    const { customerId, meterId, amountMinor, clientIp, userAgent, deviceFingerprint, clientCountry, mode } = input;
     const signals: FraudSignalResult[] = [];
 
     await Promise.all([
@@ -67,7 +75,9 @@ export async function assessPurchase(input: AssessInput): Promise<FraudAssessmen
         checkAmountAnomaly(customerId, amountMinor, signals),
         checkMeterOwnership(customerId, meterId, signals),
         checkNewIp(customerId, clientIp, signals),
-        checkNewDevice(customerId, userAgent, signals),
+        checkNewDevice(customerId, userAgent, deviceFingerprint, signals),
+        checkNewGeo(clientCountry, signals),
+        checkCardBinRisk(customerId, mode, signals),
     ]);
 
     const score = Math.min(100, signals.reduce((s, sig) => s + sig.weight, 0));
@@ -81,8 +91,8 @@ export async function assessPurchase(input: AssessInput): Promise<FraudAssessmen
             amount_minor: amountMinor,
             score,
             action,
-            client_ip:    clientIp  ? ipHash(clientIp)          : null,
-            user_agent:   userAgent ? userAgent.slice(0, 512)    : null,
+            client_ip:    clientIp   ? ipHash(clientIp)        : null,
+            user_agent:   userAgent  ? userAgent.slice(0, 512) : null,
         })
         .select('id')
         .single();
@@ -100,17 +110,17 @@ export async function assessPurchase(input: AssessInput): Promise<FraudAssessmen
         );
     }
 
-    // Record IP and UA as known so they stop firing next time
-    // Record IP and UA as known — fire-and-forget; never block the response
+    // Record known IP and device — fire-and-forget
     if (clientIp && assessmentId) {
         void adminClient.from('customer_known_ips').upsert(
             { customer_id: customerId, ip_hash: ipHash(clientIp), last_seen_at: new Date().toISOString() },
             { onConflict: 'customer_id,ip_hash', ignoreDuplicates: false },
         );
     }
-    if (userAgent && assessmentId) {
+    const deviceKey = deviceFingerprint || userAgent;
+    if (deviceKey && assessmentId) {
         void adminClient.from('customer_known_devices').upsert(
-            { customer_id: customerId, ua_hash: uaHash(userAgent), last_seen_at: new Date().toISOString() },
+            { customer_id: customerId, ua_hash: deviceFingerprint ? fingerprintHash(deviceFingerprint) : uaHash(deviceKey), last_seen_at: new Date().toISOString() },
             { onConflict: 'customer_id,ua_hash', ignoreDuplicates: false },
         );
     }
@@ -151,9 +161,9 @@ export async function refreshCustomerBaseline(customerId: string): Promise<void>
     const amounts = (data ?? []).map((r: any) => Number(r.amount_minor));
     if (amounts.length === 0) return;
 
-    const avg    = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    const avg     = amounts.reduce((a, b) => a + b, 0) / amounts.length;
     const variance = amounts.reduce((a, b) => a + (b - avg) ** 2, 0) / amounts.length;
-    const stddev = Math.sqrt(variance);
+    const stddev  = Math.sqrt(variance);
 
     await adminClient.from('customer_risk_baselines').upsert({
         customer_id:          customerId,
@@ -192,12 +202,12 @@ async function checkAmountAnomaly(
         .from('customer_risk_baselines')
         .select('avg_amount_minor, stddev_amount_minor, purchase_count')
         .eq('customer_id', customerId)
-        .single();
+        .maybeSingle();
 
     if (!baseline
         || (baseline as any).purchase_count < 5
         || (baseline as any).stddev_amount_minor === 0) {
-        return; // not enough history — never penalise new customers
+        return;
     }
 
     const avg   = (baseline as any).avg_amount_minor as number;
@@ -223,7 +233,7 @@ async function checkMeterOwnership(
         .select('id')
         .eq('customer_id', customerId)
         .eq('meter_id', meterId.toUpperCase())
-        .single();
+        .maybeSingle();
 
     if (!data) {
         signals.push({
@@ -245,7 +255,7 @@ async function checkNewIp(
         .select('id')
         .eq('customer_id', customerId)
         .eq('ip_hash', ipHash(clientIp))
-        .single();
+        .maybeSingle();
 
     if (!data) {
         signals.push({ type: 'new_ip', weight: 5, detail: 'Purchase from a previously unseen IP address' });
@@ -255,17 +265,56 @@ async function checkNewIp(
 async function checkNewDevice(
     customerId: string,
     userAgent: string | null,
+    deviceFingerprint: string | null | undefined,
     signals: FraudSignalResult[],
 ): Promise<void> {
-    if (!userAgent) return;
+    const key = deviceFingerprint || userAgent;
+    if (!key) return;
+    const hash = deviceFingerprint ? fingerprintHash(deviceFingerprint) : uaHash(key);
     const { data } = await adminClient
         .from('customer_known_devices')
         .select('id')
         .eq('customer_id', customerId)
-        .eq('ua_hash', uaHash(userAgent))
-        .single();
+        .eq('ua_hash', hash)
+        .maybeSingle();
 
     if (!data) {
         signals.push({ type: 'new_device', weight: 10, detail: 'Purchase from a previously unseen device' });
+    }
+}
+
+/** Flags purchases from a country other than Nigeria (NG). Uses Cloudflare/Vercel IP-Country header. */
+async function checkNewGeo(
+    clientCountry: string | null | undefined,
+    signals: FraudSignalResult[],
+): Promise<void> {
+    if (!clientCountry || clientCountry === 'NG' || clientCountry === 'XX') return;
+    signals.push({
+        type:   'new_geo',
+        weight: 15,
+        detail: `Purchase request originates from country: ${clientCountry}`,
+    });
+}
+
+/** Flags a direct_pay purchase when the customer has no prior completed card purchases. */
+async function checkCardBinRisk(
+    customerId: string,
+    mode: 'wallet' | 'direct_pay' | undefined,
+    signals: FraudSignalResult[],
+): Promise<void> {
+    if (mode !== 'direct_pay') return;
+    const { count } = await adminClient
+        .from('purchase_orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', customerId)
+        .eq('purchase_mode', 'direct_pay')
+        .eq('status', 'delivered');
+
+    if ((count ?? 0) === 0) {
+        signals.push({
+            type:   'card_bin_risk',
+            weight: 10,
+            detail: 'First-time card payment — no prior completed direct-pay purchase history',
+        });
     }
 }

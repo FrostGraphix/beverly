@@ -472,10 +472,20 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'invalid_mode', message: 'mode must be wallet or direct_pay.' });
         }
 
-        const customerId = req.actor!.customerId!;
-        const clientIp   = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-                         ?? req.ip ?? null;
-        const userAgent  = req.headers['user-agent'] ?? null;
+        const customerId     = req.actor!.customerId!;
+        const clientIp       = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                             ?? req.ip ?? null;
+        const userAgent      = req.headers['user-agent'] ?? null;
+        const clientCountry  = (req.headers['cf-ipcountry'] as string)
+                             ?? (req.headers['x-vercel-ip-country'] as string)
+                             ?? null;
+        // Richer fingerprint: UA + Accept-Language + client hints
+        const deviceFingerprint = [
+            userAgent ?? '',
+            (req.headers['accept-language'] as string) ?? '',
+            (req.headers['sec-ch-ua'] as string) ?? '',
+            (req.headers['sec-ch-ua-platform'] as string) ?? '',
+        ].join('|') || null;
 
         // ── Fraud assessment ──────────────────────────────────────────────────
         const assessment = await assessPurchase({
@@ -484,6 +494,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
             amountMinor: amount_minor,
             clientIp,
             userAgent,
+            deviceFingerprint,
+            clientCountry,
+            mode,
         });
 
         if (assessment.action === 'block') {

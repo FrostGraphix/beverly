@@ -1040,6 +1040,75 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ════════════════════════════════════════════════════════════
+    // MANUAL CREDIT — maker-checker wallet credits
+    // ════════════════════════════════════════════════════════════
+
+    fastify.post('/wallets/:id/manual-credit', async (req, reply) => {
+        const walletId = (req.params as { id: string }).id;
+        const schema = z.object({
+            amount_minor: z.number().int().positive(),
+            reason:       z.string().min(4),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'invalid_request', message: e.message }); }
+
+        const { requestManualCredit } = await import('../services/manual-credits.js');
+        try {
+            const request = await requestManualCredit({
+                walletId,
+                amountMinor:         body.amount_minor,
+                reason:              body.reason,
+                requestedByUserId:   req.actor!.userId,
+            });
+            return { ok: true, request };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'request_failed', message: e.message });
+        }
+    });
+
+    fastify.post('/wallets/:id/manual-credit/:reqId/approve', async (req, reply) => {
+        const { reqId } = req.params as { id: string; reqId: string };
+        const { approveManualCredit } = await import('../services/manual-credits.js');
+        try {
+            const updated = await approveManualCredit({ requestId: reqId, approvedByUserId: req.actor!.userId });
+            return { ok: true, request: updated };
+        } catch (e: any) {
+            const status = e.code === 'not_found' ? 404 : 400;
+            return reply.code(status).send({ error: e.code ?? 'approve_failed', message: e.message });
+        }
+    });
+
+    fastify.post('/wallets/:id/manual-credit/:reqId/reject', async (req, reply) => {
+        const { reqId } = req.params as { id: string; reqId: string };
+        const schema = z.object({ reason: z.string().min(2) });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'invalid_request', message: e.message }); }
+
+        const { rejectManualCredit } = await import('../services/manual-credits.js');
+        try {
+            const updated = await rejectManualCredit({
+                requestId:         reqId,
+                rejectedByUserId:  req.actor!.userId,
+                reason:            body.reason,
+            });
+            return { ok: true, request: updated };
+        } catch (e: any) {
+            const status = e.code === 'not_found' ? 404 : 400;
+            return reply.code(status).send({ error: e.code ?? 'reject_failed', message: e.message });
+        }
+    });
+
+    fastify.get('/wallets/:id/manual-credit', async (req) => {
+        const walletId = (req.params as { id: string }).id;
+        const { status } = req.query as { status?: string };
+        const { listManualCreditRequests } = await import('../services/manual-credits.js');
+        const requests = await listManualCreditRequests({ walletId, status });
+        return { requests };
+    });
+
+    // ════════════════════════════════════════════════════════════
     // CUSTOMERS — admin oversight of customer accounts + wallets
     // ════════════════════════════════════════════════════════════
 

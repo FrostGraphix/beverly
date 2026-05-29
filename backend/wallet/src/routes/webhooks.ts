@@ -247,6 +247,44 @@ const route: FastifyPluginAsync = async (fastify) => {
             }
         }
 
+        // Dedicated Virtual Account (NUBAN) top-up — channel='dedicated_nuban'
+        // Paystack fires this as charge.success; there is no separate event type.
+        if (verified.channel === 'dedicated_nuban' && !tx) {
+            const accountNumber = payload.data?.dedicated_account?.account_number as string | undefined;
+            if (accountNumber) {
+                const { data: va } = await adminClient
+                    .from('virtual_accounts')
+                    .select('wallet_id, owner_type, owner_id')
+                    .eq('account_number', accountNumber)
+                    .eq('status', 'active')
+                    .maybeSingle();
+                if (va) {
+                    const vaWallet = await findWalletForWebhook((va as any).wallet_id);
+                    try {
+                        assertWalletCanTransact(vaWallet, 'receive DVA funding');
+                        await postEntry({
+                            walletId:       (va as any).wallet_id,
+                            direction:      'credit',
+                            amountMinor:    verified.amount,
+                            entryType:      'payment_credit',
+                            referenceType:  'dva_transfer',
+                            referenceId:    reference,
+                            idempotencyKey: `dva.${reference}.credit`,
+                            memo:           `Bank transfer via ${accountNumber}`,
+                            createdBy:      (va as any).owner_id,
+                            audit:          { actorType: 'webhook' },
+                        });
+                        notifyWalletFunded((va as any).owner_id, {
+                            amountMinor: verified.amount,
+                            reference,
+                        }).catch(() => undefined);
+                    } catch { /* wallet inactive — log but do not block 200 */ }
+                }
+            }
+            await markWebhookProcessed(payload);
+            return { ok: true };
+        }
+
         // mark transaction success
         await adminClient.from('payment_transactions').update({
             status: 'succeeded',
