@@ -21,7 +21,7 @@ export async function computeSettlementBatch(
         .eq('vendor_organization_id', vendorOrganizationId)
         .eq('period_start', periodStart)
         .eq('period_end', periodEnd)
-        .single();
+        .maybeSingle();
     if (existing) return (existing as any).id;
 
     // Pull all delivered purchase orders in period for this vendor

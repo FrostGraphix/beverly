@@ -44,11 +44,17 @@ async function sweepExpiredHolds(): Promise<void> {
         .in('hold_id', holdIds)
         .in('status', ['dispatching', 'delivery_pending_review']);
     const protectedHoldIds = new Set((protectedOrders ?? []).map((row: any) => row.hold_id));
+    let released = 0;
     for (const hold of stale as any[]) {
         if (protectedHoldIds.has(hold.id)) continue;
-        void adminClient.rpc('fn_release_hold', { p_hold_id: hold.id });
+        const { error } = await adminClient.rpc('fn_release_hold', { p_hold_id: hold.id });
+        if (error) {
+            console.error(`[JOB:holds] release failed hold=${hold.id}:`, error.message);
+        } else {
+            released++;
+        }
     }
-    console.info(`[JOB:holds] released ${stale.length} expired holds`);
+    console.info(`[JOB:holds] released ${released}/${stale.length} expired holds`);
 }
 
 // ── Payment status sweeper ────────────────────────────────────────────────────

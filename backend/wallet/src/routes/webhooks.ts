@@ -90,7 +90,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if ((tx as any).purpose === 'wallet_funding' && (tx as any).actor_type === 'vendor') {
             const fundingId = (tx as any).metadata?.funding_request_id as string | undefined;
             if (fundingId) {
-                const { data: fr } = await adminClient.from('funding_requests').select('*').eq('id', fundingId).single();
+                const { data: fr } = await adminClient.from('funding_requests').select('*').eq('id', fundingId).maybeSingle();
                 if (fr) {
                     const wallet = await findWalletByOwner('vendor', (fr as any).vendor_organization_id);
                     try {
@@ -274,7 +274,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             processed: true,
             processed_at: new Date().toISOString(),
             error: error ?? null,
-        }).eq('gateway_reference', payload.data?.reference ?? '').eq('processed', false);
+        }).eq('gateway_reference', payload.data?.reference ?? '').not('processed', 'is', true);
     }
 
     async function findWalletForWebhook(walletId: string) {

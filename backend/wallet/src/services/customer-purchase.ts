@@ -183,6 +183,11 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     }
 
     const customerWallet = await findWalletByOwner('customer', input.customerId);
+
+    if (input.mode === 'wallet' && !customerWallet) {
+        throw new CustomerPurchaseError('Wallet not provisioned.', 'wallet_missing');
+    }
+
     if (customerWallet) {
         try {
             assertWalletCanTransact(customerWallet, 'buy tokens');
@@ -250,8 +255,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     let po = createdRow as PurchaseOrder;
 
     if (input.mode === 'wallet') {
-        const wallet = customerWallet;
-        if (!wallet) throw new CustomerPurchaseError('Wallet not provisioned.', 'wallet_missing');
+        const wallet = customerWallet!;
 
         // Update order with wallet id
         await adminClient.from('purchase_orders').update({ wallet_id: wallet.id }).eq('id', po.id);

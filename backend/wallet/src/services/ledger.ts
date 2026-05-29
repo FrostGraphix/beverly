@@ -174,7 +174,8 @@ export async function createHold(input: HoldInput): Promise<Hold> {
         throw new LedgerError(error.message, error.code ?? 'wallet_inactive');
     }
 
-    // pre-check: balance must cover this hold + existing
+    // Fast-fail balance check. Note: not atomic — concurrent holds can bypass this.
+    // The authoritative guard is fn_capture_hold / fn_post_ledger_entry at debit time.
     const bal = await getBalance(input.walletId);
     if (bal.availableMinor < input.amountMinor) {
         throw new LedgerError('insufficient available balance for hold', 'insufficient_balance');

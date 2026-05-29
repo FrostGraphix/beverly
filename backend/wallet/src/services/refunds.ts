@@ -63,12 +63,14 @@ export async function approveRefund(refundRequestId: string, approvedByUserId: s
     // Write ledger credit
     const { data: entry, error: ledgerErr } = await adminClient.rpc('fn_post_ledger_entry', {
         p_wallet_id:         (req as any).wallet_id,
+        p_direction:         'credit',
         p_entry_type:        'refund_credit',
         p_amount_minor:      (req as any).amount_minor,
         p_reference_type:    'refund_request',
         p_reference_id:      refundRequestId,
-        p_description:       `Refund: ${(req as any).reason}`,
+        p_memo:              `Refund: ${(req as any).reason}`,
         p_idempotency_key:   `refund_${refundRequestId}`,
+        p_created_by:        approvedByUserId,
     });
 
     if (ledgerErr) throw new RefundError(`Ledger write failed: ${ledgerErr.message}`, 'ledger_error');
