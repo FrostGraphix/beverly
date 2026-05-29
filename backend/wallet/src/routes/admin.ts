@@ -141,7 +141,8 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vending': 'wallet.vending.monitor',
     'GET /purchases/summary': 'wallet.vending.monitor',
     'GET /purchases/:id': 'wallet.vending.monitor',
-    'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
+    'POST /purchases/:id/resend-sms':    'wallet.vending.monitor',
+    'POST /purchases/:id/resend-remote': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
     'GET /meter-orders/:id': 'wallet.vendors.review',
@@ -1491,6 +1492,22 @@ const route: FastifyPluginAsync = async (fastify) => {
             return { ok: true, result };
         } catch (e: any) {
             return reply.code(400).send({ error: 'resend_failed', message: e.message ?? 'Could not resend.' });
+        }
+    });
+
+    // Resend a stuck remote-send order using its stored token (no re-generation).
+    fastify.post('/purchases/:id/resend-remote', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        try {
+            const { resendRemoteSendOrder } = await import('../services/vending.js');
+            const result = await resendRemoteSendOrder(id, req.actor!.userId);
+            return { ok: true, taskId: result.taskId };
+        } catch (e: any) {
+            const status =
+                e.code === 'not_found'     ? 404 :
+                e.code === 'invalid_state' ? 409 :
+                e.code === 'no_token'      ? 422 : 400;
+            return reply.code(status).send({ error: e.code ?? 'resend_failed', message: e.message ?? 'Could not resend.' });
         }
     });
 
