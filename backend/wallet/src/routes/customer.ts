@@ -1107,6 +1107,41 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    // ── Push token registration ───────────────────────────────────────────────
+
+    fastify.post('/notifications/push-token', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            token:    z.string().min(10).max(512),
+            platform: z.enum(['ios', 'android', 'web']),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        // Upsert: same token might belong to different customers across re-installs
+        await adminClient
+            .from('customer_push_tokens')
+            .upsert(
+                { customer_id: req.actor!.customerId!, token: body.token, platform: body.platform, active: true },
+                { onConflict: 'token' },
+            );
+        return { ok: true };
+    });
+
+    fastify.delete('/notifications/push-token', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({ token: z.string().min(10).max(512) });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        await adminClient
+            .from('customer_push_tokens')
+            .update({ active: false })
+            .eq('token', body.token)
+            .eq('customer_id', req.actor!.customerId!);
+        return { ok: true };
+    });
+
     // ── Notification preferences ──────────────────────────────────────────────
 
     fastify.get('/notifications/preferences', { preHandler: fastify.requireCustomer() }, async (req) => {
@@ -1124,6 +1159,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             sms:    z.record(z.boolean()).optional(),
             email:  z.record(z.boolean()).optional(),
             in_app: z.record(z.boolean()).optional(),
+            push:   z.record(z.boolean()).optional(),
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }

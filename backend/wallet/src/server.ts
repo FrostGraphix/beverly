@@ -23,6 +23,7 @@ import errorHandler from './plugins/error-handler.js';
 import routes from './routes/index.js';
 import { redisConnection, closeQueues } from './queue/index.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { startNotificationsWorker, closeNotificationsWorker } from './workers/notifications-worker.js';
 
 async function build() {
     const app = Fastify({
@@ -80,6 +81,7 @@ async function main() {
         app.log.info({ signal }, 'shutdown initiated');
         try {
             await app.close();
+            await closeNotificationsWorker();
             await closeQueues();
             app.log.info('shutdown complete');
             process.exit(0);
@@ -94,6 +96,7 @@ async function main() {
     try {
         await app.listen({ port: env.PORT, host: '0.0.0.0' });
         startScheduler();
+        startNotificationsWorker();
     } catch (err) {
         app.log.error({ err }, 'failed to start');
         process.exit(1);

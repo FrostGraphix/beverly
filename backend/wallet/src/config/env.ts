@@ -74,6 +74,9 @@ const schema = z.object({
     VENDOR_APP_URL: z.string().url().default('https://vendor-acob-beverly.vercel.app'),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
 
+    // Firebase Cloud Messaging — push notifications
+    FCM_SERVER_KEY: z.string().optional(),
+
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
 
     FEATURE_CUSTOMER_WALLET: z.coerce.boolean().default(true),
