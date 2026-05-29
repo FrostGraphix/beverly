@@ -301,6 +301,57 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
             }
             throw new VendingError(e.message, e.code ?? 'token_engine_failed');
         }
+    } else {
+        // remote_send: generate the credit token, then dispatch it to the meter.
+        // The hold stays active until the remote task worker confirms delivery.
+        try {
+            const tokenRes = await generateCreditToken({
+                meterId: meter.meterId,
+                customerId: meter.customerId,
+                customerName: meter.customerName,
+                stationId: meter.stationId,
+                amountMinor: input.amountMinor,
+                units: preview.units,
+                tariffId: meter.tariffId,
+                isThreePhase: meter.isThreePhase,
+                reference: po.id,
+            });
+            token = tokenRes.token;
+
+            // Store token in DB BEFORE network call so it survives a crash.
+            await adminClient.from('purchase_orders').update({
+                token,
+                delivery_state: 'token_generated_remote_send_queued',
+            }).eq('id', po.id);
+
+            const sendRes = await createRemoteSendTask({
+                customerId: meter.customerId,
+                customerName: meter.customerName,
+                meterId: meter.meterId,
+                stationId: meter.stationId,
+                protocolVersion: meter.protocolVersion,
+                token,
+                reference: po.id,
+            });
+            remoteTaskId = sendRes.taskId;
+            await adminClient.from('purchase_orders').update({
+                remote_task_id: remoteTaskId,
+                status: 'dispatching',
+                delivery_state: 'remote_send_pending',
+            }).eq('id', po.id);
+            po = { ...po, token, remote_task_id: remoteTaskId, status: 'dispatching', delivery_state: 'remote_send_pending' };
+        } catch (e: any) {
+            if (token) {
+                await markPendingReview(po.id, e.code ?? 'remote_send_failed', e.message, {
+                    token,
+                    deliveryState: 'token_generated_remote_send_failed',
+                });
+            } else {
+                try { await releaseHold(hold.id); } catch { /* noop */ }
+                await markFailed(po.id, e.code ?? 'remote_send_failed', e.message);
+            }
+            throw new VendingError(e.message, e.code ?? 'remote_send_failed');
+        }
     }
 
     await logAction({
@@ -544,6 +595,64 @@ export async function reconcileRemoteSendOrders(limit = 25) {
     }
 
     return { checked, delivered, reviewed };
+}
+
+/**
+ * Resend a remote-send order that is stuck in delivery_pending_review.
+ * Uses the token already stored in DB — never re-generates.
+ */
+export async function resendRemoteSendOrder(
+    purchaseOrderId: string,
+    staffUserId: string,
+): Promise<{ taskId: string }> {
+    const { data: row } = await adminClient
+        .from('purchase_orders')
+        .select('*')
+        .eq('id', purchaseOrderId)
+        .maybeSingle();
+
+    if (!row) throw new VendingError('Purchase order not found.', 'not_found');
+    if ((row as any).status !== 'delivery_pending_review') {
+        throw new VendingError('Order is not in delivery_pending_review status.', 'invalid_state');
+    }
+    if (!(row as any).token) {
+        throw new VendingError('No stored token — cannot resend without re-generating.', 'no_token');
+    }
+
+    const po = row as PurchaseOrder;
+    let protocolVersion: string | null = null;
+    try {
+        const meter = await lookupMeter(po.meter_id);
+        protocolVersion = meter.protocolVersion ?? null;
+    } catch { /* proceed without protocol version */ }
+
+    const sendRes = await createRemoteSendTask({
+        customerId:      po.customer_id ?? '',
+        customerName:    po.customer_name ?? '',
+        meterId:         po.meter_id,
+        stationId:       po.station_id ?? '',
+        protocolVersion,
+        token:           po.token!,
+        reference:       po.id,
+    });
+
+    await adminClient.from('purchase_orders').update({
+        remote_task_id:  sendRes.taskId,
+        status:          'dispatching',
+        delivery_state:  'remote_send_pending',
+        failure_reason:  null,
+    }).eq('id', purchaseOrderId);
+
+    await logAction({
+        actorUserId: staffUserId,
+        actorType:   'staff',
+        action:      'vending.remote_send.resend',
+        targetType:  'purchase_order',
+        targetId:    purchaseOrderId,
+        metadata:    { taskId: sendRes.taskId },
+    });
+
+    return { taskId: sendRes.taskId };
 }
 
 function shortReceipt(orderId: string): string {
