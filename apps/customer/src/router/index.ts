@@ -30,6 +30,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/security',   name: 'security', component: () => import('../views/Security.vue'),  meta: { auth: true } },
     { path: '/disputes',   name: 'disputes', component: () => import('../views/Disputes.vue'),  meta: { auth: true } },
     { path: '/help',       name: 'help',     component: () => import('../views/Help.vue'),      meta: { auth: true } },
+    { path: '/error',           name: 'error',     component: () => import('../views/Error.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') },
 ];
 

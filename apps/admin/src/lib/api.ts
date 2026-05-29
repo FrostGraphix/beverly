@@ -99,6 +99,15 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
+export function navigateToError(code: string, message?: string): void {
+    if (typeof window === 'undefined') return;
+    const base = adminBasePath();
+    const url = new URL(`${base}error`, window.location.origin);
+    url.searchParams.set('code', code);
+    if (message) url.searchParams.set('message', message);
+    window.location.assign(url.toString());
+}
+
 let mfaRedirecting = false;
 function handleMfaRequired(): void {
     // Session is valid but the app-level MFA grant expired — keep the token and

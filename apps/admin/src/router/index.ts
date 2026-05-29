@@ -39,6 +39,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/security', name: 'security', component: () => import('../views/Security.vue'), meta: { auth: true } },
     { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { auth: true } },
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue'), meta: { auth: true, permission: 'wallet.dashboard.view' } },
+    { path: '/error',           name: 'error',     component: () => import('../views/Error.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') },
 ];
 
@@ -62,6 +63,6 @@ router.beforeEach(async (to) => {
         }
     }
     const permission = typeof to.meta.permission === 'string' ? to.meta.permission : '';
-    if (permission && !auth.hasPermission(permission)) return { name: 'not-found' };
+    if (permission && !auth.hasPermission(permission)) return { name: 'error', query: { code: 'forbidden' } };
     return true;
 });

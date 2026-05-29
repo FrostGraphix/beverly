@@ -82,6 +82,14 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
+export function navigateToError(code: string, message?: string): void {
+    if (typeof window === 'undefined') return;
+    const url = new URL(`${portalBasePath()}error`, window.location.origin);
+    url.searchParams.set('code', code);
+    if (message) url.searchParams.set('message', message);
+    window.location.assign(url.toString());
+}
+
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',

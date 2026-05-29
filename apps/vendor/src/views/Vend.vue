@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, navigateToError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 
 type Step = 'meter' | 'amount' | 'preview' | 'success';
@@ -137,6 +137,9 @@ async function submitAuthorization() {
         authOpen.value = false;
         step.value = 'success';
     } catch (e: any) {
+        if (e instanceof ApiError && (e.code === 'wallet_frozen' || e.code === 'wallet_inactive')) {
+            navigateToError('wallet_frozen', e.message); return;
+        }
         error.value = describeApiError(e, e?.message ?? 'Vending failed');
     } finally {
         loading.value = false;
