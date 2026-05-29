@@ -90,6 +90,11 @@ const schema = z.object({
     // Firebase Cloud Messaging — push notifications
     FCM_SERVER_KEY: z.string().optional(),
 
+    // Public app base URLs — used to build password-reset links in emails.
+    CUSTOMER_APP_URL: z.string().url().default('https://customer-acob-beverly.vercel.app'),
+    VENDOR_APP_URL: z.string().url().default('https://vendor-acob-beverly.vercel.app'),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
     // services decrypt oem_credentials rows written by the CRM's Settings UI).

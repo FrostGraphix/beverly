@@ -46,6 +46,9 @@ import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
 } from '../services/customer-auth.js';
 import {
+    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+} from '../services/password-reset.js';
+import {
     submitKycTier1, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import {
@@ -280,61 +283,31 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    // ── EMAIL VERIFICATION (email/password accounts) ────────────────────────────
+    // ── PASSWORD RESET (email-auth customers only) ────────────────────────────
 
-    fastify.post('/auth/email/verify/send', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const { data } = await adminClient.from('customers').select('email, full_name').eq('id', req.actor!.customerId!).maybeSingle();
-        const email = (data as any)?.email;
-        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
-        try {
-            await sendEmailVerification(email, (data as any)?.full_name ?? 'there');
-            return { ok: true };
-        } catch (e: any) {
-            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
-            throw e;
+    fastify.post('/auth/email/reset-request', async (req, reply) => {
+        const { email } = req.body as { email?: string };
+        if (!email?.trim()) {
+            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
         }
-    });
-
-    fastify.post('/auth/email/verify/confirm', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const { code } = z.object({ code: z.string().trim().length(6) }).parse(req.body);
-        const { data } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).maybeSingle();
-        const email = (data as any)?.email;
-        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
-        try {
-            await confirmEmailVerification(email, code);
-            return { ok: true };
-        } catch (e: any) {
-            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
-            throw e;
-        }
-    });
-
-    // ── PASSWORD RECOVERY (email/password accounts) ──────────────────────────────
-
-    fastify.post('/auth/email/recover', async (req, reply) => {
-        const { email } = z.object({ email: z.string().email() }).parse(req.body);
-        try {
-            await sendPasswordRecoveryEmail(email);
-        } catch (e: any) {
-            if (e instanceof EmailOtpError && e.code === 'otp_rate_limited') {
-                return reply.code(429).send({ error: e.code, message: e.message });
-            }
-            // Never leak account existence on unexpected errors either.
-        }
+        // Always returns ok to avoid user enumeration.
+        await requestPasswordReset(email.trim().toLowerCase(), 'customer').catch(() => null);
         return { ok: true };
     });
 
-    fastify.post('/auth/email/reset-password', async (req, reply) => {
-        const { email, code, new_password } = z.object({
-            email: z.string().email(),
-            code: z.string().trim().length(6),
-            new_password: z.string().min(8),
-        }).parse(req.body);
+    fastify.post('/auth/email/reset-confirm', async (req, reply) => {
+        const { token, new_password } = req.body as { token?: string; new_password?: string };
+        if (!token || !new_password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
+        }
         try {
-            await confirmPasswordReset(email, code, new_password);
+            await confirmPasswordReset(token, new_password, 'customer');
             return { ok: true };
         } catch (e: any) {
-            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            if (e instanceof PasswordResetError) {
+                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
             throw e;
         }
     });

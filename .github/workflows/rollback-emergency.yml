@@ -1,0 +1,60 @@
+name: Emergency Rollback (1-click)
+
+# One-click rollback for on-call engineers.
+# Reverts the production Vercel alias to LAST_STABLE_DEPLOYMENT_URL
+# without any health checks — use when production is already broken.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type ROLLBACK to confirm emergency revert'
+        required: true
+        type: string
+      override_url:
+        description: 'Optional: override stable URL (leave blank to use recorded last-stable)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  emergency-rollback:
+    name: Emergency rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Confirm intent
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "ROLLBACK" ]; then
+            echo "::error::Confirmation string must be exactly 'ROLLBACK'"
+            exit 1
+          fi
+
+      - name: Resolve target
+        id: target
+        run: |
+          OVERRIDE="${{ github.event.inputs.override_url }}"
+          STABLE="${{ vars.LAST_STABLE_DEPLOYMENT_URL }}"
+          TARGET="${OVERRIDE:-$STABLE}"
+          if [ -z "$TARGET" ]; then
+            echo "::error::No target URL — set LAST_STABLE_DEPLOYMENT_URL or provide override_url"
+            exit 1
+          fi
+          echo "url=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Target: $TARGET"
+
+      - name: Revert production alias
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          npx vercel alias \
+            "${{ steps.target.outputs.url }}" \
+            "${{ vars.PRODUCTION_DOMAIN }}" \
+            --token "$VERCEL_TOKEN" \
+            --scope "$VERCEL_ORG_ID"
+
+      - name: Done
+        run: echo "::notice::🚨 EMERGENCY ROLLBACK COMPLETE → ${{ steps.target.outputs.url }}"

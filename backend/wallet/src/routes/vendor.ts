@@ -31,6 +31,9 @@ import { logAction } from '../services/audit.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import {
+    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+} from '../services/password-reset.js';
+import {
     createTicket, listTickets, getTicket, addTicketMessage,
     getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
 } from '../services/support.js';
@@ -507,6 +510,33 @@ const route: FastifyPluginAsync = async (fastify) => {
             return await disableVendorMfa(actor, code, mfaMeta(req));
         } catch (error) {
             return sendMfaError(reply, error);
+        }
+    });
+
+    // ── password reset (self-service, unauthenticated) ──────────────────────
+    fastify.post('/auth/reset-request', async (req, reply) => {
+        const { email } = req.body as { email?: string };
+        if (!email?.trim()) {
+            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
+        }
+        await requestPasswordReset(email.trim().toLowerCase(), 'vendor_user').catch(() => null);
+        return { ok: true };
+    });
+
+    fastify.post('/auth/reset-confirm', async (req, reply) => {
+        const { token, new_password } = req.body as { token?: string; new_password?: string };
+        if (!token || !new_password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
+        }
+        try {
+            await confirmPasswordReset(token, new_password, 'vendor_user');
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof PasswordResetError) {
+                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
+            throw e;
         }
     });
 
