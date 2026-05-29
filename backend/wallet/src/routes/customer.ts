@@ -41,6 +41,9 @@ import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
 } from '../services/customer-auth.js';
 import {
+    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+} from '../services/password-reset.js';
+import {
     submitKycTier1, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import {
@@ -213,6 +216,35 @@ const customer: FastifyPluginAsync = async (fastify) => {
             if (e instanceof AuthError) {
                 return reply.code(customerAuthStatus(e.code))
                     .send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    // ── PASSWORD RESET (email-auth customers only) ────────────────────────────
+
+    fastify.post('/auth/email/reset-request', async (req, reply) => {
+        const { email } = req.body as { email?: string };
+        if (!email?.trim()) {
+            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
+        }
+        // Always returns ok to avoid user enumeration.
+        await requestPasswordReset(email.trim().toLowerCase(), 'customer').catch(() => null);
+        return { ok: true };
+    });
+
+    fastify.post('/auth/email/reset-confirm', async (req, reply) => {
+        const { token, new_password } = req.body as { token?: string; new_password?: string };
+        if (!token || !new_password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
+        }
+        try {
+            await confirmPasswordReset(token, new_password, 'customer');
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof PasswordResetError) {
+                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
             }
             throw e;
         }

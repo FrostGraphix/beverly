@@ -182,6 +182,9 @@ async function submit() {
               {{ showPassword ? 'Hide' : 'Show' }}
             </button>
           </div>
+          <div style="text-align:right; margin-top: var(--s-1)">
+            <router-link to="/forgot-password" style="font-size:var(--t-xs); color:var(--brand); text-decoration:none">Forgot password?</router-link>
+          </div>
         </div>
       </template>
 

@@ -69,6 +69,11 @@ const schema = z.object({
     POSTMARK_SERVER_TOKEN: z.string().optional(),
     POSTMARK_FROM: z.string().default('Beverly <no-reply@beverly.acoblighting.com>'),
 
+    // Public app base URLs — used to build password-reset links in emails.
+    CUSTOMER_APP_URL: z.string().url().default('https://customer-acob-beverly.vercel.app'),
+    VENDOR_APP_URL: z.string().url().default('https://vendor-acob-beverly.vercel.app'),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
 
     FEATURE_CUSTOMER_WALLET: z.coerce.boolean().default(true),

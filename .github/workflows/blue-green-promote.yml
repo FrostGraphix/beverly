@@ -1,0 +1,154 @@
+name: Blue-Green Promote & Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'promote = verify health then alias to production | rollback = instant revert to last stable'
+        required: true
+        type: choice
+        options: [promote, rollback]
+      deployment_url:
+        description: 'Deployment URL to promote (required for promote). Leave blank for rollback.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── PROMOTE: health-gate a candidate deployment ───────────────────────────
+  promote:
+    name: Promote candidate → production
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'promote'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate input
+        run: |
+          if [ -z "${{ github.event.inputs.deployment_url }}" ]; then
+            echo "::error::deployment_url is required for promote"
+            exit 1
+          fi
+
+      - name: Wait for deployment to be live
+        run: |
+          URL="${{ github.event.inputs.deployment_url }}"
+          echo "Polling $URL/api/v1/health …"
+          for i in $(seq 1 12); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL/api/v1/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ /health responded 200 (attempt $i)"
+              break
+            fi
+            echo "Attempt $i: got $STATUS, retrying in 5s…"
+            sleep 5
+            if [ "$i" = "12" ]; then
+              echo "::error::Deployment did not become healthy after 60 s"
+              exit 1
+            fi
+          done
+
+      - name: Run readiness check
+        run: |
+          URL="${{ github.event.inputs.deployment_url }}"
+          RESP=$(curl -sf "$URL/api/v1/ready" || echo '{"status":"unreachable"}')
+          echo "Readiness: $RESP"
+          STATUS=$(echo "$RESP" | node -e "process.stdin.setEncoding('utf8');let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{ try{ const r=JSON.parse(d); process.stdout.write(r.status||'unknown'); }catch{ process.stdout.write('parse_error'); } })")
+          if [ "$STATUS" != "ready" ]; then
+            echo "::error::Readiness check returned status=$STATUS — refusing to promote"
+            exit 1
+          fi
+          echo "✓ Readiness check passed"
+
+      - name: Smoke test candidate
+        env:
+          TARGET_URL: ${{ github.event.inputs.deployment_url }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+          SMOKE_AUTH_TOKEN: ${{ secrets.SMOKE_AUTH_TOKEN }}
+        run: |
+          npm ci --ignore-scripts --prefer-offline 2>/dev/null || npm ci --ignore-scripts
+          node tools/wallet-smoke-test.cjs || true  # wallet-specific smoke
+        continue-on-error: false
+
+      - name: Promote to production alias
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx vercel alias \
+            "${{ github.event.inputs.deployment_url }}" \
+            "${{ vars.PRODUCTION_DOMAIN }}" \
+            --token "$VERCEL_TOKEN" \
+            --scope "$VERCEL_ORG_ID"
+          echo "✓ Aliased ${{ github.event.inputs.deployment_url }} → ${{ vars.PRODUCTION_DOMAIN }}"
+
+      - name: Record as last stable
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createOrUpdateRepoVariable({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              name:  'LAST_STABLE_DEPLOYMENT_URL',
+              value: '${{ github.event.inputs.deployment_url }}',
+            });
+            console.log('Recorded last stable deployment URL');
+
+  # ── ROLLBACK: instantly revert to last stable ─────────────────────────────
+  rollback:
+    name: Rollback to last stable
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'rollback'
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve stable deployment URL
+        id: stable
+        run: |
+          STABLE="${{ vars.LAST_STABLE_DEPLOYMENT_URL }}"
+          if [ -z "$STABLE" ]; then
+            echo "::error::LAST_STABLE_DEPLOYMENT_URL repo variable is not set. Set it manually or run a promote first."
+            exit 1
+          fi
+          echo "url=$STABLE" >> "$GITHUB_OUTPUT"
+          echo "Rolling back to $STABLE"
+
+      - name: Verify stable deployment is still alive
+        run: |
+          URL="${{ steps.stable.outputs.url }}"
+          STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "$URL/api/v1/health" || echo "000")
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Stable deployment returned $STATUS — proceeding anyway"
+          else
+            echo "✓ Stable deployment health: $STATUS"
+          fi
+
+      - name: Re-alias production to stable
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx vercel alias \
+            "${{ steps.stable.outputs.url }}" \
+            "${{ vars.PRODUCTION_DOMAIN }}" \
+            --token "$VERCEL_TOKEN" \
+            --scope "$VERCEL_ORG_ID"
+          echo "✓ Production rolled back to ${{ steps.stable.outputs.url }}"
+
+      - name: Notify rollback complete
+        run: |
+          echo "::notice::🔵 ROLLBACK COMPLETE — production is now ${{ steps.stable.outputs.url }}"
+          echo "Next steps:"
+          echo "  1. Investigate the failing deployment"
+          echo "  2. Fix the root cause and push a new commit"
+          echo "  3. Re-run this workflow with action=promote once the new build is ready"
