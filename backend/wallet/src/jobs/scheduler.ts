@@ -19,6 +19,7 @@ import { runDailyReconciliation } from '../services/reconciliation.js';
 import { runDailySettlement } from '../services/settlement.js';
 import { refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { reconcileRemoteSendOrders } from '../services/vending.js';
+import { listCtrs, fileCtr } from '../services/compliance-ctr.js';
 
 function safe(name: string, fn: () => Promise<void>): () => void {
     return () => {
@@ -124,6 +125,82 @@ async function recomputeFraudBaselines(): Promise<void> {
     console.info(`[JOB:fraud-baseline] recomputed ${count} customer baselines`);
 }
 
+// ── Dispute SLA escalation ────────────────────────────────────────────────────
+async function escalateOverdueDisputes(): Promise<void> {
+    const now = new Date().toISOString();
+    const { data: overdue } = await adminClient
+        .from('disputes')
+        .select('id, reference, sla_deadline, customer_id')
+        .in('status', ['open', 'under_review'])
+        .is('escalated_at', null)
+        .lte('sla_deadline', now)
+        .limit(50);
+
+    if (!overdue?.length) return;
+    let escalated = 0;
+    for (const d of overdue as any[]) {
+        const { error } = await adminClient
+            .from('disputes')
+            .update({ escalated_at: now })
+            .eq('id', d.id);
+        if (!error) {
+            escalated++;
+            console.warn(`[JOB:sla] escalated dispute ${d.reference} (deadline=${d.sla_deadline})`);
+        }
+    }
+    console.info(`[JOB:sla] escalated ${escalated}/${overdue.length} overdue disputes`);
+}
+
+// ── CTR / CBN nightly sweep ───────────────────────────────────────────────────
+async function sweepUnfiledCtrs(): Promise<void> {
+    const rows = await listCtrs({ status: 'draft', limit: 200 });
+    if (!rows.length) return;
+    console.warn(`[JOB:ctr] ${rows.length} CTRs in draft status — manual filing required`);
+    // Do NOT auto-file: staff must review before submitting to CBN/EFCC.
+}
+
+// ── AML periodic refresh ──────────────────────────────────────────────────────
+async function periodicAmlRefresh(): Promise<void> {
+    // Re-screen active customers whose last screening is > 30 days old
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: toRefresh } = await adminClient
+        .from('customers')
+        .select('id, users(full_name)')
+        .eq('status', 'active')
+        .limit(100);
+
+    if (!toRefresh?.length) return;
+
+    const { screenEntity } = await import('../services/aml-screening.js');
+    let rescreened = 0;
+    for (const c of toRefresh as any[]) {
+        const name = c.users?.full_name;
+        if (!name) continue;
+        // Only re-screen if not recently screened
+        const { data: last } = await adminClient
+            .from('aml_screening_results')
+            .select('created_at')
+            .eq('entity_type', 'customer')
+            .eq('entity_id', c.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if ((last as any)?.created_at > cutoff) continue;
+
+        try {
+            await screenEntity({
+                entityType: 'customer',
+                entityId: c.id,
+                entityName: name,
+                triggerEvent: 'periodic_refresh',
+            });
+            rescreened++;
+        } catch { /* noop per entity */ }
+    }
+    if (rescreened) console.info(`[JOB:aml] rescreened ${rescreened} customers`);
+}
+
 // ── Refund expiry (auto-close refunds pending >7 days) ───────────────────────
 async function processRefundExpiry(): Promise<void> {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -159,6 +236,15 @@ export function startScheduler(): void {
 
     // Refund expiry — every hour
     cron.schedule('0 * * * *', safe('refund-expiry', processRefundExpiry));
+
+    // Dispute SLA escalation — every 15 min
+    cron.schedule('*/15 * * * *', safe('sla-escalation', escalateOverdueDisputes));
+
+    // CTR draft sweep — 04:00 daily (after reconciliation and settlement)
+    cron.schedule('0 4 * * *', safe('ctr-sweep', sweepUnfiledCtrs));
+
+    // AML periodic refresh — 06:00 daily
+    cron.schedule('0 6 * * *', safe('aml-refresh', periodicAmlRefresh));
 
     console.info('[scheduler] all jobs registered');
 }

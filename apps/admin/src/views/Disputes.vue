@@ -24,16 +24,26 @@
               <th>Subject</th>
               <th>Org</th>
               <th>Status</th>
+              <th>SLA</th>
               <th>Created</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in disputes" :key="d.id">
+            <tr v-for="d in disputes" :key="d.id" :class="{ 'bw-row-escalated': d.escalated_at }">
               <td class="bw-mono bw-text-sm">{{ d.reference || d.id?.slice(0, 8).toUpperCase() }}</td>
-              <td class="bw-text-sm" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.subject || '—' }}</td>
+              <td class="bw-text-sm" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.subject || '—' }}</td>
               <td class="bw-mono bw-text-sm">{{ d.vendor_organizations?.trading_name || d.vendor_organizations?.legal_name || '—' }}</td>
-              <td><span :class="statusClass(d.status)" class="bw-badge">{{ statusLabel(d.status) }}</span></td>
+              <td>
+                <span :class="statusClass(d.status)" class="bw-badge">{{ statusLabel(d.status) }}</span>
+                <span v-if="d.escalated_at" class="bw-badge bw-badge-danger" style="margin-left:.25rem;font-size:.65rem">ESC</span>
+              </td>
+              <td class="bw-text-sm">
+                <span v-if="d.sla_deadline && !d.resolved_at" :class="slaClass(d)" :title="fmtDate(d.sla_deadline)">
+                  {{ slaLabel(d) }}
+                </span>
+                <span v-else class="bw-text-muted">—</span>
+              </td>
               <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
               <td>
                 <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDetail(d)">Review</button>
@@ -79,6 +89,10 @@
           <div class="bw-dispute-meta">
             <span>Org: <code class="bw-mono">{{ selected.vendor_organizations?.legal_name || selected.vendor_organization_id?.slice(0, 8) }}</code></span>
             <span>Actor: <code class="bw-mono">{{ selected.raised_by_actor_id?.slice(0, 8) }}</code></span>
+            <span v-if="selected.sla_deadline">
+              SLA: <strong :class="slaClass(selected)">{{ fmtDate(selected.sla_deadline) }}</strong>
+            </span>
+            <span v-if="selected.escalated_at" class="bw-badge bw-badge-danger">ESCALATED {{ fmtDate(selected.escalated_at) }}</span>
           </div>
 
           <div class="bw-section-label">Thread</div>
@@ -206,6 +220,24 @@ function statusClass(s: string) {
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 
+function slaClass(d: any) {
+  if (!d.sla_deadline) return '';
+  if (d.escalated_at)  return 'bw-sla-breached';
+  const remaining = new Date(d.sla_deadline).getTime() - Date.now();
+  if (remaining < 0)            return 'bw-sla-breached';
+  if (remaining < 4 * 3600000) return 'bw-sla-warning';
+  return 'bw-sla-ok';
+}
+
+function slaLabel(d: any) {
+  if (!d.sla_deadline) return '—';
+  const remaining = new Date(d.sla_deadline).getTime() - Date.now();
+  if (remaining < 0) return 'Overdue';
+  const h = Math.floor(remaining / 3600000);
+  const m = Math.floor((remaining % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 onMounted(load);
 </script>
 
@@ -221,4 +253,8 @@ onMounted(load);
 .bw-section-label { font-size: .75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin: 1rem 0 .25rem; }
 .bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 .bw-tc-ref { font-size: var(--t-sm); }
+.bw-row-escalated { background: oklch(from var(--danger, #ef4444) l c h / 0.04); }
+.bw-sla-ok      { color: var(--success, #22c55e); font-weight: 600; font-size: .8rem; }
+.bw-sla-warning { color: var(--warn, #f59e0b);    font-weight: 600; font-size: .8rem; }
+.bw-sla-breached{ color: var(--danger, #ef4444);  font-weight: 700; font-size: .8rem; }
 </style>

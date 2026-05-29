@@ -1,14 +1,15 @@
 /**
- * BullMQ queue scaffold.
+ * BullMQ queue scaffold — Phase 3 tuned.
  *
  * Queues:
- *   • notifications  — outbound SMS/email/push
- *   • payments       — gateway status sweepers, refund retries
- *   • holds          — hold-expiry sweeper trigger
- *   • audit          — non-blocking audit writes (rare; most are sync)
+ *   • notifications  — outbound SMS/email/push          (concurrency 5, 3 retries)
+ *   • payments       — gateway status sweepers           (concurrency 3, 5 retries)
+ *   • holds          — hold-expiry sweeper trigger       (concurrency 2, 3 retries)
+ *   • audit          — non-blocking audit writes         (concurrency 10, 0 retries)
+ *   • compliance     — CTR generation, AML screening     (concurrency 2, 5 retries)
  *
- * Workers are wired in src/workers/* — kept separate so they can run as
- * dedicated processes in production.
+ * Workers live in src/workers/* and run as dedicated processes in production.
+ * Retry policy: exponential back-off starting at 1 s.
  */
 import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
@@ -26,7 +27,11 @@ function disabledQueue(name: string): Queue {
 }
 
 const connection = queuesEnabled
-    ? new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null })
+    ? new IORedis(env.REDIS_URL, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck:     false,
+        lazyConnect:          true,
+    })
     : ({
         async ping() {
             throw new Error('Redis queues are disabled in development.');
@@ -34,16 +39,39 @@ const connection = queuesEnabled
         async quit() {},
     } as unknown as IORedis);
 
+// Shared retry options — exponential back-off capped at 60 s
+const retryOpts = (attempts: number) => ({
+    attempts,
+    backoff: { type: 'exponential' as const, delay: 1000 },
+    removeOnComplete: { count: 500 },
+    removeOnFail:     { count: 200 },
+});
+
 if (queuesEnabled) {
     connection.on('error', (err) => {
         console.error('[redis] queue connection error:', err);
     });
 }
 
-export const notificationsQueue = queuesEnabled ? new Queue('notifications', { connection }) : disabledQueue('notifications');
-export const paymentsQueue      = queuesEnabled ? new Queue('payments', { connection }) : disabledQueue('payments');
-export const holdsQueue         = queuesEnabled ? new Queue('holds', { connection }) : disabledQueue('holds');
-export const auditQueue         = queuesEnabled ? new Queue('audit', { connection }) : disabledQueue('audit');
+export const notificationsQueue = queuesEnabled
+    ? new Queue('notifications', { connection, defaultJobOptions: retryOpts(3) })
+    : disabledQueue('notifications');
+
+export const paymentsQueue = queuesEnabled
+    ? new Queue('payments', { connection, defaultJobOptions: retryOpts(5) })
+    : disabledQueue('payments');
+
+export const holdsQueue = queuesEnabled
+    ? new Queue('holds', { connection, defaultJobOptions: retryOpts(3) })
+    : disabledQueue('holds');
+
+export const auditQueue = queuesEnabled
+    ? new Queue('audit', { connection, defaultJobOptions: retryOpts(0) })
+    : disabledQueue('audit');
+
+export const complianceQueue = queuesEnabled
+    ? new Queue('compliance', { connection, defaultJobOptions: retryOpts(5) })
+    : disabledQueue('compliance');
 
 export const notificationsEvents = queuesEnabled
     ? new QueueEvents('notifications', { connection })
@@ -55,6 +83,7 @@ export async function closeQueues() {
         paymentsQueue.close(),
         holdsQueue.close(),
         auditQueue.close(),
+        complianceQueue.close(),
         notificationsEvents.close(),
     ]);
     await connection.quit();

@@ -1145,6 +1145,43 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return { ok: true, preferences: merged };
     });
+
+    // ── KYC document upload ───────────────────────────────────────────────────
+
+    fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const schema = z.object({
+            doc_type:       z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie', 'signature']),
+            kyc_tier:       z.literal(1).or(z.literal(2)),
+            mime_type:      z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
+            size_bytes:     z.number().int().positive().max(10 * 1024 * 1024),
+            doc_expires_at: z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const { generateUploadUrl, KycDocumentError } = await import('../services/kyc-documents.js');
+        try {
+            const result = await generateUploadUrl({
+                customerId:   req.actor!.customerId!,
+                docType:      body.doc_type,
+                kycTier:      body.kyc_tier,
+                mimeType:     body.mime_type,
+                sizeBytes:    body.size_bytes,
+                docExpiresAt: body.doc_expires_at,
+            });
+            return result;
+        } catch (e: any) {
+            const code = e instanceof KycDocumentError ? 400 : 500;
+            return reply.code(code).send({ error: e.code ?? 'upload_url_failed', message: e.message });
+        }
+    });
+
+    fastify.get('/kyc/documents', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const { listDocuments } = await import('../services/kyc-documents.js');
+        const docs = await listDocuments(req.actor!.customerId!);
+        return { documents: docs };
+    });
 };
 
 export default customer;

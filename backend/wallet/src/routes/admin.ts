@@ -2388,6 +2388,285 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'review_failed', message: e.message });
         }
     });
+
+    // ── Bulk wallet operations (super-admin only) ───────────────────────────────
+
+    fastify.post('/wallets/bulk-status', async (req, reply) => {
+        if (!requireWalletStatusManager(req, reply)) return undefined;
+        const schema = z.object({
+            walletIds: z.array(z.string().uuid()).min(1).max(100),
+            status:    z.enum(['active', 'frozen', 'closed']),
+            reason:    z.string().min(4),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+        for (const walletId of body.walletIds) {
+            try {
+                await setWalletStatus(walletId, body.status);
+                await logAction({
+                    actorUserId: req.actor!.userId,
+                    actorType:   'staff',
+                    actorRole:   req.actor!.role,
+                    action:      `wallet.bulk.${body.status}`,
+                    targetType:  'wallet',
+                    targetId:    walletId,
+                    metadata:    { reason: body.reason },
+                }).catch(() => undefined);
+                results.push({ id: walletId, ok: true });
+            } catch (e: any) {
+                results.push({ id: walletId, ok: false, error: e.message });
+            }
+        }
+        return { results };
+    });
+
+    fastify.post('/wallets/bulk-limits', async (req, reply) => {
+        if (!requireWalletStatusManager(req, reply)) return undefined;
+        const schema = z.object({
+            walletIds:         z.array(z.string().uuid()).min(1).max(100),
+            dailyCapMinor:     z.number().int().positive().optional(),
+            monthlyCapMinor:   z.number().int().positive().optional(),
+            reason:            z.string().min(4),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        if (!body.dailyCapMinor && !body.monthlyCapMinor) {
+            return reply.code(400).send({ error: 'no_changes', message: 'Provide at least one cap value.' });
+        }
+
+        const patch: Record<string, number> = {};
+        if (body.dailyCapMinor)   patch.daily_debit_cap_minor   = body.dailyCapMinor;
+        if (body.monthlyCapMinor) patch.monthly_debit_cap_minor = body.monthlyCapMinor;
+
+        const { error } = await adminClient
+            .from('wallets')
+            .update(patch)
+            .in('id', body.walletIds);
+
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType:   'staff',
+            actorRole:   req.actor!.role,
+            action:      'wallet.bulk.limits_update',
+            targetType:  'wallet',
+            targetId:    body.walletIds.join(','),
+            metadata:    { ...patch, reason: body.reason, count: body.walletIds.length },
+        }).catch(() => undefined);
+        return { ok: true, updated: body.walletIds.length };
+    });
+
+    // ── Compliance — CTR ────────────────────────────────────────────────────────
+
+    fastify.get('/compliance/ctrs', async (req) => {
+        const q = req.query as Record<string, string>;
+        const { listCtrs } = await import('../services/compliance-ctr.js');
+        const rows = await listCtrs({
+            status:     q.status,
+            walletId:   q.wallet_id,
+            customerId: q.customer_id,
+            since:      q.since,
+            until:      q.until,
+            limit:      q.limit ? Math.min(Number(q.limit), 500) : 100,
+            cursor:     q.cursor,
+        });
+        return { ctrs: rows, count: rows.length };
+    });
+
+    fastify.get('/compliance/ctrs/stats', async () => {
+        const { getCtrStats } = await import('../services/compliance-ctr.js');
+        return getCtrStats();
+    });
+
+    fastify.post('/compliance/ctrs/:id/file', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ filing_reference: z.string().optional() });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        const { fileCtr, CtrError } = await import('../services/compliance-ctr.js');
+        try {
+            await fileCtr(id, req.actor!.userId, body.filing_reference);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType:   'staff',
+                actorRole:   req.actor!.role,
+                action:      'compliance.ctr.file',
+                targetType:  'ctr',
+                targetId:    id,
+                metadata:    { filing_reference: body.filing_reference },
+            }).catch(() => undefined);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'file_failed', message: e.message });
+        }
+    });
+
+    fastify.get('/compliance/ctrs/report', async (req, reply) => {
+        const q = req.query as Record<string, string>;
+        const since = q.since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const until = q.until ?? new Date().toISOString();
+        const { buildCbnReport } = await import('../services/compliance-ctr.js');
+        const report = await buildCbnReport(since, until);
+        reply.header('Content-Type', 'application/json');
+        reply.header('Content-Disposition', `attachment; filename="cbn-ctr-report-${since.slice(0, 10)}.json"`);
+        return report;
+    });
+
+    // ── Compliance — AML / Sanctions ───────────────────────────────────────────
+
+    fastify.get('/compliance/aml', async (req) => {
+        const q = req.query as Record<string, string>;
+        const { listScreenings } = await import('../services/aml-screening.js');
+        const rows = await listScreenings({
+            entityType: q.entity_type,
+            status:     q.status,
+            since:      q.since,
+            limit:      q.limit ? Math.min(Number(q.limit), 500) : 100,
+        });
+        return { screenings: rows, count: rows.length };
+    });
+
+    fastify.post('/compliance/aml/:id/review', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            status: z.enum(['whitelisted', 'blocked', 'clear']),
+            note:   z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        const { reviewScreening } = await import('../services/aml-screening.js');
+        try {
+            await reviewScreening(id, req.actor!.userId, body.status, body.note);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType:   'staff',
+                actorRole:   req.actor!.role,
+                action:      'compliance.aml.review',
+                targetType:  'aml_screening',
+                targetId:    id,
+                metadata:    { new_status: body.status, note: body.note },
+            }).catch(() => undefined);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'review_failed', message: e.message });
+        }
+    });
+
+    fastify.get('/compliance/sanctions', async (req) => {
+        const q = req.query as Record<string, string>;
+        const { listSanctionsEntries } = await import('../services/aml-screening.js');
+        const rows = await listSanctionsEntries({
+            active: q.active !== undefined ? q.active === 'true' : true,
+            limit:  q.limit ? Math.min(Number(q.limit), 500) : 200,
+        });
+        return { entries: rows, count: rows.length };
+    });
+
+    fastify.post('/compliance/sanctions', async (req, reply) => {
+        const schema = z.object({
+            full_name:    z.string().min(2),
+            aliases:      z.array(z.string()).optional(),
+            bvn_partial:  z.string().length(4).optional(),
+            nin_partial:  z.string().length(4).optional(),
+            nationality:  z.string().optional(),
+            source:       z.enum(['EFCC', 'INTERPOL', 'OFAC', 'CBN', 'internal']),
+            list_date:    z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        const { addSanctionsEntry } = await import('../services/aml-screening.js');
+        try {
+            const id = await addSanctionsEntry({
+                fullName:        body.full_name,
+                aliases:         body.aliases,
+                bvnPartial:      body.bvn_partial,
+                ninPartial:      body.nin_partial,
+                nationality:     body.nationality,
+                source:          body.source,
+                listDate:        body.list_date,
+                addedByUserId:   req.actor!.userId,
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType:   'staff',
+                actorRole:   req.actor!.role,
+                action:      'compliance.sanctions.add',
+                targetType:  'sanctions_entry',
+                targetId:    id,
+                metadata:    { full_name: body.full_name, source: body.source },
+            }).catch(() => undefined);
+            return { ok: true, id };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'insert_failed', message: e.message });
+        }
+    });
+
+    // ── KYC document admin ──────────────────────────────────────────────────────
+
+    fastify.get('/kyc/documents/pending', async (req) => {
+        const q = req.query as { limit?: string };
+        const { listPendingDocuments } = await import('../services/kyc-documents.js');
+        const docs = await listPendingDocuments({ limit: q.limit ? Number(q.limit) : 100 });
+        return { documents: docs, count: docs.length };
+    });
+
+    fastify.get('/kyc/documents/:customerId', async (req) => {
+        const customerId = (req.params as { customerId: string }).customerId;
+        const { listDocuments } = await import('../services/kyc-documents.js');
+        const docs = await listDocuments(customerId);
+        return { documents: docs };
+    });
+
+    fastify.get('/kyc/documents/:customerId/:docId/url', async (req, reply) => {
+        const { docId } = req.params as { customerId: string; docId: string };
+        const { getDownloadUrl, KycDocumentError } = await import('../services/kyc-documents.js');
+        try {
+            const url = await getDownloadUrl(docId);
+            return { url };
+        } catch (e: any) {
+            const code = e instanceof KycDocumentError && e.code === 'not_found' ? 404 : 400;
+            return reply.code(code).send({ error: e.code ?? 'url_failed', message: e.message });
+        }
+    });
+
+    fastify.post('/kyc/documents/:docId/review', async (req, reply) => {
+        const docId = (req.params as { docId: string }).docId;
+        const schema = z.object({
+            approve:         z.boolean(),
+            rejection_note:  z.string().optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        const { reviewDocument, KycDocumentError } = await import('../services/kyc-documents.js');
+        try {
+            await reviewDocument({
+                docId,
+                reviewedByUserId: req.actor!.userId,
+                approve:          body.approve,
+                rejectionNote:    body.rejection_note,
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType:   'staff',
+                actorRole:   req.actor!.role,
+                action:      body.approve ? 'kyc.document.approve' : 'kyc.document.reject',
+                targetType:  'kyc_document',
+                targetId:    docId,
+                metadata:    { rejection_note: body.rejection_note },
+            }).catch(() => undefined);
+            return { ok: true };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'review_failed', message: e.message });
+        }
+    });
 };
 
 export default route;
