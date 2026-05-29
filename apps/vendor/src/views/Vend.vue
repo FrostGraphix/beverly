@@ -3,8 +3,7 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
-import StatusPopup from '../components/StatusPopup.vue';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, navigateToError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
@@ -232,15 +231,8 @@ async function submitAuthorization() {
         authOpen.value = false;
         step.value = 'success';
     } catch (e: any) {
-        if (e instanceof ApiError && e.code === 'vend_credential_required') {
-            authOpen.value = false;
-            authorization.value = '';
-            await router.push({ path: '/vend-access', query: { redirect: route.fullPath } });
-            return;
-        }
-        if (e instanceof ApiError && e.code === 'invalid_vend_credential') {
-            authError.value = 'Invalid vendor authorization.';
-            return;
+        if (e instanceof ApiError && (e.code === 'wallet_frozen' || e.code === 'wallet_inactive')) {
+            navigateToError('wallet_frozen', e.message); return;
         }
         error.value = describeApiError(e, e?.message ?? 'Vending failed');
     } finally {

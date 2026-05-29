@@ -99,8 +99,13 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
-function shouldRedirectUnauthorized(path: string): boolean {
-    return path !== '/api/v1/admin/me';
+export function navigateToError(code: string, message?: string): void {
+    if (typeof window === 'undefined') return;
+    const base = adminBasePath();
+    const url = new URL(`${base}error`, window.location.origin);
+    url.searchParams.set('code', code);
+    if (message) url.searchParams.set('message', message);
+    window.location.assign(url.toString());
 }
 
 let mfaRedirecting = false;

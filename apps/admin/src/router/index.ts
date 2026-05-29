@@ -42,18 +42,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/security', name: 'security', component: () => import('../views/Security.vue'), meta: { auth: true } },
     { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { auth: true } },
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue'), meta: { auth: true, permission: 'wallet.dashboard.view' } },
-    // Developer Console
-    { path: '/dev', redirect: '/dev/api-keys' },
-    { path: '/dev/api-keys', name: 'dev-api-keys', component: () => import('../views/DevApiKeys.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/webhooks', name: 'dev-webhooks', component: () => import('../views/DevWebhooks.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/api-log', name: 'dev-api-log', component: () => import('../views/DevApiLog.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/sandbox', name: 'dev-sandbox', component: () => import('../views/DevSandbox.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/service-health', name: 'dev-service-health', component: () => import('../views/DevServiceHealth.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/queue-monitor', name: 'dev-queue-monitor', component: () => import('../views/DevQueueMonitor.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/error-explorer', name: 'dev-error-explorer', component: () => import('../views/DevErrorExplorer.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/toolkit', name: 'dev-toolkit', component: () => import('../views/DevToolkit.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/sys-config', name: 'dev-sys-config', component: () => import('../views/DevSysConfig.vue'), meta: { auth: true, permission: 'dev.console' } },
-    { path: '/dev/schema', name: 'dev-schema', component: () => import('../views/DevSchemaExplorer.vue'), meta: { auth: true, permission: 'dev.console' } },
+    { path: '/error',           name: 'error',     component: () => import('../views/Error.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') },
 ];
 
@@ -79,6 +68,6 @@ router.beforeEach(async (to) => {
         }
     }
     const permission = typeof to.meta.permission === 'string' ? to.meta.permission : '';
-    if (permission && !auth.hasPermission(permission)) return { name: 'not-found' };
+    if (permission && !auth.hasPermission(permission)) return { name: 'error', query: { code: 'forbidden' } };
     return true;
 });

@@ -92,71 +92,12 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
-function shouldRedirectUnauthorized(path: string): boolean {
-    return path !== '/api/v1/vendor/me' && path !== '/api/v1/vendor/logout';
-}
-
-function rememberTokenStorage(): boolean {
-    try { return localStorage.getItem(TOKEN_KEY) !== null; } catch { return true; }
-}
-
-function readVendorRefreshToken(): string | null {
-    try { return sessionStorage.getItem(REFRESH_TOKEN_KEY) ?? localStorage.getItem(REFRESH_TOKEN_KEY); }
-    catch { try { return localStorage.getItem(REFRESH_TOKEN_KEY); } catch { return null; } }
-}
-
-function readTokenExpiresAt(): number | null {
-    try {
-        const raw = sessionStorage.getItem(TOKEN_EXPIRES_AT_KEY) ?? localStorage.getItem(TOKEN_EXPIRES_AT_KEY);
-        const value = Number(raw ?? 0);
-        return Number.isFinite(value) && value > 0 ? value : null;
-    } catch {
-        return null;
-    }
-}
-
-function tokenExpiresSoon(): boolean {
-    const expiresAt = readTokenExpiresAt();
-    return expiresAt !== null && expiresAt - Date.now() <= REFRESH_SKEW_MS;
-}
-
-function storeRefreshedToken(accessToken: string, refreshToken: string, expiresAt: number | null, expiresIn: number | null): void {
-    const storage = rememberTokenStorage() ? localStorage : sessionStorage;
-    storage.setItem(TOKEN_KEY, accessToken);
-    storage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-    const nextExpiresAt = expiresAt ? expiresAt * 1000 : expiresIn ? Date.now() + expiresIn * 1000 : null;
-    if (nextExpiresAt) storage.setItem(TOKEN_EXPIRES_AT_KEY, String(nextExpiresAt));
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-    const refreshToken = readVendorRefreshToken();
-    if (!refreshToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-    if (!refreshPromise) {
-        refreshPromise = (async () => {
-            const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-                body: JSON.stringify({ refresh_token: refreshToken }),
-            });
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok || typeof json.access_token !== 'string') return null;
-            storeRefreshedToken(
-                json.access_token,
-                typeof json.refresh_token === 'string' ? json.refresh_token : refreshToken,
-                typeof json.expires_at === 'number' ? json.expires_at : null,
-                typeof json.expires_in === 'number' ? json.expires_in : null,
-            );
-            return json.access_token as string;
-        })().finally(() => {
-            refreshPromise = null;
-        });
-    }
-    return refreshPromise;
-}
-
-async function requestToken(): Promise<string | null> {
-    if (tokenExpiresSoon()) return await refreshAccessToken() ?? getToken();
-    return getToken();
+export function navigateToError(code: string, message?: string): void {
+    if (typeof window === 'undefined') return;
+    const url = new URL(`${portalBasePath()}error`, window.location.origin);
+    url.searchParams.set('code', code);
+    if (message) url.searchParams.set('message', message);
+    window.location.assign(url.toString());
 }
 
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {

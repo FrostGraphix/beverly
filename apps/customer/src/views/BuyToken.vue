@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api, ApiError, redirectToPayment } from '../lib/api';
+import { api, redirectToPayment, navigateToError, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useAuthStore } from '../stores/auth';
@@ -89,6 +89,9 @@ onMounted(async () => {
     ]);
     meters.value = m.meters;
     walletBal.value = w?.available_minor ?? 0;
+    if (w?.status === 'frozen' || w?.status === 'inactive') {
+        navigateToError('wallet_frozen'); return;
+    }
     if (meters.value.length === 1) selMeter.value = meters.value[0];
     const query = new URLSearchParams(window.location.search);
     const reference = query.get('reference') ?? query.get('trxref');
@@ -165,7 +168,13 @@ async function purchase() {
         };
         step.value   = 4;
     } catch (e: any) {
-        error.value = describeApiError(e, e?.message ?? 'Purchase failed. Try again.');
+        if (e instanceof ApiError && (e.code === 'wallet_frozen' || e.code === 'wallet_inactive' || e.code === 'wallet_closed')) {
+            navigateToError('wallet_frozen', e.message); return;
+        }
+        if (e instanceof ApiError && e.code === 'purchase_blocked') {
+            navigateToError('purchase_blocked', e.message); return;
+        }
+        error.value = e?.message ?? 'Purchase failed. Try again.';
     } finally { loading.value = false; }
 }
 

@@ -99,49 +99,12 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
-function shouldRedirectUnauthorized(path: string): boolean {
-    return !path.startsWith('/api/v1/customer/auth/') && path !== '/api/v1/customer/me' && path !== '/api/v1/customer/logout';
-}
-
-function rememberTokenStorage(): boolean {
-    try { return localStorage.getItem(TOKEN_KEY) !== null; } catch { return true; }
-}
-
-function tokenExpiresSoon(): boolean {
-    const expiresAt = readCustomerTokenExpiresAt();
-    return expiresAt !== null && expiresAt - Date.now() <= REFRESH_SKEW_MS;
-}
-
-async function refreshAccessToken(): Promise<string | null> {
-    const refreshToken = readCustomerRefreshToken();
-    if (!refreshToken || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-    if (!refreshPromise) {
-        refreshPromise = (async () => {
-            const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-                body: JSON.stringify({ refresh_token: refreshToken }),
-            });
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok || typeof json.access_token !== 'string') return null;
-            storeCustomerToken(json.access_token, rememberTokenStorage(), {
-                refreshToken: typeof json.refresh_token === 'string' ? json.refresh_token : refreshToken,
-                expiresAt: typeof json.expires_at === 'number' ? json.expires_at : null,
-                expiresIn: typeof json.expires_in === 'number' ? json.expires_in : null,
-            });
-            return json.access_token as string;
-        })().finally(() => {
-            refreshPromise = null;
-        });
-    }
-    return refreshPromise;
-}
-
-async function requestToken(path: string): Promise<string | null> {
-    if (!path.startsWith('/api/v1/customer/auth/') && tokenExpiresSoon()) {
-        return await refreshAccessToken() ?? getToken();
-    }
-    return getToken();
+export function navigateToError(code: string, message?: string): void {
+    if (typeof window === 'undefined') return;
+    const url = new URL(`${portalBasePath()}error`, window.location.origin);
+    url.searchParams.set('code', code);
+    if (message) url.searchParams.set('message', message);
+    window.location.assign(url.toString());
 }
 
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
