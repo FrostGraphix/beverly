@@ -28,7 +28,8 @@ export type EntryType =
     | 'reversal_credit'
     | 'reversal_debit'
     | 'fee_debit'
-    | 'promo_credit';
+    | 'promo_credit'
+    | 'refund_credit';
 
 export interface LedgerEntry {
     id: string;
