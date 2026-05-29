@@ -48,9 +48,29 @@ export async function createRefundRequest(input: {
 }
 
 export async function approveRefund(refundRequestId: string, approvedByUserId: string): Promise<void> {
-    const { data: approved, error } = await adminClient.rpc('fn_approve_refund_request', {
-        p_refund_request_id: refundRequestId,
-        p_approved_by_user_id: approvedByUserId,
+    const { data: req } = await adminClient
+        .from('refund_requests')
+        .select('*')
+        .eq('id', refundRequestId)
+        .single();
+
+    if (!req) throw new RefundError('Refund request not found', 'not_found');
+    if ((req as any).status !== 'pending') throw new RefundError('Refund is not pending', 'invalid_status');
+    if ((req as any).requested_by_user_id === approvedByUserId) {
+        throw new RefundError('Approver must be different from requester (maker-checker)', 'maker_checker_violation');
+    }
+
+    // Write ledger credit
+    const { data: entry, error: ledgerErr } = await adminClient.rpc('fn_post_ledger_entry', {
+        p_wallet_id:         (req as any).wallet_id,
+        p_direction:         'credit',
+        p_entry_type:        'refund_credit',
+        p_amount_minor:      (req as any).amount_minor,
+        p_reference_type:    'refund_request',
+        p_reference_id:      refundRequestId,
+        p_memo:              `Refund: ${(req as any).reason}`,
+        p_idempotency_key:   `refund_${refundRequestId}`,
+        p_created_by:        approvedByUserId,
     });
     if (error) {
         const message = error.message.toLowerCase();

@@ -42,12 +42,12 @@ export async function sweepExpiredHolds(): Promise<void> {
         if (protectedHoldIds.has(hold.id)) continue;
         const { error } = await adminClient.rpc('fn_release_hold', { p_hold_id: hold.id });
         if (error) {
-            console.error(`[JOB:holds] release failed for ${hold.id}:`, error);
-            continue;
+            console.error(`[JOB:holds] release failed hold=${hold.id}:`, error.message);
+        } else {
+            released++;
         }
-        released++;
     }
-    console.info(`[JOB:holds] released ${released} expired holds`);
+    console.info(`[JOB:holds] released ${released}/${stale.length} expired holds`);
 }
 
 // ── Payment status sweeper ────────────────────────────────────────────────────

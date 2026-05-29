@@ -76,11 +76,66 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(200).send({ ok: true, ignored: 'no_reference' });
         }
 
-        try {
-            const result = await processPaystackChargeSuccess(reference, 'webhook');
-            await markWebhookProcessed(webhookId, result.status === 'ignored' || result.status === 'blocked' ? result.reason : undefined);
-            if (result.status === 'ignored') {
-                return reply.code(200).send({ ok: true, ignored: result.reason });
+        // verify server-side
+        const verified = await verifyTransaction(reference);
+        if (verified.status !== 'success') {
+            await markWebhookProcessed(payload, `verify_status=${verified.status}`);
+            return reply.code(200).send({ ok: true, ignored: `verify_${verified.status}` });
+        }
+
+        // find payment_transaction
+        const { data: tx } = await adminClient
+            .from('payment_transactions')
+            .select('*')
+            .eq('gateway_reference', reference)
+            .maybeSingle();
+        if (!tx) {
+            await markWebhookProcessed(payload, 'no_local_tx');
+            return reply.code(200).send({ ok: true, ignored: 'no_local_tx' });
+        }
+
+        // already done? idempotent
+        if ((tx as any).status === 'succeeded') {
+            await markWebhookProcessed(payload);
+            return { ok: true, already: true };
+        }
+
+        // Vendor wallet funding (via funding_request)
+        if ((tx as any).purpose === 'wallet_funding' && (tx as any).actor_type === 'vendor') {
+            const fundingId = (tx as any).metadata?.funding_request_id as string | undefined;
+            if (fundingId) {
+                const { data: fr } = await adminClient.from('funding_requests').select('*').eq('id', fundingId).maybeSingle();
+                if (fr) {
+                    const wallet = await findWalletByOwner('vendor', (fr as any).vendor_organization_id);
+                    try {
+                        assertWalletCanTransact(wallet, 'receive funding');
+                    } catch (error: any) {
+                        await blockWebhookFulfillment(tx, payload, error);
+                        return reply.code(200).send({ ok: true, blocked: error.code ?? 'wallet_inactive' });
+                    }
+                    if (wallet.id !== (fr as any).wallet_id) {
+                        await adminClient
+                            .from('funding_requests')
+                            .update({ wallet_id: wallet.id })
+                            .eq('id', (fr as any).id);
+                    }
+                    await postEntry({
+                        walletId: wallet.id,
+                        direction: 'credit',
+                        amountMinor: (fr as any).amount_minor,
+                        entryType: 'payment_credit',
+                        referenceType: 'funding_request',
+                        referenceId: (fr as any).id,
+                        idempotencyKey: `funding.${(fr as any).id}.paystack.credit`,
+                        memo: `Paystack ${reference}`,
+                        createdBy: (fr as any).submitted_by,
+                        audit: { actorType: 'webhook' },
+                    });
+                    await adminClient.from('funding_requests').update({
+                        status: 'approved',
+                        approved_at: new Date().toISOString(),
+                    }).eq('id', (fr as any).id);
+                }
             }
             if (result.status === 'blocked') {
                 return reply.code(200).send({ ok: true, blocked: result.reason });
@@ -97,7 +152,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             processed: true,
             processed_at: new Date().toISOString(),
             error: error ?? null,
-        }).eq('id', webhookId).eq('processed', false);
+        }).eq('gateway_reference', payload.data?.reference ?? '').not('processed', 'is', true);
     }
 
     async function setWebhookRetryError(webhookId: string, error: string) {

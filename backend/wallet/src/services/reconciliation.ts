@@ -20,7 +20,7 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         .from('reconciliation_runs')
         .select('id, status')
         .eq('run_date', date)
-        .single();
+        .maybeSingle();
     if (existing && (existing as any).status === 'ok') return;
 
     const { data: runRow } = await adminClient

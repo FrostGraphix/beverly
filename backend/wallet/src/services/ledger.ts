@@ -171,9 +171,12 @@ export async function createHold(input: HoldInput): Promise<Hold> {
     } catch (error: any) {
         throw new LedgerError(error.message, error.code ?? 'wallet_inactive');
     }
-    const ttl = input.ttlSeconds ?? 900;
-    if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) {
-        throw new LedgerError('hold ttl must be between one second and one hour', 'invalid_hold_ttl');
+
+    // Fast-fail balance check. Note: not atomic — concurrent holds can bypass this.
+    // The authoritative guard is fn_capture_hold / fn_post_ledger_entry at debit time.
+    const bal = await getBalance(input.walletId);
+    if (bal.availableMinor < input.amountMinor) {
+        throw new LedgerError('insufficient available balance for hold', 'insufficient_balance');
     }
     const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
 
