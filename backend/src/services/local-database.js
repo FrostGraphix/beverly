@@ -43,7 +43,9 @@ function createMemoryStore() {
     wallet_approval_requests: [],
     wallet_reconciliation_runs: [],
     wallet_risk_events: [],
-    sms_notifications: []
+    sms_notifications: [],
+    meter_token_overrides: new Map(),
+    sgc_token_rules: new Map()
   };
 }
 
@@ -468,10 +470,169 @@ function ensureDatabase() {
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS meter_token_overrides (
+      meter_id TEXT PRIMARY KEY,
+      is_s2 INTEGER NOT NULL,
+      note TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sgc_token_rules (
+      sgc TEXT PRIMARY KEY,
+      is_s2 INTEGER NOT NULL,
+      note TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   seedSecurityTables(database);
   return database;
+}
+
+// ── Meter token-format (STS S1/S2) per-meter overrides ──────────────────────
+// The token "isS2" flag is normally guessed from meter phase, but phase does not
+// reliably map to the STS standard. These rows pin the correct format per meter.
+function getMeterTokenOverride(meterId) {
+  const id = String(meterId || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.meter_token_overrides.get(id) || null;
+  }
+  const row = db.prepare(
+    "SELECT meter_id, is_s2, note, updated_by, updated_at FROM meter_token_overrides WHERE meter_id = ?"
+  ).get(id);
+  if (!row) return null;
+  return {
+    meterId: row.meter_id,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+function setMeterTokenOverride(entry = {}) {
+  const id = String(entry.meterId || "").trim();
+  if (!id) throw new Error("meterId is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+
+  // null/undefined isS2 clears the override (revert to phase-derived default).
+  if (entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto") {
+    if (isMemoryDatabase(db)) {
+      db.memoryStore.meter_token_overrides.delete(id);
+    } else {
+      db.prepare("DELETE FROM meter_token_overrides WHERE meter_id = ?").run(id);
+    }
+    return { meterId: id, cleared: true };
+  }
+
+  const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+  const record = {
+    meterId: id,
+    isS2,
+    note: String(entry.note || ""),
+    updatedBy: String(entry.updatedBy || ""),
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.meter_token_overrides.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO meter_token_overrides (meter_id, is_s2, note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(meter_id) DO UPDATE SET
+      is_s2 = excluded.is_s2,
+      note = excluded.note,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(id, isS2 ? 1 : 0, record.note, record.updatedBy, timestamp);
+  return record;
+}
+
+function listMeterTokenOverrides() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.meter_token_overrides.values());
+  }
+  return db.prepare(
+    "SELECT meter_id, is_s2, note, updated_by, updated_at FROM meter_token_overrides ORDER BY updated_at DESC"
+  ).all().map((row) => ({
+    meterId: row.meter_id,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  }));
+}
+
+// ── SGC-level token-format rules ────────────────────────────────────────────
+// STS standard is uniform within a Supply Group Code, so one rule covers a whole
+// group of meters. Resolution order: per-meter override → SGC rule → phase guess.
+function getSgcTokenRule(sgc) {
+  const id = String(sgc || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.sgc_token_rules.get(id) || null;
+  }
+  const row = db.prepare(
+    "SELECT sgc, is_s2, note, updated_by, updated_at FROM sgc_token_rules WHERE sgc = ?"
+  ).get(id);
+  if (!row) return null;
+  return { sgc: row.sgc, isS2: row.is_s2 === 1, note: row.note || "", updatedBy: row.updated_by || "", updatedAt: row.updated_at };
+}
+
+function setSgcTokenRule(entry = {}) {
+  const id = String(entry.sgc || "").trim();
+  if (!id) throw new Error("sgc is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  if (entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto") {
+    if (isMemoryDatabase(db)) {
+      db.memoryStore.sgc_token_rules.delete(id);
+    } else {
+      db.prepare("DELETE FROM sgc_token_rules WHERE sgc = ?").run(id);
+    }
+    return { sgc: id, cleared: true };
+  }
+  const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+  const record = { sgc: id, isS2, note: String(entry.note || ""), updatedBy: String(entry.updatedBy || ""), updatedAt: timestamp };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.sgc_token_rules.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO sgc_token_rules (sgc, is_s2, note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(sgc) DO UPDATE SET
+      is_s2 = excluded.is_s2,
+      note = excluded.note,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(id, isS2 ? 1 : 0, record.note, record.updatedBy, timestamp);
+  return record;
+}
+
+function listSgcTokenRules() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.sgc_token_rules.values());
+  }
+  return db.prepare(
+    "SELECT sgc, is_s2, note, updated_by, updated_at FROM sgc_token_rules ORDER BY updated_at DESC"
+  ).all().map((row) => ({
+    sgc: row.sgc,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  }));
 }
 
 function cacheApiResponse(entry) {
@@ -1217,8 +1378,12 @@ module.exports = {
   databasePath,
   deleteAccountBinding,
   ensureDatabase,
+  getMeterTokenOverride,
+  getSgcTokenRule,
   getSmsNotification,
   listAccountBindings,
+  listMeterTokenOverrides,
+  listSgcTokenRules,
   listImportJobs,
   listAutomationDeliveries,
   listSmsNotifications,
@@ -1232,6 +1397,8 @@ module.exports = {
   recordWriteConfirmation,
   resetForTests,
   saveAccountBinding,
+  setMeterTokenOverride,
+  setSgcTokenRule,
   tableCounts,
   updateSmsNotificationStatus,
   writableRoot

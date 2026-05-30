@@ -186,6 +186,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                             units: preview.units,
                             tariffId: meter.tariffId,
                             isThreePhase,
+                            sgc: meter.sgc,
                             reference: purchaseOrderId,
                         });
                         issuedToken = tokenRes.token;

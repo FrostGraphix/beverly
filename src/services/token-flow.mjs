@@ -43,6 +43,10 @@ export function isThreePhaseTokenMode(form = {}) {
 }
 
 export function tokenUsesS2(form = {}) {
+  // An explicit per-meter override always wins over the phase-derived guess.
+  // (STS S1/S2 standard is not reliably implied by single/three-phase.)
+  if (form.isS2Override === true) return true;
+  if (form.isS2Override === false) return false;
   return form.isS2 === true || isThreePhaseTokenMode(form) || meterPhaseFromRow(form) === "three-phase";
 }
 

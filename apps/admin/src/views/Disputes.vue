@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { api } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 
@@ -206,7 +206,12 @@ function statusClass(s: string) {
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 
-onMounted(load);
+function onEsc(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (selected.value) selected.value = null;
+}
+onMounted(() => { load(); window.addEventListener('keydown', onEsc); });
+onUnmounted(() => window.removeEventListener('keydown', onEsc));
 </script>
 
 <style scoped>

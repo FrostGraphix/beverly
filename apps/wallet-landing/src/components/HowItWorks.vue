@@ -21,34 +21,45 @@ const cta = computed(() =>
 
     <div class="lp-toggle" v-reveal role="tablist" aria-label="Audience">
       <button
+        id="tab-customer"
         :class="['lp-toggle-btn', mode === 'customer' && 'lp-toggle-btn--on']"
         type="button"
         role="tab"
         :aria-selected="mode === 'customer'"
+        aria-controls="tabpanel-steps"
         @click="mode = 'customer'"
       >
         <IconSvg name="user" /> For customers
       </button>
       <button
+        id="tab-vendor"
         :class="['lp-toggle-btn', mode === 'vendor' && 'lp-toggle-btn--on']"
         type="button"
         role="tab"
         :aria-selected="mode === 'vendor'"
+        aria-controls="tabpanel-steps"
         @click="mode = 'vendor'"
       >
         <IconSvg name="store" /> For vendors
       </button>
     </div>
 
-    <div class="lp-steps">
-      <article v-for="(s, i) in steps" :key="s.n" class="lp-step" v-reveal="i * 90">
-        <span class="lp-step-n">{{ s.n }}</span>
-        <div class="lp-step-body">
-          <h3>{{ s.title }}</h3>
-          <p>{{ s.body }}</p>
-        </div>
-        <span v-if="i < steps.length - 1" class="lp-step-arrow" aria-hidden="true"><IconSvg name="arrow" /></span>
-      </article>
+    <div
+      id="tabpanel-steps"
+      role="tabpanel"
+      :aria-labelledby="mode === 'customer' ? 'tab-customer' : 'tab-vendor'"
+      tabindex="0"
+    >
+      <div class="lp-steps">
+        <article v-for="(s, i) in steps" :key="s.n" class="lp-step" v-reveal="i * 90">
+          <span class="lp-step-n">{{ s.n }}</span>
+          <div class="lp-step-body">
+            <h3>{{ s.title }}</h3>
+            <p>{{ s.body }}</p>
+          </div>
+          <span v-if="i < steps.length - 1" class="lp-step-arrow" aria-hidden="true"><IconSvg name="arrow" /></span>
+        </article>
+      </div>
     </div>
 
     <div class="lp-how-cta" v-reveal>

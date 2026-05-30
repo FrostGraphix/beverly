@@ -15,7 +15,12 @@ assert(!fs.existsSync(path.join(root, "now.json")), "legacy now.json must not ex
 assert(packageJson.engines?.node === "22.x", "package.json engines.node must pin Vercel to 22.x");
 assert(packageJson.packageManager === "pnpm@10.28.0", "package.json packageManager must pin Vercel pnpm");
 assert(vercelJson.version === 2, "vercel.json must stay on version 2");
-assert(!("functions" in vercelJson), "vercel.json must not set custom runtimes for current api functions");
+assert(!Object.values(vercelJson.functions ?? {}).some((entry) => entry.runtime), "vercel.json must not set custom runtimes for current api functions");
+assert(
+  vercelJson.functions?.["api/reference.js"]?.excludeFiles?.includes("tmp") &&
+    vercelJson.functions?.["api/[...path].js"]?.excludeFiles?.includes("tmp"),
+  "vercel api functions must exclude tmp deployment artifacts"
+);
 assert(Array.isArray(vercelJson.rewrites), "vercel rewrites must exist");
 assert(vercelJson.env?.ALLOW_LIVE_WRITES === "true", "vercel ALLOW_LIVE_WRITES must stay enabled");
 assert(vercelJson.env?.APPROVED_LIVE_WRITES === "true", "vercel APPROVED_LIVE_WRITES must stay enabled");

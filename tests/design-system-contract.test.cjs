@@ -31,7 +31,14 @@ for (const file of [
 
 const architecture = read("ARCHITECTURE.md");
 const appVue = read("src/App.vue");
-const actionModal = read("src/components/ActionModal.vue");
+const actionModal = [
+  "src/components/ActionModal.vue",
+  "src/components/ActionModalGeneric.vue",
+  "src/components/ActionModalPrint.vue",
+  "src/components/ActionModalRemoteTask.vue",
+  "src/components/ActionModalSopFlow.vue",
+  "src/components/ActionModalTokenFlow.vue"
+].map(read).join("\n");
 const loginPage = read("src/components/LoginPage.vue");
 const referenceCss = read("src/styles/reference.css");
 const legacyCss = fs.readdirSync(path.join(root, "src/styles"))

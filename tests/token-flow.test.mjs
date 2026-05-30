@@ -15,6 +15,7 @@ import {
   parseTariffUnitPrice,
   tokenEndpoint,
   tokenUsesS2,
+  isThreePhaseTokenMode,
   tokenValidationError,
   usesLocalTokenPreview
 } from "../src/services/token-flow.mjs";
@@ -62,6 +63,8 @@ assert.equal(tokenValidationError(creditRoute, { ...form, requireThreePhase: tru
 assert.equal(tokenUsesS2(form), false);
 assert.equal(tokenUsesS2({ ...form, isThreePhase: 1 }), true);
 assert.equal(tokenUsesS2({ ...form, requireThreePhase: true, isThreePhase: 1 }), true);
+assert.equal(isThreePhaseTokenMode({ meterPhaseMode: "three-phase" }), true);
+assert.equal(tokenValidationError(creditRoute, { ...form, meterPhaseMode: "three-phase", isThreePhase: 0 }, tariff), "3-phase meter is required");
 assert.equal(keySyncEligible({ ...form, isThreePhase: 1 }), true);
 assert.equal(keySyncEligible(form), false);
 assert.equal(isTokenRejectRemark("Remote send failed: TokenReject"), true);

@@ -1,3 +1,8 @@
+/*
+ * LEGACY — auth / utility layer.
+ * Login page, sr-only helper, and shared form-element base styles.
+ * Extracted from the original monolithic stylesheet. Prefer scoped component styles for new auth UI.
+ */
 .sr-only {
   position: absolute;
   width: 1px;

@@ -139,9 +139,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
+import { naira } from '../lib/format';
 
 const disputes = ref<any[]>([]);
 const loading  = ref(false);
@@ -243,15 +244,20 @@ function statusClass(s: string) {
 }
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
-
-function fmtMoney(minor?: number | null) { return typeof minor === 'number' ? (minor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' }) : 'â€”'; }
+function fmtMoney(minor?: number | null) { return naira(minor); }
 function meterTypeLabel(type?: string | null) {
   if (type === 'three_phase') return 'Three Phase';
   if (type === 'single_phase') return 'Single Phase';
   return 'Unknown';
 }
 
-onMounted(load);
+function onEsc(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (selected.value) { selected.value = null; return; }
+  if (showNew.value)  { showNew.value  = false;  return; }
+}
+onMounted(() => { load(); window.addEventListener('keydown', onEsc); });
+onUnmounted(() => window.removeEventListener('keydown', onEsc));
 </script>
 
 <style scoped>

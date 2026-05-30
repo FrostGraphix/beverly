@@ -100,10 +100,6 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 
 <template>
   <AppShell title="Help & Support">
-    <template #topbar-end>
-      <button class="bw-btn bw-btn-primary" @click="showNew = true">+ New ticket</button>
-    </template>
-
     <div class="bw-segmented" style="margin-bottom: var(--s-4)">
       <button :class="['bw-seg', tab === 'faq' ? 'active' : '']" @click="tab = 'faq'">Help center</button>
       <button :class="['bw-seg', tab === 'tickets' ? 'active' : '']" @click="tab = 'tickets'">My tickets ({{ tickets.length }})</button>
@@ -145,6 +141,10 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 
     <!-- Tickets -->
     <template v-else>
+      <div class="help-tickets-head">
+        <span class="bw-muted bw-text-sm">{{ tickets.length }} ticket{{ tickets.length === 1 ? '' : 's' }}</span>
+        <button class="bw-btn bw-btn-primary" @click="showNew = true">+ New ticket</button>
+      </div>
       <div class="bw-table-wrapper">
         <table class="bw-table">
           <thead><tr><th>Reference</th><th>Subject</th><th>Category</th><th>Status</th><th>Updated</th><th></th></tr></thead>
@@ -157,7 +157,14 @@ onMounted(() => { loadFaqs(); loadTickets(); });
               <td class="bw-dim">{{ fmtDate(t.last_message_at) }}</td>
               <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click.stop="openTicket(t)">Open</button></td>
             </tr>
-            <tr v-if="!tickets.length"><td colspan="6" class="bw-muted" style="text-align:center; padding: var(--s-6)">No tickets yet.</td></tr>
+            <tr v-if="!tickets.length">
+              <td colspan="6" style="text-align:center; padding: var(--s-6)">
+                <div class="help-tickets-empty">
+                  <p class="bw-muted">No tickets yet.</p>
+                  <button class="bw-btn bw-btn-primary" @click="showNew = true">Open your first ticket</button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -241,6 +248,8 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-faq-vote button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 4px 10px; font-size: var(--t-sm); cursor: pointer; color: var(--text); }
 .help-faq-vote button:disabled { opacity: 0.5; cursor: default; }
 .help-faq-thanks { color: var(--brand); font-weight: 600; }
+.help-tickets-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-3); }
+.help-tickets-empty { display: flex; flex-direction: column; align-items: center; gap: var(--s-3); }
 .help-empty { text-align: center; padding: var(--s-6); color: var(--text-muted); display: flex; flex-direction: column; gap: var(--s-3); align-items: center; }
 .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
 .help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; margin-bottom: var(--s-3); }

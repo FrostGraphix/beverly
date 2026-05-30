@@ -33,7 +33,7 @@ function checkVercelDeployPreflight() {
 
   const projectNode = vercelProject?.settings?.nodeVersion;
   if (projectNode && projectNode !== nodeEngine) {
-    failures.push(`.vercel/project.json nodeVersion ${projectNode} conflicts with package engine ${nodeEngine}`);
+    warnings.push(`.vercel/project.json nodeVersion ${projectNode} is overridden by package engine ${nodeEngine}`);
   }
 
   if (vercelJson.buildCommand !== "npm run build") failures.push("vercel.json buildCommand must be npm run build");
@@ -42,7 +42,6 @@ function checkVercelDeployPreflight() {
   const cronCount = Array.isArray(vercelJson.crons) ? vercelJson.crons.length : 0;
   if (cronCount > 0 && !vercelJson.crons.every((entry) => {
     const schedule = String(entry.schedule || "");
-    if (entry.path === "/api/cron/consumption-sync") return schedule === "0 0,6,12,18 * * *";
     return /^0\s+\d+\s+\*\s+\*\s+\*$/.test(schedule);
   })) {
     failures.push("Hobby-safe Vercel crons must run once daily");

@@ -1,3 +1,8 @@
+/*
+ * LEGACY — modals layer.
+ * Generic modal backdrop, modal shell, header/body/footer slots, and animation keyframes.
+ * Extracted from the original monolithic stylesheet. New modal patterns belong in primitives.css.
+ */
 .modal-backdrop { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; background: rgba(2, 44, 34, 0.4); backdrop-filter: blur(8px); animation: fadeIn var(--transition-normal) forwards; }
     .modal-backdrop.show { display: flex; }
     .modal { width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.1) inset; animation: slideUpFade var(--transition-snappy) forwards; }

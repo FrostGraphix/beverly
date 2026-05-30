@@ -8,6 +8,14 @@
     "APPROVED_LIVE_WRITES": "true",
     "VITE_ALLOW_LIVE_WRITES": "true"
   },
+  "functions": {
+    "api/reference.js": {
+      "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
+    },
+    "api/[...path].js": {
+      "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
+    }
+  },
   "crons": [
     { "path": "/api/cron/refresh-hot", "schedule": "0 6 * * *" },
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },

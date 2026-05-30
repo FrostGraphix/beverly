@@ -129,30 +129,36 @@ async function promptInstall() {
 </template>
 
 <style scoped>
+/* ── Tab-bar height token — consumed by ChatWidget for bubble offset ── */
+:root { --bw-tabbar-height: 56px; }
+
 .bw-install-banner {
   display: flex;
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-2) var(--s-4);
-  background: oklch(70% 0.19 145 / 0.12);
-  border-bottom: 1px solid oklch(70% 0.19 145 / 0.2);
+  /* neutral surface — not brand-green so it doesn't stack with appbar + brand mark */
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
   font-size: var(--t-sm);
+  color: var(--text-dim);
 }
 .bw-install-banner span { flex: 1; }
 
-/* Notification bell */
+/* Notification bell / help icon — 44×44 touch target */
 .bw-bell {
   position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--r-full, 9999px);
   color: var(--text);
   text-decoration: none;
   flex-shrink: 0;
 }
 .bw-bell:hover { background: var(--surface-2, oklch(from var(--surface) calc(l - 0.04) c h)); }
+.bw-bell:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); border-radius: var(--r-full); }
 .bw-bell-badge {
   position: absolute;
   top: 3px;

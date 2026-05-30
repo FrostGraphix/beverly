@@ -1,3 +1,8 @@
+/*
+ * LEGACY — profile page layer.
+ * Full-screen overlay panel, avatar upload, and account settings form styles.
+ * Extracted from the original monolithic stylesheet. New profile UI goes in ProfilePage.vue (scoped).
+ */
 /* ============================================================
    PROFILE PAGE â€” Full-screen overlay panel
    ============================================================ */

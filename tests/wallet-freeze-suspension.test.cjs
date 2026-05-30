@@ -32,6 +32,9 @@ function main() {
   assert(wallets.includes("assertWalletCanTransact"), "Wallet state helper must exist.");
   assert(wallets.includes("wallet_frozen"), "Frozen wallet error code must be explicit.");
   assert(wallets.includes("wallet_closed_final"), "Closed wallets must be final.");
+  assert(wallets.includes("assertOwnerWalletTransitionAllowed"), "Owner-level transition guard must exist.");
+  assert(wallets.includes("ownerType === 'vendor' ? 'vendor_organizations' : 'customers'"), "Owner guard must resolve owner status table.");
+  assert(wallets.includes("`${ownerType}_closed_final`"), "Owner closed-final error code must include owner type.");
 
   assert(ledger.includes("assertWalletCanTransact(wallet as any, 'place holds')"), "Holds must reject frozen wallets before balance checks.");
   assert(funding.match(/assertWalletCanTransact\(wallet, 'receive funding'\)/g)?.length >= 2, "Vendor funding must reject frozen wallets.");

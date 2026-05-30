@@ -16,7 +16,7 @@ assert(writes.includes("normalizeWriteValue"), "Write payloads must normalize st
 assert(writes.includes('/\\/api\\/user\\/(?:create|update)\\b/i'), "Status coercion must stay scoped to admin user writes.");
 assert(mapper.includes('record.status = "Active"'), "User table must show active users clearly.");
 assert(mapper.includes('record.status = "Inactive"'), "User table must show inactive users clearly.");
-assert(fs.readFileSync(path.join(root, "src/components/ActionModal.vue"), "utf8").includes("sopReviewValue(field)"), "Admin user review must show friendly status labels.");
+assert(fs.readFileSync(path.join(root, "src/components/ActionModalSopFlow.vue"), "utf8").includes("sopReviewValue(field)"), "Admin user review must show friendly status labels.");
 assert(actionService.includes('route.hash.includes("admin/user")) moduleName = "user"'), "Admin user actions must target user endpoints.");
 assert(supabase.includes("ban_duration"), "Supabase Auth sync must activate or disable users.");
 assert(supabase.includes("userStatusFromPayload"), "Supabase Auth sync must derive user status from CRM payloads.");

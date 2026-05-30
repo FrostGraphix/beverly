@@ -163,7 +163,14 @@
           <div class="csp-load-fill" :style="{ width: loadPercent + '%' }" />
         </div>
         <div v-if="stationError" class="csp-error">{{ stationError }}</div>
-        <div class="csp-chart-wrap">
+        <div v-if="!loadingStations && !allAggRows.length" class="csp-empty-state">
+          <svg class="csp-empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="14" width="36" height="26" rx="3"/><path d="M16 14V10a4 4 0 0 1 8 0v4M24 28v4M16 32l4-4 4 4 4-6 4 6"/>
+          </svg>
+          <p class="csp-empty-title">No consumption data</p>
+          <p class="csp-empty-sub">No readings were found for the selected period. Try a different date range or granularity.</p>
+        </div>
+        <div v-else class="csp-chart-wrap">
           <EChartPanel :option="allChartOption" />
         </div>
       </div>
@@ -1467,6 +1474,10 @@ export default {
 .csp-down { color: var(--danger); }
 
 .csp-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+.csp-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; gap: 10px; }
+.csp-empty-icon { width: 48px; height: 48px; color: var(--text-muted); opacity: 0.5; }
+.csp-empty-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-strong); }
+.csp-empty-sub { margin: 0; font-size: 13px; color: var(--text-muted); text-align: center; max-width: 340px; }
 
 .csp-badge {
   display: inline-flex;

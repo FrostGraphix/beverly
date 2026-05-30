@@ -218,7 +218,15 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <td class="bw-dim">{{ fmt(t.last_message_at) }}</td>
               <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click.stop="openTicket(t)">Open</button></td>
             </tr>
-            <tr v-if="!tickets.length"><td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No tickets.</td></tr>
+            <tr v-if="!tickets.length">
+              <td colspan="7">
+                <div class="sup-empty-state">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <strong>No support tickets</strong>
+                  <span>Tickets raised by customers and vendors will appear here.</span>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -244,7 +252,11 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <span class="bw-dim">{{ fmt(s.last_message_at) }}</span>
             </div>
           </button>
-          <p v-if="!sessions.length" class="bw-muted" style="text-align:center; padding: var(--s-4)">No chat sessions.</p>
+          <div v-if="!sessions.length" class="sup-empty-state sup-empty-state--sm">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            <strong>No live chats</strong>
+            <span>Active customer chats appear here.</span>
+          </div>
         </aside>
 
         <section class="sup-chat-main">
@@ -299,7 +311,16 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
                 <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="deleteFaq(f)">Delete</button>
               </td>
             </tr>
-            <tr v-if="!faqs.length"><td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No FAQs yet.</td></tr>
+            <tr v-if="!faqs.length">
+              <td colspan="7">
+                <div class="sup-empty-state">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                  <strong>No FAQs yet</strong>
+                  <span>Create your first FAQ article to help customers self-serve.</span>
+                  <button class="bw-btn bw-btn-primary bw-btn-sm" @click="newFaq">+ Add FAQ</button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -400,6 +421,13 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 .sup-chat-foot { display: flex; gap: var(--s-2); padding: var(--s-3); border-top: 1px solid var(--border); }
 .sup-chat-foot .bw-input { flex: 1; }
 .sup-chat-empty { display: grid; place-items: center; height: 100%; color: var(--text-muted); }
+.sup-empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 24px; color: var(--text-muted); text-align: center; }
+.sup-empty-state svg { opacity: 0.45; }
+.sup-empty-state strong { font-size: 15px; font-weight: 600; color: var(--text); }
+.sup-empty-state span { font-size: 13px; max-width: 260px; }
+.sup-empty-state--sm { padding: 24px 16px; }
+.sup-empty-state--sm strong { font-size: 13px; }
+.sup-empty-state--sm span { font-size: 12px; }
 
 .sup-msg { max-width: 80%; display: flex; flex-direction: column; }
 .sup-msg--staff { align-self: flex-end; align-items: flex-end; }

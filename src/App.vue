@@ -189,6 +189,7 @@
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
+          <MeterKeyChangePage v-else-if="route.customComponent === 'MeterKeyChangePage'" :route="route" />
           <DisputesPage v-else-if="route.customComponent === 'DisputesPage'" :route="route" />
           <RefundsPage v-else-if="route.customComponent === 'RefundsPage'" :route="route" />
           <SettlementPage v-else-if="route.customComponent === 'SettlementPage'" :route="route" />
@@ -259,6 +260,7 @@ import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vu
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
 import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
 import StationConsumptionPage from "./components/StationConsumptionPage.vue";
+import MeterKeyChangePage from "./components/MeterKeyChangePage.vue";
 import TablePage from "./components/TablePage.vue";
 import ProfilePage from "./components/ProfilePage.vue";
 import SettingsPage from "./components/SettingsPage.vue";
@@ -299,7 +301,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, SettingsPage, SettlementPage, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, SettingsPage, SettlementPage, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",

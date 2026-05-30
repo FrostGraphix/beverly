@@ -42,6 +42,13 @@ img, svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .lp-reveal { opacity: 1 !important; transform: none !important; transition: none; }
   html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -68,8 +75,12 @@ img, svg { display: block; }
               background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
 }
 .lp-btn .lp-ico { font-size: 17px; }
-.lp-btn:hover { transform: translateY(-2px); }
+.lp-btn:hover { transform: translateY(-1px); }
 .lp-btn:active { transform: translateY(0); }
+.lp-btn:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand);
+}
 .lp-btn--lg { height: 52px; padding: 0 28px; font-size: var(--t-lg); }
 .lp-btn--block { width: 100%; }
 
@@ -162,6 +173,11 @@ img, svg { display: block; }
   transition: color var(--dur-fast), background var(--dur-fast);
 }
 .lp-nav-links button:hover { color: var(--text); background: var(--surface-2); }
+.lp-nav-links button:focus-visible {
+  outline: 0;
+  color: var(--text);
+  box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand);
+}
 
 .lp-nav-actions { display: flex; align-items: center; gap: 10px; }
 .lp-nav-links + .lp-nav-actions { margin-left: 8px; }
@@ -187,8 +203,12 @@ img, svg { display: block; }
 }
 .lp-icon-toggle--primary:hover {
   color: #04140b;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset, 0 16px 44px var(--brand-glow);
+}
+.lp-icon-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand);
 }
 .lp-nav-launch {
   width: 40px;
@@ -293,6 +313,7 @@ img, svg { display: block; }
 @keyframes lp-ping { 0% { transform: scale(0.7); opacity: 0.6; } 100% { transform: scale(2.4); opacity: 0; } }
 
 .lp-hero-title {
+  font-family: var(--font-display);
   margin: 20px 0 0;
   font-size: clamp(40px, 6.4vw, 76px);
   line-height: 1.02;
@@ -301,7 +322,7 @@ img, svg { display: block; }
   color: var(--text);
 }
 .lp-grad {
-  background: linear-gradient(120deg, var(--brand-300), var(--brand) 40%, var(--lp-violet-300));
+  background: linear-gradient(120deg, var(--brand-300), var(--brand) 60%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -327,24 +348,143 @@ img, svg { display: block; }
 
 /* Hero phone art */
 .lp-hero-art { position: relative; display: grid; place-items: center; }
+
+/* ── 3D scene wrapper ──────────────────────────────────────────── */
+.lp-phone-scene {
+  position: relative;
+  perspective: 1200px;
+  perspective-origin: 50% 38%;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Electricity streaks ───────────────────────────────────────── */
+.lp-streaks {
+  position: absolute;
+  inset: -80px -64px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.lp-streak {
+  position: absolute;
+  color: var(--brand);
+  opacity: 0;
+  filter:
+    drop-shadow(0 0 3px var(--brand-300))
+    drop-shadow(0 0 8px var(--brand));
+  animation: lp-streak-rise 3s var(--ease-out) infinite;
+}
+
+@keyframes lp-streak-rise {
+  0%   { transform: translateY(24px) scaleY(0.7); opacity: 0; }
+  14%  { opacity: 1; }
+  82%  { opacity: 0.65; }
+  100% { transform: translateY(-88px) scaleY(1.1); opacity: 0; }
+}
+
+.lp-streak--1 { left:  4%;  bottom: 32%; animation-delay:  0s;    animation-duration: 2.7s; }
+.lp-streak--2 { right: 5%;  bottom: 48%; animation-delay: -1.1s;  animation-duration: 3.3s; }
+.lp-streak--3 { left:  14%; bottom: 18%; animation-delay: -0.5s;  animation-duration: 2.4s; }
+.lp-streak--4 { right: 16%; bottom: 64%; animation-delay: -2.0s;  animation-duration: 3.8s; }
+.lp-streak--5 { left:  7%;  bottom: 58%; animation-delay: -2.6s;  animation-duration: 3.0s; }
+.lp-streak--6 { right: 28%; bottom: 28%; animation-delay: -1.5s;  animation-duration: 2.2s; }
+
+/* ── iPhone 17 shell ───────────────────────────────────────────── */
 .lp-phone {
   position: relative;
   width: 318px;
   aspect-ratio: 393 / 852;
-  border-radius: 54px;
+  border-radius: 52px;
   padding: 10px;
+  /* Aluminum frame — cooler, lighter than old dark titanium */
   background:
-    linear-gradient(145deg, oklch(86% 0.04 232), oklch(35% 0.08 235) 42%, oklch(16% 0.04 240)),
+    linear-gradient(148deg, oklch(90% 0.025 220), oklch(42% 0.06 228) 38%, oklch(14% 0.03 238)),
     var(--surface);
-  border: 1px solid oklch(88% 0.03 235 / 0.45);
+  border: 1px solid oklch(90% 0.02 220 / 0.50);
   box-shadow:
-    0 30px 90px oklch(4% 0.02 245 / 0.58),
-    inset 0 0 0 1px oklch(100% 0 0 / 0.22),
-    inset 0 -10px 24px oklch(0% 0 0 / 0.34),
-    0 0 0 1px oklch(70% 0.19 145 / 0.08);
-  animation: lp-bob 7s var(--ease-in-out) infinite;
+    0 40px 100px oklch(4% 0.02 245 / 0.65),
+    inset 0 0 0 1px oklch(100% 0 0 / 0.26),
+    inset 0 -12px 28px oklch(0% 0 0 / 0.38),
+    0 0 0 1px oklch(70% 0.19 145 / 0.06);
+  transform-style: preserve-3d;
+  animation: lp-spin-y 10s var(--ease-in-out) infinite;
+  will-change: transform;
 }
+
+@keyframes lp-spin-y {
+  0%   { transform: rotateY(-14deg) rotateX(2deg)  translateY(0px); }
+  50%  { transform: rotateY(14deg)  rotateX(-2deg) translateY(-12px); }
+  100% { transform: rotateY(-14deg) rotateX(2deg)  translateY(0px); }
+}
+
 @keyframes lp-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1deg); } }
+
+/* ── iPhone 17 back face ───────────────────────────────────────── */
+.lp-phone-back {
+  position: absolute;
+  inset: 0;
+  border-radius: 52px;
+  background:
+    linear-gradient(148deg, oklch(88% 0.025 220), oklch(40% 0.06 228) 40%, oklch(12% 0.03 238));
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: rotateY(180deg);
+  z-index: 5;
+  overflow: hidden;
+}
+
+/* Camera module — horizontal pill top-left (iPhone 17 standard) */
+.lp-phone-cam-module {
+  position: absolute;
+  top: 36px;
+  left: 28px;
+  width: 116px;
+  height: 52px;
+  border-radius: 18px;
+  background: oklch(8% 0.02 240);
+  border: 1px solid oklch(22% 0.03 235 / 0.8);
+  box-shadow:
+    0 2px 8px oklch(0% 0 0 / 0.5),
+    inset 0 1px 0 oklch(100% 0 0 / 0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.lp-phone-cam-lens {
+  border-radius: 50%;
+  border: 1px solid oklch(30% 0.04 240 / 0.6);
+  background:
+    radial-gradient(circle at 35% 35%, oklch(52% 0.08 230 / 0.8), oklch(6% 0.02 245) 68%);
+  box-shadow: inset 0 1px 2px oklch(100% 0 0 / 0.12);
+  flex-shrink: 0;
+}
+
+.lp-phone-cam-lens--main  { width: 26px; height: 26px; }
+.lp-phone-cam-lens--ultra { width: 20px; height: 20px; }
+
+.lp-phone-cam-flash {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(82% 0.04 80);
+  box-shadow: 0 0 6px oklch(82% 0.04 80 / 0.6);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.lp-phone-back-mark {
+  position: absolute;
+  bottom: 38%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: oklch(100% 0 0 / 0.07);
+}
 .lp-phone::before {
   content: "";
   position: absolute;
@@ -422,6 +562,8 @@ img, svg { display: block; }
   min-height: 100%;
   border-radius: 44px;
   overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   background:
     radial-gradient(120% 90% at 50% -10%, oklch(31% 0.1 220 / 0.9), transparent 58%),
     var(--canvas);
@@ -566,7 +708,6 @@ img, svg { display: block; }
   backdrop-filter: blur(12px);
   font-size: var(--t-sm); font-weight: 700; color: var(--text);
   box-shadow: var(--shadow-3);
-  animation: lp-bob 7s var(--ease-in-out) infinite;
 }
 .lp-art-chip .lp-ico { color: var(--brand); font-size: 15px; }
 .lp-art-chip--a { top: 16%; left: -6%; animation-delay: -1.5s; }
@@ -587,7 +728,7 @@ img, svg { display: block; }
   box-shadow: var(--shadow-2);
 }
 .lp-stat { text-align: center; display: flex; flex-direction: column; gap: 4px; }
-.lp-stat strong { font-size: clamp(24px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.03em; color: var(--text); font-family: var(--font-mono); }
+.lp-stat strong { font-size: clamp(24px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.03em; color: var(--text); }
 .lp-stat span { font-size: var(--t-sm); color: var(--text-muted); font-weight: 500; }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -601,6 +742,7 @@ img, svg { display: block; }
 .lp-section-head { max-width: 660px; margin: 0 auto clamp(36px, 5vw, 56px); text-align: center; }
 .lp-eyebrow {
   display: inline-block;
+  font-family: var(--font-display);
   font-size: var(--t-sm); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--brand);
   margin-bottom: 14px;
@@ -863,8 +1005,8 @@ img, svg { display: block; }
 .lp-footer-by strong { color: var(--text-dim); }
 .lp-footer-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
 .lp-footer-col h4 { margin: 0 0 14px; font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 800; }
-.lp-footer-col a { display: block; padding: 6px 0; color: var(--text-dim); text-decoration: none; font-size: var(--t-md); transition: color var(--dur-fast); }
-.lp-footer-col a:hover { color: var(--brand); }
+.lp-footer-col a { display: block; padding: 6px 0; color: var(--text-dim); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; font-size: var(--t-md); transition: color var(--dur-fast), text-decoration-color var(--dur-fast); }
+.lp-footer-col a:hover { color: var(--brand); text-decoration-color: var(--brand); }
 .lp-footer-base {
   max-width: var(--lp-max);
   margin: 0 auto;
@@ -1200,10 +1342,16 @@ img, svg { display: block; }
     display: grid;
     gap: 10px;
   }
+  .lp-phone-scene { perspective: none; }
   .lp-phone {
     width: min(100%, 280px);
     border-radius: 34px;
+    animation: lp-spin-y 14s var(--ease-in-out) infinite;
   }
+  .lp-streaks { inset: -40px -20px; }
+  .lp-streak--3,
+  .lp-streak--4,
+  .lp-streak--5 { display: none; }
   .lp-art-chip {
     position: static;
     z-index: 2;

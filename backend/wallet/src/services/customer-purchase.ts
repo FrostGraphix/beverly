@@ -289,6 +289,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 units: preview.units,
                 tariffId: meter.tariffId,
                 isThreePhase,
+                sgc: meter.sgc,
                 reference: po.id,
             });
             issuedToken = tokenRes.token;

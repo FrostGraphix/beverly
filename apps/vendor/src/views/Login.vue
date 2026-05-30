@@ -90,17 +90,17 @@ rememberEmail.value = Boolean(rememberedEmail);
 </script>
 
 <template>
-  <main style="min-height:100dvh; display:grid; place-items:center; padding: var(--s-5); background: var(--canvas)">
-    <div class="bw-card" style="width:100%; max-width:420px">
-      <div style="text-align:center; margin-bottom: var(--s-6)">
+  <main class="login-root">
+    <div class="bw-card login-card">
+      <div class="login-head">
         <a :href="PORTAL_URLS.landing" class="vendor-brand-link" aria-label="Beverly home">
-          <div class="bw-mark" style="width:52px; height:52px; font-size:22px; margin:0 auto var(--s-4)">B</div>
+          <div class="bw-mark login-mark">B</div>
         </a>
-        <div class="bw-h1" style="font-size: var(--t-2xl); margin-bottom: 6px">Vendor Portal</div>
-        <p class="bw-muted" style="margin:0; font-size: var(--t-sm)">Sign in to start vending</p>
+        <div class="bw-h1 login-title">Vendor Portal</div>
+        <p class="bw-muted login-subtitle">Sign in to start vending</p>
       </div>
 
-      <div v-if="sessionEnded" class="bw-alert" style="background: oklch(78% 0.16 75 / 0.10); border: 1px solid oklch(78% 0.16 75 / 0.30); color: var(--warn); font-size: var(--t-sm); margin-bottom: var(--s-4); border-radius: var(--r-md); padding: var(--s-3)">
+      <div v-if="sessionEnded" class="bw-alert warn login-session-ended">
         ⓘ Your session timed out for security. Please sign in again.
       </div>
 
@@ -126,14 +126,14 @@ rememberEmail.value = Boolean(rememberedEmail);
           <button type="button" class="login-link" @click="error = 'Ask your Beverly account manager to reset your password.'">Forgot password?</button>
         </div>
 
-        <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
+        <div v-if="error" class="bw-alert danger login-error">{{ error }}</div>
 
-        <button class="bw-btn primary lg" type="submit" :disabled="loading || !email || !password" style="justify-content:center; width:100%">
+        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
 
-      <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-5)">
+      <p class="bw-muted login-note">
         Vendor accounts are created by Beverly staff. Need access? Contact your account manager.
       </p>
 
@@ -146,6 +146,16 @@ rememberEmail.value = Boolean(rememberedEmail);
 </template>
 
 <style scoped>
+.login-root { min-height: 100dvh; display: grid; place-items: center; padding: var(--s-5); background: var(--canvas); }
+.login-card { width: 100%; max-width: 420px; }
+.login-head { text-align: center; margin-bottom: var(--s-6); }
+.login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-4); }
+.login-title { font-size: var(--t-2xl); margin-bottom: 6px; }
+.login-subtitle { margin: 0; font-size: var(--t-sm); }
+.login-session-ended { margin-bottom: var(--s-4); font-size: var(--t-sm); }
+.login-error { font-size: var(--t-sm); }
+.login-submit { justify-content: center; width: 100%; }
+.login-note { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); }
 .password-field { position: relative; }
 .password-field .bw-input { padding-right: 76px; }
 .password-toggle {

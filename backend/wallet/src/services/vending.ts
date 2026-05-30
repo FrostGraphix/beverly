@@ -189,6 +189,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                 units: preview.units,
                 tariffId: meter.tariffId,
                 isThreePhase: meter.isThreePhase,
+                sgc: meter.sgc,
                 reference: po.id,
             });
             token = tokenRes.token;
@@ -257,6 +258,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                 units: preview.units,
                 tariffId: meter.tariffId,
                 isThreePhase: meter.isThreePhase,
+                sgc: meter.sgc,
                 reference: po.id,
             });
             token = tokenRes.token;

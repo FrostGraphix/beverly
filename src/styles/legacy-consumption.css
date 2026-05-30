@@ -1,3 +1,8 @@
+/*
+ * LEGACY — consumption / table-page layer.
+ * Consumption chart, token history table, and container-query breakpoints for the billing views.
+ * Extracted from the original monolithic stylesheet. New table styles go in primitives.css.
+ */
 .table-page,
 .consumption-page {
   container-type: inline-size;

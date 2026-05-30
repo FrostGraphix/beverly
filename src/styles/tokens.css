@@ -35,6 +35,7 @@
 
   /* Primitive type tokens */
   --bev-font-sans: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  --bev-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; /* display face for H1 / eyebrow */
   --bev-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --bev-font-size-2xs: 10px;
   --bev-font-size-xs: 11px;

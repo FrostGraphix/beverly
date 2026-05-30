@@ -128,6 +128,7 @@ export interface MeterInfo {
     protocolVersion?: string | null;
     communicationWay?: string | null;
     isThreePhase?: boolean | null;
+    sgc?: string | null;
     resolutionSource?: 'energy_account' | 'local_binding' | 'energy_low_purchase_report' | 'archived_contract_sample';
     liveVerified?: boolean;
 }
@@ -172,9 +173,17 @@ export async function lookupMeter(
         const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || '').trim() === normalizedMeterId);
         if (row) {
             const meter = normalizeMeterRow(row, normalizedMeterId);
+            let isThreePhase = meter.isThreePhase ?? null;
+            let sgc = meter.sgc ?? null;
+            if (isThreePhase === null || !sgc) {
+                const meta = await lookupMeterMeta(normalizedMeterId);
+                if (isThreePhase === null) isThreePhase = meta.isThreePhase;
+                if (!sgc) sgc = meta.sgc;
+            }
             return {
                 ...meter,
-                isThreePhase: meter.isThreePhase ?? await lookupMeterPhase(normalizedMeterId),
+                isThreePhase,
+                sgc,
                 resolutionSource: 'energy_account',
                 liveVerified: true,
             };
@@ -247,6 +256,7 @@ function normalizeMeterRow(row: Record<string, unknown>, requestedMeterId: strin
         protocolVersion: String(row.protocolVersion || row.protocol_version || '').trim() || null,
         communicationWay: String(row.communicationWay || row.communication_way || '').trim() || null,
         isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
+        sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
     };
 }
 
@@ -259,7 +269,7 @@ function normalizeBoolean(value: unknown): boolean | null {
     return null;
 }
 
-async function lookupMeterPhase(meterId: string): Promise<boolean | null> {
+async function lookupMeterMeta(meterId: string): Promise<{ isThreePhase: boolean | null; sgc: string | null }> {
     try {
         const data = await energyCall<{
             code?: number;
@@ -271,11 +281,15 @@ async function lookupMeterPhase(meterId: string): Promise<boolean | null> {
             method: 'POST',
             body: JSON.stringify({ meterId, pageNumber: 1, pageSize: 20 }),
         });
-        if (!upstreamSucceeded(data)) return null;
+        if (!upstreamSucceeded(data)) return { isThreePhase: null, sgc: null };
         const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || item.id || '').trim() === meterId);
-        return row ? normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase) : null;
+        if (!row) return { isThreePhase: null, sgc: null };
+        return {
+            isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
+            sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
+        };
     } catch {
-        return null;
+        return { isThreePhase: null, sgc: null };
     }
 }
 
@@ -448,6 +462,8 @@ export interface GenerateTokenInput {
     units: number;
     tariffId: string;
     isThreePhase?: boolean | null;
+    /** Supply Group Code — lets the resolver apply an SGC-level S1/S2 rule. */
+    sgc?: string | null;
     /** External reference for traceability — usually purchase_order_id */
     reference: string;
 }
@@ -461,7 +477,7 @@ export interface GenerateTokenResult {
     upstreamPayload: Record<string, unknown>;
 }
 
-export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean } = {}) {
+export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
     const amount = Math.round((input.amountMinor / 100) * 100) / 100;
     return {
         customerId: input.customerId,
@@ -475,14 +491,52 @@ export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPre
         totalUnit: input.units,
         payDebtPercent: 0,
         paymentMethod: 'Cash',
-        isS2: input.isThreePhase === true,
+        isS2: typeof opts.isS2 === 'boolean' ? opts.isS2 : input.isThreePhase === true,
     };
+}
+
+/**
+ * Resolve the effective STS token format (isS2) using the shared override store:
+ *   per-meter override → SGC rule → phase fallback.
+ * Reads the same Supabase tables the CRM writes (meter_token_overrides, sgc_token_rules).
+ * Any lookup failure (incl. tables not yet migrated) falls back to the phase guess.
+ */
+export async function resolveEffectiveIsS2(input: GenerateTokenInput): Promise<boolean> {
+    const meterId = String(input.meterId || '').trim();
+    if (meterId) {
+        try {
+            const { data } = await adminClient
+                .from('meter_token_overrides')
+                .select('is_s2')
+                .eq('meter_id', meterId)
+                .maybeSingle();
+            if (data && typeof (data as any).is_s2 === 'boolean') return (data as any).is_s2;
+        } catch { /* table may not exist yet */ }
+    }
+
+    let sgc = String(input.sgc || '').trim();
+    if (!sgc && meterId) {
+        sgc = (await lookupMeterMeta(meterId)).sgc ?? '';
+    }
+    if (sgc) {
+        try {
+            const { data } = await adminClient
+                .from('sgc_token_rules')
+                .select('is_s2')
+                .eq('sgc', sgc)
+                .maybeSingle();
+            if (data && typeof (data as any).is_s2 === 'boolean') return (data as any).is_s2;
+        } catch { /* table may not exist yet */ }
+    }
+
+    return input.isThreePhase === true;
 }
 
 export async function generateCreditToken(input: GenerateTokenInput): Promise<GenerateTokenResult> {
     if (!env.ENERGY_AUTHORIZATION_PASSWORD) {
         throw new TokenEngineError('energy authorization password not configured', 'energy_authorization_missing');
     }
+    const isS2 = await resolveEffectiveIsS2(input);
     const response = await energyCall<{
         code?: number;
         msg?: string;
@@ -491,7 +545,7 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
         result?: Record<string, unknown>;
     }>('/api/token/creditToken/generate', {
         method: 'POST',
-        body: JSON.stringify(buildCreditTokenPayload(input)),
+        body: JSON.stringify(buildCreditTokenPayload(input, { isS2 })),
     });
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'token_generation_failed');
     const data = (response.result || response.data || response) as Record<string, unknown>;

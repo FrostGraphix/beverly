@@ -3,16 +3,21 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
-const actionModal = fs.readFileSync(path.join(root, "src", "components", "ActionModal.vue"), "utf8");
+const remoteTaskModal = fs.readFileSync(path.join(root, "src", "components", "ActionModalRemoteTask.vue"), "utf8");
+const tokenFlowModal = fs.readFileSync(path.join(root, "src", "components", "ActionModalTokenFlow.vue"), "utf8");
 const api = fs.readFileSync(path.join(root, "src", "services", "api.js"), "utf8");
 const reference = fs.readFileSync(path.join(root, "api", "reference.js"), "utf8");
 
-assert.match(actionModal, /remoteTaskHeaders\(route = this\.route, action = this\.action\)/);
-assert.match(actionModal, /"X-Route-Hash": String\(route\?\.hash \|\| ""\)/);
-assert.match(actionModal, /postApi\(endpoint, items, \{ headers \}\)/);
-assert.match(actionModal, /postApi\(endpoint, payload, \{\s*headers: this\.remoteTaskHeaders\(this\.route, this\.action\)\s*\}\)/s);
-assert.match(actionModal, /CreateTokenTask", payload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation\/remote-meter-token" \}, "Add Task"\)/s);
-assert.match(actionModal, /postApi\(remoteTaskConfirmEndpoint\(\{ hash: "#\/remote-operation\/remote-meter-token" \}\), confirmPayload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation-record\/remote-meter-token-task" \}, "Confirm"\)/s);
+assert.match(remoteTaskModal, /remoteTaskHeaders\(route = this\.route, action = this\.action\)/);
+assert.match(remoteTaskModal, /"X-Route-Hash": String\(route\?\.hash \|\| ""\)/);
+assert.match(remoteTaskModal, /postApi\(endpoint, items, \{ headers \}\)/);
+
+assert.match(tokenFlowModal, /remoteTaskHeaders\(route = this\.route, action = this\.action\)/);
+assert.match(tokenFlowModal, /"X-Route-Hash": String\(route\?\.hash \|\| ""\)/);
+assert.match(tokenFlowModal, /async previewToken\(\)[\s\S]*postApi\(endpoint, payload, \{\s*headers: this\.remoteTaskHeaders\(this\.route, this\.action\)\s*\}\)/s);
+assert.match(tokenFlowModal, /async confirmToken\(\)[\s\S]*postApi\(endpoint, payload, \{\s*headers: this\.remoteTaskHeaders\(this\.route, this\.action\)\s*\}\)/s);
+assert.match(tokenFlowModal, /CreateTokenTask", payload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation\/remote-meter-token" \}, "Add Task"\)/s);
+assert.match(tokenFlowModal, /postApi\(remoteTaskConfirmEndpoint\(\{ hash: "#\/remote-operation\/remote-meter-token" \}\), confirmPayload, \{\s*headers: this\.remoteTaskHeaders\(\{ hash: "#\/remote-operation-record\/remote-meter-token-task" \}, "Confirm"\)/s);
 
 assert.match(api, /window\.localStorage\?\.getItem\("beverly\.allow_live_writes"\)/);
 assert.match(api, /\["localhost", "127\.0\.0\.1", "::1"\]\.includes\(host\)/);

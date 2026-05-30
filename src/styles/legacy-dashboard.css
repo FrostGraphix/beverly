@@ -1,3 +1,8 @@
+/*
+ * LEGACY — dashboard layer.
+ * Draggable widget grid, stat tiles, chart containers, and dashboard editor overlay.
+ * Extracted from the original monolithic stylesheet. New dashboard widgets go in their own components.
+ */
 .dashboard-editor-container {
   padding: 16px;
   background: var(--bg-page);
@@ -136,6 +141,7 @@
 }
 .dashboard-stat-value {
   max-width: 100%;
+  font-family: var(--bev-font-display);
   color: var(--text-strong);
   font-size: clamp(20px, 1.88vw, 28px);
   font-weight: 800;

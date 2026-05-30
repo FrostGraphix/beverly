@@ -51,7 +51,7 @@
     "ci:actions": "node --disable-warning=ExperimentalWarning tools/github-actions-check.cjs"
   },
   "dependencies": {
-    "axios": "^1.7.9",
+    "axios": "^1.16.1",
     "echarts": "^5.6.0",
     "pg": "^8.16.3",
     "pinia": "^3.0.4",
@@ -86,4 +86,3 @@
   },
   "homepage": "https://github.com/FrostGraphix/beverly#readme"
 }
-

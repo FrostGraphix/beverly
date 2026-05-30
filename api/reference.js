@@ -16,7 +16,13 @@ const {
   saveAccountBinding,
   deleteAccountBinding,
   saveArtifact,
-  tableCounts
+  tableCounts,
+  getMeterTokenOverride,
+  setMeterTokenOverride,
+  listMeterTokenOverrides,
+  getSgcTokenRule,
+  setSgcTokenRule,
+  listSgcTokenRules
 } = require("../backend/src/services/storage-adapter");
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
@@ -2874,6 +2880,32 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       });
     }
     return localJobResponse(outcome.incident);
+  }
+  if (pathname === "/api/local/meter-token-format/read") {
+    const meterId = String(payload.meterId || "").trim();
+    if (meterId) return localJobResponse(await getMeterTokenOverride(meterId));
+    return localJobResponse(await listMeterTokenOverrides());
+  }
+  if (pathname === "/api/local/meter-token-format/save") {
+    return localJobResponse(await setMeterTokenOverride({
+      meterId: payload.meterId,
+      isS2: payload.isS2,
+      note: payload.note,
+      updatedBy: payload.updatedBy || ""
+    }));
+  }
+  if (pathname === "/api/local/sgc-token-rule/read") {
+    const sgc = String(payload.sgc || "").trim();
+    if (sgc) return localJobResponse(await getSgcTokenRule(sgc));
+    return localJobResponse(await listSgcTokenRules());
+  }
+  if (pathname === "/api/local/sgc-token-rule/save") {
+    return localJobResponse(await setSgcTokenRule({
+      sgc: payload.sgc,
+      isS2: payload.isS2,
+      note: payload.note,
+      updatedBy: payload.updatedBy || ""
+    }));
   }
   if (pathname === "/api/local/importJobs/read") {
     return localJobResponse(await listImportJobs({

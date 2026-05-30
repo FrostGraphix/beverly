@@ -26,6 +26,49 @@
   },
   "incidents": [
     {
+      "id": "incident-1780083417734",
+      "kind": "manual-test",
+      "severity": "info",
+      "title": "Manual test",
+      "message": "Automation control test",
+      "source": "automation-control",
+      "createdAt": "2026-05-29T19:36:57.734Z",
+      "details": {},
+      "alerts": [
+        {
+          "ok": false,
+          "status": 0,
+          "webhookId": "test-hook",
+          "webhookName": "Test Hook",
+          "attemptNumber": 1,
+          "error": "fetch failed"
+        },
+        {
+          "ok": false,
+          "status": 0,
+          "webhookId": "test-hook",
+          "webhookName": "Test Hook",
+          "attemptNumber": 2,
+          "error": "fetch failed"
+        },
+        {
+          "ok": false,
+          "status": 0,
+          "webhookId": "test-hook",
+          "webhookName": "Test Hook",
+          "attemptNumber": 3,
+          "error": "fetch failed"
+        }
+      ],
+      "remediation": [
+        {
+          "type": "capture-incident-artifact",
+          "status": "applied",
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-29T19-36-57-734Z-manual-test.json"
+        }
+      ]
+    },
+    {
       "id": "incident-1779529302430",
       "kind": "manual-test",
       "severity": "info",
@@ -839,49 +882,6 @@
           "type": "capture-incident-artifact",
           "status": "applied",
           "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-18T10-28-53-876Z-manual-test.json"
-        }
-      ]
-    },
-    {
-      "id": "incident-1779050539846",
-      "kind": "manual-test",
-      "severity": "info",
-      "title": "Manual test",
-      "message": "Automation control test",
-      "source": "automation-control",
-      "createdAt": "2026-05-17T20:42:19.846Z",
-      "details": {},
-      "alerts": [
-        {
-          "ok": false,
-          "status": 0,
-          "webhookId": "test-hook",
-          "webhookName": "Test Hook",
-          "attemptNumber": 1,
-          "error": "fetch failed"
-        },
-        {
-          "ok": false,
-          "status": 0,
-          "webhookId": "test-hook",
-          "webhookName": "Test Hook",
-          "attemptNumber": 2,
-          "error": "fetch failed"
-        },
-        {
-          "ok": false,
-          "status": 0,
-          "webhookId": "test-hook",
-          "webhookName": "Test Hook",
-          "attemptNumber": 3,
-          "error": "fetch failed"
-        }
-      ],
-      "remediation": [
-        {
-          "type": "capture-incident-artifact",
-          "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T20-42-19-846Z-manual-test.json"
         }
       ]
     }
