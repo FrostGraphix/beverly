@@ -91,6 +91,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vendors/:id/transactions': 'wallet.vending.monitor',
     'GET /vendors/:id/funding': 'wallet.funding.view',
     'GET /vendors/:id/staff': 'wallet.vendors.review',
+    'GET /vendors/:id/analytics': 'wallet.vending.monitor',
     'GET /funding/pending': 'wallet.funding.view',
     'GET /funding/history': 'wallet.funding.view',
     'POST /funding/reconcile-approved': 'wallet.funding.approve',
@@ -1208,6 +1209,116 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(100);
         return { staff: data ?? [] };
+    });
+
+    // ── vendor performance analytics ──
+    fastify.get('/vendors/:id/analytics', async (req, reply) => {
+        const id     = (req.params as { id: string }).id;
+        const period = ((req.query as any).period as string | undefined) ?? '30d';
+
+        const { data: vendor } = await adminClient
+            .from('vendor_organizations').select('id').eq('id', id).maybeSingle();
+        if (!vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+
+        let since: string | null = null;
+        if (period !== 'all') {
+            const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+            const d = new Date();
+            d.setDate(d.getDate() - days);
+            since = d.toISOString();
+        }
+
+        let q = adminClient
+            .from('purchase_orders')
+            .select('id, status, purchase_mode, amount_minor, units_kwh, meter_id, station_id, created_at')
+            .eq('actor_type', 'vendor')
+            .eq('actor_id', id)
+            .order('created_at', { ascending: true })
+            .limit(10000);
+        if (since) q = q.gte('created_at', since);
+
+        const { data: rows } = await q;
+        const orders = (rows ?? []) as {
+            id: string; status: string; purchase_mode: string;
+            amount_minor: number; units_kwh: number | null;
+            meter_id: string; station_id: string | null; created_at: string;
+        }[];
+
+        const totalAmount = orders.reduce((s, o) => s + Number(o.amount_minor ?? 0), 0);
+        const totalUnits  = orders.reduce((s, o) => s + Number(o.units_kwh  ?? 0), 0);
+        const nDelivered  = orders.filter((o) => o.status === 'delivered').length;
+        const nFailed     = orders.filter((o) => o.status === 'failed').length;
+
+        // by_mode
+        const byMode: Record<string, { count: number; amount_minor: number; units_kwh: number }> = {};
+        for (const o of orders) {
+            const m = o.purchase_mode ?? 'unknown';
+            byMode[m] ??= { count: 0, amount_minor: 0, units_kwh: 0 };
+            byMode[m].count++;
+            byMode[m].amount_minor += Number(o.amount_minor ?? 0);
+            byMode[m].units_kwh   += Number(o.units_kwh  ?? 0);
+        }
+
+        // daily breakdown
+        const dailyMap: Record<string, { count: number; amount_minor: number; units_kwh: number; delivered: number; failed: number }> = {};
+        for (const o of orders) {
+            const date = o.created_at.slice(0, 10);
+            dailyMap[date] ??= { count: 0, amount_minor: 0, units_kwh: 0, delivered: 0, failed: 0 };
+            dailyMap[date].count++;
+            dailyMap[date].amount_minor += Number(o.amount_minor ?? 0);
+            dailyMap[date].units_kwh   += Number(o.units_kwh  ?? 0);
+            if (o.status === 'delivered') dailyMap[date].delivered++;
+            if (o.status === 'failed')    dailyMap[date].failed++;
+        }
+        const daily = Object.entries(dailyMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, v]) => ({ date, ...v }));
+
+        // top stations
+        const stationMap: Record<string, { count: number; amount_minor: number; delivered: number }> = {};
+        for (const o of orders) {
+            const s = o.station_id ?? 'unknown';
+            stationMap[s] ??= { count: 0, amount_minor: 0, delivered: 0 };
+            stationMap[s].count++;
+            stationMap[s].amount_minor += Number(o.amount_minor ?? 0);
+            if (o.status === 'delivered') stationMap[s].delivered++;
+        }
+        const topStations = Object.entries(stationMap)
+            .sort(([, a], [, b]) => b.count - a.count)
+            .slice(0, 10)
+            .map(([station_id, v]) => ({ station_id, ...v }));
+
+        // top meters
+        const meterMap: Record<string, { count: number; amount_minor: number }> = {};
+        for (const o of orders) {
+            const m = o.meter_id ?? 'unknown';
+            meterMap[m] ??= { count: 0, amount_minor: 0 };
+            meterMap[m].count++;
+            meterMap[m].amount_minor += Number(o.amount_minor ?? 0);
+        }
+        const topMeters = Object.entries(meterMap)
+            .sort(([, a], [, b]) => b.count - a.count)
+            .slice(0, 10)
+            .map(([meter_id, v]) => ({ meter_id, ...v }));
+
+        return {
+            period,
+            since,
+            summary: {
+                total:              orders.length,
+                delivered:          nDelivered,
+                failed:             nFailed,
+                pending:            orders.length - nDelivered - nFailed,
+                success_rate:       orders.length ? Math.round((nDelivered / orders.length) * 1000) / 10 : 0,
+                total_amount_minor: totalAmount,
+                total_units_kwh:    Math.round(totalUnits * 100) / 100,
+                avg_amount_minor:   orders.length ? Math.round(totalAmount / orders.length) : 0,
+            },
+            by_mode:      byMode,
+            daily,
+            top_stations: topStations,
+            top_meters:   topMeters,
+        };
     });
 
     // ── funding approval queue ──
