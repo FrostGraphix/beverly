@@ -135,9 +135,9 @@ async function submit() {
 
 .field-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-2);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 

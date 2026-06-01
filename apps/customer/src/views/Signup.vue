@@ -260,15 +260,17 @@ async function submit() {
   border: 0;
   background: transparent;
   color: var(--brand);
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
+  padding: 4px 6px;
 }
 
 .field-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-2);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -347,6 +349,7 @@ async function submit() {
   line-height: 1.5;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-error span { flex: 1; }
 
 .auth-btn {
   width: 100%;
