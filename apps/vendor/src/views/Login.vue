@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import { API_BASE } from '../lib/api';
 import { PORTAL_URLS } from '../lib/portals';
+import VendorAuthShell from '../components/VendorAuthShell.vue';
 
 const REMEMBERED_VENDOR_EMAIL_KEY = 'beverly.vendor.remembered_email';
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
@@ -12,15 +13,16 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const router = useRouter();
 const route  = useRoute();
 const auth   = useVendorAuthStore();
+
 const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
 const redirectTarget = computed(() => safeRedirectTarget(route.query.redirect));
 
-const email    = ref('');
-const password = ref('');
+const email        = ref('');
+const password     = ref('');
 const showPassword = ref(false);
 const rememberEmail = ref(true);
-const loading  = ref(false);
-const error    = ref<string | null>(null);
+const loading      = ref(false);
+const error        = ref<string | null>(null);
 
 function safeRedirectTarget(raw: unknown, fallback = '/') {
     if (typeof raw !== 'string') return fallback;
@@ -39,9 +41,9 @@ async function submit() {
         error.value = 'Authentication is not configured. Contact Beverly support.';
         return;
     }
-    loading.value = true; error.value = null;
+    loading.value = true;
+    error.value   = null;
     try {
-        // 1) Sign in via Supabase
         const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
@@ -58,7 +60,6 @@ async function submit() {
             return;
         }
 
-        // 2) Verify they're a vendor_user via /me (auth plugin resolves the actor)
         const meRes = await fetch(`${API_BASE}/api/v1/vendor/me`, {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -66,17 +67,18 @@ async function submit() {
             const j = await meRes.json().catch(() => ({}));
             error.value =
                 meRes.status === 403 ? 'Access denied. This is not a vendor account.'
-                : meRes.status === 401 ? 'Session invalid, inactive, or not linked to a vendor account.'
+                : meRes.status === 401 ? 'Session invalid or not linked to a vendor account.'
                 : (j?.message ?? 'Vendor lookup failed.');
             return;
         }
         const me = await meRes.json();
 
-        // 3) Store session + route forward (forced password reset gate)
         auth.setSession(accessToken, me, rememberEmail.value);
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, normalizedEmail);
         else localStorage.removeItem(REMEMBERED_VENDOR_EMAIL_KEY);
-        await router.push(me.password_reset_required ? { path: '/password-change', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+        await router.push(me.password_reset_required
+            ? { path: '/password-change', query: { redirect: redirectTarget.value } }
+            : redirectTarget.value);
     } catch {
         error.value = 'Network error. Please try again.';
     } finally {
@@ -90,62 +92,105 @@ rememberEmail.value = Boolean(rememberedEmail);
 </script>
 
 <template>
-  <main style="min-height:100dvh; display:grid; place-items:center; padding: var(--s-5); background: var(--canvas)">
-    <div class="bw-card" style="width:100%; max-width:420px">
-      <div style="text-align:center; margin-bottom: var(--s-6)">
-        <a :href="PORTAL_URLS.landing" class="vendor-brand-link" aria-label="Beverly home">
-          <div class="bw-mark" style="width:52px; height:52px; font-size:22px; margin:0 auto var(--s-4)">B</div>
-        </a>
-        <div class="bw-h1" style="font-size: var(--t-2xl); margin-bottom: 6px">Vendor Portal</div>
-        <p class="bw-muted" style="margin:0; font-size: var(--t-sm)">Sign in to start vending</p>
-      </div>
-
-      <div v-if="sessionEnded" class="bw-alert" style="background: oklch(78% 0.16 75 / 0.10); border: 1px solid oklch(78% 0.16 75 / 0.30); color: var(--warn); font-size: var(--t-sm); margin-bottom: var(--s-4); border-radius: var(--r-md); padding: var(--s-3)">
-        ⓘ Your session timed out for security. Please sign in again.
-      </div>
-
-      <form class="bw-stack" @submit.prevent="submit">
-        <div>
-          <label class="bw-label">Email</label>
-          <input class="bw-input" v-model.trim="email" type="email" autocomplete="username" required placeholder="vendor@example.com" @input="error = null" />
-        </div>
-        <div>
-          <label class="bw-label">Password</label>
-          <div class="password-field">
-            <input class="bw-input" v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" required placeholder="Password" @input="error = null" />
-            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
-              {{ showPassword ? 'Hide' : 'Show' }}
-            </button>
-          </div>
-        </div>
-        <div class="login-row">
-          <label class="login-check">
-            <input v-model="rememberEmail" type="checkbox" />
-            Remember email
-          </label>
-          <router-link to="/forgot-password" class="login-link" style="text-decoration:none">Forgot password?</router-link>
-        </div>
-
-        <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
-
-        <button class="bw-btn primary lg" type="submit" :disabled="loading || !email || !password" style="justify-content:center; width:100%">
-          {{ loading ? 'Signing in…' : 'Sign in' }}
-        </button>
-      </form>
-
-      <p class="bw-muted" style="font-size: var(--t-xs); text-align:center; margin-top: var(--s-5)">
-        Vendor accounts are created by Beverly staff. Need access? Contact your account manager.
-      </p>
-
-      <div class="vendor-cross">
-        <a :href="PORTAL_URLS.customer + 'login'" class="vendor-cross-link">Buy electricity instead →</a>
-        <a :href="PORTAL_URLS.landing" class="vendor-cross-link vendor-cross-link--muted">← Back to Beverly home</a>
-      </div>
+  <VendorAuthShell
+    title="Sign in"
+    subtitle="Access your Beverly vendor account"
+  >
+    <div v-if="sessionEnded" class="session-banner" role="status">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+        <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Your session timed out for security. Please sign in again.
     </div>
-  </main>
+
+    <form class="auth-form" @submit.prevent="submit" novalidate>
+      <div class="field">
+        <label class="field-label" for="login-email">Email</label>
+        <input
+          id="login-email"
+          v-model.trim="email"
+          class="bw-input"
+          type="email"
+          inputmode="email"
+          autocomplete="username"
+          placeholder="vendor@example.com"
+          :disabled="loading"
+          @input="error = null"
+        />
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="login-password">Password</label>
+        <div class="password-field">
+          <input
+            id="login-password"
+            v-model="password"
+            class="bw-input"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="current-password"
+            placeholder="Password"
+            :disabled="loading"
+            @input="error = null"
+          />
+          <button
+            type="button"
+            class="password-toggle"
+            :aria-label="showPassword ? 'Hide password' : 'Show password'"
+            @click="showPassword = !showPassword"
+          >{{ showPassword ? 'Hide' : 'Show' }}</button>
+        </div>
+      </div>
+
+      <div class="login-row">
+        <label class="remember-row">
+          <input v-model="rememberEmail" type="checkbox" />
+          Remember email
+        </label>
+        <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
+      </div>
+
+      <div v-if="error" class="auth-error" role="alert">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
+          <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+          <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span>{{ error }}</span>
+      </div>
+
+      <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading || !email || !password">
+        <span v-if="loading" class="btn-spinner" aria-hidden="true" />
+        {{ loading ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+  </VendorAuthShell>
 </template>
 
 <style scoped>
+.session-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: oklch(from var(--warn) l c h / 0.10);
+  border: 1px solid oklch(from var(--warn) l c h / 0.30);
+  color: var(--warn);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+}
+
+.auth-form { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .password-field { position: relative; }
 .password-field .bw-input { padding-right: 76px; }
 .password-toggle {
@@ -156,16 +201,19 @@ rememberEmail.value = Boolean(rememberedEmail);
   border: 0;
   background: transparent;
   color: var(--brand);
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
+  padding: 4px 6px;
 }
+
 .login-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
 }
-.login-check {
+.remember-row {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -173,37 +221,46 @@ rememberEmail.value = Boolean(rememberedEmail);
   font-size: var(--t-sm);
   cursor: pointer;
 }
-.login-link {
-  border: 0;
-  background: transparent;
-  color: var(--brand);
-  font-weight: 700;
-  cursor: pointer;
-}
-.vendor-brand-link {
-  display: inline-block;
-  text-decoration: none;
-  transition: opacity var(--dur-fast);
-}
-.vendor-brand-link:hover { opacity: 0.85; }
-.vendor-cross {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: var(--s-4);
-  padding-top: var(--s-4);
-  border-top: 1px solid var(--border);
-}
-.vendor-cross-link {
+.forgot-link {
   font-size: var(--t-sm);
   font-weight: 600;
   color: var(--brand);
   text-decoration: none;
 }
-.vendor-cross-link:hover { text-decoration: underline; }
-.vendor-cross-link--muted {
-  color: var(--text-2);
-  font-weight: 500;
+.forgot-link:hover { text-decoration: underline; }
+
+.auth-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: oklch(from var(--danger) l c h / 0.10);
+  border: 1px solid oklch(from var(--danger) l c h / 0.25);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+  color: var(--danger);
+  line-height: 1.5;
+}
+.error-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-error span { flex: 1; }
+
+.auth-btn {
+  width: 100%;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 48px;
+  font-size: var(--t-md);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid oklch(100% 0 0 / 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
 }
 </style>

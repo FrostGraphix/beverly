@@ -163,7 +163,10 @@ onMounted(async () => {
     <div class="bw-card login-card">
       <div class="login-head">
         <div class="bw-mark login-mark">B</div>
-        <div class="bw-h1 login-title">Wallet Admin</div>
+        <div class="login-wordmark">
+          <strong>Beverly</strong>
+          <span>Wallet Admin</span>
+        </div>
         <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
       </div>
 
@@ -203,6 +206,7 @@ onMounted(async () => {
         </div>
         <div v-if="error" class="bw-alert danger">{{ error }}</div>
         <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
+          <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
@@ -227,6 +231,7 @@ onMounted(async () => {
         />
         <div v-if="error" class="bw-alert danger">{{ error }}</div>
         <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading">
+          <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Verifying…' : 'Verify & continue' }}
         </button>
         <div class="login-mfa-actions">
@@ -254,8 +259,28 @@ onMounted(async () => {
 }
 .login-card { position: relative; width: 100%; max-width: 420px; }
 .login-head { text-align: center; margin-bottom: var(--s-6); }
-.login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-4); }
-.login-title { font-size: var(--t-2xl); margin-bottom: 6px; }
+.login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-3); }
+.login-wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.login-wordmark strong {
+  font-size: var(--t-2xl);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.1;
+}
+.login-wordmark span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--brand);
+}
 .login-sub { margin: 0; font-size: var(--t-sm); }
 .login-flash {
   display: flex;
@@ -276,7 +301,19 @@ onMounted(async () => {
   flex-shrink: 0;
   opacity: .9;
 }
-.login-submit { justify-content: center; width: 100%; }
+.login-submit { justify-content: center; width: 100%; display: inline-flex; align-items: center; gap: var(--s-2); height: 48px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid oklch(100% 0 0 / 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 .login-foot { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); }
 .login-mfa-icon { width: 56px; height: 56px; margin: 0 auto; display: grid; place-items: center; border-radius: 16px; background: oklch(from var(--brand) l c h / .14); color: var(--brand); }
 .login-mfa-icon svg { width: 26px; height: 26px; }
