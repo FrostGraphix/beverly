@@ -214,15 +214,15 @@ onMounted(async () => {
       </div>
 
       <!-- Step 1: password -->
-      <form v-if="step === 'password'" class="bw-stack" @submit.prevent="signIn">
-        <div>
-          <label class="bw-label">Email</label>
-          <input class="bw-input" v-model.trim="email" type="email" autocomplete="username" placeholder="staff@acoblighting.com" required @input="error = null" />
+      <form v-if="step === 'password'" class="auth-form" @submit.prevent="signIn">
+        <div class="field">
+          <label class="field-label" for="admin-email">Email</label>
+          <input id="admin-email" class="bw-input" v-model.trim="email" type="email" autocomplete="username" placeholder="staff@acoblighting.com" required @input="error = null" />
         </div>
-        <div>
-          <label class="bw-label">Password</label>
+        <div class="field">
+          <label class="field-label" for="admin-password">Password</label>
           <div class="password-field">
-            <input class="bw-input" v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="Password" required @input="error = null" />
+            <input id="admin-password" class="bw-input" v-model="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="Password" required @input="error = null" />
             <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
               {{ showPassword ? 'Hide' : 'Show' }}
             </button>
@@ -235,7 +235,13 @@ onMounted(async () => {
           </label>
           <button type="button" class="login-link" @click="error = 'Ask a Beverly super admin to reset your password.'">Forgot password?</button>
         </div>
-        <div v-if="error" class="bw-alert danger">{{ error }}</div>
+        <div v-if="error" class="auth-error" role="alert">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
+            <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>{{ error }}</span>
+        </div>
         <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Signing in…' : 'Sign in' }}
@@ -243,7 +249,7 @@ onMounted(async () => {
       </form>
 
       <!-- Step 2: MFA challenge -->
-      <form v-else class="bw-stack" @submit.prevent="verifyChallenge">
+      <form v-else class="auth-form" @submit.prevent="verifyChallenge">
         <div class="login-mfa-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         </div>
@@ -260,7 +266,13 @@ onMounted(async () => {
           autofocus
           @keyup.enter="verifyChallenge"
         />
-        <div v-if="error" class="bw-alert danger">{{ error }}</div>
+        <div v-if="error" class="auth-error" role="alert">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
+            <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>{{ error }}</span>
+        </div>
         <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Verifying…' : 'Verify & continue' }}
@@ -332,6 +344,29 @@ onMounted(async () => {
   flex-shrink: 0;
   opacity: .9;
 }
+.auth-form { display: flex; flex-direction: column; gap: var(--s-4); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2, var(--text-dim));
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.auth-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  background: oklch(from var(--danger) l c h / 0.10);
+  border: 1px solid oklch(from var(--danger) l c h / 0.25);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+  color: var(--danger);
+  line-height: 1.5;
+}
+.error-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-error span { flex: 1; }
 .login-submit { justify-content: center; width: 100%; display: inline-flex; align-items: center; gap: var(--s-2); height: 48px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -348,14 +383,14 @@ onMounted(async () => {
 .login-foot { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); }
 .login-mfa-icon { width: 56px; height: 56px; margin: 0 auto; display: grid; place-items: center; border-radius: 16px; background: oklch(from var(--brand) l c h / .14); color: var(--brand); }
 .login-mfa-icon svg { width: 26px; height: 26px; }
-.login-mfa-copy { text-align: center; color: var(--text-dim, var(--muted)); font-size: var(--t-sm); margin: 0; }
+.login-mfa-copy { text-align: center; color: var(--text-2, var(--text-dim)); font-size: var(--t-sm); margin: 0; }
 .login-code { text-align: center; font-size: 28px; letter-spacing: .3em; font-family: var(--font-mono, monospace); }
 .login-mfa-actions { display: flex; justify-content: space-between; gap: var(--s-3); }
 .login-link { background: none; border: none; color: var(--brand); font-size: var(--t-sm); font-weight: 600; cursor: pointer; padding: 4px; }
 .login-link:hover { text-decoration: underline; }
 .password-field { position: relative; }
 .password-field .bw-input { padding-right: 76px; }
-.password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--brand); font-weight: 700; cursor: pointer; }
+.password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--brand); font-size: var(--t-xs); font-weight: 700; cursor: pointer; padding: 4px 6px; }
 .login-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.login-check { display: inline-flex; align-items: center; gap: 8px; color: var(--text-dim, var(--muted)); font-size: var(--t-sm); cursor: pointer; }
+.login-check { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2, var(--text-dim)); font-size: var(--t-sm); cursor: pointer; }
 </style>

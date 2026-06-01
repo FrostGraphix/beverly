@@ -198,8 +198,8 @@ async function submit() {
               {{ showPassword ? 'Hide' : 'Show' }}
             </button>
           </div>
-          <div style="text-align:right; margin-top: var(--s-1)">
-            <router-link to="/forgot-password" style="font-size:var(--t-xs); color:var(--brand); text-decoration:none">Forgot password?</router-link>
+          <div class="forgot-row">
+            <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
           </div>
         </div>
       </template>
@@ -303,8 +303,10 @@ async function submit() {
   border: 0;
   background: transparent;
   color: var(--brand);
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
+  padding: 4px 6px;
 }
 .remember-row {
   display: inline-flex;
@@ -315,12 +317,11 @@ async function submit() {
 }
 
 .field-label {
-  font-size: var(--t-sm);
-  font-weight: 600;
-  color: var(--text-2);
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
   font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .phone-wrap {
@@ -426,4 +427,8 @@ async function submit() {
   text-decoration: none;
 }
 .auth-inline-link:hover { text-decoration: underline; }
+
+.forgot-row { text-align: right; margin-top: var(--s-1); }
+.forgot-link { font-size: var(--t-xs); color: var(--brand); text-decoration: none; font-weight: 600; }
+.forgot-link:hover { text-decoration: underline; }
 </style>
