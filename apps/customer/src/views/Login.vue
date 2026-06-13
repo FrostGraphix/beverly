@@ -358,7 +358,7 @@ async function submit() {
   flex-wrap: wrap;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
-.auth-error span { flex: 1; }
+.auth-error span { flex: 1; min-width: 0; }
 .error-link {
   display: block;
   margin-top: 4px;

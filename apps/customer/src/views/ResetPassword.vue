@@ -197,7 +197,7 @@ async function submit() {
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
 .auth-error span { flex: 1; }
-.error-link { display: block; margin-top: 4px; color: var(--danger); font-weight: 600; text-decoration: none; font-size: var(--t-xs); }
+.error-link { display: block; margin-top: 4px; color: var(--brand); font-weight: 600; text-decoration: none; font-size: var(--t-xs); }
 .error-link:hover { text-decoration: underline; }
 
 .auth-btn {
