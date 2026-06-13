@@ -307,6 +307,8 @@ function logout() {
   gap: var(--s-2);
   height: 48px;
   font-size: var(--t-md);
+  display: inline-flex;
+  align-items: center;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }

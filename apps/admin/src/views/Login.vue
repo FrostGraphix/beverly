@@ -167,7 +167,7 @@ onMounted(async () => {
           <strong>Beverly</strong>
           <span>Wallet Admin</span>
         </div>
-        <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
+        <p class="login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
       </div>
 
       <div v-if="showSessionEnded" class="login-flash warn" role="status" aria-live="polite">
@@ -254,7 +254,7 @@ onMounted(async () => {
         </div>
       </form>
 
-      <p class="bw-muted login-foot">
+      <p class="login-foot">
         Access is restricted to Beverly staff. Contact your administrator.
       </p>
     </div>
@@ -269,7 +269,28 @@ onMounted(async () => {
     radial-gradient(50% 40% at 50% 0%, oklch(70% 0.19 145 / .16) 0%, transparent 70%),
     radial-gradient(40% 40% at 80% 100%, oklch(68% 0.17 280 / .12) 0%, transparent 65%);
 }
-.login-card { position: relative; width: 100%; max-width: 420px; }
+.login-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  border-radius: var(--r-2xl);
+  padding: var(--s-6);
+  box-shadow:
+    0 0 0 1px oklch(100% 0 0 / 0.04) inset,
+    0 4px 6px -1px oklch(0% 0 0 / 0.3),
+    0 20px 40px -8px oklch(0% 0 0 / 0.4),
+    0 0 60px oklch(70% 0.19 145 / 0.04);
+}
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(70% 0.19 145 / 0.5), transparent);
+  border-radius: 0 0 4px 4px;
+}
 .login-head { text-align: center; margin-bottom: var(--s-6); }
 .login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-3); }
 .login-wordmark {
@@ -293,7 +314,7 @@ onMounted(async () => {
   letter-spacing: 0.09em;
   color: var(--brand);
 }
-.login-sub { margin: 0; font-size: var(--t-sm); }
+.login-sub { margin: 0; font-size: var(--t-sm); color: var(--text-2, var(--text-dim)); }
 .login-flash {
   display: flex;
   align-items: center;
@@ -349,7 +370,7 @@ onMounted(async () => {
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
-.login-foot { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); }
+.login-foot { font-size: var(--t-xs); text-align: center; margin-top: var(--s-5); color: var(--text-2, var(--text-dim)); }
 .login-mfa-icon { width: 56px; height: 56px; margin: 0 auto; display: grid; place-items: center; border-radius: 16px; background: oklch(from var(--brand) l c h / .14); color: var(--brand); }
 .login-mfa-icon svg { width: 26px; height: 26px; }
 .login-mfa-copy { text-align: center; color: var(--text-2, var(--text-dim)); font-size: var(--t-sm); margin: 0; }
