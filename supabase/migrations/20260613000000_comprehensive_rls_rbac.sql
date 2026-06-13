@@ -153,7 +153,8 @@ create policy "security events staff read"
   using (public.is_wallet_staff());
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- ACCOUNT_BINDINGS (add customer + staff read)
+-- ACCOUNT_BINDINGS (add staff read; customer_id is a text CRM identifier, so
+-- customer access stays backend-mediated through the service role)
 -- ══════════════════════════════════════════════════════════════════════════════
 alter table public.account_bindings force row level security;
 
@@ -165,16 +166,8 @@ create policy "account bindings staff read"
   to authenticated
   using (public.is_wallet_staff());
 
-create policy "account bindings customer read"
-  on public.account_bindings for select
-  to authenticated
-  using (
-    public.is_customer_role()
-    and customer_id = public.current_customer_id()
-  );
-
 -- ══════════════════════════════════════════════════════════════════════════════
--- PURCHASE_ORDERS (add staff + customer + vendor read)
+-- PURCHASE_ORDERS (add staff + owner read; owner is keyed by actor_type/actor_id)
 -- ══════════════════════════════════════════════════════════════════════════════
 alter table public.purchase_orders force row level security;
 
@@ -192,7 +185,8 @@ create policy "purchase orders customer read"
   to authenticated
   using (
     public.is_customer_role()
-    and customer_id = public.current_customer_id()
+    and actor_type = 'customer'
+    and actor_id   = public.current_customer_id()
   );
 
 create policy "purchase orders vendor read"
@@ -200,37 +194,37 @@ create policy "purchase orders vendor read"
   to authenticated
   using (
     public.is_vendor_wallet_role()
-    and vendor_organization_id = public.current_vendor_organization_id()
+    and actor_type = 'vendor'
+    and actor_id   = public.current_vendor_organization_id()
   );
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- RECEIPTS (add staff + customer + vendor read)
+-- RECEIPTS (no owner columns — scope owners through the parent purchase_order)
 -- ══════════════════════════════════════════════════════════════════════════════
 alter table public.receipts force row level security;
 
 drop policy if exists "receipts staff read"    on public.receipts;
 drop policy if exists "receipts customer read" on public.receipts;
 drop policy if exists "receipts vendor read"   on public.receipts;
+drop policy if exists "receipts owner read"    on public.receipts;
 
 create policy "receipts staff read"
   on public.receipts for select
   to authenticated
   using (public.is_wallet_staff());
 
-create policy "receipts customer read"
+create policy "receipts owner read"
   on public.receipts for select
   to authenticated
   using (
-    public.is_customer_role()
-    and customer_id = public.current_customer_id()
-  );
-
-create policy "receipts vendor read"
-  on public.receipts for select
-  to authenticated
-  using (
-    public.is_vendor_wallet_role()
-    and vendor_organization_id = public.current_vendor_organization_id()
+    exists (
+      select 1 from public.purchase_orders po
+      where po.id = receipts.purchase_order_id
+        and (
+          (public.is_customer_role()     and po.actor_type = 'customer' and po.actor_id = public.current_customer_id())
+          or (public.is_vendor_wallet_role() and po.actor_type = 'vendor'   and po.actor_id = public.current_vendor_organization_id())
+        )
+    )
   );
 
 -- ══════════════════════════════════════════════════════════════════════════════
