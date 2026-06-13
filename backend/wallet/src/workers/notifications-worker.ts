@@ -13,7 +13,7 @@
  * Retry: 3 attempts with exponential back-off (configured on notificationsQueue).
  * If all 3 fail, the job lands in BullMQ's failed set for manual inspection.
  */
-import { Worker, type Job } from 'bullmq';
+import { Worker, type Job, type ConnectionOptions } from 'bullmq';
 import { redisConnection } from '../queue/index.js';
 import { adminClient } from '../db/supabase.js';
 import { sendSms } from '../adapters/twilio.js';
@@ -228,7 +228,8 @@ export function startNotificationsWorker(): Worker {
         'notifications',
         processJob,
         {
-            connection:  redisConnection,
+            // BullMQ bundles its own ioredis types; cast at this boundary.
+            connection:  redisConnection as unknown as ConnectionOptions,
             concurrency: CONCURRENCY,
         },
     );

@@ -19,7 +19,7 @@ import { runDailyReconciliation } from '../services/reconciliation.js';
 import { runDailySettlement } from '../services/settlement.js';
 import { refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { reconcileRemoteSendOrders } from '../services/vending.js';
-import { listCtrs, fileCtr } from '../services/compliance-ctr.js';
+import { listCtrs } from '../services/compliance-ctr.js';
 
 function safe(name: string, fn: () => Promise<void>): () => void {
     return () => {

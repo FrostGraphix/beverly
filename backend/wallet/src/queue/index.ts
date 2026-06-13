@@ -11,7 +11,7 @@
  * Workers live in src/workers/* and run as dedicated processes in production.
  * Retry policy: exponential back-off starting at 1 s.
  */
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue, QueueEvents, type ConnectionOptions } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 
@@ -53,28 +53,33 @@ if (queuesEnabled) {
     });
 }
 
+// BullMQ bundles its own ioredis copy, so its ConnectionOptions type does not
+// structurally match our top-level ioredis instance. The runtime object is
+// identical; this cast reconciles the duplicated type at the BullMQ boundary.
+const bullConnection = connection as unknown as ConnectionOptions;
+
 export const notificationsQueue = queuesEnabled
-    ? new Queue('notifications', { connection, defaultJobOptions: retryOpts(3) })
+    ? new Queue('notifications', { connection: bullConnection, defaultJobOptions: retryOpts(3) })
     : disabledQueue('notifications');
 
 export const paymentsQueue = queuesEnabled
-    ? new Queue('payments', { connection, defaultJobOptions: retryOpts(5) })
+    ? new Queue('payments', { connection: bullConnection, defaultJobOptions: retryOpts(5) })
     : disabledQueue('payments');
 
 export const holdsQueue = queuesEnabled
-    ? new Queue('holds', { connection, defaultJobOptions: retryOpts(3) })
+    ? new Queue('holds', { connection: bullConnection, defaultJobOptions: retryOpts(3) })
     : disabledQueue('holds');
 
 export const auditQueue = queuesEnabled
-    ? new Queue('audit', { connection, defaultJobOptions: retryOpts(0) })
+    ? new Queue('audit', { connection: bullConnection, defaultJobOptions: retryOpts(0) })
     : disabledQueue('audit');
 
 export const complianceQueue = queuesEnabled
-    ? new Queue('compliance', { connection, defaultJobOptions: retryOpts(5) })
+    ? new Queue('compliance', { connection: bullConnection, defaultJobOptions: retryOpts(5) })
     : disabledQueue('compliance');
 
 export const notificationsEvents = queuesEnabled
-    ? new QueueEvents('notifications', { connection })
+    ? new QueueEvents('notifications', { connection: bullConnection })
     : ({ async close() {} } as unknown as QueueEvents);
 
 export async function closeQueues() {

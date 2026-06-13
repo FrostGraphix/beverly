@@ -30,6 +30,10 @@ import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
+import {
+    PERMISSION_CATALOG, DEFAULT_ROLE_PERMISSIONS,
+    ensureAccessDefaults, permissionsForRole,
+} from '../services/rbac.js';
 
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -45,59 +49,6 @@ function isUuid(value: string): boolean {
 function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
 }
-
-const PERMISSION_CATALOG = [
-    { key: 'wallet.dashboard.view', label: 'View operations dashboard', group: 'Overview', risk: 'low' },
-    { key: 'wallet.vendors.review', label: 'Review vendor applications', group: 'Vendors', risk: 'medium' },
-    { key: 'wallet.vendors.manage', label: 'Create and manage vendors', group: 'Vendors', risk: 'high' },
-    { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
-    { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
-    { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
-    { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
-    { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
-    { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.support.manage', label: 'Manage support (FAQ, tickets, chat)', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.settlement.view', label: 'View settlement batches', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.reconciliation.run', label: 'Run reconciliation', group: 'Operations', risk: 'high' },
-    { key: 'wallet.fraud.review', label: 'Resolve fraud reviews', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.privacy.review', label: 'Review privacy requests', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.audit.view', label: 'View audit and security events', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.flags.manage', label: 'Manage feature flags', group: 'Launch', risk: 'critical' },
-    { key: 'wallet.access.manage', label: 'Manage roles and permissions', group: 'Access', risk: 'critical' },
-    { key: 'wallet.consumption.view', label: 'View consumption analytics', group: 'Analytics', risk: 'low' },
-];
-
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-    'super-admin': PERMISSION_CATALOG.map((p) => p.key),
-    'operations-manager': [
-        'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
-        'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
-    ],
-    'finance-checker': [
-        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
-        'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
-        'wallet.audit.view',
-    ],
-    account: [
-        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.customers.view', 'wallet.vending.monitor',
-        'wallet.settlement.view', 'wallet.reconciliation.run',
-    ],
-};
-
-const ROLE_LABELS: Record<string, string> = {
-    'super-admin': 'Super Admin',
-    'operations-manager': 'Operations Manager',
-    'finance-checker': 'Finance Checker',
-    account: 'Account Officer',
-};
-
-const ROLE_LEGACY_NAMES: Record<string, string> = {
-    'super-admin': 'admin',
-    'operations-manager': 'ops',
-    'finance-checker': 'analyst',
-    account: 'finance',
-};
 
 const OPEN_ADMIN_ROUTES = new Set(['GET /me']);
 
@@ -202,13 +153,6 @@ function adminRouteKey(req: FastifyRequest): string {
     return `${req.method.toUpperCase()} ${routeUrl}`;
 }
 
-async function permissionsForRole(role: string): Promise<Set<string>> {
-    await ensureAccessDefaults();
-    if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((p) => p.key));
-    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
-    return new Set((data ?? []).map((p: any) => p.route_hash));
-}
-
 async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     const key = adminRouteKey(req);
     if (OPEN_ADMIN_ROUTES.has(key)) return true;
@@ -261,39 +205,6 @@ function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): b
         return false;
     }
     return true;
-}
-
-// Seed flag — runs once per server lifetime, not on every request.
-let _accessDefaultsSeeded = false;
-let _accessDefaultsPromise: Promise<void> | null = null;
-
-async function ensureAccessDefaults() {
-    if (_accessDefaultsSeeded) return;
-    // Deduplicate concurrent calls during startup (e.g. multiple requests arriving before the first finishes).
-    if (_accessDefaultsPromise) return _accessDefaultsPromise;
-    _accessDefaultsPromise = (async () => {
-        for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
-            await adminClient.from('roles').upsert({
-                name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
-                role_key: roleKey,
-                role_name: label,
-                label,
-                description: roleKey === 'super-admin'
-                    ? 'Full wallet administration and access control.'
-                    : 'Wallet administration role managed by Beverly access policy.',
-            }, { onConflict: 'role_key' });
-        }
-        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-            for (const permission of permissions) {
-                await adminClient.from('permissions').upsert({
-                    role_key: roleKey,
-                    route_hash: permission,
-                }, { onConflict: 'role_key,route_hash' });
-            }
-        }
-        _accessDefaultsSeeded = true;
-    })();
-    return _accessDefaultsPromise;
 }
 
 const route: FastifyPluginAsync = async (fastify) => {
@@ -2616,7 +2527,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { fileCtr, CtrError } = await import('../services/compliance-ctr.js');
+        const { fileCtr } = await import('../services/compliance-ctr.js');
         try {
             await fileCtr(id, req.actor!.userId, body.filing_reference);
             await logAction({
@@ -2773,7 +2684,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { reviewDocument, KycDocumentError } = await import('../services/kyc-documents.js');
+        const { reviewDocument } = await import('../services/kyc-documents.js');
         try {
             await reviewDocument({
                 docId,
