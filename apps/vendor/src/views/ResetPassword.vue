@@ -80,7 +80,7 @@ async function submit() {
       </div>
       <p class="success-title">Password updated</p>
       <p class="success-sub">Sign in with your new password.</p>
-      <router-link to="/login" class="bw-btn primary auth-btn" style="text-decoration:none">
+      <router-link to="/login" class="bw-btn primary auth-btn">
         Sign in
       </router-link>
     </div>
@@ -88,7 +88,7 @@ async function submit() {
     <!-- Token missing -->
     <div v-else-if="!token" class="error-state">
       <p class="error-state-msg">{{ error }}</p>
-      <router-link to="/forgot-password" class="bw-btn primary auth-btn" style="text-decoration:none">
+      <router-link to="/forgot-password" class="bw-btn primary auth-btn">
         Request new link
       </router-link>
     </div>

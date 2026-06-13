@@ -49,7 +49,7 @@ async function submit() {
       <p class="success-sub">
         If an account exists for <strong>{{ email }}</strong>, a reset link has been sent. It expires in 30 minutes.
       </p>
-      <router-link to="/login" class="bw-btn primary auth-btn" style="text-decoration:none">
+      <router-link to="/login" class="bw-btn primary auth-btn">
         Back to sign in
       </router-link>
     </div>
