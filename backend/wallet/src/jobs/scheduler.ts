@@ -15,9 +15,13 @@
 import { adminClient } from '../db/supabase.js';
 import { refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { reconcileRemoteSendOrders } from '../services/vending.js';
-import { verifyTransaction } from '../adapters/paystack.js';
-import { PAYMENT_RECONCILABLE_STATUSES, PAYMENT_STATUS } from '../services/payment-status.js';
-import { fulfillSuccessfulPaystackTransaction } from '../services/payment-transactions.js';
+import { listCtrs } from '../services/compliance-ctr.js';
+
+function safe(name: string, fn: () => Promise<void>): () => void {
+    return () => {
+        fn().catch((err) => console.error(`[JOB:${name}] failed:`, err));
+    };
+}
 
 // ── Hold expiry sweeper ────────────────────────────────────────────────────────
 export async function sweepExpiredHolds(): Promise<void> {

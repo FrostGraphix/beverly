@@ -11,18 +11,20 @@
  *   customer    — row in customers with status='active'
  *
  * Guards:
- *   requireAuth()      — any authenticated actor
- *   requireStaff()     — staff only
- *   requireVendor()    — vendor_user only (blocks if password_reset_required)
- *   requireCustomer()  — customer only
- *   requireKycTier(n)  — customer with kyc_tier >= n
+ *   requireAuth()           — any authenticated actor
+ *   requireStaff()          — staff only
+ *   requireVendor()         — vendor_user only (blocks if password_reset_required)
+ *   requireCustomer()       — customer only
+ *   requireKycTier(n)       — customer with kyc_tier >= n
+ *   requirePermission(perm) — staff with a specific RBAC permission granted
  */
 import fp from 'fastify-plugin';
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
-import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
+import { roleHasPermission } from '../services/rbac.js';
+import { logAction } from '../services/audit.js';
 
 export type ActorType = 'staff' | 'vendor_user' | 'customer';
 
@@ -53,6 +55,7 @@ declare module 'fastify' {
         requireVendor: () => preHandlerHookHandler;
         requireCustomer: () => preHandlerHookHandler;
         requireKycTier: (min: number) => preHandlerHookHandler;
+        requirePermission: (permission: string) => preHandlerHookHandler;
     }
 }
 
@@ -277,6 +280,34 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                     error: 'kyc_tier_required',
                     message: `KYC tier ${min} required.`,
                     currentTier: req.actor?.kycTier ?? 0,
+                });
+            }
+            return undefined;
+        };
+    });
+
+    // Fine-grained staff RBAC: requires the actor to be staff AND hold a
+    // specific permission from the shared catalog. Use for staff-facing routes
+    // outside the admin plugin, or to layer extra checks on top of it.
+    fastify.decorate('requirePermission', (permission: string): preHandlerHookHandler => {
+        return async (req: FastifyRequest, reply: FastifyReply) => {
+            await (fastify.requireStaff() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
+            if (reply.sent) return undefined;
+            const role = req.actor!.role;
+            if (!(await roleHasPermission(role, permission))) {
+                await logAction({
+                    actorUserId: req.actor!.userId,
+                    actorType: 'staff',
+                    actorRole: role,
+                    action: 'access.permission_denied',
+                    targetType: 'route',
+                    targetId: `${req.method.toUpperCase()} ${req.routeOptions?.url ?? req.url.split('?')[0]}`,
+                    metadata: { permission },
+                }).catch(() => undefined);
+                return reply.code(403).send({
+                    error: 'permission_denied',
+                    message: `Missing permission: ${permission}.`,
+                    details: { permission },
                 });
             }
             return undefined;
