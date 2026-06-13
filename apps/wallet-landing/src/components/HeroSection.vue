@@ -59,26 +59,21 @@ function handleMouseLeave() {
       <div class="lp-hero-flash" />
     </div>
 
-    <div class="lp-hero-inner lp-hero-inner--showcase">
-      <div class="lp-hero-copy lp-hero-copy--poster">
-        <span class="lp-pill" v-reveal="150">
-          <span class="lp-pill-dot" /> Live across 5 Nasarawa sites
+    <div class="lp-hero-inner">
+      <div class="lp-hero-copy">
+        <span class="lp-pill" v-reveal>
+          <span class="lp-pill-dot" />
+          E-WALLET &middot; ELECTRICITY &middot; PAYMENTS
         </span>
 
-        <!-- Cinema clip-reveal title -->
-        <h1 class="lp-hero-title" aria-label="Smart power, partnered.">
-          <span class="lp-title-clip">
-            <span class="lp-title-word lp-title-word--1">Smart power,</span>
-          </span>
-          <span class="lp-title-clip lp-title-clip--grad">
-            <span class="lp-title-word lp-title-word--2">
-              <span class="lp-grad lp-grad--live">partnered.</span>
-            </span>
-          </span>
+        <h1 class="lp-hero-title" v-reveal="60">
+          The Future of<br>
+          <span class="lp-grad">Digital Payments!</span>
         </h1>
 
-        <p class="lp-hero-sub" v-reveal="380">
-          Your Smart Power Partner.
+        <p class="lp-hero-sub" v-reveal="120">
+          Buy prepaid electricity tokens in seconds. Power your home, run your
+          vending business, and manage every meter from one intelligent wallet.
         </p>
 
         <div class="lp-hero-cta" v-reveal="480">
@@ -86,32 +81,58 @@ function handleMouseLeave() {
             Get started free <IconSvg name="arrow" />
           </button>
           <a class="lp-btn lp-btn--glass lp-btn--lg" :href="PORTALS.vendor.login">
-            <IconSvg name="store" /> I'm a vendor
+            <IconSvg name="store" /> Vendor portal
           </a>
         </div>
 
-        <ul class="lp-hero-trust" v-reveal="600">
+        <!-- Social proof row -->
+        <div class="lp-hero-social" v-reveal="240">
+          <div class="lp-avatars">
+            <span class="lp-avatar lp-avatar--a">AO</span>
+            <span class="lp-avatar lp-avatar--b">EN</span>
+            <span class="lp-avatar lp-avatar--c">FA</span>
+            <span class="lp-avatar lp-avatar--d">CE</span>
+          </div>
+          <div class="lp-social-meta">
+            <div class="lp-stars">
+              <span v-for="i in 5" :key="i" class="lp-star">★</span>
+            </div>
+            <span class="lp-social-copy"><strong>8.5</strong> / 10 — from 2,400+ users</span>
+          </div>
+        </div>
+
+        <ul class="lp-hero-trust" v-reveal="280">
           <li><IconSvg name="check" /> No setup fees</li>
-          <li><IconSvg name="check" /> Tokens in seconds</li>
+          <li><IconSvg name="check" /> Tokens in &lt;15 seconds</li>
           <li><IconSvg name="check" /> Bank-grade security</li>
         </ul>
       </div>
 
-      <!-- Supercharged Floating & Spinning 3D Bento Grid Showcase -->
-      <div class="lp-hero-art lp-hero-art--bento">
-        <div class="lp-bento-orbit-stage">
-          <div
-            class="lp-bento-grid lp-bento-grid--3d"
-            :style="{ transform: `rotateX(${tiltX}deg) rotateY(${tiltY}deg)` }"
-          >
-            <!-- Card 1: Balance & Live Status -->
-            <div class="lp-bento-card lp-bento-card--balance lp-bento-float-1">
-              <div class="lp-bento-head">
-                <div class="lp-bento-brand">
-                  <span class="lp-bento-icon"><IconSvg name="bolt" /></span>
-                  <span>Beverly Wallet</span>
-                </div>
-                <span class="lp-bento-badge"><span class="lp-pill-dot" /> Live</span>
+      <div class="lp-hero-art" v-reveal="200">
+        <div class="lp-phone" aria-label="Beverly Wallet app">
+          <span class="lp-phone-side lp-phone-side--action" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--volume" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--power" aria-hidden="true" />
+          <span class="lp-phone-side lp-phone-side--camera" aria-hidden="true" />
+          <div class="lp-phone-island" aria-hidden="true">
+            <span class="lp-phone-camera" />
+          </div>
+
+          <div class="lp-phone-screen">
+            <div class="lp-ios-status" aria-hidden="true">
+              <span>9:41</span>
+              <span class="lp-ios-signals"><i /><i /><i /></span>
+            </div>
+
+            <div class="lp-app-bar">
+              <span class="lp-app-brand"><span class="lp-app-mark"><IconSvg name="bolt" /></span> Beverly</span>
+              <span class="lp-app-status">Live</span>
+            </div>
+
+            <div class="lp-balance-card">
+              <div class="lp-balance-head">
+                <span class="lp-balance-label">Wallet balance</span>
+                <span class="lp-app-avatar">A</span>
               </div>
               <div class="lp-bento-body">
                 <span class="lp-bento-label">Active balance</span>
