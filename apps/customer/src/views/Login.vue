@@ -117,7 +117,7 @@ async function submit() {
         <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
         <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Your session timed out for security. Please sign in again.
+      <span>Your session timed out for security. Please sign in again.</span>
     </div>
 
     <form class="auth-form" @submit.prevent="submit" novalidate>
@@ -238,6 +238,7 @@ async function submit() {
   border-radius: var(--r-md);
   font-size: var(--t-sm);
 }
+.session-banner span { flex: 1; }
 
 .auth-form {
   display: flex;
@@ -347,13 +348,14 @@ async function submit() {
   display: flex;
   align-items: flex-start;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-3);
+  padding: var(--s-3);
   background: oklch(from var(--danger) l c h / 0.10);
   border: 1px solid oklch(from var(--danger) l c h / 0.25);
   border-radius: var(--r-md);
   font-size: var(--t-sm);
   color: var(--danger);
   line-height: 1.5;
+  flex-wrap: wrap;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
 .auth-error span { flex: 1; }

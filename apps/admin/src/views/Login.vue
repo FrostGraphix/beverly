@@ -178,8 +178,13 @@ onMounted(async () => {
         </svg>
         <span>{{ sessionEndedMsg }}</span>
       </div>
-      <div v-else-if="reasonMfa && step === 'challenge'" class="login-flash warn">
-        Confirm your identity to continue — your 2FA grant expired.
+      <div v-else-if="reasonMfa && step === 'challenge'" class="login-flash warn" role="status">
+        <svg class="login-flash-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="10" cy="10" r="7.5" />
+          <path d="M10 6.6v4.2" />
+          <circle cx="10" cy="13.8" r=".7" fill="currentColor" stroke="none" />
+        </svg>
+        <span>Confirm your identity to continue — your 2FA grant expired.</span>
       </div>
 
       <!-- Step 1: password -->
