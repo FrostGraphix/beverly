@@ -191,7 +191,7 @@ onMounted(async () => {
 <template>
   <main class="login-stage">
     <div class="login-aura" />
-    <div class="bw-card login-card">
+    <div class="login-card">
       <div class="login-head">
         <div class="bw-mark login-mark">B</div>
         <div class="login-wordmark">
@@ -247,7 +247,7 @@ onMounted(async () => {
           </svg>
           <span>{{ error }}</span>
         </div>
-        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
+        <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading || !email || !password">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
@@ -278,7 +278,7 @@ onMounted(async () => {
           </svg>
           <span>{{ error }}</span>
         </div>
-        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading">
+        <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Verifying…' : 'Verify & continue' }}
         </button>
@@ -309,6 +309,8 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-2xl);
   padding: var(--s-6);
   box-shadow:
@@ -354,16 +356,17 @@ onMounted(async () => {
 .login-flash {
   display: flex;
   align-items: center;
-  gap: .55rem;
-  background: oklch(78% 0.16 75 / .08);
-  border: 1px solid oklch(78% 0.16 75 / .24);
+  gap: var(--s-2);
+  background: oklch(from var(--warn) l c h / 0.08);
+  border: 1px solid oklch(from var(--warn) l c h / 0.24);
   color: var(--warn);
-  font-size: 13px;
+  font-size: var(--t-sm);
   font-weight: 600;
   margin-bottom: var(--s-4);
-  border-radius: 10px;
-  padding: .55rem .7rem;
+  border-radius: var(--r-md);
+  padding: var(--s-3);
 }
+.login-flash span { flex: 1; }
 .login-flash-ic {
   width: 14px;
   height: 14px;
@@ -393,7 +396,7 @@ onMounted(async () => {
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
 .auth-error span { flex: 1; }
-.login-submit { justify-content: center; width: 100%; display: inline-flex; align-items: center; gap: var(--s-2); height: 48px; }
+.auth-btn { width: 100%; justify-content: center; display: inline-flex; align-items: center; gap: var(--s-2); height: 48px; font-size: var(--t-md); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .btn-spinner {
