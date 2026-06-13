@@ -104,10 +104,74 @@ export interface Stat {
 }
 
 export const STATS: Stat[] = [
-    { value: '<15s', label: 'Average token delivery' },
-    { value: '24/7', label: 'Buy anytime, any day' },
+    { value: '72K+', label: 'Tokens vended' },
+    { value: '45K+', label: 'Active wallets' },
     { value: '99.9%', label: 'Platform uptime' },
-    { value: '5+', label: 'Discos supported' },
+    { value: '500+', label: 'Vendor agents' },
+];
+
+export interface Testimonial {
+    name: string;
+    role: string;
+    avatar: string;
+    body: string;
+    rating: number;
+}
+
+export const TESTIMONIALS: Testimonial[] = [
+    {
+        name: 'Adaeze Okafor',
+        role: 'Household customer, Lagos',
+        avatar: 'AO',
+        body: 'I used to queue at the vendor shop every week. Now I top up my meter from bed at midnight. Token arrives in seconds — Beverly changed everything for me.',
+        rating: 5,
+    },
+    {
+        name: 'Emeka Nwosu',
+        role: 'Electricity vendor, Enugu',
+        avatar: 'EN',
+        body: 'My float balance is always visible. I can vend remotely and my customers get tokens on their phones instantly. My business has grown 3x since I joined Beverly.',
+        rating: 5,
+    },
+    {
+        name: 'Fatima Aliyu',
+        role: 'Shop owner, Abuja',
+        avatar: 'FA',
+        body: 'The receipt history is incredible for my bookkeeping. I track every unit I buy for my shop and home in one place. Customer service is responsive too.',
+        rating: 5,
+    },
+    {
+        name: 'Chukwudi Eze',
+        role: 'Vendor agent, Port Harcourt',
+        avatar: 'CE',
+        body: 'Real-time float balance and daily settlement reports — Beverly gives me the same tools as a big company. Easy to use, never had a failed transaction.',
+        rating: 5,
+    },
+    {
+        name: 'Ngozi Obi',
+        role: 'Customer, Rivers State',
+        avatar: 'NO',
+        body: 'Never had to worry about power at night again. Beverly remembers my meters, I just tap Buy and the token is there. Fast, reliable, and safe.',
+        rating: 5,
+    },
+    {
+        name: 'Ibrahim Suleiman',
+        role: 'Estate manager, Kano',
+        avatar: 'IS',
+        body: 'I manage 12 meters across two properties. Beverly lets me top them all up from one wallet. Massive time saver and the reports are perfect for audits.',
+        rating: 5,
+    },
+];
+
+export const PARTNER_LOGOS = [
+    { name: 'EKEDC', abbr: 'EKEDC' },
+    { name: 'IKEDC', abbr: 'IKEDC' },
+    { name: 'AEDC', abbr: 'AEDC' },
+    { name: 'PHEDC', abbr: 'PHEDC' },
+    { name: 'EEDC', abbr: 'EEDC' },
+    { name: 'KEDCO', abbr: 'KEDCO' },
+    { name: 'BEDC', abbr: 'BEDC' },
+    { name: 'KAEDCO', abbr: 'KAEDCO' },
 ];
 
 export interface Faq {

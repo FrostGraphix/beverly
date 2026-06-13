@@ -17,15 +17,18 @@ defineEmits<{ (e: 'launch'): void }>();
     <div class="lp-hero-inner">
       <div class="lp-hero-copy">
         <span class="lp-pill" v-reveal>
-          <span class="lp-pill-dot" /> Live across 5+ discos
+          <span class="lp-pill-dot" />
+          E-WALLET &middot; ELECTRICITY &middot; PAYMENTS
         </span>
+
         <h1 class="lp-hero-title" v-reveal="60">
-          Electricity,
-          <span class="lp-grad">instantly.</span>
+          The Future of<br>
+          <span class="lp-grad">Digital Payments!</span>
         </h1>
+
         <p class="lp-hero-sub" v-reveal="120">
-          Beverly Wallet is the fastest way to buy prepaid electricity tokens -
-          and the smartest way to run a vending business. One platform, two front doors.
+          Buy prepaid electricity tokens in seconds. Power your home, run your
+          vending business, and manage every meter from one intelligent wallet.
         </p>
 
         <div class="lp-hero-cta" v-reveal="180">
@@ -33,19 +36,35 @@ defineEmits<{ (e: 'launch'): void }>();
             Get started free <IconSvg name="arrow" />
           </button>
           <a class="lp-btn lp-btn--glass lp-btn--lg" :href="PORTALS.vendor.login">
-            <IconSvg name="store" /> I'm a vendor
+            <IconSvg name="store" /> Vendor portal
           </a>
         </div>
 
-        <ul class="lp-hero-trust" v-reveal="240">
+        <!-- Social proof row -->
+        <div class="lp-hero-social" v-reveal="240">
+          <div class="lp-avatars">
+            <span class="lp-avatar lp-avatar--a">AO</span>
+            <span class="lp-avatar lp-avatar--b">EN</span>
+            <span class="lp-avatar lp-avatar--c">FA</span>
+            <span class="lp-avatar lp-avatar--d">CE</span>
+          </div>
+          <div class="lp-social-meta">
+            <div class="lp-stars">
+              <span v-for="i in 5" :key="i" class="lp-star">★</span>
+            </div>
+            <span class="lp-social-copy"><strong>8.5</strong> / 10 — from 2,400+ users</span>
+          </div>
+        </div>
+
+        <ul class="lp-hero-trust" v-reveal="280">
           <li><IconSvg name="check" /> No setup fees</li>
-          <li><IconSvg name="check" /> Tokens in seconds</li>
+          <li><IconSvg name="check" /> Tokens in &lt;15 seconds</li>
           <li><IconSvg name="check" /> Bank-grade security</li>
         </ul>
       </div>
 
       <div class="lp-hero-art" v-reveal="200">
-        <div class="lp-phone" aria-label="Beverly Wallet on iPhone 17">
+        <div class="lp-phone" aria-label="Beverly Wallet app">
           <span class="lp-phone-side lp-phone-side--action" aria-hidden="true" />
           <span class="lp-phone-side lp-phone-side--volume" aria-hidden="true" />
           <span class="lp-phone-side lp-phone-side--power" aria-hidden="true" />
