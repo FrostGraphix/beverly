@@ -24,4 +24,10 @@ describe('profile picture SOP', () => {
         expect(p.startsWith('customer/abc/')).toBe(true);
         expect(p.endsWith('.png')).toBe(true);
     });
+
+    it('supports staff-scoped paths', () => {
+        const p = toProfilePicturePath('staff', 'user-1', 'head shot.webp');
+        expect(p.startsWith('staff/user-1/')).toBe(true);
+        expect(p.endsWith('.webp')).toBe(true);
+    });
 });

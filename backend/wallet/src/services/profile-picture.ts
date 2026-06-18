@@ -27,7 +27,7 @@ export function assertProfilePictureSop(input: unknown) {
     return parsed;
 }
 
-export function toProfilePicturePath(scope: 'vendor' | 'customer', id: string, fileName: string) {
+export function toProfilePicturePath(scope: 'vendor' | 'customer' | 'staff', id: string, fileName: string) {
     const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase();
     return `${scope}/${id}/${Date.now()}-${safe}`;
 }

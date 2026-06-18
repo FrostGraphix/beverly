@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 
 export interface StaffProfile {
     id: string;
     email: string | null;
     full_name: string | null;
     role: string;
+    profile_picture_url: string | null;
+    updated_at?: string | null;
 }
 
 interface State {
@@ -14,6 +16,10 @@ interface State {
     user: StaffProfile | null;
     permissions: string[];
     lastValidatedAt: number | null;
+}
+
+function isSessionTerminalError(error: unknown): boolean {
+    return error instanceof ApiError && error.status === 401;
 }
 
 export const useStaffAuthStore = defineStore('staff-auth', {
@@ -46,7 +52,8 @@ export const useStaffAuthStore = defineStore('staff-auth', {
                 }
                 try {
                     await this.refreshSession();
-                } catch {
+                } catch (error) {
+                    if (!isSessionTerminalError(error)) return;
                     this.logout();
                 }
             }
@@ -63,7 +70,14 @@ export const useStaffAuthStore = defineStore('staff-auth', {
         async ensureFreshSession(maxAgeMs = 60_000) {
             if (!this.accessToken) return;
             if (this.lastValidatedAt && Date.now() - this.lastValidatedAt < maxAgeMs) return;
-            await this.refreshSession();
+            try {
+                await this.refreshSession();
+            } catch (error) {
+                if (isSessionTerminalError(error)) {
+                    this.logout();
+                    throw error;
+                }
+            }
         },
         setSession(token: string, user: StaffProfile, permissions: string[] = []) {
             this.accessToken = token;

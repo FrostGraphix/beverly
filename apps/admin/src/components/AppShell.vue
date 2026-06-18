@@ -24,6 +24,7 @@ const navGroups = computed(() => [
         items: [
             { to: '/applications', text: 'Applications', permission: 'wallet.vendors.review', icon: 'applications' },
             { to: '/vendors', text: 'Vendors', permission: 'wallet.vendors.review', icon: 'vendors' },
+            { to: '/vendors/analytics', text: 'Vendor Analytics', permission: 'wallet.vendors.review', icon: 'vendor-analytics' },
             { to: '/customers', text: 'Customers', permission: 'wallet.customers.view', icon: 'customers' },
         ],
     },
@@ -48,6 +49,7 @@ const navGroups = computed(() => [
         items: [
             { to: '/disputes', text: 'Disputes', permission: 'wallet.disputes.manage', icon: 'disputes' },
             { to: '/support', text: 'Support Desk', permission: 'wallet.support.manage', icon: 'support' },
+            { to: '/announcements', text: 'Announcements', permission: 'wallet.announcements.manage', icon: 'announcements' },
             { to: '/refunds', text: 'Refunds', permission: 'wallet.refunds.manage', icon: 'refunds' },
             { to: '/settlement', text: 'Settlement', permission: 'wallet.settlement.view', icon: 'settlement' },
             { to: '/reconciliation', text: 'Reconciliation', permission: 'wallet.reconciliation.run', icon: 'reconciliation' },
@@ -80,6 +82,21 @@ const navGroups = computed(() => [
             { to: '/permissions', text: 'Permissions', permission: 'wallet.access.manage', icon: 'permissions' },
         ],
     },
+    {
+        label: 'Developer',
+        items: [
+            { to: '/dev/api-keys', text: 'API Keys', permission: 'dev.console', icon: 'dev-api-keys' },
+            { to: '/dev/webhooks', text: 'Webhooks', permission: 'dev.console', icon: 'dev-webhooks' },
+            { to: '/dev/api-log', text: 'API Log', permission: 'dev.console', icon: 'dev-api-log' },
+            { to: '/dev/sandbox', text: 'Sandbox', permission: 'dev.console', icon: 'dev-sandbox' },
+            { to: '/dev/service-health', text: 'Service Health', permission: 'dev.console', icon: 'dev-health' },
+            { to: '/dev/queue-monitor', text: 'Queue Monitor', permission: 'dev.console', icon: 'dev-queue' },
+            { to: '/dev/error-explorer', text: 'Error Explorer', permission: 'dev.console', icon: 'dev-errors' },
+            { to: '/dev/toolkit', text: 'Dev Toolkit', permission: 'dev.console', icon: 'dev-toolkit' },
+            { to: '/dev/sys-config', text: 'Sys Config', permission: 'dev.console', icon: 'dev-config' },
+            { to: '/dev/schema', text: 'Schema & Matrix', permission: 'dev.console', icon: 'dev-schema' },
+        ],
+    },
 ].map((group) => ({
     ...group,
     items: group.items.filter((item) => auth.hasPermission(item.permission)),
@@ -89,6 +106,7 @@ const initials = computed(() => {
     const n = auth.user?.full_name ?? auth.user?.email ?? 'ST';
     return n.slice(0, 2).toUpperCase();
 });
+const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 
 const navIconPath: Record<string, string> = {
     dashboard: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
@@ -104,6 +122,7 @@ const navIconPath: Record<string, string> = {
     meter: 'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
     disputes: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
     support: 'M12 21a9 9 0 100-18 9 9 0 000 18M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4M12 17h.01',
+    announcements: 'M3 11v2a4 4 0 004 4h1l4 4v-4h5a4 4 0 004-4v-2M7 7h10M7 11h7',
     refunds: 'M3 12h18M3 12l4-4M3 12l4 4M21 6v12',
     settlement: 'M2 5h20v14H2zM2 10h20',
     reconciliation: 'M9 11l3 3L22 4M21 12v7H3V5h13',
@@ -114,18 +133,30 @@ const navIconPath: Record<string, string> = {
     roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87',
     permissions: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
     consumption: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+    'vendor-analytics': 'M3 3v18h18M7 16l4-5 4 3 5-7',
+    // Developer Console
+    'dev-api-keys': 'M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4',
+    'dev-webhooks': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',
+    'dev-api-log':  'M14 2H6v20h12V8zM14 2v6h6M8 13h8M8 17h5',
+    'dev-sandbox':  'M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zM9 9l6 3-6 3V9z',
+    'dev-health':   'M22 12h-4l-3 9L9 3l-3 9H2',
+    'dev-queue':    'M3 6h18M3 12h18M3 18h18',
+    'dev-errors':   'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
+    'dev-toolkit':  'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
+    'dev-config':   'M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.44.68.91 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+    'dev-schema':   'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
 };
 
 const defaultCrmBaseUrl = import.meta.env.DEV
     ? `${window.location.protocol}//${window.location.hostname}:5173`
     : 'https://acob-beverly.vercel.app';
 
-function toCrmDashboardUrl(baseUrl: string) {
+function toCrmUrl(baseUrl: string) {
     const [urlWithoutHash] = baseUrl.split('#');
-    return `${urlWithoutHash.replace(/\/+$/, '')}/#/dashboard`;
+    return `${urlWithoutHash.replace(/\/+$/, '')}/`;
 }
 
-const CRM_URL = toCrmDashboardUrl(import.meta.env.VITE_CRM_URL ?? defaultCrmBaseUrl);
+const CRM_URL = toCrmUrl(import.meta.env.VITE_CRM_URL ?? defaultCrmBaseUrl);
 
 function openDrawer()  { drawerOpen.value = true; }
 function closeDrawer() { drawerOpen.value = false; }
@@ -178,7 +209,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 
       <nav class="bw-nav">
         <template v-for="group in navGroups" :key="group.label">
-          <div class="bw-nav-section">{{ group.label }}</div>
+          <div v-if="group.label === 'Developer'" class="bw-nav-dev-divider" />
+          <div :class="['bw-nav-section', { 'bw-nav-section-dev': group.label === 'Developer' }]">
+            {{ group.label }}
+            <span v-if="group.label === 'Developer'" class="bw-nav-dev-badge">DEV</span>
+          </div>
           <RouterLink v-for="item in group.items" :key="item.to" :to="item.to" class="bw-nav-item" @click="closeDrawer">
             <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path :d="navIconPath[item.icon]" />
@@ -226,7 +261,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
             :aria-expanded="userMenuOpen"
             @click="toggleUserMenu"
           >
-            <div class="bw-avatar green">{{ initials }}</div>
+            <div class="bw-avatar green" style="overflow:hidden">
+              <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" style="width:100%; height:100%; object-fit:cover" />
+              <template v-else>{{ initials }}</template>
+            </div>
             <div class="bw-user-meta">
               <strong>{{ auth.user?.full_name?.split(' ')[0] || 'Staff' }}</strong>
               <span>{{ auth.user?.role || 'admin' }}</span>
@@ -245,7 +283,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                   <small>{{ auth.user?.full_name || auth.user?.email || 'Staff user' }} - {{ auth.user?.role || 'admin' }}</small>
                 </span>
               </div>
-              <button type="button" class="bw-user-menu-item active" role="menuitem" @click="openProfile">
+              <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M20 21a8 8 0 0 0-16 0" />
                   <circle cx="12" cy="7" r="4" />

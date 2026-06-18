@@ -30,6 +30,50 @@ import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
+import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { runMalwareScan } from '../services/file-scan.js';
+import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
+import {
+    createDevApiKey,
+    createDevWebhook,
+    deleteDevJob,
+    deleteDevWebhook,
+    dryRunDevMigration,
+    inspectDevEih,
+    inspectLedgerEntry,
+    listDevApiKeys,
+    listDevApiLog,
+    listDevDeployLog,
+    listDevErrors,
+    listDevHealth,
+    listDevIncidents,
+    listDevJobs,
+    listDevMigrations,
+    listDevNotificationTemplates,
+    listDevQueues,
+    listDevSchema,
+    listDevSlowQueries,
+    listDevSysConfig,
+    listDevWebhookDeliveries,
+    listDevWebhooks,
+    listRoleMatrix,
+    listSandboxActivity,
+    getSandboxStatus,
+    replayDevWebhookDelivery,
+    resolveDevError,
+    retryAllFailedDevJobs,
+    retryDevJob,
+    revokeDevApiKey,
+    rotateDevApiKey,
+    runMockVend,
+    seedSandboxWallet,
+    setSandboxMode,
+    simulateDevVend,
+    testDevNotificationTemplate,
+    updateDevNotificationTemplate,
+    updateDevSysConfig,
+    updateDevWebhook,
+} from '../services/dev-console.js';
 
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -46,6 +90,145 @@ function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
 }
 
+type AnnouncementRecipientType = 'customer' | 'vendor';
+
+interface AnnouncementRecipient {
+    key: string;
+    type: AnnouncementRecipientType;
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    status: string | null;
+}
+
+function recipientKey(type: AnnouncementRecipientType, id: string): string {
+    return `${type}:${id}`;
+}
+
+function normalizeAnnouncementRecipient(row: any, type: AnnouncementRecipientType): AnnouncementRecipient {
+    if (type === 'customer') {
+        const name = row.full_name || row.email || row.phone || 'Unnamed customer';
+        return {
+            key: recipientKey('customer', row.id),
+            type: 'customer',
+            id: row.id,
+            name,
+            email: row.email ?? null,
+            phone: row.phone ?? null,
+            status: row.status ?? null,
+        };
+    }
+    const name = row.trading_name || row.legal_name || row.contact_email || 'Unnamed vendor';
+    return {
+        key: recipientKey('vendor', row.id),
+        type: 'vendor',
+        id: row.id,
+        name,
+        email: row.contact_email ?? null,
+        phone: row.contact_phone ?? null,
+        status: row.status ?? null,
+    };
+}
+
+async function listAnnouncementRecipients(opts: {
+    audiences: AnnouncementRecipientType[];
+    search?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<AnnouncementRecipient[]> {
+    const limit = Math.min(Math.max(opts.limit ?? 100, 1), 1_000);
+    const offset = Math.max(opts.offset ?? 0, 0);
+    const term = cleanSearchTerm(opts.search);
+    const recipients: AnnouncementRecipient[] = [];
+
+    if (opts.audiences.includes('customer')) {
+        let query = adminClient
+            .from('customers')
+            .select('id, full_name, email, phone, status')
+            .neq('status', 'deleted')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+        const { data, error } = await query;
+        if (error) throw error;
+        recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'customer')));
+    }
+
+    if (opts.audiences.includes('vendor')) {
+        let query = adminClient
+            .from('vendor_organizations')
+            .select('id, legal_name, trading_name, contact_email, contact_phone, status')
+            .neq('status', 'deleted')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+        const { data, error } = await query;
+        if (error) throw error;
+        recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'vendor')));
+    }
+
+    return recipients;
+}
+
+async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string }) {
+    const term = cleanSearchTerm(opts.search);
+    let customers = 0;
+    let vendors = 0;
+    if (opts.audiences.includes('customer')) {
+        let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).neq('status', 'deleted');
+        if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+        const { count, error } = await query;
+        if (error) throw error;
+        customers = count ?? 0;
+    }
+    if (opts.audiences.includes('vendor')) {
+        let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).neq('status', 'deleted');
+        if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+        const { count, error } = await query;
+        if (error) throw error;
+        vendors = count ?? 0;
+    }
+    return { customers, vendors, total: customers + vendors };
+}
+
+async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[]): Promise<AnnouncementRecipient[]> {
+    const pageSize = 1_000;
+    const byKey = new Map<string, AnnouncementRecipient>();
+    for (const audience of audiences) {
+        for (let offset = 0; ; offset += pageSize) {
+            const rows = await listAnnouncementRecipients({ audiences: [audience], limit: pageSize, offset });
+            for (const row of rows) byKey.set(row.key, row);
+            if (rows.length < pageSize) break;
+        }
+    }
+    return Array.from(byKey.values());
+}
+
+async function insertAnnouncementNotifications(rows: any[]) {
+    const inserted: any[] = [];
+    const chunkSize = 500;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+        const { data, error } = await adminClient
+            .from('notifications')
+            .insert(rows.slice(i, i + chunkSize))
+            .select('id, recipient_type, recipient_id');
+        if (error) throw error;
+        inserted.push(...(data ?? []));
+    }
+    return inserted;
+}
+
+async function insertAnnouncementDeliveries(rows: any[]) {
+    const chunkSize = 500;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+        const { error } = await adminClient
+            .from('admin_announcement_deliveries')
+            .insert(rows.slice(i, i + chunkSize));
+        if (error) throw error;
+    }
+}
+
 const PERMISSION_CATALOG = [
     { key: 'wallet.dashboard.view', label: 'View operations dashboard', group: 'Overview', risk: 'low' },
     { key: 'wallet.vendors.review', label: 'Review vendor applications', group: 'Vendors', risk: 'medium' },
@@ -57,6 +240,7 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
     { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
     { key: 'wallet.support.manage', label: 'Manage support (FAQ, tickets, chat)', group: 'Operations', risk: 'medium' },
+    { key: 'wallet.announcements.manage', label: 'Send wallet announcements', group: 'Operations', risk: 'high' },
     { key: 'wallet.settlement.view', label: 'View settlement batches', group: 'Operations', risk: 'medium' },
     { key: 'wallet.reconciliation.run', label: 'Run reconciliation', group: 'Operations', risk: 'high' },
     { key: 'wallet.fraud.review', label: 'Resolve fraud reviews', group: 'Compliance', risk: 'high' },
@@ -64,6 +248,7 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.audit.view', label: 'View audit and security events', group: 'Compliance', risk: 'high' },
     { key: 'wallet.flags.manage', label: 'Manage feature flags', group: 'Launch', risk: 'critical' },
     { key: 'wallet.access.manage', label: 'Manage roles and permissions', group: 'Access', risk: 'critical' },
+    { key: 'dev.console', label: 'Access developer console', group: 'Developer', risk: 'critical' },
     { key: 'wallet.consumption.view', label: 'View consumption analytics', group: 'Analytics', risk: 'low' },
 ];
 
@@ -71,7 +256,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'super-admin': PERMISSION_CATALOG.map((p) => p.key),
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
     ],
     'finance-checker': [
@@ -99,7 +284,13 @@ const ROLE_LEGACY_NAMES: Record<string, string> = {
     account: 'finance',
 };
 
-const OPEN_ADMIN_ROUTES = new Set(['GET /me']);
+const OPEN_ADMIN_ROUTES = new Set([
+    'GET /me',
+    'PATCH /me',
+    'POST /profile-picture/upload-url',
+    'POST /profile-picture/scan',
+    'DELETE /profile-picture',
+]);
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /access': 'wallet.access.manage',
@@ -109,8 +300,10 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
+    'DELETE /vendor-applications/:id': 'wallet.vendors.manage',
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
+    'DELETE /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
     'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
     'GET /vendors/:id': 'wallet.vendors.review',
@@ -135,6 +328,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /customers/:id/wallet': 'wallet.customers.view',
     'GET /customers/:id/purchases': 'wallet.vending.monitor',
     'GET /customers/:id/funding': 'wallet.funding.view',
+    'DELETE /customers/:id': 'wallet.funding.approve',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
     'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
     'GET /purchases': 'wallet.vending.monitor',
@@ -170,6 +364,10 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /support/chat/:id/messages': 'wallet.support.manage',
     'POST /support/chat/:id/assign': 'wallet.support.manage',
     'POST /support/chat/:id/end': 'wallet.support.manage',
+    'GET /announcements': 'wallet.announcements.manage',
+    'GET /announcements/recipients': 'wallet.announcements.manage',
+    'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
+    'POST /announcements': 'wallet.announcements.manage',
     'GET /refunds': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
     'POST /refunds/:id/approve': 'wallet.refunds.manage',
@@ -193,6 +391,45 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /consumption/meters': 'wallet.consumption.view',
     'GET /abnormal-alarms': 'wallet.consumption.view',
     'POST /consumption/refresh': 'wallet.consumption.view',
+    'GET /dev/api-keys': 'dev.console',
+    'POST /dev/api-keys': 'dev.console',
+    'DELETE /dev/api-keys/:id': 'dev.console',
+    'POST /dev/api-keys/:id/rotate': 'dev.console',
+    'GET /dev/webhooks': 'dev.console',
+    'POST /dev/webhooks': 'dev.console',
+    'PATCH /dev/webhooks/:id': 'dev.console',
+    'DELETE /dev/webhooks/:id': 'dev.console',
+    'GET /dev/webhooks/deliveries': 'dev.console',
+    'POST /dev/webhooks/deliveries/:id/replay': 'dev.console',
+    'GET /dev/api-log': 'dev.console',
+    'GET /dev/sandbox/status': 'dev.console',
+    'GET /dev/sandbox/activity': 'dev.console',
+    'POST /dev/sandbox/mode': 'dev.console',
+    'POST /dev/sandbox/seed-wallet': 'dev.console',
+    'POST /dev/sandbox/mock-vend': 'dev.console',
+    'GET /dev/health': 'dev.console',
+    'GET /dev/health/incidents': 'dev.console',
+    'GET /dev/queues': 'dev.console',
+    'GET /dev/queues/jobs': 'dev.console',
+    'POST /dev/queues/jobs/:id/retry': 'dev.console',
+    'DELETE /dev/queues/jobs/:id': 'dev.console',
+    'POST /dev/queues/retry-all-failed': 'dev.console',
+    'GET /dev/errors': 'dev.console',
+    'POST /dev/errors/:fingerprint/resolve': 'dev.console',
+    'GET /dev/slow-queries': 'dev.console',
+    'POST /dev/toolkit/simulate-vend': 'dev.console',
+    'POST /dev/toolkit/eih-inspect': 'dev.console',
+    'GET /dev/toolkit/ledger/:id': 'dev.console',
+    'GET /dev/migrations': 'dev.console',
+    'POST /dev/migrations/dry-run': 'dev.console',
+    'GET /dev/sys-config': 'dev.console',
+    'PUT /dev/sys-config/:key': 'dev.console',
+    'GET /dev/notif-templates': 'dev.console',
+    'PUT /dev/notif-templates/:id': 'dev.console',
+    'POST /dev/notif-templates/:id/test-send': 'dev.console',
+    'GET /dev/schema': 'dev.console',
+    'GET /dev/role-matrix': 'dev.console',
+    'GET /dev/deploy-log': 'dev.console',
 };
 
 function adminRouteKey(req: FastifyRequest): string {
@@ -294,6 +531,17 @@ async function ensureAccessDefaults() {
     return _accessDefaultsPromise;
 }
 
+function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
+    return {
+        id: actor!.userId,
+        email: staff?.email ?? actor!.email,
+        full_name: staff?.user_name ?? null,
+        role: staff?.role_key ?? actor!.role,
+        profile_picture_url: staff?.profile_picture_url ?? null,
+        updated_at: staff?.updated_at ?? null,
+    };
+}
+
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
     fastify.addHook('preHandler', async (req, reply) => {
@@ -307,19 +555,115 @@ const route: FastifyPluginAsync = async (fastify) => {
         const permissions = Array.from(await permissionsForRole(req.actor!.role));
         const { data: staff } = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, updated_at')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
             .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
             .maybeSingle();
         return {
-            user: {
-                id: req.actor!.userId,
-                email: staff?.email ?? req.actor!.email,
-                full_name: staff?.user_name ?? null,
-                role: staff?.role_key ?? req.actor!.role,
-            },
+            user: shapeStaffProfile(req.actor, staff),
             permissions,
             catalog: PERMISSION_CATALOG,
         };
+    });
+
+    fastify.patch('/me', async (req, reply) => {
+        const schema = z.object({
+            full_name: z.string().trim().min(1).max(120).optional(),
+            profile_picture_url: z.union([z.string().trim().url().max(1000), z.literal(''), z.null()]).optional(),
+        });
+        const body = schema.parse(req.body ?? {});
+        const updates: Record<string, unknown> = {};
+        if (body.full_name !== undefined) updates.user_name = body.full_name;
+        if (body.profile_picture_url !== undefined) updates.profile_picture_url = body.profile_picture_url ? body.profile_picture_url : null;
+        if (!Object.keys(updates).length) {
+            return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
+        }
+
+        const { data: existing } = await adminClient
+            .from('users')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+            .maybeSingle();
+
+        let data: any = null;
+        let error: any = null;
+        if (existing?.id) {
+            const result = await adminClient
+                .from('users')
+                .update(updates)
+                .eq('id', existing.id)
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .single();
+            data = result.data;
+            error = result.error;
+        } else {
+            const result = await adminClient
+                .from('users')
+                .insert({
+                    auth_user_id: req.actor!.userId,
+                    user_id: req.actor!.userId,
+                    user_name: body.full_name ?? null,
+                    email: req.actor!.email,
+                    role_key: req.actor!.role,
+                    profile_picture_url: body.profile_picture_url ? body.profile_picture_url : null,
+                })
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .single();
+            data = result.data;
+            error = result.error;
+        }
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        return {
+            user: shapeStaffProfile(req.actor, data),
+            permissions: Array.from(await permissionsForRole(req.actor!.role)),
+        };
+    });
+
+    fastify.post('/profile-picture/upload-url', async (req, reply) => {
+        let sop;
+        try {
+            sop = assertProfilePictureSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: 'invalid_profile_picture', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toProfilePicturePath('staff', req.actor!.userId, sop.file_name);
+        const { data, error } = await adminClient.storage.from(PROFILE_PICTURE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        const { data: pub } = adminClient.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(path);
+        return {
+            bucket: PROFILE_PICTURE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            public_url: pub?.publicUrl ?? null,
+            sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
+        };
+    });
+
+    fastify.post('/profile-picture/scan', async (req, reply) => {
+        const schema = z.object({
+            file_name: z.string().min(1).max(160),
+            content_base64: z.string().min(8),
+        });
+        const body = schema.parse(req.body ?? {});
+        const scan = await runMalwareScan(Buffer.from(body.content_base64, 'base64'), body.file_name);
+        if (!scan.ok) return reply.code(422).send({ error: 'malware_scan_failed', details: scan.output ?? null });
+        return { ok: true, mode: scan.mode };
+    });
+
+    fastify.delete('/profile-picture', async (req) => {
+        await adminClient
+            .from('users')
+            .update({ profile_picture_url: null })
+            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'staff.profile_picture.deleted',
+            targetType: 'staff_user',
+            targetId: req.actor!.userId,
+        });
+        return { ok: true };
     });
 
     fastify.get('/access', async () => {
@@ -497,6 +841,20 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { applications: data ?? [] };
     });
 
+    fastify.delete('/vendor-applications/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { data, error } = await adminClient
+            .from('vendor_applications')
+            .delete()
+            .eq('id', id)
+            .select('id')
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return reply.code(404).send({ error: 'application_not_found', message: 'Application not found.' });
+        return { ok: true, id };
+    });
+
     // ── create vendor organization ──
     fastify.post('/vendors', async (req) => {
         const schema = z.object({
@@ -528,11 +886,62 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── vendor list ──
     fastify.get('/vendors', async (req) => {
         const { status, q } = req.query as { status?: string; q?: string };
-        let query = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
+        let query = adminClient
+            .from('vendor_organizations')
+            .select('*')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(200);
         if (status) query = query.eq('status', status);
         if (q) query = query.ilike('legal_name', `%${q}%`);
-        const { data } = await query;
+        let { data, error } = await query;
+        if (error && String(error.message || '').includes('deleted_at')) {
+            let fallback = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
+            if (status) fallback = fallback.eq('status', status);
+            if (q) fallback = fallback.ilike('legal_name', `%${q}%`);
+            const retry = await fallback;
+            data = retry.data;
+            error = retry.error;
+        }
+        if (error) throw error;
         return { vendors: data ?? [] };
+    });
+
+    fastify.delete('/vendors/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ reason: z.string().trim().max(500).optional() });
+        const body = schema.parse(req.body ?? {});
+        const { data: vendor, error: readError } = await adminClient
+            .from('vendor_organizations')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (readError) throw readError;
+        if (!vendor || (vendor as any).deleted_at) {
+            return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+        }
+
+        let { error } = await adminClient
+            .from('vendor_organizations')
+            .update({
+                status: 'closed',
+                deleted_at: new Date().toISOString(),
+                deleted_by: req.actor!.userId,
+                deletion_reason: body.reason ?? null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+
+        if (error && String(error.message || '').includes('deleted_at')) {
+            const fallback = await adminClient
+                .from('vendor_organizations')
+                .delete()
+                .eq('id', id);
+            error = fallback.error;
+        }
+        if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
+        return { ok: true, id };
     });
 
     // ── freeze / unfreeze ──
@@ -568,7 +977,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' })
                 .eq('actor_type', 'vendor').eq('actor_id', id),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
-                .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding').eq('status', 'success'),
+                .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
         const sum = (arr: any[] | null | undefined) =>
             (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
@@ -870,9 +1280,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         return {
             walletCount: wallets.length,
             totalFloatMinor:    totalFloat,
+            totalBalanceMinor:  totalFloat,
             totalHoldsMinor:    totalHolds,
             vendorFloatMinor:   vendorFloat,
             customerFloatMinor: customerFloat,
+            activeWallets:      byStatus.active ?? 0,
+            suspendedWallets:   byStatus.frozen ?? 0,
+            closedWallets:      byStatus.closed ?? 0,
             byStatus,
             byOwnerType,
         };
@@ -1139,7 +1553,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             adminClient.from('customer_meters').select('id', { count: 'exact', head: true }).eq('customer_id', id),
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' }).eq('customer_id', id),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
-                .eq('actor_type', 'customer').eq('actor_id', id).eq('purpose', 'wallet_funding').eq('status', 'success'),
+                .eq('actor_type', 'customer').eq('actor_id', id).eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
         const sum = (arr: any[] | null | undefined) => (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
 
@@ -1208,6 +1623,67 @@ const route: FastifyPluginAsync = async (fastify) => {
         const rows = data ?? [];
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { funding: rows, nextCursor };
+    });
+
+    fastify.delete('/customers/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ reason: z.string().trim().min(4).max(500).optional() });
+        const body = schema.parse(req.body ?? {});
+        const { data: before, error: beforeErr } = await adminClient
+            .from('customers')
+            .select('id, auth_user_id, full_name, phone, email, status')
+            .eq('id', id)
+            .maybeSingle();
+        if (beforeErr) throw beforeErr;
+        if (!before) return reply.code(404).send({ error: 'not_found', message: 'Customer not found.' });
+
+        const { data: wallets } = await adminClient
+            .from('wallets')
+            .select('id')
+            .eq('owner_type', 'customer')
+            .eq('owner_id', id);
+        const walletIds = (wallets ?? []).map((w: any) => w.id).filter(Boolean);
+
+        for (const walletId of walletIds) {
+            await adminClient.from('wallet_holds').delete().eq('wallet_id', walletId);
+            await adminClient.from('wallet_ledger_entries').delete().eq('wallet_id', walletId);
+        }
+
+        await adminClient.from('notifications').delete().eq('customer_id', id);
+        await adminClient.from('customer_meters').delete().eq('customer_id', id);
+        await adminClient.from('customer_risk_baselines').delete().eq('customer_id', id);
+        await adminClient.from('customer_known_ips').delete().eq('customer_id', id);
+        await adminClient.from('customer_known_devices').delete().eq('customer_id', id);
+        await adminClient.from('fraud_assessments').delete().eq('customer_id', id);
+        await adminClient.from('account_deletion_requests').delete().eq('customer_id', id);
+        await adminClient.from('data_export_requests').delete().eq('customer_id', id);
+        await adminClient.from('support_chat_sessions').delete().eq('customer_id', id);
+        await adminClient.from('support_tickets').delete().eq('customer_id', id);
+        await adminClient.from('disputes').delete().eq('customer_id', id);
+        await adminClient.from('payment_transactions').delete().eq('actor_type', 'customer').eq('actor_id', id);
+        await adminClient.from('purchase_orders').delete().eq('customer_id', id);
+        await adminClient.from('wallets').delete().eq('owner_type', 'customer').eq('owner_id', id);
+
+        const { error } = await adminClient.from('customers').delete().eq('id', id);
+        if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
+
+        const authUserId = (before as any).auth_user_id;
+        if (authUserId) {
+            await adminClient.auth.admin.deleteUser(authUserId).catch(() => null);
+        }
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.delete',
+            targetType: 'customer',
+            targetId: id,
+            before,
+            after: { deleted: true, reason: body.reason ?? null },
+        });
+
+        return { ok: true, id };
     });
 
     // Suspend / reactivate a customer. Audit-logged.
@@ -1775,6 +2251,144 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    // ── announcements: admin broadcast console ──
+    fastify.get('/announcements/recipients', async (req) => {
+        const query = z.object({
+            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            search: z.string().optional(),
+            limit: z.coerce.number().int().min(1).max(1000).optional(),
+        }).parse(req.query);
+        const audiences: AnnouncementRecipientType[] =
+            query.audience === 'vendors' ? ['vendor']
+                : query.audience === 'customers' ? ['customer']
+                    : ['customer', 'vendor'];
+        const [recipients, summary] = await Promise.all([
+            listAnnouncementRecipients({
+                audiences,
+                search: query.search,
+                limit: query.limit ?? 100,
+            }),
+            countAnnouncementRecipients({ audiences, search: query.search }),
+        ]);
+        return {
+            recipients,
+            summary: {
+                customers: summary.customers,
+                vendors: summary.vendors,
+                total: summary.total,
+            },
+        };
+    });
+
+    fastify.get('/announcements/recipients/export.csv', async (req, reply) => {
+        const query = z.object({
+            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            search: z.string().optional(),
+        }).parse(req.query);
+        const audiences: AnnouncementRecipientType[] =
+            query.audience === 'vendors' ? ['vendor']
+                : query.audience === 'customers' ? ['customer']
+                    : ['customer', 'vendor'];
+        const recipients = await listAnnouncementRecipients({
+            audiences,
+            search: query.search,
+            limit: 1000,
+        });
+        reply.header('Content-Type', 'text/csv; charset=utf-8');
+        reply.header('Content-Disposition', 'attachment; filename="announcement-recipients.csv"');
+        return toCsv(recipients, ['type', 'name', 'email', 'phone', 'status', 'id']);
+    });
+
+    fastify.get('/announcements', async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(200).optional(),
+        }).parse(req.query);
+        const { data, error } = await adminClient
+            .from('admin_announcements')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(query.limit ?? 50);
+        if (error) throw error;
+        return { announcements: data ?? [] };
+    });
+
+    fastify.post('/announcements', async (req, reply) => {
+        const schema = z.object({
+            title: z.string().trim().min(3).max(120),
+            body: z.string().trim().min(5).max(2000),
+            audiences: z.array(z.enum(['customers', 'vendors'])).min(1),
+            send_to_all: z.boolean().optional(),
+            recipient_keys: z.array(z.string().regex(/^(customer|vendor):[0-9a-f-]{36}$/i)).optional(),
+        });
+        const body = schema.parse(req.body ?? {});
+        const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : 'vendor'))) as AnnouncementRecipientType[];
+        const requestedKeys = new Set(body.recipient_keys ?? []);
+        let recipients = body.send_to_all
+            ? await listAllAnnouncementRecipients(audiences)
+            : await listAnnouncementRecipients({ audiences, limit: 1000 });
+        if (!body.send_to_all) recipients = recipients.filter((r) => requestedKeys.has(r.key));
+        if (!recipients.length) return reply.code(400).send({ error: 'no_recipients', message: 'Select at least one recipient.' });
+
+        const audienceLabel = audiences.length === 2 ? 'system' : audiences[0] === 'customer' ? 'customers' : 'vendors';
+        const { data: announcement, error: annError } = await adminClient
+            .from('admin_announcements')
+            .insert({
+                title: body.title,
+                body: body.body,
+                audience: audienceLabel,
+                target_mode: body.send_to_all ? 'all' : 'selected',
+                channel: 'in_app',
+                created_by_staff_id: req.actor!.userId,
+                recipient_count: recipients.length,
+            })
+            .select('*')
+            .single();
+        if (annError) throw annError;
+
+        const notificationRows = recipients.map((r) => ({
+            customer_id: r.type === 'customer' ? r.id : null,
+            vendor_organization_id: r.type === 'vendor' ? r.id : null,
+            recipient_type: r.type,
+            recipient_id: r.id,
+            announcement_id: announcement.id,
+            type: 'admin_announcement',
+            title: body.title,
+            body: body.body,
+            metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key },
+            read: false,
+        }));
+        const notifications = await insertAnnouncementNotifications(notificationRows);
+        const notificationsByRecipient = new Map(
+            (notifications ?? []).map((n: any) => [`${n.recipient_type}:${n.recipient_id}`, n])
+        );
+
+        const deliveryRows = recipients.map((r) => {
+            const notification = notificationsByRecipient.get(r.key);
+            return {
+                announcement_id: announcement.id,
+                recipient_type: r.type,
+                recipient_id: r.id,
+                customer_id: r.type === 'customer' ? r.id : null,
+                vendor_organization_id: r.type === 'vendor' ? r.id : null,
+                notification_id: notification?.id ?? null,
+                status: notification?.id ? 'delivered' : 'queued',
+            };
+        });
+        await insertAnnouncementDeliveries(deliveryRows);
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'admin.announcement.sent',
+            targetType: 'admin_announcement',
+            targetId: announcement.id,
+            after: { audience: audienceLabel, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length },
+        }).catch(() => undefined);
+
+        return reply.code(201).send({ ok: true, announcement, delivered: recipients.length });
+    });
+
     // ── refunds ──
     fastify.get('/refunds', async (req) => {
         const { status } = req.query as { status?: string };
@@ -2048,7 +2662,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
         const [purchases, funding, refunds, disputes, newCustomers, settlements] = await Promise.all([
             inRange(adminClient.from('purchase_orders').select('amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').eq('status', 'success')).limit(50_000).then((r: any) => r.data ?? []),
+            inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('customers').select('created_at')).limit(50_000).then((r: any) => r.data ?? []),
@@ -2302,6 +2916,219 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         return { ok: true };
     });
+
+    // Developer console: all routes require dev.console via ADMIN_ROUTE_PERMISSIONS.
+    fastify.get('/dev/api-keys', async () => ({ keys: await listDevApiKeys() }));
+
+    fastify.post('/dev/api-keys', async (req) => {
+        const schema = z.object({
+            name: z.string().trim().min(2).max(120),
+            org_id: z.string().trim().min(1).nullable().optional(),
+            org_type: z.enum(['vendor', 'customer', 'system']).nullable().optional(),
+            scopes: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+        });
+        const body = schema.parse(req.body);
+        return createDevApiKey({
+            name: body.name,
+            orgId: body.org_id ?? null,
+            orgType: body.org_type ?? (body.org_id ? 'vendor' : null),
+            scopes: body.scopes,
+            actorUserId: req.actor!.userId,
+        });
+    });
+
+    fastify.delete('/dev/api-keys/:id', async (req) => {
+        await revokeDevApiKey((req.params as { id: string }).id, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.post('/dev/api-keys/:id/rotate', async (req) => (
+        rotateDevApiKey((req.params as { id: string }).id, req.actor!.userId)
+    ));
+
+    fastify.get('/dev/webhooks', async () => ({ webhooks: await listDevWebhooks() }));
+
+    fastify.get('/dev/webhooks/deliveries', async (req) => {
+        const query = req.query as { limit?: string };
+        return { deliveries: await listDevWebhookDeliveries(Math.min(Number(query.limit ?? 100), 250)) };
+    });
+
+    fastify.post('/dev/webhooks', async (req) => {
+        const schema = z.object({
+            url: z.string().trim().url().max(1000),
+            events: z.array(z.string().trim().min(1).max(120)).min(1).max(50),
+            secret: z.string().trim().min(10).max(300).optional(),
+        });
+        const body = schema.parse(req.body);
+        await createDevWebhook({ ...body, actorUserId: req.actor!.userId });
+        return { ok: true };
+    });
+
+    fastify.patch('/dev/webhooks/:id', async (req) => {
+        const schema = z.object({
+            url: z.string().trim().url().max(1000),
+            events: z.array(z.string().trim().min(1).max(120)).min(1).max(50),
+            enabled: z.boolean(),
+        });
+        await updateDevWebhook((req.params as { id: string }).id, schema.parse(req.body));
+        return { ok: true };
+    });
+
+    fastify.delete('/dev/webhooks/:id', async (req) => {
+        await deleteDevWebhook((req.params as { id: string }).id);
+        return { ok: true };
+    });
+
+    fastify.post('/dev/webhooks/deliveries/:id/replay', async (req) => {
+        await replayDevWebhookDelivery((req.params as { id: string }).id, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.get('/dev/api-log', async (req) => {
+        const query = req.query as { limit?: string; cursor?: string; from?: string };
+        return listDevApiLog({
+            limit: Math.min(Number(query.limit ?? 50), 200),
+            cursor: query.cursor,
+            from: query.from,
+        });
+    });
+
+    fastify.get('/dev/sandbox/status', async () => getSandboxStatus());
+    fastify.get('/dev/sandbox/activity', async () => ({ activity: await listSandboxActivity() }));
+
+    fastify.post('/dev/sandbox/mode', async (req) => {
+        const body = z.object({ mode: z.enum(['live', 'test']) }).parse(req.body);
+        await setSandboxMode(body.mode, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.post('/dev/sandbox/seed-wallet', async (req) => {
+        const body = z.object({
+            org_id: z.string().trim().min(1),
+            org_type: z.enum(['vendor', 'customer']),
+            amount_kobo: z.number().int().positive().max(1_000_000_000),
+        }).parse(req.body);
+        return seedSandboxWallet({
+            orgId: body.org_id,
+            orgType: body.org_type,
+            amountMinor: body.amount_kobo,
+            actorUserId: req.actor!.userId,
+        });
+    });
+
+    fastify.post('/dev/sandbox/mock-vend', async (req) => {
+        const body = z.object({
+            meter_number: z.string().trim().min(4).max(80),
+            amount_kobo: z.number().int().positive().max(100_000_000),
+            mock_response: z.enum(['success', 'disco_error', 'timeout', 'invalid_meter']),
+        }).parse(req.body);
+        return runMockVend({
+            meterNumber: body.meter_number,
+            amountMinor: body.amount_kobo,
+            mockResponse: body.mock_response,
+            actorUserId: req.actor!.userId,
+        });
+    });
+
+    fastify.get('/dev/health', async () => ({ services: await listDevHealth() }));
+    fastify.get('/dev/health/incidents', async () => ({ incidents: await listDevIncidents() }));
+    fastify.get('/dev/queues', async () => ({ queues: await listDevQueues() }));
+
+    fastify.get('/dev/queues/jobs', async (req) => {
+        const query = req.query as { queue?: string; status?: 'pending' | 'processing' | 'failed' | 'completed'; limit?: string };
+        return { jobs: await listDevJobs({ queue: query.queue, status: query.status, limit: Math.min(Number(query.limit ?? 100), 250) }) };
+    });
+
+    fastify.post('/dev/queues/jobs/:id/retry', async (req) => {
+        await retryDevJob((req.params as { id: string }).id);
+        return { ok: true };
+    });
+
+    fastify.delete('/dev/queues/jobs/:id', async (req) => {
+        await deleteDevJob((req.params as { id: string }).id);
+        return { ok: true };
+    });
+
+    fastify.post('/dev/queues/retry-all-failed', async () => {
+        await retryAllFailedDevJobs();
+        return { ok: true };
+    });
+
+    fastify.get('/dev/errors', async () => ({ groups: await listDevErrors() }));
+
+    fastify.post('/dev/errors/:fingerprint/resolve', async (req) => {
+        await resolveDevError((req.params as { fingerprint: string }).fingerprint, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.get('/dev/slow-queries', async (req) => {
+        const query = req.query as { threshold_ms?: string };
+        return { queries: await listDevSlowQueries(Math.max(Number(query.threshold_ms ?? 500), 0)) };
+    });
+
+    fastify.post('/dev/toolkit/simulate-vend', async (req) => {
+        const body = z.object({
+            meter_number: z.string().trim().min(4).max(80),
+            amount_kobo: z.number().int().positive().max(100_000_000),
+            environment: z.enum(['test', 'live']),
+        }).parse(req.body);
+        return simulateDevVend({
+            meterNumber: body.meter_number,
+            amountMinor: body.amount_kobo,
+            environment: body.environment,
+            actorUserId: req.actor!.userId,
+        });
+    });
+
+    fastify.post('/dev/toolkit/eih-inspect', async (req) => {
+        const body = z.object({ transaction_id: z.string().trim().min(1).max(120) }).parse(req.body);
+        return inspectDevEih(body.transaction_id);
+    });
+
+    fastify.get('/dev/toolkit/ledger/:id', async (req) => inspectLedgerEntry((req.params as { id: string }).id));
+    fastify.get('/dev/migrations', async () => ({ migrations: await listDevMigrations() }));
+
+    fastify.post('/dev/migrations/dry-run', async (req) => {
+        const body = z.object({ version: z.string().trim().regex(/^\d{14}$/) }).parse(req.body);
+        return dryRunDevMigration(body.version);
+    });
+
+    fastify.get('/dev/sys-config', async (req) => ({ configs: await listDevSysConfig(req.actor!.userId) }));
+
+    fastify.put('/dev/sys-config/:key', async (req) => {
+        const body = z.object({ value: z.string().max(20_000) }).parse(req.body);
+        await updateDevSysConfig((req.params as { key: string }).key, body.value, req.actor!.userId);
+        return { ok: true };
+    });
+
+    fastify.get('/dev/notif-templates', async (req) => ({ templates: await listDevNotificationTemplates(req.actor!.userId) }));
+
+    fastify.put('/dev/notif-templates/:id', async (req) => {
+        const body = z.object({ subject: z.string().max(300).nullable(), body: z.string().min(1).max(20_000) }).parse(req.body);
+        await updateDevNotificationTemplate((req.params as { id: string }).id, body);
+        return { ok: true };
+    });
+
+    fastify.post('/dev/notif-templates/:id/test-send', async (req) => {
+        const body = z.object({
+            target: z.string().trim().min(3).max(300),
+            variables: z.record(z.string()).default({}),
+        }).parse(req.body);
+        await testDevNotificationTemplate((req.params as { id: string }).id, {
+            target: body.target,
+            variables: body.variables,
+            actorUserId: req.actor!.userId,
+        });
+        return { ok: true };
+    });
+
+    fastify.get('/dev/schema', async () => ({ tables: await listDevSchema() }));
+    fastify.get('/dev/role-matrix', async () => listRoleMatrix({
+        catalog: PERMISSION_CATALOG,
+        roleLabels: ROLE_LABELS,
+        defaultRolePermissions: DEFAULT_ROLE_PERMISSIONS,
+    }));
+    fastify.get('/dev/deploy-log', async () => ({ deploys: await listDevDeployLog() }));
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
