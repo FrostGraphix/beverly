@@ -99,6 +99,7 @@ async function signIn() {
             email: data.user.email ?? null,
             full_name: data.user.user_metadata?.full_name ?? null,
             role: data.user?.user_metadata?.role_key ?? data.user?.user_metadata?.role ?? 'staff',
+            profile_picture_url: data.user?.user_metadata?.profile_picture_url ?? null,
         });
         try {
             await auth.refreshSession();
