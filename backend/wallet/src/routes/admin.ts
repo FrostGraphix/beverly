@@ -33,6 +33,7 @@ import { listDeletionRequests, reviewDeletionRequest } from '../services/data-pr
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
+import { createAdminMeterOrder } from '../services/meter-orders.js';
 import {
     createDevApiKey,
     createDevWebhook,
@@ -82,6 +83,13 @@ function csvEscape(v: unknown): string {
     return s;
 }
 
+function toCsv<T extends object>(rows: T[], columns: string[]): string {
+    return [
+        columns.map(csvEscape).join(','),
+        ...rows.map((row) => columns.map((column) => csvEscape((row as Record<string, unknown>)[column])).join(',')),
+    ].join('\n');
+}
+
 function isUuid(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -100,6 +108,10 @@ interface AnnouncementRecipient {
     email: string | null;
     phone: string | null;
     status: string | null;
+}
+
+interface WalletOwnerRow {
+    owner_id: string | null;
 }
 
 function recipientKey(type: AnnouncementRecipientType, id: string): string {
@@ -131,6 +143,24 @@ function normalizeAnnouncementRecipient(row: any, type: AnnouncementRecipientTyp
     };
 }
 
+async function listWalletCustomerIds(): Promise<string[]> {
+    const { data, error } = await adminClient
+        .from('wallets')
+        .select('owner_id')
+        .eq('owner_type', 'customer');
+    if (error) throw error;
+    return Array.from(new Set(((data ?? []) as WalletOwnerRow[]).map((wallet) => wallet.owner_id).filter((id): id is string => Boolean(id))));
+}
+
+async function listWalletVendorIds(): Promise<string[]> {
+    const { data, error } = await adminClient
+        .from('wallets')
+        .select('owner_id')
+        .eq('owner_type', 'vendor');
+    if (error) throw error;
+    return Array.from(new Set(((data ?? []) as WalletOwnerRow[]).map((wallet) => wallet.owner_id).filter((id): id is string => Boolean(id))));
+}
+
 async function listAnnouncementRecipients(opts: {
     audiences: AnnouncementRecipientType[];
     search?: string;
@@ -143,29 +173,37 @@ async function listAnnouncementRecipients(opts: {
     const recipients: AnnouncementRecipient[] = [];
 
     if (opts.audiences.includes('customer')) {
-        let query = adminClient
-            .from('customers')
-            .select('id, full_name, email, phone, status')
-            .neq('status', 'deleted')
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-        if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
-        const { data, error } = await query;
-        if (error) throw error;
-        recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'customer')));
+        const walletCustomerIds = await listWalletCustomerIds();
+        if (walletCustomerIds.length) {
+            let query = adminClient
+                .from('customers')
+                .select('id, full_name, email, phone, status')
+                .in('id', walletCustomerIds)
+                .neq('status', 'deleted')
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'customer')));
+        }
     }
 
     if (opts.audiences.includes('vendor')) {
-        let query = adminClient
-            .from('vendor_organizations')
-            .select('id, legal_name, trading_name, contact_email, contact_phone, status')
-            .neq('status', 'deleted')
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-        if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
-        const { data, error } = await query;
-        if (error) throw error;
-        recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'vendor')));
+        const walletVendorIds = await listWalletVendorIds();
+        if (walletVendorIds.length) {
+            let query = adminClient
+                .from('vendor_organizations')
+                .select('id, legal_name, trading_name, contact_email, contact_phone, status')
+                .in('id', walletVendorIds)
+                .neq('status', 'deleted')
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'vendor')));
+        }
     }
 
     return recipients;
@@ -176,18 +214,24 @@ async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipi
     let customers = 0;
     let vendors = 0;
     if (opts.audiences.includes('customer')) {
-        let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).neq('status', 'deleted');
-        if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
-        const { count, error } = await query;
-        if (error) throw error;
-        customers = count ?? 0;
+        const walletCustomerIds = await listWalletCustomerIds();
+        if (walletCustomerIds.length) {
+            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).neq('status', 'deleted');
+            if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+            const { count, error } = await query;
+            if (error) throw error;
+            customers = count ?? 0;
+        }
     }
     if (opts.audiences.includes('vendor')) {
-        let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).neq('status', 'deleted');
-        if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
-        const { count, error } = await query;
-        if (error) throw error;
-        vendors = count ?? 0;
+        const walletVendorIds = await listWalletVendorIds();
+        if (walletVendorIds.length) {
+            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).neq('status', 'deleted');
+            if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+            const { count, error } = await query;
+            if (error) throw error;
+            vendors = count ?? 0;
+        }
     }
     return { customers, vendors, total: customers + vendors };
 }
@@ -284,6 +328,8 @@ const ROLE_LEGACY_NAMES: Record<string, string> = {
     account: 'finance',
 };
 
+const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
+
 const OPEN_ADMIN_ROUTES = new Set([
     'GET /me',
     'PATCH /me',
@@ -294,9 +340,15 @@ const OPEN_ADMIN_ROUTES = new Set([
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /access': 'wallet.access.manage',
+    'POST /access/roles': 'wallet.access.manage',
+    'PATCH /access/roles/:roleKey': 'wallet.access.manage',
+    'DELETE /access/roles/:roleKey': 'wallet.access.manage',
     'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
     'POST /access/users': 'wallet.access.manage',
     'PATCH /access/users/:userId/role': 'wallet.access.manage',
+    'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
+    'POST /access/users/:userId/reset-password': 'wallet.access.manage',
+    'POST /access/users/:userId/revoke-sessions': 'wallet.access.manage',
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
@@ -339,6 +391,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
     'GET /meter-orders/:id': 'wallet.vendors.review',
+    'POST /meter-orders': 'wallet.vendors.manage',
     'PATCH /meter-orders/:id': 'wallet.vendors.manage',
     'GET /fraud': 'wallet.fraud.review',
     'PATCH /fraud/:id/resolve': 'wallet.fraud.review',
@@ -431,7 +484,6 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /dev/role-matrix': 'dev.console',
     'GET /dev/deploy-log': 'dev.console',
 };
-
 function adminRouteKey(req: FastifyRequest): string {
     const routeUrl = (req.routeOptions?.url ?? req.url.split('?')[0] ?? '').replace(/^\/api\/v1\/admin/, '') || '/';
     return `${req.method.toUpperCase()} ${routeUrl}`;
@@ -684,6 +736,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 user_name: row.user_name ?? authUser?.user_metadata?.full_name ?? authUser?.email ?? 'Staff user',
                 last_sign_in_at: authUser?.last_sign_in_at ?? null,
                 confirmed_at: authUser?.confirmed_at ?? null,
+                suspended: Boolean(authUser?.banned_until && new Date(authUser.banned_until).getTime() > Date.now()),
                 auth_role: authUser?.user_metadata?.role_key ?? authUser?.app_metadata?.role_key ?? authUser?.user_metadata?.role ?? null,
             };
         });
@@ -703,6 +756,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions: z.array(z.string()).default([]),
         });
         const body = schema.parse(req.body);
+        const { data: role } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
+        if (!role) return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
         if (roleKey === 'super-admin' && next.length !== PERMISSION_CATALOG.length) {
@@ -731,15 +786,78 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true, roleKey, permissions: next };
     });
 
+    fastify.post('/access/roles', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const body = z.object({
+            name: z.string().trim().min(2).max(64),
+            description: z.string().trim().max(240).optional().default(''),
+            permissions: z.array(z.string()).max(PERMISSION_CATALOG.length).default([]),
+        }).parse(req.body);
+        const slug = body.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const roleKey = `custom-${slug}`;
+        if (slug.length < 2) {
+            return reply.code(400).send({ error: 'invalid_role_name', message: 'Choose a unique custom role name.' });
+        }
+        const { data: existing } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
+        if (existing) return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
+        const selectedPermissions = [...new Set(body.permissions.filter((p) => valid.has(p)))];
+        const { data: role, error: roleError } = await adminClient.from('roles').insert({
+            name: roleKey, role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
+        }).select('role_key, role_name, label, description').single();
+        if (roleError || !role) return reply.code(400).send({ error: 'role_create_failed', message: roleError?.message ?? 'Could not create role.' });
+        if (selectedPermissions.length) {
+            const { error: permissionError } = await adminClient.from('permissions').insert(
+                selectedPermissions.map((route_hash) => ({ role_key: roleKey, route_hash })),
+            );
+            if (permissionError) {
+                await adminClient.from('roles').delete().eq('role_key', roleKey);
+                return reply.code(400).send({ error: 'role_permission_create_failed', message: permissionError.message });
+            }
+        }
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.created', targetType: 'role', targetId: roleKey, after: { name: body.name, permissions: selectedPermissions } });
+        return { ok: true, role, permissions: selectedPermissions };
+    });
+
+    fastify.patch('/access/roles/:roleKey', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const roleKey = (req.params as { roleKey: string }).roleKey;
+        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be renamed.' });
+        const body = z.object({ name: z.string().trim().min(2).max(64), description: z.string().trim().max(240).optional().default('') }).parse(req.body);
+        const { data: role, error } = await adminClient.from('roles').update({ role_name: body.name, label: body.name, description: body.description || null, updated_at: new Date().toISOString() })
+            .eq('role_key', roleKey).select('role_key, role_name, label, description').maybeSingle();
+        if (error || !role) return reply.code(404).send({ error: 'role_not_found', message: error?.message ?? 'Role was not found.' });
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.updated', targetType: 'role', targetId: roleKey, after: body });
+        return { ok: true, role };
+    });
+
+    fastify.delete('/access/roles/:roleKey', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const roleKey = (req.params as { roleKey: string }).roleKey;
+        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
+        const { count, error: countError } = await adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role_key', roleKey);
+        if (countError) return reply.code(400).send({ error: 'role_usage_check_failed', message: countError.message });
+        if (count) return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
+        const { error } = await adminClient.from('roles').delete().eq('role_key', roleKey);
+        if (error) return reply.code(400).send({ error: 'role_delete_failed', message: error.message });
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.deleted', targetType: 'role', targetId: roleKey });
+        return { ok: true, roleKey };
+    });
+
     fastify.post('/access/users', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const schema = z.object({
             email: z.string().email(),
             fullName: z.string().min(2),
-            roleKey: z.enum(['super-admin', 'operations-manager', 'finance-checker', 'account']),
+            roleKey: z.string().trim().min(2).max(80),
             temporaryPassword: z.string().min(12).optional(),
         });
         const body = schema.parse(req.body);
+        const { data: assignedRole } = await adminClient.from('roles').select('role_key').eq('role_key', body.roleKey).maybeSingle();
+        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const password = body.temporaryPassword ?? `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
         const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
             email: body.email.toLowerCase(),
@@ -777,9 +895,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const userId = (req.params as { userId: string }).userId;
         const schema = z.object({
-            roleKey: z.enum(['super-admin', 'operations-manager', 'finance-checker', 'account']),
+            roleKey: z.string().trim().min(2).max(80),
         });
         const { roleKey } = schema.parse(req.body);
+        const { data: assignedRole } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
+        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const { data: authUser } = await adminClient.auth.admin.getUserById(userId);
         const { error: authErr } = await adminClient.auth.admin.updateUserById(userId, {
             user_metadata: {
@@ -803,6 +923,53 @@ const route: FastifyPluginAsync = async (fastify) => {
             after: { roleKey },
         });
         return { ok: true, userId, roleKey };
+    });
+
+    fastify.patch('/access/users/:userId/suspension', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { suspended } = z.object({ suspended: z.boolean() }).parse(req.body);
+        if (userId === req.actor!.userId) return reply.code(400).send({ error: 'self_suspension_denied', message: 'You cannot suspend your own account.' });
+        const { error } = await adminClient.auth.admin.updateUserById(userId, {
+            ban_duration: suspended ? '876000h' : 'none',
+        });
+        if (error) return reply.code(400).send({ error: 'suspension_update_failed', message: error.message });
+        if (suspended) {
+            const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
+            if (signOutError) return reply.code(400).send({ error: 'session_revocation_failed', message: signOutError.message });
+        }
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: suspended ? 'access.user.suspended' : 'access.user.reactivated',
+            targetType: 'staff_user', targetId: userId, after: { suspended },
+        });
+        return { ok: true, userId, suspended };
+    });
+
+    fastify.post('/access/users/:userId/reset-password', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const password = `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
+        const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
+        if (error) return reply.code(400).send({ error: 'password_reset_failed', message: error.message });
+        await adminClient.auth.admin.signOut(userId, 'global');
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.user.password_reset', targetType: 'staff_user', targetId: userId,
+        });
+        return { ok: true, userId, temporaryPassword: password };
+    });
+
+    fastify.post('/access/users/:userId/revoke-sessions', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { error } = await adminClient.auth.admin.signOut(userId, 'global');
+        if (error) return reply.code(400).send({ error: 'session_revocation_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.user.sessions_revoked', targetType: 'staff_user', targetId: userId,
+        });
+        return { ok: true, userId };
     });
 
     // ── stations directory (live from energy backend, 5-min cache) ──
@@ -1903,25 +2070,78 @@ const route: FastifyPluginAsync = async (fastify) => {
 
 
     // ── meter purchase orders ──
+    fastify.post('/meter-orders', async (req, reply) => {
+        const body = z.object({
+            customer_id: z.string().uuid(),
+            meter_type: z.enum(['single_phase', 'three_phase']),
+            property_address: z.string().trim().min(5).max(240),
+            service_area: z.string().trim().min(2).max(120),
+            contact_phone: z.string().trim().min(8).max(32),
+            sponsor_mode: z.enum(['manual_paid', 'vendor_wallet']),
+            vendor_organization_id: z.string().uuid().optional(),
+            notes: z.string().trim().max(500).optional(),
+        }).parse(req.body ?? {});
+        try {
+            const order = await createAdminMeterOrder({
+                staffUserId: req.actor!.userId,
+                customerId: body.customer_id,
+                meterType: body.meter_type,
+                propertyAddress: body.property_address,
+                serviceArea: body.service_area,
+                contactPhone: body.contact_phone,
+                sponsorMode: body.sponsor_mode,
+                vendorOrganizationId: body.vendor_organization_id ?? null,
+                notes: body.notes,
+                idempotencyKey: String(req.headers['idempotency-key'] ?? crypto.randomUUID()),
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'meter_order.created',
+                targetType: 'meter_order',
+                targetId: order.id,
+                metadata: {
+                    meter_type: body.meter_type,
+                    sponsor_mode: body.sponsor_mode,
+                    source_channel: 'admin_portal',
+                    vendor_organization_id: body.vendor_organization_id ?? null,
+                },
+            });
+            return { order };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({
+                error: error?.code ?? 'meter_order_create_failed',
+                message: error?.message ?? 'Could not create meter order.',
+            });
+        }
+    });
+
     fastify.get('/meter-orders/stats', async () => {
         const { data } = await adminClient
             .from('meter_purchase_orders')
-            .select('status, amount_minor, updated_at, created_at')
-            .limit(10_000);
-        const rows = (data ?? []) as any[];
-        const count = (s: string) => rows.filter((r) => r.status === s).length;
-        const inProgress = ['paid', 'assigned', 'dispatched'].reduce((n, s) => n + count(s), 0);
+            .select('status, amount_minor, updated_at, created_at, source_channel')
+            .limit(10000);
+        const rows: any[] = data ?? [];
+        const count = (status: string) => rows.filter((row) => row.status === status).length;
+        const bySource = rows.reduce<Record<string, number>>((acc, row: any) => {
+            const key = String(row.source_channel ?? 'customer_portal');
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+        }, {});
+        const inProgress = ['paid', 'assigned', 'dispatched'].reduce((n, status) => n + count(status), 0);
         const todayKey = new Date().toISOString().slice(0, 10);
-        const installedToday = rows.filter((r) =>
-            r.status === 'installed' && String(r.updated_at ?? r.created_at).slice(0, 10) === todayKey
+        const installedToday = rows.filter((row) =>
+            row.status === 'installed' && String(row.updated_at ?? row.created_at).slice(0, 10) === todayKey
         ).length;
         return {
-            total:           rows.length,
+            total: rows.length,
             pending_payment: count('pending_payment'),
-            in_progress:     inProgress,
-            installed:       count('installed'),
+            in_progress: inProgress,
+            installed: count('installed'),
             installed_today: installedToday,
-            cancelled:       count('cancelled'),
+            cancelled: count('cancelled'),
+            by_source: bySource,
         };
     });
 
@@ -1930,13 +2150,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         const pageSize = Math.min(Number(limit ?? 100), 200);
         let query = adminClient
             .from('meter_purchase_orders')
-            .select('*, customers(users(full_name, email, phone))')
+            .select('*, customers(full_name, email, phone), vendor_organizations(legal_name, trading_name)')
             .order('created_at', { ascending: false })
             .limit(pageSize);
         if (status) query = query.eq('status', status);
         if (q) {
             const safeQ = cleanSearchTerm(q);
-            if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%`);
+            if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%,customer_name_snapshot.ilike.%${safeQ}%`);
         }
         if (cursor) query = query.lt('created_at', cursor);
         const { data } = await query;
@@ -1949,7 +2169,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const id = (req.params as { id: string }).id;
         const { data, error } = await adminClient
             .from('meter_purchase_orders')
-            .select('*, customers(users(full_name, email, phone))')
+            .select('*, customers(full_name, email, phone), vendor_organizations(legal_name, trading_name)')
             .eq('id', id)
             .single();
         if (error || !data) return reply.code(404).send({ error: 'not_found' });
@@ -1984,9 +2204,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             metadata: { technician_name: body.technician_name, notes: body.notes },
         });
 
-        // Notify customer for meaningful status changes
         if (['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
-            const customerId = (order as any).customer_id as string | null;
+            const customerId = order.customer_id;
             if (customerId) {
                 const { notifyMeterOrderUpdate } = await import('../services/notifications.js');
                 notifyMeterOrderUpdate(customerId, {
@@ -2000,7 +2219,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         return order;
     });
 
-    // ── fraud review queue ──
     fastify.get('/fraud', async (req) => {
         const { resolved, min_score, limit } = req.query as { resolved?: string; min_score?: string; limit?: string };
         const minScore = Number(min_score ?? 50);
@@ -2661,7 +2879,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     async function gatherReportData(sinceIso: string, untilIso: string) {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
         const [purchases, funding, refunds, disputes, newCustomers, settlements] = await Promise.all([
-            inRange(adminClient.from('purchase_orders').select('amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
+            inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
@@ -2676,6 +2894,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const delivered = d.purchases.filter((p) => p.status === 'delivered');
         const failed = d.purchases.filter((p) => p.status === 'failed');
         const revenueMinor = delivered.reduce((s, p) => s + num(p.amount_minor), 0);
+        const energyRevenueMinor = delivered.reduce((s, p) => s + num(p.energy_amount_minor ?? p.amount_minor), 0);
+        const vatMinor = delivered.reduce((s, p) => s + num(p.vat_amount_minor), 0);
         const feeMinor = delivered.reduce((s, p) => s + num(p.fee_minor), 0);
         const fundingApprovedMinor = d.funding.reduce((s, p) => s + num(p.amount_minor), 0);
         const approvedRefunds = d.refunds.filter((r) => r.status === 'approved');
@@ -2685,14 +2905,22 @@ const route: FastifyPluginAsync = async (fastify) => {
         const processed = delivered.length + failed.length;
 
         // Daily buckets (zero-filled across the range)
-        const buckets = new Map<string, { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number }>();
+        const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number }>();
         const startMs = new Date(sinceIso).getTime();
         for (let i = 0; i < days; i++) {
             const key = dayKey(new Date(startMs + i * 86400_000).toISOString());
-            buckets.set(key, { date: key, revenueMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0 });
+            buckets.set(key, { date: key, revenueMinor: 0, energyRevenueMinor: 0, vatMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0 });
         }
         const touch = (iso: string) => buckets.get(dayKey(iso));
-        for (const p of delivered) { const b = touch(p.created_at); if (b) { b.revenueMinor += num(p.amount_minor); b.purchaseCount += 1; } }
+        for (const p of delivered) {
+            const b = touch(p.created_at);
+            if (b) {
+                b.revenueMinor += num(p.amount_minor);
+                b.energyRevenueMinor += num(p.energy_amount_minor ?? p.amount_minor);
+                b.vatMinor += num(p.vat_amount_minor);
+                b.purchaseCount += 1;
+            }
+        }
         for (const f of d.funding) { const b = touch(f.created_at); if (b) b.fundingMinor += num(f.amount_minor); }
         for (const c of d.newCustomers) { const b = touch(c.created_at); if (b) b.newCustomers += 1; }
         for (const r of approvedRefunds) { const b = touch(r.created_at); if (b) b.refundMinor += num(r.amount_minor); }
@@ -2716,6 +2944,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             range: { since: sinceIso, until: untilIso, days },
             kpis: {
                 revenueMinor,
+                energyRevenueMinor,
+                vatMinor,
                 feeMinor,
                 purchaseCount: d.purchases.length,
                 deliveredCount: delivered.length,
@@ -2747,10 +2977,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
         const data = await gatherReportData(sinceIso, untilIso);
         const report = buildReport(sinceIso, untilIso, days, data);
-        const header = ['date', 'revenue_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers'];
+        const header = ['date', 'revenue_minor', 'energy_revenue_minor', 'vat_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers'];
         const csv = [
             header.join(','),
-            ...report.series.daily.map((r) => [r.date, r.revenueMinor, r.purchaseCount, r.fundingMinor, r.refundMinor, r.newCustomers].map(csvEscape).join(',')),
+            ...report.series.daily.map((r) => [r.date, r.revenueMinor, r.energyRevenueMinor, r.vatMinor, r.purchaseCount, r.fundingMinor, r.refundMinor, r.newCustomers].map(csvEscape).join(',')),
         ].join('\n');
         reply.header('Content-Type', 'text/csv; charset=utf-8');
         reply.header('Content-Disposition', `attachment; filename="report-${sinceIso.slice(0, 10)}_${untilIso.slice(0, 10)}.csv"`);

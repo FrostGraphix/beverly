@@ -44,14 +44,13 @@ import {
     submitKycTier1, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import {
-    customerPurchase, previewCustomerPurchase, initiateCustomerFunding,
+    customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
     linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases, sendTokenSmsToCustomer,
     CustomerPurchaseError,
 } from '../services/customer-purchase.js';
 import { findWalletByOwner } from '../services/wallets.js';
 import { getReceiptByOrder } from '../services/vending.js';
 import { logAction } from '../services/audit.js';
-import { initializeTransaction } from '../adapters/paystack.js';
 import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
@@ -62,6 +61,7 @@ import {
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
+import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' ? 429
@@ -84,9 +84,9 @@ function customerAuthPayload(result: { challengeId: string; expiresAt: string; r
 }
 
 const NOTIFICATION_PREF_DEFAULTS = {
-    sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false },
-    email: { token_purchased: false, wallet_funded: false, promotions: false, kyc_update: false, dispute_update: false, payment_failed: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false, admin_announcement: false },
+    email: { token_purchased: false, wallet_funded: false, promotions: false, kyc_update: false, dispute_update: false, payment_failed: false, admin_announcement: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 };
 
 function mergeNotificationPrefs(existing: any, incoming: any = {}) {
@@ -102,6 +102,37 @@ function isMissingNotificationsStorage(error: any) {
     return /notifications|notification_preferences/i.test(text) && /exist|schema cache|column|relation/i.test(text);
 }
 
+function profileCode(prefix: string, id: string | null | undefined): string | null {
+    if (!id) return null;
+    return `${prefix}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+}
+
+function walletNumber(prefix: string, id: string | null | undefined): string | null {
+    const code = profileCode(prefix, id);
+    return code ? code.replace(`${prefix}-`, `WLT-${prefix}-`) : null;
+}
+
+function verifiedAt(kycData: any): string | null {
+    return kycData?.tier2?.verified_at ?? kycData?.tier1?.verified_at ?? null;
+}
+
+async function shapeCustomerProfile(row: any) {
+    const customerId = row?.id ?? null;
+    const wallet = customerId ? await findWalletByOwner('customer', customerId).catch(() => null) : null;
+    return {
+        ...row,
+        customer_code: profileCode('CUS', customerId),
+        wallet_number: walletNumber('CUS', customerId),
+        wallet_status: wallet?.status ?? null,
+        account_status: row?.status ?? null,
+        contact_person: row?.full_name ?? null,
+        primary_phone: row?.phone ?? null,
+        site: row?.kyc_data?.tier1?.state ?? null,
+        kyc_approved_date: verifiedAt(row?.kyc_data),
+        kyc_expiry: null,
+    };
+}
+
 function shapeReceipt(row: any, purchase?: any) {
     const payload = row?.payload ?? {};
     return {
@@ -111,6 +142,10 @@ function shapeReceipt(row: any, purchase?: any) {
         meter_id: payload.meterId ?? payload.meter_id ?? purchase?.meter_id ?? null,
         meter_type: payload.meterType ?? payload.meter_type ?? purchase?.meter_type ?? null,
         amount_minor: payload.amountMinor ?? payload.amount_minor ?? purchase?.amount_minor ?? null,
+        gross_amount_minor: payload.grossAmountMinor ?? payload.gross_amount_minor ?? purchase?.amount_minor ?? null,
+        energy_amount_minor: payload.energyAmountMinor ?? payload.energy_amount_minor ?? purchase?.energy_amount_minor ?? null,
+        vat_amount_minor: payload.vatAmountMinor ?? payload.vat_amount_minor ?? purchase?.vat_amount_minor ?? null,
+        vat_rate_basis_points: payload.vatRateBasisPoints ?? payload.vat_rate_basis_points ?? purchase?.vat_rate_basis_points ?? null,
         units_kwh: payload.units ?? payload.units_kwh ?? purchase?.units_kwh ?? null,
         tariff_id: payload.tariffId ?? payload.tariff_id ?? purchase?.tariff_id ?? null,
         station_id: payload.stationId ?? payload.station_id ?? purchase?.station_id ?? null,
@@ -223,11 +258,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
-        return data;
+        return shapeCustomerProfile(data);
     });
 
     fastify.patch('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -242,10 +277,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .from('customers')
             .update(updates)
             .eq('id', req.actor!.customerId!)
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, created_at')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
-        return data;
+        return shapeCustomerProfile(data);
     });
 
     fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -461,9 +496,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { meter_id, amount_minor, mode, idempotency_key } = req.body as {
+        const { meter_id, amount_minor, mode, idempotency_key, callback_url } = req.body as {
             meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string; callback_url?: string;
         };
         if (!meter_id || !amount_minor || !mode || !idempotency_key) {
             return reply.code(400).send({ error: 'missing_fields' });
@@ -520,6 +555,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
+                callbackUrl: callback_url,
             });
             // Link assessment to the resulting purchase order
             if (result.purchaseOrder?.id) {
@@ -540,10 +576,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase/step-up-verify', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key } = req.body as {
+        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key, callback_url } = req.body as {
             challenge_id: string; otp: string;
             meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string; callback_url?: string;
         };
         if (!challenge_id || !otp || !meter_id || !amount_minor || !mode || !idempotency_key) {
             return reply.code(400).send({ error: 'missing_fields' });
@@ -580,6 +616,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
+                callbackUrl: callback_url,
             });
             void refreshCustomerBaseline(customerId);
             return result;
@@ -596,6 +633,27 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── TRANSACTIONS & RECEIPTS ───────────────────────────────────────────────
+
+    fastify.post('/purchase/:purchaseOrderId/remote-send', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const params = z.object({
+            purchaseOrderId: z.string().uuid(),
+        }).parse(req.params);
+        try {
+            return await dispatchGeneratedCustomerToken(
+                req.actor!.customerId!,
+                req.actor!.userId,
+                params.purchaseOrderId,
+            );
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) {
+                const status = e.code === 'purchase_not_found' ? 404
+                    : e.code === 'token_missing' || e.code === 'purchase_not_delivered' ? 409
+                    : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
 
     fastify.get('/transactions', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { limit = 100 } = req.query as { limit?: number };
@@ -624,8 +682,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { data: purchaseRows } = await adminClient
             .from('purchase_orders')
-            .select('id, meter_id, meter_type, amount_minor, units_kwh, tariff_id, station_id, status')
+            .select('id, meter_id, meter_type, amount_minor, energy_amount_minor, vat_amount_minor, vat_rate_basis_points, units_kwh, tariff_id, station_id, status')
             .eq('customer_id', req.actor!.customerId!);
+        if (!purchaseRows?.length) return { receipts: [] };
         const purchaseById = new Map((purchaseRows ?? []).map((p: any) => [p.id, p]));
         const { data } = await adminClient
             .from('receipts')
@@ -643,54 +702,39 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const schema = z.object({
-            meter_type:      z.enum(['single_phase', 'three_phase']),
+            meter_type: z.enum(['single_phase', 'three_phase']),
             property_address: z.string().min(5),
-            service_area:    z.string().min(2),
-            contact_phone:   z.string().min(8),
+            service_area: z.string().min(2),
+            contact_phone: z.string().min(8),
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
 
-        const amount_minor = body.meter_type === 'three_phase' ? 7_500_000 : 5_000_000; // ₦75k / ₦50k
-        const reference    = `mord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        const { data: user } = await adminClient
-            .from('users')
-            .select('email, full_name')
-            .eq('id', req.actor!.userId)
-            .single();
-
-        // Initialize Paystack transaction
-        const ps = await initializeTransaction({
-            email:     (user as any)?.email ?? '',
-            amountMinor: amount_minor,
-            reference,
-            metadata:  { customer_id: req.actor!.customerId, order_type: 'meter_purchase' },
-            callbackUrl: `${process.env.CUSTOMER_APP_URL ?? 'http://localhost:5173'}/meter-orders?ref=${reference}`,
-        });
-        if (!ps.authorization_url) {
-            return reply.code(502).send({ error: 'paystack_error', message: 'Could not initialize payment' });
+        try {
+            const result = await createCustomerPortalMeterOrder({
+                customerId: req.actor!.customerId!,
+                customerUserId: req.actor!.userId,
+                meterType: body.meter_type,
+                propertyAddress: body.property_address,
+                serviceArea: body.service_area,
+                contactPhone: body.contact_phone,
+                callbackBaseUrl: `${process.env.CUSTOMER_APP_URL ?? 'http://localhost:5173'}/meter-orders`,
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'customer',
+                action: 'meter_order.created',
+                targetId: result.order.id,
+                metadata: { meter_type: body.meter_type, source_channel: 'customer_portal' },
+            });
+            return { order: result.order, authorization_url: result.authorizationUrl };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({
+                error: error?.code ?? 'meter_order_create_failed',
+                message: error?.message ?? 'Could not create meter order.',
+            });
         }
-
-        const { data: order, error } = await adminClient
-            .from('meter_purchase_orders')
-            .insert({
-                customer_id:      req.actor!.customerId!,
-                meter_type:       body.meter_type,
-                property_address: body.property_address,
-                service_area:     body.service_area,
-                contact_phone:    body.contact_phone,
-                amount_minor,
-                payment_reference: reference,
-                status:           'pending_payment',
-            })
-            .select()
-            .single();
-        if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
-
-        await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.created', targetId: (order as any).id, metadata: { meter_type: body.meter_type } });
-        return { order, authorization_url: ps.authorization_url };
     });
 
     fastify.get('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req) => {
@@ -731,6 +775,20 @@ const customer: FastifyPluginAsync = async (fastify) => {
             headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
         });
         const ps: any = await res.json();
+        if (ps.data?.status === 'success' && Number(ps.data?.amount) !== Number((order as any).amount_minor)) {
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'customer',
+                action: 'meter_order.payment_amount_mismatch',
+                targetId: id,
+                metadata: {
+                    reference: (order as any).payment_reference,
+                    expectedAmountMinor: (order as any).amount_minor,
+                    verifiedAmountMinor: ps.data?.amount ?? null,
+                },
+            });
+            return reply.code(409).send({ error: 'payment_amount_mismatch', message: 'Verified payment amount does not match this meter order.' });
+        }
         if (ps.data?.status === 'success') {
             await adminClient
                 .from('meter_purchase_orders')
@@ -841,6 +899,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
         const { body: msgBody } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
         const t = await getTicket(id);
         if (!t || (t as any).customer_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        if ((t as any).status === 'closed') return reply.code(409).send({ error: 'ticket_closed', message: 'Closed tickets cannot receive new customer replies.' });
         await addTicketMessage({
             ticketId: id, senderActorType: 'customer', senderActorId: req.actor!.customerId!,
             senderName: await customerName(req.actor!.customerId!), body: msgBody,
@@ -1003,11 +1062,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
             limit?: string; cursor?: string; unread_only?: string;
         };
         const pageSize = Math.min(Number(limit ?? 30), 100);
+        const customerId = req.actor!.customerId!;
+        const customerRecipientScope = `customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`;
 
         let query = adminClient
             .from('notifications')
             .select('*')
-            .eq('customer_id', req.actor!.customerId!)
+            .or(customerRecipientScope)
             .order('created_at', { ascending: false })
             .limit(pageSize);
 
@@ -1022,7 +1083,35 @@ const customer: FastifyPluginAsync = async (fastify) => {
             }
             throw error;
         }
-        const rows = data ?? [];
+        const deliveryQuery = adminClient
+            .from('admin_announcement_deliveries')
+            .select('id, notification_id, created_at, admin_announcements(id, title, body, audience, created_at)')
+            .eq('recipient_type', 'customer')
+            .eq('recipient_id', customerId)
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (cursor) deliveryQuery.lt('created_at', cursor);
+        const { data: deliveryRows } = await deliveryQuery;
+        const syntheticRows = (deliveryRows ?? []).map((row: any) => {
+            const announcement = Array.isArray(row.admin_announcements) ? row.admin_announcements[0] : row.admin_announcements;
+            return {
+                id: row.notification_id ?? row.id,
+                customer_id: customerId,
+                recipient_type: 'customer',
+                recipient_id: customerId,
+                type: 'admin_announcement',
+                title: announcement?.title ?? 'Beverly announcement',
+                body: announcement?.body ?? '',
+                metadata: { announcement_id: announcement?.id ?? null, delivery_id: row.id },
+                read: true,
+                created_at: announcement?.created_at ?? row.created_at,
+            };
+        });
+        const byId = new Map<string, any>();
+        for (const row of [...(data ?? []), ...syntheticRows]) byId.set(row.id, row);
+        const rows = Array.from(byId.values())
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, pageSize);
         const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
 
         // Unread count (only on first page, no cursor)
@@ -1031,7 +1120,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const { count, error: countError } = await adminClient
                 .from('notifications')
                 .select('id', { count: 'exact', head: true })
-                .eq('customer_id', req.actor!.customerId!)
+                .or(customerRecipientScope)
                 .eq('read', false);
             if (countError && !isMissingNotificationsStorage(countError)) throw countError;
             unreadCount = countError ? 0 : count ?? 0;
@@ -1041,10 +1130,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/notifications/read-all', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const customerId = req.actor!.customerId!;
         const { error } = await adminClient
             .from('notifications')
             .update({ read: true })
-            .eq('customer_id', req.actor!.customerId!)
+            .or(`customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`)
             .eq('read', false);
         if (error && !isMissingNotificationsStorage(error)) throw error;
         return { ok: true };
@@ -1052,11 +1142,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     fastify.patch('/notifications/:id/read', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const id = (req.params as { id: string }).id;
+        const customerId = req.actor!.customerId!;
         const { error } = await adminClient
             .from('notifications')
             .update({ read: true })
             .eq('id', id)
-            .eq('customer_id', req.actor!.customerId!);
+            .or(`customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`);
         if (isMissingNotificationsStorage(error)) return { ok: true };
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return { ok: true };

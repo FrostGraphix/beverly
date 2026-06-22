@@ -5,13 +5,20 @@
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries } from '../services/ledger.js';
 import {
     initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, FundingError,
 } from '../services/funding.js';
-import { vendorPurchase, listVendorPurchases, getReceiptByOrder, VendingError } from '../services/vending.js';
+import {
+    vendorPurchase,
+    dispatchGeneratedVendorToken,
+    listVendorPurchases,
+    getReceiptByOrder,
+    VendingError,
+} from '../services/vending.js';
 import {
     previewPurchase,
     lookupMeter,
@@ -31,6 +38,7 @@ import {
     beginVendorMfaEnrollment,
     beginVendorMfaReplacement,
     disableVendorMfa,
+    regenerateVendorRecoveryCodes,
     VendorMfaError,
     vendorMfaStatus,
     verifyVendorMfaChallenge,
@@ -44,6 +52,7 @@ import {
 } from '../services/vendor-vend-credential.js';
 import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
+import { createVendorSponsoredMeterOrder } from '../services/meter-orders.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -105,6 +114,73 @@ function sendTokenEngineError(reply: FastifyReply, error: TokenEngineError) {
     });
 }
 
+function profileCode(prefix: string, id: string | null | undefined): string | null {
+    if (!id) return null;
+    return `${prefix}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+}
+
+function profileSite(stations: unknown): string | null {
+    if (Array.isArray(stations) && stations.length) return stations.filter(Boolean).join(', ');
+    if (typeof stations === 'string' && stations.trim()) return stations.trim();
+    return null;
+}
+
+function walletNumber(prefix: string, id: string | null | undefined, explicit?: string | null): string | null {
+    if (explicit) return explicit;
+    const code = profileCode(prefix, id);
+    return code ? code.replace(`${prefix}-`, `WLT-${prefix}-`) : null;
+}
+
+async function legacyVendorWallet(organizationId: string | null | undefined): Promise<{ wallet_number: string | null; status: string | null }> {
+    if (!organizationId) return { wallet_number: null, status: null };
+    const { data } = await adminClient
+        .from('vendor_wallets')
+        .select('wallet_number, status')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+    return {
+        wallet_number: (data as any)?.wallet_number ?? null,
+        status: (data as any)?.status ?? null,
+    };
+}
+
+async function shapeVendorProfile(row: any, mfaVerified: boolean | undefined) {
+    const org = row?.vendor_organizations;
+    const orgId = row?.vendor_organization_id ?? null;
+    const wallet = orgId ? await findWalletByOwner('vendor', orgId).catch(() => null) : null;
+    const legacyWallet = await legacyVendorWallet(orgId).catch(() => ({ wallet_number: null, status: null }));
+    const orgStatus = org?.status ?? null;
+    return {
+        id: row?.id,
+        vendor_organization_id: orgId,
+        role: row?.role,
+        full_name: row?.full_name,
+        phone: row?.phone ?? org?.contact_phone ?? null,
+        email: row?.email ?? org?.contact_email ?? null,
+        profile_picture_url: row?.profile_picture_url ?? null,
+        mfa_enrolled: row?.mfa_enrolled,
+        mfa_verified: mfaVerified,
+        password_reset_required: row?.password_reset_required,
+        vend_credential_configured: Boolean(row?.vend_credential_set_at),
+        vend_credential_type: row?.vend_credential_type ?? null,
+        organization_name: org?.trading_name ?? org?.legal_name,
+        organization_status: orgStatus,
+        vendor_code: profileCode('VND', orgId),
+        site: profileSite(org?.operating_stations),
+        wallet_number: walletNumber('VND', orgId, legacyWallet.wallet_number),
+        wallet_status: wallet?.status ?? legacyWallet.status ?? null,
+        account_status: orgStatus,
+        contact_person: row?.full_name ?? null,
+        primary_phone: row?.phone ?? org?.contact_phone ?? null,
+        contact_email: row?.email ?? org?.contact_email ?? null,
+        kyc_status: orgStatus === 'approved' || orgStatus === 'active' ? 'approved' : orgStatus,
+        cac_number: org?.cac_number ?? null,
+        tin: org?.tin ?? null,
+        kyc_approved_date: org?.approved_at ?? null,
+        kyc_expiry: null,
+    };
+}
+
 const route: FastifyPluginAsync = async (fastify) => {
     // ── me ──
     fastify.get('/me', { preHandler: fastify.requireAuth() }, async (req, reply) => {
@@ -114,25 +190,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor!;
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at)')
             .eq('id', actor.actorId).single();
-        const org = (vu as any)?.vendor_organizations;
-        return {
-            id: (vu as any)?.id,
-            vendor_organization_id: (vu as any)?.vendor_organization_id,
-            role: (vu as any)?.role,
-            full_name: (vu as any)?.full_name,
-            phone: (vu as any)?.phone,
-            email: (vu as any)?.email,
-            profile_picture_url: (vu as any)?.profile_picture_url ?? null,
-            mfa_enrolled: (vu as any)?.mfa_enrolled,
-            mfa_verified: actor.mfaVerified,
-            password_reset_required: (vu as any)?.password_reset_required,
-            vend_credential_configured: Boolean((vu as any)?.vend_credential_set_at),
-            vend_credential_type: (vu as any)?.vend_credential_type ?? null,
-            organization_name: org?.trading_name ?? org?.legal_name,
-            organization_status: org?.status,
-        };
+        return shapeVendorProfile(vu, actor.mfaVerified);
     });
 
     fastify.patch('/me', { preHandler: fastify.requireVendor() }, async (req, reply) => {
@@ -155,26 +215,10 @@ const route: FastifyPluginAsync = async (fastify) => {
             .from('vendor_users')
             .update(updates)
             .eq('id', req.actor!.actorId)
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at)')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
-        const org = (data as any)?.vendor_organizations;
-        return {
-            id: (data as any)?.id,
-            vendor_organization_id: (data as any)?.vendor_organization_id,
-            role: (data as any)?.role,
-            full_name: (data as any)?.full_name,
-            phone: (data as any)?.phone,
-            email: (data as any)?.email,
-            profile_picture_url: (data as any)?.profile_picture_url ?? null,
-            mfa_enrolled: (data as any)?.mfa_enrolled,
-            mfa_verified: req.actor?.mfaVerified,
-            password_reset_required: (data as any)?.password_reset_required,
-            vend_credential_configured: Boolean((data as any)?.vend_credential_set_at),
-            vend_credential_type: (data as any)?.vend_credential_type ?? null,
-            organization_name: org?.trading_name ?? org?.legal_name,
-            organization_status: org?.status,
-        };
+        return shapeVendorProfile(data, req.actor?.mfaVerified);
     });
 
     fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireVendor() }, async (req, reply) => {
@@ -219,6 +263,98 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetType: 'vendor_user',
             targetId: actorId,
         });
+        return { ok: true };
+    });
+
+    fastify.get('/notifications', { preHandler: fastify.requireVendor() }, async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(50).optional(),
+            cursor: z.string().optional(),
+        }).parse(req.query);
+        const limit = query.limit ?? 20;
+        const { data: vendorUser } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', req.actor!.actorId)
+            .maybeSingle();
+        const orgId = (vendorUser as any)?.vendor_organization_id;
+        if (!orgId) return { notifications: [], nextCursor: null, unreadCount: 0 };
+        const vendorRecipientScope = `vendor_organization_id.eq.${orgId},and(recipient_type.eq.vendor,recipient_id.eq.${orgId})`;
+
+        let inbox = adminClient
+            .from('notifications')
+            .select('id, type, title, body, metadata, read, created_at')
+            .or(vendorRecipientScope)
+            .order('created_at', { ascending: false })
+            .limit(limit + 1);
+        if (query.cursor) inbox = inbox.lt('created_at', query.cursor);
+        const { data, error } = await inbox;
+        if (error) throw error;
+        const deliveryQuery = adminClient
+            .from('admin_announcement_deliveries')
+            .select('id, notification_id, created_at, admin_announcements(id, title, body, audience, created_at)')
+            .eq('recipient_type', 'vendor')
+            .eq('recipient_id', orgId)
+            .order('created_at', { ascending: false })
+            .limit(limit + 1);
+        if (query.cursor) deliveryQuery.lt('created_at', query.cursor);
+        const { data: deliveryRows } = await deliveryQuery;
+        const syntheticRows = (deliveryRows ?? []).map((row: any) => {
+            const announcement = Array.isArray(row.admin_announcements) ? row.admin_announcements[0] : row.admin_announcements;
+            return {
+                id: row.notification_id ?? row.id,
+                type: 'admin_announcement',
+                title: announcement?.title ?? 'Beverly announcement',
+                body: announcement?.body ?? '',
+                metadata: { announcement_id: announcement?.id ?? null, delivery_id: row.id },
+                read: true,
+                created_at: announcement?.created_at ?? row.created_at,
+            };
+        });
+        const byId = new Map<string, any>();
+        for (const row of [...(data ?? []), ...syntheticRows]) byId.set(row.id, row);
+        const rows = Array.from(byId.values())
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, limit + 1);
+        const nextCursor = rows.length > limit ? rows[limit - 1]?.created_at ?? null : null;
+        const { count } = await adminClient
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .or(vendorRecipientScope)
+            .eq('read', false);
+        return { notifications: rows.slice(0, limit), nextCursor, unreadCount: count ?? 0 };
+    });
+
+    fastify.post('/notifications/read-all', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { data: vendorUser } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', req.actor!.actorId)
+            .maybeSingle();
+        const orgId = (vendorUser as any)?.vendor_organization_id;
+        if (!orgId) return { ok: true };
+        await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .or(`vendor_organization_id.eq.${orgId},and(recipient_type.eq.vendor,recipient_id.eq.${orgId})`)
+            .eq('read', false);
+        return { ok: true };
+    });
+
+    fastify.patch('/notifications/:id/read', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { data: vendorUser } = await adminClient
+            .from('vendor_users')
+            .select('vendor_organization_id')
+            .eq('id', req.actor!.actorId)
+            .maybeSingle();
+        const orgId = (vendorUser as any)?.vendor_organization_id;
+        if (!orgId) return reply.code(404).send({ error: 'not_found' });
+        await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id)
+            .or(`vendor_organization_id.eq.${orgId},and(recipient_type.eq.vendor,recipient_id.eq.${orgId})`);
         return { ok: true };
     });
 
@@ -296,6 +432,18 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { code } = schema.parse(req.body);
         try {
             return await verifyVendorMfaChallenge(actor, bearerToken(req), code, mfaMeta(req));
+        } catch (error) {
+            return sendMfaError(reply, error);
+        }
+    });
+
+    fastify.post('/mfa/recovery/regenerate', { preHandler: fastify.requireAuth() }, async (req, reply) => {
+        const actor = vendorActorOrReply(req, reply);
+        if (!actor) return undefined;
+        const schema = z.object({ code: z.string().min(6).max(24) });
+        const { code } = schema.parse(req.body);
+        try {
+            return await regenerateVendorRecoveryCodes(actor, code, mfaMeta(req));
         } catch (error) {
             return sendMfaError(reply, error);
         }
@@ -421,6 +569,105 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { entries };
     });
 
+    fastify.get('/customers', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { q, limit } = z.object({
+            q: z.string().optional(),
+            limit: z.coerce.number().int().min(1).max(50).optional(),
+        }).parse(req.query);
+        const pageSize = limit ?? 20;
+        const { data: walletRows, error: walletErr } = await adminClient
+            .from('wallets')
+            .select('owner_id')
+            .eq('owner_type', 'customer');
+        if (walletErr) return { customers: [] };
+        const customerIds = Array.from(new Set((walletRows ?? []).map((row: any) => row.owner_id).filter(Boolean)));
+        if (!customerIds.length) return { customers: [] };
+        let query = adminClient
+            .from('customers')
+            .select('id, full_name, phone, email, status')
+            .in('id', customerIds)
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (q?.trim()) {
+            const safeQ = q.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
+            query = query.or(`full_name.ilike.%${safeQ}%,phone.ilike.%${safeQ}%,email.ilike.%${safeQ}%`);
+        }
+        const { data, error } = await query;
+        if (error) return { customers: [] };
+        return { customers: data ?? [] };
+    });
+
+    fastify.post('/meter-orders', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const body = z.object({
+            customer_id: z.string().uuid(),
+            meter_type: z.enum(['single_phase', 'three_phase']),
+            property_address: z.string().trim().min(5).max(240),
+            service_area: z.string().trim().min(2).max(120),
+            contact_phone: z.string().trim().min(8).max(32),
+        }).parse(req.body ?? {});
+        try {
+            const order = await createVendorSponsoredMeterOrder({
+                vendorOrganizationId: req.actor!.vendorOrganizationId!,
+                actorUserId: req.actor!.userId,
+                actorType: 'vendor_user',
+                customerId: body.customer_id,
+                meterType: body.meter_type,
+                propertyAddress: body.property_address,
+                serviceArea: body.service_area,
+                contactPhone: body.contact_phone,
+                idempotencyKey: String(req.headers['idempotency-key'] ?? crypto.randomUUID()),
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'vendor_user',
+                action: 'meter_order.created',
+                targetType: 'meter_order',
+                targetId: order.id,
+                metadata: { meter_type: body.meter_type, source_channel: 'vendor_portal', customer_id: body.customer_id },
+            });
+            return { order };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({
+                error: error?.code ?? 'meter_order_create_failed',
+                message: error?.message ?? 'Could not create meter order.',
+            });
+        }
+    });
+
+    fastify.get('/meter-orders', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { status, q, limit } = z.object({
+            status: z.string().optional(),
+            q: z.string().optional(),
+            limit: z.coerce.number().int().min(1).max(100).optional(),
+        }).parse(req.query);
+        const pageSize = limit ?? 50;
+        let query = adminClient
+            .from('meter_purchase_orders')
+            .select('*, customers(full_name, phone, email)')
+            .eq('vendor_organization_id', req.actor!.vendorOrganizationId!)
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (status) query = query.eq('status', status);
+        if (q?.trim()) {
+            const safeQ = q.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
+            query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%,customer_name_snapshot.ilike.%${safeQ}%`);
+        }
+        const { data } = await query;
+        return { orders: data ?? [] };
+    });
+
+    fastify.get('/meter-orders/:id', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { data, error } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*, customers(full_name, phone, email)')
+            .eq('id', id)
+            .eq('vendor_organization_id', req.actor!.vendorOrganizationId!)
+            .maybeSingle();
+        if (error || !data) return reply.code(404).send({ error: 'not_found', message: 'Meter order not found.' });
+        return data;
+    });
+
     // ── funding: initiate Paystack ──
     fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const orgId = req.actor!.vendorOrganizationId!;
@@ -430,11 +677,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const body = schema.parse(req.body);
         try {
+            const email = req.actor!.email?.trim() ?? '';
             return await initiatePaystackFunding({
                 vendorOrganizationId: orgId,
                 amountMinor: body.amountMinor,
                 submittedBy: req.actor!.userId,
-                email: req.actor!.email ?? 'no-email@example.com',
+                email,
                 callbackUrl: body.callbackUrl,
             });
         } catch (e: any) {
@@ -532,7 +780,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 customerId: meter.customerId,
                 customerName: meter.customerName,
                 stationId: meter.stationId,
-                amountMinor: body.amountMinor,
+                amountMinor: preview.energyAmountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
                 isThreePhase: meter.isThreePhase,
@@ -597,19 +845,68 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         const clientKey = (req.headers['idempotency-key'] as string | undefined) ?? `${Date.now()}-${Math.random()}`;
         try {
-            return await vendorPurchase({
+            const purchase = await vendorPurchase({
                 vendorOrganizationId: req.actor!.vendorOrganizationId!,
                 vendorUserId: req.actor!.userId,
                 meterId: body.meterId,
                 amountMinor: body.amountMinor,
-                mode: body.mode,
+                mode: 'wallet',
                 clientIdempotencyKey: clientKey,
             });
+            if (body.mode !== 'remote_send') return purchase;
+
+            try {
+                const remote = await dispatchGeneratedVendorToken(
+                    req.actor!.vendorOrganizationId!,
+                    req.actor!.userId,
+                    purchase.purchaseOrder.id,
+                );
+                return {
+                    ...purchase,
+                    purchaseOrder: remote.purchaseOrder,
+                    remoteTaskId: remote.remoteTaskId,
+                    remoteSend: remote,
+                };
+            } catch (error) {
+                if (error instanceof VendingError) {
+                    return {
+                        ...purchase,
+                        remoteSend: {
+                            status: 'failed' as const,
+                            deliveryState: 'remote_send_failed_needs_manual_entry',
+                            remark: error.message,
+                            code: error.code,
+                        },
+                    };
+                }
+                throw error;
+            }
         } catch (error) {
             if (error instanceof VendingError) {
                 const status = error.code === 'insufficient_balance' ? 402
                     : error.code === 'wallet_missing' ? 404
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
+                    : 422;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
+    fastify.post('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const params = z.object({
+            purchaseOrderId: z.string().uuid(),
+        }).parse(req.params);
+        try {
+            return await dispatchGeneratedVendorToken(
+                req.actor!.vendorOrganizationId!,
+                req.actor!.userId,
+                params.purchaseOrderId,
+            );
+        } catch (error) {
+            if (error instanceof VendingError) {
+                const status = error.code === 'purchase_not_found' ? 404
+                    : error.code === 'token_missing' || error.code === 'purchase_not_delivered' ? 409
                     : 422;
                 return reply.code(status).send({ error: error.code, message: error.message });
             }
@@ -626,6 +923,43 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── single receipt ──
+    fastify.get('/receipts', { preHandler: fastify.requireVendor() }, async (req) => {
+        const orgId = req.actor!.vendorOrganizationId!;
+        const limit = Math.min(Number((req.query as any).limit ?? 100), 500);
+        const purchases = await listVendorPurchases(orgId, limit);
+        const withReceipts = purchases.filter((p: any) => p.status === 'delivered' && p.receipt_id);
+        if (!withReceipts.length) return { receipts: [] };
+        const { data: receipts } = await adminClient
+            .from('receipts')
+            .select('id, receipt_number, purchase_order_id, payload, created_at')
+            .in('purchase_order_id', withReceipts.map((p: any) => p.id));
+        const receiptByOrder = new Map((receipts ?? []).map((r: any) => [r.purchase_order_id, r]));
+        return {
+            receipts: withReceipts.map((purchase: any) => {
+                const receipt: any = receiptByOrder.get(purchase.id);
+                const payload = receipt?.payload ?? {};
+                return {
+                    id: receipt?.id ?? purchase.receipt_id,
+                    receipt_number: receipt?.receipt_number ?? payload.receiptNumber ?? purchase.id,
+                    purchase_order_id: purchase.id,
+                    customer_name: purchase.customer_name ?? null,
+                    customer_phone: purchase.customer_phone ?? null,
+                    meter_id: purchase.meter_id,
+                    meter_type: purchase.meter_type ?? payload.meterType ?? null,
+                    amount_minor: purchase.amount_minor,
+                    gross_amount_minor: purchase.amount_minor,
+                    energy_amount_minor: purchase.energy_amount_minor ?? payload.energyAmountMinor ?? null,
+                    vat_amount_minor: purchase.vat_amount_minor ?? payload.vatAmountMinor ?? null,
+                    vat_rate_basis_points: purchase.vat_rate_basis_points ?? payload.vatRateBasisPoints ?? null,
+                    units_kwh: purchase.units_kwh,
+                    token: purchase.token,
+                    status: purchase.status,
+                    created_at: receipt?.created_at ?? purchase.created_at,
+                };
+            }),
+        };
+    });
+
     fastify.get('/receipts/:orderId', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const orderId = (req.params as { orderId: string }).orderId;
         const orgId = req.actor!.vendorOrganizationId!;
@@ -721,16 +1055,16 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── Support tickets ───────────────────────────────────────────────────
-    async function vendorContext(actorId: string): Promise<{ orgId?: string; name?: string }> {
+    async function vendorContext(actorId: string, fallbackOrgId?: string | null): Promise<{ orgId?: string; name?: string }> {
         const { data } = await adminClient
             .from('vendor_users')
             .select('vendor_organization_id, full_name, vendor_organizations(trading_name, legal_name)')
             .eq('id', actorId)
             .maybeSingle();
-        if (!data) return {};
+        if (!data) return { orgId: fallbackOrgId ?? undefined };
         const org = (data as any).vendor_organizations;
         return {
-            orgId: (data as any).vendor_organization_id,
+            orgId: (data as any).vendor_organization_id ?? fallbackOrgId ?? undefined,
             name: org?.trading_name ?? org?.legal_name ?? (data as any).full_name ?? undefined,
         };
     }
@@ -747,7 +1081,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
 
         const actor = req.actor!;
-        const ctx = await vendorContext(actor.actorId);
+        const ctx = await vendorContext(actor.actorId, actor.vendorOrganizationId);
+        if (!ctx.orgId) return reply.code(403).send({ error: 'vendor_organization_required' });
         return createTicket({
             requesterActorType:   'vendor',
             requesterActorId:     actor.actorId,
@@ -762,13 +1097,15 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/support/tickets', { preHandler: fastify.requireVendor() }, async (req) => {
         const { status } = req.query as { status?: string };
-        const ctx = await vendorContext(req.actor!.actorId);
+        const ctx = await vendorContext(req.actor!.actorId, req.actor!.vendorOrganizationId);
+        if (!ctx.orgId) return { tickets: [] };
         return { tickets: await listTickets({ vendorOrganizationId: ctx.orgId, status, limit: 100 }) };
     });
 
     fastify.get('/support/tickets/:id', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const id = (req.params as { id: string }).id;
-        const ctx = await vendorContext(req.actor!.actorId);
+        const ctx = await vendorContext(req.actor!.actorId, req.actor!.vendorOrganizationId);
+        if (!ctx.orgId) return reply.code(403).send({ error: 'vendor_organization_required' });
         const t = await getTicket(id);
         if (!t || (t as any).vendor_organization_id !== ctx.orgId) return reply.code(404).send({ error: 'not_found' });
         if ((t as any).support_ticket_messages) {
@@ -780,9 +1117,11 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.post('/support/tickets/:id/messages', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const { body: msgBody } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
-        const ctx = await vendorContext(req.actor!.actorId);
+        const ctx = await vendorContext(req.actor!.actorId, req.actor!.vendorOrganizationId);
+        if (!ctx.orgId) return reply.code(403).send({ error: 'vendor_organization_required' });
         const t = await getTicket(id);
         if (!t || (t as any).vendor_organization_id !== ctx.orgId) return reply.code(404).send({ error: 'not_found' });
+        if ((t as any).status === 'closed') return reply.code(409).send({ error: 'ticket_closed', message: 'Closed tickets cannot receive new vendor replies.' });
         await addTicketMessage({
             ticketId: id, senderActorType: 'vendor', senderActorId: req.actor!.actorId,
             senderName: ctx.name, body: msgBody,
@@ -793,7 +1132,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── Quick chat ────────────────────────────────────────────────────────
     fastify.post('/support/chat/session', { preHandler: fastify.requireVendor() }, async (req) => {
         const actor = req.actor!;
-        const ctx = await vendorContext(actor.actorId);
+        const ctx = await vendorContext(actor.actorId, actor.vendorOrganizationId);
         const { subject } = (req.body ?? {}) as { subject?: string };
         return getOrCreateChatSession({
             requesterActorType:   'vendor',
@@ -838,7 +1177,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { subject } = z.object({ subject: z.string().min(3).max(200) }).parse(req.body);
         const s = await getChatSession(id);
         if (!s || (s as any).requester_actor_id !== req.actor!.actorId) return reply.code(404).send({ error: 'not_found' });
-        const ctx = await vendorContext(req.actor!.actorId);
+        const ctx = await vendorContext(req.actor!.actorId, req.actor!.vendorOrganizationId);
+        if (!ctx.orgId) return reply.code(403).send({ error: 'vendor_organization_required' });
         return escalateChatToTicket({
             sessionId: id, requesterActorType: 'vendor', requesterActorId: req.actor!.actorId,
             requesterName: ctx.name, vendorOrganizationId: ctx.orgId, subject,
