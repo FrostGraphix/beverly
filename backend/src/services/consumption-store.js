@@ -464,6 +464,45 @@ function effectiveGranularity(granularity, windowDays) {
   return granularity;
 }
 
+function dateParts(day) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ""));
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function isMonthStart(day) {
+  const parts = dateParts(day);
+  return !!parts && parts.day === 1;
+}
+
+function isMonthEnd(day) {
+  const parts = dateParts(day);
+  if (!parts) return false;
+  const lastDay = new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
+  return parts.day === lastDay;
+}
+
+function isoWeekday(day) {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return 0;
+  return date.getUTCDay() || 7;
+}
+
+function isWeeklyBoundary(from, to) {
+  return isoWeekday(from) === 1 && isoWeekday(to) === 7;
+}
+
+function supportsExactAggregateRange(granularity, from, to) {
+  if (granularity === "monthly") return isMonthStart(from) && isMonthEnd(to);
+  if (granularity === "weekly") return isWeeklyBoundary(from, to);
+  if (granularity === "yearly") return /-\d{2}-\d{2}$/.test(from) && from.endsWith("-01-01") && to.endsWith("-12-31");
+  return true;
+}
+
 /**
  * Convert a period_start date (ISO YYYY-MM-DD) to the display key used by the
  * existing frontend consumers (same format as periodKey()).
@@ -541,11 +580,7 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
 
 async function readAggregatedDeltas({ stationId, from, to, granularity = "daily" }) {
   const periodType = aggPeriodType(granularity);
-  // For non-daily granularities the period_start of the *first* overlapping bucket
-  // may be earlier than `from` (e.g. a Monday-start week that contains `from`).
-  // Extend the lower bound by the max period width so we never miss a bucket.
-  const periodExtendDays = granularity === "yearly" ? 365 : granularity === "monthly" ? 31 : granularity === "weekly" ? 6 : 0;
-  const fromBound = periodExtendDays > 0 ? addDaysIso(from, -periodExtendDays) : from;
+  const fromBound = from;
   const pageSize = 1000;
 
   // One station if requested, otherwise every canonical station (junk/test
@@ -1004,10 +1039,12 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   const priorTo = addDaysIso(from, -1);
   const priorFrom = addDaysIso(priorTo, -(windowDays - 1));
 
-  // Coarsen the query granularity for wide windows so we never pull hundreds of
-  // thousands of per-meter rows (keeps queries fast + the chart readable).
-  const queryGranularity = effectiveGranularity(granularity, windowDays);
-  const granularityCoarsened = queryGranularity !== granularity;
+  const chartGranularity = effectiveGranularity(granularity, windowDays);
+  // Coarsen only when the selected date range exactly matches aggregate bucket
+  // boundaries. Weekly/monthly aggregate rows represent whole buckets, so using
+  // them for partial custom ranges would over-count outside the user's filter.
+  const queryGranularity = supportsExactAggregateRange(chartGranularity, from, to) ? chartGranularity : "daily";
+  const granularityCoarsened = chartGranularity !== granularity;
 
   // ── Try aggregate table path ──────────────────────────────────────────────
   const DEFAULT_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
@@ -1029,14 +1066,14 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     const response = buildAnalyticsFromAggregates({
       currentAgg, priorAgg: priorAgg || [],
       from, to, priorFrom, priorTo,
-      granularity: queryGranularity, topLimit, windowDays,
+      granularity: chartGranularity, topLimit, windowDays,
       stationId,
       proxySource: "supabase-station-analytics-agg",
     });
     const data = response.body.data;
     // Tell the client which granularity was actually used (for chart axis + note).
     data.range.requestedGranularity = granularity;
-    data.range.granularity = queryGranularity;
+    data.range.granularity = chartGranularity;
     data.range.granularityCoarsened = granularityCoarsened;
     let latestOdometerKwh = 0;
     let metersWithLatest = 0;
@@ -1119,7 +1156,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     s.byDay.set(d.date, (s.byDay.get(d.date) || 0) + d.delta);
     overallByDate.set(d.date, (overallByDate.get(d.date) || 0) + d.delta);
 
-    const pk = periodKey(d.date, granularity);
+    const pk = periodKey(d.date, chartGranularity);
     byPeriod.set(pk, (byPeriod.get(pk) || 0) + d.delta);
     if (!byPeriodStation.has(pk)) byPeriodStation.set(pk, new Map());
     const psMap = byPeriodStation.get(pk);
@@ -1242,7 +1279,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
       msg: "success",
       reason: "success",
       data: {
-        range: { from, to, granularity, priorFrom, priorTo, periodDays: windowDays },
+        range: { from, to, granularity: chartGranularity, requestedGranularity: granularity, granularityCoarsened, priorFrom, priorTo, periodDays: windowDays },
         totals: {
           consumedKwh: round3(consumedKwh),
           latestOdometerKwh: round3(latestOdometerKwh),
