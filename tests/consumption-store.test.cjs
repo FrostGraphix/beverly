@@ -50,6 +50,84 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
       };
     }
     if (pathname.startsWith("/meter_consumption_aggregates")) {
+      if (pathname.includes("period_start=gte.2026-05-25")) {
+        return {
+          response: {
+            headers: {
+              get(name) {
+                return String(name).toLowerCase() === "content-range" ? "0-1/2" : "";
+              }
+            }
+          },
+          body: [
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "day",
+              period_start: "2026-05-26",
+              kwh_total: 8,
+              reading_count: 1
+            },
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "day",
+              period_start: "2026-06-03",
+              kwh_total: 12,
+              reading_count: 1
+            }
+          ]
+        };
+      }
+      if (pathname.includes("period_type=eq.month")) {
+        const includesExactWindow = pathname.includes("period_start=gte.2026-05-01");
+        return {
+          response: {
+            headers: {
+              get(name) {
+                return String(name).toLowerCase() === "content-range" ? (includesExactWindow ? "0-1/2" : "0-2/3") : "";
+              }
+            }
+          },
+          body: (includesExactWindow ? [] : [
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-04-01",
+              kwh_total: 700,
+              reading_count: 30
+            }
+          ]).concat([
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-05-01",
+              kwh_total: 800,
+              reading_count: 31
+            },
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-06-01",
+              kwh_total: 900,
+              reading_count: 30
+            }
+          ])
+        };
+      }
       return {
         response: {
           headers: {
@@ -195,6 +273,40 @@ assert.strictEqual(summary.status, 200);
 assert.strictEqual(summary.body._proxy.source, "supabase-consumption-summary-agg");
 assert.strictEqual(summary.body.data.consumedKwh, 5);
 assert.deepStrictEqual(summary.body.data.temporal.labels, ["2026-05-07"]);
+
+requests.length = 0;
+const partialMonthlyAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-25",
+    TO: "2026-06-21",
+    granularity: "monthly",
+    topMeters: 10
+  }
+});
+assert.strictEqual(partialMonthlyAnalytics.status, 200);
+assert.strictEqual(partialMonthlyAnalytics.body.data.range.granularity, "monthly");
+assert.deepStrictEqual(partialMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
+assert.strictEqual(partialMonthlyAnalytics.body.data.totals.consumedKwh, 20);
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.day")));
+assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
+
+requests.length = 0;
+const exactMonthlyAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-01",
+    TO: "2026-06-30",
+    granularity: "monthly",
+    topMeters: 10
+  }
+});
+assert.strictEqual(exactMonthlyAnalytics.status, 200);
+assert.deepStrictEqual(exactMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
+assert.strictEqual(exactMonthlyAnalytics.body.data.totals.consumedKwh, 1700);
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-05-01")));
+assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-03-31")));
 
 supabase.restRequest = originalRestRequest;
 supabase.restRequestWithResponse = originalRestRequestWithResponse;
