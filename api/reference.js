@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
+const { isCanonicalMoneyMutation } = require("./wallet-route-contract.cjs");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
 const {
   ensureDatabase,
@@ -104,15 +105,18 @@ let accessControlModulePromise = null;
 function getEnv() {
   const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
   const liveBaseUrl = process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault;
+  const walletApiBaseUrl = String(process.env.WALLET_API_BASE_URL || "").trim().replace(/\/+$/, "");
   const configuredLiveWrites = process.env.ALLOW_LIVE_WRITES;
-  const allowLiveWrites = configuredLiveWrites === "false"
-    ? false
-    : configuredLiveWrites === "true"
-      || process.env.APPROVED_LIVE_WRITES === "true"
-      || process.env.NODE_ENV !== "production";
+  const isPreviewDeployment = Boolean(process.env.VERCEL_ENV) && process.env.VERCEL_ENV !== "production";
+  const allowLiveWrites = configuredLiveWrites === "true"
+    && process.env.APPROVED_LIVE_WRITES === "true"
+    && !isPreviewDeployment;
   return {
     readMode,
     liveBaseUrl,
+    walletApiBaseUrl,
+    canonicalWalletWritesEnabled: process.env.WALLET_PROXY_MONEY_WRITES_ENABLED === "true" && !isPreviewDeployment,
+    allowLegacyWalletTestMode: process.env.NODE_ENV === "test" && process.env.LEGACY_WALLET_TEST_MODE === "true",
     liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
     allowLiveWrites,
@@ -297,13 +301,14 @@ function roleAllowsWalletPath(roleId, pathname) {
 
 async function matchingRouteForRequest(pathname, request) {
   const access = await getAccessControlModule();
+  const writeRouteHash = routeHashForWritePath(pathname);
   const requestedHash = routeHeaderHash(request);
+  if (writeRouteHash) {
+    if (requestedHash && requestedHash !== writeRouteHash) return null;
+    return access.routeManifest.find((route) => route.hash === writeRouteHash) || null;
+  }
   if (requestedHash) {
     return access.routeManifest.find((route) => route.hash === requestedHash) || null;
-  }
-  const writeRouteHash = routeHashForWritePath(pathname);
-  if (writeRouteHash) {
-    return access.routeManifest.find((route) => route.hash === writeRouteHash) || null;
   }
   const loweredPath = String(pathname || "").toLowerCase();
   return access.routeManifest.find((route) =>
@@ -316,6 +321,13 @@ async function authorizeRequest(request, pathname, requestData) {
   const token = authHeaderToken(request);
   const trustedLiveActor = trustedLiveReadActor(pathname, request);
   if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
+
+  // Demo-auth bypass: accept local-dev-token when DEMO_AUTH_ENABLED=true
+  const env = getEnv();
+  if (env.demoAuthEnabled && token === "local-dev-token") {
+    request.__auth = { userId: env.demoAuthUser || "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin", stationId: "" };
+    return null;
+  }
 
   const actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
   if (!actor && !trustedLiveActor) return authFailure(401, pathname, "Invalid session");
@@ -520,6 +532,19 @@ function isPreviewRequest(requestData) {
 
 function isGuardedWriteRequest(pathname, method, requestData) {
   return isWriteRequest(pathname, method) && !isPreviewRequest(requestData);
+}
+
+function isCanonicalWalletRequest(pathname) {
+  return /^\/api\/v1\//.test(String(pathname || ""));
+}
+
+function isCanonicalFinancialMutation(pathname, method) {
+  return isCanonicalMoneyMutation(pathname, method);
+}
+
+function isLegacyFinancialMutation(pathname, method) {
+  return String(method || "GET").toUpperCase() !== "GET"
+    && /^\/api\/wallet(?:\/|$)/.test(String(pathname || ""));
 }
 
 function isCacheableRequest(pathname, method) {
@@ -2104,31 +2129,83 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ requests: walletPrivacy.listDeletionRequests({ status }) });
   }
 
+  const getVendorApplicationSeed = () => {
+    const state = globalThis.__beverlyVendorApplicationsState ||= {
+      rows: [
+        { id: "app-001", legal_name: "Sunrise Energy Ltd", contact_name: "Emeka Okonkwo", contact_email: "emeka@sunrise.ng", contact_phone: "+2348011223344", business_type: "retail_energy", operating_stations: ["Lagos Island", "Surulere"], notes: null, status: "submitted", created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
+        { id: "app-002", legal_name: "GreenPower Co", contact_name: "Fatima Yusuf", contact_email: "f.yusuf@greenpower.ng", contact_phone: "+2348099887766", business_type: "commercial", operating_stations: ["Abuja Central"], notes: "Has existing NERC license", status: "contacted", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+        { id: "app-003", legal_name: "Bright Connections", contact_name: "Chidi Eze", contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", business_type: "residential", operating_stations: ["Port Harcourt"], notes: null, status: "submitted", created_at: new Date(Date.now() - 1 * 86400000).toISOString() },
+      ],
+    };
+    return state.rows;
+  };
+
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendor-applications")) {
     const sp = adminQueryParams(request.url);
     const status = sp.get("status") || "submitted";
-    const seed = [
-      { id: "app-001", legal_name: "Sunrise Energy Ltd", contact_name: "Emeka Okonkwo", contact_email: "emeka@sunrise.ng", contact_phone: "+2348011223344", business_type: "retail_energy", operating_stations: ["Lagos Island", "Surulere"], notes: null, status: "submitted", created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
-      { id: "app-002", legal_name: "GreenPower Co", contact_name: "Fatima Yusuf", contact_email: "f.yusuf@greenpower.ng", contact_phone: "+2348099887766", business_type: "commercial", operating_stations: ["Abuja Central"], notes: "Has existing NERC license", status: "contacted", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
-      { id: "app-003", legal_name: "Bright Connections", contact_name: "Chidi Eze", contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", business_type: "residential", operating_stations: ["Port Harcourt"], notes: null, status: "submitted", created_at: new Date(Date.now() - 1 * 86400000).toISOString() },
-    ];
+    const seed = getVendorApplicationSeed();
     const filtered = status ? seed.filter(a => a.status === status) : seed;
     return localJobResponse({ applications: filtered });
+  }
+
+  if (methodUpper === "DELETE" && pathname.startsWith("/api/v1/admin/vendor-applications/")) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const rows = getVendorApplicationSeed();
+    const index = rows.findIndex(a => a.id === id);
+    if (index < 0) {
+      return {
+        status: 404,
+        body: {
+          code: 404,
+          msg: "Application not found.",
+          reason: "Application not found.",
+          data: null,
+          result: null,
+          _proxy: { source: "local-db", pathname }
+        }
+      };
+    }
+    rows.splice(index, 1);
+    return localJobResponse({ ok: true, id });
   }
 
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendors")) {
     const sp = adminQueryParams(request.url);
     const statusFilter = sp.get("status") || "";
     const q = (sp.get("q") || "").toLowerCase();
-    const seed = [
-      { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
-      { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
-      { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
-    ];
-    let rows = seed;
+    const state = globalThis.__beverlyVendorsState ||= {
+      rows: [
+        { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
+        { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+      ],
+    };
+    let rows = state.rows.filter(v => !v.deleted_at);
     if (statusFilter) rows = rows.filter(v => v.status === statusFilter);
     if (q) rows = rows.filter(v => v.legal_name.toLowerCase().includes(q) || v.contact_email.toLowerCase().includes(q));
     return localJobResponse({ vendors: rows });
+  }
+
+  if (methodUpper === "DELETE" && pathname.startsWith("/api/v1/admin/vendors/")) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+    const row = state.rows.find(v => v.id === id && !v.deleted_at);
+    if (!row) {
+      return {
+        status: 404,
+        body: {
+          code: 404,
+          msg: "Vendor not found.",
+          reason: "Vendor not found.",
+          data: null,
+          result: null,
+          _proxy: { source: "local-db", pathname }
+        }
+      };
+    }
+    row.status = "closed";
+    row.deleted_at = new Date().toISOString();
+    return localJobResponse({ ok: true, id });
   }
 
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/fraud")) {
@@ -2224,6 +2301,111 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
   if (methodUpper === "GET" && pathname === "/api/auth/mfa/factors") {
     return localJobResponse({ factors: [] });
+  }
+
+  if (pathname === "/api/local/abnormal-alarms") {
+    const qp = adminQueryParams(request.url);
+    const body = requestData.parsedBody || {};
+    const alarm = String(qp.get("alarm") || body.alarm || "").trim();
+    const stationId = String(qp.get("station_id") || qp.get("stationId") || body.station_id || body.stationId || "").trim();
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+    const defaultTo = now.toISOString();
+    const from = String(qp.get("from") || qp.get("FROM") || body.from || body.FROM || defaultFrom).trim();
+    const to = String(qp.get("to") || qp.get("TO") || body.to || body.TO || defaultTo).trim();
+    const searchTerm = String(qp.get("searchTerm") || qp.get("search") || body.searchTerm || body.search || "").trim().toLowerCase();
+    const sortBy = String(qp.get("sortBy") || body.sortBy || "").trim();
+    const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "asc").trim().toLowerCase() === "desc" ? "desc" : "asc";
+    const offset = Math.max(0, Number(qp.get("offset") || body.offset || 0));
+    const pageLimit = Math.min(1000, Math.max(10, Number(qp.get("limit") || qp.get("pageLimit") || body.pageLimit || body.limit || 200)));
+    let base = null;
+    let warning = "";
+    try {
+      base = await readDailyMeterRows({
+        pathname: "/api/DailyDataMeter/read",
+        requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from, TO: to }
+      });
+    } catch (error) {
+      warning = error instanceof Error ? error.message : String(error);
+      console.error("[abnormal-alarms]", warning);
+    }
+    let list = base?.body?.result?.data || base?.body?.data?.data || [];
+    if ((!Array.isArray(list) || !list.length)) {
+      try {
+        const upstream = await proxyLive(
+          { ...request, method: "POST", url: "/api/DailyDataMeter/read" },
+          "/api/DailyDataMeter/read",
+          {
+            ...requestData,
+            parsedBody: { lang: "en", pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from, TO: to }
+          }
+        );
+        const liveRows = upstream?.body?.result?.data || upstream?.body?.data?.data || [];
+        if (Array.isArray(liveRows) && liveRows.length) list = liveRows;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        warning = warning ? `${warning}; ${msg}` : msg;
+      }
+    }
+    const rows = [];
+    const flagValue = (record, keys) => keys.some((key) => {
+      const value = record?.[key];
+      const text = String(value ?? "").trim().toLowerCase();
+      return Number(value) > 0 || ["yes", "true", "open", "low", "abnormal", "reverse", "unbalance"].includes(text);
+    });
+    const readingUsage = (record) => Number(record.usage1 ?? record.energyConsumptionKwh ?? record.consumption ?? 0);
+    for (const r of list) {
+      const stationValue = r.stationId || r.station_id || r.SITE_ID || stationId;
+      const normalizedRow = {
+        ...r,
+        stationId: stationValue,
+        meterId: r.meterId || r.meter_id || r.METER_ID || "",
+        customerId: r.customerId || r.customer_id || r.CUSTOMER_ID || "",
+        customerName: r.customerName || r.customer_name || r.CUSTOMER_NAME || "",
+        gatewayId: r.gatewayId || r.gateway_id || r.GATEWAY_ID || "",
+        currentDate: r.currentDate || r.readingDate || r.reading_date || r.CURRENT_DATE || ""
+      };
+      const pushes = [
+        ["noData", "No Data Report", readingUsage(r) === 0],
+        ["magneticInterference", "Magnetic Interference", flagValue(r, ["magneticInterference", "magneticStatus", "magnetismStatus"])],
+        ["batteryLow", "Battery Low", flagValue(r, ["batteryLow", "batteryStatus", "batteryVoltageStatus"])],
+        ["terminalCoverOpen", "Terminal Cover Open", flagValue(r, ["terminalCoverOpen", "terminalStatus", "terminalCoverStatus"])],
+        ["coverOpen", "Upper Open", flagValue(r, ["coverOpen", "upperCoverOpen", "upperCoverStatus"])],
+        ["currentReverse", "Current Reverse", flagValue(r, ["currentReverse", "reverseCurrent", "currentReverseStatus"])],
+        ["currentUnbalance", "Current Unbalance", flagValue(r, ["currentUnbalance", "currentUnbalanceStatus", "unbalanceStatus"])]
+      ];
+      for (const [key, label, hit] of pushes) if (hit) rows.push({ ...normalizedRow, alarmKey: key, alarmLabel: label });
+    }
+    const alarmRows = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
+    const searched = searchTerm
+      ? alarmRows.filter((row) => Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(searchTerm)))
+      : alarmRows;
+    const filtered = sortBy
+      ? [...searched].sort((a, b) => {
+        const left = a?.[sortBy];
+        const right = b?.[sortBy];
+        const numericLeft = Number(left);
+        const numericRight = Number(right);
+        const result = Number.isFinite(numericLeft) && Number.isFinite(numericRight)
+          ? numericLeft - numericRight
+          : String(left ?? "").localeCompare(String(right ?? ""));
+        return sortDirection === "desc" ? -result : result;
+      })
+      : searched;
+    const paged = filtered.slice(offset, offset + pageLimit);
+    return localJobResponse({
+      total: filtered.length,
+      rows: paged,
+      data: paged,
+      result: { total: filtered.length, data: paged },
+      meta: {
+        source: base?.body?._proxy?.source || "local-abnormal-alarm",
+        from,
+        to,
+        stationId,
+        warning
+      }
+    });
   }
 
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
@@ -2789,35 +2971,6 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       }
     };
   }
-  if (pathname === "/api/local/abnormal-alarms") {
-    const alarm = String(payload.alarm || "").trim();
-    const stationId = String(payload.station_id || "").trim();
-    const from = String(payload.from || "").trim();
-    const to = String(payload.to || "").trim();
-    const offset = Math.max(0, Number(payload.offset || 0));
-    const pageLimit = Math.min(1000, Math.max(10, Number(payload.pageLimit || payload.limit || 200)));
-    const base = await readDailyMeterRows({
-      pathname: "/api/DailyDataMeter/read",
-      requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from || undefined, TO: to || undefined }
-    });
-    const list = base?.body?.result?.data || base?.body?.data?.data || [];
-    const rows = [];
-    for (const r of list) {
-      const pushes = [
-        ["noData", "No Data Report", Number(r.usage1 ?? r.energyConsumptionKwh ?? 0) === 0],
-        ["magneticInterference", "Magnetic Interference", Number(r.magneticInterference ?? r.magneticStatus ?? 0) > 0 || String(r.magneticStatus || "").toLowerCase() === "abnormal"],
-        ["batteryLow", "Battery Low", Number(r.batteryLow ?? 0) > 0 || String(r.batteryStatus || "").toLowerCase() === "low"],
-        ["terminalCoverOpen", "Terminal Cover Open", Number(r.terminalCoverOpen ?? 0) > 0 || String(r.terminalCoverOpen || "").toLowerCase() === "open"],
-        ["coverOpen", "Upper Open", Number(r.coverOpen ?? 0) > 0 || String(r.coverOpen || "").toLowerCase() === "open"],
-        ["currentReverse", "Current Reverse", Number(r.currentReverse ?? 0) > 0 || String(r.currentReverse || "").toLowerCase() === "yes"],
-        ["currentUnbalance", "Current Unbalance", Number(r.currentUnbalance ?? 0) > 0 || String(r.currentUnbalance || "").toLowerCase() === "yes"]
-      ];
-      for (const [key, label, hit] of pushes) if (hit) rows.push({ ...r, alarmKey: key, alarmLabel: label });
-    }
-    const filtered = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
-    const paged = filtered.slice(offset, offset + pageLimit);
-    return localJobResponse({ total: filtered.length, rows: paged, data: paged, result: { total: filtered.length, data: paged } });
-  }
   if (pathname === "/api/user/profile") {
     return localJobResponse({
       saved: true,
@@ -3300,15 +3453,83 @@ async function proxyLive(request, pathname, requestData) {
   return null;
 }
 
+async function proxyCanonicalWallet(request, pathname, requestData) {
+  const env = getEnv();
+  if (!env.walletApiBaseUrl) {
+    return {
+      status: 503,
+      body: {
+        error: "wallet_backend_unconfigured",
+        message: "Wallet backend is not configured for this deployment."
+      }
+    };
+  }
+  if (isCanonicalFinancialMutation(pathname, request.method) && !env.canonicalWalletWritesEnabled) {
+    return {
+      status: 503,
+      body: {
+        error: "money_writes_disabled",
+        message: "Money writes are disabled for this deployment."
+      }
+    };
+  }
+
+  const axios = require("axios");
+  const headers = {};
+  for (const name of ["authorization", "content-type", "idempotency-key", "x-correlation-id", "user-agent"]) {
+    const value = request.headers[name];
+    if (typeof value === "string" && value) headers[name] = value;
+  }
+  if (!headers["content-type"] && requestData.contentType) headers["content-type"] = requestData.contentType;
+
+  try {
+    const response = await axios({
+      method: request.method || "GET",
+      url: `${env.walletApiBaseUrl}${pathname}${querySuffix(request.url)}`,
+      headers,
+      data: String(request.method || "GET").toUpperCase() === "GET" ? undefined : requestData.rawBody,
+      responseType: "text",
+      timeout: 20_000,
+      maxRedirects: 0,
+      validateStatus: () => true
+    });
+    const contentType = String(response.headers["content-type"] || "");
+    let body = response.data;
+    if (contentType.includes(jsonContentType)) {
+      try {
+        body = JSON.parse(response.data);
+      } catch {
+        body = { error: "wallet_backend_invalid_json", message: "Wallet backend returned invalid JSON." };
+      }
+    }
+    return { status: response.status, body };
+  } catch (error) {
+    console.error("[wallet-backend-proxy]", error instanceof Error ? error.message : String(error));
+    return {
+      status: 502,
+      body: {
+        error: "wallet_backend_unavailable",
+        message: "Wallet backend is unavailable."
+      }
+    };
+  }
+}
+
 async function handler(request, response) {
   try {
-    ensureDatabase();
     applyCorsHeaders(request, response);
     if (String(request.method || "GET").toUpperCase() === "OPTIONS") {
       response.status(204).json({});
       return;
     }
     const pathname = normalizeRequestPath(request.url);
+    if (isCanonicalWalletRequest(pathname)) {
+      const requestData = await readRequest(request);
+      const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
+      response.status(canonicalResult.status).json(canonicalResult.body);
+      return;
+    }
+    ensureDatabase();
     let result = rateLimitResult(request);
     if (result) {
       await auditResult(request, pathname, result);
@@ -3322,7 +3543,20 @@ async function handler(request, response) {
       response.status(result.status).json(result.body);
       return;
     }
-    result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+    if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
+      result = {
+        status: 410,
+        body: {
+          code: 410,
+          msg: "Legacy wallet mutations are retired.",
+          reason: "Use the canonical wallet API.",
+          data: null,
+          result: null
+        }
+      };
+    } else {
+      result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+    }
 
     if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
       result = {
@@ -3465,6 +3699,9 @@ module.exports._test = {
   candidatePaths,
   normalizeLivePayload,
   normalizeRequestPath,
+  isCanonicalFinancialMutation,
+  isCanonicalWalletRequest,
+  isLegacyFinancialMutation,
   readRequest,
   rateLimitResult,
   refreshTargets,

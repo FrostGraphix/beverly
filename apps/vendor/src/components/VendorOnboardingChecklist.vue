@@ -196,8 +196,10 @@ function dismiss() {
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
   border-radius: var(--r-md);
   text-decoration: none;
   color: var(--text);

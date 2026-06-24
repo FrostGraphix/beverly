@@ -42,15 +42,10 @@ defineProps<{
       </div>
     </div>
 
-    <p class="auth-cross">
-      Selling electricity?
-      <a :href="PORTAL_URLS.vendor + 'login'" class="auth-cross-link">Open the vendor portal →</a>
-    </p>
-
     <p class="auth-legal">
       By continuing you agree to Beverly's
-      <a href="#" class="auth-link">Terms of Service</a> &amp;
-      <a href="#" class="auth-link">Privacy Policy</a>.
+      <router-link to="/terms" class="auth-link">Terms of Service</router-link> &amp;
+      <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>.
     </p>
   </main>
 </template>
@@ -64,18 +59,18 @@ defineProps<{
   justify-content: center;
   padding: var(--s-5) var(--s-4);
   padding-bottom: max(var(--s-6), env(safe-area-inset-bottom, 0px));
-  background: var(--canvas);
+  background: transparent;
   position: relative;
   overflow: hidden;
 }
 
-/* Ambient brand glow in the background */
+/* Ambient brand glow in the background — sits atop the fixed body gradient */
 .auth-bg-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 600px 400px at 50% 0%, oklch(70% 0.19 145 / 0.09) 0%, transparent 70%),
-    radial-gradient(ellipse 400px 300px at 80% 100%, oklch(65% 0.18 270 / 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 600px 400px at 50% 0%, oklch(70% 0.19 145 / 0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 300px at 80% 100%, oklch(65% 0.18 270 / 0.05) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -83,15 +78,13 @@ defineProps<{
   position: relative;
   width: 100%;
   max-width: 420px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-2xl);
   padding: var(--s-6);
-  box-shadow:
-    0 0 0 1px oklch(100% 0 0 / 0.04) inset,
-    0 4px 6px -1px oklch(0% 0 0 / 0.3),
-    0 20px 40px -8px oklch(0% 0 0 / 0.4),
-    0 0 60px oklch(70% 0.19 145 / 0.04);
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
 }
 
 /* Top glow line on card */

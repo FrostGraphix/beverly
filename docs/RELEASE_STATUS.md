@@ -1,12 +1,13 @@
 # Release Status
 
-Date: 2026-05-12
+Date: 2026-06-17
 
 Status: blocked.
 
 Reason:
-- Public Vercel smoke fails behind Vercel Authentication.
-- Protected API reads return `401 authz` without smoke credentials.
+- Latest unread Vercel mail reports failed preview deployments.
+- Public Vercel smoke still needs a successful preview URL.
+- Protected API reads need bypass and smoke credentials.
 - Remote CI has no run for branch `codex/production-gap-fixes-20260512`.
 - Worktree is dirty.
 
@@ -44,6 +45,37 @@ Release rule:
 
 Latest preview:
 - `https://beverly-3lrokjz2q-danmusa-abdulsamads-projects.vercel.app`
+
+Latest unread deployment failure:
+- `2026-06-13T08:54:37Z`
+- project: `acob-crm-4-clean-deploy`
+- deployment: `dpl_ApHZfUvEfjjC1UNM6Rk6TjE1We6S`
+- details: `https://vercel.com/danmusa-abdulsamads-projects/acob-crm-4-clean-deploy/dpl_ApHZfUvEfjjC1UNM6Rk6TjE1We6S`
+- latest `beverly` failure: `dpl_4TL5qsL4Dbe9FuAgx9xWSRrY9fMS`
+
+Latest preview smoke checklist:
+1. Confirm the target is a successful `beverly` preview URL.
+2. Set `$env:PREVIEW_TARGET_URL="https://beverly-3lrokjz2q-danmusa-abdulsamads-projects.vercel.app"`.
+3. Set `$env:TARGET_URL=$env:PREVIEW_TARGET_URL`.
+4. Set `$env:VERCEL_PROTECTION_BYPASS="<preview-bypass-secret>"`.
+5. Set `$env:SMOKE_AUTH_TOKEN="<smoke-token>"`.
+6. Or set `$env:SMOKE_USER_ID` and `$env:SMOKE_PASSWORD`.
+7. Run `npm run smoke:vercel`.
+8. Set `$env:STAGING_TARGET_URL=$env:PREVIEW_TARGET_URL`.
+9. Run `npm run write:staging`.
+10. Record `readMode`, `liveProxyEnabled`, and `writeGuarded`.
+
+Preview operator console checklist:
+1. Sign in as `super-admin`.
+2. Open Developer Console > Service Health.
+3. Confirm Supabase reports `healthy`.
+4. Review unresolved incidents.
+5. Open Queue Monitor.
+6. Confirm no failed jobs.
+7. Retry only reviewed failures.
+8. Open Schema Explorer > Deploy Log.
+9. Confirm latest preview status.
+10. Record deployment SHA and timestamp.
 
 Unblock order:
 1. Set `VERCEL_PROTECTION_BYPASS`.

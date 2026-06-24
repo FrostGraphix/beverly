@@ -14,6 +14,7 @@ import { sendEmail } from '../adapters/postmark.js';
 import { logAction } from './audit.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env }       from '../config/env.js';
+import { notificationsQueue } from '../queue/index.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ export type NotificationType =
     | 'wallet_funded'
     | 'kyc_update'
     | 'dispute_update'
+    | 'admin_announcement'
     | 'low_balance'
     | 'payment_failed'
     | 'meter_order_update';
@@ -56,9 +58,9 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     // token_purchased SMS is false here because the dedicated token-SMS system
     // (sendTokenSmsToCustomer) already delivers the actual token code via SMS.
     // The notification service handles in-app + email for this event.
-    sms:    { token_purchased: false, wallet_funded: true,  login_otp: true },
-    email:  { token_purchased: false, wallet_funded: false, promotions: false },
-    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
+    email:  { token_purchased: false, wallet_funded: false, promotions: false, admin_announcement: false },
+    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 };
 
 function prefEnabled(prefs: PreferencesShape | null, channel: 'sms' | 'email' | 'in_app', type: NotificationType): boolean {
@@ -70,6 +72,24 @@ function prefEnabled(prefs: PreferencesShape | null, channel: 'sms' | 'email' | 
 // ── Main function ─────────────────────────────────────────────────────────────
 
 export async function sendNotification(
+    customerId: string,
+    payload: NotificationPayload,
+): Promise<void> {
+    try {
+        await notificationsQueue.add('deliver', { customerId, payload }, {
+            jobId: `notification:${customerId}:${payload.type}:${Date.now()}`,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 30_000 },
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        });
+    } catch (error) {
+        if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') throw error;
+        await deliverNotification(customerId, payload);
+    }
+}
+
+export async function deliverNotification(
     customerId: string,
     payload: NotificationPayload,
 ): Promise<void> {
@@ -99,6 +119,8 @@ async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: 
     try {
         await adminClient.from('notifications').insert({
             customer_id: cu.id,
+            recipient_type: 'customer',
+            recipient_id: cu.id,
             type:        payload.type,
             title:       payload.title,
             body:        payload.body,

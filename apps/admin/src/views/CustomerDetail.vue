@@ -16,6 +16,7 @@ import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 
 const route = useRoute();
@@ -145,9 +146,16 @@ onMounted(loadDetail);
           </div>
         </div>
         <div class="head-actions">
-          <button v-if="detail.customer.status === 'active'" class="bw-btn" @click="askStatus('suspended')">Suspend</button>
-          <button v-if="detail.customer.status === 'suspended'" class="bw-btn primary" @click="askStatus('active')">Reactivate</button>
-          <button v-if="detail.customer.status !== 'closed'" class="bw-btn danger" @click="askStatus('closed')">Close</button>
+          <div class="head-action-buttons">
+            <button v-if="detail.customer.status === 'active'" class="bw-btn" @click="askStatus('suspended')">Suspend</button>
+            <button v-if="detail.customer.status === 'suspended'" class="bw-btn primary" @click="askStatus('active')">Reactivate</button>
+            <button v-if="detail.customer.status !== 'closed'" class="bw-btn danger" @click="askStatus('closed')">Close</button>
+          </div>
+          <MobileActionMenu label="Customer actions">
+            <button v-if="detail.customer.status === 'active'" class="mobile-action-item" @click="askStatus('suspended')">Suspend</button>
+            <button v-if="detail.customer.status === 'suspended'" class="mobile-action-item primary" @click="askStatus('active')">Reactivate</button>
+            <button v-if="detail.customer.status !== 'closed'" class="mobile-action-item danger" @click="askStatus('closed')">Close</button>
+          </MobileActionMenu>
         </div>
       </div>
 
@@ -227,16 +235,18 @@ onMounted(loadDetail);
         <div v-if="tabLoading" class="empty bw-muted">Loading…</div>
         <div v-else class="bw-t-wrap">
           <table class="bw-table">
-            <thead><tr><th>When</th><th>Meter</th><th>Station</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
+            <thead><tr><th>When</th><th>Meter</th><th>Station</th><th style="text-align:right">Paid</th><th style="text-align:right">Energy</th><th style="text-align:right">VAT</th><th>Status</th></tr></thead>
             <tbody>
               <tr v-for="p in purchases" :key="p.id">
                 <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
                 <td class="bw-mono">{{ p.meter_id }}</td>
                 <td class="bw-mono bw-muted">{{ p.station_id || '—' }}</td>
                 <td class="bw-money" style="text-align: right">{{ naira(p.amount_minor) }}</td>
+                <td class="bw-money" style="text-align: right">{{ naira(p.energy_amount_minor ?? p.amount_minor) }}</td>
+                <td class="bw-money" style="text-align: right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
                 <td><span :class="['bw-badge', purchaseBadge(p.status)]">{{ p.status }}</span></td>
               </tr>
-              <tr v-if="!purchases.length"><td colspan="5" class="bw-muted empty">No purchases.</td></tr>
+              <tr v-if="!purchases.length"><td colspan="7" class="bw-muted empty">No purchases.</td></tr>
             </tbody>
           </table>
         </div>
@@ -296,14 +306,15 @@ onMounted(loadDetail);
 
 .head-card { display: flex; justify-content: space-between; align-items: start; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-3); }
 .head-main { display: flex; gap: var(--s-4); align-items: center; }
-.avatar { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display: grid; place-items: center; font-size: 24px; font-weight: 700; color: white; flex-shrink: 0; }
+.avatar { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display: grid; place-items: center; font-size: 24px; font-weight: 700; color: oklch(8% 0.04 145); flex-shrink: 0; }
 .head-name { margin: 0 0 4px; font-size: var(--t-xl); }
 .head-meta { font-size: var(--t-sm); color: var(--text-muted); margin: 0 0 var(--s-2); }
 .head-badges { display: flex; gap: var(--s-2); flex-wrap: wrap; }
 .head-actions { display: flex; gap: var(--s-2); align-items: center; }
+.head-action-buttons { display: flex; gap: var(--s-2); align-items: center; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
-.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); position: relative; overflow: hidden; }
+.stat-tile { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: var(--s-4); position: relative; overflow: hidden; backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
 .stat-tile.brand { background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent); border-color: oklch(from var(--brand) l c h / 0.25); }
 .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
 .stat-value { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-lg); margin: 0; }
@@ -338,6 +349,8 @@ onMounted(loadDetail);
 
 @media (max-width: 640px) {
   .head-card { flex-direction: column; }
+  .head-actions { width: 100%; justify-content: flex-end; }
+  .head-action-buttons { display: none; }
   .ov-dl { grid-template-columns: 1fr; }
   .ov-dl dt { font-weight: 700; margin-top: var(--s-2); }
   .ledger-row { grid-template-columns: 1fr auto; }

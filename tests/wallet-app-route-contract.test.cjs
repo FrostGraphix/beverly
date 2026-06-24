@@ -236,6 +236,7 @@ function main() {
   assert.match(vendorRouter, /createWebHistory\(portalHistoryBase\(import\.meta\.env\.BASE_URL\)\)/);
   assert.match(customerRouter, /createWebHistory\(portalHistoryBase\(import\.meta\.env\.BASE_URL\)\)/);
   assert.match(adminMeterOrders, /source_channel/);
+  assert.match(adminMeterOrders, /sponsor_mode/);
   assert.match(adminMeterOrders, /vendor_organizations/);
   assert.match(adminMeterOrders, /sourceLabel/);
   assert.match(adminMeterOrders, /New Order/);
@@ -243,8 +244,12 @@ function main() {
   assert.match(adminMeterOrderCreate, /vendor_wallet/);
   assert.match(adminMeterOrderCreate, /\/api\/v1\/admin\/meter-orders/);
   assert.match(vendorMeterOrders, /\/api\/v1\/vendor\/meter-orders/);
+  assert.match(vendorMeterOrders, /sponsor_mode/);
   assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/customers/);
   assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/meter-orders/);
+  const sponsorMigration = read("supabase/migrations/20260622090000_meter_order_sponsor_mode.sql");
+  assert.match(sponsorMigration, /manual_paid/);
+  assert.match(sponsorMigration, /vendor_wallet/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);
   assert.match(walletCss, /\.bw-scrim\.open\s*\{[\s\S]*pointer-events:\s*auto;/);
   assert.match(rootPackage.scripts.build, /@beverly\/admin-app build/);

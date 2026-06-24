@@ -73,7 +73,11 @@ async function submit() {
         const me = await meRes.json();
 
         // 3) Store session + route forward (forced password reset gate)
-        auth.setSession(accessToken, me, rememberEmail.value);
+        auth.setSession(accessToken, me, rememberEmail.value, {
+            refreshToken: typeof tokData.refresh_token === 'string' ? tokData.refresh_token : null,
+            expiresAt: typeof tokData.expires_at === 'number' ? tokData.expires_at : null,
+            expiresIn: typeof tokData.expires_in === 'number' ? tokData.expires_in : null,
+        });
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, normalizedEmail);
         else localStorage.removeItem(REMEMBERED_VENDOR_EMAIL_KEY);
         await router.push(me.password_reset_required ? { path: '/password-change', query: { redirect: redirectTarget.value } } : redirectTarget.value);
@@ -139,14 +143,13 @@ rememberEmail.value = Boolean(rememberedEmail);
 
       <div class="vendor-cross">
         <a :href="PORTAL_URLS.customer + 'login'" class="vendor-cross-link">Buy electricity instead →</a>
-        <a :href="PORTAL_URLS.landing" class="vendor-cross-link vendor-cross-link--muted">← Back to Beverly home</a>
       </div>
     </div>
   </main>
 </template>
 
 <style scoped>
-.login-root { min-height: 100dvh; display: grid; place-items: center; padding: var(--s-5); background: var(--canvas); }
+.login-root { min-height: 100dvh; display: grid; place-items: center; padding: var(--s-5); background: transparent; }
 .login-card { width: 100%; max-width: 420px; }
 .login-head { text-align: center; margin-bottom: var(--s-6); }
 .login-mark { width: 52px; height: 52px; font-size: 22px; margin: 0 auto var(--s-4); }

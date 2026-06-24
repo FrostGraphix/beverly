@@ -36,9 +36,9 @@ const inboxError  = ref('');
 
 // Preferences
 const prefs       = ref<Preferences>({
-    sms:    { token_purchased: false, wallet_funded: true },
-    email:  { token_purchased: false, wallet_funded: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    sms:    { token_purchased: false, wallet_funded: true, admin_announcement: false },
+    email:  { token_purchased: false, wallet_funded: false, admin_announcement: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 });
 const savingPrefs = ref(false);
 const prefsError  = ref('');
@@ -51,6 +51,7 @@ const NOTIF_ICON: Record<string, string> = {
     wallet_funded:     'M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
     kyc_update:        'M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     dispute_update:    'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
+    admin_announcement:'M3 11v2a4 4 0 004 4h1l4 4v-4h5a4 4 0 004-4v-2M7 7h10M7 11h7',
     low_balance:       'M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
     payment_failed:    'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M12 3C6.48 3 2 7.48 2 12s4.48 9 10 9 10-4.48 10-10S17.52 3 12 3z',
     meter_order_update:'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
@@ -61,6 +62,7 @@ const NOTIF_COLOR: Record<string, string> = {
     wallet_funded:     'var(--brand)',
     kyc_update:        'oklch(70% 0.19 145)',
     dispute_update:    'oklch(70% 0.15 280)',
+    admin_announcement:'var(--brand)',
     low_balance:       'oklch(78% 0.16 75)',
     payment_failed:    'oklch(60% 0.22 25)',
     meter_order_update:'oklch(70% 0.15 220)',
@@ -132,6 +134,15 @@ const PREF_GROUPS = [
         channels: [
             { channel: 'in_app' as const, label: 'In-app' },
             { channel: 'sms'    as const, label: 'SMS'    },
+        ],
+    },
+    {
+        label: 'Beverly announcements',
+        key: 'admin_announcement',
+        channels: [
+            { channel: 'in_app' as const, label: 'In-app' },
+            { channel: 'sms'    as const, label: 'SMS'    },
+            { channel: 'email'  as const, label: 'Email'  },
         ],
     },
 ];
@@ -373,10 +384,10 @@ onMounted(async () => {
   transition: background 0.15s, color 0.15s;
 }
 .notif-tab.active {
-  background: var(--surface);
+  background: var(--glass-bg-strong);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 4px oklch(0% 0 0 / 0.10);
+  box-shadow: var(--glass-shadow-card);
 }
 .notif-tab-badge {
   background: var(--danger, oklch(60% 0.22 25));
@@ -397,8 +408,11 @@ onMounted(async () => {
   align-items: flex-start;
   gap: var(--s-3);
   padding: var(--s-3) var(--s-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
   border-radius: var(--r-xl);
   cursor: pointer;
   transition: background 0.12s;

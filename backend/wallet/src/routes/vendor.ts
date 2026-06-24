@@ -5,7 +5,6 @@
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries } from '../services/ledger.js';
@@ -50,9 +49,10 @@ import {
     VendorVendCredentialError,
     verifyVendorVendCredential,
 } from '../services/vendor-vend-credential.js';
-import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { createVendorSponsoredMeterOrder } from '../services/meter-orders.js';
+import { assertClientIdempotencyKey } from '../services/idempotency.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -73,6 +73,16 @@ function mfaMeta(req: FastifyRequest) {
         ip: req.ip,
         userAgent: req.headers['user-agent'] as string | undefined,
     };
+}
+
+function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string | null {
+    try {
+        return assertClientIdempotencyKey(req.headers['idempotency-key']);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'A valid Idempotency-Key header is required.';
+        reply.code(400).send({ error: 'invalid_idempotency_key', message });
+        return null;
+    }
 }
 
 function sendMfaError(reply: FastifyReply, error: unknown) {
@@ -196,18 +206,17 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.patch('/me', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
+            return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
+        }
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
             phone: z.string().trim().min(6).max(32).optional(),
-            profile_picture_url: z.union([z.string().url().max(1000), z.literal(''), z.null()]).optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.full_name = body.full_name;
         if (body.phone !== undefined) updates.phone = body.phone;
-        if (body.profile_picture_url !== undefined) {
-            updates.profile_picture_url = body.profile_picture_url ? body.profile_picture_url : null;
-        }
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
@@ -264,6 +273,17 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetId: actorId,
         });
         return { ok: true };
+    });
+
+    fastify.post('/profile-picture/activate', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
+        try {
+            const profilePictureUrl = await activateProfilePicture('vendor', req.actor!.actorId, path);
+            await adminClient.from('vendor_users').update({ profile_picture_url: profilePictureUrl }).eq('id', req.actor!.actorId);
+            return { profile_picture_url: profilePictureUrl };
+        } catch (error) {
+            return reply.code(422).send({ error: 'profile_picture_activation_failed' });
+        }
     });
 
     fastify.get('/notifications', { preHandler: fastify.requireVendor() }, async (req) => {
@@ -605,6 +625,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             service_area: z.string().trim().min(2).max(120),
             contact_phone: z.string().trim().min(8).max(32),
         }).parse(req.body ?? {});
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return reply;
         try {
             const order = await createVendorSponsoredMeterOrder({
                 vendorOrganizationId: req.actor!.vendorOrganizationId!,
@@ -615,7 +637,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
-                idempotencyKey: String(req.headers['idempotency-key'] ?? crypto.randomUUID()),
+                idempotencyKey,
             });
             await logAction({
                 actorUserId: req.actor!.userId,
@@ -825,6 +847,12 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // ── vending: token ──
     fastify.post('/vend', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        if (!req.actor?.mfaVerified) {
+            return reply.code(403).send({
+                error: 'mfa_required',
+                message: 'Verify two-factor authentication before vending.',
+            });
+        }
         const schema = z.object({
             meterId: z.string().min(1),
             amountMinor: z.number().int().min(10000),
@@ -832,6 +860,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             authorization: z.string().min(4).max(80),
         });
         const body = schema.parse(req.body);
+        const clientKey = requireIdempotencyKey(req, reply);
+        if (!clientKey) return reply;
         try {
             await verifyVendorVendCredential({
                 vendorUserId: req.actor!.actorId,
@@ -843,7 +873,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (error) {
             return sendVendCredentialError(reply, error);
         }
-        const clientKey = (req.headers['idempotency-key'] as string | undefined) ?? `${Date.now()}-${Math.random()}`;
         try {
             const purchase = await vendorPurchase({
                 vendorOrganizationId: req.actor!.vendorOrganizationId!,

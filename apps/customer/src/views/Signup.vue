@@ -53,13 +53,17 @@ async function submit() {
     errorCode.value = null;
     try {
         if (accountMode.value === 'email') {
-            const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/signup', {
+            const r = await api.post<{ access_token: string; refresh_token?: string | null; expires_at?: number | null; expires_in?: number | null; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/signup', {
                 email: email.value.trim().toLowerCase(),
                 password: password.value,
                 full_name: fullName.value.trim(),
                 phone: phone.value.trim() ? normaliseNigerianPhone(phone.value) : undefined,
             });
-            auth.setSession(r.access_token, r.customer);
+            auth.setSession(r.access_token, r.customer, true, {
+                refreshToken: r.refresh_token,
+                expiresAt: r.expires_at,
+                expiresIn: r.expires_in,
+            });
             await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
             return;
         }
@@ -245,7 +249,7 @@ async function submit() {
   cursor: pointer;
 }
 .mode-switch button.active {
-  background: var(--surface);
+  background: var(--glass-bg-strong);
   color: var(--text);
 }
 

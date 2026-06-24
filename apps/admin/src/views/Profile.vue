@@ -13,6 +13,7 @@ const saving = ref(false);
 const uploading = ref(false);
 const cropOpen = ref(false);
 const cropFile = ref<File | null>(null);
+const error = ref<string | null>(null);
 
 const initials = computed(() => {
     const source = auth.user?.full_name?.trim() || auth.user?.email?.trim() || 'ST';
@@ -36,9 +37,10 @@ async function saveProfile() {
     try {
         const response = await api.patch<{ user: any; permissions: string[] }>('/api/v1/admin/me', {
             full_name: fullName.value.trim(),
-            profile_picture_url: profilePictureUrl.value.trim() || null,
         });
         await syncAuthFromApi(response);
+    } catch (e: any) {
+        error.value = e?.message ?? 'Profile update failed.';
     } finally {
         saving.value = false;
     }
@@ -50,6 +52,8 @@ async function removeProfilePicture() {
         await api.del('/api/v1/admin/profile-picture');
         profilePictureUrl.value = '';
         await syncAuthFromApi();
+    } catch (e: any) {
+        error.value = e?.message ?? 'Picture removal failed.';
     } finally {
         saving.value = false;
     }
@@ -80,13 +84,18 @@ async function uploadProcessedProfilePicture(file: File) {
             content_type: file.type,
             size_bytes: file.size,
         });
-        await fetch(payload.signed_url, {
+        if (!payload?.signed_url || !payload?.public_url) throw new Error('profile_picture_upload_unavailable');
+        const uploadResponse = await fetch(payload.signed_url, {
             method: 'PUT',
             headers: { 'Content-Type': file.type },
             body: file,
         });
-        profilePictureUrl.value = payload.public_url;
-        await saveProfile();
+        if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed');
+        const activated = await api.post<any>('/api/v1/admin/profile-picture/activate', { path: payload.path });
+        profilePictureUrl.value = activated.profile_picture_url;
+        await syncAuthFromApi();
+    } catch (e: any) {
+        error.value = e?.message ?? 'Picture upload failed.';
     } finally {
         uploading.value = false;
     }
@@ -104,24 +113,41 @@ async function uploadProcessedProfilePicture(file: File) {
 
     <div class="profile-shell">
       <section class="profile-hero bw-card">
-        <div class="profile-avatar">
-          <img v-if="auth.user?.profile_picture_url" :src="auth.user.profile_picture_url" alt="Staff profile" />
-          <template v-else>{{ initials }}</template>
+        <div class="profile-hero-top">
+          <div class="profile-avatar-wrap">
+            <div class="profile-avatar">
+              <img v-if="auth.user?.profile_picture_url" :src="auth.user.profile_picture_url" alt="Staff profile" />
+              <template v-else>{{ initials }}</template>
+            </div>
+          </div>
+          <div class="profile-hero-copy">
+            <p class="profile-eyebrow">Staff Identity</p>
+            <h1 class="bw-h1">{{ auth.user?.full_name || 'Staff user' }}</h1>
+          </div>
         </div>
-        <div class="profile-hero-copy">
-          <p class="profile-eyebrow">Staff Identity</p>
-          <h1 class="bw-h1">{{ auth.user?.full_name || 'Staff user' }}</h1>
-          <p class="bw-muted">Your wallet admin identity, avatar, and session profile.</p>
-          <div class="profile-badges">
-            <span class="bw-badge bw-badge-success">{{ roleLabel }}</span>
-            <span class="bw-badge bw-badge-neutral">{{ auth.user?.email || 'No email' }}</span>
+
+        <div class="profile-hero-meta">
+          <div>
+            <span>Role</span>
+            <strong>{{ roleLabel }}</strong>
+          </div>
+          <div>
+            <span>Email</span>
+            <strong>{{ auth.user?.email || 'No email' }}</strong>
+          </div>
+          <div>
+            <span>Session</span>
+            <strong>Active</strong>
           </div>
         </div>
       </section>
 
       <section class="profile-grid">
         <article class="bw-card profile-panel">
-          <h2>Profile Details</h2>
+          <div class="profile-panel-head">
+            <span class="profile-panel-kicker">Record</span>
+            <h2>Profile Details</h2>
+          </div>
           <dl class="profile-list">
             <div class="profile-row">
               <dt>Full name</dt>
@@ -143,17 +169,26 @@ async function uploadProcessedProfilePicture(file: File) {
         </article>
 
         <article class="bw-card profile-panel">
-          <h2>Profile Picture</h2>
-          <p class="bw-muted profile-panel-copy">Use the same clean avatar standard across admin, vendor, and customer surfaces.</p>
+          <div class="profile-panel-head">
+            <span class="profile-panel-kicker">Avatar</span>
+            <h2>Profile Picture</h2>
+          </div>
           <div class="profile-form">
-            <input v-model="fullName" class="bw-input" placeholder="Full name" />
-            <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
+            <label class="profile-field">
+              <span>Display name</span>
+              <input v-model="fullName" class="bw-input" placeholder="Full name" />
+            </label>
+            <label class="profile-field">
+              <span>Photo upload</span>
+              <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
+            </label>
             <small class="bw-muted">JPEG, PNG, WEBP only. Max 2MB. Image is cropped to square and re-exported clean.</small>
             <div class="profile-actions">
               <button class="bw-btn primary" :disabled="saving || uploading" @click="saveProfile">{{ saving ? 'Saving...' : 'Save profile' }}</button>
               <button class="bw-btn" :disabled="saving || uploading || !auth.user?.profile_picture_url" @click="removeProfilePicture">Remove picture</button>
             </div>
             <small v-if="uploading" class="bw-muted">Uploading image...</small>
+            <small v-if="error" class="bw-muted" style="color:var(--danger)">{{ error }}</small>
           </div>
         </article>
       </section>
@@ -168,25 +203,60 @@ async function uploadProcessedProfilePicture(file: File) {
 }
 
 .profile-hero {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 22px;
+  padding: 28px;
+  background:
+    linear-gradient(135deg, oklch(from var(--brand) l c h / 0.18), transparent 44%),
+    linear-gradient(160deg, var(--surface-2), var(--surface));
+}
+
+.profile-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, oklch(from var(--brand) l c h / 0.10), transparent),
+    repeating-linear-gradient(90deg, oklch(from var(--text) l c h / 0.08) 0 1px, transparent 1px 96px);
+  opacity: 0.35;
+}
+
+.profile-hero-top,
+.profile-hero-meta {
+  position: relative;
+}
+
+.profile-hero-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 20px;
+}
+
+.profile-avatar-wrap {
+  width: max-content;
+  padding: 7px;
+  border: 1px solid oklch(from var(--brand) l c h / 0.35);
+  border-radius: 28px;
+  background: oklch(from var(--brand) l c h / 0.09);
 }
 
 .profile-avatar {
-  width: 84px;
-  height: 84px;
+  width: 104px;
+  height: 104px;
   flex: 0 0 auto;
-  border-radius: 26px;
+  border-radius: 22px;
   overflow: hidden;
   display: grid;
   place-items: center;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 900;
   color: oklch(8% 0.04 145);
   background: linear-gradient(135deg, var(--brand-400), var(--brand-700));
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-3);
 }
 
 .profile-avatar img {
@@ -199,50 +269,100 @@ async function uploadProcessedProfilePicture(file: File) {
   min-width: 0;
 }
 
+.profile-hero-copy h1 {
+  max-width: 11ch;
+  margin-bottom: 10px;
+  line-height: 0.98;
+}
+
 .profile-eyebrow {
   margin: 0 0 6px;
   font-size: var(--t-xs);
   font-weight: 900;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--brand);
 }
 
-.profile-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+.profile-hero-meta {
+  display: grid;
+  grid-template-columns: 0.8fr 1.6fr 0.8fr;
+  border-top: 1px solid var(--border);
+}
+
+.profile-hero-meta > div {
+  min-width: 0;
+  padding: 14px 16px 0 0;
+}
+
+.profile-hero-meta > div + div {
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.profile-hero-meta span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.profile-hero-meta strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--t-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 20px;
 }
 
-.profile-panel h2 {
-  margin: 0 0 14px;
-  font-size: var(--t-md);
+.profile-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
 }
 
-.profile-panel-copy {
-  margin: 0 0 16px;
+.profile-panel-head {
+  display: grid;
+  gap: 4px;
+}
+
+.profile-panel-kicker {
+  color: var(--brand);
+  font-size: var(--t-xs);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.profile-panel h2 {
+  margin: 0;
+  font-size: var(--t-md);
 }
 
 .profile-list {
   margin: 0;
   display: grid;
-  gap: 14px;
 }
 
 .profile-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(95px, 0.6fr) minmax(0, 1fr);
+  align-items: start;
   gap: 16px;
-  padding-bottom: 14px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.profile-row:first-child {
+  padding-top: 0;
 }
 
 .profile-row:last-child {
@@ -252,6 +372,7 @@ async function uploadProcessedProfilePicture(file: File) {
 
 .profile-row dt {
   color: var(--muted);
+  font-size: var(--t-sm);
 }
 
 .profile-row dd {
@@ -259,6 +380,7 @@ async function uploadProcessedProfilePicture(file: File) {
   text-align: right;
   font-weight: 700;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .profile-mono {
@@ -268,7 +390,19 @@ async function uploadProcessedProfilePicture(file: File) {
 
 .profile-form {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+}
+
+.profile-field {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-field > span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .profile-actions {
@@ -289,11 +423,57 @@ async function uploadProcessedProfilePicture(file: File) {
 
 @media (max-width: 640px) {
   .profile-hero {
-    align-items: flex-start;
-    flex-direction: column;
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .profile-hero-top {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+  }
+
+  .profile-avatar {
+    width: 94px;
+    height: 94px;
+  }
+
+  .profile-hero-copy h1 {
+    max-width: 100%;
+    font-size: clamp(1.8rem, 7vw, 2.25rem);
+  }
+
+  .profile-hero-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-hero-meta > div {
+    padding: 12px 0;
+  }
+
+  .profile-hero-meta > div + div {
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .profile-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .profile-row dd {
+    text-align: left;
   }
 
   .profile-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .profile-hero-top {
     grid-template-columns: 1fr;
   }
 }

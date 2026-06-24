@@ -19,6 +19,9 @@ function main() {
   const reconciliationPage = read("apps/admin/src/views/Reconciliation.vue");
   const vendingPage = read("apps/admin/src/views/Vending.vue");
   const refundsService = read("backend/wallet/src/services/refunds.ts");
+  const refundApprovalRpc = read("supabase/migrations/20260606110000_refund_approval_rpc.sql");
+  const scheduler = read("backend/wallet/src/jobs/scheduler.ts");
+  const refundExpiryMigration = read("supabase/migrations/20260601133000_refund_expiry_status.sql");
   const disputesService = read("backend/wallet/src/services/disputes.ts");
   const settlementService = read("backend/wallet/src/services/settlement.ts");
   const reconciliationService = read("backend/wallet/src/services/reconciliation.ts");
@@ -52,7 +55,15 @@ function main() {
 
   assert(refundsPage.includes("statusFilter = ref('pending')"), "Refunds page must use backend pending status.");
   assert(!refundsPage.includes('value="requested"'), "Refunds page must not use unsupported requested status.");
-  assert(refundsService.includes("status !== 'pending'"), "Refund approvals must enforce pending status.");
+  assert(refundsService.includes("fn_approve_refund_request"), "Refund approvals must use the atomic RPC.");
+  assert(refundApprovalRpc.includes("for update"), "Refund approval RPC must lock the request row.");
+  assert(refundApprovalRpc.includes("v_request.status <> 'pending'"), "Refund approval RPC must enforce pending status.");
+  assert(refundApprovalRpc.includes("fn_post_ledger_entry"), "Refund approval RPC must write the ledger entry.");
+  assert(refundApprovalRpc.includes("ledger_entry_id = v_entry.id"), "Refund approval RPC must persist ledger linkage.");
+  assert(refundsService.includes(".select('status, reason')"), "Refund rejection must preserve the original reason.");
+  assert(refundsService.includes("state_transition_missing"), "Refund approval must fail loudly if state does not update after credit.");
+  assert(scheduler.includes("status: 'expired'"), "Refund expiry job must transition stale pending refunds.");
+  assert(refundExpiryMigration.includes("add value if not exists 'expired'"), "Refund enum must allow expired status.");
   assert(adminRoute.includes("status === 'requested' || status === 'under_review'"), "Refund route must keep legacy status aliases.");
 
   assert(settlementPage.includes("/api/v1/admin/settlement"), "Settlement page must use settlement API.");

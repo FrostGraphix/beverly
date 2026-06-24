@@ -7,6 +7,8 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { env } from '../config/env.js';
+import { assertClientIdempotencyKey } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
 import {
     createVendorOrganization, setVendorStatus,
@@ -30,7 +32,7 @@ import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
-import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder } from '../services/meter-orders.js';
@@ -96,6 +98,16 @@ function isUuid(value: string): boolean {
 
 function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
+}
+
+function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string | null {
+    try {
+        return assertClientIdempotencyKey(req.headers['idempotency-key']);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'A valid Idempotency-Key header is required.';
+        reply.code(400).send({ error: 'invalid_idempotency_key', message });
+        return null;
+    }
 }
 
 type AnnouncementRecipientType = 'customer' | 'vendor';
@@ -491,7 +503,6 @@ function adminRouteKey(req: FastifyRequest): string {
 
 async function permissionsForRole(role: string): Promise<Set<string>> {
     await ensureAccessDefaults();
-    if (role === 'super-admin') return new Set(PERMISSION_CATALOG.map((p) => p.key));
     const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
     return new Set((data ?? []).map((p: any) => p.route_hash));
 }
@@ -597,6 +608,30 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
     fastify.addHook('preHandler', async (req, reply) => {
+        const pathname = req.routeOptions?.url ?? req.url.split('?')[0] ?? '';
+        if (pathname.startsWith('/dev/')) {
+            if (!env.DEV_CONSOLE_ENABLED) {
+                return reply.code(404).send({ error: 'not_found', message: 'Route not found.' });
+            }
+            if (!req.actor?.mfaVerified) {
+                return reply.code(403).send({ error: 'reauth_required', message: 'Reauthenticate with two-factor authentication before using developer tools.' });
+            }
+            if (env.NODE_ENV !== 'development') {
+                const token = req.headers['x-break-glass-token'];
+                if (!env.DEV_CONSOLE_BREAK_GLASS_TOKEN || token !== env.DEV_CONSOLE_BREAK_GLASS_TOKEN) {
+                    return reply.code(403).send({ error: 'break_glass_required', message: 'Break-glass authorization is required.' });
+                }
+            }
+            await logAction({
+                actorUserId: req.actor.userId,
+                actorType: 'staff',
+                actorRole: req.actor.role,
+                action: 'dev_console.accessed',
+                targetType: 'admin_route',
+                targetId: `${req.method.toUpperCase()} ${pathname}`,
+                metadata: { environment: env.NODE_ENV },
+            });
+        }
         // ensureAccessDefaults() is called inside requireAdminPermission → permissionsForRole
         // and is cached after the first run — no need to call it again here.
         if (!(await requireAdminPermission(req, reply))) return undefined;
@@ -618,14 +653,15 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.patch('/me', async (req, reply) => {
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
+            return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
+        }
         const schema = z.object({
             full_name: z.string().trim().min(1).max(120).optional(),
-            profile_picture_url: z.union([z.string().trim().url().max(1000), z.literal(''), z.null()]).optional(),
         });
         const body = schema.parse(req.body ?? {});
         const updates: Record<string, unknown> = {};
         if (body.full_name !== undefined) updates.user_name = body.full_name;
-        if (body.profile_picture_url !== undefined) updates.profile_picture_url = body.profile_picture_url ? body.profile_picture_url : null;
         if (!Object.keys(updates).length) {
             return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
         }
@@ -656,7 +692,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     user_name: body.full_name ?? null,
                     email: req.actor!.email,
                     role_key: req.actor!.role,
-                    profile_picture_url: body.profile_picture_url ? body.profile_picture_url : null,
+                    profile_picture_url: null,
                 })
                 .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
                 .single();
@@ -700,6 +736,19 @@ const route: FastifyPluginAsync = async (fastify) => {
         const scan = await runMalwareScan(Buffer.from(body.content_base64, 'base64'), body.file_name);
         if (!scan.ok) return reply.code(422).send({ error: 'malware_scan_failed', details: scan.output ?? null });
         return { ok: true, mode: scan.mode };
+    });
+
+    fastify.post('/profile-picture/activate', async (req, reply) => {
+        const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
+        try {
+            const profilePictureUrl = await activateProfilePicture('staff', req.actor!.userId, path);
+            await adminClient.from('users')
+                .update({ profile_picture_url: profilePictureUrl })
+                .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`);
+            return { profile_picture_url: profilePictureUrl };
+        } catch {
+            return reply.code(422).send({ error: 'profile_picture_activation_failed' });
+        }
     });
 
     fastify.delete('/profile-picture', async (req) => {
@@ -2081,6 +2130,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             vendor_organization_id: z.string().uuid().optional(),
             notes: z.string().trim().max(500).optional(),
         }).parse(req.body ?? {});
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return reply;
         try {
             const order = await createAdminMeterOrder({
                 staffUserId: req.actor!.userId,
@@ -2092,7 +2143,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 sponsorMode: body.sponsor_mode,
                 vendorOrganizationId: body.vendor_organization_id ?? null,
                 notes: body.notes,
-                idempotencyKey: String(req.headers['idempotency-key'] ?? crypto.randomUUID()),
+                idempotencyKey,
             });
             await logAction({
                 actorUserId: req.actor!.userId,
@@ -3227,7 +3278,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/dev/sandbox/activity', async () => ({ activity: await listSandboxActivity() }));
 
     fastify.post('/dev/sandbox/mode', async (req) => {
-        const body = z.object({ mode: z.enum(['live', 'test']) }).parse(req.body);
+        const body = z.object({ mode: z.literal('test') }).parse(req.body);
         await setSandboxMode(body.mode, req.actor!.userId);
         return { ok: true };
     });

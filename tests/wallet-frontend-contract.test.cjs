@@ -27,12 +27,18 @@ function main() {
   const buyMeter = read("apps/customer/src/views/BuyMeter.vue");
   const fundWallet = read("apps/customer/src/views/FundWallet.vue");
   const customerReceipt = read("apps/customer/src/views/ReceiptDetail.vue");
+  const customerReceipts = read("apps/customer/src/views/Receipts.vue");
+  const customerMeters = read("apps/customer/src/views/Meters.vue");
+  const customerChat = read("apps/customer/src/components/ChatWidget.vue");
+  const vendorChat = read("apps/vendor/src/components/ChatWidget.vue");
+  const customerShell = read("apps/customer/src/components/AppShell.vue");
   const vendorFund = read("apps/vendor/src/views/Fund.vue");
+  const customerRoute = read("backend/wallet/src/routes/customer.ts");
 
-  assert(routeManifest.includes("#/wallet"));
-  assert(routeManifest.includes('externalUrl: "/wallet-admin/"'));
-  assert(!routeManifest.includes('#/admin/reports'));
-  assert(!routeManifest.includes('customComponent: "ReportsPage"'));
+  assert(!routeManifest.includes("#/wallet/admin/dashboard"));
+  assert(!routeManifest.includes('customComponent: "AdminWalletOperationsPage"'));
+  assert(routeManifest.includes('#/admin/reports'));
+  assert(routeManifest.includes('customComponent: "ReportsPage"'));
   assert(!routeManifest.includes('devExternalUrl: "http://localhost:5175"'));
   assert(!routeManifest.includes("admin.beverly.acoblighting.com"));
   assert(routeManifest.includes("vendor_user"));
@@ -42,9 +48,9 @@ function main() {
   assert(app.includes("LoginPage"));
   assert(app.includes("handleSignOut"));
   assert(app.includes("userDropdownOpen"));
-  assert(app.includes('normalizeHash(nextHash) === "#/admin/reports"'));
-  assert(app.includes('window.location.href = "/wallet-admin/reports"'));
-  assert(!app.includes('ReportsPage v-else-if="route.customComponent'));
+  assert(app.includes('normalizeHash(nextHash).startsWith("#/wallet/admin/")'));
+  assert(!app.includes("AdminWalletOperationsPage v-else-if"));
+  assert(app.includes('ReportsPage v-else-if="route.customComponent'));
 
   assert(vendorAuthPage.includes("Beverly Wallet Access"));
   assert(vendorAuthPage.includes("Designed for fast wallet entry"));
@@ -86,6 +92,14 @@ function main() {
   assert(adminPage.includes("Audit Log"));
   assert(adminPage.includes("maker-checker"));
   assert(adminPage.includes("temporaryPassword"));
+  assert(adminPage.includes("wallet-admin-sidebar"));
+  assert(adminPage.includes("wallet-admin-topbar"));
+  assert(adminPage.includes("wallet-date-range"));
+  assert(adminPage.includes("Wallet Admin Source of Truth"));
+  assert(adminPage.includes("exportReportExcelXml"));
+  assert(adminPage.includes("reportRowsInRange"));
+  assert(adminPage.includes("dateRangeStart"));
+  assert(app.includes("VITE_ADMIN_URL"));
 
   assert(service.includes("/api/wallet/summary"));
   assert(service.includes("/api/wallet/funding/create"));
@@ -104,12 +118,35 @@ function main() {
   assert(buyMeter.includes("redirectToPayment(data.authorization_url)"));
   assert(fundWallet.includes("redirectToPayment(r.authorizationUrl)"));
   assert(vendorFund.includes("redirectToPayment(r.authorizationUrl)"));
+  assert(buyToken.includes("callback_url"));
+  assert(buyToken.includes("/buy-token?paid=1"));
+  assert(fundWallet.includes("/wallet/fund?funded=1"));
+  assert(vendorFund.includes("/wallet/fund?funded=1"));
+  assert(customerRoute.includes("callback_url"));
   assert(!buyToken.includes("window.location.href = r.authorizationUrl"));
   assert(!buyMeter.includes("window.location.href = data.authorization_url"));
   assert(!fundWallet.includes("window.location.href = r.authorizationUrl"));
   assert(!vendorFund.includes("window.location.assign(r.authorizationUrl)"));
   assert(customerReceipt.includes("api.get<any>"));
+  assert(customerReceipt.includes("function disputeOrderId"));
+  assert(customerReceipt.includes("purchase_order_id"));
+  assert(!customerReceipt.includes("encodeURIComponent(receipt.reference)"));
+  assert(customerReceipts.includes("function disputeOrderId"));
+  assert(!customerReceipts.includes("encodeURIComponent(selected.reference)"));
   assert(!customerReceipt.includes("http://localhost:4000"));
+  assert(customerMeters.includes("meter-install-card"));
+  assert(customerMeters.includes("Certified install"));
+  assert(customerMeters.includes('to="/meter-orders"'));
+  assert(customerMeters.includes('to="/buy-meter"'));
+  assert(!customerMeters.includes("style=\"display:flex; align-items:center; gap: var(--s-4); margin-bottom: var(--s-4); padding: var(--s-4)\""));
+  assert(customerChat.includes("width: 46px; height: 46px"));
+  assert(customerChat.includes("animation: cw-float"));
+  assert(vendorChat.includes("width: 46px; height: 46px"));
+  assert(vendorChat.includes("animation: cw-float"));
+  assert(customerShell.includes('aria-label="Help & support"'));
+  const helpIcon = customerShell.match(/aria-label="Help & support"[\s\S]*?<\/RouterLink>/)?.[0] ?? "";
+  assert(helpIcon.includes('a8 8 0 0 1 16 0v1'));
+  assert(!helpIcon.includes('M9.1 9a3 3 0 0 1 5.8 1'));
 
   assert(migration.includes("current_vendor_organization_id"));
   assert(migration.includes("vendors read own wallet"));

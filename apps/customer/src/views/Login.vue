@@ -58,11 +58,15 @@ async function submit() {
     errorCode.value = null;
     try {
         if (loginMode.value === 'email') {
-            const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/login', {
+            const r = await api.post<{ access_token: string; refresh_token?: string | null; expires_at?: number | null; expires_in?: number | null; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/login', {
                 email: email.value.trim().toLowerCase(),
                 password: password.value,
             });
-            auth.setSession(r.access_token, r.customer, rememberLogin.value);
+            auth.setSession(r.access_token, r.customer, rememberLogin.value, {
+                refreshToken: r.refresh_token,
+                expiresAt: r.expires_at,
+                expiresIn: r.expires_in,
+            });
             writeRememberedLogin(email.value.trim().toLowerCase(), rememberLogin.value);
             await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
             return;
@@ -210,14 +214,9 @@ async function submit() {
 
     <!-- Footer links -->
     <div class="auth-links">
-      <p class="auth-links-row">
-        New to Beverly?
-        <router-link to="/signup" class="auth-inline-link">Create account</router-link>
-      </p>
-      <p class="auth-links-row">
-        Lost access?
-        <router-link to="/recover" class="auth-inline-link">Recover account</router-link>
-      </p>
+      <router-link to="/signup" class="auth-inline-link">Create account</router-link>
+      <span aria-hidden="true">•</span>
+      <router-link to="/recover" class="auth-inline-link">Forget password</router-link>
     </div>
   </CustomerAuthShell>
 </template>
@@ -261,7 +260,7 @@ async function submit() {
   cursor: pointer;
 }
 .mode-switch button.active {
-  background: var(--surface);
+  background: var(--glass-bg-strong);
   color: var(--text);
 }
 
@@ -386,20 +385,17 @@ async function submit() {
 .auth-links {
   margin-top: var(--s-5);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: var(--s-2);
-}
-.auth-links-row {
   font-size: var(--t-sm);
   color: var(--text-2);
-  text-align: center;
-  margin: 0;
+  white-space: nowrap;
 }
 .auth-inline-link {
   color: var(--brand);
   font-weight: 600;
   text-decoration: none;
-  margin-left: 4px;
 }
 .auth-inline-link:hover { text-decoration: underline; }
 </style>

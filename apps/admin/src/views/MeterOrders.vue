@@ -49,6 +49,7 @@ interface MeterOrder {
     created_at: string;
     updated_at: string;
     source_channel?: 'customer_portal' | 'vendor_portal' | 'admin_portal';
+    sponsor_mode?: 'manual_paid' | 'vendor_wallet';
     customers?: CustomerUser | null;
     vendor_organizations?: VendorOrg | null;
 }
@@ -126,6 +127,9 @@ function sourceLabel(o: MeterOrder) {
     }
     if (o.source_channel === 'admin_portal') return 'Admin assisted';
     return 'Customer self-service';
+}
+function sponsorLabel(o: MeterOrder) {
+    return o.sponsor_mode === 'vendor_wallet' ? 'Vendor wallet' : 'Manual paid';
 }
 
 // ── fetch ─────────────────────────────────────────────────────────
@@ -398,7 +402,7 @@ function doExport() {
               </td>
               <td class="mo-address">{{ o.property_address }}</td>
               <td class="bw-muted" style="font-size: var(--t-sm)">{{ o.service_area }}</td>
-              <td class="bw-muted" style="font-size: var(--t-sm)">{{ sourceLabel(o) }}</td>
+              <td class="bw-muted" style="font-size: var(--t-sm)">{{ sourceLabel(o) }} · {{ sponsorLabel(o) }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(o.amount_minor) }}</td>
               <td>
                 <span :class="['bw-badge', STATUS_BADGE[o.status] ?? 'neutral']">

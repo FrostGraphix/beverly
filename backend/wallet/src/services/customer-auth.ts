@@ -136,7 +136,7 @@ function storeFallbackOtpChallenge(input: Omit<StoredOtpChallenge, 'id' | 'attem
 }
 
 function generateOtp(): string {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    return String(crypto.randomInt(100000, 1000000));
 }
 
 function hashOtp(otp: string): string {
@@ -365,7 +365,13 @@ export async function requestOtp(
     return { challengeId, expiresAt, retryAfterSeconds: CUSTOMER_OTP_RETRY_AFTER_SECONDS };
 }
 
-async function emailPasswordToken(email: string, password: string): Promise<{ accessToken: string; userId: string }> {
+async function emailPasswordToken(email: string, password: string): Promise<{
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: number | null;
+    expiresIn: number | null;
+    userId: string;
+}> {
     const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: {
@@ -376,6 +382,9 @@ async function emailPasswordToken(email: string, password: string): Promise<{ ac
     });
     const body = await res.json().catch(() => ({})) as {
         access_token?: unknown;
+        refresh_token?: unknown;
+        expires_at?: unknown;
+        expires_in?: unknown;
         user?: { id?: unknown };
     };
     if (!res.ok || !body.access_token || !body.user?.id) {
@@ -384,7 +393,13 @@ async function emailPasswordToken(email: string, password: string): Promise<{ ac
     if (typeof body.access_token !== 'string' || typeof body.user.id !== 'string') {
         throw new AuthError('Invalid email or password.', 'invalid_credentials');
     }
-    return { accessToken: body.access_token, userId: body.user.id };
+    return {
+        accessToken: body.access_token,
+        refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
+        expiresAt: typeof body.expires_at === 'number' ? body.expires_at : null,
+        expiresIn: typeof body.expires_in === 'number' ? body.expires_in : null,
+        userId: body.user.id,
+    };
 }
 
 async function createCustomerRow(input: {
@@ -421,7 +436,14 @@ async function createCustomerRow(input: {
 
 export async function signupWithEmail(
     input: EmailSignupInput,
-): Promise<{ access_token: string; customer: CustomerProfile; isNew: boolean }> {
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
     const email = normalizeRequiredEmail(input.email);
     const password = normalizePassword(input.password);
     const fullName = input.full_name?.trim();
@@ -493,6 +515,9 @@ export async function signupWithEmail(
 
         return {
             access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
             customer,
             isNew: true,
         };
@@ -504,7 +529,14 @@ export async function signupWithEmail(
 
 export async function loginWithEmail(
     input: EmailLoginInput,
-): Promise<{ access_token: string; customer: CustomerProfile; isNew: boolean }> {
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
     const email = normalizeRequiredEmail(input.email);
     const password = normalizePassword(input.password);
     const session = await emailPasswordToken(email, password);
@@ -531,6 +563,9 @@ export async function loginWithEmail(
 
     return {
         access_token: session.accessToken,
+        refresh_token: session.refreshToken,
+        expires_at: session.expiresAt,
+        expires_in: session.expiresIn,
         customer: customer as CustomerProfile,
         isNew: false,
     };

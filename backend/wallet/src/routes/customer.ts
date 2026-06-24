@@ -59,7 +59,7 @@ import {
     getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
 } from '../services/support.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
-import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
 
@@ -266,11 +266,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.patch('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const { full_name, email, profile_picture_url } = req.body as { full_name?: string; email?: string; profile_picture_url?: string | null };
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
+            return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
+        }
+        const { full_name, email } = req.body as { full_name?: string; email?: string };
         const updates: Record<string, unknown> = {};
         if (full_name !== undefined) updates.full_name = full_name.trim();
         if (email !== undefined) updates.email = email.trim().toLowerCase() || null;
-        if (profile_picture_url !== undefined) updates.profile_picture_url = (profile_picture_url ?? '').trim() || null;
         if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
 
         const { data, error } = await adminClient
@@ -652,6 +654,17 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return reply.code(status).send({ error: e.code, message: e.message });
             }
             throw e;
+        }
+    });
+
+    fastify.post('/profile-picture/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
+        try {
+            const profilePictureUrl = await activateProfilePicture('customer', req.actor!.customerId!, path);
+            await adminClient.from('customers').update({ profile_picture_url: profilePictureUrl }).eq('id', req.actor!.customerId!);
+            return { profile_picture_url: profilePictureUrl };
+        } catch {
+            return reply.code(422).send({ error: 'profile_picture_activation_failed' });
         }
     });
 

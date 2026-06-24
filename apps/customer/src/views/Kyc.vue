@@ -487,7 +487,9 @@ function skipTier2() {
   bottom: 90px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--surface);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--brand);
   color: var(--brand);
   border-radius: var(--r-full);
@@ -604,8 +606,11 @@ function skipTier2() {
   align-items: center;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-5);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
   border-radius: var(--r-xl);
   margin-top: var(--s-3);
   flex-wrap: wrap;

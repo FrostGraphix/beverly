@@ -1,0 +1,340 @@
+/* Wallet-inspired navigation treatment for the Beverly CRM shell. */
+.app-page:not(.wallet-admin-host) .sidebar-container {
+  width: 252px;
+  background:
+    radial-gradient(circle at 18% -8%, rgba(57, 201, 95, 0.15), transparent 32%),
+    linear-gradient(180deg, #0a1418 0%, #081115 55%, #060d10 100%) !important;
+  color: #9baab0;
+  box-shadow: 1px 0 0 rgba(174, 210, 190, 0.11), 18px 0 46px rgba(1, 8, 10, 0.24) !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-logo {
+  height: 110px;
+  gap: 12px;
+  padding: 0 22px;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(174, 210, 190, 0.12) !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-logo-icon {
+  width: 54px;
+  height: 54px;
+  margin-right: 0;
+  border-radius: 15px;
+  background: linear-gradient(145deg, #55db70, #20a747) !important;
+  color: #03140a;
+  font-size: 25px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(41, 190, 80, 0.22), inset 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-logo:hover .sidebar-logo-icon {
+  transform: none;
+  box-shadow: 0 10px 28px rgba(41, 190, 80, 0.32), inset 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-brand-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: #f4f8f5;
+  line-height: 1;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-brand-copy strong {
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-brand-copy small {
+  color: #819198;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-menu {
+  margin-top: 0;
+  padding: 8px 8px 28px;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-menu::before {
+  display: none;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-menu > div::before {
+  display: none;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-section {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 14px 10px 4px;
+  color: #64747a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-section:first-child {
+  margin-top: 4px;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item {
+  min-height: 44px;
+  gap: 13px;
+  margin-bottom: 1px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #aab6ba !important;
+  font-size: 14px;
+  font-weight: 590;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item::before {
+  width: 3px;
+  right: auto;
+  opacity: 0;
+  background: #38ca62;
+  border-radius: 0 4px 4px 0;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.045) !important;
+  border-color: rgba(181, 214, 194, 0.08) !important;
+  box-shadow: none;
+  color: #f2f8f3 !important;
+  transform: none;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item.active {
+  background: linear-gradient(90deg, rgba(47, 194, 89, 0.2), rgba(47, 194, 89, 0.055)) !important;
+  border-color: rgba(70, 211, 106, 0.18) !important;
+  box-shadow: none !important;
+  color: #4bdd70 !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item.active::before {
+  opacity: 1;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item.indent {
+  min-height: 38px;
+  margin: 1px 0;
+  padding-left: 49px;
+  color: #89989d !important;
+  font-size: 12px;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item.indent.active {
+  background: rgba(61, 203, 96, 0.1) !important;
+  color: #d9f7e1 !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-icon {
+  opacity: 0.78;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item:hover .sidebar-icon,
+.app-page:not(.wallet-admin-host) .sidebar-item.active .sidebar-icon {
+  color: #44d66c;
+  filter: none;
+  transform: none;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-caret {
+  color: #718187;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-footer {
+  padding: 14px 12px;
+  background: rgba(3, 10, 12, 0.4) !important;
+  border-top-color: rgba(174, 210, 190, 0.12) !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout,
+.app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:not(:disabled) {
+  min-height: 44px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #aab6ba;
+  border-radius: 10px;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:hover,
+.app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(248, 113, 113, 0.09);
+  box-shadow: none;
+  color: #fecaca;
+  transform: none;
+}
+
+.app-page:not(.wallet-admin-host).hideSidebar .sidebar-logo {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-page:not(.wallet-admin-host).hideSidebar .sidebar-logo-icon {
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+}
+
+@media (max-width: 1024px) {
+  .app-page:not(.wallet-admin-host).mobile .sidebar-container {
+    width: min(308px, calc(100vw - 36px));
+    max-width: min(308px, calc(100vw - 36px));
+    transform: translateX(calc(-1 * min(308px, calc(100vw - 36px))));
+  }
+
+  .app-page:not(.wallet-admin-host).mobile.openSidebar .sidebar-container {
+    transform: translateX(0);
+  }
+
+  .app-page:not(.wallet-admin-host) .sidebar-mobile-close {
+    width: 38px;
+    height: 38px;
+    color: #d6e4d8;
+    border: 1px solid rgba(184, 220, 196, 0.13);
+    border-radius: 10px;
+  }
+
+  .app-page:not(.wallet-admin-host) .drawer-bg {
+    background: rgba(2, 8, 10, 0.7);
+    backdrop-filter: blur(5px);
+  }
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item:focus-visible,
+.app-page:not(.wallet-admin-host) .sidebar-signout:focus-visible,
+.app-page:not(.wallet-admin-host) .sidebar-mobile-close:focus-visible {
+  outline: 2px solid #62e682;
+  outline-offset: 2px;
+}
+
+/* Light mode keeps the same hierarchy without a dark drawer. */
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-container {
+  background:
+    radial-gradient(circle at 12% -8%, rgba(52, 197, 86, 0.13), transparent 30%),
+    linear-gradient(180deg, #fbfdfb 0%, #f4f8f5 100%) !important;
+  color: #53636b;
+  box-shadow: 1px 0 0 rgba(21, 42, 33, 0.1), 18px 0 42px rgba(15, 33, 24, 0.08) !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-logo {
+  border-bottom-color: rgba(21, 42, 33, 0.1) !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy {
+  color: #14241b;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy small,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-section {
+  color: #687971;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item {
+  color: #45575e !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item:hover {
+  background: rgba(22, 163, 74, 0.07) !important;
+  border-color: rgba(22, 163, 74, 0.12) !important;
+  color: #14241b !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item.active {
+  background: linear-gradient(90deg, rgba(22, 163, 74, 0.17), rgba(22, 163, 74, 0.045)) !important;
+  border-color: rgba(22, 163, 74, 0.2) !important;
+  color: #176b35 !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item.indent {
+  color: #66776f !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item.indent.active {
+  background: rgba(22, 163, 74, 0.1) !important;
+  color: #145c2f !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-caret {
+  color: #718279;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer {
+  background: rgba(246, 250, 247, 0.9) !important;
+  border-top-color: rgba(21, 42, 33, 0.1) !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:not(:disabled) {
+  border-color: rgba(21, 42, 33, 0.12);
+  color: #485a51;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-mobile-close {
+  color: #294537;
+  border-color: rgba(21, 42, 33, 0.12);
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .drawer-bg {
+  background: rgba(10, 23, 15, 0.48);
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item:focus-visible,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-signout:focus-visible,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-mobile-close:focus-visible {
+  outline-color: #15803d;
+}
+
+/* Dark mode uses softer green tones. */
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-container {
+  background:
+    radial-gradient(circle at 18% -8%, rgba(80, 220, 112, 0.16), transparent 32%),
+    linear-gradient(180deg, #0a1510 0%, #07100b 55%, #050b07 100%) !important;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item.active {
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0.22), rgba(74, 222, 128, 0.055)) !important;
+  border-color: rgba(134, 239, 172, 0.22) !important;
+  color: #86efac !important;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item.active::before {
+  background: #86efac;
+}
+
+/* Preserve a distinct high-contrast route. */
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-container {
+  background: linear-gradient(180deg, #080808, #020202) !important;
+}
+
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-logo-icon {
+  background: linear-gradient(145deg, #ffe45c, #d4a900) !important;
+  color: #171300;
+}
+
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item.active {
+  background: linear-gradient(90deg, rgba(255, 214, 10, 0.25), rgba(255, 214, 10, 0.06)) !important;
+  border-color: rgba(255, 214, 10, 0.28) !important;
+  color: #fff3a3 !important;
+}
+
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item.active::before {
+  background: #ffd60a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page:not(.wallet-admin-host) .sidebar-container,
+  .app-page:not(.wallet-admin-host) .sidebar-item,
+  .app-page:not(.wallet-admin-host) .sidebar-logo-icon {
+    transition: none;
+  }
+}

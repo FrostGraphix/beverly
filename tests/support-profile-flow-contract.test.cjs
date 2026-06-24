@@ -38,6 +38,9 @@ function main() {
     "/api/v1/vendor/profile-picture/scan",
     "/api/v1/vendor/profile-picture/upload-url",
     "/api/v1/vendor/profile-picture",
+    "if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed')",
+    "profile_picture_upload_unavailable",
+    "Picture upload failed.",
     "Account Information",
     "KYC Status",
   ]);
@@ -47,8 +50,19 @@ function main() {
     "/api/v1/admin/profile-picture/scan",
     "/api/v1/admin/profile-picture/upload-url",
     "/api/v1/admin/profile-picture",
+    "if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed')",
+    "profile_picture_upload_unavailable",
+    "Picture upload failed.",
     "Staff Identity",
     "Profile Picture",
+  ]);
+
+  assertIncludes("apps/customer/src/views/Profile.vue", [
+    "/api/v1/customer/profile-picture/scan",
+    "/api/v1/customer/profile-picture/upload-url",
+    "if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed')",
+    "profile_picture_upload_unavailable",
+    "await auth.refreshProfile();",
   ]);
 
   assertIncludes("backend/wallet/src/routes/customer.ts", [

@@ -44,12 +44,29 @@ function safeRedirectTarget(raw: unknown, fallback = '/') {
 }
 
 function readableError(err: unknown, fallback: string): string {
+    if (err instanceof ApiError && err.status >= 500) {
+        return 'Authentication service is temporarily unavailable. Retry shortly.';
+    }
     if (err instanceof ApiError && err.status === 401) {
         return 'This Supabase account signed in, but no active Beverly Wallet Admin staff profile is linked.';
     }
     if (err instanceof ApiError) return err.message || fallback;
     if (err instanceof Error) return err.message || fallback;
     return fallback;
+}
+
+function signInFailureMessage(data: any, status: number): string {
+    const message = String(data?.error_description ?? data?.message ?? data?.msg ?? '').trim();
+    if (status >= 500 || /^internal server error$/i.test(message)) {
+        return 'Authentication service is temporarily unavailable. Retry shortly.';
+    }
+    return message || 'Sign-in failed. Check your details and retry.';
+}
+
+function isMfaRequired(err: unknown): boolean {
+    return err instanceof ApiError
+        && err.status === 403
+        && (err.code === 'mfa_required' || /two-factor|mfa_required/i.test(err.message || ''));
 }
 
 async function afterAuthenticated() {
@@ -86,7 +103,7 @@ async function signIn() {
         });
         const data = await res.json();
         if (!res.ok) {
-            error.value = data.error_description ?? data.msg ?? 'Sign-in failed.';
+            error.value = signInFailureMessage(data, res.status);
             return;
         }
         const accessToken: string = data.access_token;
@@ -104,6 +121,14 @@ async function signIn() {
         try {
             await auth.refreshSession();
         } catch (err) {
+            // `/admin/me` is MFA-protected. Preserve the fresh password session
+            // and show the challenge rather than logging the staff user out.
+            if (isMfaRequired(err)) {
+                if (rememberEmail.value) localStorage.setItem(REMEMBERED_EMAIL_KEY, normalizedEmail);
+                else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+                step.value = 'challenge';
+                return;
+            }
             auth.logout();
             error.value = readableError(err, 'Access denied. Staff account required.');
             return;
@@ -128,6 +153,7 @@ async function verifyChallenge() {
     try {
         await api.post('/api/v1/admin/mfa/challenge/verify', { code: challengeCode.value.trim() });
         challengeCode.value = '';
+        await auth.refreshSession();
         await router.push(redirectTarget.value);
     } catch (err) {
         error.value = readableError(err, 'Security code rejected.');
@@ -246,7 +272,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.login-stage { position: relative; min-height: 100dvh; display: grid; place-items: center; padding: var(--s-5); background: var(--canvas); overflow: hidden; }
+.login-stage { position: relative; min-height: 100dvh; display: grid; place-items: center; padding: var(--s-5); background: transparent; overflow: hidden; }
 .login-aura {
   position: absolute; inset: 0; pointer-events: none;
   background:

@@ -23,6 +23,31 @@ const PROOF_ALLOWED_MIME = new Set([
     'image/webp',
 ]);
 
+function fundingChannelCode(channel: 'bank_transfer' | 'paystack' | 'manual'): string {
+    if (channel === 'bank_transfer') return 'BT';
+    if (channel === 'paystack') return 'PS';
+    return 'MN';
+}
+
+async function generateFundingReference(
+    channel: 'bank_transfer' | 'paystack' | 'manual',
+    vendorOrganizationId: string,
+): Promise<string> {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const org = vendorOrganizationId.replace(/-/g, '').slice(0, 6).toUpperCase();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const nonce = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const reference = `BEV-FND-${fundingChannelCode(channel)}-${day}-${org}-${nonce}`;
+        const { data } = await adminClient
+            .from('funding_requests')
+            .select('id')
+            .eq('funding_reference', reference)
+            .maybeSingle();
+        if (!data) return reference;
+    }
+    return `BEV-FND-${fundingChannelCode(channel)}-${day}-${org}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
 export interface FundingRequest {
     id: string;
     vendor_organization_id: string;
@@ -69,15 +94,24 @@ export interface InitiatePaystackResult {
     reference: string;
 }
 
+function normalizeFundingEmail(email: string): string {
+    const normalized = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        throw new FundingError('A valid vendor email is required to initialize Paystack funding.', 'email_required');
+    }
+    return normalized;
+}
+
 export async function initiatePaystackFunding(input: InitiatePaystackInput): Promise<InitiatePaystackResult> {
     if (input.amountMinor < 50000) {
         throw new FundingError('minimum funding is ₦500', 'amount_too_low');
     }
+    const email = normalizeFundingEmail(input.email);
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
     try { assertWalletCanTransact(wallet, 'receive funding'); }
     catch (error: any) { throw new FundingError(error.message, error.code ?? 'wallet_inactive'); }
 
-    const reference = `FND-${Date.now()}-${input.vendorOrganizationId.slice(0, 8)}`;
+    const reference = await generateFundingReference('paystack', input.vendorOrganizationId);
 
     // Create funding_request and payment_transaction atomically (best-effort sequential)
     const { data: fr, error: frErr } = await adminClient.from('funding_requests').insert({
@@ -103,16 +137,56 @@ export async function initiatePaystackFunding(input: InitiatePaystackInput): Pro
         idempotency_key: `funding.${(fr as FundingRequest).id}`,
         metadata: { funding_request_id: (fr as FundingRequest).id },
     }).select('*').single();
-    if (ptErr) throw new FundingError(ptErr.message, 'create_payment_failed');
+    if (ptErr) {
+        await adminClient
+            .from('funding_requests')
+            .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+            .eq('id', (fr as FundingRequest).id);
+        throw new FundingError(ptErr.message, 'create_payment_failed');
+    }
 
-    const initRes = await initializeTransaction({
-        email: input.email,
-        amountMinor: input.amountMinor,
-        reference,
-        callbackUrl: input.callbackUrl,
-        metadata: { funding_request_id: (fr as FundingRequest).id, vendor_id: input.vendorOrganizationId },
-        channels: ['card', 'bank', 'ussd', 'bank_transfer'],
-    });
+    let initRes;
+    try {
+        initRes = await initializeTransaction({
+            email,
+            amountMinor: input.amountMinor,
+            reference,
+            callbackUrl: input.callbackUrl,
+            metadata: { funding_request_id: (fr as FundingRequest).id, vendor_id: input.vendorOrganizationId },
+            channels: ['card', 'bank', 'ussd', 'bank_transfer'],
+        });
+    } catch (error: any) {
+        const now = new Date().toISOString();
+        const message = error?.message ?? 'Paystack checkout could not be initialized.';
+        await Promise.all([
+            adminClient
+                .from('payment_transactions')
+                .update({
+                    status: 'failed',
+                    metadata: {
+                        ...(((pt as any).metadata ?? {}) as Record<string, unknown>),
+                        funding_request_id: (fr as FundingRequest).id,
+                        checkout_init_failed_at: now,
+                        checkout_init_error: message,
+                    },
+                    updated_at: now,
+                })
+                .eq('id', (pt as { id: string }).id),
+            adminClient
+                .from('funding_requests')
+                .update({ status: 'cancelled', updated_at: now })
+                .eq('id', (fr as FundingRequest).id),
+        ]);
+        await logAction({
+            actorUserId: input.submittedBy,
+            actorType: 'vendor_user',
+            action: 'funding.initiate.paystack_failed',
+            targetType: 'funding_request',
+            targetId: (fr as FundingRequest).id,
+            after: { amountMinor: input.amountMinor, reference, reason: message },
+        }).catch(() => undefined);
+        throw new FundingError(message, 'payment_init_failed');
+    }
 
     await logAction({
         actorUserId: input.submittedBy,
@@ -238,6 +312,7 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         wallet_id: wallet.id,
         amount_minor: input.amountMinor,
         channel: 'bank_transfer',
+        funding_reference: await generateFundingReference('bank_transfer', input.vendorOrganizationId),
         proof_file_path: input.proofFilePath,
         proof_hash: input.proofHash,
         status: 'proof_uploaded',
@@ -252,7 +327,7 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         action: 'funding.initiate.bank_transfer',
         targetType: 'funding_request',
         targetId: (data as FundingRequest).id,
-        after: { amountMinor: input.amountMinor },
+        after: { amountMinor: input.amountMinor, reference: (data as FundingRequest).funding_reference },
     });
 
     return data as FundingRequest;

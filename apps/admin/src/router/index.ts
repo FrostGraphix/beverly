@@ -67,7 +67,9 @@ router.beforeEach(async (to) => {
     const auth = useStaffAuthStore();
     if (!auth.hydrated) await auth.hydrate();
     if (to.meta.auth && !auth.isAuthenticated) return { name: 'login', query: { redirect: to.fullPath } };
-    if (to.meta.guest && auth.isAuthenticated) return { name: 'dashboard' };
+    // An authenticated staff session may still need its app-level MFA grant.
+    // Keep the login route reachable for the challenge screen.
+    if (to.meta.guest && auth.isAuthenticated && to.query.reason !== 'mfa_required') return { name: 'dashboard' };
     if (to.meta.auth) {
         try {
             await auth.ensureFreshSession();

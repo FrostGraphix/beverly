@@ -14,6 +14,7 @@ interface MeterOrder {
     status: string;
     created_at: string;
     technician_name: string | null;
+    sponsor_mode?: 'manual_paid' | 'vendor_wallet';
 }
 
 const orders = ref<MeterOrder[]>([]);
@@ -102,6 +103,7 @@ onMounted(load);
                 </td>
                 <td style="text-align:right">
                   <div>{{ amount(order.amount_minor) }}</div>
+                  <div class="bw-muted" style="font-size: var(--t-xs)">{{ order.sponsor_mode === 'vendor_wallet' ? 'Vendor wallet' : 'Manual paid' }}</div>
                   <div class="bw-muted" style="font-size: var(--t-xs)">{{ dateLabel(order.created_at) }}</div>
                 </td>
               </tr>

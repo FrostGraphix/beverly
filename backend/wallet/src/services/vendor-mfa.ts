@@ -235,7 +235,7 @@ async function verifyActiveMfaCode(actor: VendorMfaActor, code: string, reason: 
             severity: 'high',
             ip: meta.ip,
             userAgent: meta.userAgent,
-            metadata: { reason },
+            metadata: { reason, surface: 'vendor' },
         });
         throw new VendorMfaError('Enter a valid security code.', 'invalid_otp');
     }
@@ -275,7 +275,7 @@ export async function verifyVendorMfaEnrollment(actor: VendorMfaActor, accessTok
             severity: 'medium',
             ip: meta.ip,
             userAgent: meta.userAgent,
-            metadata: { reason: 'invalid_enrollment_code' },
+            metadata: { reason: 'invalid_enrollment_code', surface: 'vendor' },
         });
         throw new VendorMfaError('That authenticator code is not correct.', 'invalid_otp');
     }
@@ -306,7 +306,7 @@ export async function verifyVendorMfaEnrollment(actor: VendorMfaActor, accessTok
         severity: 'info',
         ip: meta.ip,
         userAgent: meta.userAgent,
-        metadata: { method: 'authenticator_app' },
+        metadata: { method: 'authenticator_app', surface: 'vendor' },
     });
 
     return { ok: true, recovery_codes: recoveryCodes, session_expires_at };
@@ -320,11 +320,14 @@ async function consumeRecoveryCode(actor: VendorMfaActor, code: string): Promise
         .is('used_at', null);
     const match = (data || []).find((row: any) => row.code_hash === recoveryHash(code));
     if (!match) return false;
-    await adminClient
+    // Guard against race: only update if still unused at the DB level.
+    const { data: updated } = await adminClient
         .from('vendor_mfa_recovery_codes')
         .update({ used_at: new Date().toISOString() })
-        .eq('id', (match as any).id);
-    return true;
+        .eq('id', (match as any).id)
+        .is('used_at', null)
+        .select('id');
+    return Boolean(updated?.length);
 }
 
 export async function verifyVendorMfaChallenge(actor: VendorMfaActor, accessToken: string, code: string, meta: VendorMfaRequestMeta = {}) {
@@ -336,6 +339,18 @@ export async function verifyVendorMfaChallenge(actor: VendorMfaActor, accessToke
     const session_expires_at = await createVerifiedSession(actor, accessToken);
 
     return { ok: true, recovery_code_used: recoveryCodeUsed, session_expires_at };
+}
+
+export async function regenerateVendorRecoveryCodes(actor: VendorMfaActor, code: string, meta: VendorMfaRequestMeta = {}) {
+    await verifyActiveMfaCode(actor, code, 'invalid_recovery_regen_code', meta);
+    await adminClient.from('vendor_mfa_recovery_codes').delete().eq('vendor_user_id', actor.actorId);
+    const recoveryCodes = generateRecoveryCodes();
+    await adminClient.from('vendor_mfa_recovery_codes').insert(recoveryCodes.map((recoveryCode) => ({
+        vendor_user_id: actor.actorId,
+        auth_user_id: actor.userId,
+        code_hash: recoveryHash(recoveryCode),
+    })));
+    return { ok: true as const, recovery_codes: recoveryCodes };
 }
 
 export async function disableVendorMfa(actor: VendorMfaActor, code: string, meta: VendorMfaRequestMeta = {}) {
@@ -354,7 +369,7 @@ export async function disableVendorMfa(actor: VendorMfaActor, code: string, meta
         severity: 'high',
         ip: meta.ip,
         userAgent: meta.userAgent,
-        metadata: { method: 'authenticator_app' },
+        metadata: { method: 'authenticator_app', surface: 'vendor' },
     });
 
     return { ok: true };

@@ -78,8 +78,8 @@ async function resolveActor(token: string): Promise<Actor | null> {
 
     const userId = user.id;
     const email  = user.email ?? null;
-    // aal2 = MFA verified (Supabase AMR)
-    const mfaVerified = Array.isArray(user.factors) && user.factors.some((f: any) => f.status === 'verified');
+    // Enrollment status never proves this session passed MFA.
+    const mfaVerified = false;
 
     const rawRole = (user.user_metadata?.['role_key'] as string | undefined)
         ?? (user.app_metadata?.['role_key'] as string | undefined)
@@ -97,7 +97,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
         const organization = (vu as any).vendor_organizations;
         if (organization?.status !== 'approved') return null;
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
-        const appMfaVerified = mfaEnrolled ? await vendorMfaSessionVerified(userId, token) : true;
+        const appMfaVerified = mfaEnrolled && await vendorMfaSessionVerified(userId, token);
         return {
             userId,
             email,
@@ -149,9 +149,9 @@ async function resolveActor(token: string): Promise<Actor | null> {
         .maybeSingle();
     const staffRole = (staffRow as any)?.role_key ?? rawRole;
 
-    if (staffRow && staffRole && STAFF_ROLES.has(staffRole)) {
+    if (staffRow && staffRole && (STAFF_ROLES.has(staffRole) || staffRole.startsWith('custom-'))) {
         const mfaEnrolled = await staffMfaEnrolled(userId);
-        const appMfaVerified = mfaEnrolled ? await staffMfaSessionVerified(userId, token) : true;
+        const appMfaVerified = mfaEnrolled && await staffMfaSessionVerified(userId, token);
         return {
             userId,
             email: (staffRow as any).email ?? email,
@@ -189,6 +189,9 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             if (req.actor?.type !== 'staff') {
                 return reply.code(403).send({ error: 'forbidden', message: 'Staff role required.' });
             }
+            // MFA is opt-in until an active authenticator factor exists.
+            // An unenrolled staff member must enter normally and can enroll
+            // from Security after authentication.
             if (req.actor.mfaEnrolled && !req.actor.mfaVerified) {
                 return reply.code(403).send({
                     error: 'mfa_required',

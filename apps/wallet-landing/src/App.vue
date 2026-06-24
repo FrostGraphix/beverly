@@ -6,6 +6,7 @@ import PortalChooser from './components/PortalChooser.vue';
 import FeatureGrid from './components/FeatureGrid.vue';
 import HowItWorks from './components/HowItWorks.vue';
 import TrustSection from './components/TrustSection.vue';
+import CoverageSection from './components/CoverageSection.vue';
 import FaqSection from './components/FaqSection.vue';
 import LandingFooter from './components/LandingFooter.vue';
 import LaunchModal from './components/LaunchModal.vue';
@@ -58,6 +59,7 @@ watch(launchOpen, (v) => {
       <FeatureGrid />
       <HowItWorks />
       <TrustSection />
+      <CoverageSection />
       <FaqSection />
       <LandingFooter @launch="launchOpen = true" />
     </main>

@@ -3,11 +3,6 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "env": {
-    "ALLOW_LIVE_WRITES": "true",
-    "APPROVED_LIVE_WRITES": "true",
-    "VITE_ALLOW_LIVE_WRITES": "true"
-  },
   "functions": {
     "api/reference.js": {
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"

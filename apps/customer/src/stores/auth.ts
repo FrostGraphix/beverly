@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { api } from '../lib/api';
-import { clearCustomerToken, readCustomerToken, storeCustomerToken } from '../lib/auth-flow';
+import { clearCustomerToken, readCustomerToken, storeCustomerToken, type CustomerTokenOptions } from '../lib/auth-flow';
 
 export interface CustomerProfile {
     id: string;
@@ -10,7 +10,17 @@ export interface CustomerProfile {
     profile_picture_url: string | null;
     kyc_tier: number;
     kyc_status: 'unverified' | 'pending' | 'verified' | 'rejected';
+    kyc_data?: Record<string, unknown> | null;
     status: 'active' | 'suspended' | 'closed';
+    customer_code?: string | null;
+    site?: string | null;
+    wallet_number?: string | null;
+    wallet_status?: string | null;
+    account_status?: string | null;
+    contact_person?: string | null;
+    primary_phone?: string | null;
+    kyc_approved_date?: string | null;
+    kyc_expiry?: string | null;
 }
 
 interface State {
@@ -26,8 +36,8 @@ export const useAuthStore = defineStore('auth', {
         kycTier: (s) => s.customer?.kyc_tier ?? 0,
     },
     actions: {
-        async hydrate() {
-            if (this.hydrated) return;
+        async hydrate(force = false) {
+            if (this.hydrated && !force) return;
             this.hydrated = true;
             try {
                 const token = readCustomerToken();
@@ -41,10 +51,16 @@ export const useAuthStore = defineStore('auth', {
                 clearCustomerToken();
             }
         },
-        setSession(token: string, customer: CustomerProfile, remember = true) {
+        async refreshProfile() {
+            if (!this.accessToken) return null;
+            const me = await api.get<CustomerProfile>('/api/v1/customer/me');
+            this.customer = me;
+            return me;
+        },
+        setSession(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = {}) {
             this.accessToken = token;
             this.customer = customer;
-            storeCustomerToken(token, remember);
+            storeCustomerToken(token, remember, tokenOptions);
         },
         async logout() {
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }

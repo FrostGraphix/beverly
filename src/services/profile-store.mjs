@@ -17,7 +17,8 @@ export function loadProfileState(userName = "") {
   return validateProfileState({
     name: saved.name || userName,
     email: saved.email,
-    phone: saved.phone
+    phone: saved.phone,
+    profilePictureUrl: saved.profilePictureUrl
   });
 }
 

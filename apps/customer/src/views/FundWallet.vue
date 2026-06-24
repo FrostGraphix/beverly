@@ -18,7 +18,7 @@ async function fund() {
     try {
         const r = await api.post<{ authorizationUrl: string }>('/api/v1/customer/wallet/fund', {
             amount_minor: amt,
-            callback_url: `${window.location.origin}/wallet?funded=1`,
+            callback_url: `${window.location.origin}/wallet/fund?funded=1`,
         });
         redirectToPayment(r.authorizationUrl);
     } catch (e: any) {

@@ -65,6 +65,7 @@ const form = ref({ subject: '', description: '', category: 'general', priority: 
 
 const selected = ref<Ticket | null>(null);
 const detail = ref<any>(null);
+const detailLoading = ref(false);
 const replyText = ref('');
 
 async function loadTickets() {
@@ -100,8 +101,10 @@ async function submitNew() {
 async function openTicket(t: Ticket) {
     selected.value = t;
     detail.value = null;
+    detailLoading.value = true;
     replyText.value = '';
-    try { detail.value = await api.get(`/api/v1/customer/support/tickets/${t.id}`); } catch { /* ignore */ }
+    try { detail.value = await api.get(`/api/v1/customer/support/tickets/${t.id}`); }
+    catch { /* ignore */ } finally { detailLoading.value = false; }
 }
 
 async function sendReply() {
@@ -270,13 +273,18 @@ onMounted(() => { loadFaqs(); loadTickets(); });
         </div>
         <div class="bw-modal-body">
           <div class="help-thread">
-            <div v-for="m in detail?.support_ticket_messages" :key="m.id"
-                 :class="['help-msg', m.sender_actor_type === 'staff' ? 'help-msg--staff' : 'help-msg--mine']">
-              <span class="help-msg-who">{{ m.sender_actor_type === 'staff' ? 'Support' : 'You' }}</span>
-              <p class="help-msg-body">{{ m.body }}</p>
-              <span class="help-msg-time">{{ fmtDate(m.created_at) }}</span>
+            <div v-if="detailLoading" class="help-thread-loading">
+              <span class="help-thread-spinner" />Loading conversation…
             </div>
-            <p v-if="!detail?.support_ticket_messages?.length" class="bw-muted">Loading conversation…</p>
+            <template v-else>
+              <div v-for="m in detail?.support_ticket_messages" :key="m.id"
+                   :class="['help-msg', m.sender_actor_type === 'staff' ? 'help-msg--staff' : 'help-msg--mine']">
+                <span class="help-msg-who">{{ m.sender_actor_type === 'staff' ? 'Support' : 'You' }}</span>
+                <p class="help-msg-body">{{ m.body }}</p>
+                <span class="help-msg-time">{{ fmtDate(m.created_at) }}</span>
+              </div>
+              <p v-if="detail && !detail.support_ticket_messages?.length" class="bw-muted" style="text-align:center; font-size: var(--t-sm); padding: var(--s-3)">No messages yet.</p>
+            </template>
           </div>
           <textarea v-if="selected.status !== 'closed'" v-model="replyText" class="bw-textarea" rows="3" placeholder="Write a reply…"></textarea>
           <p v-else class="bw-muted" style="font-size: var(--t-sm)">This ticket is closed. Open a new ticket if you still need help.</p>
@@ -296,16 +304,16 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-tabs { margin-bottom: var(--s-2); }
 .help-count { background: var(--brand); color: #04140b; border-radius: 999px; padding: 0 6px; font-size: 10px; margin-left: 4px; }
 
-.help-search { display: flex; align-items: center; gap: var(--s-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 0 var(--s-3); height: 44px; }
+.help-search { display: flex; align-items: center; gap: var(--s-2); background: var(--glass-bg-strong); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: 0 var(--s-3); height: 44px; }
 .help-search svg { width: 18px; height: 18px; color: var(--text-muted); flex-shrink: 0; }
 .help-search-input { flex: 1; border: 0; background: transparent; color: var(--text); font: inherit; outline: none; }
 
 .help-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.help-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: all var(--dur-fast); }
+.help-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-2); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: all var(--dur-fast); }
 .help-chip--on { background: var(--brand); border-color: var(--brand); color: #04140b; }
 
 .help-faqs { display: flex; flex-direction: column; gap: var(--s-2); }
-.help-faq { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; transition: border-color var(--dur-base); }
+.help-faq { border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); overflow: hidden; transition: border-color var(--dur-base); }
 .help-faq--open { border-color: oklch(70% 0.19 145 / 0.4); }
 .help-faq-q { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-4); background: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--text); text-align: left; }
 .help-faq-caret { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-muted); transition: transform var(--dur-base); }
@@ -317,13 +325,13 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-faq-vote button:disabled { opacity: 0.5; cursor: default; }
 .help-faq-thanks { color: var(--brand); font-weight: 600; }
 
-.help-cta-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-lg); background: radial-gradient(120% 100% at 0% 0%, var(--brand-glow), transparent 60%), var(--surface); margin-top: var(--s-2); }
+.help-cta-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-4); border: 1px solid oklch(70% 0.19 145 / 0.28); border-radius: var(--r-lg); background: radial-gradient(120% 100% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); margin-top: var(--s-2); }
 .help-cta-card strong { display: block; color: var(--text); }
 .help-cta-card p { margin: 2px 0 0; font-size: var(--t-sm); color: var(--text-2); }
 
 .help-tickets-head { display: flex; align-items: center; justify-content: space-between; }
 .help-ticket-list { display: flex; flex-direction: column; gap: var(--s-2); }
-.help-ticket { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); cursor: pointer; text-align: left; transition: border-color var(--dur-fast); }
+.help-ticket { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); cursor: pointer; text-align: left; transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
 .help-ticket:hover { border-color: var(--brand); }
 .help-ticket-main { flex: 1; min-width: 0; }
 .help-ticket-subject { font-weight: 600; color: var(--text); }
@@ -332,7 +340,10 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-empty { text-align: center; padding: var(--s-6) var(--s-4); color: var(--text-muted); display: flex; flex-direction: column; gap: var(--s-3); align-items: center; }
 
 .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
-.help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; margin-bottom: var(--s-3); }
+.help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; margin-bottom: var(--s-3); border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--s-3); background: var(--glass-bg); backdrop-filter: blur(12px) saturate(140%); -webkit-backdrop-filter: blur(12px) saturate(140%); }
+.help-thread-loading { display: flex; align-items: center; justify-content: center; gap: var(--s-2); color: var(--text-muted); font-size: var(--t-sm); padding: var(--s-4); }
+.help-thread-spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: help-spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes help-spin { to { transform: rotate(360deg); } }
 .help-msg { border-radius: var(--r-md); padding: var(--s-2) var(--s-3); max-width: 85%; }
 .help-msg--mine { background: var(--brand-glow); align-self: flex-end; }
 .help-msg--staff { background: var(--surface-2); align-self: flex-start; }

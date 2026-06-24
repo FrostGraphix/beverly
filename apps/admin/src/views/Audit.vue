@@ -8,6 +8,7 @@
  *   3. Summary       — last 7d counts by action and actor type (heat list)
  */
 import { onMounted, ref, computed, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, shortDate, API_BASE, ApiError } from '../lib/api';
 
@@ -54,6 +55,7 @@ const tab = ref<'audit' | 'security' | 'summary'>('audit');
 const entries = ref<AuditEntry[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const route = useRoute();
 const auditError = ref('');
 const lastAuditLoadedAt = ref<string | null>(null);
 const exporting = ref(false);
@@ -259,7 +261,10 @@ watch(tab, (v) => {
     if (v === 'summary'  && !summary.value)        void loadSummary();
 });
 
-onMounted(loadAudit);
+onMounted(() => {
+    fActor.value = typeof route.query.actor === 'string' ? route.query.actor : '';
+    void loadAudit();
+});
 </script>
 
 <template>
@@ -723,11 +728,13 @@ onMounted(loadAudit);
 .drawer {
   width: min(640px, 100%);
   height: 100%;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  border-left: 1px solid var(--glass-border);
   overflow-y: auto;
   padding: var(--s-5);
-  box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: -16px 0 48px oklch(0% 0 0 / 0.35), var(--glass-shine);
 }
 .drawer-head {
   display: flex;

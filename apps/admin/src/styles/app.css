@@ -69,6 +69,46 @@
   .bw-content { padding: var(--s-5); }
 }
 
+/* Local quality settings */
+html[data-admin-density="compact"] .bw-content {
+  gap: var(--s-3);
+}
+
+html[data-admin-density="compact"] .bw-card,
+html[data-admin-density="compact"] .bw-table-head-bar {
+  padding: var(--s-3);
+}
+
+html[data-admin-density="compact"] .bw-table th,
+html[data-admin-density="compact"] .bw-table td {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+html[data-admin-density="compact"] .bw-btn,
+html[data-admin-density="compact"] .bw-input,
+html[data-admin-density="compact"] .bw-select {
+  min-height: 36px;
+}
+
+html[data-admin-sticky-tables="true"] .bw-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+html[data-admin-reduce-motion="true"] *,
+html[data-admin-reduce-motion="true"] *::before,
+html[data-admin-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
 @media (max-width: 900px) {
   .bw-sidebar {
     width: min(84vw, 300px);

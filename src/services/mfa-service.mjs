@@ -7,6 +7,22 @@
 
 import { postApi, getApi } from "./api";
 
+/* ── Local Persistence (local-mode fallback when API has no DB) ── */
+
+const MFA_FACTOR_KEY = "beverly.mfa.factor";
+
+function persistFactor(factorId) {
+  try { localStorage.setItem(MFA_FACTOR_KEY, factorId); } catch {}
+}
+
+function retrievePersistedFactor() {
+  try { return localStorage.getItem(MFA_FACTOR_KEY) || null; } catch { return null; }
+}
+
+function clearPersistedFactor() {
+  try { localStorage.removeItem(MFA_FACTOR_KEY); } catch {}
+}
+
 /* ── MFA Enrollment ── */
 
 /**
@@ -15,7 +31,9 @@ import { postApi, getApi } from "./api";
  */
 export async function enrollMFA() {
   const res = await postApi("/api/auth/mfa/enroll", {});
-  return res?.data || res;
+  const data = res?.data || res;
+  if (data?.factorId) persistFactor(data.factorId);
+  return data;
 }
 
 /**
@@ -61,6 +79,7 @@ export async function verifyChallenge(challengeId, code) {
  */
 export async function unenrollMFA(factorId) {
   const res = await postApi("/api/auth/mfa/unenroll", { factorId });
+  clearPersistedFactor();
   return res?.data || res;
 }
 
@@ -75,6 +94,7 @@ export async function listFactors() {
 
 /**
  * Quick status check: is MFA enrolled and verified?
+ * Checks live API first; falls back to localStorage for local-mode environments.
  * @returns {{ enrolled: boolean, factorId: string|null }}
  */
 export async function getMFAStatus() {
@@ -82,10 +102,11 @@ export async function getMFAStatus() {
     const result = await listFactors();
     const factors = Array.isArray(result?.factors) ? result.factors : [];
     const active = factors.find((f) => f.status === "verified");
-    return { enrolled: Boolean(active), factorId: active?.id || null };
-  } catch {
-    return { enrolled: false, factorId: null };
-  }
+    if (active) return { enrolled: true, factorId: active.id };
+  } catch {}
+  // Fallback: localStorage persistence for local-mode where the API has no DB
+  const localFactorId = retrievePersistedFactor();
+  return { enrolled: Boolean(localFactorId), factorId: localFactorId };
 }
 
 /* ── Recovery Codes ── */

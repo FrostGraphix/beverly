@@ -33,6 +33,7 @@ export interface MeterOrderRecord {
     technician_name: string | null;
     notes: string | null;
     source_channel: MeterOrderSourceChannel;
+    sponsor_mode: 'manual_paid' | 'vendor_wallet';
     created_by_actor_type: MeterOrderActorType;
     created_by_actor_id: string | null;
     created_at: string;
@@ -82,6 +83,7 @@ async function createOrderRow(input: {
     paymentReference: string;
     status: MeterOrderStatus;
     sourceChannel: MeterOrderSourceChannel;
+    sponsorMode?: 'manual_paid' | 'vendor_wallet';
     createdByActorType: MeterOrderActorType;
     createdByActorId: string | null;
     vendorOrganizationId?: string | null;
@@ -101,6 +103,7 @@ async function createOrderRow(input: {
             payment_reference: input.paymentReference,
             status: input.status,
             source_channel: input.sourceChannel,
+            sponsor_mode: input.sponsorMode ?? 'manual_paid',
             created_by_actor_type: input.createdByActorType,
             created_by_actor_id: input.createdByActorId,
             vendor_organization_id: input.vendorOrganizationId ?? null,
@@ -152,6 +155,7 @@ export async function createCustomerPortalMeterOrder(input: {
         paymentReference: reference,
         status: 'pending_payment',
         sourceChannel: 'customer_portal',
+        sponsorMode: 'manual_paid',
         createdByActorType: 'customer',
         createdByActorId: input.customerUserId,
     });
@@ -203,6 +207,7 @@ export async function createVendorSponsoredMeterOrder(input: {
         paymentReference: idemKey,
         status: 'paid',
         sourceChannel: 'vendor_portal',
+        sponsorMode: 'vendor_wallet',
         createdByActorType: 'vendor_user',
         createdByActorId: input.actorUserId,
         vendorOrganizationId: input.vendorOrganizationId,
@@ -296,6 +301,7 @@ export async function createAdminMeterOrder(input: {
         paymentReference: paymentReference('morda'),
         status: 'paid',
         sourceChannel: 'admin_portal',
+        sponsorMode: 'manual_paid',
         createdByActorType: 'staff',
         createdByActorId: input.staffUserId,
         notes: input.notes?.trim() || 'Staff-assisted meter order.',
