@@ -925,6 +925,23 @@ assert.strictEqual(dailyDataMeterRequest.payload.stationId, "TUNGA");
 assert.strictEqual(dailyDataMeterRequest.payload.FROM, "2026-01-01T00:00:00.000Z");
 assert.strictEqual(dailyDataMeterRequest.payload.TO, "2026-01-31T23:59:59.999Z");
 
+const abnormalAlarmRoute = routeManifest.find((route) => route.hash === "#/prepay-report/abnormal-alarm");
+const abnormalAlarmRequest = tableRequest(abnormalAlarmRoute, {
+  siteId: "OGUFA",
+  pageNumber: 3,
+  pageSize: 10,
+  searchTerm: "47300481810",
+  orderBy: "meterId desc"
+});
+assert.strictEqual(routeUsesServerPagination(abnormalAlarmRoute), true);
+assert.strictEqual(abnormalAlarmRequest.path, "/api/local/abnormal-alarms");
+assert.strictEqual(abnormalAlarmRequest.params.station_id, "OGUFA");
+assert.strictEqual(abnormalAlarmRequest.params.searchTerm, "47300481810");
+assert.strictEqual(abnormalAlarmRequest.params.sortBy, "meterId");
+assert.strictEqual(abnormalAlarmRequest.params.sortDirection, "desc");
+assert.strictEqual(abnormalAlarmRequest.params.offset, 20);
+assert.strictEqual(abnormalAlarmRequest.params.pageLimit, 10);
+
 const lowPurchaseRoute = routeManifest.find((route) => route.hash === "#/prepay-report/low-purchase-situation");
 const lowPurchaseRows = Array.from({ length: 45 }, (_, index) => ({
   customerId: `C-${String(index + 1).padStart(3, "0")}`,

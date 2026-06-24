@@ -7,55 +7,39 @@
     <aside class="sidebar-container">
       <div class="sidebar-logo">
         <span class="sidebar-logo-icon">B</span>
-        <span class="sidebar-logo-text"><strong>Beverly</strong></span>
+        <span class="sidebar-logo-text sidebar-brand-copy">
+          <strong>Beverly</strong>
+        </span>
         <BaseIconButton v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
       </div>
-      <nav class="sidebar-menu" aria-label="Main navigation">
-        <template v-for="group in groups">
+      <button type="button" class="sidebar-find" aria-label="Find pages" title="Find pages" @click="openSidebarSearch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <span>Find...</span>
+        <kbd>F</kbd>
+      </button>
+      <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
+        <template v-for="group in groups" :key="`section-${group.name}`">
+          <div class="sidebar-section">{{ sidebarSectionLabel(group.name) }}</div>
           <a
-            v-if="group.name === 'Dashboard'"
-            :key="'dash-' + group.name"
-            :class="sidebarClass(group.routes[0], false)"
-            :href="group.routes[0].hash"
+            v-for="route in group.routes"
+            :key="route.hash"
+            :class="sidebarClass(route, false)"
+            :href="route.external ? resolveExternalUrl(route) : route.hash"
+            :target="route.external ? '_blank' : null"
+            :rel="route.external ? 'noopener noreferrer' : null"
+            :title="route.title"
             @click="closeSidebar"
           >
-            <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
-            <span class="sidebar-label">Dashboard</span>
+            <span class="sidebar-icon" v-html="routeIcon(route)"></span>
+            <span class="sidebar-label">{{ route.title }}</span>
+            <svg v-if="route.external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;margin-left:auto;opacity:0.45;flex-shrink:0" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
-          <a
-            v-else-if="group.routes.length === 1 && group.routes[0].external"
-            :key="'ext-' + group.name"
-            class="sidebar-item"
-            :href="resolveExternalUrl(group.routes[0])"
-            target="_blank"
-            rel="noopener noreferrer"
-            @click="closeSidebar"
-          >
-            <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
-            <span class="sidebar-label">{{ group.name }}</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;margin-left:auto;opacity:0.45;flex-shrink:0" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          </a>
-          <div v-else :key="'group-' + group.name">
-            <div class="sidebar-item" @click="toggleGroup(group.name)" style="cursor: pointer;">
-              <span class="sidebar-icon" v-html="groupIcon(group.name)"></span>
-              <span class="sidebar-label">{{ group.name }}</span>
-              <span class="sidebar-caret" :style="{ transform: expandedGroups[group.name] ? 'rotate(90deg)' : 'rotate(0deg)' }">&#8250;</span>
-            </div>
-            <transition name="collapse">
-              <div class="sidebar-submenu" v-show="expandedGroups[group.name]">
-                <a v-for="route in group.routes" :key="route.hash" :class="sidebarClass(route, true)" :href="route.hash" @click="closeSidebar">
-                  <span class="sidebar-dot"></span>
-                  <span class="sidebar-label">{{ route.title }}</span>
-                </a>
-              </div>
-            </transition>
-          </div>
         </template>
       </nav>
       <div class="sidebar-footer">
-        <BaseButton class="sidebar-signout" variant="ghost" @click="handleSignOut">
+        <BaseButton class="sidebar-signout" variant="ghost" title="Sign Out" @click="handleSignOut">
           <span class="sidebar-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </span>
@@ -63,10 +47,15 @@
         </BaseButton>
       </div>
     </aside>
-    <section class="main-container">
+    <section :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]">
+      <div
+        v-if="userDropdownOpen && width <= 1024"
+        class="bw-account-scrim"
+        @click="closeUserMenu"
+      ></div>
       <header class="fixed-header">
         <div class="navbar" :aria-label="`${route.title} ${currentUserName}`">
-          <BaseIconButton class="hamburger-container" aria-label="Toggle sidebar" @click="toggleSidebar">
+          <BaseIconButton class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
             <span class="hamburger-lines">
               <span></span>
               <span></span>
@@ -75,6 +64,7 @@
           </BaseIconButton>
           <div class="breadcrumb">{{ breadcrumb }}</div>
           <div class="right-menu">
+            <StationAlertsBell />
             <div class="bw-account-menu" ref="accountMenuWrap">
               <button
                 type="button"
@@ -83,10 +73,14 @@
                 :aria-label="`User menu for ${currentUserName}`"
                 aria-haspopup="menu"
                 :aria-expanded="String(userDropdownOpen)"
+                aria-controls="beverly-account-menu"
               >
-                <span class="bw-avatar green">{{ userInitials }}</span>
+                <span class="bw-avatar green bw-avatar-shell">
+                  <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
+                  <template v-else>{{ userInitials }}</template>
+                </span>
                 <span class="bw-user-meta">
-                  <strong>{{ currentUserName.split(/[\\s(]+/)[0] || 'User' }}</strong>
+                  <strong>{{ currentUserFirstName }}</strong>
                   <span>{{ currentRoleName }}</span>
                 </span>
                 <svg class="bw-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -94,12 +88,15 @@
                 </svg>
               </button>
               <transition name="dropdown">
-                <div v-show="userDropdownOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly account menu">
+                <div id="beverly-account-menu" v-show="userDropdownOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly account menu">
                   <div class="bw-user-dropdown-brand">
-                    <span class="bw-user-dropdown-logo">B</span>
+                    <span class="bw-user-dropdown-logo bw-user-dropdown-logo--avatar">
+                      <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
+                      <template v-else>B</template>
+                    </span>
                     <span>
                       <strong>Beverly</strong>
-                      <small>{{ currentUserName }} - {{ currentRoleName }}</small>
+                      <small>{{ displayUserName }} - {{ currentRoleName }}</small>
                     </span>
                   </div>
                   <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
@@ -185,6 +182,7 @@
       </header>
         <main :class="['content-page', route.hash === '#/dashboard' ? 'dashboard-editor-container' : '']">
           <DashboardPage v-if="route.hash === '#/dashboard'" />
+          <ReportsPage v-else-if="route.customComponent === 'ReportsPage'" />
           <DailyDataMeterPage v-else-if="route.hash === '#/prepay-report/daily-data-meter'" :route="route" />
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
@@ -273,7 +271,10 @@ import SettlementPage from "./components/wallet/SettlementPage.vue";
 import ReconciliationPage from "./components/wallet/ReconciliationPage.vue";
 import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
+import ReportsPage from "./components/ReportsPage.vue";
+import StationAlertsBell from "./components/StationAlertsBell.vue";
 import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, touchSession } from "./services/api";
+import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
 const groupIcons = {
@@ -291,6 +292,40 @@ const groupIcons = {
   System: '<svg viewBox="0 0 128 128" aria-hidden="true"><path d="M10 20h108v28H10zm0 60h108v28H10zm18-42h18v-8H28zm54 60h18v-8H82z"/></svg>'
 };
 
+const sidebarSectionLabels = {
+  Dashboard: "Overview",
+  "Data Report": "Insights",
+  "Token Generate": "Token Operations",
+  "Token Record": "Token Records",
+  "Remote Operation": "Remote Operations",
+  "Remote Operation Task": "Task Queue",
+  Management: "Management",
+  Administration: "Administration",
+  Protocol: "Protocol",
+  "Remote Support": "Remote Support",
+  System: "System"
+};
+
+const routeIconPaths = {
+  dashboard: "M4 4h6v7H4zM14 4h6v4h-6zM14 12h6v8h-6zM4 15h6v5H4z",
+  reports: "M4 20V4m0 16h16M7 15l4-4 3 3 5-7",
+  token: "M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5zm0 4a1 1 0 0 1 1 1v3h-2V7a1 1 0 0 1 1-1z",
+  record: "M14 3H6v18h12V9zm0 0v6h6M9 14h6M9 18h4",
+  reading: "M4 19V5m0 14h16M8 15l3-4 3 2 3-5",
+  control: "M12 2v10m5.66-5.66A8 8 0 1 1 6.34 6.34",
+  task: "M9 11l3 3L22 4M21 12v7H3V5h13",
+  customer: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a8 8 0 0 1 16 0v1",
+  gateway: "M5 18h14M7 14h10M9 10h6M11 6h2",
+  tariff: "M5 4h14v16H5zm4 4h6m-6 4h6m-6 4h4",
+  account: "M3 7h18v12H3zm0 4h18m-5 4h2",
+  users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87",
+  station: "M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6z",
+  meter: "M3 3h18v18H3zm4 5h10m-7 4h4m-5 4h6",
+  protocol: "M4 5h16M4 12h16M4 19h16M8 3v18m8-18v18",
+  support: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-3-9h6m-3-3v6",
+  system: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.4-.5a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.44.68.91 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+};
+
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
 
 function normalizeThemeChoice(theme) {
@@ -301,7 +336,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, SettingsPage, SettlementPage, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -310,6 +345,7 @@ export default {
       width: window.innerWidth,
       currentRoleId: getCookie("roleId") || "super-admin",
       currentUserName: getCookie("userName") || "ACB(admin)",
+      profilePictureUrl: "",
       expandedGroups: {},
       currentTheme: normalizeThemeChoice(localStorage.getItem('acob-theme') || 'system'),
       themeDropdownOpen: false,
@@ -344,7 +380,13 @@ export default {
       return "";
     },
     userInitials() {
-      return (this.currentUserName || 'U').split(/[\s()_-]+/).filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('');
+      return this.displayUserName.split(/[\s()_-]+/).filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('') || "U";
+    },
+    displayUserName() {
+      return String(this.currentUserName || "User").trim();
+    },
+    currentUserFirstName() {
+      return this.displayUserName.split(/[\s(]+/)[0] || "User";
     },
     searchResults() {
       const q = this.searchQuery.trim().toLowerCase();
@@ -402,6 +444,7 @@ export default {
       if (newHash !== oldHash && this.width <= 1024) {
         this.sidebarOpen = false;
       }
+      if (newHash !== oldHash) this.closeUserMenu();
     }
   },
   created() {
@@ -415,6 +458,7 @@ export default {
     this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     this.mediaQuery.addEventListener('change', this.applyTheme);
     this.currentTheme = normalizeThemeChoice(this.currentTheme);
+    this.syncProfileIdentity();
     this.applyTheme();
     this.armSessionTimer();
     this.loadUser();
@@ -482,6 +526,7 @@ export default {
         const response = await currentUserInfo();
         this.currentRoleId = response.data?.roleId || this.currentRoleId;
         this.currentUserName = response.data?.name || this.currentUserName;
+        this.syncProfileIdentity();
         this.syncHash();
       } catch (error) {
         if ((error?.message || "").includes("Session expired")) {
@@ -493,16 +538,20 @@ export default {
     },
     syncHash() {
       const nextHash = window.location.hash || "#/login?redirect=%2Fdashboard";
+      if (normalizeHash(nextHash).startsWith("#/wallet/admin/")) {
+        const configured = String(import.meta.env?.VITE_ADMIN_URL || "").trim();
+        const adminUrl = configured || (import.meta.env?.DEV
+          ? `${window.location.protocol}//${window.location.hostname}:5175/`
+          : `${window.location.origin}/wallet-admin/`);
+        window.location.assign(adminUrl);
+        return;
+      }
       if (normalizeHash(nextHash) === "#/prepay-report/site-consumption") {
         window.location.hash = "#/prepay-report/station-consumption";
         return;
       }
       if (normalizeHash(nextHash) === "#/system/live-probing") {
         window.location.hash = "#/system/automation-command";
-        return;
-      }
-      if (normalizeHash(nextHash) === "#/admin/reports") {
-        window.location.href = "/wallet-admin/reports";
         return;
       }
       this.hash = nextHash.startsWith("#/login")
@@ -521,8 +570,14 @@ export default {
     goDashboard() {
       this.currentRoleId = getCookie("roleId") || "super-admin";
       this.currentUserName = getCookie("userName") || "ACB(admin)";
+      this.syncProfileIdentity();
       window.location.hash = this.nextRoute("#/dashboard").hash;
       this.syncHash();
+    },
+    syncProfileIdentity() {
+      const profile = loadProfileState(this.currentUserName);
+      if (profile.name) this.currentUserName = profile.name;
+      this.profilePictureUrl = profile.profilePictureUrl || "";
     },
     toggleSidebar() {
       if (this.width <= 1024) this.sidebarOpen = !this.sidebarOpen;
@@ -536,6 +591,30 @@ export default {
     },
     groupIcon(groupName) {
       return groupIcons[groupName] || groupIcons.Management;
+    },
+    sidebarSectionLabel(groupName) {
+      return sidebarSectionLabels[groupName] || groupName;
+    },
+    routeIcon(route) {
+      const text = `${route?.group || ""} ${route?.title || ""} ${route?.hash || ""}`.toLowerCase();
+      let icon = "meter";
+      if (text.includes("dashboard")) icon = "dashboard";
+      else if (text.includes("report") || text.includes("consumption") || text.includes("nonpurchase") || text.includes("abnormal") || text.includes("interval")) icon = "reports";
+      else if (text.includes("remote") && text.includes("task")) icon = "task";
+      else if (text.includes("meter reading")) icon = "reading";
+      else if (text.includes("meter control")) icon = "control";
+      else if (text.includes("token record") || text.includes("record")) icon = "record";
+      else if (text.includes("token")) icon = "token";
+      else if (text.includes("customer")) icon = "customer";
+      else if (text.includes("gateway")) icon = "gateway";
+      else if (text.includes("tariff")) icon = "tariff";
+      else if (text.includes("account") || text.includes("debt")) icon = "account";
+      else if (text.includes("user") || text.includes("role") || text.includes("log")) icon = "users";
+      else if (text.includes("station")) icon = "station";
+      else if (text.includes("protocol") || text.includes("dlms") || text.includes("dlt645")) icon = "protocol";
+      else if (text.includes("support") || text.includes("gprs") || text.includes("firmware") || text.includes("profile") || text.includes("event") || text.includes("upload")) icon = "support";
+      else if (text.includes("system") || text.includes("automation")) icon = "system";
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${routeIconPaths[icon]}"/></svg>`;
     },
     sidebarClass(route, indent) {
       return ["sidebar-item", indent ? "indent" : "", route.hash === this.route.hash ? "active" : ""];
@@ -583,6 +662,10 @@ export default {
       this.closeUserMenu();
       this.searchOpen = true;
     },
+    openSidebarSearch() {
+      this.closeSidebar();
+      this.searchOpen = true;
+    },
     openFullscreenFromMenu() {
       this.closeUserMenu();
       this.toggleFullscreen();
@@ -618,3 +701,86 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.main-container {
+  position: relative;
+}
+
+.main-container::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 949;
+  background:
+    radial-gradient(circle at 88% 7%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 17rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-page) 18%, transparent), color-mix(in srgb, var(--bg-page) 34%, transparent));
+  backdrop-filter: blur(0) saturate(100%);
+  -webkit-backdrop-filter: blur(0) saturate(100%);
+  transition:
+    opacity var(--transition-fast),
+    backdrop-filter var(--transition-fast),
+    -webkit-backdrop-filter var(--transition-fast);
+}
+
+.bw-account-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: transparent;
+}
+
+.main-container--account-menu-open::before {
+  opacity: 1;
+  backdrop-filter: blur(4px) saturate(108%);
+  -webkit-backdrop-filter: blur(4px) saturate(108%);
+}
+
+.main-container--account-menu-open :deep(.content-page) {
+  filter: saturate(0.94) brightness(0.97);
+  transition: filter var(--transition-fast);
+}
+
+.main-container--account-menu-open :deep(.fixed-header .breadcrumb),
+.main-container--account-menu-open :deep(.fixed-header .tags-view-container),
+.main-container--account-menu-open :deep(.fixed-header .right-menu > :not(.bw-account-menu)) {
+  filter: saturate(0.92) brightness(0.96);
+  transition: filter var(--transition-fast);
+}
+
+.main-container--account-menu-open :deep(.fixed-header .navbar) {
+  position: relative;
+  z-index: 1005;
+}
+
+.main-container--account-menu-open :deep(.fixed-header .tags-view-container) {
+  position: relative;
+  z-index: 960;
+}
+
+.main-container--account-menu-open :deep(.fixed-header) {
+  z-index: 1002;
+}
+
+.main-container--account-menu-open :deep(.bw-account-menu) {
+  position: relative;
+  z-index: 1003;
+}
+
+.main-container--account-menu-open :deep(.bw-user-dropdown) {
+  z-index: 1004;
+}
+
+@media (min-width: 1025px) {
+  .main-container::before,
+  .bw-account-scrim {
+    display: none;
+  }
+
+  .main-container--account-menu-open :deep(.content-page) {
+    filter: none;
+  }
+}
+</style>

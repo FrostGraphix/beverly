@@ -1,10 +1,12 @@
 <template>
   <main class="login-page auth-page" aria-label="Beverly sign in">
     <div class="auth-bg" aria-hidden="true">
+      <div class="auth-bg-orb"></div>
       <div class="auth-bg-beam auth-bg-beam--a"></div>
       <div class="auth-bg-beam auth-bg-beam--b"></div>
       <div class="auth-bg-glow"></div>
       <div class="auth-bg-grid"></div>
+      <div class="auth-bg-flash"></div>
     </div>
 
     <section class="auth-panel auth-panel--right">
@@ -16,7 +18,8 @@
             <span class="auth-card-mark">B</span>
             <span class="auth-card-name">Beverly</span>
           </div>
-          <h2 class="auth-card-title">Sign In</h2>
+          <h2 class="auth-card-title">Sign in</h2>
+          <p class="auth-card-sub">Beverly Operations</p>
         </header>
 
         <transition name="auth-alert-fade">

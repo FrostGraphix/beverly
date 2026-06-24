@@ -24,9 +24,25 @@ function safeRedirectTarget(raw: unknown, fallback = '/vend') {
 }
 
 const valid = computed(() => {
+    if (credentialProblem.value) return false;
     if (credential.value !== confirm.value) return false;
-    if (type.value === 'pin') return /^\d{4,6}$/.test(credential.value);
-    return credential.value.length >= 10 && /[A-Za-z]/.test(credential.value) && /\d/.test(credential.value);
+    return true;
+});
+
+const credentialProblem = computed(() => {
+    const value = credential.value;
+    if (!value) return '';
+    if (type.value === 'pin') {
+        if (!/^\d{4,6}$/.test(value)) return 'Use a 4 to 6 digit PIN.';
+        if (/^(\d)\1+$/.test(value) || ['1234', '12345', '123456', '0000'].includes(value)) {
+            return 'Choose a less predictable PIN.';
+        }
+        return '';
+    }
+    if (value.length < 10 || !/[A-Za-z]/.test(value) || !/\d/.test(value)) {
+        return 'Use at least 10 characters with letters and numbers.';
+    }
+    return '';
 });
 
 async function submit() {
@@ -98,6 +114,12 @@ async function submit() {
         <p class="bw-muted" style="margin-top: var(--s-3); font-size: var(--t-sm)">
           PIN: 4-6 digits.
           Password: 10+ characters.
+        </p>
+        <p v-if="credentialProblem" class="bw-alert danger" style="margin-top: var(--s-3)">
+          {{ credentialProblem }}
+        </p>
+        <p v-else-if="credential && confirm && credential !== confirm" class="bw-alert danger" style="margin-top: var(--s-3)">
+          Authorization entries must match.
         </p>
 
         <p v-if="error" class="bw-alert danger" style="margin-top: var(--s-3)">

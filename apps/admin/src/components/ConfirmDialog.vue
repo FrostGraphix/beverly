@@ -170,13 +170,15 @@ onBeforeUnmount(() => {
 }
 
 .cd-dialog {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-xl);
   padding: var(--s-6);
   width: 100%;
   max-width: 440px;
-  box-shadow: 0 32px 80px oklch(0% 0 0 / 0.50);
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
   position: relative;
   overflow: hidden;
 }
@@ -246,9 +248,9 @@ onBeforeUnmount(() => {
 .cd-btn-cancel { background: transparent; color: var(--text-dim); }
 .cd-btn-cancel:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
-.cd-btn-confirm.tone-brand  { background: var(--brand); border-color: var(--brand); color: white; }
+.cd-btn-confirm.tone-brand  { background: var(--brand); border-color: var(--brand); color: oklch(8% 0.04 145); }
 .cd-btn-confirm.tone-warn   { background: var(--warn);  border-color: var(--warn);  color: oklch(20% 0 0); }
-.cd-btn-confirm.tone-danger { background: var(--danger);border-color: var(--danger);color: white; }
+.cd-btn-confirm.tone-danger { background: var(--danger);border-color: var(--danger);color: oklch(10% 0.04 25); }
 
 .cd-spinner {
   width: 14px; height: 14px;

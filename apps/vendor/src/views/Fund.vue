@@ -75,7 +75,7 @@ async function payNow() {
     try {
         const r = await api.post<{ authorizationUrl: string }>('/api/v1/vendor/funding/paystack', {
             amountMinor: amountNaira.value * 100,
-            callbackUrl: `${window.location.origin}/wallet?funded=1`,
+            callbackUrl: `${window.location.origin}/wallet/fund?funded=1`,
         });
         redirectToPayment(r.authorizationUrl);
     } catch (e: any) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ledgerKey, hashIdempotency } from '../idempotency.js';
+import { assertClientIdempotencyKey, ledgerKey, hashIdempotency } from '../idempotency.js';
 
 describe('idempotency helpers', () => {
     it('composes deterministic ledger keys', () => {
@@ -20,5 +20,15 @@ describe('idempotency helpers', () => {
         const a = hashIdempotency(['x', '1']);
         const b = hashIdempotency(['x', '2']);
         expect(a).not.toBe(b);
+    });
+
+    it('accepts bounded client request keys', () => {
+        expect(assertClientIdempotencyKey('vend-2026:abc_123')).toBe('vend-2026:abc_123');
+    });
+
+    it('rejects missing or unsafe client request keys', () => {
+        expect(() => assertClientIdempotencyKey(undefined)).toThrow('Idempotency-Key');
+        expect(() => assertClientIdempotencyKey('short')).toThrow('Idempotency-Key');
+        expect(() => assertClientIdempotencyKey('invalid key value')).toThrow('Idempotency-Key');
     });
 });

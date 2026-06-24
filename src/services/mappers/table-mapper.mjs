@@ -81,6 +81,23 @@ function mapRowShape(row, route) {
     if (record.totalPaid == null && record.purchaseTotalPaid != null) record.totalPaid = record.purchaseTotalPaid;
   }
 
+  if (route.hash.includes("remote-support/gprs-tasks")) {
+    if (record.id == null && record.taskId != null) record.id = record.taskId;
+    if (record.customerId == null && record.concentratorId != null) record.customerId = record.concentratorId;
+    if (record.status != null) record.status = normalizeRemoteStatus(record.status);
+  }
+
+  if (route.hash.includes("remote-support/gprs-online-status")) {
+    if (record.isOnline === true) record.isOnline = "Online";
+    else if (record.isOnline === false) record.isOnline = "Offline";
+    if (record.statusUpdateDate == null && record.updateDate != null) record.statusUpdateDate = record.updateDate;
+  }
+
+  if (route.hash.includes("remote-support/firmware-update")) {
+    if (record.id == null && record.taskId != null) record.id = record.taskId;
+    if (record.status != null) record.status = normalizeRemoteStatus(record.status);
+  }
+
   if (route.hash.includes("remote-support/load-profile")) {
     if (record.currentDate == null && record.createDate != null) record.currentDate = record.createDate;
     if (record.data == null && record.totalEnergy != null) record.data = record.totalEnergy;

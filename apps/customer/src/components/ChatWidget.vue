@@ -26,6 +26,7 @@ const unread      = ref(0);
 const lastTs      = ref('');
 const scroller    = ref<HTMLElement | null>(null);
 const sessionStarted = ref(false);
+const activeGuideTopic = ref('');
 const staffTyping = ref(false);
 let poll: ReturnType<typeof setInterval> | null = null;
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -37,12 +38,55 @@ const escLoading  = ref(false);
 const escError    = ref('');
 const escDone     = ref<{ reference: string } | null>(null);
 
-const QUICK_REPLIES = [
-    'How do I buy a token?',
-    'My token did not work',
-    'How do I fund my wallet?',
-    'I need a refund',
-];
+const HELP_TOPICS: Record<string, string[]> = {
+    'How do I buy a token?': [
+        'Open Buy from the bottom menu.',
+        'Select the meter you want to recharge.',
+        'Enter the amount or units.',
+        'Confirm the customer and meter details.',
+        'Pay from your wallet balance.',
+        'Copy the token shown after purchase.',
+        'Enter the token on your meter keypad.',
+        'Keep the receipt for reference.',
+    ],
+    'My token did not work': [
+        'Check the meter number on the receipt.',
+        'Confirm the token was entered exactly.',
+        'Enter the KCT tokens first when shown.',
+        'Wait for the meter to accept each KCT token.',
+        'Enter the energy token last.',
+        'If the meter rejects it again, open a ticket.',
+        'Attach the receipt and meter screen error.',
+    ],
+    'How do I fund my wallet?': [
+        'Open Wallet from the bottom menu.',
+        'Tap Fund wallet.',
+        'Choose the funding channel.',
+        'Enter the amount you want to fund.',
+        'Complete the transfer or payment.',
+        'Upload proof when requested.',
+        'Wait for approval and balance update.',
+    ],
+    'I need a refund': [
+        'Open Profile from the bottom menu.',
+        'Tap My Disputes.',
+        'Create a new dispute.',
+        'Choose refund as the request type.',
+        'Attach your receipt or payment proof.',
+        'Explain what went wrong clearly.',
+        'Submit and track the status there.',
+    ],
+};
+
+const QUICK_REPLIES = Object.keys(HELP_TOPICS);
+
+const suggestedTopics = computed(() => QUICK_REPLIES.filter((topic) => topic !== activeGuideTopic.value));
+const activeGuide = computed(() => {
+    const topic = activeGuideTopic.value;
+    if (!topic) return null;
+    return { topic, steps: HELP_TOPICS[topic] ?? [] };
+});
+const showHelpTopics = computed(() => !sessionStarted.value || !!activeGuideTopic.value);
 
 // Group messages so consecutive same-sender messages are visually merged
 const groupedMessages = computed(() => {
@@ -102,7 +146,6 @@ async function toggle() {
     if (open.value) {
         unread.value = 0;
         view.value = 'chat';
-        await ensureSession();
         await nextTick();
         scrollToBottom();
     }
@@ -114,6 +157,7 @@ async function send(text?: string) {
     sending.value = true;
     draft.value = '';
     sessionStarted.value = true;
+    activeGuideTopic.value = '';
     await ensureSession();
 
     const tmpId = `tmp-${Date.now()}`;
@@ -144,6 +188,16 @@ async function send(text?: string) {
     } finally {
         sending.value = false;
     }
+}
+
+async function showGuide(topic: string) {
+    const steps = HELP_TOPICS[topic];
+    if (!steps?.length || starting.value) return;
+    sessionStarted.value = true;
+    activeGuideTopic.value = topic;
+    staffTyping.value = false;
+    if (typingTimer) clearTimeout(typingTimer);
+    scrollToBottom();
 }
 
 async function submitEscalate() {
@@ -246,6 +300,11 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
               <span class="cw-connecting-dot" /><span class="cw-connecting-dot" /><span class="cw-connecting-dot" />
             </div>
 
+            <article v-if="!messages.length && !activeGuide" class="cw-intro">
+              <strong>How can we help?</strong>
+              <span>Choose a topic for instant steps. Type a message to reach support.</span>
+            </article>
+
             <!-- Messages -->
             <div
               v-for="m in groupedMessages" :key="m.id"
@@ -270,10 +329,22 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
               </template>
             </div>
 
-            <!-- Quick replies (only before first send) -->
-            <div v-if="!sessionStarted && !starting" class="cw-quick">
-              <span class="cw-quick-label">Suggested questions</span>
-              <button v-for="q in QUICK_REPLIES" :key="q" class="cw-quick-btn" @click="send(q)">{{ q }}</button>
+            <!-- Local help guide -->
+            <article v-if="activeGuide" class="cw-guide">
+              <div class="cw-guide-head">
+                <span>Guide</span>
+                <strong>{{ activeGuide.topic }}</strong>
+              </div>
+              <ol class="cw-guide-steps">
+                <li v-for="step in activeGuide.steps" :key="step">{{ step }}</li>
+              </ol>
+              <p class="cw-guide-note">Need more help? Type a message or open a ticket.</p>
+            </article>
+
+            <!-- Quick replies -->
+            <div v-if="!starting && showHelpTopics && suggestedTopics.length" :class="['cw-quick', activeGuideTopic && 'cw-quick--after']">
+              <span class="cw-quick-label">{{ activeGuideTopic ? 'More help topics' : 'Suggested questions' }}</span>
+              <button v-for="q in suggestedTopics" :key="q" class="cw-quick-btn" @click="showGuide(q)">{{ q }}</button>
             </div>
 
             <!-- Typing indicator -->
@@ -375,19 +446,20 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 
 /* ── Bubble ── */
 .cw-bubble {
-  width: 56px; height: 56px;
+  width: 46px; height: 46px;
   border-radius: 50%; border: 0;
   background: linear-gradient(180deg, var(--brand-300), var(--brand-600));
   color: #04140b;
   display: grid; place-items: center;
   cursor: pointer;
-  box-shadow: 0 8px 24px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25);
+  box-shadow: 0 8px 20px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25);
   position: relative;
+  animation: cw-float 3.8s ease-in-out infinite;
   transition: transform var(--dur-fast), box-shadow var(--dur-fast);
 }
-.cw-bubble:hover { transform: translateY(-1px); box-shadow: 0 12px 28px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25); }
+.cw-bubble:hover { animation-play-state: paused; transform: translateY(-3px); box-shadow: 0 12px 26px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25); }
 .cw-bubble:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); }
-.cw-bubble svg { width: 24px; height: 24px; }
+.cw-bubble svg { width: 19px; height: 19px; }
 
 .cw-badge {
   position: absolute; top: -2px; right: -2px;
@@ -396,6 +468,11 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
   font-size: 11px; font-weight: 700;
   display: grid; place-items: center;
   border: 2px solid var(--canvas);
+}
+
+@keyframes cw-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -6px, 0); }
 }
 
 /* Bubble icon swap */
@@ -407,10 +484,12 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 .cw-panel {
   width: min(380px, calc(100vw - 32px));
   height: min(580px, calc(100dvh - 140px));
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-xl);
-  box-shadow: var(--shadow-4);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -458,9 +537,28 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 @keyframes cw-pulse { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
 
 /* ── Messages ── */
+.cw-intro {
+  width: 100%;
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+.cw-intro strong {
+  display: block;
+  color: var(--text);
+  font-size: var(--t-md);
+  margin-bottom: 4px;
+}
+.cw-intro span {
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  line-height: 1.4;
+}
+
 .cw-msg { display: flex; flex-direction: column; max-width: 82%; }
 .cw-msg--mine { align-self: flex-end; align-items: flex-end; }
-.cw-msg--them { align-self: flex-start; }
+.cw-msg--them { align-self: flex-start; max-width: 92%; }
 .cw-msg--sys  { align-self: center; max-width: 100%; align-items: center; margin: var(--s-2) 0; }
 .cw-msg--pending { opacity: 0.65; }
 
@@ -529,7 +627,51 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 .cw-typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
 /* Quick replies */
+.cw-guide {
+  width: 100%;
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--brand) 9%, var(--surface-2));
+}
+.cw-guide-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: var(--s-2);
+}
+.cw-guide-head span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.cw-guide-head strong {
+  color: var(--text);
+  font-size: var(--t-sm);
+}
+.cw-guide-steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+}
+.cw-guide-steps li + li { margin-top: 5px; }
+.cw-guide-note {
+  margin: var(--s-3) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
 .cw-quick { display: flex; flex-direction: column; gap: 6px; margin-top: var(--s-3); }
+.cw-quick--after {
+  width: 100%;
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
 .cw-quick-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
 .cw-quick-btn {
   text-align: left; border: 1px solid var(--border);

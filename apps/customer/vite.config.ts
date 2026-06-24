@@ -48,7 +48,17 @@ export default defineConfig(({ command }) => {
     server: {
         port: 5173,
         proxy: {
-            '/api': { target: 'http://localhost:4000', changeOrigin: true },
+            '/api': { target: `http://localhost:${process.env.WALLET_PORT || 4000}`, changeOrigin: true },
+        },
+    },
+    esbuild: {
+        supported: {
+            destructuring: true
+        }
+    },
+    optimizeDeps: {
+        esbuildOptions: {
+            target: 'es2022',
         },
     },
     build: {

@@ -41,6 +41,7 @@ const setupCode = ref('');
 const challengeCode = ref('');
 const disableCode = ref('');
 const resetCode = ref('');
+const regenCode = ref('');
 const loading = ref(false);
 const action = ref<'idle' | 'setup' | 'verify' | 'disable'>('idle');
 const notice = ref('');
@@ -179,6 +180,27 @@ async function disableMfa() {
         await refreshIdentity();
     } catch (err) {
         error.value = readableError(err, 'Could not disable 2FA.');
+    } finally {
+        loading.value = false;
+    }
+}
+
+async function regenRecoveryCodes() {
+    if (regenCode.value.trim().length < 6) {
+        error.value = 'Enter a current 2FA or recovery code to regenerate.';
+        return;
+    }
+    loading.value = true;
+    action.value = 'verify';
+    error.value = '';
+    try {
+        const response = await api.post<{ recovery_codes: string[] }>('/api/v1/vendor/mfa/recovery/regenerate', { code: regenCode.value });
+        recoveryCodes.value = response.recovery_codes;
+        regenCode.value = '';
+        notice.value = 'New recovery codes generated. Old codes no longer work.';
+        await refreshIdentity();
+    } catch (err) {
+        error.value = readableError(err, 'Could not regenerate recovery codes.');
     } finally {
         loading.value = false;
     }
@@ -325,7 +347,7 @@ onMounted(async () => {
               <p class="sop-step-sub">Proves the secret was saved correctly before it is enforced on your account.</p>
             </div>
           </div>
-          <div v-if="error && sopStep === 2" class="sop-alert sop-alert--danger">{{ error }}</div>
+          <div v-if="error" class="sop-alert sop-alert--danger">{{ error }}</div>
           <div class="sop-input-row">
             <input v-model="setupCode" class="bw-input sop-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000 000" @keyup.enter="verifySetup" />
             <button class="bw-btn primary sop-btn" :disabled="loading && action === 'verify'" @click="verifySetup">
@@ -358,7 +380,7 @@ onMounted(async () => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
               <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
-            Copy all recovery codes
+            Copy recovery codes
           </button>
         </div>
       </div>
@@ -400,12 +422,25 @@ onMounted(async () => {
       <!-- Recovery vault + Danger zone side by side -->
       <div class="sop-side-row">
         <div class="sop-card sop-card--side">
-          <p class="sop-eyebrow">Recovery vault</p>
+          <p class="sop-eyebrow">Recovery Vault</p>
           <h3 class="sop-step-title">Emergency access</h3>
           <p class="sop-step-sub">Each code is single-use. Shown once at setup.</p>
           <div class="sop-recovery-empty">
             <strong>{{ safeRecoveryCount }}</strong>
             <span>unused recovery {{ safeRecoveryCount === 1 ? 'code' : 'codes' }}</span>
+          </div>
+          <p class="sop-step-sub" style="margin-top: var(--s-4); margin-bottom: var(--s-3)">Invalidates old codes and issues a fresh set of 10.</p>
+          <div class="sop-input-col">
+            <input v-model="regenCode" class="bw-input" inputmode="numeric" placeholder="Current 2FA code" />
+            <button class="bw-btn sop-btn" :disabled="loading" @click="regenRecoveryCodes">
+              {{ loading && action === 'verify' && regenCode ? 'Generating…' : 'Regenerate codes' }}
+            </button>
+          </div>
+          <div v-if="recoveryCodes.length" class="sop-recovery-grid" style="margin-top: var(--s-4)">
+            <code v-for="code in recoveryCodes" :key="code" class="sop-recovery-code">{{ code }}</code>
+          </div>
+          <div v-if="recoveryCodes.length" class="sop-input-row" style="margin-top: var(--s-3)">
+            <button class="bw-btn sop-btn sop-btn--full" @click="copyRecoveryCodes">Copy recovery codes</button>
           </div>
         </div>
 
@@ -794,7 +829,7 @@ onMounted(async () => {
 }
 .sop-btn--danger:hover:not(:disabled) {
   background: var(--danger);
-  color: white;
+  color: oklch(10% 0.04 25);
   border-color: var(--danger);
 }
 

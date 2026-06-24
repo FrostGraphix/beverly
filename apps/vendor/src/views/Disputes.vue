@@ -111,7 +111,9 @@
           <div v-if="detail?.purchase_order" class="bw-dispute-purchase">
             <span>Meter</span><strong class="bw-mono">{{ detail.purchase_order.meter_id }}</strong>
             <span>Phase</span><strong>{{ meterTypeLabel(detail.purchase_order.meter_type) }}</strong>
-            <span>Amount</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Amount paid</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Energy value</span><strong>{{ fmtMoney(detail.purchase_order.energy_amount_minor ?? detail.purchase_order.amount_minor) }}</strong>
+            <span>VAT</span><strong>{{ fmtMoney(detail.purchase_order.vat_amount_minor ?? 0) }}</strong>
             <span>Status</span><strong>{{ detail.purchase_order.status }}</strong>
           </div>
 
@@ -262,7 +264,7 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
 
 <style scoped>
 .bw-messages { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 1rem; max-height: 240px; overflow-y: auto; }
-.bw-message { background: var(--surface); border-radius: var(--r-md); padding: .5rem .75rem; }
+.bw-message { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: .5rem .75rem; }
 .bw-message-staff { background: oklch(from var(--brand) l c h / 0.10); }
 .bw-message-actor { font-size: .7rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; }
 .bw-message-body { margin: .25rem 0; font-size: .875rem; }

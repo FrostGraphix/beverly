@@ -319,6 +319,9 @@ function buildTableRequest(route, requestOptions) {
     const query = hash.includes("?") ? hash.split("?")[1] : "";
     const params = new URLSearchParams(query);
     const alarm = params.get("alarm") || "";
+    const pageSize = Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    const { direction, field } = parseOrderBy(requestOptions.orderBy, route);
     return {
       path,
       method: "GET",
@@ -327,7 +330,12 @@ function buildTableRequest(route, requestOptions) {
         station_id: requestOptions.siteId || "",
         from: requestOptions.from,
         to: requestOptions.to,
-        limit: requestOptions.pageSize
+        searchTerm: requestOptions.searchTerm || "",
+        sortBy: field,
+        sortDirection: direction,
+        offset: (pageNumber - 1) * pageSize,
+        pageLimit: pageSize,
+        limit: pageSize
       },
       pagination: "offset"
     };

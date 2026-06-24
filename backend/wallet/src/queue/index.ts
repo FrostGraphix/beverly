@@ -44,6 +44,8 @@ export const notificationsQueue = queuesEnabled ? new Queue('notifications', { c
 export const paymentsQueue      = queuesEnabled ? new Queue('payments', { connection }) : disabledQueue('payments');
 export const holdsQueue         = queuesEnabled ? new Queue('holds', { connection }) : disabledQueue('holds');
 export const auditQueue         = queuesEnabled ? new Queue('audit', { connection }) : disabledQueue('audit');
+export const maintenanceQueue   = queuesEnabled ? new Queue('maintenance', { connection }) : disabledQueue('maintenance');
+export const exportsQueue       = queuesEnabled ? new Queue('privacy-exports', { connection }) : disabledQueue('privacy-exports');
 
 export const notificationsEvents = queuesEnabled
     ? new QueueEvents('notifications', { connection })
@@ -55,9 +57,12 @@ export async function closeQueues() {
         paymentsQueue.close(),
         holdsQueue.close(),
         auditQueue.close(),
+        maintenanceQueue.close(),
+        exportsQueue.close(),
         notificationsEvents.close(),
     ]);
     await connection.quit();
 }
 
 export { connection as redisConnection };
+export { queuesEnabled };

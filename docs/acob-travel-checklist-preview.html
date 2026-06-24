@@ -1,0 +1,2854 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACOB Travel Checklist Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+        margin: 0;
+        background: #0a0f12;
+      }
+
+      .boot {
+        display: grid;
+        min-height: 80vh;
+        place-items: center;
+        color: #dcebe0;
+        font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        text-align: center;
+        padding: 40px;
+      }
+      
+      .boot.error {
+        color: #f87171;
+      }
+      
+      .boot.error pre {
+        background: rgba(248, 113, 113, 0.1);
+        border: 1px solid rgba(248, 113, 113, 0.2);
+        padding: 16px;
+        border-radius: 8px;
+        text-align: left;
+        max-width: 800px;
+        overflow-x: auto;
+        font-family: monospace;
+      }
+
+      /* Premium Light Theme Footer */
+      .preview-footer {
+        max-width: 1400px;
+        margin: 40px auto 60px;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(22, 163, 92, 0.12);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.02);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        width: calc(100% - 64px);
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .footer-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo-dot {
+        width: 10px;
+        height: 10px;
+        background: #16a35c;
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(22, 163, 92, 0.4);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 16px rgba(22, 163, 92, 0.6); }
+        100% { transform: scale(1); opacity: 0.8; }
+      }
+
+      .brand-name {
+        color: #0f172a;
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: 0.5px;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .status-badge.loading {
+        background: rgba(234, 179, 8, 0.1);
+        color: #eab308;
+        border: 1px solid rgba(234, 179, 8, 0.2);
+      }
+      
+      .status-badge.success {
+        background: rgba(34, 197, 94, 0.1);
+        color: #22c55e;
+        border: 1px solid rgba(34, 197, 94, 0.2);
+      }
+      
+      .status-badge.warning {
+        background: rgba(249, 115, 22, 0.1);
+        color: #f97316;
+        border: 1px solid rgba(249, 115, 22, 0.2);
+      }
+
+      .footer-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .footer-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        border: 1px solid rgba(22, 163, 92, 0.15);
+        background: rgba(255, 255, 255, 0.9);
+        color: #334155;
+      }
+
+      .footer-btn:hover {
+        background: rgba(22, 163, 92, 0.05);
+        border-color: rgba(22, 163, 92, 0.3);
+        color: #0f172a;
+        transform: translateY(-1px);
+      }
+
+      .footer-btn.primary {
+        background: #16a35c;
+        border-color: #16a35c;
+        color: #ffffff;
+      }
+
+      .footer-btn.primary:hover {
+        background: #15803d;
+        border-color: #15803d;
+        box-shadow: 0 0 15px rgba(22, 163, 92, 0.4);
+      }
+
+      #root {
+        min-height: 100vh;
+      }
+
+      /* Code Viewer Overlay */
+      .code-viewer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 15, 18, 0.92);
+        backdrop-filter: blur(12px);
+        z-index: 2000;
+        display: none;
+        place-items: center;
+        padding: 40px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      
+      .code-viewer-overlay.active {
+        display: grid;
+        opacity: 1;
+      }
+      
+      .code-viewer-window {
+        background: #0f172a;
+        border: 1px solid rgba(134, 239, 172, 0.25);
+        border-radius: 16px;
+        width: 100%;
+        max-width: 1100px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      }
+      
+      .code-viewer-header {
+        padding: 16px 24px;
+        background: #1e293b;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .code-viewer-header h3 {
+        margin: 0;
+        color: #86efac;
+        font-size: 16px;
+        font-family: 'Fira Code', monospace;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 12px;
+      }
+      
+      .code-viewer-window pre {
+        margin: 0;
+        padding: 24px;
+        overflow: auto;
+        flex: 1;
+        background: #090d16;
+        font-family: 'Fira Code', 'Courier New', Courier, monospace;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #cbd5e1;
+        text-align: left;
+      }
+      
+      /* Scrollbar adjustments */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(134, 239, 172, 0.2);
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(134, 239, 172, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Main Container -->
+    <div id="root">
+      <div class="boot">Loading ACOB travel checklist components...</div>
+    </div>
+
+    <!-- Static Footer Controls -->
+    <footer class="preview-footer">
+      <div class="footer-left">
+        <span class="logo-dot"></span>
+        <span class="brand-name">ACOB Travel Console</span>
+        <span id="load-status" class="status-badge loading">Loading...</span>
+      </div>
+      <div class="footer-right">
+        <button id="view-code-btn" class="footer-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          View Source
+        </button>
+        <a id="download-btn" class="footer-btn primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Download JSX
+        </a>
+      </div>
+    </footer>
+
+    <!-- Code Viewer Overlay -->
+    <div id="code-viewer" class="code-viewer-overlay">
+      <div class="code-viewer-window">
+        <div class="code-viewer-header">
+          <h3>acob-travel-checklist.jsx</h3>
+          <div class="header-actions">
+            <button id="copy-btn" class="footer-btn">Copy Code</button>
+            <button id="close-code-btn" class="footer-btn primary">Close</button>
+          </div>
+        </div>
+        <pre><code id="code-display"></code></pre>
+      </div>
+    </div>
+
+    <!-- Embedded JSX fallback -->
+    <script id="embedded-jsx-source" type="text/plain">import React from "react";
+
+const sources = [
+  "Public hospital directories and official facility references reviewed June 1, 2026.",
+  "Precise pins should be reconfirmed with each state liaison 48 hours before movement.",
+];
+
+const facilities = [
+  {
+    state: "Kaduna",
+    short: "KAD",
+    name: "Gwantu General Hospital",
+    town: "Gwantu, Sanga LGA",
+    address: "General Hospital Gwantu, Gwantu, Sanga LGA, Kaduna State",
+    map: "Search: General Hospital Gwantu, Gwantu Kaduna",
+    direction: "Use the Kaduna to Kafanchan corridor, then proceed toward Gwantu through Sanga. Pair with Kafanchan on the same southern Kaduna production day.",
+    day: 2,
+    priority: "Solar and clinical-service impact story",
+    shots: ["Drone arrival over hospital compound", "Solar/lighting infrastructure details", "OPD workflow", "Community beneficiary portrait"],
+  },
+  {
+    state: "Kaduna",
+    short: "KAD",
+    name: "Sir Patrick Ibrahim Yakowa Memorial Hospital",
+    town: "Kafanchan, Jema'a LGA",
+    address: "1 Hospital Road, Kafanchan, Kaduna State",
+    map: "Search: Sir Patrick Ibrahim Yakowa Memorial Hospital, Kafanchan",
+    direction: "Base in Kafanchan after Gwantu. Shoot late-afternoon exterior and interview hospital leadership early next morning if needed.",
+    day: 2,
+    priority: "Regional referral impact and COVID-era resilience",
+    shots: ["Main gate establishing shot", "Interview: medical director or matron", "Ward corridor lighting", "Before-and-after testimony"],
+  },
+  {
+    state: "Kaduna",
+    short: "KAD",
+    name: "Ikara General Hospital",
+    town: "Jamfalan / Ikara",
+    address: "Along Muarga Road, Jamfalan, Ikara LGA, Kaduna State",
+    map: "Search: Ikara General Hospital Jamfalan Kaduna",
+    direction: "Move north via Kaduna/Zaria axis, then Ikara. Keep this as the bridge between Kaduna and Kano.",
+    day: 3,
+    priority: "Rural health access and night-service reliability",
+    shots: ["Road approach and town context", "Exterior drone orbit", "Interview: facility administrator", "Lighting close-ups in priority care spaces"],
+  },
+  {
+    state: "Kano",
+    short: "KAN",
+    name: "Infectious Disease Hospital",
+    town: "Fagge / Sabon Gari",
+    address: "2G8H+27V, Sabon Gari, Fagge, Kano 700211",
+    map: "Search: Infectious Diseases Hospital Kano Fagge",
+    direction: "Start Kano city day here. It anchors the COVID-19 documentary narrative and should get the strongest interview slot.",
+    day: 4,
+    priority: "COVID-19 frontline response",
+    shots: ["Controlled exterior drone if permitted", "Isolation ward exterior", "Interview: COVID response lead", "Impact details without patient-identifiable footage"],
+  },
+  {
+    state: "Kano",
+    short: "KAN",
+    name: "Muhammad Abdullahi Wase Teaching Hospital",
+    town: "Nassarawa / Giginyu",
+    address: "Hospital Road, off Audu Bako Way, Giginyu, Nassarawa LGA, Kano State",
+    map: "Search: Muhammad Abdullahi Wase Teaching Hospital Kano",
+    direction: "Move from Fagge toward Nassarawa/Giginyu. Keep interview crew mobile while drone team handles exterior approvals.",
+    day: 4,
+    priority: "High-volume maternal and general-care impact",
+    shots: ["Hospital Road approach", "Interview: obstetrics or admin lead", "Waiting area and service flow", "Lighting reliability cutaways"],
+  },
+  {
+    state: "Kano",
+    short: "KAN",
+    name: "Sir Muhammadu Sanusi Specialist Hospital",
+    town: "Yankaba / Hadejia Road",
+    address: "Yankaba, Hadejia Road, Kano State",
+    map: "Search: Sir Muhammadu Sanusi Specialist Hospital Kano",
+    direction: "Pair with Abdullahi Wase and AKTH. Shoot exterior, specialist departments, and staff impact quotes.",
+    day: 4,
+    priority: "Specialist-care continuity",
+    shots: ["Hadejia Road approach", "Specialist clinic context", "Interview: clinical staff", "Patient-flow visuals with consent"],
+  },
+  {
+    state: "Kano",
+    short: "KAN",
+    name: "Aminu Kano Teaching Hospital",
+    town: "Unguwa Uku / Tarauni",
+    address: "Unguwa Uku, Kano 700102, Kano State",
+    map: "Search: Aminu Kano Teaching Hospital Unguwa Uku",
+    direction: "Finish Kano city day at AKTH for golden-hour scale shots and a teaching-hospital leadership interview.",
+    day: 4,
+    priority: "Teaching-hospital scale and long-term system value",
+    shots: ["Wide campus establishing shots", "Interview: engineering/facilities lead", "Teaching and service corridor", "Night-light reliability sequence"],
+  },
+  {
+    state: "Kano",
+    short: "KAN",
+    name: "Dawakin Tofa General Hospital",
+    town: "Dawakin Tofa",
+    address: "Dawakin Tofa Cikin Gari, Dawakin Tofa, Kano State",
+    map: "Search: Dawakin Tofa General Hospital Kano",
+    direction: "Leave Kano early northwest toward Dawakin Tofa. This is the natural exit toward Kazaure in Jigawa.",
+    day: 5,
+    priority: "Peri-urban service continuity",
+    shots: ["Morning road movement", "Compound drone pass", "Interview: local health worker", "Solar plant or power-room detail"],
+  },
+  {
+    state: "Jigawa",
+    short: "JIG",
+    name: "Kazaure General Hospital",
+    town: "Kazaure",
+    address: "JCX3+3X8, Kazaure 705101, Jigawa State",
+    map: "Search: Kazaure General Hospital Jigawa",
+    direction: "Continue from Dawakin Tofa into Kazaure. Capture transition from Kano corridor into Jigawa story.",
+    day: 5,
+    priority: "Northern Jigawa access and continuity",
+    shots: ["Road-to-facility transition", "Drone reveal", "Facility management interview", "Power continuity B-roll"],
+  },
+  {
+    state: "Jigawa",
+    short: "JIG",
+    name: "Babura General Hospital",
+    town: "Babura",
+    address: "Babura Kofar Arewa, Babura LGA, Jigawa State",
+    map: "Search: Babura General Hospital Jigawa",
+    direction: "Run as a Kazaure-to-Babura northern loop. Leave buffer for road condition and security check-in.",
+    day: 6,
+    priority: "Border-area health access",
+    shots: ["Town and facility context", "Drone top shot", "Interview: nursing lead", "Community patient journey"],
+  },
+  {
+    state: "Jigawa",
+    short: "JIG",
+    name: "Hadejia General Hospital",
+    town: "Hadejia",
+    address: "Hadejia town, Hadejia LGA, Jigawa State",
+    map: "Search: General Hospital Hadejia Jigawa",
+    direction: "Move east from Babura/Kazaure corridor toward Hadejia. Plan this as a lighter interview day because of drive time.",
+    day: 7,
+    priority: "Eastern Jigawa reach and beneficiary story",
+    shots: ["River-town context", "Hospital exterior", "Interview: administrator", "Impact portrait with consent"],
+  },
+  {
+    state: "Jigawa",
+    short: "JIG",
+    name: "Rasheed Shekoni Specialist Hospital",
+    town: "Dutse",
+    address: "Danmasara Kude, Dutse 720101, Jigawa State",
+    map: "Search: Rasheed Shekoni Specialist Hospital Dutse",
+    direction: "Return to Dutse as the final major facility. Close with leadership interview and documentary wrap shots.",
+    day: 7,
+    priority: "Specialist-care wrap and statewide impact",
+    shots: ["Campus-wide drone", "Interview: hospital leadership", "Specialist unit details", "Final team field log"],
+  },
+];
+
+const days = [
+  {
+    day: 1,
+    title: "Mobilize and Kaduna Production Setup",
+    base: "Kaduna or Kafanchan",
+    drive: "Arrival, equipment checks, liaison calls, permits, security briefing",
+    work: ["Confirm hospital pins and contacts", "Drone permit confirmation", "Interview schedule lock", "Shoot opening road sequence"],
+  },
+  {
+    day: 2,
+    title: "Southern Kaduna Impact Day",
+    base: "Kafanchan",
+    drive: "Kafanchan to Gwantu loop, then Sir Patrick Yakowa Hospital",
+    work: ["Gwantu General Hospital", "Sir Patrick Yakowa Hospital", "Golden-hour Kafanchan exterior", "Backup interviews if clinic flow runs late"],
+  },
+  {
+    day: 3,
+    title: "Ikara and Kano Transfer",
+    base: "Kano",
+    drive: "Kafanchan/Kaduna axis to Ikara, then Kano",
+    work: ["Ikara General Hospital", "Road movement B-roll", "Kano hotel check-in", "Kano city scout and call sheets"],
+  },
+  {
+    day: 4,
+    title: "Kano Metro Documentary Day",
+    base: "Kano",
+    drive: "Fagge, Nassarawa/Giginyu, Yankaba, Unguwa Uku",
+    work: ["Infectious Disease Hospital", "Muhammad Abdullahi Wase", "Sir Muhammadu Sanusi", "Aminu Kano Teaching Hospital"],
+  },
+  {
+    day: 5,
+    title: "Kano North to Jigawa Entry",
+    base: "Kazaure or Dutse",
+    drive: "Kano to Dawakin Tofa, then Kazaure",
+    work: ["Dawakin Tofa General Hospital", "Kazaure General Hospital", "Jigawa arrival story", "Evening data backup and rough selects"],
+  },
+  {
+    day: 6,
+    title: "Northern Jigawa Loop",
+    base: "Dutse",
+    drive: "Kazaure/Dutse to Babura, return or continue by liaison advice",
+    work: ["Babura General Hospital", "Community cutaways", "Stakeholder interview", "Drone battery rotation and media ingest"],
+  },
+  {
+    day: 7,
+    title: "Eastern Jigawa and Final Hospital",
+    base: "Dutse",
+    drive: "Dutse to Hadejia, return to Dutse",
+    work: ["Hadejia General Hospital", "Rasheed Shekoni Specialist Hospital", "Final leadership interview", "Closing visuals"],
+  },
+  {
+    day: 8,
+    title: "Reserve, Pickups, and Wrap",
+    base: "Kano, Dutse, or Kaduna depending on exit plan",
+    drive: "Buffer for weather, security delays, missed interviews, and return movement",
+    work: ["Pickup shots", "Consent-form audit", "Media checksum", "Producer review and travel wrap"],
+  },
+];
+
+const productionChecklist = [
+  "Drone permits, pilot credentials, NOTAM/local aviation guidance, and hospital written approval",
+  "Interview consent forms, appearance releases, and patient privacy protocol",
+  "Facility liaison sheet with medical director, admin officer, security desk, and power/maintenance lead",
+  "Two-camera interview kit, lavs, boom, LED panels, reflectors, ND filters, and rain covers",
+  "Drone kit with spare props, landing pad, high-vis vests, batteries, and mobile charging plan",
+  "Still photography shot list: leadership, staff, infrastructure, patient journey, exterior, community context",
+  "Data workflow: dual SSD backup, checksum, daily selects, transcription notes, and location-tagged folders",
+  "Health and security: first-aid kit, PPE, drinking water, driver rest plan, and state-by-state check-ins",
+];
+
+const routeSequence = [
+  "Abuja",
+  "Gwantu",
+  "Kafanchan",
+  "Ikara",
+  "Kano",
+  "Dawakin Tofa",
+  "Kazaure",
+  "Babura",
+  "Hadejia",
+  "Dutse",
+  "Abuja",
+];
+
+const captureEverySite = [
+  "Hospital signboard and exterior",
+  "Drone establishing shot, if approved",
+  "Solar panels, inverter, and battery system",
+  "Hospital corridors and active departments",
+  "Staff using powered equipment",
+  "Nurses, doctors, technicians, and admin staff",
+  "ACOB team inspecting the project",
+  "Hospital representative interview",
+  "Technical or maintenance interview",
+  "Human impact visuals and community context",
+];
+
+const interviewBanks = [
+  {
+    group: "Hospital management",
+    questions: [
+      "What was the power situation before the project?",
+      "How did unreliable electricity affect hospital operations?",
+      "How did the solar intervention help during or after COVID-19?",
+      "Which departments benefited most?",
+      "What has changed for staff and patients?",
+      "What is the long-term value of this project?",
+    ],
+  },
+  {
+    group: "Nurses and hospital staff",
+    questions: [
+      "How did power challenges affect your work before?",
+      "What changed after the project?",
+      "How does reliable electricity help night operations?",
+      "What difference has it made for patient care?",
+    ],
+  },
+  {
+    group: "Technical staff",
+    questions: [
+      "How does the solar system support the hospital?",
+      "What areas depend most on the system?",
+      "How has it improved maintenance and operations?",
+    ],
+  },
+  {
+    group: "ACOB team",
+    questions: [
+      "Why was this project important?",
+      "What technical challenges did ACOB solve?",
+      "What impact are you most proud of?",
+      "What does this say about renewable energy and healthcare in Nigeria?",
+    ],
+  },
+];
+
+const equipmentGroups = [
+  {
+    title: "Video and photo",
+    items: ["Main camera", "Backup camera", "Lenses", "Tripod", "Gimbal", "Drone", "Drone batteries", "Camera batteries", "Memory cards", "LED lights", "Reflector"],
+  },
+  {
+    title: "Data backup",
+    items: ["Laptop", "Card reader", "Master hard drive", "Backup hard drive", "Portable SSD", "Daily footage log"],
+  },
+];
+
+const safetyChecklist = [
+  "Move only during daylight.",
+  "Avoid night road travel.",
+  "Confirm each route every morning.",
+  "Share live location with ACOB office.",
+  "Use reliable vehicles.",
+  "Keep fuel available.",
+  "Avoid unnecessary roadside stops.",
+  "Keep drone use discreet and approved.",
+  "Do not film patients without permission.",
+  "Carry first-aid kit, water, and basic medication.",
+  "Use local contacts in every state.",
+];
+
+const backupRoutine = [
+  "Copy footage to Master Drive.",
+  "Copy footage to Backup Drive.",
+  "Label files by day, state, and hospital.",
+  "Check interviews and media quality.",
+  "Note missing shots.",
+  "Charge all batteries.",
+  "Prepare the next day call sheet.",
+];
+
+const deliverables = [
+  "Full documentary video",
+  "3-minute executive summary",
+  "60-second social media version",
+  "30-second teaser",
+  "12 short site-specific videos",
+  "Documentary photo album",
+  "LinkedIn photo story",
+  "Project impact report",
+  "Behind-the-scenes carousel",
+  "Testimonial quote cards",
+];
+
+const interviewTargets = [
+  "Hospital administrator or medical director",
+  "Nursing lead or ward supervisor",
+  "Facility engineer, electrician, or maintenance officer",
+  "COVID response lead where available",
+  "Community beneficiary, patient advocate, or local health committee representative",
+  "ACOB project lead for technical and delivery context",
+];
+
+const kpis = [
+  { label: "States", value: "3" },
+  { label: "Hospitals", value: "12" },
+  { label: "Timeline", value: "8 days" },
+  { label: "Core outputs", value: "Film, drone, photo, interviews" },
+];
+
+function cx(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
+const stopDays = {
+  "Abuja": [1, 8],
+  "Gwantu": [2],
+  "Kafanchan": [2],
+  "Ikara": [3],
+  "Kano": [3, 4, 5],
+  "Dawakin Tofa": [5],
+  "Kazaure": [5],
+  "Babura": [6],
+  "Hadejia": [7],
+  "Dutse": [7]
+};
+
+export default function ACOBTravelChecklist() {
+  const [activeState, setActiveState] = React.useState("All");
+  const [activeDay, setActiveDay] = React.useState(1);
+  const [checked, setChecked] = React.useState(() => new Set());
+  const [checkedShots, setCheckedShots] = React.useState(() => new Set());
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [coreCaptures, setCoreCaptures] = React.useState(() => new Set());
+  const [safetyChecks, setSafetyChecks] = React.useState(() => new Set());
+  const [packedItems, setPackedItems] = React.useState(() => new Set());
+  const [progressMode, setProgressMode] = React.useState("facilities");
+
+  const stateOptions = ["All", "Kaduna", "Kano", "Jigawa"];
+  const visibleFacilities = facilities.filter((facility) => {
+    const matchesState = activeState === "All" || facility.state === activeState;
+    const matchesSearch = facility.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          facility.town.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          facility.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          facility.priority.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesState && matchesSearch;
+  });
+
+  const completed = checked.size;
+  const progress = Math.round((completed / facilities.length) * 100);
+
+  const totalShots = facilities.reduce((acc, f) => acc + f.shots.length, 0);
+  const completedShots = checkedShots.size;
+  const shotProgress = totalShots > 0 ? Math.round((completedShots / totalShots) * 100) : 0;
+
+  const totalEquipment = equipmentGroups.reduce((acc, g) => acc + g.items.length, 0);
+  const packedCount = packedItems.size;
+  const packingProgress = Math.round((packedCount / totalEquipment) * 100);
+
+  function toggleFacility(facility) {
+    setChecked((current) => {
+      const next = new Set(current);
+      const isCurrentlyChecked = next.has(facility.name);
+      
+      if (isCurrentlyChecked) {
+        next.delete(facility.name);
+        setCheckedShots((prev) => {
+          const nextShots = new Set(prev);
+          facility.shots.forEach((shot) => {
+            nextShots.delete(`${facility.name}-${shot}`);
+          });
+          return nextShots;
+        });
+      } else {
+        next.add(facility.name);
+        setCheckedShots((prev) => {
+          const nextShots = new Set(prev);
+          facility.shots.forEach((shot) => {
+            nextShots.add(`${facility.name}-${shot}`);
+          });
+          return nextShots;
+        });
+      }
+      return next;
+    });
+  }
+
+  function toggleShot(facilityName, shot) {
+    setCheckedShots((current) => {
+      const next = new Set(current);
+      const shotKey = `${facilityName}-${shot}`;
+      if (next.has(shotKey)) {
+        next.delete(shotKey);
+      } else {
+        next.add(shotKey);
+      }
+      
+      const facility = facilities.find(f => f.name === facilityName);
+      if (facility) {
+        const allShotsChecked = facility.shots.every(s => next.has(`${facilityName}-${s}`));
+        setChecked((prevChecked) => {
+          const nextChecked = new Set(prevChecked);
+          if (allShotsChecked) {
+            nextChecked.add(facilityName);
+          } else {
+            nextChecked.delete(facilityName);
+          }
+          return nextChecked;
+        });
+      }
+      return next;
+    });
+  }
+
+  return (
+    <main className="acob-travel" aria-label="ACOB Travel documentary checklist">
+      <style>{styles}</style>
+
+      <section className="hero">
+        <div className="heroGrid" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="heroLogo">
+          <img src="./assets/acob-logo-black.png" alt="ACOB Lighting Technology Limited" />
+        </div>
+        <div className="heroCopy">
+          <h1>12 Energizing the Health Sector Projects Documentary Route</h1>
+          <p className="lead">
+            An 8-day field production checklist for Kaduna, Kano, and Jigawa: drone work, interviews,
+            photography, routes, addresses, permits, and story capture across all 12 facilities.
+          </p>
+          <div className="heroActions">
+            <a href="#route" className="button primary">Review route</a>
+            <a href="#checklist" className="button">Open checklist</a>
+          </div>
+        </div>
+        <div className="missionPanel">
+          <div className="routeLine">
+            <span>Kaduna</span>
+            <i />
+            <span>Kano</span>
+            <i />
+            <span>Jigawa</span>
+          </div>
+          
+          <div className="progressModeToggle">
+            <button 
+              className={cx("toggleBtn", progressMode === "facilities" && "active")}
+              onClick={() => setProgressMode("facilities")}
+              type="button"
+            >
+              Facilities
+            </button>
+            <button 
+              className={cx("toggleBtn", progressMode === "shots" && "active")}
+              onClick={() => setProgressMode("shots")}
+              type="button"
+            >
+              Shots
+            </button>
+          </div>
+
+          <div className="progressRing" style={{ "--progress": `${progressMode === "facilities" ? progress : shotProgress}%` }}>
+            <b>{progressMode === "facilities" ? progress : shotProgress}%</b>
+            <small>{progressMode === "facilities" ? "facility prep" : "shots captured"}</small>
+          </div>
+        </div>
+      </section>
+
+      <section className="kpiStrip" aria-label="Trip summary">
+        {kpis.map((kpi) => (
+          <div className="kpi" key={kpi.label}>
+            <span>{kpi.label}</span>
+            <strong>{kpi.value}</strong>
+          </div>
+        ))}
+      </section>
+
+      <div className="phaseContainer" aria-label="Phase 1: Pre-Production & Field Readiness">
+        <header className="phaseHeader">
+          <span className="phaseNumber">Phase 1</span>
+          <h2>Pre-Production & Field Readiness</h2>
+        </header>
+        <p className="phaseDesc">Verify and pack all camera/drone kits, review safety measures, establish backup routines, and define interview targets and final deliverables before deploying.</p>
+        
+        <div className="phaseContent">
+          <section className="fieldReadiness" aria-label="Field readiness">
+            <article>
+              <p className="label">Equipment</p>
+              <h2>Camera, drone, and data kit ({packedCount}/{totalEquipment} packed)</h2>
+              <div className="packingProgressBar">
+                <div className="progressFill" style={{ width: `${packingProgress}%` }} />
+              </div>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "-8px", marginBottom: "16px" }}>
+                Click items below to pack them.
+              </p>
+              <div className="kitGroups">
+                {equipmentGroups.map((group) => (
+                  <div className="kitGroup" key={group.title}>
+                    <strong>{group.title}</strong>
+                    <div>
+                      {group.items.map((item) => {
+                        const isPacked = packedItems.has(item);
+                        return (
+                          <span 
+                            key={item} 
+                            className={cx("kitItem", isPacked && "packed")}
+                            onClick={() => {
+                              setPackedItems((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(item)) next.delete(item);
+                                else next.add(item);
+                                return next;
+                              });
+                            }}
+                          >
+                            {item}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+            <article>
+              <p className="label">Safety</p>
+              <h2>Road and site movement rules ({safetyChecks.size}/{safetyChecklist.length})</h2>
+              <div className="safetyList">
+                {safetyChecklist.map((item) => {
+                  const isChecked = safetyChecks.has(item);
+                  return (
+                    <label key={item} className={cx(isChecked && "isChecked")}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => {
+                          setSafetyChecks((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item)) next.delete(item);
+                            else next.add(item);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span>{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </article>
+            <article>
+              <p className="label">Daily backup</p>
+              <h2>End-of-day media routine</h2>
+              <ol className="backupList">
+                {backupRoutine.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ol>
+            </article>
+          </section>
+
+          <section className="productionGrid single">
+            <article>
+              <p className="label">Interview plan</p>
+              <h2>People to put on camera</h2>
+              <div className="interviewList">
+                {interviewTargets.map((target) => (
+                  <div key={target}>
+                    <span />
+                    <p>{target}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="callout">
+                <strong>Privacy rule</strong>
+                <p>No patient-identifiable images without written consent. Film care areas from behind, through hands, equipment, corridors, and staff-led demonstrations when consent is not available.</p>
+              </div>
+            </article>
+          </section>
+
+          <section className="deliverableWall" aria-label="Final deliverables">
+            <div>
+              <p className="label">Final deliverables</p>
+              <h2>One documentary system, many outputs</h2>
+            </div>
+            <div className="deliverables">
+              {deliverables.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div className="phaseContainer" aria-label="Phase 2: Route Itinerary & Schedule">
+        <header className="phaseHeader">
+          <span className="phaseNumber">Phase 2</span>
+          <h2>Route Itinerary & Schedule</h2>
+        </header>
+        <p className="phaseDesc">Track the daily base locations, regional movements, and work checklists across the 8-day route timeline.</p>
+        
+        <div className="phaseContent">
+          <section className="routeRibbon" aria-label="Main route">
+            <div>
+              <p className="label">Main route</p>
+              <h2>Abuja to the field sites and back to Abuja</h2>
+              <p>Active route stops are highlighted in green based on your selected active day on the board.</p>
+            </div>
+            <div className="routeStops">
+              {routeSequence.map((stop, index) => {
+                const isActive = stopDays[stop]?.includes(activeDay);
+                return (
+                  <React.Fragment key={`${stop}-${index}`}>
+                    <span className={cx(isActive && "isActiveStop")}>
+                      {stop}
+                      {isActive && <span className="pulseDot" />}
+                    </span>
+                    {index < routeSequence.length - 1 ? <i className={cx(isActive && "isActiveLink")} aria-hidden="true" /> : null}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="workspace" id="route">
+            <aside className="dayRail" aria-label="8 day route">
+              <div className="railHead">
+                <span>Route board</span>
+                <strong>8 days</strong>
+              </div>
+              {days.map((item) => (
+                <button
+                  className={cx("dayButton", activeDay === item.day && "isActive")}
+                  key={item.day}
+                  onClick={() => setActiveDay(item.day)}
+                  type="button"
+                >
+                  <span>Day {item.day}</span>
+                  <strong>{item.title}</strong>
+                </button>
+              ))}
+            </aside>
+
+            <section className="dayDetail">
+              {days.filter((item) => item.day === activeDay).map((item) => (
+                <article key={item.day} className="detailPanel">
+                  <div className="panelTop">
+                    <p className="label">Day {item.day}</p>
+                    <h2>{item.title}</h2>
+                    <span>{item.base}</span>
+                  </div>
+                  <div className="directionBlock">
+                    <strong>Best movement</strong>
+                    <p>{item.drive}</p>
+                  </div>
+                  <div className="workGrid">
+                    {item.work.map((work) => (
+                      <div className="workItem" key={work}>
+                        <span />
+                        <p>{work}</p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </section>
+          </section>
+        </div>
+      </div>
+
+      <div className="phaseContainer" aria-label="Phase 3: On-Site Execution">
+        <header className="phaseHeader">
+          <span className="phaseNumber">Phase 3</span>
+          <h2>On-Site Execution</h2>
+        </header>
+        <p className="phaseDesc">Manage active site checklists, locate facility contacts, follow directions, and tick off required shots for each general and specialist hospital.</p>
+        
+        <div className="phaseContent">
+          <section className="facilitySection" id="checklist">
+            <div className="sectionHead">
+              <div>
+                <p className="label">Facility checklist</p>
+                <h2>Addresses, directions, and documentary tasks</h2>
+              </div>
+              <div className="searchAndFilter">
+                <div className="searchWrapper">
+                  <svg className="searchIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input 
+                    type="text" 
+                    placeholder="Search facilities, LGAs, tasks..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="searchInput"
+                  />
+                  {searchQuery && (
+                    <button className="clearSearch" onClick={() => setSearchQuery("")}>&times;</button>
+                  )}
+                </div>
+                <div className="tabs" role="tablist" aria-label="Filter facilities by state">
+                  {stateOptions.map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={cx(activeState === option && "isActive")}
+                      onClick={() => setActiveState(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="facilityList">
+              {visibleFacilities.map((facility) => {
+                const isChecked = checked.has(facility.name);
+                return (
+                  <article className={cx("facility", isChecked && "isChecked")} key={facility.name}>
+                    <button
+                      type="button"
+                      className="check"
+                      onClick={() => toggleFacility(facility)}
+                      aria-pressed={isChecked}
+                      aria-label={`Mark ${facility.name} prepared`}
+                    >
+                      <span>{isChecked ? "OK" : ""}</span>
+                    </button>
+                    <div className="facilityMain">
+                      <div className="facilityTitle">
+                        <span>{facility.short}</span>
+                        <div>
+                          <h3>{facility.name}</h3>
+                          <p>{facility.town}</p>
+                        </div>
+                      </div>
+                      <dl className="facilityMeta">
+                        <div>
+                          <dt>Address</dt>
+                          <dd>{facility.address}</dd>
+                        </div>
+                        <div>
+                          <dt>Map direction</dt>
+                          <dd>{facility.map}</dd>
+                        </div>
+                        <div>
+                          <dt>Route note</dt>
+                          <dd>{facility.direction}</dd>
+                        </div>
+                        <div>
+                          <dt>Story priority</dt>
+                          <dd>{facility.priority}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="shotList">
+                      <strong>Capture list</strong>
+                      {facility.shots.map((shot) => {
+                        const isShotChecked = checkedShots.has(`${facility.name}-${shot}`);
+                        return (
+                          <label key={shot} className={cx("shotCheckLabel", isShotChecked && "checked")}>
+                            <input 
+                              type="checkbox" 
+                              checked={isShotChecked}
+                              onChange={() => toggleShot(facility.name, shot)}
+                            />
+                            <span>{shot}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div className="phaseContainer" aria-label="Phase 4: Reference Guide">
+        <header className="phaseHeader">
+          <span className="phaseNumber">Phase 4</span>
+          <h2>Reference Guide</h2>
+        </header>
+        <p className="phaseDesc">Consult the interview question banks and default shot B-roll lists required at every hospital site to ensure story-telling continuity.</p>
+        
+        <div className="phaseContent">
+          <section className="creativeOps" aria-label="Documentary creative operations">
+            <article className="capturePanel">
+              <p className="label">Every site</p>
+              <h2>Core B-Roll checklist ({coreCaptures.size}/{captureEverySite.length})</h2>
+              <div className="captureGrid">
+                {captureEverySite.map((item) => {
+                  const isChecked = coreCaptures.has(item);
+                  return (
+                    <label key={item} className={cx(isChecked && "isChecked")}>
+                      <input 
+                        type="checkbox" 
+                        checked={isChecked}
+                        onChange={() => {
+                          setCoreCaptures((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item)) next.delete(item);
+                            else next.add(item);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span>{item}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </article>
+            <article className="interviewPanel">
+              <p className="label">Interview bank</p>
+              <h2>Questions that carry the story</h2>
+              <div className="questionStack">
+                {interviewBanks.map((bank) => (
+                  <details key={bank.group}>
+                    <summary>{bank.group}</summary>
+                    <ol>
+                      {bank.questions.map((question) => (
+                        <li key={question}>{question}</li>
+                      ))}
+                    </ol>
+                  </details>
+                ))}
+              </div>
+            </article>
+          </section>
+        </div>
+      </div>
+
+      <section className="wrap">
+        <div>
+          <p className="label">Route logic</p>
+          <h2>Kaduna south to Ikara, Kano metro, Kano north, then Jigawa west to east.</h2>
+        </div>
+        <p>
+          This order reduces backtracking: southern Kaduna is handled before the northern Kaduna bridge into Kano;
+          Kano city hospitals are grouped tightly; Dawakin Tofa becomes the exit toward Kazaure; Jigawa then moves
+          through Babura, Hadejia, and Dutse with Day 8 protected for pickups and travel recovery.
+        </p>
+        <div className="sourceNote">
+          {sources.map((source) => (
+            <span key={source}>{source}</span>
+          ))}
+        </div>
+        <blockquote>When healthcare needed power most, light became part of the response.</blockquote>
+      </section>
+    </main>
+  );
+}
+
+const styles = `
+:root {
+  color-scheme: light;
+  --bg-base: #f8fafc;
+  --bg-surface: rgba(255, 255, 255, 0.7);
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --border-subtle: rgba(22, 163, 92, 0.12);
+  --border-focus: rgba(22, 163, 92, 0.3);
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-accent: #15803d;
+  --accent-glow: 0 0 20px rgba(22, 163, 92, 0.12);
+  --primary: #16a35c;
+  --primary-hover: #15803d;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-base);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Base layout: Mobile-First */
+.acob-travel {
+  min-height: 100vh;
+  background: 
+    radial-gradient(circle at 10% 0%, rgba(22, 163, 92, 0.05), transparent 40rem),
+    radial-gradient(circle at 90% 80%, rgba(247, 201, 72, 0.04), transparent 40rem),
+    var(--bg-base);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Shared Containers */
+.routeRibbon, 
+.creativeOps article, 
+.fieldReadiness article, 
+.deliverableWall, 
+.dayRail, 
+.detailPanel, 
+.facility, 
+.productionGrid article, 
+.wrap {
+  background: #ffffff;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
+}
+
+/* Hero Section - Mobile Base */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  background: 
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 253, 244, 0.95)),
+    url("https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=1800&q=82") center / cover;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(22, 163, 92, 0.1);
+}
+
+.heroGrid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  opacity: 0.15;
+  pointer-events: none;
+}
+.heroGrid span {
+  border-left: 1px solid var(--text-accent);
+}
+
+.heroLogo {
+  margin-bottom: 4px;
+  z-index: 1;
+}
+.heroLogo img {
+  height: 36px;
+  width: auto;
+  display: block;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+}
+
+.label {
+  display: inline-block;
+  margin: 0 0 12px;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 4px 8px;
+  background: rgba(22, 163, 92, 0.08);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(22, 163, 92, 0.15);
+}
+
+h1, h2, h3, p { text-wrap: pretty; }
+
+h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  font-weight: 800;
+}
+
+.lead {
+  margin: 16px 0 0;
+  color: #334155;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(22, 163, 92, 0.2);
+  border-radius: var(--radius-md);
+  padding: 0 20px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+}
+
+.button.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(22, 163, 92, 0.3);
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  background: rgba(22, 163, 92, 0.05);
+}
+
+.button.primary:hover {
+  background: var(--primary-hover);
+  box-shadow: 0 6px 20px rgba(22, 163, 92, 0.4);
+  color: #ffffff;
+}
+
+.button:active {
+  transform: translateY(0);
+}
+
+/* Mission Panel - Mobile Base */
+.missionPanel {
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.04);
+  width: 100%;
+}
+
+.routeLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-accent);
+  font-size: 11px;
+  font-weight: 700;
+  justify-content: center;
+}
+
+.routeLine i {
+  width: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--text-accent), transparent);
+}
+
+.progressRing {
+  display: grid;
+  width: 160px;
+  height: 160px;
+  place-items: center;
+  margin: 20px auto;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #ffffff 56%, transparent 58%),
+    conic-gradient(var(--text-accent) var(--progress), rgba(22, 163, 92, 0.08) 0);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.02), 0 0 20px rgba(134, 239, 172, 0.1);
+}
+
+.progressRing b {
+  display: block;
+  color: #0f172a;
+  font-size: 36px;
+  font-weight: 800;
+}
+
+.progressRing small {
+  margin-top: -60px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.progressModeToggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  margin-bottom: -8px;
+  z-index: 2;
+  position: relative;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.progressModeToggle .toggleBtn {
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.progressModeToggle .toggleBtn.active {
+  background: #ffffff;
+  color: var(--text-accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* KPI Strip - Mobile Base */
+.kpiStrip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.kpi {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  transition: background 0.3s ease;
+}
+
+.kpi:hover {
+  background: rgba(240, 253, 244, 0.5);
+}
+
+.kpi span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.kpi strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-accent);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* Phases Layout - Mobile Base */
+.phaseContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.02);
+}
+
+.phaseHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 2px solid rgba(22, 163, 92, 0.1);
+  padding-bottom: 12px;
+  margin: 0;
+}
+
+.phaseNumber {
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+
+.phaseHeader h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.phaseDesc {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: -4px 0 4px;
+  max-width: 100%;
+}
+
+.phaseContent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Phase 1: Pre-Production & Field Readiness - Mobile Base */
+.fieldReadiness {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.fieldReadiness article {
+  padding: 16px;
+}
+
+.packingProgressBar {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 12px;
+}
+
+.packingProgressBar .progressFill {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.kitGroups {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.kitGroup {
+  display: grid;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: rgba(240, 253, 244, 0.4);
+  border: 1px solid rgba(22, 163, 92, 0.08);
+}
+
+.kitGroup strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.kitGroup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kitGroup span.kitItem {
+  border-radius: 20px;
+  padding: 6px 12px;
+  color: #15803d;
+  background: rgba(22, 163, 92, 0.05);
+  border: 1px solid rgba(22, 163, 92, 0.15);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.kitGroup span.kitItem:hover {
+  background: rgba(22, 163, 92, 0.1);
+  box-shadow: var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.kitGroup span.kitItem.packed {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+.safetyList {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.safetyList label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  color: #334155;
+  background: rgba(240, 253, 244, 0.4);
+  border: 1px solid rgba(22, 163, 92, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.safetyList label:hover {
+  background: rgba(22, 163, 92, 0.05);
+  border-color: rgba(22, 163, 92, 0.15);
+}
+
+.safetyList label.isChecked {
+  background: rgba(22, 163, 92, 0.08);
+  border-color: rgba(22, 163, 92, 0.25);
+  color: #15803d;
+  font-weight: 600;
+}
+
+.safetyList input {
+  margin-top: 3px;
+  accent-color: var(--primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.backupList {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  color: #334155;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.backupList li::marker {
+  color: var(--text-accent);
+  font-weight: bold;
+}
+
+.backupList li + li {
+  margin-top: 8px;
+}
+
+.productionGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.productionGrid article {
+  padding: 16px;
+}
+
+.interviewList {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.interviewList div {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(240, 253, 244, 0.4);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(22, 163, 92, 0.08);
+}
+
+.interviewList span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--text-accent);
+  box-shadow: var(--accent-glow);
+}
+
+.interviewList p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.callout {
+  margin-top: 20px;
+  border: 1px solid rgba(247, 201, 72, 0.4);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: rgba(247, 201, 72, 0.08);
+}
+
+.callout strong {
+  color: #b45309;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.callout strong::before {
+  content: '⚠️';
+}
+
+.callout p {
+  margin: 8px 0 0;
+  color: #78350f;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.deliverableWall {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.deliverables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deliverables span {
+  border-radius: 20px;
+  padding: 6px 12px;
+  background: rgba(247, 201, 72, 0.06);
+  color: #b45309;
+  border: 1px solid rgba(247, 201, 72, 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.deliverables span:hover {
+  background: rgba(247, 201, 72, 0.12);
+  box-shadow: 0 0 20px rgba(247, 201, 72, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Phase 2: Route Itinerary & Schedule - Mobile Base */
+.routeRibbon {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.routeRibbon h2 {
+  font-size: 20px;
+}
+
+.routeRibbon p:not(.label) {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.routeStops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.routeStops span {
+  border: 1px solid rgba(22, 163, 92, 0.2);
+  border-radius: 20px;
+  padding: 6px 12px;
+  color: #15803d;
+  background: rgba(22, 163, 92, 0.05);
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.routeStops span.isActiveStop {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(22, 163, 92, 0.4);
+  transform: scale(1.05);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border-radius: 50%;
+  animation: pulseStop 1.5s infinite;
+}
+
+@keyframes pulseStop {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+.routeStops i {
+  width: 12px;
+  height: 2px;
+  background: rgba(22, 163, 92, 0.15);
+}
+
+.routeStops i.isActiveLink {
+  background: var(--primary);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.dayRail {
+  padding: 12px;
+  position: static;
+}
+
+.railHead {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+
+.railHead span {
+  color: var(--text-accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.dayButton {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.dayButton:hover {
+  background: rgba(22, 163, 92, 0.03);
+  transform: translateX(4px);
+}
+
+.dayButton.isActive {
+  background: rgba(22, 163, 92, 0.08);
+  border-color: rgba(22, 163, 92, 0.25);
+  color: #0f172a;
+  box-shadow: inset 4px 0 0 var(--text-accent);
+}
+
+.dayButton span {
+  color: var(--text-accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dayButton strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.detailPanel {
+  padding: 16px;
+}
+
+.panelTop {
+  display: grid;
+  gap: 8px;
+}
+
+.panelTop h2 {
+  font-size: 20px;
+}
+
+.panelTop span {
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.panelTop span::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-accent);
+}
+
+.directionBlock {
+  margin-top: 16px;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: rgba(22, 163, 92, 0.04);
+  border: 1px solid rgba(22, 163, 92, 0.1);
+}
+
+.directionBlock strong {
+  color: var(--text-accent);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.directionBlock p {
+  margin: 8px 0 0;
+  color: #334155;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.workGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.workItem {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: rgba(240, 253, 244, 0.4);
+}
+
+.workItem span {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--text-accent);
+}
+
+.workItem p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.4;
+  font-size: 13px;
+}
+
+/* Phase 3: On-Site Execution - Mobile Base */
+.facilitySection {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sectionHead h2 {
+  font-size: 20px;
+}
+
+.searchAndFilter {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.searchWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(240, 253, 244, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  min-height: 44px;
+  width: 100%;
+}
+
+.searchWrapper:focus-within {
+  border-color: var(--primary);
+  background: #ffffff;
+}
+
+.searchIcon {
+  color: var(--text-muted);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  width: 100%;
+  outline: none;
+}
+
+.clearSearch {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  background: rgba(240, 253, 244, 0.4);
+  overflow-x: auto;
+  width: 100%;
+}
+
+.tabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  color: var(--text-muted);
+  background: transparent;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  flex: 1 0 auto;
+}
+
+.tabs button.isActive {
+  background: var(--text-accent);
+  color: #ffffff;
+}
+
+.facilityList {
+  display: grid;
+  gap: 12px;
+}
+
+.facility {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+}
+
+.facility.isChecked {
+  background: linear-gradient(180deg, rgba(22, 163, 92, 0.04), #ffffff);
+  border-color: rgba(22, 163, 92, 0.2);
+}
+
+.check {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 2px solid rgba(22, 163, 92, 0.3);
+  border-radius: var(--radius-md);
+  color: transparent;
+  background: rgba(240, 253, 244, 0.4);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.check:hover {
+  border-color: var(--text-accent);
+}
+
+.isChecked .check {
+  background: var(--text-accent);
+  border-color: var(--text-accent);
+  color: #ffffff;
+}
+
+.check span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.facilityMain {
+  display: flex;
+  flex-direction: column;
+}
+
+.facilityTitle {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.facilityTitle > span {
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: #ffffff;
+  background: var(--text-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.facilityTitle h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.facilityTitle p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.facilityMeta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.facilityMeta dt {
+  color: var(--text-accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.facilityMeta dd {
+  margin: 4px 0 0;
+  color: #334155;
+  line-height: 1.4;
+  font-size: 13px;
+}
+
+.shotList {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.shotList strong {
+  color: #0f172a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.shotCheckLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: #334155;
+  background: rgba(240, 253, 244, 0.4);
+  border: 1px solid rgba(22, 163, 92, 0.08);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.shotCheckLabel:hover {
+  background: rgba(22, 163, 92, 0.05);
+  border-color: rgba(22, 163, 92, 0.2);
+}
+
+.shotCheckLabel.checked {
+  background: rgba(22, 163, 92, 0.08);
+  border-color: rgba(22, 163, 92, 0.25);
+  color: #15803d;
+  font-weight: 600;
+}
+
+.shotCheckLabel input {
+  margin-top: 2px;
+  accent-color: var(--primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* Phase 4: Reference Guide - Mobile Base */
+.creativeOps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.creativeOps article {
+  padding: 16px;
+}
+
+.captureGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.captureGrid label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  color: #334155;
+  background: rgba(240, 253, 244, 0.4);
+  border: 1px solid rgba(22, 163, 92, 0.08);
+  cursor: pointer;
+}
+
+.captureGrid input {
+  margin-top: 3px;
+  accent-color: var(--primary);
+  width: 14px;
+  height: 14px;
+}
+
+.captureGrid label.isChecked {
+  background: rgba(22, 163, 92, 0.08);
+  border-color: rgba(22, 163, 92, 0.25);
+  color: #15803d;
+  font-weight: 600;
+}
+
+.questionStack {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.questionStack details {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(240, 253, 244, 0.4);
+  overflow: hidden;
+}
+
+.questionStack details[open] {
+  background: rgba(22, 163, 92, 0.05);
+  border-color: rgba(22, 163, 92, 0.2);
+}
+
+.questionStack summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 14px;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.questionStack summary::-webkit-details-marker {
+  display: none;
+}
+.questionStack summary::after {
+  content: '+';
+  color: var(--text-accent);
+  font-size: 16px;
+}
+.questionStack details[open] summary::after {
+  content: '-';
+}
+
+.questionStack ol {
+  margin: 0;
+  padding: 0 16px 16px 28px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.questionStack li + li {
+  margin-top: 8px;
+}
+
+/* Wrap-up - Mobile Base */
+.wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 16px;
+}
+
+.wrap h2 {
+  font-size: 20px;
+}
+
+.wrap > p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+.sourceNote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.sourceNote span {
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--text-muted);
+  background: rgba(240, 253, 244, 0.4);
+  font-size: 11px;
+  border: 1px solid rgba(22, 163, 92, 0.08);
+}
+
+.wrap blockquote {
+  margin: 12px 0 0;
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  color: #15803d;
+  background: linear-gradient(135deg, rgba(247, 201, 72, 0.08), rgba(22, 163, 92, 0.08));
+  border: 1px solid rgba(22, 163, 92, 0.15);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* ==========================================
+   PROGRESSIVE ENHANCEMENT: Tablet Queries
+   ========================================== */
+@media (min-width: 768px) {
+  .acob-travel {
+    padding: 24px;
+    gap: 24px;
+  }
+
+  .hero {
+    padding: 32px;
+  }
+
+  h1 {
+    font-size: 44px;
+  }
+
+  .lead {
+    font-size: 16px;
+  }
+
+  .heroLogo img {
+    height: 40px;
+  }
+
+  .kpiStrip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .kpi {
+    padding: 20px;
+  }
+
+  .kpi strong {
+    font-size: 24px;
+  }
+
+  .phaseContainer {
+    padding: 24px;
+    gap: 20px;
+  }
+
+  .phaseHeader h2 {
+    font-size: 22px;
+  }
+
+  .phaseDesc {
+    font-size: 14px;
+  }
+
+  .fieldReadiness {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .fieldReadiness article:last-child {
+    grid-column: span 2;
+  }
+
+  .productionGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .productionGrid article:last-child {
+    grid-column: span 2;
+  }
+
+  .routeRibbon {
+    padding: 24px;
+  }
+
+  .routeRibbon h2 {
+    font-size: 24px;
+  }
+
+  .routeStops span {
+    font-size: 13px;
+  }
+
+  .workspace {
+    grid-template-columns: 260px 1fr;
+  }
+
+  .dayRail {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+  }
+
+  .detailPanel {
+    padding: 24px;
+  }
+
+  .panelTop h2 {
+    font-size: 24px;
+  }
+
+  .workGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sectionHead {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .searchAndFilter {
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+  }
+
+  .searchWrapper {
+    width: 250px;
+  }
+
+  .tabs {
+    width: auto;
+  }
+
+  .facility {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .shotList {
+    grid-column: 2;
+  }
+
+  .creativeOps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .captureGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wrap {
+    padding: 24px;
+  }
+
+  .wrap h2 {
+    font-size: 24px;
+  }
+
+  .sourceNote {
+    flex-direction: row;
+  }
+
+  .wrap blockquote {
+    font-size: 22px;
+    padding: 24px;
+  }
+}
+
+/* ==========================================
+   PROGRESSIVE ENHANCEMENT: Desktop Queries
+   ========================================== */
+@media (min-width: 1200px) {
+  .acob-travel {
+    padding: 32px;
+    gap: 32px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    min-height: 500px;
+    padding: 48px;
+  }
+
+  h1 {
+    font-size: 60px;
+  }
+
+  .lead {
+    font-size: 18px;
+    margin-top: 24px;
+  }
+
+  .heroCopy {
+    align-self: center;
+  }
+
+  .heroLogo {
+    grid-column: 1 / -1;
+  }
+
+  .heroLogo img {
+    height: 48px;
+  }
+
+  .missionPanel {
+    align-self: center;
+    padding: 32px;
+  }
+
+  .kpiStrip {
+    grid-template-columns: repeat(4, 1fr);
+    background: rgba(22, 163, 92, 0.15);
+    border: 1px solid rgba(22, 163, 92, 0.15);
+    border-radius: var(--radius-lg);
+    gap: 1px;
+    overflow: hidden;
+  }
+
+  .kpi {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .kpi strong {
+    font-size: 28px;
+  }
+
+  .phaseContainer {
+    padding: 32px;
+    gap: 24px;
+    border-radius: var(--radius-xl);
+  }
+
+  .phaseHeader {
+    padding-bottom: 16px;
+  }
+
+  .phaseHeader h2 {
+    font-size: 26px;
+  }
+
+  .phaseNumber {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .phaseDesc {
+    font-size: 15px;
+    margin: -8px 0 8px;
+  }
+
+  .fieldReadiness {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fieldReadiness article:last-child {
+    grid-column: auto;
+  }
+
+  .fieldReadiness article {
+    padding: 32px;
+  }
+
+  .productionGrid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  }
+
+  .productionGrid article:last-child {
+    grid-column: auto;
+  }
+
+  .productionGrid article {
+    padding: 32px;
+  }
+
+  .deliverableWall {
+    grid-template-columns: minmax(300px, 0.36fr) minmax(0, 0.64fr);
+    padding: 40px;
+    align-items: center;
+  }
+
+  .routeRibbon {
+    grid-template-columns: minmax(300px, 0.4fr) minmax(0, 0.6fr);
+    padding: 32px;
+    align-items: center;
+  }
+
+  .routeRibbon p:not(.label) {
+    margin-top: 16px;
+  }
+
+  .workspace {
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .dayRail {
+    padding: 16px;
+  }
+
+  .detailPanel {
+    padding: 40px;
+  }
+
+  .facility {
+    grid-template-columns: 56px minmax(0, 1fr) 300px;
+    padding: 24px;
+  }
+
+  .shotList {
+    grid-column: auto;
+    border-left: 1px solid var(--border-subtle);
+    padding-left: 24px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .facilityMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .creativeOps article {
+    padding: 32px;
+  }
+
+  .wrap {
+    grid-template-columns: 0.8fr 1fr;
+    padding: 40px;
+    gap: 32px;
+  }
+
+  .wrap blockquote {
+    font-size: 28px;
+    padding: 32px;
+  }
+}
+\`;
+`;
+</script>
+
+    <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+    <script type="module">
+      import React from "https://esm.sh/react@18.3.1";
+      import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+
+      const root = createRoot(document.getElementById("root"));
+      const loadStatus = document.getElementById("load-status");
+      const downloadBtn = document.getElementById("download-btn");
+      const viewCodeBtn = document.getElementById("view-code-btn");
+      const codeViewer = document.getElementById("code-viewer");
+      const closeCodeBtn = document.getElementById("close-code-btn");
+      const codeDisplay = document.getElementById("code-display");
+      const copyBtn = document.getElementById("copy-btn");
+
+      let source = "";
+      let loadMethod = "";
+
+      // Try fetching from the server (local HTTP or Vite)
+      try {
+        if (window.location.protocol === "file:") {
+          throw new Error("Local file protocol - fetch disabled due to CORS");
+        }
+        
+        const response = await fetch('./acob-travel-checklist.jsx?v=' + Date.now());
+        if (!response.ok) {
+          throw new Error('HTTP error! status: ' + response.status);
+        }
+        const text = await response.text();
+        
+        // Simple sanity check: does it look like our JSX code (e.g. contains the main component export)?
+        if (text.includes("ACOBTravelChecklist")) {
+          source = text;
+          loadMethod = "Server (acob-travel-checklist.jsx)";
+        } else {
+          throw new Error("Fetched file contents are invalid (may be compiled JS/HTML)");
+        }
+      } catch (error) {
+        console.warn("Could not load external JSX, using embedded fallback:", error);
+        const fallbackScript = document.getElementById("embedded-jsx-source");
+        if (fallbackScript) {
+          source = fallbackScript.textContent;
+          loadMethod = "Embedded Fallback";
+        } else {
+          loadMethod = "Failed to load";
+        }
+      }
+
+      if (source) {
+        // Update status badge
+        loadStatus.textContent = 'Source: ' + loadMethod;
+        loadStatus.className = 'status-badge ' + (loadMethod.toLowerCase().includes("server") ? "success" : "warning");
+
+        // Setup download link
+        const blob = new Blob([source], { type: "text/javascript" });
+        const downloadUrl = URL.createObjectURL(blob);
+        downloadBtn.href = downloadUrl;
+        downloadBtn.download = "acob-travel-checklist.jsx";
+
+        // Setup code viewer
+        codeDisplay.textContent = source;
+
+        // Compile and render component
+        try {
+          const transformed = Babel.transform(
+            source
+              .replace('import React from "react";', "")
+              .replace("export default function ACOBTravelChecklist()", "function ACOBTravelChecklist()"),
+            {
+              presets: [["react", { runtime: "classic" }]],
+            },
+          ).code;
+
+          const componentFactory = new Function("React", transformed + "; return ACOBTravelChecklist;");
+          const ACOBTravelChecklist = componentFactory(React);
+          root.render(React.createElement(ACOBTravelChecklist));
+        } catch (compileError) {
+          console.error("Compilation error:", compileError);
+          document.getElementById("root").innerHTML = `
+            <div class="boot error">
+              <h2>Failed to compile JSX</h2>
+              <pre>${compileError.message}</pre>
+            </div>
+          `;
+        }
+      } else {
+        loadStatus.textContent = "Error: No source loaded";
+        loadStatus.className = "status-badge error";
+        document.getElementById("root").innerHTML = `
+          <div class="boot error">
+            <h2>Failed to load JSX</h2>
+            <p>Make sure the acob-travel-checklist.jsx file exists next to the preview.html.</p>
+          </div>
+        `;
+      }
+
+      // Code Viewer Interactions
+      viewCodeBtn.addEventListener("click", () => {
+        codeViewer.style.display = "grid";
+        setTimeout(() => codeViewer.classList.add("active"), 10);
+      });
+
+      const closeCode = () => {
+        codeViewer.classList.remove("active");
+        setTimeout(() => codeViewer.style.display = "none", 300);
+      };
+
+      closeCodeBtn.addEventListener("click", closeCode);
+      codeViewer.addEventListener("click", (e) => {
+        if (e.target === codeViewer) closeCode();
+      });
+
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(source).then(() => {
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => {
+            copyBtn.textContent = "Copy Code";
+          }, 2000);
+        });
+      });
+    </script>
+  </body>
+</html>

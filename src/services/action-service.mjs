@@ -233,6 +233,17 @@ export async function submitRouteAction(route, action, form, options = {}) {
   if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
   }
+
+  // After successful user create, reset on upstream so the password is registered there too.
+  // The upstream UserCreateRequest schema has no password field, so a reset call is needed
+  // to initialise the account on systems that share the same upstream API.
+  if (endpoint === "/api/user/create" && action === "Add" && payload.userId) {
+    try {
+      await api.postApi("/api/user/reset", { userId: payload.userId });
+    } catch {
+      // Non-fatal — user is created; reset failure only affects upstream password sync
+    }
+  }
   if (isCustomerDelete(route, action)) {
     await verifyCustomerDeleted(form, api);
   }

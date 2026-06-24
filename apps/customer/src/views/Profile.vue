@@ -7,7 +7,6 @@ import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 import { api, ApiError } from '../lib/api';
-import { PORTAL_URLS } from '../lib/portals';
 
 const auth   = useAuthStore();
 const router = useRouter();
@@ -25,13 +24,21 @@ const uploading = ref(false);
 const cropOpen = ref(false);
 const cropFile = ref<File | null>(null);
 
+function fallback(value: string | null | undefined): string {
+    return value?.trim() || '-';
+}
+
+function titleCase(value: string | null | undefined): string {
+    if (!value) return '-';
+    return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 async function saveProfile() {
     loading.value = true; error.value = null;
     try {
         const r = await api.patch<any>('/api/v1/customer/me', {
             full_name: fullName.value.trim(),
             email: email.value.trim() || undefined,
-            profile_picture_url: profilePictureUrl.value.trim() || null,
         });
         if (auth.customer) {
             auth.customer.full_name = r.full_name;
@@ -46,9 +53,13 @@ async function saveProfile() {
     } finally { loading.value = false; }
 }
 async function removeProfilePicture() {
-    await api.del('/api/v1/customer/profile-picture');
-    profilePictureUrl.value = '';
-    if (auth.customer) auth.customer.profile_picture_url = null;
+    loading.value = true; error.value = null;
+    try {
+        await api.del('/api/v1/customer/profile-picture');
+        profilePictureUrl.value = '';
+        await auth.refreshProfile();
+    } catch (e: any) { error.value = e?.message ?? 'Picture removal failed.'; }
+    finally { loading.value = false; }
 }
 
 async function uploadProfilePicture(event: Event) {
@@ -73,12 +84,19 @@ async function uploadProcessedProfilePicture(file: File) {
             content_type: file.type,
             size_bytes: file.size,
         });
-        await fetch(payload.signed_url, {
+        if (!payload?.signed_url || !payload?.public_url) throw new Error('profile_picture_upload_unavailable');
+        const uploadResponse = await fetch(payload.signed_url, {
             method: 'PUT',
             headers: { 'Content-Type': file.type },
             body: file,
         });
-        profilePictureUrl.value = payload.public_url;
+        if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed');
+        const activated = await api.post<any>('/api/v1/customer/profile-picture/activate', { path: payload.path });
+        profilePictureUrl.value = activated.profile_picture_url;
+        await auth.refreshProfile();
+        await auth.refreshProfile();
+    } catch (e: any) {
+        error.value = e?.message ?? 'Picture upload failed.';
     } finally {
         uploading.value = false;
     }
@@ -143,7 +161,7 @@ async function doSignOut() {
       @done="(f) => { cropOpen = false; uploadProcessedProfilePicture(f); }"
     />
     <!-- Avatar + name -->
-    <div class="bw-card" style="text-align:center; padding: var(--s-6)">
+    <div class="bw-card" style="text-align:center; padding: var(--s-6); margin-top: var(--s-3)">
       <div style="width:64px; height:64px; border-radius:50%; background: linear-gradient(135deg, var(--brand-300), var(--brand-600)); display:grid; place-items:center; margin: 0 auto var(--s-3); font-size:28px; font-weight:700; color:white; overflow:hidden">
         <img v-if="auth.customer?.profile_picture_url" :src="auth.customer.profile_picture_url" alt="Profile" style="width:100%; height:100%; object-fit:cover" />
         <template v-else>{{ (auth.customer?.full_name ?? '?')[0].toUpperCase() }}</template>
@@ -177,6 +195,10 @@ async function doSignOut() {
             <p class="bw-label">Phone</p>
             <p class="bw-mono" style="margin:0">{{ auth.customer?.phone }}</p>
           </div>
+          <div>
+            <p class="bw-label">KYC status</p>
+            <p style="margin:0; color: var(--brand); font-weight:700">{{ titleCase(auth.customer?.kyc_status) }}</p>
+          </div>
         </div>
         <p v-if="saved" class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-3); color: var(--brand)">✓ Profile updated</p>
       </template>
@@ -191,10 +213,10 @@ async function doSignOut() {
           <input class="bw-input" v-model="email" type="email" placeholder="Optional" />
         </div>
         <div>
-          <label class="bw-label">Profile picture URL</label>
-          <input class="bw-input" v-model="profilePictureUrl" placeholder="https://..." />
+          <label class="bw-label">Profile picture</label>
           <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" style="margin-top:8px" />
           <p class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">JPEG, PNG, WEBP only. Max 2MB.</p>
+          <p v-if="error" class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0; color:var(--danger)">{{ error }}</p>
           <p v-if="uploading" class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">Uploading image...</p>
         </div>
         <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
@@ -241,10 +263,6 @@ async function doSignOut() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           My Disputes
         </router-link>
-        <a :href="PORTAL_URLS.landing" class="bw-btn" style="text-decoration:none; justify-content:flex-start">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l9-9 9 9M5 11v9h14v-9"/></svg>
-          Beverly home
-        </a>
         <p v-if="exportMsg" style="font-size:var(--t-xs); color:var(--bw-text-muted); margin:0 0 4px; padding: 0 2px">{{ exportMsg }}</p>
         <button class="bw-btn" style="justify-content:flex-start; color: var(--bw-text-muted)" @click="requestExport" :disabled="exportLoading">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
@@ -304,6 +322,99 @@ async function doSignOut() {
 </template>
 
 <style scoped>
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-bottom: var(--s-3);
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: oklch(8% 0.04 145);
+  background: linear-gradient(135deg, var(--brand-400), var(--brand-700));
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-eyebrow {
+  margin: 0 0 var(--s-1);
+  font-size: var(--t-xs);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.profile-section {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: var(--s-3);
+}
+
+.profile-section h2 {
+  margin: 0;
+  padding: var(--s-4);
+  font-size: var(--t-md);
+  font-weight: 800;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-section dl {
+  margin: 0;
+  padding: 0 var(--s-4);
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-row:last-child {
+  border-bottom: 0;
+}
+
+.profile-row dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+}
+
+.profile-row dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 800;
+  text-align: right;
+}
+
+.tone-success {
+  color: var(--success) !important;
+}
+
+.tone-warning {
+  color: var(--warn) !important;
+}
+
+.tone-danger {
+  color: var(--danger) !important;
+}
+
 .p-banner {
   display: flex;
   align-items: center;

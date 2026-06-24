@@ -7,7 +7,17 @@ export default defineConfig(({ command }) => ({
     plugins: [vue()],
     server: {
         port: 5175,
-        proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } },
+        proxy: { '/api': { target: `http://localhost:${process.env.WALLET_PORT || 4000}`, changeOrigin: true } },
+    },
+    esbuild: {
+        supported: {
+            destructuring: true
+        }
+    },
+    optimizeDeps: {
+        esbuildOptions: {
+            target: 'es2022',
+        },
     },
     build: {
         target: 'es2022',

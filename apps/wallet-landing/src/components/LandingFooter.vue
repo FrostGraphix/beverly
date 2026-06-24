@@ -48,12 +48,21 @@ const year = new Date().getFullYear();
           <a :href="PORTALS.vendor.login">Vendor portal</a>
           <a href="mailto:wallet@acoblighting.com?subject=Becoming%20a%20Beverly%20vendor">Become a vendor</a>
           <a href="#features">Features</a>
+          <a href="#coverage">Coverage</a>
+        </div>
+        <div class="lp-footer-col">
+          <h4>Resources</h4>
+          <a href="#how">How it works</a>
+          <a href="#portals">Choose portal</a>
+          <a href="#support">Support center</a>
+          <a href="mailto:support@acoblighting.com">Email support</a>
         </div>
         <div class="lp-footer-col">
           <h4>Company</h4>
           <a href="#about">About ACOB</a>
           <a href="#contact">Contact</a>
-          <a href="#support">Support</a>
+          <a href="#privacy">Privacy policy</a>
+          <a href="#terms">Terms of service</a>
         </div>
       </div>
     </div>

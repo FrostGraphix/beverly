@@ -7,33 +7,34 @@ import {
 } from '../token-engine.js';
 
 describe('token engine pricing', () => {
-    it('resolves residential tariff with no tax', () => {
+    it('resolves residential tariff pricing', () => {
         const t = resolveTariffPricing('RESIDENTIAL');
         expect(t.basePricePerKwh).toBe(350);
-        expect(t.taxRate).toBe(0);
         expect(t.effectivePricePerKwh).toBe(350);
     });
 
-    it('applies KOLO 7.5% tax', () => {
+    it('resolves KOLO base pricing before VAT split', () => {
         const t = resolveTariffPricing('KOLO');
-        expect(t.effectivePricePerKwh).toBeCloseTo(483.75, 4);
+        expect(t.basePricePerKwh).toBe(450);
+        expect(t.effectivePricePerKwh).toBe(450);
     });
 
     it('falls back to residential pricing for unknown legacy tariff ids', () => {
         const t = resolveTariffPricing('UNKNOWN');
         expect(t.basePricePerKwh).toBe(350);
-        expect(t.taxRate).toBe(0);
         expect(t.effectivePricePerKwh).toBe(350);
         expect(t.tariffId).toBe('UNKNOWN');
     });
 
-    it('previewPurchase computes units correctly for residential', () => {
+    it('previewPurchase computes units from VAT-exclusive energy value', () => {
         // ₦5,000 = 500000 kobo at ₦350/kWh = 14.2857 kWh
         const p = previewPurchase(500000, 'RESIDENTIAL');
         expect(p.amountMinor).toBe(500000);
-        expect(p.units).toBeCloseTo(14.2857, 3);
+        expect(p.energyAmountMinor).toBe(465116);
+        expect(p.taxAmountMinor).toBe(34884);
+        expect(p.vatRateBasisPoints).toBe(750);
+        expect(p.units).toBeCloseTo(13.289, 3);
         expect(p.tariffId).toBe('RESIDENTIAL');
-        expect(p.taxAmountMinor).toBe(0);
     });
 
     it('previewPurchase computes tax embedded in kobo amount for KOLO', () => {

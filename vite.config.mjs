@@ -1,12 +1,38 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { createRequire } from "node:module";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const referenceHandler = require("./api/reference");
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET
   || (process.env.API_PORT ? `http://127.0.0.1:${process.env.API_PORT}` : "http://127.0.0.1:9310");
+
+function serveRawDocs() {
+  return {
+    name: "serve-raw-docs",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = request.url ? request.url.split("?")[0] : "";
+        if (url.startsWith("/docs/") && url.endsWith(".jsx")) {
+          const filePath = path.join(process.cwd(), url);
+          try {
+            const content = await fs.readFile(filePath, "utf-8");
+            response.statusCode = 200;
+            response.setHeader("Content-Type", "text/plain; charset=utf-8");
+            response.end(content);
+            return;
+          } catch (error) {
+            // Let next middleware handle it
+          }
+        }
+        next();
+      });
+    }
+  };
+}
 
 function embeddedReferenceApi() {
   return {
@@ -56,12 +82,17 @@ function embeddedReferenceApi() {
 }
 
 export default defineConfig({
-  plugins: [embeddedReferenceApi(), vue()],
+  plugins: [serveRawDocs(), embeddedReferenceApi(), vue()],
   server: {
     port: 9311,
     strictPort: false,
     proxy: {
       "/api": apiProxyTarget
+    }
+  },
+  esbuild: {
+    supported: {
+      destructuring: true
     }
   },
   build: {

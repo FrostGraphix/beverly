@@ -3,19 +3,29 @@ import { onMounted, onUnmounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
+import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; }
 interface Application    { id: string; legal_name: string; created_at: string; }
-interface Purchase        { id: string; amount_minor: number; status: string; meter_id?: string; created_at: string; }
-interface WalletSummary   { totalBalanceMinor: number; activeWallets: number; suspendedWallets: number; closedWallets: number; }
+interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; created_at: string; }
+interface WalletSummary {
+    walletCount: number;
+    totalFloatMinor: number;
+    totalBalanceMinor?: number;
+    activeWallets?: number;
+    suspendedWallets?: number;
+    closedWallets?: number;
+    byStatus?: Record<string, number>;
+}
 
 const funding = ref<FundingRequest[]>([]);
 const auth = useStaffAuthStore();
 const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
-const walletSummary = ref<WalletSummary>({ totalBalanceMinor: 0, activeWallets: 0, suspendedWallets: 0, closedWallets: 0 });
+const walletSummary = ref<WalletSummary>({ walletCount: 0, totalFloatMinor: 0, byStatus: {} });
 const loading = ref(true);
 const feedErrors = ref<string[]>([]);
+const staffName = computed(() => auth.user?.full_name?.split(' ')[0] || 'team');
 let poll: ReturnType<typeof setInterval> | null = null;
 const statPendingFundingMinor = ref(0);
 const statTodayPurchasesMinor = ref(0);
@@ -23,6 +33,19 @@ const statFailedToday = ref(0);
 const statApplications = ref(0);
 const statTotalWalletFloatMinor = ref(0);
 const statTokensDeliveredToday = ref(0);
+const recentTypeFilter = ref('all');
+const recentStationFilter = ref('');
+const recentDateFilter = ref('today');
+const showRecentFilters = ref(false);
+
+const RECENT_TYPE_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'purchases', label: 'Purchases' },
+    { id: 'funding', label: 'Funding' },
+    { id: 'reversals', label: 'Reversals' },
+    { id: 'disputes', label: 'Disputes' },
+    { id: 'failed', label: 'Failed' },
+] as const;
 
 const pendingFundingTotal = computed(() => funding.value.reduce((s, f) => s + f.amount_minor, 0));
 const todayVendingTotal = computed(() => {
@@ -42,7 +65,73 @@ const deliveredToday = computed(() => {
 const pendingVending = computed(() =>
     vending.value.filter(p => ['hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status))
 );
-const recentTransactions = computed(() => [...vending.value].slice(0, 10));
+const recentActivityRows = computed(() => {
+    const purchases = vending.value.map((p) => {
+        const isFailed = p.status === 'failed';
+        const isReversal = p.status === 'reversed';
+        const kind = isFailed ? 'failed' : (isReversal ? 'reversals' : 'purchases');
+        return {
+            id: `purchase-${p.id}`,
+            reference: `#${p.id.slice(0, 8)}`,
+            type: typeLabel(p),
+            kind,
+            typeTone: typeTone(kind),
+            vendor: p.purchase_mode ? p.purchase_mode.replace(/_/g, ' ') : 'Vending',
+            customerMeter: [p.customer_name, p.meter_id].filter(Boolean).join(' - ') || 'Unknown meter',
+            station: p.station_id || '',
+            amountMinor: p.amount_minor,
+            units: p.units_kwh ? `${p.units_kwh.toLocaleString('en-NG', { maximumFractionDigits: 1 })} kWh` : '',
+            status: p.status.replace(/_/g, ' '),
+            statusTone: statusTone(p.status),
+            createdAt: p.created_at,
+        };
+    });
+
+    const fundingRows = funding.value.map((f) => ({
+        id: `funding-${f.id}`,
+        reference: `#${f.id.slice(0, 8)}`,
+        type: 'Funding',
+        kind: 'funding',
+        typeTone: 'info',
+        vendor: 'Funding queue',
+        customerMeter: '',
+        station: '',
+        amountMinor: f.amount_minor,
+        units: '',
+        status: f.status.replace(/_/g, ' '),
+        statusTone: statusTone(f.status),
+        createdAt: f.created_at,
+    }));
+
+    return [...purchases, ...fundingRows]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+});
+const recentActivityTabs = computed(() =>
+    RECENT_TYPE_FILTERS.map((tab) => ({
+        ...tab,
+        count: tab.id === 'all'
+            ? recentActivityRows.value.length
+            : recentActivityRows.value.filter((row) => row.kind === tab.id).length,
+    })),
+);
+const recentStations = computed(() =>
+    [...new Set(recentActivityRows.value.map(row => row.station).filter(Boolean))].sort(),
+);
+const filteredRecentTransactions = computed(() =>
+    recentActivityRows.value.filter((row) => {
+        const matchesType = recentTypeFilter.value === 'all' || row.kind === recentTypeFilter.value;
+        const matchesStation = !recentStationFilter.value || row.station === recentStationFilter.value;
+        const matchesDate = matchesDateFilter(row.createdAt, recentDateFilter.value);
+        return matchesType && matchesStation && matchesDate;
+    }),
+);
+const recentTransactions = computed(() => filteredRecentTransactions.value.slice(0, 10));
+const totalWalletFloatMinor = computed(() =>
+    walletSummary.value.totalFloatMinor ?? walletSummary.value.totalBalanceMinor ?? 0,
+);
+const activeWalletCount = computed(() =>
+    walletSummary.value.byStatus?.active ?? walletSummary.value.activeWallets ?? 0,
+);
 
 function animateStat(targetRef: { value: number }, target: number, durationMs = 700) {
     const from = Number(targetRef.value || 0);
@@ -64,8 +153,57 @@ function syncAnimatedStats() {
     animateStat(statTodayPurchasesMinor, todayVendingTotal.value);
     animateStat(statFailedToday, failedToday.value);
     animateStat(statApplications, apps.value.length);
-    animateStat(statTotalWalletFloatMinor, walletSummary.value.totalBalanceMinor ?? 0);
+    animateStat(statTotalWalletFloatMinor, totalWalletFloatMinor.value);
     animateStat(statTokensDeliveredToday, deliveredToday.value);
+}
+
+function typeLabel(p: Purchase) {
+    if (p.status === 'reversed') return 'Reversal';
+    if (p.status === 'failed') return 'Failed Vend';
+    if (p.purchase_mode === 'remote_send') return 'Remote Send';
+    return 'Token Buy';
+}
+
+function typeTone(kind: string) {
+    if (kind === 'funding') return 'info';
+    if (kind === 'reversals') return 'warn';
+    if (kind === 'disputes' || kind === 'failed') return 'danger';
+    return 'success';
+}
+
+function statusTone(status: string) {
+    if (status === 'delivered' || status === 'approved' || status === 'processed') return 'success';
+    if (status === 'failed' || status === 'rejected') return 'danger';
+    if (status === 'dispatching' || status === 'hold_active') return 'info';
+    if (status === 'delivery_pending_review' || status === 'reversed' || status === 'pending') return 'warn';
+    return 'neutral';
+}
+
+function matchesDateFilter(iso: string, filter: string) {
+    const created = new Date(iso);
+    if (Number.isNaN(created.getTime())) return true;
+    const now = new Date();
+    const start = new Date(now);
+    if (filter === 'seven') {
+        start.setDate(now.getDate() - 7);
+        return created >= start;
+    }
+    if (filter === 'month') {
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        return created >= start;
+    }
+    start.setHours(0, 0, 0, 0);
+    return created >= start;
+}
+
+function adminAutoRefreshEnabled() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('beverly.admin.qualitySettings') || '{}');
+        return saved.autoRefresh !== false;
+    } catch {
+        return true;
+    }
 }
 
 async function fetchAll() {
@@ -78,22 +216,27 @@ async function fetchAll() {
     syncAnimatedStats();
 }
 
-onMounted(async () => { await fetchAll(); loading.value = false; poll = setInterval(fetchAll, 30_000); });
+onMounted(async () => {
+    await fetchAll();
+    loading.value = false;
+    if (adminAutoRefreshEnabled()) poll = setInterval(fetchAll, 30_000);
+});
 onUnmounted(() => { if (poll) clearInterval(poll); });
 </script>
 
 <template>
-  <AppShell title="Operations">
+  <AppShell title="Dashboard">
+
+    <WalletGreeting
+      audience="Wallet command room"
+      :name="staffName"
+      detail="for Beverly wallet operations."
+    />
 
     <!-- Page header -->
     <div class="bw-page-head">
       <div class="bw-page-title">
-        <h1>
-          Operations
-          <span class="bw-live-tag">
-            <span class="bw-live-dot" />LIVE
-          </span>
-        </h1>
+        <h1>Dashboard</h1>
         <p>Real-time overview of Beverly vending wallet. Refreshes every 30 s.</p>
       </div>
       <div class="bw-head-actions">
@@ -196,7 +339,12 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       </div>
 
       <!-- Total wallet float -->
-      <div class="bw-kpi featured">
+      <router-link
+        to="/wallets"
+        class="bw-kpi featured bw-kpi-link"
+        style="text-decoration:none; color:inherit"
+        aria-label="Open all wallets"
+      >
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Total Wallet Float</span>
           <div class="bw-kpi-icon">
@@ -205,10 +353,10 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
         <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTotalWalletFloatMinor) }}</div>
         <div class="bw-kpi-foot">
-          <span class="bw-delta up">{{ walletSummary.activeWallets }} active</span>
+          <span class="bw-delta up">{{ activeWalletCount }} active</span>
           <span class="bw-kpi-note">across all wallets</span>
         </div>
-      </div>
+      </router-link>
 
       <!-- Tokens delivered today -->
       <div class="bw-kpi info-tone">
@@ -371,6 +519,17 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           <div class="bw-card-title">Recent Transactions</div>
           <div class="bw-card-sub">Most recent vending orders</div>
         </div>
+        <router-link
+          v-if="auth.hasPermission('wallet.vending.monitor')"
+          to="/vending"
+          class="bw-btn sm"
+          style="text-decoration:none"
+        >
+          See more
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </router-link>
       </div>
 
       <div class="bw-t-wrap">

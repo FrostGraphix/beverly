@@ -67,7 +67,8 @@ export function validateProfileState(value) {
   return {
     name: optionalString(source.name),
     email: optionalString(source.email),
-    phone: optionalString(source.phone)
+    phone: optionalString(source.phone),
+    profilePictureUrl: optionalString(source.profilePictureUrl || source.profile_picture_url)
   };
 }
 

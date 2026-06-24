@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api, redirectToPayment } from '../lib/api';
+import { api, ApiError, redirectToPayment } from '../lib/api';
 import { naira, kwh } from '../lib/format';
+import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useAuthStore } from '../stores/auth';
 
 const auth    = useAuthStore();
@@ -26,8 +27,10 @@ const loadingPreview = ref(false);
 // Step 4 — result
 const result   = ref<any>(null);
 const loading  = ref(false);
-const error    = ref<string | null>(null);
+const error    = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
+const notice   = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const copied   = ref(false);
+const remoteSending = ref(false);
 
 // Step-up auth
 const stepUpRequired  = ref(false);
@@ -51,6 +54,34 @@ function meterTypeLabel(type?: string | null) {
     return 'Phase Unknown';
 }
 
+const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
+const canRemoteSendToken = computed(() => {
+    if (!result.value?.token || !result.value.purchaseOrder?.id || remoteSending.value) return false;
+    return remoteState.value !== 'remote_send_delivered';
+});
+const remoteSendLabel = computed(() => {
+    if (remoteSending.value) return 'Sending...';
+    if (remoteState.value === 'remote_send_delivered') return 'Remote sent';
+    if (['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value)) return 'Check remote status';
+    if (remoteState.value.includes('failed')) return 'Retry remote send';
+    return 'Remote send';
+});
+
+function describeApiError(e: unknown, fallback: string) {
+    if (e instanceof ApiError) {
+        if (e.code === 'amount_too_low') return { title: 'Amount too low', message: e.message, action: 'Choose at least ₦500.', code: e.code };
+        if (e.code === 'insufficient_balance') return { title: 'Insufficient wallet balance', message: e.message, action: 'Top up or pay with card.', code: e.code };
+        if (['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(String(e.code))) {
+            return { title: 'Wallet cannot buy token', message: e.message, action: 'Contact Beverly support.', code: e.code };
+        }
+        if (e.code === 'remote_token_rejected') return { title: 'Remote send rejected', message: e.message, action: 'The token remains visible. Enter it manually.', code: e.code };
+        if (e.code === 'remote_send_metadata_missing') return { title: 'Remote send unavailable', message: e.message, action: 'The token remains valid for manual entry.', code: e.code };
+        if (e.code === 'request_timeout') return { title: 'Request timed out', message: e.message, action: 'Check your network and retry.', code: e.code };
+        return { title: 'Request failed', message: e.message, action: 'Retry or contact support if this repeats.', code: e.code };
+    }
+    return { title: 'Request failed', message: fallback };
+}
+
 onMounted(async () => {
     const [m, w] = await Promise.all([
         api.get<{ meters: any[] }>('/api/v1/customer/meters'),
@@ -59,6 +90,9 @@ onMounted(async () => {
     meters.value = m.meters;
     walletBal.value = w?.available_minor ?? 0;
     if (meters.value.length === 1) selMeter.value = meters.value[0];
+    if (new URLSearchParams(window.location.search).get('paid') === '1') {
+        notice.value = { tone: 'info', title: 'Payment received', message: 'Token delivery will complete after Paystack confirmation.' };
+    }
 });
 
 function setQuick(amt: number) {
@@ -67,7 +101,7 @@ function setQuick(amt: number) {
 
 async function goToPreview() {
     if (!selMeter.value || amountMinor.value < 50000) return;
-    loadingPreview.value = true; error.value = null;
+    loadingPreview.value = true; error.value = null; notice.value = null;
     try {
         preview.value = await api.post<any>('/api/v1/customer/purchase/preview', {
             meter_id: selMeter.value.meter_id,
@@ -76,19 +110,20 @@ async function goToPreview() {
         mode.value = walletBal.value >= amountMinor.value ? 'wallet' : 'direct_pay';
         step.value = 3;
     } catch (e: any) {
-        error.value = e?.message ?? 'Could not load preview.';
+        error.value = describeApiError(e, e?.message ?? 'Could not load preview.');
     } finally { loadingPreview.value = false; }
 }
 
 async function purchase() {
     if (!selMeter.value || !preview.value) return;
-    loading.value = true; error.value = null;
+    loading.value = true; error.value = null; notice.value = null;
     const params = {
         meter_id:        selMeter.value.meter_id,
         meter_type:      selMeter.value.meter_type,
         amount_minor:    amountMinor.value,
         mode:            mode.value as 'wallet' | 'direct_pay',
         idempotency_key: crypto.randomUUID(),
+        callback_url:    `${window.location.origin}/buy-token?paid=1`,
     };
     try {
         const r = await api.post<any>('/api/v1/customer/purchase', params);
@@ -109,9 +144,14 @@ async function purchase() {
             return;
         }
         result.value = r;
+        notice.value = {
+            tone: 'success',
+            title: 'Token generated successfully',
+            message: 'Receipt is ready. Copy, download, view, or remote send now.',
+        };
         step.value   = 4;
     } catch (e: any) {
-        error.value = e?.message ?? 'Purchase failed. Try again.';
+        error.value = describeApiError(e, e?.message ?? 'Purchase failed. Try again.');
     } finally { loading.value = false; }
 }
 
@@ -131,6 +171,11 @@ async function submitStepUp() {
             return;
         }
         result.value = r;
+        notice.value = {
+            tone: 'success',
+            title: 'Token generated successfully',
+            message: 'Receipt is ready. Copy, download, view, or remote send now.',
+        };
         step.value   = 4;
     } catch (e: any) {
         stepUpError.value = e?.message ?? 'Incorrect code. Try again.';
@@ -145,22 +190,118 @@ function cancelStepUp() {
     pendingPurchaseParams = null;
 }
 
-function copyToken() {
+async function copyToken() {
     if (result.value?.token) {
-        navigator.clipboard.writeText(result.value.token);
-        copied.value = true;
-        setTimeout(() => { copied.value = false; }, 2000);
+        try {
+            await navigator.clipboard.writeText(result.value.token);
+            copied.value = true;
+            notice.value = { tone: 'success', title: 'Token copied', message: 'Paste it into your meter keypad when needed.' };
+            setTimeout(() => { copied.value = false; }, 2000);
+        } catch {
+            notice.value = { tone: 'danger', title: 'Copy failed', message: 'Select the token and copy it manually.' };
+        }
     }
 }
 
 function reset() {
     step.value = 1; result.value = null; preview.value = null;
-    amountRaw.value = ''; error.value = null;
+    amountRaw.value = ''; error.value = null; notice.value = null;
+    remoteSending.value = false; copied.value = false;
+}
+
+function resultReceiptRow() {
+    if (!result.value) return null;
+    return {
+        ...(result.value.purchaseOrder ?? {}),
+        token: result.value.token,
+        units_kwh: result.value.units,
+        receipt_id: result.value.receiptId,
+        purchase_order_id: result.value.purchaseOrder?.id,
+        amount_minor: result.value.purchaseOrder?.amount_minor ?? preview.value?.amountMinor,
+        energy_amount_minor: result.value.purchaseOrder?.energy_amount_minor ?? preview.value?.energyAmountMinor,
+        vat_amount_minor: result.value.purchaseOrder?.vat_amount_minor ?? preview.value?.vatMinor,
+        vat_rate_basis_points: result.value.purchaseOrder?.vat_rate_basis_points ?? preview.value?.vatRateBasisPoints,
+        meter_id: result.value.purchaseOrder?.meter_id ?? preview.value?.meterId,
+        meter_type: result.value.purchaseOrder?.meter_type ?? preview.value?.meterType,
+    };
+}
+
+function viewResultReceipt() {
+    const row = resultReceiptRow();
+    if (row) viewReceipt(purchaseReceipt(row));
+}
+
+function printResultReceipt() {
+    const row = resultReceiptRow();
+    if (row) printReceipt(purchaseReceipt(row));
+}
+
+function downloadResultReceipt() {
+    const row = resultReceiptRow();
+    if (row) downloadReceipt(purchaseReceipt(row));
+}
+
+async function remoteSendGeneratedToken() {
+    const current = result.value;
+    const orderId = current?.purchaseOrder?.id;
+    if (!orderId) return;
+    remoteSending.value = true;
+    error.value = null;
+    notice.value = {
+        tone: 'info',
+        title: ['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value) ? 'Checking remote delivery' : 'Remote send started',
+        message: ['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value)
+            ? 'Beverly is checking your meter delivery status now.'
+            : 'Beverly is sending this token to your meter now.',
+    };
+    try {
+        const response = await api.post<{
+            remoteTaskId: string;
+            status: 'pending' | 'success' | 'failed' | 'unknown';
+            deliveryState: string;
+            remark?: string | null;
+            purchaseOrder?: any;
+        }>(`/api/v1/customer/purchase/${orderId}/remote-send`, {});
+        result.value = {
+            ...current,
+            purchaseOrder: {
+                ...current.purchaseOrder,
+                ...(response.purchaseOrder ?? {}),
+                remote_task_id: response.remoteTaskId,
+                delivery_state: response.deliveryState,
+            },
+        };
+        if (response.status === 'success') {
+            notice.value = { tone: 'success', title: 'Remote send delivered', message: 'Your meter accepted the generated token.' };
+            return;
+        }
+        notice.value = {
+            tone: response.status === 'failed' ? 'danger' : 'info',
+            title: response.status === 'failed' ? 'Remote send needs manual entry' : response.status === 'unknown' ? 'Remote status unknown' : 'Remote delivery needs review',
+            message: response.remark || 'The token remains visible for manual entry if needed.',
+        };
+    } catch (e: any) {
+        const details = describeApiError(e, e?.message ?? 'Remote send failed');
+        notice.value = {
+            tone: 'danger',
+            title: details.title,
+            message: `${details.message}${details.action ? ` ${details.action}` : ''}`,
+            code: details.code,
+        };
+    } finally {
+        remoteSending.value = false;
+    }
 }
 </script>
 
 <template>
   <AppShell>
+    <div v-if="notice" :class="['bw-alert', notice.tone === 'danger' ? 'danger' : '']" style="display: grid; gap: 6px; margin-bottom: var(--s-3)">
+      <strong>{{ notice.title }}</strong>
+      <span>{{ notice.message }}</span>
+      <small v-if="notice.code" class="bw-mono">Code: {{ notice.code }}</small>
+    </div>
+
     <!-- Step indicator -->
     <div class="bw-steps">
       <div v-for="n in 4" :key="n"
@@ -229,7 +370,12 @@ function reset() {
           </button>
         </div>
       </div>
-      <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
+      <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm); display: grid; gap: 6px">
+        <strong>{{ error.title }}</strong>
+        <span>{{ error.message }}</span>
+        <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
+        <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+      </div>
       <div class="bw-row" style="gap: var(--s-3)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="step = 1">Back</button>
         <button class="bw-btn primary" style="flex:2; justify-content:center"
@@ -259,8 +405,16 @@ function reset() {
             <span class="bw-mono" style="font-weight:700">{{ kwh(preview.units) }}</span>
           </div>
           <div class="bw-row" style="justify-content:space-between">
-            <span class="bw-muted" style="font-size: var(--t-sm)">Amount</span>
+            <span class="bw-muted" style="font-size: var(--t-sm)">Amount paid</span>
             <span class="bw-money" style="font-weight:700">{{ naira(preview.amountMinor) }}</span>
+          </div>
+          <div class="bw-row" style="justify-content:space-between">
+            <span class="bw-muted" style="font-size: var(--t-sm)">Energy value</span>
+            <span class="bw-money" style="font-weight:700">{{ naira(preview.energyAmountMinor) }}</span>
+          </div>
+          <div class="bw-row" style="justify-content:space-between">
+            <span class="bw-muted" style="font-size: var(--t-sm)">VAT (7.5%)</span>
+            <span class="bw-money" style="font-weight:700">{{ naira(preview.vatMinor) }}</span>
           </div>
           <hr style="border:none; border-top:1px solid var(--border)">
           <div class="bw-row" style="justify-content:space-between">
@@ -281,7 +435,12 @@ function reset() {
           </div>
         </div>
       </div>
-      <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
+      <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm); display: grid; gap: 6px">
+        <strong>{{ error.title }}</strong>
+        <span>{{ error.message }}</span>
+        <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
+        <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+      </div>
       <div class="bw-row" style="gap: var(--s-3)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="step = 2">Back</button>
         <button class="bw-btn primary" style="flex:2; justify-content:center"
@@ -333,11 +492,25 @@ function reset() {
         <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-5)">{{ kwh(result.units) }} credited to meter {{ result.purchaseOrder?.meter_id }}</p>
         <div class="bw-token-box">
           <div class="bw-token-value">{{ result.token }}</div>
-          <div class="bw-token-units">{{ kwh(result.units) }}</div>
+          <div class="bw-token-units">{{ kwh(result.units) }} · {{ naira(result.purchaseOrder?.amount_minor ?? preview?.amountMinor) }}</div>
+        </div>
+        <div class="bw-card" style="text-align:left; margin-top: var(--s-3)">
+          <div class="bw-row" style="justify-content:space-between"><span class="bw-muted">Meter</span><strong class="bw-mono">{{ result.purchaseOrder?.meter_id }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Amount paid</span><strong>{{ naira(result.purchaseOrder?.amount_minor ?? preview?.amountMinor) }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Energy value</span><strong>{{ naira(result.purchaseOrder?.energy_amount_minor ?? preview?.energyAmountMinor) }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">VAT (7.5%)</span><strong>{{ naira(result.purchaseOrder?.vat_amount_minor ?? preview?.vatMinor) }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Remote state</span><strong>{{ remoteState.replace(/_/g, ' ') }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Order</span><strong class="bw-mono">#{{ String(result.purchaseOrder?.id ?? '').slice(0, 8) }}</strong></div>
         </div>
         <button class="bw-btn" style="width:100%; justify-content:center; margin-top: var(--s-4)" @click="copyToken">
           {{ copied ? '✓ Copied!' : 'Copy token' }}
         </button>
+        <div class="buy-token-actions">
+          <button class="bw-btn primary" @click="remoteSendGeneratedToken" :disabled="!canRemoteSendToken">{{ remoteSendLabel }}</button>
+          <button class="bw-btn" @click="downloadResultReceipt">Download receipt</button>
+          <button class="bw-btn" @click="viewResultReceipt">View receipt</button>
+          <button class="bw-btn" @click="printResultReceipt">Print receipt</button>
+        </div>
       </div>
       <button class="bw-btn primary" style="width:100%; justify-content:center" @click="reset">
         Buy another
@@ -361,5 +534,23 @@ function reset() {
   padding: var(--s-7);
   width: min(420px, 100%);
   display: flex; flex-direction: column;
+}
+
+.buy-token-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.buy-token-actions .bw-btn {
+  min-width: 0;
+  justify-content: center;
+}
+
+@media (max-width: 520px) {
+  .buy-token-actions {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

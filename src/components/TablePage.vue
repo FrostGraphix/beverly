@@ -734,6 +734,14 @@ export default {
   width: 110px;
 }
 
+.table-page[aria-label="Abnormal Alarm"] {
+  display: contents;
+}
+
+.table-page {
+  display: contents;
+}
+
 .table-scroll th[data-column-key="createDate"],
 .table-scroll td[data-column-key="createDate"],
 .table-scroll th[data-column-key="updateDate"],
@@ -827,10 +835,6 @@ export default {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.table-page[aria-label="Load Profile"] {
-  --bg-card: #ffffff;
-  --bg-page: #ffffff;
-}
 
 /* Custom Toolbar Grid Layout */
 .ddm-toolbar {
@@ -891,7 +895,7 @@ export default {
   background: var(--bg-card);
   box-shadow: var(--shadow-md);
   padding: 6px;
-  z-index: 20;
+  z-index: 2000;
 }
 .sort-direction-menu__item {
   border: 0;

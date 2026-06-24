@@ -1,0 +1,374 @@
+/* Beverly CRM shell, aligned to Vercel's restrained dashboard language. */
+.app-page:not(.wallet-admin-host) {
+  --layout-sidebar-width: 256px;
+  --sidebar-width: 256px;
+  --layout-sidebar-collapsed-width: 60px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-container {
+  background: #fff !important;
+  color: #666;
+  box-shadow: none !important;
+  border-right: 1px solid #eaeaea;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-logo {
+  height: 64px;
+  padding: 0 20px;
+  background: #fff !important;
+  border-bottom-color: #eaeaea !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-logo-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #000 !important;
+  box-shadow: none;
+  color: #fff;
+  font-size: 15px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy {
+  color: #111;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy strong {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-menu {
+  padding: 0 10px 24px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-section {
+  min-height: 24px;
+  margin: 16px 8px 5px;
+  color: #888;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item {
+  min-height: 38px;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #666 !important;
+  font-size: 13px;
+  font-weight: 450;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item::before {
+  display: none;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item:hover {
+  background: #f5f5f5 !important;
+  border-color: transparent !important;
+  color: #111 !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item.active {
+  background: #f2f2f2 !important;
+  border-color: transparent !important;
+  color: #111 !important;
+  font-weight: 550;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item:hover .sidebar-icon,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item.active .sidebar-icon {
+  color: currentColor;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-icon {
+  color: currentColor;
+  opacity: 0.85;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer {
+  padding: 10px;
+  background: #fff !important;
+  border-top-color: #eaeaea !important;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:not(:disabled) {
+  min-height: 38px;
+  border-color: transparent;
+  border-radius: 6px;
+  color: #666;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:hover,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout:hover:not(:disabled) {
+  background: #fff0f0;
+  border-color: transparent;
+  color: #e00;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .fixed-header,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .navbar,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .tags-view-container {
+  background: #fff !important;
+  border-color: #eaeaea !important;
+  box-shadow: none;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .fixed-header {
+  backdrop-filter: none;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .navbar {
+  height: 52px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .hamburger-container {
+  width: 52px;
+  height: 52px;
+  color: #111;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .breadcrumb {
+  color: #111;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .right-menu {
+  height: 52px;
+  padding-right: 16px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .tags-view-container {
+  height: 36px;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .tags-view-item {
+  border-radius: 5px;
+  background: #f5f5f5;
+  color: #111;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .bw-user-chip {
+  min-height: 34px;
+  padding: 3px 8px 3px 3px;
+  border-color: #eaeaea;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .bw-avatar.green {
+  background: #111;
+  color: #fff;
+}
+
+[data-theme="light"] .app-page:not(.wallet-admin-host) .bw-user-chip:hover,
+[data-theme="light"] .app-page:not(.wallet-admin-host) .bw-user-chip-btn[aria-expanded="true"] {
+  background: #fafafa;
+  border-color: #bbb;
+  box-shadow: none;
+}
+
+/* Dark mode follows Vercel's black-on-black dashboard shell. */
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-container,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-container {
+  background: #000 !important;
+  border-right-color: #262626;
+  box-shadow: none !important;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-logo,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-logo {
+  height: 64px;
+  padding: 0 20px;
+  background: #000 !important;
+  border-bottom-color: #262626 !important;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-logo-icon,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-logo-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #fff !important;
+  box-shadow: none;
+  color: #000;
+  font-size: 15px;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy { color: #fff; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy strong,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy strong { font-size: 15px; letter-spacing: -0.02em; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-menu,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-menu { padding: 0 10px 24px; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-section,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-section { min-height: 24px; margin: 16px 8px 5px; color: #888; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item { min-height: 38px; gap: 10px; padding: 0 10px; border-radius: 6px; color: #a3a3a3 !important; font-size: 13px; font-weight: 450; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item::before,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item::before { display: none; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item:hover,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item:hover { background: #1a1a1a !important; border-color: transparent !important; color: #fff !important; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item.active,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item.active { background: #1f1f1f !important; border-color: transparent !important; color: #fff !important; font-weight: 550; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item:hover .sidebar-icon,
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-item.active .sidebar-icon,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item:hover .sidebar-icon,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item.active .sidebar-icon { color: currentColor; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-footer,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-footer { padding: 10px; background: #000 !important; border-top-color: #262626 !important; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-footer .sidebar-signout { min-height: 38px; border-color: transparent; border-radius: 6px; color: #a3a3a3; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .fixed-header,
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .navbar,
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .tags-view-container,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .fixed-header,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .navbar,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .tags-view-container { background: #000 !important; border-color: #262626 !important; box-shadow: none; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .fixed-header,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .fixed-header { backdrop-filter: none; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .navbar,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .navbar { height: 52px; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .hamburger-container,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .hamburger-container { width: 52px; height: 52px; color: #fff; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .breadcrumb,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .breadcrumb { color: #fff; font-size: 13px; font-weight: 500; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .right-menu,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .right-menu { height: 52px; padding-right: 16px; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .tags-view-container,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .tags-view-container { height: 36px; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .tags-view-item,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .tags-view-item { border-radius: 5px; background: #1a1a1a; color: #fff; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .bw-user-chip,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-user-chip { min-height: 34px; padding: 3px 8px 3px 3px; border-color: #333; border-radius: 7px; background: #000; box-shadow: none; }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .bw-avatar.green,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-avatar.green { background: #fff; color: #000; }
+
+.app-page:not(.wallet-admin-host) .sidebar-find {
+  width: calc(100% - 20px);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px;
+  padding: 0 12px;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  background: transparent;
+  color: #777;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-find:hover { border-color: #c9c9c9; color: #111; }
+.app-page:not(.wallet-admin-host) .sidebar-find svg { width: 20px; height: 20px; flex: 0 0 auto; }
+.app-page:not(.wallet-admin-host) .sidebar-find kbd { margin-left: auto; padding: 2px 7px; border: 1px solid #eaeaea; border-radius: 5px; background: #fafafa; color: #666; font: 600 12px/1 var(--font-sans); }
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-find,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-find { border-color: #262626; color: #a3a3a3; }
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-find:hover,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-find:hover { border-color: #555; color: #fff; }
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-find kbd,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-find kbd { border-color: #333; background: #171717; color: #a3a3a3; }
+
+@media (max-width: 1024px) {
+  [data-theme="light"] .app-page:not(.wallet-admin-host) .drawer-bg { background: rgba(0, 0, 0, 0.42); backdrop-filter: none; }
+  [data-theme="executive"] .app-page:not(.wallet-admin-host) .drawer-bg,
+  [data-theme="contrast"] .app-page:not(.wallet-admin-host) .drawer-bg { background: rgba(0, 0, 0, 0.62); backdrop-filter: none; }
+  .app-page:not(.wallet-admin-host) .sidebar-mobile-close { border-radius: 6px; }
+}
+
+/* Desktop collapse mirrors Vercel's icon-rail navigation. */
+.hideSidebar:not(.mobile) .sidebar-container {
+  width: 60px;
+}
+
+.hideSidebar:not(.mobile) .sidebar-logo {
+  justify-content: center;
+  padding: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-logo-icon {
+  margin: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-find {
+  width: 40px;
+  min-height: 40px;
+  justify-content: center;
+  margin: 10px;
+  padding: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-find span,
+.hideSidebar:not(.mobile) .sidebar-find kbd,
+.hideSidebar:not(.mobile) .sidebar-section {
+  display: none;
+}
+
+.hideSidebar:not(.mobile) .sidebar-menu {
+  padding: 2px 8px 20px;
+}
+
+.hideSidebar:not(.mobile) .sidebar-item {
+  width: 44px;
+  min-height: 40px;
+  justify-content: center;
+  padding: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-item .sidebar-icon {
+  margin: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-footer {
+  padding: 10px 8px;
+}
+
+.hideSidebar:not(.mobile) .sidebar-signout {
+  width: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.app-page:not(.wallet-admin-host) .hamburger-container {
+  border-right: 1px solid transparent;
+}
+
+.app-page:not(.wallet-admin-host) .hamburger-container:hover,
+.app-page:not(.wallet-admin-host) .hamburger-container[aria-pressed="true"] {
+  background: #f5f5f5;
+}
+
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .hamburger-container:hover,
+[data-theme="executive"] .app-page:not(.wallet-admin-host) .hamburger-container[aria-pressed="true"],
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .hamburger-container:hover,
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .hamburger-container[aria-pressed="true"] {
+  background: #1a1a1a;
+}
