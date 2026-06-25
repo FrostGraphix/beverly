@@ -62,6 +62,55 @@ export const routeManifest = [
     actions: ["Export"],
     isCustomPage: true,
     roles: ["super-admin", "operations-manager", "account"]
+  },
+  {
+    group: "Data Report",
+    title: "Report Centre",
+    hash: "#/admin/reports",
+    apis: [
+      "/api/reports/revenue",
+      "/api/reports/wallet",
+      "/api/reports/customers",
+      "/api/reports/audit",
+      "/api/reports/settlement"
+    ],
+    columns: [],
+    actions: ["Generate", "Export"],
+    roles: ["super-admin", "operations-manager", "account"]
+  },
+  {
+    group: "Data Report",
+    title: "Abnormal Alarm",
+    hash: "#/prepay-report/abnormal-alarm",
+    apis: ["/api/local/abnormal-alarms"],
+    columns: [
+      "alarmLabel",
+      "meterId",
+      "customerId",
+      "customerName",
+      "stationId",
+      "gatewayId",
+      "total1",
+      "usage1",
+      "batteryLow",
+      "magneticInterference",
+      "terminalCoverOpen",
+      "currentReverse",
+      "currentUnbalance",
+      "currentDate"
+    ],
+    actions: ["Sort", "Search", "Reset", "Export"],
+    roles: ["super-admin", "operations-manager", "account"]
+  },
+  {
+    group: "Data Report",
+    title: "Station Consumption",
+    hash: "#/prepay-report/station-consumption",
+    apis: ["/api/local/consumption/station-analytics"],
+    columns: [],
+    actions: ["Refresh", "Export"],
+    isCustomPage: true,
+    roles: ["super-admin", "operations-manager", "account"]
   }
 ];
 
@@ -86,6 +135,9 @@ const referenceVisibleHashes = new Set([
   "#/prepay-report/consumption-statistics",
   "#/prepay-report/daily-data-meter",
   "#/prepay-report/site-consumption",
+  "#/admin/reports",
+  "#/prepay-report/abnormal-alarm",
+  "#/prepay-report/station-consumption",
   "#/management/gateway",
   "#/management/customer",
   "#/management/tariff",
