@@ -10,6 +10,8 @@ try {
   DatabaseSync = null;
 }
 
+const { nowIso, parseJson } = require("../shared/utils");
+
 const defaultDatabasePath = path.resolve(__dirname, "..", "..", "data", "reference-crm.sqlite");
 
 let database = null;
@@ -51,10 +53,6 @@ function isMemoryDatabase(db) {
   return Boolean(db?.memoryStore);
 }
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
 function writableRoot() {
   if (process.env.VERCEL || process.env.AWS_REGION) return process.env.TMPDIR || process.env.TEMP || "/tmp";
   return path.resolve(__dirname, "..", "..", "tmp");
@@ -75,14 +73,6 @@ function databasePath() {
 
 function ensureDirectory(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-}
-
-function parseJson(text, fallback) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return fallback;
-  }
 }
 
 function sanitizeValue(value) {

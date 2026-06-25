@@ -22,9 +22,7 @@ const deliveryStates = new Set([
   "delivery_unknown"
 ]);
 
-function nowIso() {
-  return new Date().toISOString();
-}
+
 
 function jsonText(value) {
   return JSON.stringify(value || {});

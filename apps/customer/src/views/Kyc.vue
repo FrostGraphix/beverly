@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import Stepper from '../components/Stepper.vue';
+import { Stepper } from '@beverly/ui';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 

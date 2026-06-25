@@ -42,9 +42,7 @@ function sanitizeValue(value) {
   return sanitized;
 }
 
-function nowIso() {
-  return new Date().toISOString();
-}
+
 
 function stableId(prefix) {
   return crypto.createHash("sha256").update(prefix).digest("hex");

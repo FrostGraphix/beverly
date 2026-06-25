@@ -34,9 +34,7 @@ function ensureSchema() {
   return db;
 }
 
-function nowIso() {
-  return new Date().toISOString();
-}
+
 
 function reportSummary(options = {}) {
   ensureSchema();

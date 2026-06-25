@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@beverly/tokens": "workspace:*",
+    "@beverly/ui": "workspace:*",
+    "@beverly/vite-config": "workspace:*",
     "pinia": "^2.2.0",
     "vue": "^3.4.31",
     "vue-router": "^4.4.0"

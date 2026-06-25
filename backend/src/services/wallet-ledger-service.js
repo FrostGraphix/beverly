@@ -16,9 +16,7 @@ const ledgerTypes = new Set([
   "reconciliation_correction"
 ]);
 
-function nowIso() {
-  return new Date().toISOString();
-}
+
 
 function jsonText(value) {
   return JSON.stringify(value || {});

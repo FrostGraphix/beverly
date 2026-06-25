@@ -1,11 +1,7 @@
 import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
+import { baseConfig } from '@beverly/vite-config';
 
 export default defineConfig({
-    plugins: [vue()],
-    server: {
-        port: 5174,
-        proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } },
-    },
-    build: { target: 'es2022', sourcemap: true },
+    ...baseConfig,
+    server: { ...baseConfig.server, port: 5174 },
 });

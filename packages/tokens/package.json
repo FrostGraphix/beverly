@@ -16,6 +16,7 @@
     ".": "./index.js",
     "./tokens.css": "./tokens.css",
     "./theme.css": "./theme.css",
-    "./wallet.css": "./wallet.css"
+    "./wallet.css": "./wallet.css",
+    "./WalletGreeting.vue": "./WalletGreeting.vue"
   }
 }

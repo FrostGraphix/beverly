@@ -3,7 +3,7 @@ import { onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useVendorAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
-import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
+import { SessionTimeoutWarning } from '@beverly/ui';
 
 const auth = useVendorAuthStore();
 const router = useRouter();

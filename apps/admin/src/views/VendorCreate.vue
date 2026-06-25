@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import Stepper from '../components/Stepper.vue';
+import { Stepper } from '@beverly/ui';
 import { api } from '../lib/api';
 
 const route = useRoute();
