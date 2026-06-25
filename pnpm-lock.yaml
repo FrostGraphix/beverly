@@ -54,6 +54,9 @@ importers:
       '@beverly/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@beverly/vite-config':
+        specifier: workspace:*
+        version: link:../../packages/vite-config
       pinia:
         specifier: ^2.2.0
         version: 2.3.1(typescript@5.9.3)(vue@3.5.34(typescript@5.9.3))
