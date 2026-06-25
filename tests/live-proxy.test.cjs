@@ -212,7 +212,8 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
       LIVE_API_BEARER_TOKEN: "env-token",
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true"
     }, async () => {
       const liveRead = await request(proxyPort, "POST", "/api/remoteMeterTask/getReadingTask?SITE_ID=KYAKALE", {
         headers: {
@@ -432,7 +433,8 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: "http://127.0.0.1:1",
       LIVE_API_BEARER_TOKEN: "env-token",
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true"
     }, async () => {
       const customerUnavailable = await request(proxyPort, "POST", "/api/customer/read", {
         headers: {

@@ -2,16 +2,50 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
+import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; }
 interface Application    { id: string; legal_name: string; created_at: string; }
-interface Purchase        { id: string; amount_minor: number; status: string; meter_id?: string; created_at: string; }
+interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; created_at: string; }
+interface WalletSummary {
+    walletCount: number;
+    totalFloatMinor: number;
+    totalBalanceMinor?: number;
+    activeWallets?: number;
+    suspendedWallets?: number;
+    closedWallets?: number;
+    byStatus?: Record<string, number>;
+}
 
 const funding = ref<FundingRequest[]>([]);
+const auth = useStaffAuthStore();
 const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
+const walletSummary = ref<WalletSummary>({ walletCount: 0, totalFloatMinor: 0, byStatus: {} });
 const loading = ref(true);
+const feedErrors = ref<string[]>([]);
+const staffName = computed(() => auth.user?.full_name?.split(' ')[0] || 'team');
 let poll: ReturnType<typeof setInterval> | null = null;
+const statPendingFundingMinor = ref(0);
+const statTodayPurchasesMinor = ref(0);
+const statFailedToday = ref(0);
+const statApplications = ref(0);
+const statTotalWalletFloatMinor = ref(0);
+const statTokensDeliveredToday = ref(0);
+const recentTypeFilter = ref('all');
+const recentStationFilter = ref('');
+const recentDateFilter = ref('today');
+const showRecentFilters = ref(false);
+
+const RECENT_TYPE_FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'purchases', label: 'Purchases' },
+    { id: 'funding', label: 'Funding' },
+    { id: 'reversals', label: 'Reversals' },
+    { id: 'disputes', label: 'Disputes' },
+    { id: 'failed', label: 'Failed' },
+] as const;
 
 const pendingFundingTotal = computed(() => funding.value.reduce((s, f) => s + f.amount_minor, 0));
 const todayVendingTotal = computed(() => {
@@ -31,37 +65,190 @@ const deliveredToday = computed(() => {
 const pendingVending = computed(() =>
     vending.value.filter(p => ['hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status))
 );
+const recentActivityRows = computed(() => {
+    const purchases = vending.value.map((p) => {
+        const isFailed = p.status === 'failed';
+        const isReversal = p.status === 'reversed';
+        const kind = isFailed ? 'failed' : (isReversal ? 'reversals' : 'purchases');
+        return {
+            id: `purchase-${p.id}`,
+            reference: `#${p.id.slice(0, 8)}`,
+            type: typeLabel(p),
+            kind,
+            typeTone: typeTone(kind),
+            vendor: p.purchase_mode ? p.purchase_mode.replace(/_/g, ' ') : 'Vending',
+            customerMeter: [p.customer_name, p.meter_id].filter(Boolean).join(' - ') || 'Unknown meter',
+            station: p.station_id || '',
+            amountMinor: p.amount_minor,
+            units: p.units_kwh ? `${p.units_kwh.toLocaleString('en-NG', { maximumFractionDigits: 1 })} kWh` : '',
+            status: p.status.replace(/_/g, ' '),
+            statusTone: statusTone(p.status),
+            createdAt: p.created_at,
+        };
+    });
 
-async function fetchAll() {
-    try { funding.value = (await api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending')).funding; } catch { /* noop */ }
-    try { apps.value    = (await api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications')).applications; } catch { /* noop */ }
-    try { vending.value = (await api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending')).purchases; } catch { /* noop */ }
+    const fundingRows = funding.value.map((f) => ({
+        id: `funding-${f.id}`,
+        reference: `#${f.id.slice(0, 8)}`,
+        type: 'Funding',
+        kind: 'funding',
+        typeTone: 'info',
+        vendor: 'Funding queue',
+        customerMeter: '',
+        station: '',
+        amountMinor: f.amount_minor,
+        units: '',
+        status: f.status.replace(/_/g, ' '),
+        statusTone: statusTone(f.status),
+        createdAt: f.created_at,
+    }));
+
+    return [...purchases, ...fundingRows]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+});
+const recentActivityTabs = computed(() =>
+    RECENT_TYPE_FILTERS.map((tab) => ({
+        ...tab,
+        count: tab.id === 'all'
+            ? recentActivityRows.value.length
+            : recentActivityRows.value.filter((row) => row.kind === tab.id).length,
+    })),
+);
+const recentStations = computed(() =>
+    [...new Set(recentActivityRows.value.map(row => row.station).filter(Boolean))].sort(),
+);
+const filteredRecentTransactions = computed(() =>
+    recentActivityRows.value.filter((row) => {
+        const matchesType = recentTypeFilter.value === 'all' || row.kind === recentTypeFilter.value;
+        const matchesStation = !recentStationFilter.value || row.station === recentStationFilter.value;
+        const matchesDate = matchesDateFilter(row.createdAt, recentDateFilter.value);
+        return matchesType && matchesStation && matchesDate;
+    }),
+);
+const recentTransactions = computed(() => filteredRecentTransactions.value.slice(0, 10));
+const totalWalletFloatMinor = computed(() =>
+    walletSummary.value.totalFloatMinor ?? walletSummary.value.totalBalanceMinor ?? 0,
+);
+const activeWalletCount = computed(() =>
+    walletSummary.value.byStatus?.active ?? walletSummary.value.activeWallets ?? 0,
+);
+
+function animateStat(targetRef: { value: number }, target: number, durationMs = 700) {
+    const from = Number(targetRef.value || 0);
+    const to = Number(target || 0);
+    if (from === to) return;
+    const start = performance.now();
+
+    const step = (now: number) => {
+        const t = Math.min((now - start) / durationMs, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        targetRef.value = Math.round(from + (to - from) * eased);
+        if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
 }
 
-onMounted(async () => { await fetchAll(); loading.value = false; poll = setInterval(fetchAll, 30_000); });
+function syncAnimatedStats() {
+    animateStat(statPendingFundingMinor, pendingFundingTotal.value);
+    animateStat(statTodayPurchasesMinor, todayVendingTotal.value);
+    animateStat(statFailedToday, failedToday.value);
+    animateStat(statApplications, apps.value.length);
+    animateStat(statTotalWalletFloatMinor, totalWalletFloatMinor.value);
+    animateStat(statTokensDeliveredToday, deliveredToday.value);
+}
+
+function typeLabel(p: Purchase) {
+    if (p.status === 'reversed') return 'Reversal';
+    if (p.status === 'failed') return 'Failed Vend';
+    if (p.purchase_mode === 'remote_send') return 'Remote Send';
+    return 'Token Buy';
+}
+
+function typeTone(kind: string) {
+    if (kind === 'funding') return 'info';
+    if (kind === 'reversals') return 'warn';
+    if (kind === 'disputes' || kind === 'failed') return 'danger';
+    return 'success';
+}
+
+function statusTone(status: string) {
+    if (status === 'delivered' || status === 'approved' || status === 'processed') return 'success';
+    if (status === 'failed' || status === 'rejected') return 'danger';
+    if (status === 'dispatching' || status === 'hold_active') return 'info';
+    if (status === 'delivery_pending_review' || status === 'reversed' || status === 'pending') return 'warn';
+    return 'neutral';
+}
+
+function matchesDateFilter(iso: string, filter: string) {
+    const created = new Date(iso);
+    if (Number.isNaN(created.getTime())) return true;
+    const now = new Date();
+    const start = new Date(now);
+    if (filter === 'seven') {
+        start.setDate(now.getDate() - 7);
+        return created >= start;
+    }
+    if (filter === 'month') {
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        return created >= start;
+    }
+    start.setHours(0, 0, 0, 0);
+    return created >= start;
+}
+
+function adminAutoRefreshEnabled() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('beverly.admin.qualitySettings') || '{}');
+        return saved.autoRefresh !== false;
+    } catch {
+        return true;
+    }
+}
+
+async function fetchAll() {
+    const errors: string[] = [];
+    try { funding.value = (await api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending')).funding; } catch { errors.push('Funding queue unavailable'); }
+    try { apps.value    = (await api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications')).applications; } catch { errors.push('Applications feed unavailable'); }
+    try { vending.value = (await api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending')).purchases; } catch { errors.push('Vending feed unavailable'); }
+    try { walletSummary.value = await api.get<WalletSummary>('/api/v1/admin/wallets/summary'); } catch { errors.push('Wallet summary unavailable'); }
+    feedErrors.value = errors;
+    syncAnimatedStats();
+}
+
+onMounted(async () => {
+    await fetchAll();
+    loading.value = false;
+    if (adminAutoRefreshEnabled()) poll = setInterval(fetchAll, 30_000);
+});
 onUnmounted(() => { if (poll) clearInterval(poll); });
 </script>
 
 <template>
-  <AppShell title="Operations">
+  <AppShell title="Dashboard">
+
+    <WalletGreeting
+      audience="Wallet command room"
+      :name="staffName"
+      detail="for Beverly wallet operations."
+    />
 
     <!-- Page header -->
     <div class="bw-page-head">
       <div class="bw-page-title">
-        <h1>
-          Operations
-          <span class="bw-live-tag">
-            <span class="bw-live-dot" />LIVE
-          </span>
-        </h1>
+        <h1>Dashboard</h1>
         <p>Real-time overview of Beverly vending wallet. Refreshes every 30 s.</p>
       </div>
       <div class="bw-head-actions">
-        <router-link to="/vendors/new" class="bw-btn primary" style="text-decoration:none">
+        <router-link v-if="auth.hasPermission('wallet.vendors.manage')" to="/vendors/new" class="bw-btn primary" style="text-decoration:none">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           New Vendor
         </router-link>
       </div>
+    </div>
+
+    <div v-if="feedErrors.length" class="bw-banner error" role="alert" style="margin-bottom: var(--s-4)">
+      Live dashboard degraded: {{ feedErrors.join(' - ') }}.
     </div>
 
     <!-- KPI grid -->
@@ -76,7 +263,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" style="color: var(--brand)">
-          {{ naira(pendingFundingTotal) }}
+          {{ naira(statPendingFundingMinor) }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', funding.length > 0 ? 'up' : 'flat']">
@@ -104,7 +291,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(todayVendingTotal) }}</div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTodayPurchasesMinor) }}</div>
         <div class="bw-kpi-foot">
           <span class="bw-delta up">{{ deliveredToday }} vends</span>
           <span class="bw-kpi-note">successful today</span>
@@ -124,7 +311,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" :style="{ color: failedToday > 0 ? 'var(--danger)' : 'var(--text-dim)' }">
-          {{ failedToday }}
+          {{ statFailedToday }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', failedToday > 0 ? 'down' : 'flat']">
@@ -142,12 +329,47 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
         </div>
         <div class="bw-kpi-value" :style="{ color: apps.length > 0 ? 'var(--info)' : 'var(--text-dim)' }">
-          {{ apps.length }}
+          {{ statApplications }}
         </div>
         <div class="bw-kpi-foot">
           <span :class="['bw-delta', apps.length > 0 ? 'flat' : 'flat']" style="background: oklch(72% 0.13 220 / 0.12); color: var(--info)">
             awaiting review
           </span>
+        </div>
+      </div>
+
+      <!-- Total wallet float -->
+      <router-link
+        to="/wallets"
+        class="bw-kpi featured bw-kpi-link"
+        style="text-decoration:none; color:inherit"
+        aria-label="Open all wallets"
+      >
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Total Wallet Float</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h20v10H2z"/><path d="M16 12h.01"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTotalWalletFloatMinor) }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ activeWalletCount }} active</span>
+          <span class="bw-kpi-note">across all wallets</span>
+        </div>
+      </router-link>
+
+      <!-- Tokens delivered today -->
+      <div class="bw-kpi info-tone">
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Tokens Delivered Today</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--info)">{{ statTokensDeliveredToday }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ deliveredToday }} successful</span>
+          <span class="bw-kpi-note">live delivery count</span>
         </div>
       </div>
 
@@ -185,7 +407,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
 
         <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
-          <router-link to="/funding" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
+          <router-link v-if="auth.hasPermission('wallet.funding.view')" to="/funding" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
             Open queue
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </router-link>
@@ -220,7 +442,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
 
         <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
-          <router-link to="/applications" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
+          <router-link v-if="auth.hasPermission('wallet.vendors.review')" to="/applications" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
             Review all
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </router-link>
@@ -239,7 +461,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </div>
           <div class="bw-card-sub">Orders that haven't resolved yet</div>
         </div>
-        <router-link to="/vending" class="bw-btn sm" style="text-decoration:none">Open monitor</router-link>
+        <router-link v-if="auth.hasPermission('wallet.vending.monitor')" to="/vending" class="bw-btn sm" style="text-decoration:none">Open monitor</router-link>
       </div>
 
       <!-- Desktop table -->
@@ -287,6 +509,53 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="bw-card flush">
+      <div class="bw-table-head-bar">
+        <div>
+          <div class="bw-card-title">Recent Transactions</div>
+          <div class="bw-card-sub">Most recent vending orders</div>
+        </div>
+        <router-link
+          v-if="auth.hasPermission('wallet.vending.monitor')"
+          to="/vending"
+          class="bw-btn sm"
+          style="text-decoration:none"
+        >
+          See more
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </router-link>
+      </div>
+
+      <div class="bw-t-wrap">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Meter</th>
+              <th>Status</th>
+              <th style="text-align:right">Amount</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
+              <td class="bw-row-id">#{{ p.id.slice(0, 8) }}</td>
+              <td class="bw-mono">{{ p.customerMeter || '—' }}</td>
+              <td><span class="bw-badge" :class="p.status === 'delivered' ? 'success' : (p.status === 'failed' ? 'danger' : 'warn')">{{ p.status }}</span></td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.amountMinor) }}</td>
+              <td class="bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.createdAt) }}</td>
+            </tr>
+            <tr v-if="!recentTransactions.length && !loading">
+              <td colspan="5" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions yet.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

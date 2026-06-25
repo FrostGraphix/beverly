@@ -74,7 +74,7 @@ export function validateProfileState(value) {
 export function validatePreferenceState(value) {
   const source = isObject(value) ? value : {};
   return {
-    theme: optionalString(source.theme, "system"),
+    theme: optionalString(source.theme, "light"),
     compact: Boolean(source.compact),
     emailAlerts: source.emailAlerts !== false,
     tokenAlerts: source.tokenAlerts !== false,

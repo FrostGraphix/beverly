@@ -45,7 +45,8 @@
     "test:auth": "node --disable-warning=ExperimentalWarning tests/supabase-auth-resolution.test.cjs && node --disable-warning=ExperimentalWarning tests/supabase-login-domain.test.cjs && node --disable-warning=ExperimentalWarning tests/route-permissions.test.mjs && node --disable-warning=ExperimentalWarning tests/api-authz.test.cjs && node --disable-warning=ExperimentalWarning tests/session-timeout.test.mjs",
     "node:verify": "node --disable-warning=ExperimentalWarning tools/node-version-check.cjs",
     "security:audit": "node --disable-warning=ExperimentalWarning tools/security-audit-baseline.cjs",
-    "ci:actions": "node --disable-warning=ExperimentalWarning tools/github-actions-check.cjs"
+    "ci:actions": "node --disable-warning=ExperimentalWarning tools/github-actions-check.cjs",
+    "phase8:verify": "node --disable-warning=ExperimentalWarning tools/phase8-verification-suite.cjs"
   },
   "dependencies": {
     "axios": "^1.7.9",

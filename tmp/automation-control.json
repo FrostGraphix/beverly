@@ -26,13 +26,13 @@
   },
   "incidents": [
     {
-      "id": "incident-1779050539846",
+      "id": "incident-1782386494338",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T20:42:19.846Z",
+      "createdAt": "2026-06-25T11:21:34.338Z",
       "details": {},
       "alerts": [
         {
@@ -64,18 +64,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T20-42-19-846Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-06-25T11-21-34-338Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779050444722",
+      "id": "incident-1782386425718",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T20:40:44.722Z",
+      "createdAt": "2026-06-25T11:20:25.718Z",
       "details": {},
       "alerts": [
         {
@@ -107,18 +107,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T20-40-44-722Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-06-25T11-20-25-718Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779046570136",
+      "id": "incident-1780083417734",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T19:36:10.136Z",
+      "createdAt": "2026-05-29T19:36:57.734Z",
       "details": {},
       "alerts": [
         {
@@ -150,18 +150,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T19-36-10-136Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-29T19-36-57-734Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779046547395",
+      "id": "incident-1779529302430",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T19:35:47.395Z",
+      "createdAt": "2026-05-23T09:41:42.430Z",
       "details": {},
       "alerts": [
         {
@@ -193,18 +193,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T19-35-47-395Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-23T09-41-42-430Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779045428461",
+      "id": "incident-1779528326264",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T19:17:08.461Z",
+      "createdAt": "2026-05-23T09:25:26.264Z",
       "details": {},
       "alerts": [
         {
@@ -236,18 +236,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T19-17-08-461Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-23T09-25-26-264Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779044049608",
+      "id": "incident-1779528003941",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:54:09.608Z",
+      "createdAt": "2026-05-23T09:20:03.941Z",
       "details": {},
       "alerts": [
         {
@@ -279,18 +279,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-54-09-608Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-23T09-20-03-941Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779043992965",
+      "id": "incident-1779527914201",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:53:12.965Z",
+      "createdAt": "2026-05-23T09:18:34.201Z",
       "details": {},
       "alerts": [
         {
@@ -322,18 +322,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-53-12-965Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-23T09-18-34-201Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779043785119",
+      "id": "incident-1779527006056",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:49:45.119Z",
+      "createdAt": "2026-05-23T09:03:26.056Z",
       "details": {},
       "alerts": [
         {
@@ -365,18 +365,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-49-45-119Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-23T09-03-26-056Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779043521425",
+      "id": "incident-1779461972715",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:45:21.425Z",
+      "createdAt": "2026-05-22T14:59:32.715Z",
       "details": {},
       "alerts": [
         {
@@ -408,18 +408,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-45-21-425Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-22T14-59-32-715Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779043337615",
+      "id": "incident-1779461941601",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:42:17.615Z",
+      "createdAt": "2026-05-22T14:59:01.601Z",
       "details": {},
       "alerts": [
         {
@@ -451,18 +451,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-42-17-615Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-22T14-59-01-601Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779042835293",
+      "id": "incident-1779362325462",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:33:55.293Z",
+      "createdAt": "2026-05-21T11:18:45.462Z",
       "details": {},
       "alerts": [
         {
@@ -494,18 +494,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-33-55-293Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-21T11-18-45-462Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779041061719",
+      "id": "incident-1779361867229",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:04:21.719Z",
+      "createdAt": "2026-05-21T11:11:07.229Z",
       "details": {},
       "alerts": [
         {
@@ -537,18 +537,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-04-21-719Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-21T11-11-07-229Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779041015121",
+      "id": "incident-1779361267844",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:03:35.121Z",
+      "createdAt": "2026-05-21T11:01:07.844Z",
       "details": {},
       "alerts": [
         {
@@ -580,18 +580,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-03-35-121Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-21T11-01-07-844Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1779040981608",
+      "id": "incident-1779360777201",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-17T18:03:01.608Z",
+      "createdAt": "2026-05-21T10:52:57.201Z",
       "details": {},
       "alerts": [
         {
@@ -623,18 +623,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-17T18-03-01-608Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-21T10-52-57-201Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778937377084",
+      "id": "incident-1779196626187",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T13:16:17.084Z",
+      "createdAt": "2026-05-19T13:17:06.187Z",
       "details": {},
       "alerts": [
         {
@@ -666,18 +666,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T13-16-17-084Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-19T13-17-06-187Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778935644676",
+      "id": "incident-1779196324511",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T12:47:24.676Z",
+      "createdAt": "2026-05-19T13:12:04.511Z",
       "details": {},
       "alerts": [
         {
@@ -709,18 +709,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T12-47-24-676Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-19T13-12-04-511Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778934685878",
+      "id": "incident-1779188860434",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T12:31:25.878Z",
+      "createdAt": "2026-05-19T11:07:40.434Z",
       "details": {},
       "alerts": [
         {
@@ -752,18 +752,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T12-31-25-878Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-19T11-07-40-434Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778929265407",
+      "id": "incident-1779188653513",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T11:01:05.407Z",
+      "createdAt": "2026-05-19T11:04:13.513Z",
       "details": {},
       "alerts": [
         {
@@ -795,18 +795,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T11-01-05-407Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-19T11-04-13-513Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778929116144",
+      "id": "incident-1779103039083",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T10:58:36.144Z",
+      "createdAt": "2026-05-18T11:17:19.083Z",
       "details": {},
       "alerts": [
         {
@@ -838,18 +838,18 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T10-58-36-144Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-18T11-17-19-083Z-manual-test.json"
         }
       ]
     },
     {
-      "id": "incident-1778928777039",
+      "id": "incident-1779100802656",
       "kind": "manual-test",
       "severity": "info",
       "title": "Manual test",
       "message": "Automation control test",
       "source": "automation-control",
-      "createdAt": "2026-05-16T10:52:57.039Z",
+      "createdAt": "2026-05-18T10:40:02.657Z",
       "details": {},
       "alerts": [
         {
@@ -881,7 +881,7 @@
         {
           "type": "capture-incident-artifact",
           "status": "applied",
-          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-16T10-52-57-039Z-manual-test.json"
+          "artifactPath": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4\\tmp\\automation-incidents\\2026-05-18T10-40-02-657Z-manual-test.json"
         }
       ]
     }

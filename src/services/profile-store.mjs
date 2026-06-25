@@ -27,7 +27,7 @@ export function saveProfileState(profile) {
   return state;
 }
 
-export function loadPreferenceState(theme = "system") {
+export function loadPreferenceState(theme = "light") {
   return validatePreferenceState({
     ...readJson(preferenceKey, {}),
     theme: localStorage.getItem("acob-theme") || theme
