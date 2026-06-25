@@ -30,18 +30,6 @@ export declare const fontStacks: {
     mono: string;
 };
 
-export type WalletGreetingPeriod = 'morning' | 'afternoon' | 'night';
-
-export interface WalletGreeting {
-    period: WalletGreetingPeriod;
-    english: string;
-    yoruba: string;
-    hausa: string;
-    pulse: string;
-}
-
-export declare function getWalletGreeting(date?: Date): WalletGreeting;
-
 export declare function setTheme(name: 'dark' | 'light' | string): void;
 export declare function initTheme(defaultName?: string): void;
 export declare function toggleTheme(): void;

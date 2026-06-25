@@ -7,8 +7,8 @@
  *   freezeVendor / unfreeze  → wallet status + audit.
  */
 import { adminClient } from '../db/supabase.js';
-import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
-import { logAction, logSecurityEvent } from './audit.js';
+import { getOrCreateWallet } from './wallets.js';
+import { logAction } from './audit.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
@@ -132,17 +132,6 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         },
     });
 
-    // Mark that a temp password was issued for this user.
-    // Note: the password itself is NEVER stored in audit metadata.
-    await logSecurityEvent('temp_password_issued', {
-        actorUserId: authUserId,
-        severity: 'info',
-        metadata: {
-            issued_by: input.createdByStaffId,
-            vendor_organization_id: organization.id,
-        },
-    });
-
     return {
         organizationId: organization.id,
         primaryVendorUserId: (vu as { id: string }).id,
@@ -163,30 +152,21 @@ export async function setVendorStatus(
         .select('status')
         .eq('id', vendorOrganizationId)
         .single();
-    if ((before as any)?.status === 'closed' && newStatus !== 'closed') {
-        throw new OnboardingError('Closed vendors cannot be reactivated. Create a replacement vendor profile instead.', 'vendor_closed_final');
-    }
-
-    // Mirror account controls to the wallet so vend/funding paths cannot bypass
-    // an organization-level suspension.
-    const walletStatus =
-        newStatus === 'approved' ? 'active'
-        : newStatus === 'closed' ? 'closed'
-        : 'frozen';
-    try {
-        await setOwnerWalletStatus('vendor', vendorOrganizationId, walletStatus);
-    } catch (error) {
-        if (error instanceof WalletStateError) {
-            throw new OnboardingError(error.message, error.code);
-        }
-        throw error;
-    }
 
     const { error } = await adminClient
         .from('vendor_organizations')
         .update({ status: newStatus, notes: reason ?? null })
         .eq('id', vendorOrganizationId);
     if (error) throw new OnboardingError(error.message, 'status_update_failed');
+
+    // mirror wallet state
+    if (newStatus === 'frozen' || newStatus === 'closed') {
+        await adminClient.from('wallets').update({ status: 'frozen' })
+            .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
+    } else if (newStatus === 'approved') {
+        await adminClient.from('wallets').update({ status: 'active' })
+            .eq('owner_type', 'vendor').eq('owner_id', vendorOrganizationId);
+    }
 
     await logAction({
         actorUserId: staffId,
@@ -195,7 +175,7 @@ export async function setVendorStatus(
         targetType: 'vendor_organization',
         targetId: vendorOrganizationId,
         before: { status: before?.status },
-        after: { status: newStatus, walletStatus, reason: reason ?? null },
+        after: { status: newStatus, reason: reason ?? null },
     });
 }
 

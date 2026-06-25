@@ -731,7 +731,7 @@ Acceptance:
 
 ## Phase 7: Data Governance
 
-Status: Required before compliance release.
+Status: Implemented and applied to linked Supabase.
 
 ### P7-01: Minimize webhook retention
 
@@ -760,6 +760,12 @@ Acceptance:
 - Expired payloads purge automatically.
 - Audit trail remains intact.
 
+Implemented:
+
+- `payment_webhooks` stores a minimal payload plus encrypted raw body.
+- Expired webhook payloads purge through the worker.
+- Purge counts are audit logged.
+
 ### P7-02: Govern VAT changes
 
 Scope:
@@ -786,6 +792,13 @@ Acceptance:
 - Default rate stays 750 basis points.
 - Future rate activates by date.
 - Purchases preserve historic rate.
+
+Implemented:
+
+- `vat_policies` keeps approved, effective-dated Nigeria VAT rates.
+- New previews use the latest approved effective rate.
+- Purchase orders snapshot VAT basis points for historic receipts.
+- Admin VAT policy routes require `wallet.vat.manage`.
 
 ## Phase 8: Verification Suite
 

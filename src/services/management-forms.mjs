@@ -61,6 +61,7 @@ export const ROLE_PERMISSIONS = [
       { value: "DataReport.LowPurchase",          label: "Low Purchase Situation" },
       { value: "DataReport.ConsumptionStatistics",label: "Consumption Statistics" },
       { value: "AutomaticMeterReading.DailyDataMeter", label: "Interval Data (Daily Meter)" },
+      { value: "DataReport.SiteConsumption",      label: "Site Consumption" }
     ]
   },
   {
@@ -244,7 +245,6 @@ const managementForms = {
       field("password",  "Password",  { required: true, type: "password" }),
       field("roleId",    "Role",      { type: "role-select" }),
       field("stationId", "StationId", { required: true, type: "select" }),
-      field("status",    "Status",    { type: "select", options: [{ value: "true", label: "Active" }, { value: "false", label: "Inactive" }] }),
       field("remark",    "Remark")
     ],
     Edit: [
@@ -253,7 +253,6 @@ const managementForms = {
       field("nickName",  "Nick Name", { required: true }),
       field("roleId",    "Role",      { type: "role-select" }),
       field("stationId", "StationId", { required: true, type: "select" }),
-      field("status",    "Status",    { type: "select", options: [{ value: "true", label: "Active" }, { value: "false", label: "Inactive" }] }),
       field("remark",    "Remark")
     ],
     Delete: [
@@ -471,7 +470,6 @@ export function managementFormSeed(route, action, row = {}) {
       else if (["gatewayId", "userId"].includes(currentField.name)) value = row.id || row.userId;
       else if (["customerName", "gatewayName", "tariffName"].includes(currentField.name)) value = row.name;
       else if (currentField.name === "stationId") value = row.stationId || row.station || row.siteId || row.StationId || "";
-      else if (currentField.name === "status" && route.hash === "#/admin/user") value = "true";
       else if (currentField.name === "type") value = row.type ?? row.meterType ?? "";
       else if (currentField.name === "isThreePhase") value = row.isThreePhase ?? "";
       else if (currentField.name === "communicationWay") value = row.communicationWay ?? "";
@@ -481,11 +479,6 @@ export function managementFormSeed(route, action, row = {}) {
     }
     if (currentField.name === "stationId" && typeof value === "string") {
       value = value.toUpperCase();
-    }
-    if (route.hash === "#/admin/user" && currentField.name === "status") {
-      value = value === true || value === 1 || String(value).toLowerCase() === "active" || String(value).toLowerCase() === "true"
-        ? "true"
-        : "false";
     }
     if (route.hash === "#/admin/meter" && ["type", "isThreePhase", "communicationWay"].includes(currentField.name) && value !== "") {
       value = String(value);

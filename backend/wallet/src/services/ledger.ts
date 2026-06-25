@@ -158,22 +158,29 @@ export interface Hold {
 
 export async function createHold(input: HoldInput): Promise<Hold> {
     if (input.amountMinor <= 0) throw new LedgerError('amount must be positive', 'invalid_amount');
-    if (!input.idempotencyKey) throw new LedgerError('idempotencyKey is required', 'missing_idempotency_key');
     const ttl = input.ttlSeconds ?? 900;
-    if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) {
-        throw new LedgerError('hold ttl must be between one second and one hour', 'invalid_hold_ttl');
-    }
     const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
 
-    const { data, error } = await adminClient.rpc('fn_create_hold', {
-        p_wallet_id: input.walletId,
-        p_amount_minor: input.amountMinor,
-        p_reference_type: input.referenceType ?? null,
-        p_reference_id: input.referenceId ?? null,
-        p_idempotency_key: input.idempotencyKey,
-        p_expires_at: expiresAt,
-        p_created_by: input.createdBy,
-    });
+    // pre-check: balance must cover this hold + existing
+    const bal = await getBalance(input.walletId);
+    if (bal.availableMinor < input.amountMinor) {
+        throw new LedgerError('insufficient available balance for hold', 'insufficient_balance');
+    }
+
+    const { data, error } = await adminClient
+        .from('wallet_holds')
+        .insert({
+            wallet_id: input.walletId,
+            amount_minor: input.amountMinor,
+            reference_type: input.referenceType ?? null,
+            reference_id: input.referenceId ?? null,
+            idempotency_key: input.idempotencyKey,
+            expires_at: expiresAt,
+            status: 'active',
+            created_by: input.createdBy,
+        })
+        .select('*')
+        .single();
 
     if (error) {
         if (error.code === '23505') {
@@ -185,14 +192,7 @@ export async function createHold(input: HoldInput): Promise<Hold> {
                 .single();
             if (existing) return existing as Hold;
         }
-        const message = error.message ?? 'Could not create hold.';
-        if (/insufficient available balance/i.test(message)) {
-            throw new LedgerError(message, 'insufficient_balance');
-        }
-        if (/wallet (not found|is not active)/i.test(message)) {
-            throw new LedgerError(message, 'wallet_inactive');
-        }
-        throw new LedgerError(message, 'hold_error');
+        throw new LedgerError(error.message, 'hold_error');
     }
     return data as Hold;
 }
@@ -208,7 +208,6 @@ export interface CaptureInput {
 }
 
 export async function captureHold(input: CaptureInput): Promise<LedgerEntry> {
-    if (!input.idempotencyKey) throw new LedgerError('idempotencyKey is required', 'missing_idempotency_key');
     const { data, error } = await adminClient.rpc('fn_capture_hold', {
         p_hold_id: input.holdId,
         p_entry_type: input.entryType,
@@ -218,13 +217,7 @@ export async function captureHold(input: CaptureInput): Promise<LedgerEntry> {
         p_memo: input.memo ?? null,
         p_created_by: input.createdBy,
     });
-    if (error) {
-        const message = error.message ?? 'Could not capture hold.';
-        if (/hold has expired/i.test(message)) throw new LedgerError(message, 'hold_expired');
-        if (/hold is not active/i.test(message)) throw new LedgerError(message, 'hold_inactive');
-        if (/insufficient available balance/i.test(message)) throw new LedgerError(message, 'insufficient_balance');
-        throw new LedgerError(message, 'capture_error');
-    }
+    if (error) throw new LedgerError(error.message, 'capture_error');
     return data as LedgerEntry;
 }
 
@@ -249,12 +242,7 @@ export async function getBalance(walletId: string): Promise<Balance> {
         .select('*')
         .eq('wallet_id', walletId)
         .single();
-    if (error) {
-        if (/v_wallet_balances/i.test(error.message)) {
-            return getBalanceFromLedger(walletId);
-        }
-        throw new LedgerError(error.message, 'balance_error');
-    }
+    if (error) throw new LedgerError(error.message, 'balance_error');
     return {
         walletId: data.wallet_id,
         ledgerBalanceMinor: Number(data.ledger_balance_minor),
@@ -262,46 +250,6 @@ export async function getBalance(walletId: string): Promise<Balance> {
         availableMinor: Number(data.available_balance_minor),
         currency: data.currency,
         status: data.status,
-    };
-}
-
-async function getBalanceFromLedger(walletId: string): Promise<Balance> {
-    const { data: wallet, error: walletError } = await adminClient
-        .from('wallets')
-        .select('id, currency, status')
-        .eq('id', walletId)
-        .single();
-    if (walletError || !wallet) {
-        throw new LedgerError(walletError?.message ?? 'wallet not found', 'balance_error');
-    }
-
-    const { data: entries, error: entriesError } = await adminClient
-        .from('wallet_ledger_entries')
-        .select('direction, amount_minor')
-        .eq('wallet_id', walletId);
-    if (entriesError) throw new LedgerError(entriesError.message, 'balance_error');
-
-    const ledgerBalanceMinor = (entries ?? []).reduce((sum, entry) => {
-        const amount = Number(entry.amount_minor ?? 0);
-        return entry.direction === 'credit' ? sum + amount : sum - amount;
-    }, 0);
-
-    const { data: holds, error: holdsError } = await adminClient
-        .from('wallet_holds')
-        .select('amount_minor')
-        .eq('wallet_id', walletId)
-        .eq('status', 'active');
-    if (holdsError) throw new LedgerError(holdsError.message, 'balance_error');
-
-    const activeHoldsMinor = (holds ?? []).reduce((sum, hold) => sum + Number(hold.amount_minor ?? 0), 0);
-
-    return {
-        walletId,
-        ledgerBalanceMinor,
-        activeHoldsMinor,
-        availableMinor: ledgerBalanceMinor - activeHoldsMinor,
-        currency: wallet.currency,
-        status: wallet.status,
     };
 }
 

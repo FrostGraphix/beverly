@@ -74,14 +74,6 @@ export function remoteTaskEndpoint(route = {}) {
   return "/API/RemoteMeterTask/CreateReadingTask";
 }
 
-export function remoteTaskConfirmEndpoint(route = {}) {
-  if (isGprsSupportTaskRoute(route)) return "/API/GPRSMeterTask/GPRSUpdateReadingTask";
-  const kind = remoteTaskKind(route);
-  if (kind === "token") return "/API/RemoteMeterTask/UpdateTokenTask";
-  if (kind === "control") return "/API/RemoteMeterTask/UpdateControlTask";
-  return "/API/RemoteMeterTask/UpdateReadingTask";
-}
-
 export function remoteTaskNeedsAuthorization(route = {}) {
   return false;
 }
@@ -231,106 +223,6 @@ export function buildRemoteTaskPayload(route = {}, action = "", form = {}, rows 
   return sourceRows.map((row) => remoteTaskPayloadForRow(route, row, form));
 }
 
-function collectTaskIds(value, target = []) {
-  if (!value) return target;
-  if (Array.isArray(value)) {
-    for (const item of value) collectTaskIds(item, target);
-    return target;
-  }
-  if (typeof value !== "object") return target;
-  const id = remoteTaskId(value);
-  if (Number.isFinite(id) && id > 0) target.push(id);
-  collectTaskIds(value.result, target);
-  collectTaskIds(value.data, target);
-  return target;
-}
-
-export function remoteTaskConfirmPayload(response = {}) {
-  return [...new Set(collectTaskIds(response))].map((id) => ({ id }));
-}
-
-export function remoteTaskId(value = {}) {
-  return Number(
-    value.id ??
-    value.taskId ??
-    value.taskID ??
-    value.recordId ??
-    value.remoteTaskId ??
-    value.tokenTaskId ??
-    value.meterTaskId
-  );
-}
-
-export function remoteTaskConfirmPayloadFromRow(row = {}) {
-  const id = remoteTaskId(row);
-  return Number.isFinite(id) && id > 0 ? [{ id }] : [];
-}
-
-function collectTaskRows(value, target = []) {
-  if (!value) return target;
-  if (Array.isArray(value)) {
-    for (const item of value) collectTaskRows(item, target);
-    return target;
-  }
-  if (typeof value !== "object") return target;
-  if (Number.isFinite(remoteTaskId(value))) target.push(value);
-  collectTaskRows(value.result, target);
-  collectTaskRows(value.data, target);
-  return target;
-}
-
-function normalizeTaskToken(value) {
-  return String(value || "").replace(/\s+/g, "");
-}
-
-function isStandbyStatus(value) {
-  return value === 0 || value === "0" || String(value || "").toLowerCase() === "standby";
-}
-
-export function isRemoteTaskTerminalStatus(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  return value === 1 || value === "1" || value === 2 || value === "2" || normalized === "success" || normalized === "failure" || normalized === "failed";
-}
-
-export function remoteTokenTaskStatus(response = {}, form = {}) {
-  const meterId = String(form.meterId || "").trim();
-  const token = normalizeTaskToken(form.token || form.data);
-  const id = remoteTaskId(form);
-  return collectTaskRows(response)
-    .filter((row) => !Number.isFinite(id) || remoteTaskId(row) === id)
-    .find((row) => String(row.meterId || "").trim() === meterId && (!token || normalizeTaskToken(row.data || row.token) === token)) || null;
-}
-
-export function remoteTokenTaskLookupPayload(form = {}) {
-  return {
-    lang: "en",
-    meterId: form.meterId || "",
-    pageNumber: 1,
-    pageSize: 100,
-    orderBy: "createDate desc"
-  };
-}
-
-export function remoteTokenStandbyConfirmPayload(response = {}, form = {}) {
-  const meterId = String(form.meterId || "").trim();
-  const token = normalizeTaskToken(form.token || form.data);
-  const ids = collectTaskRows(response)
-    .filter((row) => String(row.meterId || "").trim() === meterId)
-    .filter((row) => !token || normalizeTaskToken(row.data || row.token) === token)
-    .filter((row) => isStandbyStatus(row.status))
-    .map((row) => remoteTaskId(row))
-    .filter((id) => Number.isFinite(id) && id > 0);
-  return [...new Set(ids)].map((id) => ({ id }));
-}
-
-/**
- * Returns true only when the error is a FRONTEND guard (live writes off),
- * NOT when it is a real backend 403 on a live-write-enabled environment.
- *
- * Previously this delegated straight to isGuardedWriteError which matched
- * any 403 — including "Route permission required" from the upstream API —
- * causing "Live writes are off." to appear even when live writes were on.
- */
 export function guardedRemoteTaskError(error = {}) {
   return isGuardedWriteError(error);
 }

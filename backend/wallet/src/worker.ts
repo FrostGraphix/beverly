@@ -12,6 +12,7 @@ import { runDailyReconciliation } from './services/reconciliation.js';
 import { runDailySettlement } from './services/settlement.js';
 import { buildDataExport } from './services/data-privacy.js';
 import { deliverNotification, type NotificationPayload } from './services/notifications.js';
+import { purgeExpiredWebhookPayloads } from './services/webhook-retention.js';
 
 const schedules = [
     { name: 'holds', pattern: '*/5 * * * *' },
@@ -22,6 +23,7 @@ const schedules = [
     { name: 'settlement', pattern: '0 3 * * *' },
     { name: 'fraud-baseline', pattern: '0 5 * * *' },
     { name: 'refund-expiry', pattern: '0 * * * *' },
+    { name: 'webhook-retention', pattern: '20 4 * * *' },
 ] as const;
 
 async function processMaintenance(name: string): Promise<void> {
@@ -34,6 +36,7 @@ async function processMaintenance(name: string): Promise<void> {
         case 'settlement': return runDailySettlement();
         case 'fraud-baseline': return recomputeFraudBaselines();
         case 'refund-expiry': return processRefundExpiry();
+        case 'webhook-retention': await purgeExpiredWebhookPayloads(); return;
         default: throw new Error(`Unknown maintenance job: ${name}`);
     }
 }

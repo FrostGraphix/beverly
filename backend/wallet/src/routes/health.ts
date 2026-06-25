@@ -8,18 +8,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { redisConnection } from '../queue/index.js';
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const guard = new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    });
-    try {
-        return await Promise.race([promise, guard]);
-    } finally {
-        if (timeout) clearTimeout(timeout);
-    }
-}
-
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }));
 
@@ -40,7 +28,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         // Redis
         const redisStart = Date.now();
         try {
-            const pong = await withTimeout(redisConnection.ping(), 1500, 'redis ping');
+            const pong = await redisConnection.ping();
             checks.redis = pong === 'PONG'
                 ? { ok: true, latencyMs: Date.now() - redisStart }
                 : { ok: false, error: `unexpected ping reply: ${pong}` };

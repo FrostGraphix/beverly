@@ -16,6 +16,28 @@
     ]
   },
   {
+    "group": "Data Report",
+    "title": "Report Centre",
+    "hash": "#/admin/reports",
+    "apis": [
+      "/api/reports/revenue",
+      "/api/reports/wallet",
+      "/api/reports/customers",
+      "/api/reports/audit",
+      "/api/reports/settlement"
+    ],
+    "columns": [],
+    "actions": [
+      "Generate",
+      "Export"
+    ],
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
     "group": "Token Generate",
     "title": "Credit Token",
     "hash": "#/token-generate/credit-token",
@@ -625,6 +647,59 @@
     ]
   },
   {
+    "group": "Data Report",
+    "title": "Abnormal Alarm",
+    "hash": "#/prepay-report/abnormal-alarm",
+    "apis": [
+      "/api/local/abnormal-alarms"
+    ],
+    "columns": [
+      "alarmLabel",
+      "meterId",
+      "customerId",
+      "customerName",
+      "stationId",
+      "gatewayId",
+      "total1",
+      "usage1",
+      "batteryLow",
+      "magneticInterference",
+      "terminalCoverOpen",
+      "currentReverse",
+      "currentUnbalance",
+      "currentDate"
+    ],
+    "actions": [
+      "Sort",
+      "Search",
+      "Reset",
+      "Export"
+    ],
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
+    "group": "Data Report",
+    "title": "Station Consumption",
+    "hash": "#/prepay-report/station-consumption",
+    "apis": [
+      "/api/local/consumption/station-analytics"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Export"
+    ],
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
     "group": "Management",
     "title": "Gateway",
     "hash": "#/management/gateway",
@@ -1220,6 +1295,43 @@
     ],
     "roles": [
       "super-admin"
+    ]
+  },
+  {
+    "group": "System",
+    "title": "Station Onboarding Studio",
+    "hash": "#/system/station-onboarding-studio",
+    "apis": [
+      "/api/station/read",
+      "/api/gateway/read",
+      "/api/meter/read",
+      "/api/customer/read",
+      "/api/account/read",
+      "/api/tariff/read"
+    ],
+    "columns": [],
+    "actions": [],
+    "roles": [
+      "super-admin"
+    ]
+  },
+  {
+    "group": "System",
+    "title": "Automation Command",
+    "hash": "#/system/automation-command",
+    "apis": [
+      "/api/system/automation-report",
+      "/api/system/automation-control"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Save",
+      "Test Alert"
+    ],
+    "roles": [
+      "super-admin",
+      "operations-manager"
     ]
   }
 ]

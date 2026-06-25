@@ -41,36 +41,6 @@ export const fontStacks = {
     mono: "'JetBrains Mono', ui-monospace, monospace",
 };
 
-export function getWalletGreeting(date = new Date()) {
-    const hour = date.getHours();
-    const period = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'night';
-    const greetings = {
-        morning: {
-            period,
-            english: 'Good morning',
-            yoruba: 'E kaaro',
-            hausa: 'Ina kwana',
-            pulse: 'Fresh starts',
-        },
-        afternoon: {
-            period,
-            english: 'Good afternoon',
-            yoruba: 'E kaasan',
-            hausa: 'Ina wuni',
-            pulse: 'Steady flow',
-        },
-        night: {
-            period,
-            english: 'Good night',
-            yoruba: 'E ku ale',
-            hausa: 'Barka da dare',
-            pulse: 'Calm close',
-        },
-    };
-
-    return greetings[period];
-}
-
 export function setTheme(name) {
     if (typeof document === 'undefined') return;
     document.documentElement.setAttribute('data-theme', name);

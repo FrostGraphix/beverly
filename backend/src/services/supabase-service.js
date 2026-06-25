@@ -116,11 +116,7 @@ function authUsersFromBody(body) {
 
 function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
   const emailValue = user.email || fallbackEmail || "";
-  const roleId = user.user_metadata?.role_key
-    || user.app_metadata?.role_key
-    || user.user_metadata?.role
-    || user.app_metadata?.role
-    || "";
+  const roleId = user.user_metadata?.role_key || user.app_metadata?.role_key || "";
   return {
     authUserId: user.id || "",
     userId: user.user_metadata?.user_id || (emailValue === adminEmailsFallback() ? "admin" : emailValue),
@@ -129,24 +125,6 @@ function normalizedActorFromAuthUser(user = {}, fallbackEmail = "") {
     remark: user.user_metadata?.remark || "",
     stationId: user.user_metadata?.station_id || "",
     email: emailValue
-  };
-}
-
-async function staffActorFromAuthUser(user = {}, fallback = {}) {
-  if (!serviceConfigured() || !user.id) return null;
-  const encodedUserId = encodeURIComponent(user.id);
-  const rows = await restRequest(`/users?select=id,auth_user_id,user_id,email,name,role_key,remark,station_id&or=(auth_user_id.eq.${encodedUserId},user_id.eq.${encodedUserId})&limit=1`);
-  const staff = Array.isArray(rows) ? rows[0] : null;
-  const roleId = staff?.role_key || fallback.roleId || "";
-  if (!staff || !roleId) return null;
-  return {
-    authUserId: staff.auth_user_id || user.id,
-    userId: staff.user_id || staff.id || fallback.userId || user.id,
-    userName: staff.name || staff.email || fallback.userName || user.email || "",
-    roleId,
-    remark: staff.remark || fallback.remark || "",
-    stationId: staff.station_id || fallback.stationId || "",
-    email: staff.email || user.email || fallback.email || ""
   };
 }
 
@@ -185,37 +163,15 @@ async function resolveAuthEmail(identifier, explicitEmail = "") {
 async function signInWithPassword({ userId, password }) {
   if (!authEnabled() || !configured()) return null;
   const key = anonKey() || serviceRoleKey();
-  let email = "";
-  let response;
-  let body;
-  try {
-    email = await resolveAuthEmail(userId);
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: jsonHeaders(key),
-      body: JSON.stringify({
-        email,
-        password
-      })
-    })));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      status: 503,
-      body: {
-        code: 503,
-        msg: "Authentication service unavailable",
-        reason: "Authentication service unavailable",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "supabase-auth",
-          pathname: "/api/user/login",
-          detail: message
-        }
-      }
-    };
-  }
+  const email = await resolveAuthEmail(userId);
+  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: jsonHeaders(key),
+    body: JSON.stringify({
+      email,
+      password
+    })
+  }));
 
   if (!response.ok) {
     return {
@@ -272,37 +228,6 @@ async function signInWithPassword({ userId, password }) {
   };
 }
 
-async function refreshAccessToken(refreshToken) {
-  const token = String(refreshToken || "").trim();
-  const key = anonKey() || serviceRoleKey();
-  if (!authEnabled() || !configured() || !token || !key) return null;
-  let response;
-  let body;
-  try {
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: jsonHeaders(key),
-      body: JSON.stringify({ refresh_token: token })
-    })));
-  } catch {
-    return null;
-  }
-  if (!response.ok || !body?.access_token) return null;
-  const user = body.user || {};
-  const actor = normalizedActorFromAuthUser(user);
-  return {
-    token: body.access_token,
-    refreshToken: body.refresh_token,
-    expiresIn: body.expires_in,
-    userId: actor.userId,
-    userName: actor.userName,
-    roleId: actor.roleId,
-    remark: actor.remark,
-    stationId: actor.stationId,
-    email: actor.email
-  };
-}
-
 async function authUserFromAccessToken(accessToken) {
   const token = String(accessToken || "").trim();
   const key = anonKey() || serviceRoleKey();
@@ -315,13 +240,7 @@ async function authUserFromAccessToken(accessToken) {
     }
   }));
   if (!response.ok) return null;
-  const actor = normalizedActorFromAuthUser(body || {});
-  if (actor.roleId) return actor;
-  try {
-    return await staffActorFromAuthUser(body || {}, actor);
-  } catch {
-    return actor;
-  }
+  return normalizedActorFromAuthUser(body || {});
 }
 
 function adminEmailsFallback() {
@@ -340,11 +259,7 @@ async function createAdminUser({ email, password }) {
       email_confirm: true,
       user_metadata: {
         role: "super-admin",
-        role_key: "super-admin",
-        user_id: "admin",
-        user_name: "ACB(admin)",
-        login_email: email,
-        remark: "super-admin"
+        user_name: "ACB(admin)"
       }
     })
   }));
@@ -357,25 +272,11 @@ async function getAuthUserByUserId(userId) {
   return getAuthUserByIdentifier(userId);
 }
 
-function userStatusFromPayload(payload = {}) {
-  const value = payload.status;
-  if (value === undefined || value === null || value === "") return "active";
-  const normalized = String(value).trim().toLowerCase();
-  return value === false || value === 0 || ["false", "inactive", "disabled", "suspended"].includes(normalized)
-    ? "inactive"
-    : "active";
-}
-
-function authBanDurationForStatus(status) {
-  return status === "inactive" ? "876000h" : "none";
-}
-
 async function createAuthUser(payload) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return null;
   const email = await resolveAuthEmail(payload.userId, payload.email);
   const password = payload.password;
-  const status = userStatusFromPayload(payload);
   if (!password) {
     return {
       code: 400,
@@ -391,15 +292,12 @@ async function createAuthUser(payload) {
       email,
       password,
       email_confirm: true,
-      ban_duration: authBanDurationForStatus(status),
       user_metadata: {
-        role: payload.roleId || "operations-manager",
         role_key: payload.roleId || "operations-manager",
         user_name: payload.name || payload.nickName || payload.userName || payload.userId,
         user_id: String(payload.userId || "").trim(),
         login_email: email,
         station_id: String(payload.stationId || "").trim(),
-        status,
         remark: payload.remark || ""
       }
     })
@@ -419,27 +317,21 @@ async function createAuthUser(payload) {
 async function updateAuthUser(userId, payload) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return null;
-  const user = await getAuthUserByUserId(userId) || (payload.email ? await getAuthUserByIdentifier(payload.email) : null);
+  const user = await getAuthUserByUserId(userId);
   if (!user) throw new Error("User not found in Supabase Auth");
   const nextEmail = await resolveAuthEmail(userId, payload.email);
-  const status = payload.status !== undefined ? userStatusFromPayload(payload) : "";
   
   const updateBody = {
     user_metadata: {
       ...user.user_metadata,
-      ...(payload.roleId ? { role: payload.roleId } : {}),
       ...(payload.roleId ? { role_key: payload.roleId } : {}),
       ...(payload.name || payload.nickName || payload.userName ? { user_name: payload.name || payload.nickName || payload.userName } : {}),
       ...(payload.userId ? { user_id: String(payload.userId).trim() } : {}),
       ...(nextEmail ? { login_email: nextEmail } : {}),
       ...(payload.stationId !== undefined ? { station_id: String(payload.stationId || "").trim() } : {}),
-      ...(status ? { status } : {}),
       ...(payload.remark !== undefined ? { remark: payload.remark } : {})
     }
   };
-  if (status) {
-    updateBody.ban_duration = authBanDurationForStatus(status);
-  }
   if (nextEmail && normalizeIdentifier(nextEmail) !== normalizeIdentifier(user.email)) {
     updateBody.email = nextEmail;
   }
@@ -538,28 +430,6 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
-/* ── MFA / 2FA (production stubs) ── */
-
-async function enrollMFAFactor() {
-  // TODO: Production — call supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'Beverly' })
-  return { factorId: null, totpUri: null, secret: null };
-}
-
-async function verifyMFAFactor(factorId, code) {
-  // TODO: Production — call supabase.auth.mfa.challengeAndVerify({ factorId, code })
-  return { verified: false };
-}
-
-async function listMFAFactors() {
-  // TODO: Production — call supabase.auth.mfa.listFactors()
-  return { factors: [] };
-}
-
-async function unenrollMFAFactor(factorId) {
-  // TODO: Production — call supabase.auth.mfa.unenroll({ factorId })
-  return { success: false };
-}
-
 module.exports = {
   authEnabled,
   configured,
@@ -569,20 +439,15 @@ module.exports = {
   deleteAuthUser,
   resolveAuthEmail,
   emailFromLogin,
-  enrollMFAFactor,
   getAuthUserByIdentifier,
   getAuthUserByUserId,
   ensureStorageBuckets,
-  listMFAFactors,
   restRequest,
   restRequestWithResponse,
   serviceConfigured,
   signInWithPassword,
-  refreshAccessToken,
   authUserFromAccessToken,
   storageEnabled,
   storageReport,
-  unenrollMFAFactor,
-  uploadStorageObject,
-  verifyMFAFactor
+  uploadStorageObject
 };

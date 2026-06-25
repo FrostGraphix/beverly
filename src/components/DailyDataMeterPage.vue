@@ -2,7 +2,7 @@
   <div class="table-page ddm-container">
     <div class="sr-only">Meter interval ledger</div>
 
-    <div class="filter-toolbar ddm-toolbar" @click="closeSortDirectionMenu">
+    <div class="filter-toolbar ddm-toolbar">
       <div class="ddm-toolbar-group ddm-search-group">
         <BaseInput
           v-model="searchTerm"
@@ -14,27 +14,13 @@
         />
       </div>
       <div class="ddm-toolbar-group ddm-sort-group">
-        <div class="sort-direction-menu">
-          <BaseButton
-            class="sort-direction-menu__toggle"
-            aria-label="Sort direction options"
-            :aria-expanded="sortDirectionMenuOpen ? 'true' : 'false'"
-            @click.stop="toggleSortDirectionMenu"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v12"></path>
-              <path d="m4 9 4-4 4 4"></path>
-              <path d="M16 19V7"></path>
-              <path d="m12 15 4 4 4-4"></path>
-            </svg>
-          </BaseButton>
-          <div v-if="sortDirectionMenuOpen" class="sort-direction-menu__panel" role="menu">
-            <BaseButton class="sort-direction-menu__item" :class="{ active: sortDir === 'asc' }" @click.stop="setSortDirection('asc')">Ascending</BaseButton>
-            <BaseButton class="sort-direction-menu__item" :class="{ active: sortDir === 'desc' }" @click.stop="setSortDirection('desc')">Descending</BaseButton>
-          </div>
-        </div>
+        <BaseSelect v-model="sortDir" class="sort-select" aria-label="Sort direction" @change="reload">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </BaseSelect>
       </div>
       <div class="ddm-toolbar-group ddm-actions-group">
+        <BaseButton variant="primary" :disabled="loading" @click="onSearch">Search</BaseButton>
         <BaseButton @click="resetFilters">Reset</BaseButton>
         <BaseButton variant="primary" :disabled="!rows.length" @click="exportCsv">Export</BaseButton>
       </div>
@@ -48,7 +34,7 @@
       </div>
     </div>
 
-    <div class="table-scroll" @click="closeRowActionMenu">
+    <div class="table-scroll">
       <table style="min-width:2660px">
         <thead>
           <tr>
@@ -105,33 +91,14 @@
             <td><span :class="tableHealthClass(row.currentReverse)">{{ tableHealthText(row.currentReverse) }}</span></td>
             <td><span :class="tableHealthClass(row.currentUnbalance)">{{ tableHealthText(row.currentUnbalance) }}</span></td>
             <td class="mono-sm text-muted">{{ dateTimeText(row.updateDate) }}</td>
-            <td :class="['action-column', { 'action-column--menu-open': isRowActionMenuOpen(index) }]">
-              <div class="ddm-action-cell">
-                <BaseButton
-                  class="hourly-btn ddm-action-btn--desktop"
-                  aria-label="Open hourly hover modal"
-                  @click.stop="openHourly(row)"
-                >
-                  Hourly
-                </BaseButton>
-                <div class="ddm-row-action-menu">
-                  <BaseButton
-                    class="ddm-row-action-toggle"
-                    aria-label="Open row actions"
-                    :aria-expanded="isRowActionMenuOpen(index)"
-                    @click.stop="toggleRowActionMenu(index)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <circle cx="12" cy="5" r="2"></circle>
-                      <circle cx="12" cy="12" r="2"></circle>
-                      <circle cx="12" cy="19" r="2"></circle>
-                    </svg>
-                  </BaseButton>
-                  <div v-if="isRowActionMenuOpen(index)" class="ddm-row-action-panel" role="menu">
-                    <BaseButton class="ddm-row-action-item" role="menuitem" @click.stop="openHourlyFromMenu(row)">Hourly</BaseButton>
-                  </div>
-                </div>
-              </div>
+            <td class="action-column">
+              <BaseButton
+                class="hourly-btn"
+                aria-label="Open hourly hover modal"
+                @click.stop="openHourly(row)"
+              >
+                Hourly
+              </BaseButton>
             </td>
           </tr>
         </tbody>
@@ -296,7 +263,7 @@ import BaseSelect from "./base/BaseSelect.vue";
 import { getApi, postApi } from "../services/api.js";
 import { downloadTextFile, exportReportCsvText } from "../services/import-export.mjs";
 import { hourlyCreateTime, intervalRowMatchesSearch, normalizeDailyMeterRow, sliceIntervalRows } from "../services/interval-data-flow.mjs";
-import { normalizeIntervalTableStatus } from "../services/interval-status.mjs";
+import { normalizeHourlyStatus, normalizeIntervalTableStatus } from "../services/interval-status.mjs";
 
 function normalizeCollection(response) {
   const body = response?.body || response;
@@ -335,8 +302,6 @@ export default {
         query: "",
         rows: []
       },
-      searchDebounceTimer: null,
-      skipAutoSearch: false,
       hourly: {
         open: false,
         loading: false,
@@ -346,9 +311,7 @@ export default {
         date: "",
         rows: [],
         total: 0
-      },
-      openRowActionIndex: null,
-      sortDirectionMenuOpen: false
+      }
     };
   },
   computed: {
@@ -366,23 +329,8 @@ export default {
       return pages;
     }
   },
-  watch: {
-    searchTerm() {
-      if (this.skipAutoSearch) {
-        this.skipAutoSearch = false;
-        return;
-      }
-      this.scheduleSearch();
-    }
-  },
   mounted() {
     this.reload();
-  },
-  beforeUnmount() {
-    if (this.searchDebounceTimer) {
-      clearTimeout(this.searchDebounceTimer);
-      this.searchDebounceTimer = null;
-    }
   },
   methods: {
     async reload() {
@@ -422,7 +370,6 @@ export default {
       }
     },
     async openHourly(row) {
-      this.closeRowActionMenu();
       const meterId = String(row.meterId || "").trim();
       const date = this.dateOnly(row.currentDate);
       this.hourly = {
@@ -473,19 +420,6 @@ export default {
     },
     closeHourly() {
       this.hourly.open = false;
-    },
-    isRowActionMenuOpen(rowIndex) {
-      return this.openRowActionIndex === rowIndex;
-    },
-    toggleRowActionMenu(rowIndex) {
-      this.openRowActionIndex = this.openRowActionIndex === rowIndex ? null : rowIndex;
-    },
-    closeRowActionMenu() {
-      this.openRowActionIndex = null;
-    },
-    openHourlyFromMenu(row) {
-      this.closeRowActionMenu();
-      this.openHourly(row);
     },
     async fetchAllSearchMatches(basePayload, query) {
       if (this.searchCache.query === query && this.searchCache.rows.length) {
@@ -545,45 +479,17 @@ export default {
       return text.toLowerCase();
     },
     onSearch() {
-      if (this.searchDebounceTimer) {
-        clearTimeout(this.searchDebounceTimer);
-        this.searchDebounceTimer = null;
-      }
       this.page = 1;
       this.gotoPage = "1";
       this.reload();
     },
-    scheduleSearch() {
-      if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
-      this.searchDebounceTimer = setTimeout(() => {
-        this.searchDebounceTimer = null;
-        this.onSearch();
-      }, 320);
-    },
     resetFilters() {
-      if (this.searchDebounceTimer) {
-        clearTimeout(this.searchDebounceTimer);
-        this.searchDebounceTimer = null;
-      }
-      this.skipAutoSearch = true;
       this.searchTerm = "";
       this.sortDir = "desc";
       this.searchCache = { query: "", rows: [] };
       this.page = 1;
       this.gotoPage = "1";
       this.reload();
-    },
-    setSortDirection(direction) {
-      if (this.sortDir === direction) return;
-      this.sortDir = direction;
-      this.closeSortDirectionMenu();
-      this.reload();
-    },
-    toggleSortDirectionMenu() {
-      this.sortDirectionMenuOpen = !this.sortDirectionMenuOpen;
-    },
-    closeSortDirectionMenu() {
-      this.sortDirectionMenuOpen = false;
     },
     onPageSizeChange() {
       this.page = 1;
@@ -617,11 +523,10 @@ export default {
       downloadTextFile("interval_data.csv", content, "text/csv;charset=utf-8");
     },
     healthText(value) {
-      // Hourly modal uses same polarity users expect in Interval table.
-      return normalizeIntervalTableStatus(value);
+      return normalizeHourlyStatus(value);
     },
     healthClass(value) {
-      return normalizeIntervalTableStatus(value) === "Normal" ? "sp sp--ok" : "sp sp--danger";
+      return normalizeHourlyStatus(value) === "Normal" ? "sp sp--ok" : "sp sp--danger";
     },
     tableHealthText(value) {
       return normalizeIntervalTableStatus(value);
@@ -673,57 +578,6 @@ export default {
 .ddm-search-group { width: 100%; }
 .ddm-search-group .search-input { width: 100%; max-width: 100%; }
 .ddm-sort-group .sort-select { min-width: 140px; }
-.sort-direction-menu { position: relative; }
-.sort-direction-menu__toggle {
-  width: 38px;
-  height: 36px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-main);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.sort-direction-menu__toggle svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.sort-direction-menu__panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 126px;
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--border-mid);
-  border-radius: 10px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-md);
-  padding: 6px;
-  z-index: 20;
-}
-.sort-direction-menu__item {
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-main);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-  padding: 8px 10px;
-  cursor: pointer;
-}
-.sort-direction-menu__item.active {
-  background: var(--primary-light);
-  color: var(--primary);
-}
 .mono-sm { font-family: "Courier New", monospace; font-size: 10px; }
 .text-primary { color: var(--primary); }
 .text-muted { color: var(--text-muted); }
@@ -735,8 +589,6 @@ export default {
 .sp--warn { background: var(--warning-bg); color: var(--warning); }
 .sp--danger { background: var(--danger-bg); color: var(--danger); }
 .hourly-btn { min-width: 74px !important; height: 28px !important; padding-inline: 12px !important; font-size: 10px !important; }
-.ddm-action-cell { display: inline-flex; justify-content: flex-end; width: 100%; }
-.ddm-row-action-menu { display: none; }
 .goto-input { width: 50px; height: 28px; text-align: center; }
 .ddm-overlay { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg-overlay); backdrop-filter: blur(10px); }
 .ddm-modal { width: min(980px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--modal-radius); background: var(--bg-card); box-shadow: var(--shadow-xl); }
@@ -755,7 +607,7 @@ export default {
 .ddm-err { padding: 40px; color: var(--danger); text-align: center; }
 .ddm-spin { width: 24px; height: 24px; border: 3px solid var(--border-color); border-top-color: var(--primary); border-radius: 999px; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.ddm-mobile-cards { display: none !important; }
+.ddm-mobile-cards { display: none; }
 .ddm-mobile-card { padding: 14px; border-top: 1px solid var(--border-color); background: var(--bg-card); }
 .ddm-mobile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .ddm-mobile-head div { min-width: 0; display: grid; gap: 3px; }
@@ -782,75 +634,20 @@ export default {
 }
 
 @media (max-width: 900px) {
-  .ddm-toolbar { grid-template-columns: 1fr auto auto; gap: 12px; }
-  .ddm-search-group { grid-column: 1 / -1; }
-  .ddm-sort-group { grid-column: 1; }
-  .ddm-actions-group { grid-column: 2 / span 2; justify-content: flex-end; width: auto; }
+  .ddm-toolbar { grid-template-columns: 1fr; gap: 12px; }
   .ddm-sort-group { flex-wrap: wrap; }
   .ddm-sort-group .sort-select { flex: 1; }
+  .ddm-actions-group { justify-content: flex-end; width: 100%; }
 }
 
 @media (max-width: 768px) {
-  .ddm-container th.action-column,
-  .ddm-container td.action-column {
-    min-width: 84px !important;
-    width: 84px !important;
-    overflow: visible !important;
-  }
-  .ddm-action-btn--desktop { display: none !important; }
-  .ddm-row-action-menu { display: inline-flex !important; position: relative; pointer-events: auto; }
-  .ddm-row-action-toggle {
-    width: 38px;
-    height: 34px;
-    border: 1px solid var(--border-mid);
-    border-radius: 10px;
-    background: var(--bg-card);
-    color: var(--text-main);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    pointer-events: auto;
-    touch-action: manipulation;
-  }
-  .ddm-row-action-toggle svg { width: 16px; height: 16px; fill: currentColor; }
-  .ddm-row-action-panel {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    z-index: 40;
-    min-width: 116px;
-    padding: 6px;
-    border: 1px solid var(--border-mid);
-    border-radius: 10px;
-    background: var(--bg-card);
-    box-shadow: var(--shadow-md);
-    display: grid;
-    gap: 4px;
-  }
-  .ddm-row-action-item {
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-main);
-    font-size: 12px;
-    font-weight: 700;
-    text-align: left;
-    padding: 8px 10px;
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-  .ddm-row-action-item:hover { background: var(--primary-light); color: var(--primary); }
-  .ddm-container td.action-column.action-column--menu-open {
-    z-index: 60;
-    overflow: visible !important;
-  }
-  .ddm-container .table-scroll { display: block; }
+  .ddm-container .table-scroll { display: none; }
+  .ddm-mobile-cards { display: block; }
   .ddm-toolbar { padding: 12px; }
   .ddm-toolbar-group { gap: 8px; }
   .ddm-sort-group .sort-select,
   .ddm-actions-group .base-button { min-width: 0; }
-  .ddm-actions-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ddm-actions-group { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ddm-actions-group :deep(.base-button) { width: 100%; padding-inline: 8px; }
   .ddm-container .table-command-strip { padding: 10px 12px; }
   .ddm-container .pagination { padding: 12px; gap: 8px; }

@@ -9,7 +9,6 @@ const targetUrl = String(
 ).replace(/\/+$/, "");
 const protectionBypass = String(
   process.env.VERCEL_PROTECTION_BYPASS ||
-  process.env.VERCEL_AUTOMATION_BYPASS ||
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   ""
 ).trim();
@@ -85,7 +84,7 @@ async function authenticateSmoke() {
 
 async function main() {
   if (!targetUrl) {
-    throw new Error("TARGET_URL, PREVIEW_TARGET_URL, PRODUCTION_TARGET_URL, or argv[2] is required");
+    throw new Error("TARGET_URL is required");
   }
 
   await authenticateSmoke();

@@ -340,9 +340,52 @@ async function runFlow(browserName, page) {
   await page.waitForSelector("text=Data Item", { timeout: 10000 });
   await closeModal(page);
 
-  await page.waitForSelector('a.sidebar-item[href*="5175"], a.sidebar-item[href="/wallet-admin/"]', { timeout: 10000 });
+  await page.evaluate(() => {
+    window.location.hash = "#/prepay-report/site-consumption";
+  });
+  await page.waitForSelector("text=Site Performance", { timeout: 10000 });
+  await page.waitForSelector("text=Revenue Shortfall", { timeout: 10000 });
+  await page.waitForSelector('[data-testid="site-consumption-sync-banner"]', { timeout: 10000 });
+  await page.waitForSelector('[data-testid="site-consumption-sync-logs"]', { timeout: 10000 });
+  const auditDownload = page.waitForEvent("download");
+  await page.click('[data-testid="site-consumption-audit-export"]');
+  const download = await auditDownload;
+  if (!download.suggestedFilename().includes("site-consumption-audit")) {
+    throw new Error(`unexpected audit filename: ${download.suggestedFilename()}`);
+  }
+  await page.click("text=Fraud");
+  await page.waitForSelector("text=Risk Investigation", { timeout: 10000 });
+
+  await page.waitForSelector('a.sidebar-item[href*="5175"], a.sidebar-item[href*="admin.beverly.acoblighting.com"]', { timeout: 10000 });
 
   return browserName;
+}
+
+async function runMobileSiteConsumption(browser) {
+  const audit = { authMisses: [] };
+  const page = await browser.newPage({ viewport: { width: 400, height: 545 }, acceptDownloads: true });
+  await installApiMocks(page, audit);
+  await login(page);
+  await page.evaluate(() => {
+    window.location.hash = "#/prepay-report/site-consumption";
+  });
+  await page.waitForSelector("text=Site Performance", { timeout: 10000 });
+  await page.waitForSelector('[data-testid="site-consumption-sync-banner"]', { timeout: 10000 });
+  const metrics = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    controlMinHeight: Math.min(...Array.from(document.querySelectorAll(".eih-btn, .view-pill, .site-pill")).map((node) => node.getBoundingClientRect().height)),
+  }));
+  await page.close();
+  if (metrics.documentWidth > metrics.viewportWidth + 2) {
+    throw new Error(`mobile site consumption overflows: ${metrics.documentWidth} > ${metrics.viewportWidth}`);
+  }
+  if (metrics.controlMinHeight < 38) {
+    throw new Error(`mobile controls too small: ${metrics.controlMinHeight}`);
+  }
+  if (audit.authMisses.length) {
+    throw new Error(`site consumption API calls missed auth: ${audit.authMisses.join(", ")}`);
+  }
 }
 
 async function closeModal(page) {
@@ -395,6 +438,7 @@ async function runBrowser(target) {
   const page = await browser.newPage({ viewport: { width: 1365, height: 768 }, acceptDownloads: true });
   await installApiMocks(page);
   const browserName = await runFlow(target.name, page);
+  await runMobileSiteConsumption(browser);
   await browser.close();
   return { browser: browserName, skipped: false };
 }

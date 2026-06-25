@@ -67,7 +67,7 @@ const items = computed(() =>
   font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;
-  background: var(--glass-bg-strong);
+  background: var(--surface);
   color: var(--text-muted);
   transition: all var(--dur-fast);
 }
@@ -87,7 +87,7 @@ const items = computed(() =>
 .stepper-item--active .stepper-dot {
   border-color: var(--brand);
   background: var(--brand);
-  color: oklch(8% 0.04 145);
+  color: white;
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
 .stepper-item--active .stepper-label { color: var(--text); }

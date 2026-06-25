@@ -3,7 +3,6 @@ import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
-import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 const purchases = ref<any[]>([]);
 const loading   = ref(false);
@@ -30,18 +29,6 @@ function statusBadge(s: string) {
     if (s === 'dispatching' || s === 'hold_active') return 'info';
     if (s === 'delivery_pending_review') return 'warn';
     return 'neutral';
-}
-
-function canReceipt(p: any) {
-    return p.status === 'delivered' && !!p.receipt_id;
-}
-
-function viewPurchaseReceipt(p: any) {
-    viewReceipt(purchaseReceipt(p));
-}
-
-function printPurchaseReceipt(p: any) {
-    printReceipt(purchaseReceipt(p));
 }
 </script>
 
@@ -70,7 +57,6 @@ function printPurchaseReceipt(p: any) {
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
-              <th>Receipt</th>
             </tr>
           </thead>
           <tbody>
@@ -80,17 +66,10 @@ function printPurchaseReceipt(p: any) {
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
-              <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0,12) + '...' : '-' }}</td>
-              <td>
-                <div v-if="canReceipt(p)" class="receipt-actions">
-                  <button class="bw-btn bw-btn-sm" @click="viewPurchaseReceipt(p)">View</button>
-                  <button class="bw-btn bw-btn-sm" @click="printPurchaseReceipt(p)">Print</button>
-                </div>
-                <span v-else class="bw-muted">-</span>
-              </td>
+              <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0,12) + '…' : '—' }}</td>
             </tr>
             <tr v-if="!filtered().length && !loading">
-              <td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
+              <td colspan="6" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
             </tr>
           </tbody>
         </table>
@@ -118,13 +97,6 @@ function printPurchaseReceipt(p: any) {
             <div class="bw-tc-pair" v-if="p.token">
               <span class="bw-tc-pair-label">Token</span>
               <span class="bw-tc-pair-val bw-mono" style="font-size: var(--t-xs)">{{ p.token.slice(0,16) }}…</span>
-            </div>
-            <div class="bw-tc-pair" v-if="canReceipt(p)">
-              <span class="bw-tc-pair-label">Receipt</span>
-              <span class="receipt-actions">
-                <button class="bw-btn bw-btn-sm" @click="viewPurchaseReceipt(p)">View</button>
-                <button class="bw-btn bw-btn-sm" @click="printPurchaseReceipt(p)">Print</button>
-              </span>
             </div>
           </div>
         </div>

@@ -85,8 +85,8 @@ const items = computed(() =>
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1.5px solid var(--glass-border-strong);
-  background: var(--glass-bg-strong);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
   color: var(--text-muted);
   display: grid;
   place-items: center;
@@ -137,7 +137,7 @@ const items = computed(() =>
 .stepper-item--active .stepper-dot {
   border-color: var(--brand);
   background: var(--brand);
-  color: oklch(8% 0.04 145);
+  color: white;
   box-shadow: 0 0 0 4px var(--brand-glow);
 }
 .stepper-item--active .stepper-title { color: var(--text); }

@@ -7,14 +7,10 @@
       </div>
     </template>
     <template #toolbar>
-      <div class="filter-toolbar ddm-toolbar" data-testid="table-apply-controls" @click="closeSortDirectionMenu">
+      <div class="filter-toolbar ddm-toolbar">
         <div class="ddm-toolbar-group ddm-search-group">
           <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Site filter" @change="load">
             <option v-for="option in siteOptions" :key="option.value || 'all-sites'" :value="option.value">{{ option.label }}</option>
-          </BaseSelect>
-          <BaseSelect v-if="supportsMeterPhaseFilter" v-model="meterPhaseFilter" class="sort-select" aria-label="Meter phase filter" @change="applyControls">
-            <option value="all">All phases</option>
-            <option value="three-phase">3-phase only</option>
           </BaseSelect>
           <BaseInput v-if="route.actions.includes('Search')" v-model="searchTerm" class="search-input" type="search" placeholder="Search Term" aria-label="Search Term" @keyup.enter="applyControls" />
         </div>
@@ -26,37 +22,17 @@
               <option v-for="column in sortableColumns" :key="column" :value="getColKey(column)">{{ formatColumnName(column) }}</option>
             </BaseSelect>
           </template>
-          <template v-if="route.actions.includes('Sort') && !fixedSortPolicy">
+          <template v-if="route.actions.includes('Sort')">
             <BaseSelect v-model="sortDirection" class="sort-select" aria-label="Sort direction" @change="applyControls">
               <option value="asc">Ascending</option>
               <option value="desc">Descending</option>
             </BaseSelect>
           </template>
-          <template v-else-if="route.actions.includes('Sort')">
-            <div class="sort-direction-menu">
-              <BaseButton
-                class="sort-direction-menu__toggle"
-                aria-label="Sort direction options"
-                :aria-expanded="sortDirectionMenuOpen ? 'true' : 'false'"
-                @click.stop="toggleSortDirectionMenu"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 5v12"></path>
-                  <path d="m4 9 4-4 4 4"></path>
-                  <path d="M16 19V7"></path>
-                  <path d="m12 15 4 4 4-4"></path>
-                </svg>
-              </BaseButton>
-              <div v-if="sortDirectionMenuOpen" class="sort-direction-menu__panel" role="menu">
-                <BaseButton class="sort-direction-menu__item" :class="{ active: sortDirection === 'asc' }" @click.stop="setSortDirection('asc')">Ascending</BaseButton>
-                <BaseButton class="sort-direction-menu__item" :class="{ active: sortDirection === 'desc' }" @click.stop="setSortDirection('desc')">Descending</BaseButton>
-              </div>
-            </div>
-          </template>
         </div>
 
         <div class="ddm-toolbar-group ddm-actions-group">
-          <BaseButton v-if="showResetButton" data-testid="table-reset-controls" @click="resetControls">Reset</BaseButton>
+          <BaseButton v-if="route.actions.includes('Search') || route.actions.includes('Sort')" variant="primary" data-testid="table-apply-controls" @click="applyControls">Apply</BaseButton>
+          <BaseButton v-if="route.actions.includes('Reset')" data-testid="table-reset-controls" @click="resetControls">Reset</BaseButton>
           <BaseButton
             v-for="action in toolbarActions"
             :key="action"
@@ -79,7 +55,7 @@
       </div>
       <p v-if="route.note" class="quota-line">{{ route.note }}</p>
     </template>
-    <div class="table-scroll" @click="closeRowActionMenu">
+    <div class="table-scroll">
       <table>
         <thead><tr>
           <th v-if="isBatchCheckable" class="check-column"><BaseCheckbox data-testid="table-select-all" :value="allPageChecked" @input="toggleAllPage" /></th>
@@ -112,51 +88,22 @@
             <td
               v-for="column in route.columns"
               :key="column"
-              :class="column === 'Actions' ? ['action-column', { 'action-column--menu-open': isRowActionMenuOpen(rowIndex) }] : ''"
+              :class="column === 'Actions' ? 'action-column' : ''"
               :data-column-key="getColKey(column)"
             >
-              <span v-if="column === 'Actions'" class="action-cell-controls">
-                <span class="action-btn-group action-btn-group--desktop">
-                  <BaseButton
-                    v-for="action in rowActions"
-                    :key="action"
-                    :class="rowActionClass(action)"
-                    :aria-label="`${action} row ${rowIndex + 1}`"
-                    :data-testid="`table-row-action-${actionTestId(action)}-${rowIndex + 1}`"
-                    @click.stop="openAction(action, row)"
-                  >
-                    <svg v-if="action === 'Edit'" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                    <svg v-else-if="action === 'Delete'" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    {{ action }}
-                  </BaseButton>
-                </span>
-                <div class="row-action-menu">
-                  <BaseButton
-                    class="row-action-menu__toggle"
-                    aria-label="Open row actions"
-                    :aria-expanded="isRowActionMenuOpen(rowIndex)"
-                    :data-testid="`table-row-action-menu-${rowIndex + 1}`"
-                    @click.stop="toggleRowActionMenu(rowIndex)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <circle cx="12" cy="5" r="2"></circle>
-                      <circle cx="12" cy="12" r="2"></circle>
-                      <circle cx="12" cy="19" r="2"></circle>
-                    </svg>
-                  </BaseButton>
-                  <div v-if="isRowActionMenuOpen(rowIndex)" :class="['row-action-menu__panel', { 'row-action-menu__panel--drop-up': shouldDropUp(rowIndex) }]" role="menu">
-                    <BaseButton
-                      v-for="action in rowActions"
-                      :key="`mobile-${action}`"
-                      class="row-action-menu__item"
-                      role="menuitem"
-                      :data-action="action.toLowerCase()"
-                      @click.stop="openRowActionFromMenu(action, row)"
-                    >
-                      {{ action }}
-                    </BaseButton>
-                  </div>
-                </div>
+              <span v-if="column === 'Actions'" class="action-btn-group">
+                <BaseButton
+                  v-for="action in rowActions"
+                  :key="action"
+                  :class="rowActionClass(action)"
+                  :aria-label="`${action} row ${rowIndex + 1}`"
+                  :data-testid="`table-row-action-${actionTestId(action)}-${rowIndex + 1}`"
+                  @click.stop="openAction(action, row)"
+                >
+                  <svg v-if="action === 'Edit'" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                  <svg v-else-if="action === 'Delete'" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                  {{ action }}
+                </BaseButton>
               </span>
               <span v-else-if="isStatusColumn(column, cell(row, column, rowIndex))" :class="statusClass(cell(row, column, rowIndex))">
                 {{ cell(row, column, rowIndex) }}
@@ -183,7 +130,7 @@
         </tbody>
       </table>
     </div>
-    <div class="mobile-table-cards" aria-hidden="true">
+    <div class="mobile-table-cards" aria-hidden="false">
       <template v-if="loading">
         <article v-for="i in 4" :key="`mobile-sk-${i}`" class="mobile-table-card skeleton-row">
           <div v-for="n in 5" :key="n" class="mobile-card-line">
@@ -245,16 +192,6 @@
         <BaseButton v-for="page in pages" :key="page" :class="['page-chip', page === currentPage ? 'active' : '']" size="sm" @click="goToPage(page)">{{ page }}</BaseButton>
         <BaseButton class="page-chip" size="sm" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">&#8250;</BaseButton>
         <span>Go to</span>
-        <BaseInput
-          v-model="gotoPageInput"
-          class="goto-input"
-          type="number"
-          min="1"
-          :max="pageCount"
-          aria-label="Go to page"
-          @keyup.enter="applyGoto"
-        />
-        <BaseButton class="page-chip" size="sm" @click="applyGoto">Go</BaseButton>
       </div>
     </template>
     <ActionModal v-if="modalAction" :action="modalAction" :route="route" :row="activeRow" :rows="batchModalRows" @close="closeModal" @done="handleModalDone" />
@@ -271,8 +208,7 @@ import BaseSelect from "./base/BaseSelect.vue";
 import BaseTableShell from "./base/BaseTableShell.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
-import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
-import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mjs";
+import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
 import { toastWarn } from "../services/toast.js";
 
 export default {
@@ -300,17 +236,12 @@ export default {
       detailRow: null,
       errorMessage: "",
       loading: false,
-      gotoPageInput: "1",
-      checkedMeterIds: new Set(),
-      meterPhaseFilter: "all",
-      openRowActionIndex: null,
-      sortDirectionMenuOpen: false,
-      loadToken: 0
+      checkedMeterIds: new Set()
     };
   },
   computed: {
     pageSizeOptions() {
-      return this.serverPaginated ? pageSizeOptions.filter((size) => size <= 20) : pageSizeOptions;
+      return pageSizeOptions;
     },
     isBatchCheckable() {
       return isBatchCheckableRoute(this.route);
@@ -323,29 +254,16 @@ export default {
     },
     toolbarActions() {
       return this.route.actions.filter((name) => {
-        if (name === "Confirm" && String(this.route.hash || "").startsWith("#/remote-operation-record/")) return true;
         if (["Sort", "Search", "Reset", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
         if (name === "Add Task" && this.route.columns.includes("Actions")) return false;
         return true;
       });
-    },
-    showResetButton() {
-      const routeHash = String(this.route.hash || "");
-      if (routeHash.startsWith("#/management/")) return false;
-      if (routeHash === "#/admin/role") return false;
-      return this.route.actions.includes("Reset");
     },
     siteOptions() {
       return tableSiteOptions;
     },
     supportsSiteFilter() {
       return routeSupportsSiteFilter(this.route);
-    },
-    supportsMeterPhaseFilter() {
-      return isCreditTokenRoute(this.route);
-    },
-    serverPaginated() {
-      return routeUsesServerPagination(this.route);
     },
     rowActions() {
       return rowActionButtons(this.route);
@@ -354,7 +272,7 @@ export default {
       return totalPages(this.displayedTotal, this.pageSize);
     },
     displayedTotal() {
-      const hasClientFilters = Boolean(String(this.searchTerm || "").trim() || this.meterPhaseFilter !== "all");
+      const hasClientFilters = Boolean(String(this.searchTerm || "").trim());
       if (!hasClientFilters && Number(this.total) > this.filteredTotal) return this.total;
       return this.filteredTotal;
     },
@@ -387,9 +305,7 @@ export default {
         this.sortDirection = routeSortDirection(this.route);
         this.sortField = "";
         this.searchTerm = "";
-        this.meterPhaseFilter = "all";
         this.currentPage = 1;
-        if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
         this.load();
       }
@@ -397,121 +313,59 @@ export default {
   },
   methods: {
     async load() {
-      const token = ++this.loadToken;
       this.errorMessage = "";
       this.loading = true;
       try {
-        if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
-        const requestOptions = {
+        const table = await fetchTableData(this.route, {
           siteId: this.supportsSiteFilter ? this.selectedSite : undefined,
-          meterPhaseFilter: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : undefined,
-          searchTerm: this.serverPaginated ? this.searchTerm : undefined,
           orderBy: this.route.actions.includes("Sort")
             ? `${this.sortField || routeSortPolicy(this.route).key} ${this.sortDirection || routeSortDirection(this.route)}`
             : undefined
-        };
-        if (this.serverPaginated) {
-          requestOptions.pageNumber = this.currentPage;
-          requestOptions.pageSize = this.pageSize;
-        }
-        const table = await fetchTableData(this.route, requestOptions);
-        if (token !== this.loadToken) return;
+        });
         this.allRows = table.rows;
         this.total = table.total;
-        this.applyControls({ reloadServer: false });
+        this.applyControls();
       } catch (error) {
-        if (token !== this.loadToken) return;
         this.allRows = [];
-        this.total = 0;
         this.filteredRows = [];
         this.visibleRows = [];
         this.filteredTotal = 0;
         this.selectedRow = null;
         this.errorMessage = error?.message || "Unable to load data";
       } finally {
-        if (token === this.loadToken) this.loading = false;
+        this.loading = false;
       }
     },
-    applyControls(options = {}) {
-      if (this.serverPaginated && options.reloadServer !== false) {
-        this.currentPage = 1;
-        this.gotoPageInput = "1";
-        this.load();
-        return;
-      }
-      if (this.serverPaginated) {
-        this.filteredRows = this.allRows;
-        this.filteredTotal = this.total;
-        this.visibleRows = this.allRows;
-        this.selectedRow = this.visibleRows[0] || null;
-        this.gotoPageInput = String(this.currentPage);
-        return;
-      }
+    applyControls() {
       const searchedRows = searchRows(this.route, this.allRows, this.searchTerm);
-      const phaseRows = this.filterRowsByPhase(searchedRows);
-      const sortedRows = sortRows(this.route, phaseRows, this.sortDirection, this.sortField);
+      const sortedRows = sortRows(this.route, searchedRows, this.sortDirection, this.sortField);
       this.filteredRows = sortedRows;
       this.filteredTotal = sortedRows.length;
       this.currentPage = Math.min(this.currentPage, totalPages(this.displayedTotal, this.pageSize));
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
-    filterRowsByPhase(rows) {
-      if (this.meterPhaseFilter !== "three-phase") return rows;
-      return rows.filter((row) => meterPhaseFromRow(row) === "three-phase");
-    },
     resetControls() {
       this.searchTerm = "";
       this.selectedSite = "";
-      this.meterPhaseFilter = "all";
       this.sortDirection = routeSortDirection(this.route);
       this.sortField = "";
       this.pageSize = 10;
       this.currentPage = 1;
       this.checkedMeterIds = new Set();
-      if (this.supportsSiteFilter || this.serverPaginated) {
+      if (this.supportsSiteFilter) {
         this.load();
         return;
       }
       this.applyControls();
-    },
-    setSortDirection(direction) {
-      if (this.sortDirection === direction) return;
-      this.sortDirection = direction;
-      this.closeSortDirectionMenu();
-      this.applyControls();
-    },
-    toggleSortDirectionMenu() {
-      this.sortDirectionMenuOpen = !this.sortDirectionMenuOpen;
-    },
-    closeSortDirectionMenu() {
-      this.sortDirectionMenuOpen = false;
     },
     goToPage(page) {
       this.currentPage = Math.max(1, Math.min(this.pageCount, page));
-      this.gotoPageInput = String(this.currentPage);
-      if (this.serverPaginated) {
-        this.load();
-        return;
-      }
       this.visibleRows = paginateRows(this.filteredRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
-    applyGoto() {
-      const target = Number(this.gotoPageInput);
-      if (!Number.isFinite(target)) {
-        this.gotoPageInput = String(this.currentPage);
-        return;
-      }
-      this.goToPage(Math.trunc(target));
-    },
     changePageSize() {
       this.currentPage = 1;
-      this.gotoPageInput = "1";
-      if (this.serverPaginated) {
-        this.load();
-        return;
-      }
       this.applyControls();
     },
     cell(row, column, rowIndex) {
@@ -642,34 +496,12 @@ export default {
       }
       this.checkedMeterIds = next;
     },
-    isRowActionMenuOpen(rowIndex) {
-      return this.openRowActionIndex === rowIndex;
-    },
-    shouldDropUp(rowIndex) {
-      return rowIndex >= Math.max(0, this.visibleRows.length - 3);
-    },
-    toggleRowActionMenu(rowIndex) {
-      this.openRowActionIndex = this.openRowActionIndex === rowIndex ? null : rowIndex;
-    },
-    closeRowActionMenu() {
-      this.openRowActionIndex = null;
-    },
-    openRowActionFromMenu(action, row) {
-      this.closeRowActionMenu();
-      this.openAction(action, row);
-    },
     openAction(action, row) {
       if (action === "Add Batch Task" && this.isBatchCheckable && !this.checkedMeterIds.size) {
         toastWarn("Select at least one meter first");
         return;
       }
-      this.closeRowActionMenu();
-      this.activeRow = {
-        ...(row || {}),
-        ...createFormSeed(this.route, action, row),
-        meterPhaseMode: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : "all",
-        requireThreePhase: this.supportsMeterPhaseFilter && this.meterPhaseFilter === "three-phase"
-      };
+      this.activeRow = { ...(row || {}), ...createFormSeed(this.route, action, row) };
       this.selectedRow = row || null;
       this.modalAction = action;
     },
@@ -719,29 +551,6 @@ export default {
   min-width: 180px;
 }
 
-.table-page[aria-label="Role"] .table-scroll th[data-column-key="remark"],
-.table-page[aria-label="Role"] .table-scroll td[data-column-key="remark"] {
-  max-width: 280px;
-  min-width: 220px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.table-page[aria-label="Role"] .table-scroll th.action-column,
-.table-page[aria-label="Role"] .table-scroll td.action-column {
-  min-width: 110px;
-  width: 110px;
-}
-
-.table-page[aria-label="Abnormal Alarm"] {
-  display: contents;
-}
-
-.table-page {
-  display: contents;
-}
-
 .table-scroll th[data-column-key="createDate"],
 .table-scroll td[data-column-key="createDate"],
 .table-scroll th[data-column-key="updateDate"],
@@ -753,30 +562,6 @@ export default {
 .table-scroll td.action-column {
   min-width: var(--table-action-column-width, 240px);
   width: var(--table-action-column-width, 240px);
-}
-
-.table-scroll th.check-column,
-.table-scroll td.check-column {
-  min-width: 42px !important;
-  width: 42px !important;
-  max-width: 42px;
-  text-align: center;
-  padding: 0 6px !important;
-}
-
-.table-scroll th.check-column {
-  background: linear-gradient(180deg, var(--bg-card), var(--bg-page));
-}
-
-.goto-input {
-  width: 64px;
-  text-align: center;
-}
-
-.goto-input :deep(input),
-.goto-input:deep(input) {
-  width: 64px;
-  text-align: center;
 }
 
 .data-value-trigger {
@@ -835,7 +620,6 @@ export default {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-
 /* Custom Toolbar Grid Layout */
 .ddm-toolbar {
   display: grid !important;
@@ -859,62 +643,9 @@ export default {
 .ddm-sort-group .sort-select {
   min-width: 140px;
 }
-.sort-direction-menu {
-  position: relative;
-}
-.sort-direction-menu__toggle {
-  width: 38px;
-  height: 36px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-main);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.sort-direction-menu__toggle svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.sort-direction-menu__panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 126px;
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--border-mid);
-  border-radius: 10px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-md);
-  padding: 6px;
-  z-index: 2000;
-}
-.sort-direction-menu__item {
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-main);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: left;
-  padding: 8px 10px;
-  cursor: pointer;
-}
-.sort-direction-menu__item.active {
-  background: var(--primary-light);
-  color: var(--primary);
-}
 
 .mobile-table-cards {
-  display: none !important;
+  display: none;
 }
 
 .mobile-table-card {
@@ -999,16 +730,6 @@ export default {
   gap: 8px;
 }
 
-.action-cell-controls {
-  display: inline-flex;
-  justify-content: flex-end;
-  width: 100%;
-}
-
-.row-action-menu {
-  display: none;
-}
-
 .mobile-card-line {
   margin-bottom: 10px;
 }
@@ -1025,137 +746,18 @@ export default {
 }
 
 @media(max-width:900px){
-  .ddm-toolbar { grid-template-columns: auto 1fr; gap: 10px; }
-  .ddm-search-group {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-  .ddm-search-group .sort-select,
-  .ddm-search-group .search-input {
-    width: 100%;
-    max-width: 100%;
-  }
-  .ddm-sort-group {
-    grid-column: 1;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-  }
-  .ddm-actions-group {
-    grid-column: 2;
-    justify-content: flex-end;
-    width: auto;
-    flex-wrap: nowrap;
-  }
-}
-
-@media (max-width: 560px) {
-  .ddm-search-group {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px;
-  }
-  .ddm-sort-group { grid-column: 1; }
-  .ddm-actions-group { grid-column: 2; }
+  .ddm-toolbar { grid-template-columns: 1fr; gap: 12px; }
+  .ddm-sort-group { flex-wrap: wrap; }
+  .ddm-sort-group .sort-select { flex: 1; }
+  .ddm-actions-group { justify-content: flex-end; width: 100%; }
 }
 
 @media (max-width: 768px) {
-  .table-scroll th.check-column,
-  .table-scroll td.check-column {
-    min-width: 38px !important;
-    width: 38px !important;
-    max-width: 38px;
-    padding: 0 4px !important;
-  }
-
-  .table-scroll th.action-column,
-  .table-scroll td.action-column {
-    min-width: 84px;
-    width: 84px;
-    overflow: visible !important;
-  }
-
-  .action-btn-group--desktop {
-    display: none !important;
-  }
-
-  .row-action-menu {
-    display: inline-flex !important;
-    position: relative;
-    pointer-events: auto;
-  }
-
-  .row-action-menu__toggle {
-    width: 38px;
-    height: 34px;
-    border: 1px solid var(--border-mid);
-    border-radius: 10px;
-    background: var(--bg-card);
-    color: var(--text-main);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    pointer-events: auto;
-    touch-action: manipulation;
-  }
-
-  .row-action-menu__toggle svg {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
-  }
-
-  .row-action-menu__panel {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    z-index: 40;
-    min-width: 116px;
-    padding: 6px;
-    border: 1px solid var(--border-mid);
-    border-radius: 10px;
-    background: var(--bg-card);
-    box-shadow: var(--shadow-md);
-    display: grid;
-    gap: 4px;
-  }
-
-  .row-action-menu__panel--drop-up {
-    top: auto;
-    bottom: calc(100% + 6px);
-  }
-
-  .table-scroll td.action-column.action-column--menu-open {
-    z-index: 60;
-    overflow: visible !important;
-  }
-
-  .row-action-menu__item {
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-main);
-    font-size: 12px;
-    font-weight: 700;
-    text-align: left;
-    padding: 8px 10px;
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-
-  .row-action-menu__item[data-action="delete"],
-  .row-action-menu__item[data-action="cancel"] {
-    color: var(--danger);
-  }
-
-  .row-action-menu__item:hover {
-    background: var(--primary-light);
-    color: var(--primary);
-  }
-
   .table-scroll {
+    display: none;
+  }
+
+  .mobile-table-cards {
     display: block;
   }
 

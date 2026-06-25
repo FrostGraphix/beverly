@@ -13,8 +13,6 @@ const accountRoutes = visibleRoutes("account");
 
 for (const route of superAdminRoutes) {
   for (const apiPath of route.apis) {
-    if (apiPath.toLowerCase() === "/api/v1/admin/abnormal-alarms") continue;
-    if (apiPath.toLowerCase() === "/api/local/abnormal-alarms") continue;
     assert(contractPaths.has(apiPath.toLowerCase()), `Missing hidden route endpoint: ${apiPath}`);
   }
 }

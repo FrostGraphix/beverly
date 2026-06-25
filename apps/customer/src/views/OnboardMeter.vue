@@ -7,7 +7,6 @@ import { api } from '../lib/api';
 const router   = useRouter();
 const meterId  = ref('');
 const nickname = ref('');
-const meterType = ref<'single_phase' | 'three_phase'>('single_phase');
 const loading  = ref(false);
 const error    = ref<string | null>(null);
 const done     = ref(false);
@@ -19,7 +18,6 @@ async function submit() {
         await api.post('/api/v1/customer/meters', {
             meter_id: meterId.value.trim().toUpperCase(),
             nickname: nickname.value.trim() || undefined,
-            meter_type: meterType.value,
         });
         done.value = true;
     } catch (e: any) {
@@ -50,28 +48,6 @@ async function submit() {
               <span class="bw-muted" style="text-transform:none; letter-spacing:0; font-weight:400; margin-left:4px">(optional)</span>
             </label>
             <input class="bw-input" v-model="nickname" type="text" placeholder="Home, Office…" />
-          </div>
-
-          <div>
-            <label class="bw-label">Meter phase</label>
-            <div class="phase-grid">
-              <button
-                type="button"
-                :class="['phase-card', meterType === 'single_phase' ? 'active' : '']"
-                @click="meterType = 'single_phase'"
-              >
-                <span>Single Phase</span>
-                <small>1P service</small>
-              </button>
-              <button
-                type="button"
-                :class="['phase-card', meterType === 'three_phase' ? 'active' : '']"
-                @click="meterType = 'three_phase'"
-              >
-                <span>Three Phase</span>
-                <small>3P service</small>
-              </button>
-            </div>
           </div>
 
           <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm)">{{ error }}</div>
@@ -112,33 +88,3 @@ async function submit() {
     </template>
   </AppShell>
 </template>
-
-<style scoped>
-.phase-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s-2);
-}
-.phase-card {
-  min-height: 68px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--text);
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  cursor: pointer;
-}
-.phase-card span {
-  font-weight: 800;
-}
-.phase-card small {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-.phase-card.active {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 2px var(--brand-glow);
-}
-</style>

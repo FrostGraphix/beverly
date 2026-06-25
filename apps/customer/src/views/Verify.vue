@@ -4,19 +4,15 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
-import { safeAuthRedirect } from '../lib/auth-flow';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const challengeId = ref(route.query.challenge_id as string);
+const challengeId = route.query.challenge_id as string;
 const phone = route.query.phone as string;
 const isSignup = route.query.signup === '1';
 const isRecovery = route.query.recovery === '1';
-const authPurpose = isRecovery ? 'recovery' : isSignup ? 'signup' : 'login';
-const rememberSession = route.query.remember !== '0';
-const redirectTarget = computed(() => safeAuthRedirect(route.query.redirect));
 // Stored for signup resend
 const storedFullName = route.query.full_name as string | undefined;
 const storedEmail = route.query.email as string | undefined;
@@ -27,14 +23,14 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const success = ref(false);
 
-// Resend cooldown comes from the API so SMS-backed flows can tune retry windows.
-const initialRetryAfter = Number(route.query.retry_after_seconds ?? 30);
-const resendCd = ref(Number.isFinite(initialRetryAfter) ? initialRetryAfter : 30);
+// Resend cooldown (30s between sends)
+const resendCd = ref(30);
 let resendTimer: ReturnType<typeof setInterval>;
 
-const fallbackExpiry = Date.now() + 5 * 60 * 1000;
-let expiresAt = route.query.expires_at ? new Date(String(route.query.expires_at)).getTime() : fallbackExpiry;
-const expiresIn = ref(Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)));
+// OTP expires in 5 minutes; show countdown last 60s
+const expiryMs = 5 * 60 * 1000;
+let sentAt = Date.now();
+const expiresIn = ref(Math.floor(expiryMs / 1000));
 let expiryTimer: ReturnType<typeof setInterval>;
 
 onMounted(() => {
@@ -49,6 +45,7 @@ onBeforeUnmount(() => {
 });
 
 function startResendCooldown() {
+    resendCd.value = 30;
     clearInterval(resendTimer);
     resendTimer = setInterval(() => {
         if (--resendCd.value <= 0) clearInterval(resendTimer);
@@ -58,7 +55,7 @@ function startResendCooldown() {
 function startExpiryCountdown() {
     clearInterval(expiryTimer);
     expiryTimer = setInterval(() => {
-        const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+        const remaining = Math.max(0, Math.floor((sentAt + expiryMs - Date.now()) / 1000));
         expiresIn.value = remaining;
         if (remaining === 0) clearInterval(expiryTimer);
     }, 1000);
@@ -123,12 +120,12 @@ async function submit() {
     try {
         const r = await api.post<{ access_token: string; customer: any; is_new: boolean }>(
             '/api/v1/customer/auth/verify',
-            { challenge_id: challengeId.value, otp },
+            { challenge_id: challengeId, otp },
         );
         success.value = true;
-        auth.setSession(r.access_token, r.customer, rememberSession);
+        auth.setSession(r.access_token, r.customer);
         await new Promise((res) => setTimeout(res, 600)); // brief success pause
-        await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+        await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
     } catch (e: any) {
         if (e instanceof ApiError) {
             if (e.code === 'otp_expired') {
@@ -154,31 +151,17 @@ async function resend() {
     error.value = null;
     clearDigits();
     try {
-        let response: { challenge_id: string; expires_at?: string; retry_after_seconds?: number };
         if (isSignup) {
-            response = await api.post('/api/v1/customer/auth/signup', {
+            await api.post('/api/v1/customer/auth/signup', {
                 phone,
                 full_name: storedFullName,
                 email: storedEmail || undefined,
             });
-        } else if (isRecovery) {
-            response = await api.post('/api/v1/customer/auth/recover', { phone });
         } else {
-            response = await api.post('/api/v1/customer/auth/login', { phone });
+            await api.post('/api/v1/customer/auth/login', { phone });
         }
-        challengeId.value = response.challenge_id;
-        expiresAt = response.expires_at ? new Date(response.expires_at).getTime() : Date.now() + 5 * 60 * 1000;
-        expiresIn.value = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-        resendCd.value = response.retry_after_seconds ?? 30;
-        await router.replace({
-            name: 'verify',
-            query: {
-                ...route.query,
-                challenge_id: response.challenge_id,
-                expires_at: response.expires_at,
-                retry_after_seconds: response.retry_after_seconds,
-            },
-        });
+        sentAt = Date.now();
+        expiresIn.value = Math.floor(expiryMs / 1000);
         startResendCooldown();
         startExpiryCountdown();
     } catch (e: any) {
@@ -192,7 +175,6 @@ async function resend() {
     :title="isRecovery ? 'Check your phone' : isSignup ? 'Check your phone' : 'Enter your code'"
     :back="isRecovery ? '/recover' : isSignup ? '/signup' : '/login'"
   >
-    <p class="auth-purpose" aria-live="polite">{{ authPurpose === 'recovery' ? 'Account recovery' : authPurpose === 'signup' ? 'New account verification' : 'Sign-in verification' }}</p>
 
     <!-- Phone indicator -->
     <div class="phone-badge">
@@ -295,16 +277,6 @@ async function resend() {
   align-self: center;
 }
 .phone-badge strong { color: var(--text); }
-
-.auth-purpose {
-  margin: 0;
-  text-align: center;
-  font-size: var(--t-xs);
-  font-weight: 700;
-  color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
 
 /* OTP row */
 .otp-row {

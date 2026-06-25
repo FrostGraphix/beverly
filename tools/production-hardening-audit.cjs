@@ -5,23 +5,6 @@ const root = path.resolve(__dirname, "..");
 const reportDir = path.join(root, "tmp", "production-hardening");
 const reportPath = path.join(reportDir, "audit-report.json");
 
-function writeJsonArtifact(filePath, report) {
-  const payload = `${JSON.stringify(report, null, 2)}\n`;
-  let lastError;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const tempPath = `${filePath}.${process.pid}.${attempt}.tmp`;
-    try {
-      fs.writeFileSync(tempPath, payload);
-      fs.renameSync(tempPath, filePath);
-      return;
-    } catch (error) {
-      lastError = error;
-      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* best effort */ }
-    }
-  }
-  throw lastError;
-}
-
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
@@ -177,7 +160,7 @@ function runAudit(writeArtifact = true) {
 
   if (writeArtifact) {
     fs.mkdirSync(reportDir, { recursive: true });
-    writeJsonArtifact(reportPath, report);
+    fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   }
 
   return report;

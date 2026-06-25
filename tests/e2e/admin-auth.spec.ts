@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const ADMIN_EMAIL    = 'admin@acoblighting.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
+const ADMIN_PASSWORD = 'Abdul$amad123';
 
 test.describe('Admin authentication', () => {
     test('login page renders', async ({ page }) => {
@@ -20,7 +20,6 @@ test.describe('Admin authentication', () => {
     });
 
     test('signs in with correct credentials and lands on dashboard', async ({ page }) => {
-        test.skip(!ADMIN_PASSWORD, 'ADMIN_PASSWORD is required for live admin login.');
         await page.goto('/login');
         await page.getByLabel(/Email/i).fill(ADMIN_EMAIL);
         await page.getByLabel(/Password/i).fill(ADMIN_PASSWORD);

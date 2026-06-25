@@ -546,10 +546,10 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           <tbody>
             <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
               <td class="bw-row-id">#{{ p.id.slice(0, 8) }}</td>
-              <td class="bw-mono">{{ p.meter_id || '—' }}</td>
+              <td class="bw-mono">{{ p.customerMeter || '—' }}</td>
               <td><span class="bw-badge" :class="p.status === 'delivered' ? 'success' : (p.status === 'failed' ? 'danger' : 'warn')">{{ p.status }}</span></td>
-              <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
-              <td class="bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.amountMinor) }}</td>
+              <td class="bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.createdAt) }}</td>
             </tr>
             <tr v-if="!recentTransactions.length && !loading">
               <td colspan="5" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions yet.</td>

@@ -8,7 +8,6 @@
  * Results stored in reconciliation_runs for dashboard display.
  */
 import { adminClient } from '../db/supabase.js';
-import { PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
 
 const MISMATCH_ALERT_THRESHOLD_MINOR = 10_000_00; // ₦10,000
 
@@ -34,13 +33,13 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         const since = `${date}T00:00:00Z`;
         const until = `${date}T23:59:59Z`;
 
-        // Our DB: sum of payment_transactions completed on this date.
+        // Our DB: sum of payment_transactions confirmed on this date
         const { data: dbTxns } = await adminClient
             .from('payment_transactions')
             .select('amount_minor')
-            .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))
-            .gte('completed_at', since)
-            .lte('completed_at', until);
+            .eq('status', 'succeeded')
+            .gte('created_at', since)
+            .lte('created_at', until);
 
         const dbTotal = (dbTxns ?? []).reduce((s: number, r: any) => s + Number(r.amount_minor), 0);
         const dbCount = (dbTxns ?? []).length;

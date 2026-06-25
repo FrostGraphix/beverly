@@ -22,10 +22,10 @@ assert.deepStrictEqual(buildWritePayload("/api/token/creditToken/generate", { cu
 assert.deepStrictEqual(
   buildWritePayload(
     "/api/user/create",
-    { userId: "TEMPER", email: "temper@org.acoblighting.com", status: "false", amount: "", paymentMethod: "Cash" },
-    [{ name: "userId" }, { name: "email" }, { name: "status" }]
+    { userId: "TEMPER", email: "temper@org.acoblighting.com", status: "", amount: "", paymentMethod: "Cash" },
+    [{ name: "userId" }, { name: "email" }]
   ),
-  [{ userId: "TEMPER", email: "temper@org.acoblighting.com", status: false }]
+  [{ userId: "TEMPER", email: "temper@org.acoblighting.com" }]
 );
 assert(confirmationMessage("Delete", "Customer").includes("Customer"));
 assert(confirmationMessage("Cancel", "Credit Token Record").includes("cancellation"));

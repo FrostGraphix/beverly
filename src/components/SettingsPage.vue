@@ -22,7 +22,7 @@
           Security
         </BaseButton>
         <BaseButton :class="['profile-tab', { active: activeTab === 'settings' }]" @click="activeTab = 'settings'">
-          <span class="profile-tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5h18v2H3V5zm4 6h10v2H7v-2zm-2 6h14v2H5v-2z"/></svg></span>
+          <span class="profile-tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"/></svg></span>
           Preferences
         </BaseButton>
       </div>
@@ -74,25 +74,18 @@
             {{ passwordMessage }}
           </div>
 
-          <div class="profile-section-title" style="margin-top:32px">Two-Factor Authentication</div>
-          <div class="mfa-section-body">
-            <div v-if="mfaLoading" class="mfa-loading">Loading…</div>
-            <div v-else-if="mfaStatus.enrolled" class="mfa-status">
-              <div class="mfa-status-badge mfa-enabled">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Enabled
+          <div class="profile-section-title" style="margin-top:32px">Active Sessions</div>
+          <div class="profile-sessions">
+            <div class="profile-session" v-for="session in sessions" :key="session.id">
+              <div class="session-icon" v-html="session.icon"></div>
+              <div class="session-info">
+                <div class="session-device">{{ session.device }}</div>
+                <div class="session-meta">{{ session.location }} - {{ session.time }}</div>
               </div>
-              <p class="mfa-hint">Your account is protected with two-factor authentication.</p>
-              <div class="mfa-actions"><BaseButton size="sm" variant="danger" @click="disableMFA">Disable 2FA</BaseButton></div>
+              <div v-if="session.current" class="session-current">Current</div>
+              <BaseButton v-else class="session-revoke" variant="danger" size="sm" @click="revokeSession(session.id)">Revoke</BaseButton>
             </div>
-            <div v-else class="mfa-status">
-              <div class="mfa-status-badge mfa-disabled">Not Enabled</div>
-              <p class="mfa-hint">Protect your account with a second verification step.</p>
-              <BaseButton size="sm" variant="primary" @click="mfaSetupOpen = true">Enable 2FA</BaseButton>
-            </div>
-            <MfaSetupFlow v-if="mfaSetupOpen" @complete="onMfaSetupComplete" @cancelled="mfaSetupOpen = false" />
           </div>
-
         </div>
 
         <div v-if="activeTab === 'settings'" class="profile-section">
@@ -148,9 +141,7 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseToggle from "./base/BaseToggle.vue";
-import MfaSetupFlow from "./MfaSetupFlow.vue";
 import { changeUserPassword, loadPreferenceState, savePreferenceState } from "../services/profile-store.mjs";
-import { getMFAStatus, unenrollMFA } from "../services/mfa-service.mjs";
 
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
 
@@ -162,7 +153,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "SettingsPage",
-  components: { BaseButton, BaseIconButton, BaseInput, BaseToggle, MfaSetupFlow },
+  components: { BaseButton, BaseIconButton, BaseInput, BaseToggle },
   props: {
     userName: { type: String, default: "ACB(admin)" },
     roleId: { type: String, default: "super-admin" },
@@ -176,6 +167,11 @@ export default {
       passwordMessage: "",
       prefsMessage: "",
       prefs: savePreferenceState({ ...loadPreferenceState(), theme: normalizeThemeChoice(loadPreferenceState().theme) }),
+      sessions: [
+        { id: 1, device: "Chrome on Windows", location: "Lagos, NG", time: "Now", current: true, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
+        { id: 2, device: "Edge on Windows", location: "Abuja, NG", time: "2h ago", current: false, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>' },
+        { id: 3, device: "Mobile browser", location: "Lagos, NG", time: "Yesterday", current: false, icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01 7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>' }
+      ],
       themes: [
         { id: "system", label: "System", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
         { id: "light", label: "Light", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/></svg>' },
@@ -186,14 +182,8 @@ export default {
         { id: "emailAlerts", label: "Email Alerts", desc: "Receive alerts via email" },
         { id: "tokenAlerts", label: "Token Alerts", desc: "Notify on token generation" },
         { id: "systemAlerts", label: "System Alerts", desc: "System maintenance notices" }
-      ],
-      mfaStatus: { enrolled: false, factorId: null },
-      mfaLoading: true,
-      mfaSetupOpen: false
+      ]
     };
-  },
-  async mounted() {
-    await this.loadMfaStatus();
   },
   computed: {
     roleName() {
@@ -233,6 +223,9 @@ export default {
       this.pw = { current: "", next: "", confirm: "" };
       this.passwordMessage = "Password updated.";
     },
+    revokeSession(id) {
+      this.sessions = this.sessions.filter((session) => session.id !== id);
+    },
     applyTheme(theme) {
       const nextTheme = normalizeThemeChoice(theme);
       this.prefs = savePreferenceState({ ...this.prefs, theme: nextTheme });
@@ -242,21 +235,6 @@ export default {
       this.prefs = savePreferenceState(this.prefs);
       this.prefsMessage = "Preferences saved.";
       setTimeout(() => { this.prefsMessage = ""; }, 3000);
-    },
-    async loadMfaStatus() {
-      this.mfaLoading = true;
-      try {
-        this.mfaStatus = await getMFAStatus();
-      } catch { this.mfaStatus = { enrolled: false, factorId: null }; }
-      this.mfaLoading = false;
-    },
-    async disableMFA() {
-      await unenrollMFA(this.mfaStatus.factorId);
-      await this.loadMfaStatus();
-    },
-    async onMfaSetupComplete() {
-      this.mfaSetupOpen = false;
-      await this.loadMfaStatus();
     }
   }
 };

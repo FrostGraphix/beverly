@@ -1,10 +1,9 @@
-import { getCookie, liveWritesAllowed, postApi, uploadApi } from "./api.js";
+import { liveWritesAllowed, postApi, uploadApi } from "./api.js";
 import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
 import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
 import { validateUploadFile } from "./upload-policy.mjs";
 import { guardedWriteMessage } from "./guarded-write.mjs";
-import { remoteTaskConfirmPayloadFromRow } from "./remote-task-flow.mjs";
 
 export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/api/File/Upload";
@@ -18,9 +17,6 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-reading")) return "/api/RemoteMeterTask/CreateReadingTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-control")) return "/api/RemoteMeterTask/CreateControlTask";
   if ((action === "Add Task" || action === "Add Batch Task") && route.hash.includes("remote-meter-token")) return "/api/RemoteMeterTask/CreateTokenTask";
-  if (action === "Confirm" && route.hash.includes("remote-meter-reading-task")) return "/api/RemoteMeterTask/UpdateReadingTask";
-  if (action === "Confirm" && route.hash.includes("remote-meter-control-task")) return "/api/RemoteMeterTask/UpdateControlTask";
-  if (action === "Confirm" && route.hash.includes("remote-meter-token-task")) return "/api/RemoteMeterTask/UpdateTokenTask";
   if (action === "Add" && route.hash.includes("remote-support/firmware-update")) return "/API/UpdateFirmwareTask/CreateUpdateFirmwareTask";
 
   let moduleName = "";
@@ -59,41 +55,6 @@ function requestHeaders(route, action) {
   };
 }
 
-const mirrorUserWriteOrigin = (import.meta.env?.VITE_USER_MIRROR_ORIGIN || "http://8.208.16.168:9311").replace(/\/+$/, "");
-const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "true").toLowerCase() !== "false";
-
-function shouldMirrorUserWrite(route, action, endpoint) {
-  if (!mirrorUserWriteEnabled) return false;
-  const hash = String(route?.hash || "");
-  const roleOrUserRoute = hash.includes("admin/user") || hash.includes("admin/role");
-  if (!roleOrUserRoute) return false;
-  if (!["Add", "Edit", "Delete"].includes(action)) return false;
-  return Boolean(endpoint && (endpoint.startsWith("/api/user/") || endpoint.startsWith("/api/role/")));
-}
-
-async function mirrorUserWrite(route, action, endpoint, payload) {
-  const token = getCookie("token");
-  const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...requestHeaders(route, action),
-    },
-    body: JSON.stringify(payload || {}),
-  });
-
-  let json = null;
-  try { json = await response.json(); } catch { json = null; }
-
-  const responseCode = Number(json?.code);
-  const failedByCode = Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200;
-  if (!response.ok || failedByCode) {
-    const reason = json?.reason || json?.msg || json?.message || `HTTP ${response.status}`;
-    throw new Error(`Remote user sync failed: ${reason}`);
-  }
-}
-
 function formDataPayload(route, action, form, selectedFile) {
   const formData = new FormData();
   formData.append("file", selectedFile);
@@ -121,17 +82,6 @@ function normalizeRows(response) {
 
 function isCustomerDelete(route, action) {
   return action === "Delete" && route?.hash === "#/management/customer";
-}
-
-function isRemoteTaskConfirm(route, action) {
-  return action === "Confirm" && String(route?.hash || "").startsWith("#/remote-operation-record/");
-}
-
-function isRemoteTaskConfirmAccepted(response, route, action) {
-  if (!isRemoteTaskConfirm(route, action)) return false;
-  const responseCode = Number(response?.code);
-  const reason = String(response?.reason || response?.msg || response?.message || "").toLowerCase();
-  return responseCode === 99 && reason.includes("no data has been changed");
 }
 
 async function deleteCustomerDependencies(form, api) {
@@ -209,45 +159,25 @@ export async function submitRouteAction(route, action, form, options = {}) {
     await deleteCustomerDependencies(form, api);
   }
 
-  const payload = isRemoteTaskConfirm(route, action)
-    ? remoteTaskConfirmPayloadFromRow(form)
-    : action === "Import"
+  const payload = action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
       ? buildWritePayload(endpoint, { ...form, ...meta }, fields)
       : form;
-  if (isRemoteTaskConfirm(route, action) && !payload.length) {
-    throw new Error("task id is required");
-  }
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
-  if (!uploadMode && shouldMirrorUserWrite(route, action, endpoint)) {
-    await mirrorUserWrite(route, action, endpoint, payload);
-  }
-
   const response = uploadMode
     ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint
       ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
-  }
-
-  // After successful user create, reset on upstream so the password is registered there too.
-  // The upstream UserCreateRequest schema has no password field, so a reset call is needed
-  // to initialise the account on systems that share the same upstream API.
-  if (endpoint === "/api/user/create" && action === "Add" && payload.userId) {
-    try {
-      await api.postApi("/api/user/reset", { userId: payload.userId });
-    } catch {
-      // Non-fatal — user is created; reset failure only affects upstream password sync
-    }
   }
   if (isCustomerDelete(route, action)) {
     await verifyCustomerDeleted(form, api);
   }
-  const mapped = mapActionResponse(response, action, isRemoteTaskConfirmAccepted(response, route, action) ? "submitted" : "success");
+  const mapped = mapActionResponse(response, action);
 
   return {
     endpoint,

@@ -2,10 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import ConfirmDialog from '../components/ConfirmDialog.vue';
-import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, shortDate } from '../lib/api';
-import { useStaffAuthStore } from '../stores/auth';
 
 interface Application {
     id: string;
@@ -21,23 +18,15 @@ interface Application {
 }
 
 const router = useRouter();
-const auth = useStaffAuthStore();
 const apps = ref<Application[]>([]);
 const loading = ref(false);
-const deletingId = ref<string | null>(null);
-const deleteOpen = ref(false);
-const deleteTarget = ref<Application | null>(null);
-const error = ref('');
 const status = ref<'submitted' | 'contacted' | 'rejected' | 'converted'>('submitted');
 
 async function load() {
     loading.value = true;
-    error.value = '';
     try {
         const r = await api.get<{ applications: Application[] }>(`/api/v1/admin/vendor-applications?status=${status.value}`);
         apps.value = r.applications;
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Could not load applications.';
     } finally { loading.value = false; }
 }
 
@@ -52,28 +41,6 @@ function convertToVendor(app: Application) {
             primaryName: app.contact_name,
         },
     });
-}
-
-function askDeleteApplication(app: Application) {
-    deleteTarget.value = app;
-    deleteOpen.value = true;
-}
-
-async function deleteApplication() {
-    if (!deleteTarget.value) return;
-    const app = deleteTarget.value;
-    deletingId.value = app.id;
-    error.value = '';
-    try {
-        await api.del(`/api/v1/admin/vendor-applications/${encodeURIComponent(app.id)}`);
-        apps.value = apps.value.filter((item) => item.id !== app.id);
-        deleteOpen.value = false;
-        deleteTarget.value = null;
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Could not delete application.';
-    } finally {
-        deletingId.value = null;
-    }
 }
 
 onMounted(load);
@@ -92,10 +59,6 @@ onMounted(load);
         </div>
       </div>
 
-      <div v-if="error" class="bw-banner error" role="alert" style="margin: var(--s-4)">
-        {{ error }}
-      </div>
-
       <div class="bw-t-wrap">
         <table class="bw-table">
           <thead>
@@ -105,7 +68,7 @@ onMounted(load);
               <th>Contact</th>
               <th>Type</th>
               <th>Stations</th>
-              <th class="actions-col"></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -118,19 +81,10 @@ onMounted(load);
               </td>
               <td>{{ a.business_type || '—' }}</td>
               <td>{{ a.operating_stations?.join(', ') || '—' }}</td>
-              <td class="actions-col">
-                <div class="app-actions">
+              <td>
+                <div class="bw-row" style="gap: var(--s-2); justify-content: flex-end">
                   <button v-if="status === 'submitted'" class="bw-btn sm primary" @click="convertToVendor(a)">Approve</button>
-                  <button v-if="auth.hasPermission('wallet.vendors.manage')" class="bw-btn sm danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
-                    {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
-                  </button>
                 </div>
-                <MobileActionMenu label="Application actions">
-                  <button v-if="status === 'submitted'" class="mobile-action-item primary" @click="convertToVendor(a)">Approve</button>
-                  <button v-if="auth.hasPermission('wallet.vendors.manage')" class="mobile-action-item danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
-                    {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
-                  </button>
-                </MobileActionMenu>
               </td>
             </tr>
             <tr v-if="!apps.length && !loading">
@@ -140,45 +94,5 @@ onMounted(load);
         </table>
       </div>
     </div>
-
-    <ConfirmDialog
-      v-model:open="deleteOpen"
-      title="Delete application"
-      :description="deleteTarget
-        ? `Delete ${deleteTarget.legal_name || deleteTarget.contact_email || 'this application'} from the review queue?`
-        : ''"
-      confirm-label="Delete application"
-      tone="danger"
-      :loading="Boolean(deletingId)"
-      @confirm="deleteApplication"
-    />
   </AppShell>
 </template>
-
-<style scoped>
-.actions-col {
-  min-width: 170px;
-}
-
-.app-actions {
-  display: flex;
-  gap: var(--s-2);
-  justify-content: flex-end;
-}
-
-@media (max-width: 720px) {
-  .actions-col {
-    min-width: 72px;
-    position: sticky;
-    right: 0;
-    background: var(--glass-bg-strong);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    z-index: 3;
-  }
-
-  .app-actions {
-    display: none;
-  }
-}
-</style>

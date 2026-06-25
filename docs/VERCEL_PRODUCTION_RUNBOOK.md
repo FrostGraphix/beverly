@@ -27,38 +27,12 @@ Preview checks
 6. Confirm account table loads.
 7. Confirm write returns `403` while writes are disabled.
 8. Confirm live route smoke succeeds.
-9. Sign in as a super-admin.
-10. Open Developer Console > Service Health.
-11. Confirm incidents are reviewed.
-12. Open Queue Monitor.
-13. Confirm failed queue count is zero.
-14. Open Schema Explorer > Deploy Log.
-15. Confirm the preview deployment status.
-
-Developer console operator record
-1. Preview URL.
-2. Deployment SHA.
-3. Deployment timestamp.
-4. Service-health result.
-5. Open incident count.
-6. Failed queue count.
-7. Operator name.
 
 Smoke command
 ```powershell
-$env:PREVIEW_TARGET_URL="https://beverly-3lrokjz2q-danmusa-abdulsamads-projects.vercel.app"
-$env:TARGET_URL=$env:PREVIEW_TARGET_URL
-$env:VERCEL_PROTECTION_BYPASS="<preview-bypass-secret>"
-$env:SMOKE_AUTH_TOKEN="<smoke-token>"
+$env:TARGET_URL="https://your-preview-url.vercel.app"
 npm run smoke:vercel
 ```
-
-Use `SMOKE_USER_ID` and `SMOKE_PASSWORD` when no token exists.
-
-Latest unread failure mail:
-- project: `acob-crm-4-clean-deploy`
-- deployment: `dpl_ApHZfUvEfjjC1UNM6Rk6TjE1We6S`
-- latest `beverly` failure: `dpl_4TL5qsL4Dbe9FuAgx9xWSRrY9fMS`
 
 Write enable step
 1. Set `ALLOW_LIVE_WRITES=true`.

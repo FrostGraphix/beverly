@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { PORTAL_URLS } from '../lib/portals';
-
 defineProps<{
   title: string;
   subtitle?: string;
@@ -13,14 +11,14 @@ defineProps<{
     <div class="auth-bg-glow" aria-hidden="true" />
 
     <div class="auth-card">
-      <!-- Brand header → back to Beverly landing -->
-      <a class="auth-brand" :href="PORTAL_URLS.landing" aria-label="Beverly home">
+      <!-- Brand header -->
+      <div class="auth-brand">
         <div class="bw-mark auth-mark">B</div>
         <div class="auth-wordmark">
           <strong>Beverly</strong>
           <span>Electricity · Wallet</span>
         </div>
-      </a>
+      </div>
 
       <!-- Back link -->
       <router-link v-if="back" :to="back" class="auth-back">
@@ -44,8 +42,8 @@ defineProps<{
 
     <p class="auth-legal">
       By continuing you agree to Beverly's
-      <router-link to="/terms" class="auth-link">Terms of Service</router-link> &amp;
-      <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>.
+      <a href="#" class="auth-link">Terms of Service</a> &amp;
+      <a href="#" class="auth-link">Privacy Policy</a>.
     </p>
   </main>
 </template>
@@ -59,18 +57,18 @@ defineProps<{
   justify-content: center;
   padding: var(--s-5) var(--s-4);
   padding-bottom: max(var(--s-6), env(safe-area-inset-bottom, 0px));
-  background: transparent;
+  background: var(--canvas);
   position: relative;
   overflow: hidden;
 }
 
-/* Ambient brand glow in the background — sits atop the fixed body gradient */
+/* Ambient brand glow in the background */
 .auth-bg-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 600px 400px at 50% 0%, oklch(70% 0.19 145 / 0.07) 0%, transparent 70%),
-    radial-gradient(ellipse 400px 300px at 80% 100%, oklch(65% 0.18 270 / 0.05) 0%, transparent 60%);
+    radial-gradient(ellipse 600px 400px at 50% 0%, oklch(70% 0.19 145 / 0.09) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 300px at 80% 100%, oklch(65% 0.18 270 / 0.06) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -78,13 +76,15 @@ defineProps<{
   position: relative;
   width: 100%;
   max-width: 420px;
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border-strong);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-2xl);
   padding: var(--s-6);
-  backdrop-filter: blur(36px) saturate(200%);
-  -webkit-backdrop-filter: blur(36px) saturate(200%);
-  box-shadow: var(--glass-shine), var(--glass-shadow-float);
+  box-shadow:
+    0 0 0 1px oklch(100% 0 0 / 0.04) inset,
+    0 4px 6px -1px oklch(0% 0 0 / 0.3),
+    0 20px 40px -8px oklch(0% 0 0 / 0.4),
+    0 0 60px oklch(70% 0.19 145 / 0.04);
 }
 
 /* Top glow line on card */
@@ -104,12 +104,7 @@ defineProps<{
   align-items: center;
   gap: var(--s-3);
   margin-bottom: var(--s-6);
-  text-decoration: none;
-  cursor: pointer;
-  width: max-content;
-  transition: opacity var(--dur-fast);
 }
-.auth-brand:hover { opacity: 0.85; }
 
 .auth-mark {
   width: 44px;
@@ -177,22 +172,8 @@ defineProps<{
   gap: var(--s-4);
 }
 
-.auth-cross {
-  margin-top: var(--s-5);
-  font-size: var(--t-sm);
-  color: var(--text-2);
-  text-align: center;
-}
-.auth-cross-link {
-  color: var(--brand);
-  font-weight: 600;
-  text-decoration: none;
-  margin-left: 4px;
-}
-.auth-cross-link:hover { text-decoration: underline; }
-
 .auth-legal {
-  margin-top: var(--s-3);
+  margin-top: var(--s-5);
   font-size: var(--t-xs);
   color: var(--text-2);
   text-align: center;

@@ -53,16 +53,14 @@ function mmss(s: number) {
 }
 
 .session-modal {
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border-strong);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-xl);
   padding: var(--s-6);
   width: 100%;
   max-width: 380px;
   text-align: center;
-  backdrop-filter: blur(36px) saturate(200%);
-  -webkit-backdrop-filter: blur(36px) saturate(200%);
-  box-shadow: var(--glass-shine), var(--glass-shadow-float);
+  box-shadow: 0 24px 64px oklch(0% 0 0 / 0.45);
 }
 
 .session-icon {

@@ -4,17 +4,12 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL              = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL              = 'https://qpoipyqgrjsjdvfqmxok.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODczMDQ5MCwiZXhwIjoyMDg0MzA2NDkwfQ.IFafEGSJw6CV39f14Wpuoc2dnl5a0UV1qVAfJRu8NO8';
 
-const ADMIN_EMAIL    = process.env.WALLET_ADMIN_EMAIL ?? 'admin@acoblighting.com';
-const ADMIN_PASSWORD = process.env.WALLET_ADMIN_PASSWORD;
+const ADMIN_EMAIL    = 'admin@acoblighting.com';
+const ADMIN_PASSWORD = 'Abdul$amad123';
 const ADMIN_ROLE     = 'super-admin';
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ADMIN_PASSWORD) {
-    console.error('SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and WALLET_ADMIN_PASSWORD are required.');
-    process.exit(1);
-}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },

@@ -8,19 +8,42 @@
           </div>
           <div>
             <div class="profile-panel-name">Profile</div>
-            <div class="profile-panel-meta-row">
-              <span class="profile-panel-role">{{ userName }}</span>
-              <span class="profile-badge">
-                <svg viewBox="0 0 24 24" fill="currentColor" style="width:10px;height:10px" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
-                Active
-              </span>
-              <span class="profile-panel-role">{{ roleName }}</span>
-            </div>
+            <div class="profile-panel-role">{{ userName }} - {{ roleName }}</div>
           </div>
         </div>
         <BaseIconButton class="profile-close-btn" @click="$emit('close')" aria-label="Close profile">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </BaseIconButton>
+      </div>
+
+      <div class="profile-hero">
+        <div class="profile-avatar-wrap">
+          <div class="profile-avatar">{{ initials }}</div>
+        </div>
+        <div class="profile-hero-info">
+          <div class="profile-hero-name">{{ userName }}</div>
+          <div class="profile-hero-meta">
+            <span class="profile-badge">
+              <svg viewBox="0 0 24 24" fill="currentColor" style="width:10px;height:10px" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
+              Active
+            </span>
+            <span class="profile-hero-sep">-</span>
+            <span>{{ roleName }}</span>
+            <span class="profile-hero-sep">-</span>
+            <span>Beverly CRM</span>
+          </div>
+        </div>
+        <div class="profile-hero-stats">
+          <div class="profile-stat">
+            <span class="profile-stat-val">{{ sessionDays }}</span>
+            <span class="profile-stat-label">Days Active</span>
+          </div>
+          <div class="profile-stat-div"></div>
+          <div class="profile-stat">
+            <span class="profile-stat-val">{{ permissions }}</span>
+            <span class="profile-stat-label">Permissions</span>
+          </div>
+        </div>
       </div>
 
       <div class="profile-body">
@@ -98,6 +121,13 @@ export default {
       const map = { "super-admin": "Super Admin", "operations-manager": "Operations Manager", account: "Account Officer", vendor: "Vendor" };
       return map[this.roleId] || this.roleId;
     },
+    sessionDays() {
+      return 42;
+    },
+    permissions() {
+      const map = { "super-admin": "Full", "operations-manager": "Ops", account: "Read", vendor: "Token" };
+      return map[this.roleId] || "-";
+    }
   },
   methods: {
     resetForm() {

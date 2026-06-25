@@ -12,7 +12,6 @@ const defaultIdleTimeoutMs = 30 * 60 * 1000;
 
 const sessionCookieKeys = [
   "token",
-  "refreshToken",
   "SiteManager",
   "SiteCom",
   "userId",
@@ -83,36 +82,7 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const apiMessage = error?.response?.data?.reason
-      || error?.response?.data?.msg
-      || error?.response?.data?.message;
-    if (apiMessage) error.message = apiMessage;
-
-    const status = Number(error?.response?.status);
-    const original = error?.config || {};
-    const isRefreshCall = String(original.url || "").includes("/auth/refresh");
-
-    if (status === 401 && !original.__retried && !isRefreshCall) {
-      // Try to transparently refresh the session, then replay the request once.
-      const newToken = await refreshSession();
-      if (newToken) {
-        original.__retried = true;
-        original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
-        return apiClient(original);
-      }
-      // Refresh impossible/failed — fall through to logout.
-      clearSessionCookies();
-      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
-        window.location.hash = "#/login";
-      }
-    } else if (status === 401) {
-      clearSessionCookies();
-      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
-        window.location.hash = "#/login";
-      }
-    }
-
+  (error) => {
     recordClientError("api-response-error", error, {
       url: error?.config?.url || "",
       method: error?.config?.method || ""
@@ -126,8 +96,7 @@ export function setCookie(name, value) {
 }
 
 export function getCookie(name) {
-  const rawValue = document.cookie.split("; ").find((row) => row.startsWith(`${encodeURIComponent(name)}=`))?.split("=")[1] || "";
-  return rawValue ? decodeURIComponent(rawValue) : "";
+  return document.cookie.split("; ").find((row) => row.startsWith(`${encodeURIComponent(name)}=`))?.split("=")[1] || "";
 }
 
 export function clearCookie(name) {
@@ -137,47 +106,6 @@ export function clearCookie(name) {
 export function clearSessionCookies() {
   sessionCookieKeys.forEach(clearCookie);
   clearSessionState();
-}
-
-// Single-flight refresh: concurrent 401s share one refresh request.
-let refreshInFlight = null;
-
-/**
- * Exchange the stored refresh token for a fresh access token.
- * Updates the `token` (and `refreshToken`) cookies on success.
- * Returns the new access token, or "" if refresh is impossible/failed.
- * Uses a raw fetch (not apiClient) to avoid interceptor recursion.
- */
-export async function refreshSession() {
-  const refreshToken = getCookie("refreshToken");
-  if (!refreshToken) return "";
-  if (refreshInFlight) return refreshInFlight;
-
-  refreshInFlight = (async () => {
-    try {
-      const res = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      });
-      if (!res.ok) return "";
-      const json = await res.json().catch(() => null);
-      const data = json?.data || json?.result || {};
-      const newToken = data.token || "";
-      if (!newToken) return "";
-      setCookie("token", newToken);
-      if (data.refreshToken) setCookie("refreshToken", data.refreshToken);
-      touchSession();
-      return newToken;
-    } catch {
-      return "";
-    } finally {
-      // Clear after the microtask so all awaiters get the same result first.
-      setTimeout(() => { refreshInFlight = null; }, 0);
-    }
-  })();
-
-  return refreshInFlight;
 }
 
 function pickUserRow(response) {
@@ -241,7 +169,6 @@ export async function login(payload) {
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
   setCookie("token", token);
-  if (response.data?.refreshToken) setCookie("refreshToken", response.data.refreshToken);
   writeSessionState();
   setCookie("SiteManager", payload.userId);
   setCookie("SiteCom", "ACB");
@@ -275,7 +202,6 @@ export function demoLogin(portal = "admin") {
   const userName = isVendor ? "Bright Future Vendor" : "ACOB Finance Admin";
   const roleId = isVendor ? "vendor_user" : "super-admin";
   setCookie("token", `demo-${portal}-session`);
-  setCookie("refreshToken", "");
   setCookie("SiteManager", userId);
   setCookie("SiteCom", isVendor ? "SITE_001" : "ACB");
   writeSessionState();
@@ -326,18 +252,5 @@ export async function currentUserInfo() {
 }
 
 export function liveWritesAllowed() {
-  const override = typeof window !== "undefined"
-    ? window.localStorage?.getItem("beverly.allow_live_writes")
-    : "";
-  if (override === "true") return true;
-  if (override === "false") return false;
-
-  const host = typeof window !== "undefined" ? window.location?.hostname : "";
-  if (["localhost", "127.0.0.1", "::1"].includes(host)) return true;
-
-  const configured = import.meta.env?.VITE_ALLOW_LIVE_WRITES;
-  if (configured === "true") return true;
-  if (configured === "false") return false;
-
-  return false;
+  return (import.meta.env?.VITE_ALLOW_LIVE_WRITES || "false") === "true";
 }

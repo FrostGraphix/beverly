@@ -68,28 +68,23 @@ async function liveRawTotal(stationId) {
   const rows = [];
   for (const station of stats.stations) {
     const liveTotal = await liveRawTotal(station.station);
-    const canonicalRows = Number(station.rows || 0);
-    const rawDuplicateRows = Number(station.rawDuplicateRows || 0);
-    const logicalRawRows = canonicalRows + rawDuplicateRows;
-    const delta = canonicalRows - liveTotal;
-    const duplicateCovered = Math.abs(delta) <= rawDuplicateRows;
+    const logicalRawRows = Number(station.logicalRawRows || station.rows || 0);
+    const delta = logicalRawRows - liveTotal;
     const fresh = station.latestReadingDate === to || station.latestReadingDate === today;
     rows.push({
       station: station.station,
-      canonicalRows,
-      rawDuplicateRows,
+      canonicalRows: Number(station.rows || 0),
+      rawDuplicateRows: Number(station.rawDuplicateRows || 0),
       logicalRawRows,
       liveRawRows: liveTotal,
       delta,
-      duplicateCovered,
       earliestReadingDate: station.earliestReadingDate,
       latestReadingDate: station.latestReadingDate,
       fresh,
     });
   }
 
-  const drift = rows.filter((row) => row.delta !== 0 && !row.duplicateCovered);
-  const duplicateCoveredDrift = rows.filter((row) => row.delta !== 0 && row.duplicateCovered);
+  const drift = rows.filter((row) => row.delta !== 0);
   const stale = rows.filter((row) => !row.fresh);
   const report = {
     status: drift.length || stale.length ? "raw gap verification failed" : "raw gap verification passed",
@@ -98,7 +93,6 @@ async function liveRawTotal(stationId) {
     generatedAt: new Date().toISOString(),
     rows,
     drift,
-    duplicateCoveredDrift,
     stale,
   };
 

@@ -35,13 +35,13 @@ const STATUS_LABEL: Record<string, string> = {
     cancelled:       'Cancelled',
 };
 
-const STATUS_BADGE: Record<string, string> = {
-    pending_payment: 'neutral',
-    paid:            'warn',
-    assigned:        'warn',
-    dispatched:      'info',
-    installed:       'success',
-    cancelled:       'danger',
+const STATUS_COLOR: Record<string, string> = {
+    pending_payment: 'var(--fg-2)',
+    paid:            'oklch(75% 0.18 85)',
+    assigned:        'oklch(75% 0.18 85)',
+    dispatched:      'oklch(70% 0.19 145)',
+    installed:       'var(--brand)',
+    cancelled:       'oklch(60% 0.22 25)',
 };
 
 function fmt(minor: number) { return `₦${(minor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`; }
@@ -113,7 +113,7 @@ onMounted(async () => {
             <strong>{{ order.meter_type === 'three_phase' ? 'Three Phase' : 'Single Phase' }} Meter</strong>
             <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">{{ fmtDate(order.created_at) }}</p>
           </div>
-          <span :class="['bw-badge', STATUS_BADGE[order.status] ?? 'neutral']">
+          <span class="bw-status-badge" :style="`color:${STATUS_COLOR[order.status]}`">
             {{ STATUS_LABEL[order.status] ?? order.status }}
           </span>
         </div>
@@ -172,6 +172,7 @@ onMounted(async () => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .bw-empty { display: flex; flex-direction: column; align-items: center; gap: var(--s-4); text-align: center; padding: var(--s-10) 0; color: var(--fg-2); }
 .bw-order-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-3); }
+.bw-status-badge { font-size: var(--t-xs, 0.7rem); font-weight: 600; white-space: nowrap; }
 .bw-order-details { display: flex; flex-direction: column; gap: var(--s-1); }
 .bw-detail-row { display: flex; justify-content: space-between; gap: var(--s-3); font-size: var(--t-sm); }
 .bw-detail-row span:last-child { text-align: right; }

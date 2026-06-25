@@ -67,15 +67,14 @@ export function validateProfileState(value) {
   return {
     name: optionalString(source.name),
     email: optionalString(source.email),
-    phone: optionalString(source.phone),
-    profilePictureUrl: optionalString(source.profilePictureUrl || source.profile_picture_url)
+    phone: optionalString(source.phone)
   };
 }
 
 export function validatePreferenceState(value) {
   const source = isObject(value) ? value : {};
   return {
-    theme: optionalString(source.theme, "system"),
+    theme: optionalString(source.theme, "light"),
     compact: Boolean(source.compact),
     emailAlerts: source.emailAlerts !== false,
     tokenAlerts: source.tokenAlerts !== false,

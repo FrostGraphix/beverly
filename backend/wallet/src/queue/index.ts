@@ -14,42 +14,14 @@ import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 
-const queuesEnabled = env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true';
+const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
-function disabledQueue(name: string): Queue {
-    return {
-        async add() {
-            throw new Error(`Redis queue "${name}" is disabled in development. Set ENABLE_REDIS_QUEUES=true to enable it.`);
-        },
-        async close() {},
-    } as unknown as Queue;
-}
+export const notificationsQueue = new Queue('notifications', { connection });
+export const paymentsQueue      = new Queue('payments', { connection });
+export const holdsQueue         = new Queue('holds', { connection });
+export const auditQueue         = new Queue('audit', { connection });
 
-const connection = queuesEnabled
-    ? new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null })
-    : ({
-        async ping() {
-            throw new Error('Redis queues are disabled in development.');
-        },
-        async quit() {},
-    } as unknown as IORedis);
-
-if (queuesEnabled) {
-    connection.on('error', (err) => {
-        console.error('[redis] queue connection error:', err);
-    });
-}
-
-export const notificationsQueue = queuesEnabled ? new Queue('notifications', { connection }) : disabledQueue('notifications');
-export const paymentsQueue      = queuesEnabled ? new Queue('payments', { connection }) : disabledQueue('payments');
-export const holdsQueue         = queuesEnabled ? new Queue('holds', { connection }) : disabledQueue('holds');
-export const auditQueue         = queuesEnabled ? new Queue('audit', { connection }) : disabledQueue('audit');
-export const maintenanceQueue   = queuesEnabled ? new Queue('maintenance', { connection }) : disabledQueue('maintenance');
-export const exportsQueue       = queuesEnabled ? new Queue('privacy-exports', { connection }) : disabledQueue('privacy-exports');
-
-export const notificationsEvents = queuesEnabled
-    ? new QueueEvents('notifications', { connection })
-    : ({ async close() {} } as unknown as QueueEvents);
+export const notificationsEvents = new QueueEvents('notifications', { connection });
 
 export async function closeQueues() {
     await Promise.all([
@@ -57,12 +29,9 @@ export async function closeQueues() {
         paymentsQueue.close(),
         holdsQueue.close(),
         auditQueue.close(),
-        maintenanceQueue.close(),
-        exportsQueue.close(),
         notificationsEvents.close(),
     ]);
     await connection.quit();
 }
 
 export { connection as redisConnection };
-export { queuesEnabled };

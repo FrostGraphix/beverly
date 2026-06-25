@@ -48,34 +48,51 @@ export async function createRefundRequest(input: {
 }
 
 export async function approveRefund(refundRequestId: string, approvedByUserId: string): Promise<void> {
-    const { data: approved, error } = await adminClient.rpc('fn_approve_refund_request', {
-        p_refund_request_id: refundRequestId,
-        p_approved_by_user_id: approvedByUserId,
-    });
-    if (error) {
-        const message = error.message.toLowerCase();
-        if (message.includes('not found')) throw new RefundError('Refund request not found', 'not_found');
-        if (message.includes('not pending')) throw new RefundError('Refund is not pending', 'invalid_status');
-        if (message.includes('maker-checker')) throw new RefundError('Approver must be different from requester (maker-checker)', 'maker_checker_violation');
-        if (message.includes('missing ledger entry')) throw new RefundError('Approved refund is missing its ledger entry. Manual reconciliation required.', 'state_transition_missing');
-        if (message.includes('wallet')) throw new RefundError(`Ledger write failed: ${error.message}`, 'ledger_error');
-        throw new RefundError(`Refund approval failed: ${error.message}`, 'approve_failed');
+    const { data: req } = await adminClient
+        .from('refund_requests')
+        .select('*')
+        .eq('id', refundRequestId)
+        .single();
+
+    if (!req) throw new RefundError('Refund request not found', 'not_found');
+    if ((req as any).status !== 'pending') throw new RefundError('Refund is not pending', 'invalid_status');
+    if ((req as any).requested_by_user_id === approvedByUserId) {
+        throw new RefundError('Approver must be different from requester (maker-checker)', 'maker_checker_violation');
     }
-    const req = approved as any;
+
+    // Write ledger credit
+    const { data: entry, error: ledgerErr } = await adminClient.rpc('fn_post_ledger_entry', {
+        p_wallet_id:         (req as any).wallet_id,
+        p_entry_type:        'refund_credit',
+        p_amount_minor:      (req as any).amount_minor,
+        p_reference_type:    'refund_request',
+        p_reference_id:      refundRequestId,
+        p_description:       `Refund: ${(req as any).reason}`,
+        p_idempotency_key:   `refund_${refundRequestId}`,
+    });
+
+    if (ledgerErr) throw new RefundError(`Ledger write failed: ${ledgerErr.message}`, 'ledger_error');
+
+    await adminClient.from('refund_requests').update({
+        status:               'approved',
+        approved_by_user_id:  approvedByUserId,
+        ledger_entry_id:      (entry as any)?.id ?? null,
+        processed_at:         new Date().toISOString(),
+    }).eq('id', refundRequestId);
 
     await logAction({
         actorUserId: approvedByUserId,
         actorType:   'staff',
         action:      'refund.approved',
         targetId:    refundRequestId,
-        metadata:    { amount_minor: req?.amount_minor, wallet_id: req?.wallet_id, ledger_entry_id: req?.ledger_entry_id ?? null },
+        metadata:    { amount_minor: (req as any).amount_minor, wallet_id: (req as any).wallet_id },
     });
 }
 
 export async function rejectRefund(refundRequestId: string, rejectedByUserId: string, reason: string): Promise<void> {
     const { data: req } = await adminClient
         .from('refund_requests')
-        .select('status, reason')
+        .select('status')
         .eq('id', refundRequestId)
         .single();
 

@@ -3,16 +3,10 @@ Final Release Checklist
 
 Release Status
 --------------
-- blocked as of 2026-05-20
-- local build passes
-- local security gates pass
-- local wallet gates pass
-- Supabase migrations are applied
-- Wallet Admin now deploys at `/wallet-admin/`
-- public Vercel smoke needs latest successful preview URL
-- GitHub monitoring smoke is manual until target URLs exist
-- staging write guard uses the same preview URL
-- remote CI status is unverified locally
+- blocked as of 2026-05-12
+- public Vercel smoke fails behind Vercel Authentication
+- remote CI is red
+- preview Supabase envs are missing
 - do not promote to production
 
 Local Gates
@@ -29,25 +23,12 @@ npm run diff
 Preview Gates
 -------------
 ```powershell
-$env:PREVIEW_TARGET_URL="https://beverly-3lrokjz2q-danmusa-abdulsamads-projects.vercel.app"
-$env:TARGET_URL=$env:PREVIEW_TARGET_URL
+$env:TARGET_URL="https://your-preview-url.vercel.app"
 $env:VERCEL_PROTECTION_BYPASS="<preview-bypass-secret>"
-$env:SMOKE_AUTH_TOKEN="<smoke-token>"
 npm run smoke:vercel
-$env:STAGING_TARGET_URL=$env:PREVIEW_TARGET_URL
+$env:STAGING_TARGET_URL=$env:TARGET_URL
 npm run write:staging
 ```
-
-Use `SMOKE_USER_ID` and `SMOKE_PASSWORD` when no token exists.
-
-Latest unread deployment failure:
-- `2026-06-13T08:54:37Z`
-- project: `acob-crm-4-clean-deploy`
-- deployment: `dpl_ApHZfUvEfjjC1UNM6Rk6TjE1We6S`
-- latest `beverly` failure: `dpl_4TL5qsL4Dbe9FuAgx9xWSRrY9fMS`
-
-Run `.github/workflows/monitoring-smoke.yml` with `workflow_dispatch`.
-Re-enable schedules only after target repository variables exist.
 
 Manual QA
 ---------

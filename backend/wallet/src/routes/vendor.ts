@@ -19,7 +19,7 @@ import {
     VendingError,
 } from '../services/vending.js';
 import {
-    previewPurchase,
+    previewPurchaseWithCurrentVat,
     lookupMeter,
     TokenEngineError,
     buildCreditTokenPreviewPlan,
@@ -771,7 +771,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 allowArchivedFallback: true,
                 allowHistoricalFallback: true,
             });
-            const preview = previewPurchase(body.amountMinor, meter.tariffId);
+            const preview = await previewPurchaseWithCurrentVat(body.amountMinor, meter.tariffId);
             return { meter, preview };
         } catch (e: any) {
             if (e instanceof TokenEngineError) {
@@ -795,7 +795,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 allowArchivedFallback: true,
                 allowHistoricalFallback: true,
             });
-            const preview = previewPurchase(body.amountMinor, meter.tariffId);
+            const preview = await previewPurchaseWithCurrentVat(body.amountMinor, meter.tariffId);
             const reference = `DRY-RUN-${Date.now()}`;
             const tokenInput = {
                 meterId: meter.meterId,

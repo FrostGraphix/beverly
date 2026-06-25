@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
-import { isValidNigerianPhone, normaliseNigerianPhone } from '../lib/auth-flow';
 
 const router = useRouter();
 const phoneInput = ref<HTMLInputElement | null>(null);
@@ -14,29 +13,27 @@ const errorCode = ref<string | null>(null);
 
 onMounted(() => phoneInput.value?.focus());
 
+function normalise(raw: string): string {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.startsWith('234')) return `+${digits}`;
+    if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
+    return `+234${digits}`;
+}
+
 async function submit() {
-    if (!isValidNigerianPhone(phone.value)) {
+    if (phone.value.replace(/\D/g, '').length < 10) {
         error.value = 'Enter a valid Nigerian phone number.';
         return;
     }
     loading.value = true;
     error.value = null;
     errorCode.value = null;
-    const normalised = normaliseNigerianPhone(phone.value);
+    const normalised = normalise(phone.value);
     try {
-        const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
-            '/api/v1/customer/auth/recover',
-            { phone: normalised },
-        );
+        const r = await api.post<{ challenge_id: string }>('/api/v1/customer/auth/login', { phone: normalised });
         await router.push({
             name: 'verify',
-            query: {
-                challenge_id: r.challenge_id,
-                phone: normalised,
-                recovery: '1',
-                expires_at: r.expires_at,
-                retry_after_seconds: r.retry_after_seconds,
-            },
+            query: { challenge_id: r.challenge_id, phone: normalised, recovery: '1' },
         });
     } catch (e: any) {
         if (e instanceof ApiError) {
@@ -81,7 +78,7 @@ async function submit() {
         <label class="field-label" for="recovery-phone">Phone number</label>
         <div class="phone-wrap">
           <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">NG</span>
+            <span class="flag" aria-hidden="true">🇳🇬</span>
             +234
           </span>
           <input

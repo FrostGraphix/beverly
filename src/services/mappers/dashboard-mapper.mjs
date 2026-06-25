@@ -7,6 +7,7 @@ import {
 } from "../response-normalizers.mjs";
 import {
   axisLabels,
+  buildAlarmLegendFromReadings,
   buildConsumptionRowsFromReadings,
   buildHourlySuccessSeries,
   buildPurchaseRowsFromPayments,
@@ -69,9 +70,6 @@ const referenceDailyConsumption = [
   1980, 3480, 1380, 0, 0, 1200, 6150, 580, 1980
 ];
 
-const referenceMonthlyConsumptionLabels = ["2026-03", "2026-04"];
-const referenceMonthlyConsumption = [4200, 40020];
-
 const referenceSuccess = [
   ["10:00", 48],
   ["12:00", 50],
@@ -99,71 +97,21 @@ const referenceSuccess = [
 ];
 
 const referenceAlarms = [
-  { label: "No Data Report", color: "#2ec7c9", value: 10 },
-  { label: "Current Unbalance", color: "#b6a2de", value: 14 },
-  { label: "Current Reverse", color: "#5ab1ef", value: 18 },
+  { label: "No Data Report", color: "#35c2c1", value: 10 },
+  { label: "Current Unbalance", color: "#b399dd", value: 14 },
+  { label: "Current Reverse", color: "#10b981", value: 18 },
   { label: "Cover Open", color: "#ffb26a", value: 20 },
-  { label: "Terminal Cover Open", color: "#d87a80", value: 26 },
-  { label: "Magnetic Interference", color: "#8d98b3", value: 12 },
-  { label: "Battery Low", color: "#e5cf0d", value: 9 },
-  { label: "Relay Open", color: "#97b552", value: 58 }
+  { label: "Terminal Cover Open", color: "#db7a85", value: 26 },
+  { label: "Magnetic Interference", color: "#92a0bd", value: 12 },
+  { label: "Battery Low", color: "#f3d600", value: 9 },
+  { label: "Relay Open", color: "#9ab94f", value: 58 }
 ];
-
-const alarmDefinitions = referenceAlarms.map((alarm) => ({
-  label: alarm.label,
-  color: alarm.color,
-  aliases: [alarm.label]
-}));
-
-const alarmAliasMap = new Map(
-  alarmDefinitions.flatMap((alarm) => alarm.aliases.map((alias) => [normalizeAlarmKey(alias), alarm.label]))
-);
 
 function referenceTopSeries(type) {
   if (type === 0) return referencePurchaseMoney.map((value) => Math.max(1, Math.round(value / 250)));
   if (type === 1) return referencePurchaseMoney.map((value) => Math.max(1, Math.round(value / 10000)));
   if (type === 2) return referencePurchaseMoney.map((value) => Math.max(1, Math.round(value / 6)));
   return referencePurchaseMoney;
-}
-
-function normalizeAlarmKey(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
-}
-
-function alarmLabelFor(value) {
-  const key = normalizeAlarmKey(value);
-  if (alarmAliasMap.has(key)) return alarmAliasMap.get(key);
-  if (key.includes("no data")) return "No Data Report";
-  if (key.includes("unbalance") || key.includes("imbalance")) return "Current Unbalance";
-  if (key.includes("reverse")) return "Current Reverse";
-  if (key.includes("terminal") && key.includes("cover")) return "Terminal Cover Open";
-  if (key.includes("cover")) return "Cover Open";
-  if (key.includes("magnetic")) return "Magnetic Interference";
-  if (key.includes("battery")) return "Battery Low";
-  if (key.includes("relay")) return "Relay Open";
-  return "";
-}
-
-function mapAlarmRows(rows) {
-  const totals = new Map(alarmDefinitions.map((alarm) => [alarm.label, 0]));
-
-  for (const row of rows || []) {
-    const label = alarmLabelFor(row.label || row.name || row.type || row.status || row.category);
-    if (!label) continue;
-    totals.set(label, totals.get(label) + Math.max(0, toFiniteNumber(row.value ?? row.count ?? row.total, 0)));
-  }
-
-  const normalized = alarmDefinitions.map((alarm) => ({
-    label: alarm.label,
-    color: alarm.color,
-    value: totals.get(alarm.label) || 0
-  }));
-
-  return normalized.some((alarm) => alarm.value > 0) ? normalized : referenceAlarms;
 }
 
 export function referenceDashboardDataset(activeType = 3) {
@@ -268,8 +216,6 @@ export function mapDashboardDataset({
       valueKeys: ["consumption", "usage", "value", "amount", "total"]
     }
   );
-  const fallbackConsumptionLabels = consumptionType === 5 ? referenceMonthlyConsumptionLabels : referenceLabels;
-  const fallbackConsumptionValues = consumptionType === 5 ? referenceMonthlyConsumption : referenceDailyConsumption;
 
   const normalizedSuccessChart = mapDashboardSeries(successChart, {
     type: 6,
@@ -294,7 +240,14 @@ export function mapDashboardDataset({
       }))
     : fallbackHourly;
 
-  const primaryAlarmRows = mapAlarmRows(normalizeDashboardLegend(alarmChart, []));
+  const fallbackAlarmLegend = buildAlarmLegendFromReadings(hourlyRows);
+  const primaryAlarmRows = normalizeDashboardLegend(alarmChart, []);
+  const eventAlarmRows = normalizeDashboardLegend(events, []);
+  const alarmRows = primaryAlarmRows.length
+    ? primaryAlarmRows
+    : eventAlarmRows.length
+      ? eventAlarmRows
+      : fallbackAlarmLegend;
 
   const envelope = normalizeEnvelope(dashboard);
 
@@ -309,14 +262,14 @@ export function mapDashboardDataset({
     },
     consumption: {
       title: consumptionType === 4 ? "Daily Consumption" : "Monthly Consumption",
-      labels: normalizedConsumptionChart.labels.length ? normalizedConsumptionChart.labels : fallbackConsumptionLabels,
-      values: normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : fallbackConsumptionValues,
-      axis: axisLabels(Math.max(1, ...(normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : fallbackConsumptionValues)))
+      labels: normalizedConsumptionChart.labels.length ? normalizedConsumptionChart.labels : referenceLabels,
+      values: normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : referenceDailyConsumption,
+      axis: axisLabels(Math.max(1, ...(normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : referenceDailyConsumption)))
     },
     success: {
       labels: successRows.length ? successRows.map((row) => row.label) : referenceSuccess.map((row) => row[0]),
       values: successRows.length ? successRows.map((row) => Number(row.value || 0)) : referenceSuccess.map((row) => row[1])
     },
-    alarms: primaryAlarmRows
+    alarms: alarmRows.length ? alarmRows : referenceAlarms
   };
 }

@@ -336,13 +336,10 @@ export default {
 }
 
 .orb-val {
-  max-width: min(220px, 62vw);
-  font-size: 14px;
+  font-size: 46px;
   font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: 0;
-  text-align: center;
-  overflow-wrap: anywhere;
+  line-height: 1;
+  letter-spacing: -0.05em;
   background: linear-gradient(160deg, var(--text-strong) 30%, var(--primary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

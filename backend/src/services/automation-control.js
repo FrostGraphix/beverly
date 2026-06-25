@@ -21,36 +21,6 @@ function ensureDir(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
-function isTransientFsError(error) {
-  const code = String(error?.code || "").toUpperCase();
-  return code === "UNKNOWN" || code === "EPERM" || code === "EBUSY" || code === "EACCES";
-}
-
-function sleepMs(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return;
-  const buffer = new SharedArrayBuffer(4);
-  const view = new Int32Array(buffer);
-  Atomics.wait(view, 0, 0, ms);
-}
-
-function writeFileAtomicWithRetry(filePath, content, attempts = 6) {
-  ensureDir(filePath);
-  let lastError = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-      fs.writeFileSync(tempPath, content);
-      fs.renameSync(tempPath, filePath);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFsError(error) || attempt === attempts) break;
-      sleepMs(Math.min(250, attempt * 50));
-    }
-  }
-  throw lastError;
-}
-
 function readJson(filePath, fallback) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -60,7 +30,8 @@ function readJson(filePath, fallback) {
 }
 
 function writeJson(filePath, value) {
-  writeFileAtomicWithRetry(filePath, `${JSON.stringify(value, null, 2)}\n`);
+  ensureDir(filePath);
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function defaultControlState() {
@@ -215,7 +186,7 @@ function delay(ms) {
 function persistIncidentArtifact(incident) {
   fs.mkdirSync(incidentDir, { recursive: true });
   const filePath = path.join(incidentDir, `${incident.createdAt.replace(/[:.]/g, "-")}-${incident.kind}.json`);
-  writeFileAtomicWithRetry(filePath, `${JSON.stringify(incident, null, 2)}\n`);
+  fs.writeFileSync(filePath, `${JSON.stringify(incident, null, 2)}\n`);
   return filePath;
 }
 

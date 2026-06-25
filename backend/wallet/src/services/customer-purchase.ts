@@ -12,7 +12,7 @@
 import { adminClient } from '../db/supabase.js';
 import { createHold, captureHold, releaseHold } from './ledger.js';
 import {
-    lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchaseWithCurrentVat, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
@@ -240,7 +240,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         throw e;
     }
 
-    const preview = previewPurchase(input.amountMinor, meter.tariffId);
+    const preview = await previewPurchaseWithCurrentVat(input.amountMinor, meter.tariffId);
     // Resolve phase: live record wins; customer's onboarding declaration fills any gap.
     const declared = await declaredMeterType(input.customerId, meter.meterId);
     const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
@@ -644,7 +644,7 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         if (e instanceof TokenEngineError) throw new CustomerPurchaseError(e.message, (e as TokenEngineError).code);
         throw e;
     }
-    const preview = previewPurchase(amountMinor, meter.tariffId);
+    const preview = await previewPurchaseWithCurrentVat(amountMinor, meter.tariffId);
     const declared = customerId ? await declaredMeterType(customerId, meter.meterId) : null;
     const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
     return {

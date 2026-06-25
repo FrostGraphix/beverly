@@ -35,10 +35,6 @@ assertIncludes(themesCss, "[data-theme=\"contrast\"]");
 assertIncludes(themesCss, "--color-brand: #22c55e");
 assertIncludes(tokensCss, "--primary: var(--color-brand)");
 assertIncludes(tokensCss, "--theme-color: var(--color-brand)");
-assertIncludes(tokensCss, "--tags-view-item-text:");
-assertIncludes(tokensCss, "--tags-view-item-active-text:");
-assertIncludes(combinedCss, "color: var(--tags-view-item-text)");
-assertIncludes(combinedCss, "color: var(--tags-view-item-active-text)");
 assertIncludes(app, 'label: "Executive"');
 assertIncludes(settings, 'label: "Executive"');
 assertIncludes(combinedCss, ".theme-command-menu");
@@ -47,24 +43,6 @@ assertIncludes(themesCss, "color-scheme: dark");
 assertIncludes(themesCss, "color-scheme: light");
 assertIncludes(combinedCss, ".sidebar-logo-icon");
 assertIncludes(combinedCss, "color: var(--text-inverse)");
-
-const lightThemeCss = themesCss.match(/\[data-theme="light"\]\s*\{[\s\S]*?\n\}/)?.[0] || "";
-// Wallet-mirrored light theme uses oklch values from packages/tokens/theme.css
-const walletLightThemeTokens = [
-  "--color-brand:        oklch(70% 0.19 145)",
-  "--color-brand-hover:  oklch(62% 0.17 145)",
-  "--color-brand-soft:   oklch(70% 0.19 145 / 0.18)",
-  "--color-surface-page:    oklch(98% 0.004 240)",
-  "--color-surface-card:    oklch(100% 0 0)",
-  "--color-border:        oklch(20% 0.020 240 / 0.08)",
-  "--theme-color:        oklch(70% 0.19 145)",
-  "--theme-color-bright: oklch(80% 0.16 145)",
-  "--sidebar-active-border: oklch(80% 0.16 145)"
-];
-
-for (const token of walletLightThemeTokens) {
-  assertIncludes(lightThemeCss, token);
-}
 
 const greenThemeCss = [
   themesCss.match(/\[data-theme="executive"\]\s*\{[\s\S]*?\n\}/)?.[0] || ""

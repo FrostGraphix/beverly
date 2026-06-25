@@ -77,11 +77,7 @@ async function main() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
   const previousPath = process.env.LOCAL_DB_PATH;
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousLegacyWalletTestMode = process.env.LEGACY_WALLET_TEST_MODE;
   process.env.LOCAL_DB_PATH = dbPath;
-  process.env.NODE_ENV = "test";
-  process.env.LEGACY_WALLET_TEST_MODE = "true";
   handler._test.resetContractCache();
   const server = await createProxyServer();
   const port = server.address().port;
@@ -206,10 +202,6 @@ async function main() {
     localDatabase.resetForTests();
     if (previousPath === undefined) delete process.env.LOCAL_DB_PATH;
     else process.env.LOCAL_DB_PATH = previousPath;
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previousNodeEnv;
-    if (previousLegacyWalletTestMode === undefined) delete process.env.LEGACY_WALLET_TEST_MODE;
-    else process.env.LEGACY_WALLET_TEST_MODE = previousLegacyWalletTestMode;
   }
 }
 

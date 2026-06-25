@@ -1,15 +1,10 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import VendorOnboardingChecklist from '../components/VendorOnboardingChecklist.vue';
-import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
-import { useVendorAuthStore } from '../stores/auth';
 import { useWalletStore } from '../stores/wallet';
 import { naira } from '../lib/format';
 
-const auth = useVendorAuthStore();
 const wallet = useWalletStore();
-const vendorName = computed(() => auth.user?.organization_name?.split(' ')[0] || auth.user?.full_name?.split(' ')[0] || 'vendor');
 
 onMounted(async () => {
     await wallet.fetchSummary();
@@ -26,24 +21,14 @@ const todayCredits = computed(() =>
 const todayDebits = computed(() =>
     wallet.ledger.filter(e => isToday(e.created_at) && e.direction === 'debit').reduce((s, e) => s + e.amount_minor, 0)
 );
-const todayCount   = computed(() => wallet.ledger.filter(e => isToday(e.created_at)).length);
-const totalFunded  = computed(() => wallet.ledger.filter(e => e.direction === 'credit').reduce((s, e) => s + e.amount_minor, 0));
+const todayCount = computed(() => wallet.ledger.filter(e => isToday(e.created_at)).length);
 </script>
 
 <template>
   <AppShell title="Dashboard">
 
-    <WalletGreeting
-      audience="Vendor wallet desk"
-      :name="vendorName"
-      detail="for vending, funding, and token delivery."
-    />
-
-    <!-- Onboarding checklist (only shown until complete or dismissed) -->
-    <VendorOnboardingChecklist />
-
     <!-- Hero balance card -->
-    <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg); border-color: oklch(70% 0.19 145 / 0.28); position: relative; overflow: hidden">
+    <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--surface); border-color: oklch(70% 0.19 145 / 0.22); position: relative; overflow: hidden">
       <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--brand), transparent)"></div>
       <p class="bw-label" style="color: var(--brand)">Wallet Float</p>
       <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-2)">
@@ -91,12 +76,12 @@ const totalFunded  = computed(() => wallet.ledger.filter(e => e.direction === 'c
 
       <div class="bw-kpi">
         <div class="bw-kpi-row">
-          <span class="bw-kpi-label">Total Funded</span>
+          <span class="bw-kpi-label">Currency</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(totalFunded) }}</div>
+        <div class="bw-kpi-value bw-mono">{{ wallet.summary?.currency || 'NGN' }}</div>
       </div>
 
       <div class="bw-kpi">

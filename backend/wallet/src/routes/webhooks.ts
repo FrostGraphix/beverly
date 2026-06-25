@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { verifyWebhookSignature } from '../adapters/paystack.js';
 import { processPaystackChargeSuccess } from '../services/payment-webhooks.js';
+import { encryptSecret } from '../services/totp.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     // Need raw body for signature verification.
@@ -55,6 +56,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             signature_valid: valid,
             verified_at: valid ? new Date().toISOString() : null,
             raw_payload: storedPayload,
+            payload_encrypted: encryptSecret(raw),
         }).select('id').single();
         if (webhookErr?.code === '23505') {
             return reply.code(200).send({ ok: true, duplicate: true });

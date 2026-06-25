@@ -31,14 +31,7 @@ for (const file of [
 
 const architecture = read("ARCHITECTURE.md");
 const appVue = read("src/App.vue");
-const actionModal = [
-  "src/components/ActionModal.vue",
-  "src/components/ActionModalGeneric.vue",
-  "src/components/ActionModalPrint.vue",
-  "src/components/ActionModalRemoteTask.vue",
-  "src/components/ActionModalSopFlow.vue",
-  "src/components/ActionModalTokenFlow.vue"
-].map(read).join("\n");
+const actionModal = read("src/components/ActionModal.vue");
 const loginPage = read("src/components/LoginPage.vue");
 const referenceCss = read("src/styles/reference.css");
 const legacyCss = fs.readdirSync(path.join(root, "src/styles"))
@@ -59,6 +52,7 @@ const settingsPage = read("src/components/SettingsPage.vue");
 const dailyDataMeterPage = read("src/components/DailyDataMeterPage.vue");
 const consumptionStatisticsPage = read("src/components/ConsumptionStatisticsPage.vue");
 const dashboardPage = read("src/components/DashboardPage.vue");
+const siteConsumptionPage = read("src/components/SiteConsumptionPage.vue");
 const customerDrawer = read("src/components/consumption/CustomerDrawer.vue");
 const stationSummaryGrid = read("src/components/consumption/StationSummaryGrid.vue");
 const suspectLedger = read("src/components/consumption/SuspectLedger.vue");
@@ -137,6 +131,9 @@ assert(consumptionStatisticsPage.includes("BaseSelect"), "ConsumptionStatisticsP
 assert(consumptionStatisticsPage.includes("BaseIconButton"), "ConsumptionStatisticsPage icon controls should consume BaseIconButton.");
 assert(consumptionStatisticsPage.includes("BaseCheckbox"), "ConsumptionStatisticsPage selections should consume BaseCheckbox.");
 assert(dashboardPage.includes("BaseButton"), "DashboardPage controls should consume BaseButton.");
+assert(siteConsumptionPage.includes("BaseButton"), "SiteConsumptionPage controls should consume BaseButton.");
+assert(siteConsumptionPage.includes("BaseInput"), "SiteConsumptionPage date fields should consume BaseInput.");
+assert(siteConsumptionPage.includes("BaseIconButton"), "SiteConsumptionPage icon controls should consume BaseIconButton.");
 assert(loginPage.includes("BaseButton"), "LoginPage actions should consume BaseButton.");
 assert(loginPage.includes("BaseInput"), "LoginPage fields should consume BaseInput.");
 assert(loginPage.includes("BaseIconButton"), "LoginPage icon controls should consume BaseIconButton.");

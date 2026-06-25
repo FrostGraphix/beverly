@@ -16,7 +16,7 @@ const defaultDashboardTheme = {
   surface: "#ffffff",
   tooltip: "rgba(15, 23, 42, 0.92)",
   tooltipText: "#f8fafc",
-  alarmColors: ["#2ec7c9", "#b6a2de", "#5ab1ef", "#ffb980", "#d87a80", "#8d98b3", "#e5cf0d", "#97b552"]
+  alarmColors: []
 };
 
 function toSeries(labels = [], values = []) {
@@ -38,11 +38,6 @@ export function dashboardSeries(labels = [], values = []) {
 export function createBarOption(series, title, theme = {}) {
   const colors = chartTheme(theme);
   return {
-    animation: true,
-    animationDuration: 1200,
-    animationDurationUpdate: 1200,
-    animationEasing: "cubicOut",
-    animationEasingUpdate: "cubicOut",
     title: { left: "left", text: title, textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 14 } },
     xAxis: {
       type: "category",
@@ -93,11 +88,6 @@ export function createBarOption(series, title, theme = {}) {
 export function createLineOption(series, title, theme = {}) {
   const colors = chartTheme(theme);
   return {
-    animation: true,
-    animationDuration: 1200,
-    animationDurationUpdate: 1200,
-    animationEasing: "cubicOut",
-    animationEasingUpdate: "cubicOut",
     title: { left: "left", text: title, textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 14 } },
     xAxis: {
       type: "category",
@@ -158,15 +148,12 @@ export function createLineOption(series, title, theme = {}) {
 
 export function createPieOption(series, title, theme = {}) {
   const colors = chartTheme(theme);
-  const palette = colors.alarmColors.length ? colors.alarmColors : defaultDashboardTheme.alarmColors;
+  const palette = colors.alarmColors.length
+    ? colors.alarmColors
+    : [colors.primary, colors.success, colors.primaryDeep, colors.textMuted, colors.warning, colors.danger];
   return {
-    animation: true,
-    animationDuration: 1200,
-    animationDurationUpdate: 1200,
-    animationEasing: "cubicOut",
-    animationEasingUpdate: "cubicOut",
     color: palette,
-    title: { text: title, left: 10, top: 4, textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 15 } },
+    title: { text: title, left: "center", textStyle: { color: colors.textMuted, fontWeight: 700, fontSize: 14 } },
     tooltip: {
       trigger: "item",
       padding: [8, 12],
@@ -175,47 +162,28 @@ export function createPieOption(series, title, theme = {}) {
       textStyle: { color: colors.tooltipText },
       formatter: "{a} <br/>{b} : {c} ({d}%)"
     },
-    legend: {
-      left: "center",
-      bottom: 0,
-      type: "scroll",
-      pageIconColor: colors.primary,
-      pageIconInactiveColor: colors.border,
-      itemWidth: 18,
-      itemHeight: 12,
-      itemGap: 12,
-      textStyle: { color: colors.textFaint, fontSize: 11 }
-    },
+    legend: { bottom: "0", itemWidth: 10, itemHeight: 10, textStyle: { color: colors.textFaint, fontSize: 11 } },
     series: [
       {
         name: title,
         type: "pie",
         roseType: "radius",
-        radius: ["18%", "58%"],
+        radius: ["40%", "75%"],
         center: ["50%", "45%"],
-        minAngle: 4,
-        avoidLabelOverlap: true,
         label: {
           color: colors.textFaint,
           fontSize: 11,
           fontWeight: 600,
-          formatter: "{b}",
-          overflow: "break",
-          width: 108,
+          overflow: "truncate",
+          width: 96,
           textBorderWidth: 0
         },
         labelLine: {
-          length: 18,
-          length2: 28,
-          smooth: 0.15,
+          length: 16,
+          length2: 22,
           lineStyle: { width: 1.5 }
         },
-        itemStyle: { borderRadius: 3, borderWidth: 0 },
-        emphasis: {
-          scale: true,
-          scaleSize: 6,
-          itemStyle: { shadowBlur: 14, shadowColor: colors.primaryLight }
-        },
+        itemStyle: { borderRadius: 4, borderWidth: 0 },
         data: series.xData.map((name, index) => ({
           name,
           value: series.yData[index] ?? 0,

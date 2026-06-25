@@ -78,7 +78,7 @@ function extractArray(source) {
 }
 
 function palette(index) {
-  const colors = ["#2ec7c9", "#b6a2de", "#5ab1ef", "#ffb980", "#d87a80", "#8d98b3", "#e5cf0d", "#97b552"];
+  const colors = ["#059669", "#10b981", "#34d399", "#ffb26a", "#db7a85", "#92a0bd", "#f3d600", "#9ab94f"];
   return colors[index % colors.length];
 }
 
@@ -163,14 +163,14 @@ export function buildHourlySuccessSeries(readings) {
 
 export function buildAlarmLegendFromReadings(readings) {
   const buckets = new Map([
-    ["No Data Report", { color: palette(0), value: 0 }],
-    ["Active Readings", { color: palette(1), value: 0 }],
-    ["Battery Low", { color: palette(6), value: 0 }],
-    ["Relay Open", { color: palette(7), value: 0 }],
-    ["Terminal Cover Open", { color: palette(4), value: 0 }],
-    ["Current Reverse", { color: palette(2), value: 0 }],
-    ["Current Unbalance", { color: palette(1), value: 0 }],
-    ["Magnetic Interference", { color: palette(5), value: 0 }]
+    ["No Data Report", { color: "#35c2c1", value: 0 }],
+    ["Active Readings", { color: "#059669", value: 0 }],
+    ["Battery Low", { color: "#ffb26a", value: 0 }],
+    ["Relay Open", { color: "#f97316", value: 0 }],
+    ["Terminal Cover Open", { color: "#10b981", value: 0 }],
+    ["Current Reverse", { color: "#8b5cf6", value: 0 }],
+    ["Current Unbalance", { color: "#db2777", value: 0 }],
+    ["Magnetic Interference", { color: "#ef4444", value: 0 }]
   ]);
 
   for (const reading of readings || []) {
@@ -241,14 +241,11 @@ export function normalizeDashboardLegend(payload, fallback = []) {
   const labels = firstValue(objects, ["xData", "labels", "categories"], []);
   const values = firstValue(objects, ["yData", "values", "series"], []);
   if (Array.isArray(labels) && Array.isArray(values) && labels.length && values.length) {
-    return labels.map((label, index) => {
-      const item = asObject(values[index]);
-      return {
-        label: String(item.name || label || ""),
-        value: toNumber(item.value ?? values[index], 0),
-        color: String(item.color || item.itemStyle?.color || palette(index))
-      };
-    }).filter((row) => row.label && row.value > 0);
+    return labels.map((label, index) => ({
+      label: String(label || ""),
+      value: toNumber(values[index], 0),
+      color: palette(index)
+    })).filter((row) => row.label && row.value > 0);
   }
   const rows = extractArray(payload);
   const derived = rows.map((row, index) => ({
