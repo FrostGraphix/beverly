@@ -116,6 +116,9 @@ importers:
       '@beverly/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
+      '@beverly/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@beverly/vite-config':
         specifier: workspace:*
         version: link:../../packages/vite-config
