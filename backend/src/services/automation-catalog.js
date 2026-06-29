@@ -129,6 +129,18 @@ function buildAutomationCatalog() {
       notes: "Advances historical station backfill in bounded pages."
     }),
     item({
+      key: "consumption-sync",
+      title: "Smart consumption sync",
+      lane: "Live Refresh",
+      mode: "cron",
+      status: crons.has("/api/cron/consumption-sync") ? "ready" : "missing",
+      source: "vercel.json",
+      trigger: "Every 6 hours",
+      schedule: crons.get("/api/cron/consumption-sync") || "",
+      endpoint: "/api/cron/consumption-sync",
+      notes: "Detects latest Supabase station readings and pulls only the missing daily meter window."
+    }),
+    item({
       key: "refresh-targets",
       title: "Refresh target orchestration",
       lane: "Live Refresh",

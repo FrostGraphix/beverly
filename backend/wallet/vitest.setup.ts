@@ -5,3 +5,5 @@ process.env.SUPABASE_ANON_KEY      ??= 'test-anon-key-at-least-twenty-chars';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key-at-least-twenty-chars';
 process.env.REDIS_URL              ??= 'redis://localhost:6379';
 process.env.PAYSTACK_SECRET_KEY    ??= 'sk_test_placeholder';
+process.env.ENERGY_BACKEND_URL     ??= 'https://energy.test';
+process.env.ENERGY_BEARER_TOKEN    ??= 'test-token';

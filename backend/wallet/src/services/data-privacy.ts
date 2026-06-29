@@ -8,6 +8,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
+import { exportsQueue } from '../queue/index.js';
 
 export class PrivacyError extends Error {
     constructor(message: string, public code: string) {
@@ -46,6 +47,17 @@ export async function requestDataExport(customerId: string): Promise<{ requestId
         action:      'ndpr.data_export.requested',
         targetId:    (data as any).id,
     });
+    try {
+        await exportsQueue.add('build', { customerId, requestId: (data as any).id }, {
+            jobId: `data-export:${(data as any).id}`,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 30_000 },
+            removeOnComplete: 100,
+            removeOnFail: 500,
+        });
+    } catch (error) {
+        if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') throw error;
+    }
 
     return { requestId: (data as any).id };
 }
@@ -66,7 +78,6 @@ export async function buildDataExport(customerId: string, requestId: string): Pr
     const [
         { data: customer },
         { data: wallets },
-        { data: transactions },
         { data: meters },
         { data: purchaseOrders },
         { data: disputes },
@@ -74,12 +85,20 @@ export async function buildDataExport(customerId: string, requestId: string): Pr
     ] = await Promise.all([
         adminClient.from('customers').select('*, users(full_name, email, phone, created_at)').eq('id', customerId).single(),
         adminClient.from('wallets').select('id, balance_minor, currency, created_at').eq('owner_id', customerId).eq('owner_type', 'customer'),
-        adminClient.from('wallet_transactions').select('id, type, amount_minor, description, created_at').eq('customer_id', customerId).order('created_at', { ascending: false }).limit(500),
-        adminClient.from('customer_meters').select('meter_id, alias, registered_at').eq('customer_id', customerId),
-        adminClient.from('purchase_orders').select('id, meter_id, amount_minor, status, created_at').eq('customer_id', customerId).limit(200),
+        adminClient.from('customer_meters').select('meter_id, meter_type, alias, nickname, registered_at, created_at').eq('customer_id', customerId),
+        adminClient.from('purchase_orders').select('id, meter_id, meter_type, amount_minor, units_kwh, status, created_at').eq('customer_id', customerId).limit(200),
         adminClient.from('disputes').select('id, reference, subject, status, created_at').eq('customer_id', customerId).limit(100),
         adminClient.from('meter_purchase_orders').select('id, meter_type, status, created_at').eq('customer_id', customerId).limit(50),
     ]);
+    const walletIds = (wallets ?? []).map((wallet: any) => wallet.id).filter(Boolean);
+    const { data: transactions } = walletIds.length
+        ? await adminClient
+            .from('wallet_ledger_entries')
+            .select('id, wallet_id, direction, amount_minor, entry_type, reference_type, reference_id, memo, created_at')
+            .in('wallet_id', walletIds)
+            .order('created_at', { ascending: false })
+            .limit(500)
+        : { data: [] };
 
     await adminClient
         .from('data_export_requests')

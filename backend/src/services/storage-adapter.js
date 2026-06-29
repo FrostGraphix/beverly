@@ -42,7 +42,9 @@ function sanitizeValue(value) {
   return sanitized;
 }
 
-
+function nowIso() {
+  return new Date().toISOString();
+}
 
 function stableId(prefix) {
   return crypto.createHash("sha256").update(prefix).digest("hex");
@@ -387,9 +389,139 @@ async function tableCounts() {
   );
 }
 
+// Meter token-format (STS S1/S2) overrides — persisted to Supabase in production,
+// local SQLite otherwise (same fallback model as account bindings).
+function mapOverrideRow(row) {
+  if (!row) return null;
+  return {
+    meterId: row.meter_id,
+    isS2: row.is_s2 === true || row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+async function getMeterTokenOverride(meterId) {
+  return runWithFallback(
+    () => localDatabase.getMeterTokenOverride(meterId),
+    async () => {
+      const id = encodeURIComponent(String(meterId || ""));
+      const rows = await supabase.restRequest(`/meter_token_overrides?meter_id=eq.${id}&select=meter_id,is_s2,note,updated_by,updated_at&limit=1`);
+      return mapOverrideRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function setMeterTokenOverride(entry = {}) {
+  const meterId = String(entry.meterId || "").trim();
+  const clear = entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto";
+  return runWithFallback(
+    () => localDatabase.setMeterTokenOverride(entry),
+    async () => {
+      if (clear) {
+        await supabase.restRequest(`/meter_token_overrides?meter_id=eq.${encodeURIComponent(meterId)}`, {
+          method: "DELETE",
+          prefer: "return=minimal"
+        });
+        return { meterId, cleared: true };
+      }
+      const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+      const rows = await supabase.restRequest("/meter_token_overrides?on_conflict=meter_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: {
+          meter_id: meterId,
+          is_s2: isS2,
+          note: String(entry.note || ""),
+          updated_by: String(entry.updatedBy || ""),
+          updated_at: nowIso()
+        }
+      });
+      return mapOverrideRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listMeterTokenOverrides() {
+  return runWithFallback(
+    () => localDatabase.listMeterTokenOverrides(),
+    async () => {
+      const rows = await supabase.restRequest("/meter_token_overrides?select=meter_id,is_s2,note,updated_by,updated_at&order=updated_at.desc");
+      return (Array.isArray(rows) ? rows : []).map(mapOverrideRow);
+    }
+  );
+}
+
+// SGC-level rules — one row classifies a whole supply group.
+function mapSgcRuleRow(row) {
+  if (!row) return null;
+  return {
+    sgc: row.sgc,
+    isS2: row.is_s2 === true || row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+async function getSgcTokenRule(sgc) {
+  return runWithFallback(
+    () => localDatabase.getSgcTokenRule(sgc),
+    async () => {
+      const id = encodeURIComponent(String(sgc || ""));
+      const rows = await supabase.restRequest(`/sgc_token_rules?sgc=eq.${id}&select=sgc,is_s2,note,updated_by,updated_at&limit=1`);
+      return mapSgcRuleRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function setSgcTokenRule(entry = {}) {
+  const sgc = String(entry.sgc || "").trim();
+  const clear = entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto";
+  return runWithFallback(
+    () => localDatabase.setSgcTokenRule(entry),
+    async () => {
+      if (clear) {
+        await supabase.restRequest(`/sgc_token_rules?sgc=eq.${encodeURIComponent(sgc)}`, { method: "DELETE", prefer: "return=minimal" });
+        return { sgc, cleared: true };
+      }
+      const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+      const rows = await supabase.restRequest("/sgc_token_rules?on_conflict=sgc", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: {
+          sgc,
+          is_s2: isS2,
+          note: String(entry.note || ""),
+          updated_by: String(entry.updatedBy || ""),
+          updated_at: nowIso()
+        }
+      });
+      return mapSgcRuleRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listSgcTokenRules() {
+  return runWithFallback(
+    () => localDatabase.listSgcTokenRules(),
+    async () => {
+      const rows = await supabase.restRequest("/sgc_token_rules?select=sgc,is_s2,note,updated_by,updated_at&order=updated_at.desc");
+      return (Array.isArray(rows) ? rows : []).map(mapSgcRuleRow);
+    }
+  );
+}
+
 module.exports = {
   cacheApiResponse,
   ensureDatabase,
+  getMeterTokenOverride,
+  setMeterTokenOverride,
+  listMeterTokenOverrides,
+  getSgcTokenRule,
+  setSgcTokenRule,
+  listSgcTokenRules,
   listAutomationDeliveries,
   listAccountBindings,
   listImportJobs,

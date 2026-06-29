@@ -275,14 +275,11 @@ async function fulfillCustomerTokenPurchase(
         const wallet = await findWalletByOwner('customer', (po as any).customer_id ?? tx.actor_id);
         if (wallet) assertWalletCanTransact(wallet, 'buy tokens');
 
-        const { generateCreditToken, lookupMeter, previewPurchase, previewPurchaseWithCurrentVat } = await import('./token-engine.js');
+        const { generateCreditToken, lookupMeter, previewPurchase } = await import('./token-engine.js');
         const { createReceipt } = await import('./vending.js');
         const { declaredMeterType, effectiveThreePhase } = await import('./customer-purchase.js');
         const meter = await lookupMeter((po as any).meter_id);
-        const snapshotRate = Number((po as any).vat_rate_basis_points);
-        const preview = Number.isInteger(snapshotRate) && snapshotRate >= 0
-            ? previewPurchase((po as any).amount_minor, meter.tariffId, snapshotRate)
-            : await previewPurchaseWithCurrentVat((po as any).amount_minor, meter.tariffId);
+        const preview = previewPurchase((po as any).amount_minor, meter.tariffId);
         const declared = await declaredMeterType((po as any).customer_id, meter.meterId);
         const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
         const meterType = isThreePhase ? 'three_phase' : 'single_phase';

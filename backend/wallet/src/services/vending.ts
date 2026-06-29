@@ -22,7 +22,7 @@ import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
 import {
-    lookupMeter, previewPurchaseWithCurrentVat, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
@@ -171,7 +171,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         throw e;
     }
 
-    const preview = await previewPurchaseWithCurrentVat(input.amountMinor, meter.tariffId);
+    const preview = previewPurchase(input.amountMinor, meter.tariffId);
     const meterType = meterTypeFromInfo(meter);
 
     // create order in 'created' state

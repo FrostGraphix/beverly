@@ -6,6 +6,7 @@
  * A resolved dispute can trigger a refund_request.
  */
 import { adminClient } from '../db/supabase.js';
+import { notifyDisputeUpdate } from './notifications.js';
 
 export class DisputeError extends Error {
     constructor(message: string, public code: string) {
@@ -72,6 +73,20 @@ export async function updateDisputeStatus(input: {
         patch.resolved_at = new Date().toISOString();
     }
     await adminClient.from('disputes').update(patch).eq('id', input.disputeId);
+
+    // Notify the customer who raised the dispute (if any)
+    const { data: dispute } = await adminClient
+        .from('disputes')
+        .select('customer_id')
+        .eq('id', input.disputeId)
+        .maybeSingle();
+    if ((dispute as any)?.customer_id) {
+        notifyDisputeUpdate((dispute as any).customer_id, {
+            disputeId: input.disputeId,
+            status: input.status,
+            message: input.resolutionNote,
+        }).catch(() => undefined);
+    }
 }
 
 export async function getDispute(disputeId: string) {
@@ -80,7 +95,7 @@ export async function getDispute(disputeId: string) {
         .select('*, dispute_messages(* order by created_at asc)')
         .eq('id', disputeId)
         .single();
-    return data;
+    return data ? (await withPurchaseContext(data)) : data;
 }
 
 export async function listDisputes(opts: {
@@ -100,7 +115,7 @@ export async function listDisputes(opts: {
     if (opts.status)               query = query.eq('status', opts.status);
 
     const { data } = await query;
-    return data ?? [];
+    return withPurchaseContexts(data ?? []);
 }
 
 export async function listAllDisputes(opts: { status?: string; limit?: number }) {
@@ -111,5 +126,25 @@ export async function listAllDisputes(opts: { status?: string; limit?: number })
         .limit(opts.limit ?? 200);
     if (opts.status) query = query.eq('status', opts.status);
     const { data } = await query;
-    return data ?? [];
+    return withPurchaseContexts(data ?? []);
+}
+
+async function withPurchaseContext(dispute: any) {
+    const [row] = await withPurchaseContexts([dispute]);
+    return row;
+}
+
+async function withPurchaseContexts(disputes: any[]) {
+    const ids = [...new Set(disputes.map((d) => d.purchase_order_id).filter(Boolean))];
+    if (!ids.length) return disputes;
+
+    const { data: purchases } = await adminClient
+        .from('purchase_orders')
+        .select('id, meter_id, meter_type, customer_name, station_id, amount_minor, units_kwh, status, created_at')
+        .in('id', ids);
+    const byId = new Map((purchases ?? []).map((p: any) => [p.id, p]));
+    return disputes.map((d) => ({
+        ...d,
+        purchase_order: d.purchase_order_id ? byId.get(d.purchase_order_id) ?? null : null,
+    }));
 }

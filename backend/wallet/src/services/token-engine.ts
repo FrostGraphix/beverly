@@ -18,7 +18,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
-import { resolveVatRateBasisPoints } from './vat-policy.js';
 import { calculateVendingVatBreakdown } from './vending-vat.js';
 
 const PRICE_BY_TARIFF: Record<string, number> = {
@@ -99,10 +98,10 @@ export interface PurchasePreview {
     tariffId: string;
 }
 
-export function previewPurchase(amountMinor: number, tariffId: string, vatRateBasisPoints = env.VENDING_VAT_BASIS_POINTS): PurchasePreview {
+export function previewPurchase(amountMinor: number, tariffId: string): PurchasePreview {
     if (amountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
     const t = resolveTariffPricing(tariffId);
-    const vat = calculateVendingVatBreakdown(amountMinor, vatRateBasisPoints);
+    const vat = calculateVendingVatBreakdown(amountMinor, env.VENDING_VAT_BASIS_POINTS);
     const naira = vat.energyAmountMinor / 100;
     const units = naira / t.basePricePerKwh;
     return {
@@ -115,11 +114,6 @@ export function previewPurchase(amountMinor: number, tariffId: string, vatRateBa
         vatRateBasisPoints: vat.vatRateBasisPoints,
         tariffId: t.tariffId,
     };
-}
-
-export async function previewPurchaseWithCurrentVat(amountMinor: number, tariffId: string, at = new Date()): Promise<PurchasePreview> {
-    const vatRateBasisPoints = await resolveVatRateBasisPoints(at);
-    return previewPurchase(amountMinor, tariffId, vatRateBasisPoints);
 }
 
 export interface MeterInfo {

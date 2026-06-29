@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { checkVerification, sendSms, sendVerification } from '../adapters/twilio.js';
 import { env } from '../config/env.js';
+import { assertCustomerOtpTrafficAllowed, SmsGuardrailError } from './sms-guardrails.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;  // 10 minutes
 const MAX_ATTEMPTS = 5;
@@ -72,13 +73,22 @@ export async function issueStepUpChallenge(customerId: string): Promise<StepUpCh
     // Best-effort SMS — don't block purchase flow if Twilio is down
     if (phone) {
         try {
+            const decision = await assertCustomerOtpTrafficAllowed({
+                kind: 'step_up_otp',
+                phone,
+                actorType: 'customer',
+                actorUserId: customerId,
+            });
             if (usesTwilioVerify()) {
-                await sendVerification(phone, 'sms');
+                await sendVerification(decision.phone, 'sms');
             } else if (otp) {
-                await sendSms({ to: phone, body: `Beverly security check: your one-time code is ${otp}. Valid for 10 minutes. Do not share this code.` });
+                await sendSms({ to: decision.phone, body: `Beverly security check: your one-time code is ${otp}. Valid for 10 minutes. Do not share this code.` });
             }
-        } catch {
+        } catch (error) {
             await adminClient.from('step_up_challenges').delete().eq('id', (challenge as any).id);
+            if (error instanceof SmsGuardrailError) {
+                throw new StepUpError(error.message, error.code);
+            }
             throw new StepUpError('Could not send security code', 'challenge_send_failed');
         }
     }

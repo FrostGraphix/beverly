@@ -15,6 +15,14 @@ export type MeterOrderStatus =
 export type MeterOrderSourceChannel = 'customer_portal' | 'vendor_portal' | 'admin_portal';
 export type MeterOrderActorType = 'customer' | 'vendor_user' | 'staff';
 export type MeterOrderType = 'single_phase' | 'three_phase';
+const METER_ORDER_TRANSITIONS: Record<MeterOrderStatus, MeterOrderStatus[]> = {
+    pending_payment: ['paid', 'cancelled'],
+    paid: ['assigned', 'cancelled'],
+    assigned: ['dispatched', 'cancelled'],
+    dispatched: ['installed'],
+    installed: [],
+    cancelled: [],
+};
 
 export interface MeterOrderRecord {
     id: string;
@@ -49,6 +57,12 @@ export class MeterOrderError extends Error {
 
 export function meterOrderAmountMinor(meterType: MeterOrderType): number {
     return meterType === 'three_phase' ? 7_500_000 : 5_000_000;
+}
+
+export function assertMeterOrderTransition(from: MeterOrderStatus, to: MeterOrderStatus): void {
+    if (!METER_ORDER_TRANSITIONS[from]?.includes(to)) {
+        throw new MeterOrderError(`Cannot move meter order from ${from} to ${to}.`, 'invalid_status_transition', 409);
+    }
 }
 
 function paymentReference(prefix: 'mord' | 'mordv' | 'morda'): string {
@@ -124,6 +138,7 @@ export async function createCustomerPortalMeterOrder(input: {
     serviceArea: string;
     contactPhone: string;
     callbackBaseUrl: string;
+    idempotencyKey: string;
 }): Promise<{ order: MeterOrderRecord; authorizationUrl: string }> {
     const customer = await readCustomer(input.customerId);
     const email = String(customer.email ?? '').trim().toLowerCase();
@@ -131,7 +146,7 @@ export async function createCustomerPortalMeterOrder(input: {
         throw new MeterOrderError('A valid customer email is required for meter order payment.', 'email_required', 422);
     }
     const amountMinor = meterOrderAmountMinor(input.meterType);
-    const reference = paymentReference('mord');
+    const reference = `mord_${hashIdempotency(['customer_meter_order', input.customerId, input.idempotencyKey])}`;
     const callbackUrl = new URL(input.callbackBaseUrl);
     callbackUrl.searchParams.set('ref', reference);
     const paystack = await initializeTransaction({

@@ -35,8 +35,7 @@ import { listDeletionRequests, reviewDeletionRequest } from '../services/data-pr
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
-import { createAdminMeterOrder } from '../services/meter-orders.js';
-import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
+import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
 import {
     createDevApiKey,
     createDevWebhook,
@@ -293,7 +292,6 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
-    { key: 'wallet.vat.manage', label: 'Govern VAT policies', group: 'Money', risk: 'critical' },
     { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
     { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
     { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
@@ -305,6 +303,7 @@ const PERMISSION_CATALOG = [
     { key: 'wallet.privacy.review', label: 'Review privacy requests', group: 'Compliance', risk: 'high' },
     { key: 'wallet.audit.view', label: 'View audit and security events', group: 'Compliance', risk: 'high' },
     { key: 'wallet.flags.manage', label: 'Manage feature flags', group: 'Launch', risk: 'critical' },
+    { key: 'wallet.vat.manage', label: 'Govern VAT policies', group: 'Money', risk: 'critical' },
     { key: 'wallet.access.manage', label: 'Manage roles and permissions', group: 'Access', risk: 'critical' },
     { key: 'dev.console', label: 'Access developer console', group: 'Developer', risk: 'critical' },
     { key: 'wallet.consumption.view', label: 'View consumption analytics', group: 'Analytics', risk: 'low' },
@@ -319,8 +318,8 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     ],
     'finance-checker': [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
-        'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run', 'wallet.vat.manage',
-        'wallet.audit.view',
+        'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.audit.view', 'wallet.vat.manage',
     ],
     account: [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.customers.view', 'wallet.vending.monitor',
@@ -435,9 +434,6 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /announcements/recipients': 'wallet.announcements.manage',
     'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
     'POST /announcements': 'wallet.announcements.manage',
-    'GET /vat-policies': 'wallet.vat.manage',
-    'POST /vat-policies': 'wallet.vat.manage',
-    'POST /vat-policies/:id/approve': 'wallet.vat.manage',
     'GET /refunds': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
     'POST /refunds/:id/approve': 'wallet.refunds.manage',
@@ -455,6 +451,9 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',
+    'GET /vat-policies': 'wallet.vat.manage',
+    'POST /vat-policies': 'wallet.vat.manage',
+    'POST /vat-policies/:id/approve': 'wallet.vat.manage',
     'GET /privacy/deletions': 'wallet.privacy.review',
     'PATCH /privacy/deletions/:id': 'wallet.privacy.review',
     'GET /consumption': 'wallet.consumption.view',
@@ -2235,18 +2234,38 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.patch('/meter-orders/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const schema = z.object({
-            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']),
+            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']).optional(),
             technician_name: z.string().optional(),
             notes: z.string().optional(),
+        }).refine((value) => value.status || value.technician_name !== undefined || value.notes !== undefined, {
+            message: 'Provide a status, technician, or note.',
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
 
+        const { data: current, error: currentError } = await adminClient
+            .from('meter_purchase_orders')
+            .select('id, status')
+            .eq('id', id)
+            .maybeSingle();
+        if (currentError) return reply.code(500).send({ error: 'db_error', message: currentError.message });
+        if (!current) return reply.code(404).send({ error: 'not_found' });
+        const nextStatus = body.status ?? (current as any).status;
+        try {
+            if (body.status && body.status !== (current as any).status) {
+                assertMeterOrderTransition((current as any).status, body.status);
+            }
+        }
+        catch (transitionError: any) {
+            return reply.code(transitionError?.status ?? 409).send({ error: transitionError?.code ?? 'invalid_status_transition', message: transitionError?.message });
+        }
+
         const { data: order, error } = await adminClient
             .from('meter_purchase_orders')
-            .update({ ...body, updated_at: new Date().toISOString() })
+            .update({ ...body, status: nextStatus, updated_at: new Date().toISOString() })
             .eq('id', id)
+            .eq('status', (current as any).status)
             .select()
             .single();
         if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
@@ -2255,12 +2274,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'staff',
-            action: `meter_order.${body.status}`,
+            action: body.status ? `meter_order.${body.status}` : 'meter_order.updated',
             targetId: id,
             metadata: { technician_name: body.technician_name, notes: body.notes },
         });
 
-        if (['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
+        if (body.status && ['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
             const customerId = order.customer_id;
             if (customerId) {
                 const { notifyMeterOrderUpdate } = await import('../services/notifications.js');
@@ -3203,50 +3222,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-
-    fastify.get('/vat-policies', async () => ({ policies: await listVatPolicies() }));
-
-    fastify.post('/vat-policies', async (req) => {
-        const body = z.object({
-            label: z.string().trim().min(3).max(120),
-            rate_basis_points: z.number().int().min(0).max(10_000),
-            effective_at: z.string().datetime(),
-        }).parse(req.body ?? {});
-        const policy = await submitVatPolicy({
-            label: body.label,
-            rateBasisPoints: body.rate_basis_points,
-            effectiveAt: body.effective_at,
-            actorUserId: req.actor!.userId,
-        });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            action: 'vat.policy.submitted',
-            targetType: 'vat_policy',
-            targetId: policy.id,
-            after: { rateBasisPoints: policy.rate_basis_points, effectiveAt: policy.effective_at },
-        });
-        return { policy };
-    });
-
-    fastify.post('/vat-policies/:id/approve', async (req, reply) => {
-        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-        try {
-            const policy = await approveVatPolicy(id, req.actor!.userId);
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType: 'staff',
-                action: 'vat.policy.approved',
-                targetType: 'vat_policy',
-                targetId: policy.id,
-                after: { rateBasisPoints: policy.rate_basis_points, effectiveAt: policy.effective_at },
-            });
-            return { policy };
-        } catch (error: any) {
-            if (error?.message === 'vat_policy_not_found') return reply.code(404).send({ error: 'not_found' });
-            throw error;
-        }
-    });
     // Developer console: all routes require dev.console via ADMIN_ROUTE_PERMISSIONS.
     fastify.get('/dev/api-keys', async () => ({ keys: await listDevApiKeys() }));
 

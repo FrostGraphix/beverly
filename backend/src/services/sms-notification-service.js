@@ -8,6 +8,7 @@ const twilioVerifyBase = "https://verify.twilio.com/v2";
 const e164Pattern = /^\+[1-9]\d{7,14}$/;
 const trackedStatuses = new Set(["queued", "accepted", "scheduled", "sending", "sent", "delivered", "undelivered", "failed", "canceled", "read"]);
 const verifyChannels = new Set(["sms", "call", "email", "whatsapp", "rcs", "sna"]);
+const smsTrafficMemory = new Map();
 
 function requiredEnv(name) {
   const value = String(process.env[name] || "").trim();
@@ -26,6 +27,89 @@ function normalizePhone(value, fieldName) {
   const phone = String(value || "").trim();
   if (!e164Pattern.test(phone)) throw new Error(`${fieldName} must be an E.164 phone number, for example +15558675310`);
   return phone;
+}
+
+function splitCountryCodes(value, fallback = "") {
+  return String(value || fallback)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.startsWith("+") ? entry : `+${entry.replace(/\D/g, "")}`);
+}
+
+function smsCountryCode(phone) {
+  const known = Array.from(new Set([
+    ...splitCountryCodes(process.env.SMS_ALLOWED_COUNTRY_CODES, "+234"),
+    ...splitCountryCodes(process.env.SMS_BLOCKED_COUNTRY_CODES),
+    ...splitCountryCodes(process.env.SMS_HIGH_RISK_COUNTRY_CODES, "+234"),
+    "+234"
+  ])).sort((a, b) => b.length - a.length);
+  return known.find((code) => phone.startsWith(code)) || `+${phone.slice(1, 4)}`;
+}
+
+function assertSmsDestinationAllowed(phone, purpose = "notification") {
+  const countryCode = smsCountryCode(phone);
+  const allowed = splitCountryCodes(process.env.SMS_ALLOWED_COUNTRY_CODES, "+234");
+  const blocked = splitCountryCodes(process.env.SMS_BLOCKED_COUNTRY_CODES);
+  if (blocked.includes(countryCode)) {
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "blocked",
+      code: "sms_country_blocked",
+      reason: "country_blocked",
+      countryCode
+    });
+    const error = new Error("SMS is not available for this destination");
+    error.status = 403;
+    error.code = "sms_country_blocked";
+    throw error;
+  }
+  if (allowed.length && !allowed.includes(countryCode)) {
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "blocked",
+      code: "sms_country_not_allowed",
+      reason: "country_not_allowed",
+      countryCode
+    });
+    const error = new Error("SMS is only available for approved destinations");
+    error.status = 403;
+    error.code = "sms_country_not_allowed";
+    throw error;
+  }
+  return {
+    countryCode,
+    highRisk: splitCountryCodes(process.env.SMS_HIGH_RISK_COUNTRY_CODES, "+234").includes(countryCode),
+    purpose
+  };
+}
+
+function assertSmsTrafficLimit(phone, purpose) {
+  const windowSeconds = Number(process.env.SMS_OTP_RATE_LIMIT_WINDOW_SECONDS || 900);
+  const max = Number(process.env.SMS_OTP_RATE_LIMIT_MAX || 2);
+  const key = `${purpose}:${phone}`;
+  const cutoff = Date.now() - windowSeconds * 1000;
+  const recent = (smsTrafficMemory.get(key) || []).filter((ts) => ts > cutoff);
+  if (recent.length >= max) {
+    smsTrafficMemory.set(key, recent);
+    recordSmsGuardrailDecision({
+      to: phone,
+      purpose,
+      status: "rate_limited",
+      code: "sms_rate_limited",
+      reason: "window_exceeded",
+      windowSeconds,
+      max
+    });
+    const error = new Error("Too many SMS requests. Try again later");
+    error.status = 429;
+    error.code = "sms_rate_limited";
+    throw error;
+  }
+  recent.push(Date.now());
+  smsTrafficMemory.set(key, recent);
 }
 
 function callbackUrlFromPayload(payload = {}) {
@@ -48,6 +132,35 @@ function sanitizeMetadata(value) {
   );
 }
 
+function recordSmsGuardrailDecision(entry = {}) {
+  try {
+    const to = String(entry.to || "");
+    const purpose = String(entry.purpose || "notification");
+    const code = String(entry.code || "sms_guardrail");
+    localDatabase.recordSmsNotification({
+      messageSid: `AUDIT-${crypto.randomUUID()}`,
+      to,
+      from: "sms-guardrail",
+      body: "SMS guardrail decision",
+      status: String(entry.status || "blocked"),
+      errorCode: code,
+      errorMessage: String(entry.reason || code),
+      reference: `${purpose}:${to.slice(-4) || "unknown"}`,
+      details: {
+        provider: "local-guardrail",
+        purpose,
+        phoneSuffix: to.slice(-4),
+        countryCode: entry.countryCode,
+        reason: entry.reason,
+        max: entry.max,
+        windowSeconds: entry.windowSeconds
+      }
+    });
+  } catch {
+    // Audit must not break guardrail enforcement.
+  }
+}
+
 function twilioFormPayload(fields) {
   const form = new URLSearchParams();
   for (const [key, value] of Object.entries(fields)) {
@@ -62,6 +175,8 @@ async function sendSmsNotification(payload = {}) {
   const messagingServiceSid = String(payload.messagingServiceSid || process.env.TWILIO_MESSAGING_SERVICE_SID || "").trim();
   const from = messagingServiceSid ? "" : normalizePhone(payload.from || process.env.TWILIO_FROM_NUMBER, "from");
   const to = normalizePhone(payload.to, "to");
+  const guard = assertSmsDestinationAllowed(to, "notification");
+  assertSmsTrafficLimit(to, "notification");
   const body = normalizeBody(payload.body);
   const callbackUrl = callbackUrlFromPayload(payload);
   const reference = String(payload.reference || payload.idempotencyKey || crypto.randomUUID()).trim();
@@ -105,6 +220,7 @@ async function sendSmsNotification(payload = {}) {
       provider: "twilio",
       messagingServiceSid,
       metadata: sanitizeMetadata(payload.metadata),
+      smsGuardrails: guard,
       trackingConfigured: Boolean(callbackUrl),
       twilio: {
         accountSid: result.account_sid,
@@ -190,6 +306,8 @@ function mapVerifyResult(result = {}, reference = "") {
 async function sendVerification(payload = {}) {
   const channel = normalizeVerifyChannel(payload.channel);
   const to = normalizeVerifyTarget(payload.to, channel);
+  const guard = channel === "email" ? { countryCode: "email", highRisk: false, purpose: "verify" } : assertSmsDestinationAllowed(to, "verify");
+  if (channel !== "email") assertSmsTrafficLimit(to, "verify");
   const serviceSid = verifyServiceSid();
   const reference = String(payload.reference || payload.idempotencyKey || crypto.randomUUID()).trim();
   const result = await twilioVerifyRequest(`/Services/${encodeURIComponent(serviceSid)}/Verifications`, {
@@ -210,6 +328,7 @@ async function sendVerification(payload = {}) {
       provider: "twilio-verify",
       serviceSid: mapped.serviceSid,
       channel: mapped.channel,
+      smsGuardrails: guard,
       sendCodeAttempts: mapped.sendCodeAttempts
     }
   });

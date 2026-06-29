@@ -4,7 +4,9 @@ const crypto = require("crypto");
 const { ensureDatabase } = require("./local-database");
 const ledger = require("./wallet-ledger-service");
 
-
+function nowIso() {
+  return new Date().toISOString();
+}
 
 function requireText(value, label) {
   const text = String(value || "").trim();
