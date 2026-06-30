@@ -11,7 +11,7 @@ Scope
 
 Local Storage
 -------------
-- default path: `backend/data/reference-crm.sqlite`
+- default path: `tmp/reference-crm.sqlite`
 - Vercel path: `/tmp/reference-crm.sqlite`
 - backup local files before release testing
 - never commit local database files
@@ -20,13 +20,13 @@ Backup Command
 --------------
 ```powershell
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-Copy-Item "backend\data\reference-crm.sqlite" "tmp\backup-reference-crm-$stamp.sqlite"
+Copy-Item "tmp\reference-crm.sqlite" "tmp\backup-reference-crm-$stamp.sqlite"
 ```
 
 Restore Command
 ---------------
 ```powershell
-Copy-Item "tmp\backup-reference-crm-YYYYMMDD-HHMMSS.sqlite" "backend\data\reference-crm.sqlite"
+Copy-Item "tmp\backup-reference-crm-YYYYMMDD-HHMMSS.sqlite" "tmp\reference-crm.sqlite"
 ```
 
 Environment Recovery

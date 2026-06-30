@@ -27,6 +27,8 @@ function main() {
   const adminMeterOrderCreate = read("apps/admin/src/views/MeterOrderCreate.vue");
   const vendorMeterOrders = read("apps/vendor/src/views/MeterOrders.vue");
   const vendorMeterOrderCreate = read("apps/vendor/src/views/MeterOrderCreate.vue");
+  const meterOrdersService = read("backend/wallet/src/services/meter-orders.ts");
+  const customerMeterOrders = read("backend/wallet/src/routes/customer.ts");
   const walletCss = read("packages/tokens/wallet.css");
   const rootPackage = JSON.parse(read("package.json"));
 
@@ -250,6 +252,11 @@ function main() {
   const sponsorMigration = read("supabase/migrations/20260622090000_meter_order_sponsor_mode.sql");
   assert.match(sponsorMigration, /manual_paid/);
   assert.match(sponsorMigration, /vendor_wallet/);
+  assert.match(meterOrdersService, /METER_ORDER_TRANSITIONS/);
+  assert.match(meterOrdersService, /assertMeterOrderTransition/);
+  assert.match(meterOrdersService, /customer_meter_order/);
+  assert.match(customerMeterOrders, /assertClientIdempotencyKey/);
+  assert.match(customerMeterOrders, /\.eq\('status', 'pending_payment'\)/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);
   assert.match(walletCss, /\.bw-scrim\.open\s*\{[\s\S]*pointer-events:\s*auto;/);
   assert.match(rootPackage.scripts.build, /@beverly\/admin-app build/);

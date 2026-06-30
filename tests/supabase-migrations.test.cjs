@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "..");
 const migrationsDir = path.join(root, "supabase", "migrations");
 
 function readMigration(name) {
-  return fs.readFileSync(path.join(migrationsDir, name), "utf8");
+  return fs.readFileSync(path.join(migrationsDir, name), "utf8").replace(/\r\n/g, "\n");
 }
 
 function main() {
@@ -17,8 +17,14 @@ function main() {
   const snapshots = readMigration("20260507110000_operational_snapshots.sql");
   const dailyMeters = readMigration("20260508120000_daily_meter_readings.sql");
   const rawDuplicates = readMigration("20260516130000_daily_meter_raw_duplicates.sql");
+  const meterAggregates = readMigration("20260521210000_meter_reading_aggregates.sql");
   const hardening = readMigration("20260511150000_harden_role_permissions_rls.sql");
   const governance = readMigration("20260512100000_data_governance.sql");
+  const devConsoleAccess = readMigration("20260601120000_dev_console_access.sql");
+  const refundApprovalRpc = readMigration("20260606110000_refund_approval_rpc.sql");
+  const atomicHolds = readMigration("20260622140000_wallet_atomic_holds.sql");
+  const paymentLeases = readMigration("20260622150000_payment_fulfillment_leases.sql");
+  const announcementRls = readMigration("20260622160000_announcement_rls.sql");
 
   const requiredTables = [
     "roles",
@@ -86,6 +92,26 @@ function main() {
     rawDuplicates.includes("alter table public.daily_meter_raw_duplicates enable row level security"),
     "missing raw duplicate RLS"
   );
+  assert(
+    meterAggregates.includes("create table if not exists public.daily_meter_deltas"),
+    "missing daily meter deltas table"
+  );
+  assert(
+    meterAggregates.includes("create table if not exists public.meter_consumption_aggregates"),
+    "missing meter consumption aggregates table"
+  );
+  assert(
+    meterAggregates.includes("create or replace function public.refresh_meter_reading_aggregates"),
+    "missing meter aggregate refresh function"
+  );
+  assert(
+    meterAggregates.includes("cron.schedule"),
+    "missing meter aggregate cron schedule"
+  );
+  assert(
+    !meterAggregates.includes("select public.refresh_meter_reading_aggregates();"),
+    "meter aggregate migration must not run blocking seed"
+  );
   assert(hardening.includes("create or replace function public.normalized_role_key"), "missing normalized role function");
   assert(hardening.includes("create or replace function public.current_role_key"), "missing current role function");
   assert(hardening.includes("create or replace function public.current_station_id"), "missing current station function");
@@ -105,10 +131,38 @@ function main() {
     "missing data governance runs table"
   );
   assert(governance.includes("cleanup_data_governance"), "missing cleanup function");
+  assert(!devConsoleAccess.includes("update auth.users"), "dev console migration must not update auth.users");
+  assert(!devConsoleAccess.includes("from auth.users"), "dev console migration must not seed profiles from auth.users");
+  assert(!devConsoleAccess.includes("@gmail.com"), "dev console migration must not hard-code account emails");
+  assert(devConsoleAccess.includes("npm run dev-console:user"), "dev console migration must point to explicit bootstrap");
+  assert(refundApprovalRpc.includes("security definer"), "refund approval RPC must remain security definer");
+  assert(refundApprovalRpc.includes("set search_path = public"), "refund approval RPC must pin search_path");
+  assert(
+    refundApprovalRpc.includes("revoke all on function public.fn_approve_refund_request(uuid, uuid) from public"),
+    "refund approval RPC must revoke public execute"
+  );
+  assert(
+    refundApprovalRpc.includes("grant execute on function public.fn_approve_refund_request(uuid, uuid) to service_role"),
+    "refund approval RPC must grant service_role execute"
+  );
+  assert(atomicHolds.includes("create or replace function public.fn_create_hold"), "missing atomic hold creation RPC");
+  assert(atomicHolds.includes("for update;"), "atomic hold RPCs must lock rows");
+  assert(atomicHolds.includes("and id <> v_hold.id"), "capture must exclude its own hold reservation");
+  assert(atomicHolds.includes("create or replace function public.fn_claim_wallet_idempotency"), "missing idempotency claim RPC");
+  assert(atomicHolds.includes("alter table public.wallet_idempotency_requests enable row level security"), "idempotency requests must use RLS");
+  assert(atomicHolds.includes("idempotency key payload mismatch"), "missing idempotency payload conflict guard");
+  assert(atomicHolds.includes("revoke all on function public.fn_create_hold"), "atomic hold RPC must revoke public execute");
+  assert(atomicHolds.includes("grant execute on function public.fn_capture_hold"), "atomic capture RPC must grant service role");
+  assert(paymentLeases.includes("payment_webhooks_gateway_event_uidx"), "payment webhook events require deduplication");
+  assert(paymentLeases.includes("fn_claim_payment_fulfillment"), "payment fulfillment needs an atomic claim");
+  assert(paymentLeases.includes("fulfillment_lease_token"), "payment fulfillment needs a lease token");
+  assert(announcementRls.includes("force row level security"), "announcement records must force RLS");
+  assert(announcementRls.includes("customers read own announcement deliveries"), "customers need own-delivery RLS");
+  assert(announcementRls.includes("vendors read own announcement deliveries"), "vendors need own-delivery RLS");
 
   console.log(JSON.stringify({
-    migrations: 7,
-    tables: requiredTables.length + 4,
+    migrations: 13,
+    tables: requiredTables.length + 6,
     buckets: 4,
     status: "supabase migrations passed"
   }, null, 2));

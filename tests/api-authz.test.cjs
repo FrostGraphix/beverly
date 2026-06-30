@@ -169,6 +169,15 @@ async function main() {
       });
       assert.strictEqual(blockedStationWrite.status, 403);
       assert.strictEqual(blockedStationWrite.body.reason, "Station scope violation");
+
+      const spoofedRouteHashWrite = await request(port, "POST", "/API/RemoteMeterTask/CreateTokenTask", [{ meterId: "4700", stationId: "UMAISHA" }], {
+        Authorization: "Bearer vendor-token",
+        "X-Route-Hash": "#/management/account",
+        "X-Route-Action": "Add Task"
+      });
+      assert.strictEqual(spoofedRouteHashWrite.status, 403);
+      assert.strictEqual(spoofedRouteHashWrite.body.reason, "Route permission required");
+      assert.strictEqual(spoofedRouteHashWrite.body._proxy.source, "authz");
     });
 
     console.log(JSON.stringify({

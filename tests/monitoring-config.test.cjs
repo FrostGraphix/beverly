@@ -16,15 +16,20 @@ function assertIncludes(source, value, label) {
   }
 }
 
-assertIncludes(workflow, "schedule:", "workflow");
 assertIncludes(workflow, "PREVIEW_TARGET_URL", "workflow");
 assertIncludes(workflow, "PRODUCTION_TARGET_URL", "workflow");
 assertIncludes(workflow, "VERCEL_PROTECTION_BYPASS", "workflow");
 assertIncludes(workflow, 'node-version: "22"', "workflow");
 assertIncludes(workflow, "npm run smoke:vercel", "workflow");
+assertIncludes(workflow, "workflow_dispatch:", "workflow");
 assertIncludes(docs, "PREVIEW_TARGET_URL", "docs");
 assertIncludes(docs, "PRODUCTION_TARGET_URL", "docs");
 assertIncludes(docs, "VERCEL_PROTECTION_BYPASS", "docs");
+assertIncludes(docs, "manual by default", "docs");
+
+if (workflow.includes("schedule:")) {
+  throw new Error("workflow must not create empty scheduled runs before target URLs exist");
+}
 
 console.log(JSON.stringify({
   workflow: path.relative(root, workflowPath),

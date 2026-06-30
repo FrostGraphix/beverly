@@ -1,0 +1,67 @@
+{
+  "recovery": {
+    "name": "June 24 verified recovery",
+    "cutoff": "2026-06-24T22:59:59Z",
+    "timezone": "Africa/Lagos",
+    "branch": "codex/recover-june24",
+    "branchBase": "7bdb44a05d443cb9a7dc59b9fcaf04d3fb6862e4",
+    "authoritativeTrackedTree": "c3e083a5a00fcc7ed8dfe99274de6fed8ef9396a",
+    "authoritativeTrackedParent": "3064a702",
+    "untrackedTree": "c3e083a5^3"
+  },
+  "sources": [
+    {
+      "kind": "stash-tree",
+      "ref": "c3e083a5",
+      "purpose": "Final tracked worktree captured during consolidation"
+    },
+    {
+      "kind": "stash-untracked-tree",
+      "ref": "c3e083a5^3",
+      "included": [
+        "backend/wallet/src/services/vat-policy.ts",
+        "backend/wallet/src/services/webhook-retention.ts",
+        "supabase/migrations/20260624100000_phase7_data_governance.sql"
+      ]
+    },
+    {
+      "kind": "codex-transcript",
+      "session": "019ee3d6-8674-7360-a364-c1ab1fb89b0b",
+      "timestamp": "2026-06-24T15:21:57.368Z",
+      "purpose": "Meter-order and protected-preview contract tests"
+    },
+    {
+      "kind": "codex-transcript",
+      "session": "019ee3df-dbc3-7460-a687-07b03247eee6",
+      "timestamps": [
+        "2026-06-24T15:22:57.614Z",
+        "2026-06-24T15:26:43.738Z"
+      ],
+      "purpose": "Header geometry and grouped sidebar restoration"
+    }
+  ],
+  "repairs": [
+    {
+      "path": "backend/wallet/src/routes/admin.ts",
+      "reason": "Removed an unused VAT import left by concurrent editing"
+    },
+    {
+      "path": "apps/admin/src/views/Dashboard.vue",
+      "reason": "Aligned template fields with the computed transaction model"
+    }
+  ],
+  "exclusions": [
+    "Current Antigravity placeholder implementations",
+    "Runtime databases and generated logs",
+    "Scratch scripts and generated PDF output",
+    "Unmerged Claude branch changes",
+    "June 25 production-gap and DRY refactors",
+    "June 24 two-theme transcript patch, because the approved plan retains four modes"
+  ],
+  "evidenceVault": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4-recovery-vault-20260629",
+  "productionPolicy": {
+    "forcePushAllowed": false,
+    "previewApprovalRequired": true,
+    "productionPromotionAllowed": false
+  }
+}

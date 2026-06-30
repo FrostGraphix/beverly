@@ -31,10 +31,53 @@
       "Generate",
       "Export"
     ],
+    "isCustomPage": true,
+    "customComponent": "ReportsPage",
     "roles": [
       "super-admin",
       "operations-manager",
       "account"
+    ]
+  },
+  {
+    "group": "Data Report",
+    "title": "Station Consumption",
+    "hash": "#/prepay-report/station-consumption",
+    "apis": [
+      "/api/local/consumption/station-analytics"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Export"
+    ],
+    "isCustomPage": true,
+    "customComponent": "StationConsumptionPage",
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
+    "group": "System",
+    "title": "Automation Command",
+    "hash": "#/system/automation-command",
+    "apis": [
+      "/api/system/automation-report",
+      "/api/system/automation-control"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Save",
+      "Test Alert"
+    ],
+    "isCustomPage": true,
+    "customComponent": "AutomationCommandPage",
+    "roles": [
+      "super-admin",
+      "operations-manager"
     ]
   },
   {
@@ -647,59 +690,6 @@
     ]
   },
   {
-    "group": "Data Report",
-    "title": "Abnormal Alarm",
-    "hash": "#/prepay-report/abnormal-alarm",
-    "apis": [
-      "/api/local/abnormal-alarms"
-    ],
-    "columns": [
-      "alarmLabel",
-      "meterId",
-      "customerId",
-      "customerName",
-      "stationId",
-      "gatewayId",
-      "total1",
-      "usage1",
-      "batteryLow",
-      "magneticInterference",
-      "terminalCoverOpen",
-      "currentReverse",
-      "currentUnbalance",
-      "currentDate"
-    ],
-    "actions": [
-      "Sort",
-      "Search",
-      "Reset",
-      "Export"
-    ],
-    "roles": [
-      "super-admin",
-      "operations-manager",
-      "account"
-    ]
-  },
-  {
-    "group": "Data Report",
-    "title": "Station Consumption",
-    "hash": "#/prepay-report/station-consumption",
-    "apis": [
-      "/api/local/consumption/station-analytics"
-    ],
-    "columns": [],
-    "actions": [
-      "Refresh",
-      "Export"
-    ],
-    "roles": [
-      "super-admin",
-      "operations-manager",
-      "account"
-    ]
-  },
-  {
     "group": "Management",
     "title": "Gateway",
     "hash": "#/management/gateway",
@@ -1295,43 +1285,6 @@
     ],
     "roles": [
       "super-admin"
-    ]
-  },
-  {
-    "group": "System",
-    "title": "Station Onboarding Studio",
-    "hash": "#/system/station-onboarding-studio",
-    "apis": [
-      "/api/station/read",
-      "/api/gateway/read",
-      "/api/meter/read",
-      "/api/customer/read",
-      "/api/account/read",
-      "/api/tariff/read"
-    ],
-    "columns": [],
-    "actions": [],
-    "roles": [
-      "super-admin"
-    ]
-  },
-  {
-    "group": "System",
-    "title": "Automation Command",
-    "hash": "#/system/automation-command",
-    "apis": [
-      "/api/system/automation-report",
-      "/api/system/automation-control"
-    ],
-    "columns": [],
-    "actions": [
-      "Refresh",
-      "Save",
-      "Test Alert"
-    ],
-    "roles": [
-      "super-admin",
-      "operations-manager"
     ]
   }
 ]

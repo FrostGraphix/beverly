@@ -116,7 +116,8 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
       LIVE_API_BEARER_TOKEN: "env-token",
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true"
     }, async () => {
       const created = await request(proxy.address().port, "POST", "/api/account/create", [{
         customerId: "CUS-9001",

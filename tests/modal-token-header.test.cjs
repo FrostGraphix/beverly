@@ -21,8 +21,28 @@ assert(
 );
 
 assert(
+  /\.modal\.base-modal-shell \.modal-header-left,[\s\S]*?\.picker-modal\.base-modal-shell \.modal-header-left\s*\{[^}]*gap:\s*10px[^}]*align-items:\s*center/s.test(css),
+  "modal header title groups must stay centered and compact"
+);
+
+assert(
+  /\.modal\.base-modal-shell \.modal-action-badge,[\s\S]*?\.picker-modal\.base-modal-shell \.modal-action-badge\s*\{[^}]*width:\s*32px[^}]*height:\s*32px/s.test(css),
+  "modal action badges must align to compact SOP sizing"
+);
+
+assert(
   /\.modal-token-flow \.modal-close\s*\{[^}]*margin-left:\s*auto/.test(css),
   "token modal close button must stay on the far right"
+);
+
+assert(
+  /\.modal-title\s*\{[^}]*font-size:\s*14px[^}]*line-height:\s*1\.25/s.test(css),
+  "modal titles must use the compact SOP text size"
+);
+
+assert(
+  !/\.modal-title\s*\{[^}]*font-size:\s*clamp\(18px,\s*6vw,\s*24px\)/s.test(css),
+  "mobile modal titles must not expand past SOP text size"
 );
 
 assert(

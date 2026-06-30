@@ -6,19 +6,19 @@
     "routeManifest": "reference-route-manifest.json",
     "endpointRegistry": "backend/src/services/endpoint-registry.ts"
   },
-  "generatedAt": "2026-06-25T11:20:02.795Z",
+  "generatedAt": "2026-06-30T06:02:38.126Z",
   "documentedTotal": 144,
-  "endpointCount": 153,
+  "endpointCount": 152,
   "endpointCountNote": "overview count differs from endpoint catalog lines",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 40,
+  "visibleEndpointCount": 39,
   "liveWriteEndpointCount": 83,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
     "crawlMissingEndpointCount": 0,
     "crawlMissingEndpoints": [],
-    "routeCount": 43,
-    "fullyMappedRouteCount": 43,
+    "routeCount": 41,
+    "fullyMappedRouteCount": 41,
     "routeCoverage": [
       {
         "group": "Dashboard",
@@ -34,6 +34,22 @@
         "hash": "#/admin/reports",
         "apiCount": 5,
         "coveredApiCount": 5,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Station Consumption",
+        "hash": "#/prepay-report/station-consumption",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "System",
+        "title": "Automation Command",
+        "hash": "#/system/automation-command",
+        "apiCount": 2,
+        "coveredApiCount": 2,
         "fullyMapped": true
       },
       {
@@ -178,22 +194,6 @@
         "hash": "#/prepay-report/daily-data-meter",
         "apiCount": 2,
         "coveredApiCount": 2,
-        "fullyMapped": true
-      },
-      {
-        "group": "Data Report",
-        "title": "Abnormal Alarm",
-        "hash": "#/prepay-report/abnormal-alarm",
-        "apiCount": 1,
-        "coveredApiCount": 1,
-        "fullyMapped": true
-      },
-      {
-        "group": "Data Report",
-        "title": "Station Consumption",
-        "hash": "#/prepay-report/station-consumption",
-        "apiCount": 1,
-        "coveredApiCount": 1,
         "fullyMapped": true
       },
       {
@@ -347,22 +347,6 @@
         "apiCount": 1,
         "coveredApiCount": 1,
         "fullyMapped": true
-      },
-      {
-        "group": "System",
-        "title": "Station Onboarding Studio",
-        "hash": "#/system/station-onboarding-studio",
-        "apiCount": 6,
-        "coveredApiCount": 6,
-        "fullyMapped": true
-      },
-      {
-        "group": "System",
-        "title": "Automation Command",
-        "hash": "#/system/automation-command",
-        "apiCount": 2,
-        "coveredApiCount": 2,
-        "fullyMapped": true
       }
     ]
   },
@@ -492,12 +476,6 @@
           "title": "Account",
           "hash": "#/management/account",
           "status": 200
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -551,11 +529,6 @@
           "group": "Management",
           "title": "Account",
           "hash": "#/management/account"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -690,12 +663,6 @@
           "title": "Account",
           "hash": "#/management/account",
           "status": 200
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -734,11 +701,6 @@
           "group": "Management",
           "title": "Account",
           "hash": "#/management/account"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -1673,12 +1635,6 @@
           "title": "Gateway",
           "hash": "#/management/gateway",
           "status": null
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -1702,11 +1658,6 @@
           "group": "Management",
           "title": "Gateway",
           "hash": "#/management/gateway"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -2558,12 +2509,6 @@
           "title": "Meter",
           "hash": "#/admin/meter",
           "status": null
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -2597,11 +2542,6 @@
           "group": "Administration",
           "title": "Meter",
           "hash": "#/admin/meter"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -3425,12 +3365,6 @@
           "title": "Station",
           "hash": "#/admin/station",
           "status": null
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -3554,11 +3488,6 @@
           "group": "Administration",
           "title": "Station",
           "hash": "#/admin/station"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -3693,12 +3622,6 @@
           "title": "Account",
           "hash": "#/management/account",
           "status": 200
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio",
-          "status": null
         }
       ],
       "observed": true,
@@ -3737,11 +3660,6 @@
           "group": "Management",
           "title": "Account",
           "hash": "#/management/account"
-        },
-        {
-          "group": "System",
-          "title": "Station Onboarding Studio",
-          "hash": "#/system/station-onboarding-studio"
         }
       ],
       "writeRiskLevel": "none"
@@ -4823,43 +4741,6 @@
           "group": "Data Report",
           "title": "Report Centre",
           "hash": "#/admin/reports"
-        }
-      ],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Data Report",
-      "path": "/api/local/abnormal-alarms",
-      "operationId": "",
-      "method": "POST",
-      "requestSchema": "",
-      "responseSchema": "",
-      "operation": "generic",
-      "consumers": [
-        {
-          "group": "Data Report",
-          "title": "Abnormal Alarm",
-          "hash": "#/prepay-report/abnormal-alarm",
-          "status": null
-        }
-      ],
-      "observed": false,
-      "aliases": [
-        "/api/local/abnormal-alarms",
-        "/API/local/abnormal-alarms"
-      ],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "manifestOnly": true,
-      "casingVariants": [
-        "/api/local/abnormal-alarms",
-        "/API/local/abnormal-alarms"
-      ],
-      "uiRouteConsumers": [
-        {
-          "group": "Data Report",
-          "title": "Abnormal Alarm",
-          "hash": "#/prepay-report/abnormal-alarm"
         }
       ],
       "writeRiskLevel": "none"

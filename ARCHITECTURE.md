@@ -66,8 +66,6 @@ Keep write safety strict.
 - `backend/src/services/wallet-audit-service.js` owns structured wallet audit events.
 - `backend/wallet/src/services/payment-transactions.ts` owns Paystack success fulfillment and legacy status compatibility.
 - `backend/wallet/src/services/payment-webhooks.ts` owns verified Paystack webhook reconciliation.
-- `backend/wallet/src/services/webhook-retention.ts` owns expired webhook payload minimization.
-- `backend/wallet/src/services/vat-policy.ts` owns approved VAT policy resolution and governance.
 - `backend/wallet/src/services/dev-console.ts` owns admin developer console data contracts.
 - `LIVE_BEARER_TOKEN` has priority over client auth.
 - `CORS_ORIGINS` controls CORS.

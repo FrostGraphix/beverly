@@ -24,8 +24,7 @@ const routes = [
   { name: "daily-meter", hash: "#/prepay-report/daily-data-meter", ready: ".ddm-container" },
   { name: "credit-token-record", hash: "#/token-record/credit-token-record", ready: 'th[data-column-key="receiptId"]' },
   { name: "remote-task", hash: "#/remote-operation-record/remote-meter-reading-task", ready: 'th[data-column-key="dataItem"]' },
-  { name: "long-nonpurchase", hash: "#/prepay-report/long-nonpurchase-situation", ready: 'th[data-column-key="nonpurchaseDays"]' },
-  { name: "site-consumption", hash: "#/prepay-report/site-consumption", ready: ".eih-page" }
+  { name: "long-nonpurchase", hash: "#/prepay-report/long-nonpurchase-situation", ready: 'th[data-column-key="nonpurchaseDays"]' }
 ];
 
 let appUrl = "";

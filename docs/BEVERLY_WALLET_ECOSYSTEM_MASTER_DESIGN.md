@@ -47,7 +47,7 @@ The CRM does NOT host wallet admin pages.
 The CRM has exactly **ONE** sidebar entry pointing to the wallet:
 
 - Label: `Wallet`
-- Action: opens the wallet workspace (`vendor.beverly.com` admin surface or shared `wallet.beverly.com`).
+- Action: opens the wallet workspace at `/wallet-admin/` until a custom domain is provisioned.
 - No nested wallet routes inside the CRM sidebar.
 - No wallet sub-menu inside the CRM.
 - No wallet tables, wallet forms, wallet dashboards inside the CRM.
@@ -75,7 +75,7 @@ How staff transitions:
 │  │  CRM Admin   │   │ Vendor Retail│   │  Customer App    │  │
 │  │ (staff-only) │   │   Portal     │   │ (public self-svc)│  │
 │  │              │   │              │   │                  │  │
-│  │ admin.beverly│   │ vendor.beverly│   │ app.beverly      │  │
+│  │ /wallet-admin│   │ vendor.beverly│   │ app.beverly      │  │
 │  └──────┬───────┘   └──────┬───────┘   └──────┬───────────┘  │
 │         │                  │                  │              │
 │         └──────────┬───────┴──────────────────┘              │
@@ -115,7 +115,7 @@ Three identity stores. One auth provider (Supabase Auth).
 
 | Domain | Audience | Self-signup | 2FA |
 |--------|----------|-------------|-----|
-| `admin.beverly.acoblighting.com` | CRM staff | NO | mandatory |
+| `/wallet-admin/` on the CRM Vercel deployment | CRM staff | NO | mandatory |
 | `vendor.beverly.acoblighting.com` | Approved vendors | NO | mandatory |
 | `beverly.acoblighting.com` | Public customers | YES | optional, encouraged |
 
@@ -1232,10 +1232,11 @@ Implementation: Supabase Edge Functions + pg_cron, or Vercel cron, or Inngest.
 
 ### 19.1 Hosting
 
-- Frontends: **Vercel** — three projects:
+- Frontends: **Vercel** — current deployment plus future split projects:
   - `beverly-customer` → `beverly.acoblighting.com`
   - `beverly-vendor` → `vendor.beverly.acoblighting.com`
-  - `beverly-admin` → `admin.beverly.acoblighting.com`
+  - current staff wallet admin → `/wallet-admin/`
+  - future `beverly-admin` custom domain only after DNS and Vercel are provisioned
 - Backend API: **dedicated Node/Fastify service** on **Fly.io** (or Railway).
   - Long-lived process (ledger atomicity, webhook reliability, scheduled jobs).
   - Two regions: `lagos` (primary), fallback secondary.
@@ -1519,7 +1520,7 @@ Confirmed 2026-05-16. These resolve all pre-build questions.
 ```
 beverly.acoblighting.com          → Customer App (public)
 vendor.beverly.acoblighting.com   → Vendor Portal
-admin.beverly.acoblighting.com    → CRM + Wallet Admin
+beverly CRM Vercel `/wallet-admin/` → Wallet Admin
 ```
 
 All three share a single Supabase Auth tenant. Sessions are scoped per role at the API layer.

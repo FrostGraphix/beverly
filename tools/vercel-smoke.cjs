@@ -9,6 +9,7 @@ const targetUrl = String(
 ).replace(/\/+$/, "");
 const protectionBypass = String(
   process.env.VERCEL_PROTECTION_BYPASS ||
+  process.env.VERCEL_AUTOMATION_BYPASS ||
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   ""
 ).trim();
@@ -84,7 +85,13 @@ async function authenticateSmoke() {
 
 async function main() {
   if (!targetUrl) {
-    throw new Error("TARGET_URL is required");
+    throw new Error("TARGET_URL, PREVIEW_TARGET_URL, PRODUCTION_TARGET_URL, or argv[2] is required");
+  }
+  if (!protectionBypass) {
+    throw new Error("VERCEL_PROTECTION_BYPASS is required for the protected Beverly preview");
+  }
+  if (!smokeToken && (!process.env.SMOKE_USER_ID || !process.env.SMOKE_PASSWORD)) {
+    throw new Error("SMOKE_AUTH_TOKEN or SMOKE_USER_ID and SMOKE_PASSWORD are required");
   }
 
   await authenticateSmoke();

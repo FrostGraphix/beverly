@@ -87,7 +87,8 @@ async function main() {
     TWILIO_FROM_NUMBER: process.env.TWILIO_FROM_NUMBER,
     TWILIO_VERIFY_SERVICE_SID: process.env.TWILIO_VERIFY_SERVICE_SID,
     TWILIO_SMS_STATUS_CALLBACK_URL: process.env.TWILIO_SMS_STATUS_CALLBACK_URL,
-    TWILIO_VALIDATE_WEBHOOKS: process.env.TWILIO_VALIDATE_WEBHOOKS
+    TWILIO_VALIDATE_WEBHOOKS: process.env.TWILIO_VALIDATE_WEBHOOKS,
+    SMS_ALLOWED_COUNTRY_CODES: process.env.SMS_ALLOWED_COUNTRY_CODES
   };
   const originalFetch = global.fetch;
 
@@ -98,6 +99,7 @@ async function main() {
   process.env.TWILIO_VERIFY_SERVICE_SID = "VA1234567890abcdef";
   process.env.TWILIO_SMS_STATUS_CALLBACK_URL = "https://example.test/api/notifications/sms/status";
   process.env.TWILIO_VALIDATE_WEBHOOKS = "false";
+  process.env.SMS_ALLOWED_COUNTRY_CODES = "+1,+234";
   handler._test.resetContractCache();
 
   global.fetch = async (url, init) => {
@@ -207,6 +209,22 @@ async function main() {
     assert.strictEqual(list.status, 200);
     assert(list.body.data.rows.some((row) => row.messageSid === "SM1234567890abcdef" && row.status === "delivered"));
     assert(list.body.data.rows.some((row) => row.messageSid === "VE1234567890abcdef" && row.status === "approved"));
+
+    process.env.SMS_ALLOWED_COUNTRY_CODES = "+234";
+    const blocked = await post(port, "/api/notifications/verify/send", {
+      to: "+15558675310",
+      channel: "sms",
+      reference: "blocked-otp-123"
+    });
+    assert.strictEqual(blocked.status, 403);
+    assert.strictEqual(blocked.body.msg, "SMS is only available for approved destinations");
+
+    const auditList = await post(port, "/api/notifications/sms/list", { limit: 10 });
+    assert(auditList.body.data.rows.some((row) => (
+      row.from === "sms-guardrail"
+      && row.status === "blocked"
+      && row.errorCode === "sms_country_not_allowed"
+    )));
 
     console.log(JSON.stringify({
       status: "sms notification api passed",

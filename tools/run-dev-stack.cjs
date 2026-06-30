@@ -3,10 +3,10 @@
 /**
  * Beverly dev stack runner.
  *
- *   npm run dev                  → starts everything (CRM + wallet backend + admin + vendor + customer + reference API)
+ *   npm run dev                  → starts everything (CRM + wallet backend + admin + vendor + customer + landing + reference API)
  *   SKIP_WALLET=1 npm run dev    → starts only the legacy CRM + reference API
  *   ONLY=admin npm run dev       → starts only the named wallet service
- *                                  (admin | vendor | customer | wallet | crm)
+ *                                  (admin | vendor | customer | landing | wallet | crm)
  *
  * Ports:
  *   9310  reference API proxy (mock data for legacy CRM)
@@ -15,6 +15,7 @@
  *   5173  customer PWA       (Vue 3)
  *   5174  vendor portal      (Vue 3)
  *   5175  wallet admin       (Vue 3)
+ *   5176  wallet landing     (Vue 3)
  */
 
 const { spawn } = require("child_process");
@@ -75,6 +76,7 @@ const colors = {
   admin:    "\x1b[32m",
   vendor:   "\x1b[33m",
   customer: "\x1b[34m",
+  landing:  "\x1b[95m",
 };
 const RESET = "\x1b[0m";
 
@@ -144,6 +146,14 @@ const services = [
     args: ["dev"],
     cwd: path.join(root, "apps/customer"),
     url: "http://localhost:5173",
+    walletGroup: true,
+  },
+  {
+    name: "landing",
+    cmd: pnpmCmd,
+    args: ["dev"],
+    cwd: path.join(root, "apps/wallet-landing"),
+    url: "http://localhost:5176",
     walletGroup: true,
   },
 ];

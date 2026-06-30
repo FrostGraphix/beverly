@@ -20,6 +20,7 @@ const globalCss = `${readProjectFile("src/styles/reference.css")}\n${readProject
   .map((file) => readProjectFile(`src/styles/${file}`))
   .join("\n")}`;
 const tablePage = readProjectFile("src/components/TablePage.vue");
+const apiService = readProjectFile("src/services/api.js");
 const loginPage = readProjectFile("src/components/LoginPage.vue");
 const dailyDataMeterPage = readProjectFile("src/components/DailyDataMeterPage.vue");
 const pickerModal = readProjectFile("src/components/PickerModal.vue");
@@ -40,7 +41,16 @@ assertIncludes(tablePage, "table-command-strip");
 assertIncludes(tablePage, "displayedTotal()");
 assertIncludes(tablePage, "Number(this.total) > this.filteredTotal");
 assertIncludes(tablePage, "Total {{ displayedTotal }}");
+assertIncludes(tablePage, "this.total = 0;");
+assertIncludes(tablePage, "routeUsesServerPagination(this.route)");
+assertIncludes(tablePage, "requestOptions.pageNumber = this.currentPage;");
+assertIncludes(tablePage, "requestOptions.pageSize = this.pageSize;");
+assertIncludes(tablePage, "searchTerm: this.serverPaginated ? this.searchTerm : undefined");
+assertIncludes(tablePage, "this.applyControls({ reloadServer: false });");
+assertIncludes(tablePage, "if (this.serverPaginated) {");
 assertIncludes(tablePage, ":aria-label=\"`${action} row ${rowIndex + 1}`\"");
+assertIncludes(apiService, "error?.response?.data?.reason");
+assertIncludes(apiService, "if (apiMessage) error.message = apiMessage;");
 assertIncludes(tablePage, "min-width: var(--table-action-column-width, 240px)");
 assertIncludes(tablePage, ":data-column-key=\"getColKey(column)\"");
 assertIncludes(tablePage, "data-testid=\"table-apply-controls\"");
@@ -67,6 +77,12 @@ assertIncludes(consumptionStatisticsPage, "syncThemePalette");
 assertIncludes(consumptionStatisticsPage, "observeThemeChanges");
 assertIncludes(consumptionStatisticsPage, "var(--text-strong)");
 assertIncludes(consumptionStatisticsPage, "var(--primary-light)");
+assertIncludes(consumptionStatisticsPage, "Customer Id");
+assertIncludes(consumptionStatisticsPage, "Meter Id");
+assertIncludes(consumptionStatisticsPage, "Date Range");
+assertIncludes(consumptionStatisticsPage, "Collection Date");
+assertIncludes(consumptionStatisticsPage, "Consumption");
+assertIncludes(consumptionStatisticsPage, "csp-reference-shell");
 
 const consumptionStyle = consumptionStatisticsPage.match(/<style scoped>([\s\S]*?)<\/style>/)?.[1] || "";
 assert(

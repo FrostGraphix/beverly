@@ -5,6 +5,23 @@ const root = path.resolve(__dirname, "..");
 const artifactDir = path.join(root, "tmp", "creative-implementation-flow");
 const artifactPath = path.join(artifactDir, "audit-report.json");
 
+function writeJsonArtifact(filePath, report) {
+  const payload = `${JSON.stringify(report, null, 2)}\n`;
+  let lastError;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const tempPath = `${filePath}.${process.pid}.${attempt}.tmp`;
+    try {
+      fs.writeFileSync(tempPath, payload);
+      fs.renameSync(tempPath, filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* best effort */ }
+    }
+  }
+  throw lastError;
+}
+
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
@@ -197,7 +214,7 @@ function runAudit(options = {}) {
 
   if (writeArtifact) {
     fs.mkdirSync(artifactDir, { recursive: true });
-    fs.writeFileSync(artifactPath, `${JSON.stringify(report, null, 2)}\n`);
+    writeJsonArtifact(artifactPath, report);
   }
 
   return report;
