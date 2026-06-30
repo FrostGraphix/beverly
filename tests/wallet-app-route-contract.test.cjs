@@ -255,6 +255,12 @@ function main() {
   assert.match(meterOrdersService, /METER_ORDER_TRANSITIONS/);
   assert.match(meterOrdersService, /assertMeterOrderTransition/);
   assert.match(meterOrdersService, /customer_meter_order/);
+  assert.match(meterOrdersService, /runIdempotentMeterOrder/);
+  assert.match(meterOrdersService, /claimWalletIdempotency/);
+  assert.match(meterOrdersService, /completeWalletIdempotency/);
+  assert.match(meterOrdersService, /abandonWalletIdempotency/);
+  assert.match(meterOrdersService, /deterministicMeterOrderReference\('morda'/);
+  assert.doesNotMatch(meterOrdersService, /Date\.now\(\).*Math\.random/);
   assert.match(customerMeterOrders, /assertClientIdempotencyKey/);
   assert.match(customerMeterOrders, /\.eq\('status', 'pending_payment'\)/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);

@@ -2,7 +2,13 @@ import { adminClient } from '../db/supabase.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { postEntry, LedgerError } from './ledger.js';
 import { findWalletByOwner, assertWalletCanTransact } from './wallets.js';
-import { hashIdempotency, ledgerKey } from './idempotency.js';
+import {
+    abandonWalletIdempotency,
+    claimWalletIdempotency,
+    completeWalletIdempotency,
+    hashIdempotency,
+    ledgerKey,
+} from './idempotency.js';
 
 export type MeterOrderStatus =
     | 'pending_payment'
@@ -65,8 +71,37 @@ export function assertMeterOrderTransition(from: MeterOrderStatus, to: MeterOrde
     }
 }
 
-function paymentReference(prefix: 'mord' | 'mordv' | 'morda'): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+export function deterministicMeterOrderReference(
+    prefix: 'mord' | 'mordv' | 'morda',
+    parts: (string | number | null | undefined)[],
+): string {
+    return `${prefix}_${hashIdempotency(parts)}`;
+}
+
+export async function runIdempotentMeterOrder<T>(
+    scope: string,
+    idempotencyKey: string,
+    fingerprintParts: (string | number | null | undefined)[],
+    operation: () => Promise<T>,
+): Promise<T> {
+    const fingerprint = hashIdempotency(fingerprintParts);
+    const claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+    if (claim.state === 'replay') return claim.responsePayload as T;
+    if (claim.state === 'pending') {
+        throw new MeterOrderError(
+            'This meter order request is still processing.',
+            'idempotency_in_progress',
+            409,
+        );
+    }
+    try {
+        const result = await operation();
+        await completeWalletIdempotency(scope, idempotencyKey, result);
+        return result;
+    } catch (error) {
+        await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
+        throw error;
+    }
 }
 
 async function readCustomer(customerId: string) {
@@ -140,44 +175,61 @@ export async function createCustomerPortalMeterOrder(input: {
     callbackBaseUrl: string;
     idempotencyKey: string;
 }): Promise<{ order: MeterOrderRecord; authorizationUrl: string }> {
-    const customer = await readCustomer(input.customerId);
-    const email = String(customer.email ?? '').trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        throw new MeterOrderError('A valid customer email is required for meter order payment.', 'email_required', 422);
-    }
-    const amountMinor = meterOrderAmountMinor(input.meterType);
-    const reference = `mord_${hashIdempotency(['customer_meter_order', input.customerId, input.idempotencyKey])}`;
-    const callbackUrl = new URL(input.callbackBaseUrl);
-    callbackUrl.searchParams.set('ref', reference);
-    const paystack = await initializeTransaction({
-        email,
-        amountMinor,
-        reference,
-        metadata: { customer_id: input.customerId, order_type: 'meter_purchase' },
-        callbackUrl: callbackUrl.toString(),
-    });
-    if (!paystack.authorization_url) {
-        throw new MeterOrderError('Could not initialize payment.', 'payment_init_failed', 502);
-    }
-    const order = await createOrderRow({
-        customerId: input.customerId,
-        customerName: customer.full_name,
-        meterType: input.meterType,
-        propertyAddress: input.propertyAddress,
-        serviceArea: input.serviceArea,
-        contactPhone: input.contactPhone,
-        amountMinor,
-        paymentReference: reference,
-        status: 'pending_payment',
-        sourceChannel: 'customer_portal',
-        sponsorMode: 'manual_paid',
-        createdByActorType: 'customer',
-        createdByActorId: input.customerUserId,
-    });
-    return { order, authorizationUrl: paystack.authorization_url };
+    return runIdempotentMeterOrder(
+        `meter_order.customer.${input.customerId}`,
+        input.idempotencyKey,
+        [
+            input.customerId,
+            input.meterType,
+            input.propertyAddress,
+            input.serviceArea,
+            input.contactPhone,
+        ],
+        async () => {
+            const customer = await readCustomer(input.customerId);
+            const email = String(customer.email ?? '').trim().toLowerCase();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                throw new MeterOrderError('A valid customer email is required for meter order payment.', 'email_required', 422);
+            }
+            const amountMinor = meterOrderAmountMinor(input.meterType);
+            const reference = deterministicMeterOrderReference('mord', [
+                'customer_meter_order',
+                input.customerId,
+                input.idempotencyKey,
+            ]);
+            const callbackUrl = new URL(input.callbackBaseUrl);
+            callbackUrl.searchParams.set('ref', reference);
+            const paystack = await initializeTransaction({
+                email,
+                amountMinor,
+                reference,
+                metadata: { customer_id: input.customerId, order_type: 'meter_purchase' },
+                callbackUrl: callbackUrl.toString(),
+            });
+            if (!paystack.authorization_url) {
+                throw new MeterOrderError('Could not initialize payment.', 'payment_init_failed', 502);
+            }
+            const order = await createOrderRow({
+                customerId: input.customerId,
+                customerName: customer.full_name,
+                meterType: input.meterType,
+                propertyAddress: input.propertyAddress,
+                serviceArea: input.serviceArea,
+                contactPhone: input.contactPhone,
+                amountMinor,
+                paymentReference: reference,
+                status: 'pending_payment',
+                sourceChannel: 'customer_portal',
+                sponsorMode: 'manual_paid',
+                createdByActorType: 'customer',
+                createdByActorId: input.customerUserId,
+            });
+            return { order, authorizationUrl: paystack.authorization_url };
+        },
+    );
 }
 
-export async function createVendorSponsoredMeterOrder(input: {
+type VendorMeterOrderInput = {
     vendorOrganizationId: string;
     actorUserId: string;
     actorType?: 'vendor_user' | 'staff';
@@ -187,7 +239,9 @@ export async function createVendorSponsoredMeterOrder(input: {
     serviceArea: string;
     contactPhone: string;
     idempotencyKey: string;
-}): Promise<MeterOrderRecord> {
+};
+
+async function createVendorSponsoredMeterOrderOnce(input: VendorMeterOrderInput): Promise<MeterOrderRecord> {
     const customer = await readCustomer(input.customerId);
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);
     try {
@@ -196,12 +250,9 @@ export async function createVendorSponsoredMeterOrder(input: {
         throw new MeterOrderError(error.message, error.code ?? 'wallet_inactive', error.status ?? 403);
     }
     const amountMinor = meterOrderAmountMinor(input.meterType);
-    const idemKey = hashIdempotency([
+    const idemKey = deterministicMeterOrderReference('mordv', [
         'vendor_meter_order',
         input.vendorOrganizationId,
-        input.customerId,
-        input.meterType,
-        input.propertyAddress,
         input.idempotencyKey,
     ]);
     const { data: existing } = await adminClient
@@ -261,6 +312,21 @@ export async function createVendorSponsoredMeterOrder(input: {
     return data as MeterOrderRecord;
 }
 
+export async function createVendorSponsoredMeterOrder(input: VendorMeterOrderInput): Promise<MeterOrderRecord> {
+    return runIdempotentMeterOrder(
+        `meter_order.vendor.${input.vendorOrganizationId}`,
+        input.idempotencyKey,
+        [
+            input.customerId,
+            input.meterType,
+            input.propertyAddress,
+            input.serviceArea,
+            input.contactPhone,
+        ],
+        () => createVendorSponsoredMeterOrderOnce(input),
+    );
+}
+
 export async function createAdminMeterOrder(input: {
     staffUserId: string;
     customerId: string;
@@ -303,22 +369,42 @@ export async function createAdminMeterOrder(input: {
         return data as MeterOrderRecord;
     }
 
-    const customer = await readCustomer(input.customerId);
-    const amountMinor = meterOrderAmountMinor(input.meterType);
-    return createOrderRow({
-        customerId: input.customerId,
-        customerName: customer.full_name,
-        meterType: input.meterType,
-        propertyAddress: input.propertyAddress,
-        serviceArea: input.serviceArea,
-        contactPhone: input.contactPhone,
-        amountMinor,
-        paymentReference: paymentReference('morda'),
-        status: 'paid',
-        sourceChannel: 'admin_portal',
-        sponsorMode: 'manual_paid',
-        createdByActorType: 'staff',
-        createdByActorId: input.staffUserId,
-        notes: input.notes?.trim() || 'Staff-assisted meter order.',
-    });
+    return runIdempotentMeterOrder(
+        `meter_order.admin.${input.staffUserId}`,
+        input.idempotencyKey,
+        [
+            input.customerId,
+            input.meterType,
+            input.propertyAddress,
+            input.serviceArea,
+            input.contactPhone,
+            input.sponsorMode,
+            input.vendorOrganizationId,
+            input.notes,
+        ],
+        async () => {
+            const customer = await readCustomer(input.customerId);
+            const amountMinor = meterOrderAmountMinor(input.meterType);
+            return createOrderRow({
+                customerId: input.customerId,
+                customerName: customer.full_name,
+                meterType: input.meterType,
+                propertyAddress: input.propertyAddress,
+                serviceArea: input.serviceArea,
+                contactPhone: input.contactPhone,
+                amountMinor,
+                paymentReference: deterministicMeterOrderReference('morda', [
+                    'admin_meter_order',
+                    input.staffUserId,
+                    input.idempotencyKey,
+                ]),
+                status: 'paid',
+                sourceChannel: 'admin_portal',
+                sponsorMode: 'manual_paid',
+                createdByActorType: 'staff',
+                createdByActorId: input.staffUserId,
+                notes: input.notes?.trim() || 'Staff-assisted meter order.',
+            });
+        },
+    );
 }

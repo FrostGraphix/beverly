@@ -22,7 +22,8 @@ create table if not exists public.vat_policies (
   rejection_reason text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check ((status = 'approved') = (approved_by is not null and approved_at is not null))
+  check ((status = 'approved') = (approved_by is not null and approved_at is not null)),
+  check (status <> 'approved' or submitted_by is null or approved_by <> submitted_by)
 );
 
 create unique index if not exists vat_policies_approved_effective_uidx
@@ -30,7 +31,7 @@ create unique index if not exists vat_policies_approved_effective_uidx
   where status = 'approved';
 
 insert into public.vat_policies (jurisdiction, label, rate_basis_points, effective_at, status, approved_by, approved_at)
-select 'NG', 'Nigeria VAT 7.5%', 750, '2020-01-01T00:00:00Z', 'approved', null, now()
+select 'NG', 'Nigeria VAT 7.5%', 750, '2020-01-01T00:00:00Z', 'approved', '00000000-0000-0000-0000-000000000000'::uuid, now()
 where not exists (select 1 from public.vat_policies where jurisdiction = 'NG' and status = 'approved');
 
 alter table public.vat_policies enable row level security;

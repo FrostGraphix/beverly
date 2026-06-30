@@ -15,6 +15,8 @@ assert.match(vat, /vatAmountMinor/);
 const tokenEngine = read('backend/wallet/src/services/token-engine.ts');
 assert.match(tokenEngine, /calculateVendingVatBreakdown/);
 assert.match(tokenEngine, /env\.VENDING_VAT_BASIS_POINTS/);
+assert.match(tokenEngine, /resolveVatRateBasisPoints/);
+assert.match(tokenEngine, /previewPurchaseWithPolicy/);
 assert.match(tokenEngine, /const units = naira \/ t\.basePricePerKwh/);
 assert.match(tokenEngine, /energyAmountMinor: vat\.energyAmountMinor/);
 assert.match(tokenEngine, /taxAmountMinor: vat\.vatAmountMinor/);
@@ -24,6 +26,15 @@ assert.match(migration, /energy_amount_minor bigint/);
 assert.match(migration, /vat_amount_minor bigint/);
 assert.match(migration, /vat_rate_basis_points integer/);
 assert.match(migration, /10750/);
+
+const policyMigration = read('supabase/migrations/20260624100000_phase7_data_governance.sql');
+assert.match(policyMigration, /create table if not exists public\.vat_policies/);
+assert.match(policyMigration, /approved_by <> submitted_by/);
+assert.match(policyMigration, /00000000-0000-0000-0000-000000000000/);
+
+const vatPolicy = read('backend/wallet/src/services/vat-policy.ts');
+assert.match(vatPolicy, /different finance checker/);
+assert.match(vatPolicy, /Only pending VAT policies can be approved/);
 
 const vending = read('backend/wallet/src/services/vending.ts');
 assert.match(vending, /energy_amount_minor: preview\.energyAmountMinor/);
@@ -64,6 +75,11 @@ const reportRoute = read('backend/wallet/src/routes/admin.ts');
 assert.match(reportRoute, /energy_revenue_minor/);
 assert.match(reportRoute, /vat_minor/);
 assert.match(reportRoute, /energyRevenueMinor: 0/);
+assert.match(reportRoute, /fastify\.get\('\/vat-policies'/);
+assert.match(reportRoute, /fastify\.post\('\/vat-policies'/);
+assert.match(reportRoute, /fastify\.post\('\/vat-policies\/:id\/approve'/);
+assert.match(reportRoute, /vat_policy\.submitted/);
+assert.match(reportRoute, /vat_policy\.approved/);
 
 const vatEnv = read('backend/wallet/src/config/env.ts');
 assert.match(vatEnv, /VENDING_VAT_BASIS_POINTS/);

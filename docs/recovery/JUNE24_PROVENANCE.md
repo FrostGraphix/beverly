@@ -49,6 +49,20 @@ An unused VAT import was removed. The import referenced no June 24 route impleme
 
 Three dashboard template fields were aligned. Their computed model already used camel-case names.
 
+## Final verification repairs
+
+- Meter-order requests now use atomic idempotency claims.
+- Customer replays preserve payment authorization responses.
+- Admin and vendor references are deterministic.
+- Runtime VAT policies now drive every purchase preview.
+- VAT policy approvals enforce maker-checker separation.
+- VAT policy changes produce audit records.
+- The notification panel now layers correctly on mobile.
+- Direct bell and panel browser coverage was added.
+- Tracked runtime artifacts match the mainline versions.
+- Backend verification now passes one hundred tests.
+- The complete recovery smoke suite passes.
+
 ## Safety controls
 
 The original dirty worktree remains untouched. Recovery uses a separate worktree.

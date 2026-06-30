@@ -31,6 +31,7 @@ import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } 
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
+import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
@@ -3104,6 +3105,49 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── NDPR: account deletion queue ──
+    fastify.get('/vat-policies', async () => ({
+        policies: await listVatPolicies(),
+    }));
+
+    fastify.post('/vat-policies', async (req, reply) => {
+        const body = z.object({
+            label: z.string().trim().min(3).max(120),
+            rate_basis_points: z.number().int().min(0).max(10_000),
+            effective_at: z.string().datetime(),
+        }).parse(req.body ?? {});
+        const policy = await submitVatPolicy({
+            label: body.label,
+            rateBasisPoints: body.rate_basis_points,
+            effectiveAt: body.effective_at,
+            actorUserId: req.actor!.userId,
+        });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vat_policy.submitted',
+            targetType: 'vat_policy',
+            targetId: policy.id,
+            after: { ...policy },
+        });
+        return reply.code(201).send({ policy });
+    });
+
+    fastify.post('/vat-policies/:id/approve', async (req, reply) => {
+        const id = z.string().uuid().parse((req.params as { id: string }).id);
+        const policy = await approveVatPolicy(id, req.actor!.userId);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vat_policy.approved',
+            targetType: 'vat_policy',
+            targetId: policy.id,
+            after: { ...policy },
+        });
+        return reply.send({ policy });
+    });
+
     fastify.get('/privacy/deletions', async (req) => {
         const { status } = req.query as { status?: string };
         return { requests: await listDeletionRequests({ status, limit: 200 }) };

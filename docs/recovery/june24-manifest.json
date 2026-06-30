@@ -65,8 +65,8 @@
       },
       {
         "path": "src/App.vue",
-        "sha256": "42a8aadd31f8134de7b5ad3c59f775f5e54e25a4d3dc9f8275ac7ec388a78313",
-        "reason": "Restored design-system button contracts"
+        "sha256": "be6742936335088653342b951331b154b3fc612e4a6763c6f4e5e06c37d655e6",
+        "reason": "Restored design-system contracts and mobile alert layering"
       },
       {
         "path": "src/components/StationConsumptionPage.vue",
@@ -93,6 +93,87 @@
       "test:visual:audit",
       "test:full-smoke"
     ]
+  },
+  "finalRepairs": {
+    "recordedAt": "2026-06-30",
+    "outcomes": [
+      "Atomic meter-order request claims and deterministic references",
+      "Runtime VAT policy wiring with maker-checker approval",
+      "Mobile notification panel layering and direct browser coverage",
+      "Tracked runtime artifacts restored from origin/main"
+    ],
+    "files": [
+      {
+        "path": "backend/wallet/src/routes/admin.ts",
+        "sha256": "21d17366f37ca68cbc40fa19fdb1b599af2aebbb512b3c2a9da0a6445e9cf7ea"
+      },
+      {
+        "path": "backend/wallet/src/routes/vendor.ts",
+        "sha256": "0c43f495ce54dbcf5856fa145fd097e6a1c23689714a27c8a4756f202171b917"
+      },
+      {
+        "path": "backend/wallet/src/services/customer-purchase.ts",
+        "sha256": "642a1bb9eb11384cf6772cd7d9289ac97329d9b2eedd9a2a11a1232fa7c68072"
+      },
+      {
+        "path": "backend/wallet/src/services/meter-orders.ts",
+        "sha256": "256d0eede3a8b5d6fe5bfdeb3689d86d9d24b9f274b442336fdfb4629280b552"
+      },
+      {
+        "path": "backend/wallet/src/services/payment-transactions.ts",
+        "sha256": "2f5063e3e57b8f27b2ebb53570076229e62ee1913c360e60c5c0efc2a380000b"
+      },
+      {
+        "path": "backend/wallet/src/services/token-engine.ts",
+        "sha256": "2e14342c6258c12cd2d3af710d8584dd885ee4cc5e0d55f47d27becd08e76a0a"
+      },
+      {
+        "path": "backend/wallet/src/services/vat-policy.ts",
+        "sha256": "1968c3485e00d87eb6cf83e45def78574434d5b9f8a1aa99bb133d112cdda896"
+      },
+      {
+        "path": "backend/wallet/src/services/vending.ts",
+        "sha256": "d50ece259dcd30c43cd383ff844660d5dc1687e71720e24aa4534f0c5233f28e"
+      },
+      {
+        "path": "backend/wallet/src/services/__tests__/meter-orders.test.ts",
+        "sha256": "aa598da5741667cc443b6583bd1831624c2ddf9c3d36d3bd1450af424dcd9d1f"
+      },
+      {
+        "path": "backend/wallet/src/services/__tests__/vat-policy.test.ts",
+        "sha256": "f013207bc13dd35ba0fc84bd851f391b37c348629bd324a8dbca6f27d3ae7728"
+      },
+      {
+        "path": "package.json",
+        "sha256": "d542c493082a075c4122ccb2fde8534764aa3f9bf897ab6492196e8349658bd7"
+      },
+      {
+        "path": "src/components/StationAlertsBell.vue",
+        "sha256": "c8b794b5cde28a40693b47b28337e856a19229026b958c8ac0ad3862d945f2aa"
+      },
+      {
+        "path": "supabase/migrations/20260624100000_phase7_data_governance.sql",
+        "sha256": "97a5b312537650ff430e66a6896a0b7f9d4ccb17e49b3fa39d1fe3f12f0097b9"
+      },
+      {
+        "path": "tests/station-alerts.browser.test.cjs",
+        "sha256": "bf35fc2ccadcfea3cfcc883aa7ff7f5dd2e97295741bfcddba7d05b7cadd792a"
+      },
+      {
+        "path": "tests/vending-vat-contract.test.cjs",
+        "sha256": "fdcb821e6752345cbb1fa735ef1705f39cc177407e6f4c607a3e131cf7c53414"
+      },
+      {
+        "path": "tests/wallet-app-route-contract.test.cjs",
+        "sha256": "53594debeb218728f9d698e72e08cdbde5bcc83a6759f0100825e01c39c38020"
+      }
+    ],
+    "verification": {
+      "backendTestFiles": 14,
+      "backendTests": 100,
+      "visualScreenshots": 48,
+      "fullSmokePassed": true
+    }
   },
   "exclusions": [
     "Current Antigravity placeholder implementations",

@@ -803,6 +803,10 @@ export default {
   position: relative;
 }
 
+.fixed-header:has(.station-alerts--open) {
+  z-index: 1102;
+}
+
 .main-container::before {
   content: "";
   position: fixed;
