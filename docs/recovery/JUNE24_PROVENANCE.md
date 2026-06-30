@@ -70,3 +70,5 @@ The original dirty worktree remains untouched. Recovery uses a separate worktree
 No force-push is permitted. Production promotion requires explicit visual approval.
 
 The external evidence vault contains repository archives, Git archives, reflogs, unreachable-object listings, working-tree patches, and SHA-256 checksums.
+
+The recovery preview uses branch-scoped demo authentication. Vercel deployment protection remains enabled.
