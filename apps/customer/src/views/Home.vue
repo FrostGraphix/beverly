@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import OnboardingChecklist from '../components/OnboardingChecklist.vue';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
+import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 
 const auth    = useAuthStore();
 const wallet  = ref<any>(null);
 const ledger  = ref<any[]>([]);
 const loading = ref(false);
+const customerName = computed(() => auth.customer?.full_name?.split(' ')[0] || 'there');
 
 onMounted(async () => {
     loading.value = true;
@@ -22,17 +25,19 @@ onMounted(async () => {
     } catch { /* noop */ } finally { loading.value = false; }
 });
 
-function greeting() {
-    const h = new Date().getHours();
-    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
 </script>
 
 <template>
   <AppShell>
+    <WalletGreeting
+      audience="Customer wallet"
+      :name="customerName"
+      detail="for top-ups, meters, and token purchases."
+    />
+
     <!-- Balance hero -->
     <div class="bw-balance-hero">
-      <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">{{ greeting() }}, {{ auth.customer?.full_name?.split(' ')[0] || 'there' }}</p>
+      <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">Wallet balance</p>
       <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-1)">
         {{ naira(wallet?.balance_minor) }}
       </div>
@@ -50,18 +55,8 @@ function greeting() {
       </div>
     </div>
 
-    <!-- KYC nudge -->
-    <div v-if="auth.kycTier === 0" class="bw-card" style="border-color: oklch(75% 0.14 80 / 0.30); background: oklch(75% 0.14 80 / 0.05)">
-      <div class="bw-row">
-        <div style="flex:1">
-          <p style="font-weight:700; font-size: var(--t-sm); margin:0 0 2px">Complete verification</p>
-          <p class="bw-muted" style="font-size: var(--t-xs); margin:0">Verify your identity to start buying tokens</p>
-        </div>
-        <router-link to="/kyc" class="bw-btn" style="text-decoration:none; flex-shrink:0; white-space:nowrap; font-size: var(--t-sm)">
-          Verify →
-        </router-link>
-      </div>
-    </div>
+    <!-- Onboarding checklist -->
+    <OnboardingChecklist />
 
     <!-- Recent activity -->
     <div class="bw-card flush">

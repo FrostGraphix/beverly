@@ -71,6 +71,15 @@ function pruneEmpty(value) {
   return value;
 }
 
+function normalizeWriteValue(endpoint, key, value) {
+  if (key === "status" && /\/api\/user\/(?:create|update)\b/i.test(endpoint)) {
+    const normalized = String(value).trim().toLowerCase();
+    if (["true", "active", "1", "enabled"].includes(normalized)) return true;
+    if (["false", "inactive", "0", "disabled"].includes(normalized)) return false;
+  }
+  return value;
+}
+
 export function buildWritePayload(endpoint, form = {}, fields = []) {
   const payload = stripWriteMeta(form);
   const fieldNames = new Set((fields || []).map((field) => field.name));
@@ -92,7 +101,7 @@ export function buildWritePayload(endpoint, form = {}, fields = []) {
       delete payload[key];
       continue;
     }
-    payload[key] = value;
+    payload[key] = normalizeWriteValue(endpoint, key, value);
   }
   return usesArrayPayload(endpoint) ? [payload] : payload;
 }

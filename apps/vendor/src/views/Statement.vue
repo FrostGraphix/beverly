@@ -32,10 +32,10 @@ onMounted(async () => {
 });
 
 const totals = computed(() => ({
-    vends: batches.value.reduce((s, b) => s + b.total_vends, 0),
-    gross: batches.value.reduce((s, b) => s + b.gross_amount_minor, 0),
-    fees:  batches.value.reduce((s, b) => s + b.fee_minor, 0),
-    net:   batches.value.reduce((s, b) => s + b.net_amount_minor, 0),
+    vends: batches.value.reduce((s, b) => s + (b.total_vends ?? 0), 0),
+    gross: batches.value.reduce((s, b) => s + (b.gross_amount_minor ?? 0), 0),
+    fees:  batches.value.reduce((s, b) => s + (b.fee_minor ?? 0), 0),
+    net:   batches.value.reduce((s, b) => s + (b.net_amount_minor ?? 0), 0),
 }));
 
 function fmtDate(iso: string) {

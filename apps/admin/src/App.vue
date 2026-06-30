@@ -3,7 +3,7 @@ import { onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStaffAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
-import { SessionTimeoutWarning } from '@beverly/ui';
+import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
 
 const auth = useStaffAuthStore();
 const router = useRouter();
@@ -31,6 +31,6 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
     :visible="warningVisible"
     :seconds-left="secondsLeft"
     @stay="stayActive"
-    @logout="auth.logout(); $router.push({ name: 'login' })"
+    @logout="auth.logout(); $router.push({ name: 'login', query: { reason: 'session_timeout' } })"
   />
 </template>

@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { Stepper } from '@beverly/ui';
+import Stepper from '../components/Stepper.vue';
+import StationMultiSelect from '../components/StationMultiSelect.vue';
 import { api } from '../lib/api';
 
 const route = useRoute();
@@ -26,7 +27,7 @@ const form = ref({
     contactEmail: '',
     contactPhone: '',
     operatingAddress: '',
-    operatingStations: '',
+    operatingStations: [] as string[],
     primaryUserFullName: '',
     primaryUserEmail: '',
     primaryUserPhone: '',
@@ -142,9 +143,7 @@ async function submit() {
             contactEmail: form.value.contactEmail.trim(),
             contactPhone: form.value.contactPhone.trim(),
             operatingAddress: form.value.operatingAddress.trim() || undefined,
-            operatingStations: form.value.operatingStations
-                ? form.value.operatingStations.split(',').map((s) => s.trim()).filter(Boolean)
-                : undefined,
+            operatingStations: form.value.operatingStations.length ? form.value.operatingStations : undefined,
             primaryUserFullName: form.value.primaryUserFullName.trim(),
             primaryUserEmail: form.value.primaryUserEmail.trim(),
             primaryUserPhone: form.value.primaryUserPhone.trim() || undefined,
@@ -199,7 +198,7 @@ const dailyLimitFmt = computed(() =>
           <h2 class="bw-h2">Next steps</h2>
           <ol class="next-steps">
             <li>Send credentials via approved channel (encrypted email or in-person).</li>
-            <li>Vendor logs in at <span class="bw-mono">vendor.beverly.acoblighting.com</span>.</li>
+            <li>Vendor logs in at <a class="bw-mono" href="https://acob-beverly.vercel.app/wallet-vendor/" target="_blank" rel="noopener">acob-beverly.vercel.app/wallet-vendor</a>.</li>
             <li>Vendor changes password and sets up 2FA.</li>
             <li>Vendor begins funding + vending.</li>
           </ol>
@@ -263,9 +262,9 @@ const dailyLimitFmt = computed(() =>
           </div>
 
           <div>
-            <label class="bw-label">Operating stations (comma-separated)</label>
-            <input class="bw-input bw-mono" v-model="form.operatingStations" placeholder="TUNGA, UMAISHA, KARSHI" />
-            <p class="field-hint">Station codes this vendor will sell tokens for.</p>
+            <label class="bw-label">Operating stations</label>
+            <StationMultiSelect v-model="form.operatingStations" />
+            <p class="field-hint">Search and pick the stations this vendor will sell tokens for. List is fetched live from the energy backend.</p>
           </div>
         </section>
 
@@ -344,7 +343,7 @@ const dailyLimitFmt = computed(() =>
                 <dt>CAC</dt><dd class="bw-mono">{{ form.cacNumber || '—' }}</dd>
                 <dt>TIN</dt><dd class="bw-mono">{{ form.tin || '—' }}</dd>
                 <dt>Address</dt><dd>{{ form.operatingAddress || '—' }}</dd>
-                <dt>Stations</dt><dd class="bw-mono">{{ form.operatingStations || '—' }}</dd>
+                <dt>Stations</dt><dd class="bw-mono">{{ form.operatingStations.length ? form.operatingStations.join(', ') : '—' }}</dd>
               </dl>
             </div>
 

@@ -1,7 +1,120 @@
-/* Wallet Admin — all design primitives come from @beverly/tokens/wallet.css (bw-* classes).
-   Only admin-specific overrides that have no bw- equivalent live here. */
+/* Wallet Admin app-specific overrides. */
 
-/* Admin content padding (bw-content uses s-7; tighten on mid breakpoints) */
+/* Sidebar SOP cleanup */
+.bw-sidebar {
+  width: 268px;
+  display: flex;
+  flex-direction: column;
+}
+
+.bw-brand {
+  padding: 1rem 1.1rem;
+  min-height: 74px;
+}
+
+.bw-brand-text strong {
+  font-size: 1.03rem;
+  letter-spacing: 0;
+}
+
+.bw-brand-text span {
+  font-size: 0.66rem;
+  letter-spacing: 0.11em;
+}
+
+.bw-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.35rem 0.5rem 0.6rem;
+}
+
+.bw-nav-section {
+  margin: 0.7rem 0 0.32rem;
+  padding: 0 0.62rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.bw-nav-item {
+  min-height: 38px;
+  padding: 0.5rem 0.62rem;
+  margin: 0.08rem 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.bw-nav-item .bw-ic {
+  width: 17px;
+  height: 17px;
+}
+
+.bw-nav-item.router-link-active {
+  box-shadow: none;
+}
+
+.bw-sidebar-foot {
+  padding: 0.8rem 0.75rem 0.9rem;
+}
+
+.bw-back {
+  min-height: 42px;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+/* Admin content padding */
 @media (max-width: 1200px) {
   .bw-content { padding: var(--s-5); }
+}
+
+/* Local quality settings */
+html[data-admin-density="compact"] .bw-content {
+  gap: var(--s-3);
+}
+
+html[data-admin-density="compact"] .bw-card,
+html[data-admin-density="compact"] .bw-table-head-bar {
+  padding: var(--s-3);
+}
+
+html[data-admin-density="compact"] .bw-table th,
+html[data-admin-density="compact"] .bw-table td {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+html[data-admin-density="compact"] .bw-btn,
+html[data-admin-density="compact"] .bw-input,
+html[data-admin-density="compact"] .bw-select {
+  min-height: 36px;
+}
+
+html[data-admin-sticky-tables="true"] .bw-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+html[data-admin-reduce-motion="true"] *,
+html[data-admin-reduce-motion="true"] *::before,
+html[data-admin-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (max-width: 900px) {
+  .bw-sidebar {
+    width: min(84vw, 300px);
+  }
+
+  .bw-nav-item {
+    min-height: 40px;
+  }
 }

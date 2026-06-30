@@ -17,7 +17,8 @@ export function loadProfileState(userName = "") {
   return validateProfileState({
     name: saved.name || userName,
     email: saved.email,
-    phone: saved.phone
+    phone: saved.phone,
+    profilePictureUrl: saved.profilePictureUrl
   });
 }
 
@@ -27,7 +28,7 @@ export function saveProfileState(profile) {
   return state;
 }
 
-export function loadPreferenceState(theme = "light") {
+export function loadPreferenceState(theme = "system") {
   return validatePreferenceState({
     ...readJson(preferenceKey, {}),
     theme: localStorage.getItem("acob-theme") || theme

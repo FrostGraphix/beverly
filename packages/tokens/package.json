@@ -9,6 +9,9 @@
   "files": [
     "tokens.css",
     "theme.css",
+    "wallet.css",
+    "WalletGreeting.vue",
+    "WalletGreeting.vue.d.ts",
     "index.js",
     "index.d.ts"
   ],
@@ -17,6 +20,9 @@
     "./tokens.css": "./tokens.css",
     "./theme.css": "./theme.css",
     "./wallet.css": "./wallet.css",
-    "./WalletGreeting.vue": "./WalletGreeting.vue"
+    "./WalletGreeting.vue": {
+      "types": "./WalletGreeting.vue.d.ts",
+      "import": "./WalletGreeting.vue"
+    }
   }
 }

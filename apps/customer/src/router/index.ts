@@ -1,11 +1,19 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 
+function portalHistoryBase(configuredBase: string): string {
+    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '/';
+    if (typeof window === 'undefined' || base === '/') return base;
+    return window.location.pathname.startsWith(base) ? base : '/';
+}
+
 const routes: RouteRecordRaw[] = [
     { path: '/',           name: 'home',     component: () => import('../views/Home.vue'),      meta: { auth: true } },
     { path: '/signup',     name: 'signup',   component: () => import('../views/Signup.vue'),    meta: { guest: true } },
     { path: '/login',      name: 'login',    component: () => import('../views/Login.vue'),     meta: { guest: true } },
     { path: '/recover',    name: 'recover',  component: () => import('../views/Recover.vue'),   meta: { guest: true } },
+    { path: '/terms',      name: 'terms',    component: () => import('../views/Terms.vue') },
+    { path: '/privacy',    name: 'privacy',  component: () => import('../views/Privacy.vue') },
     { path: '/verify',     name: 'verify',   component: () => import('../views/Verify.vue') },
     { path: '/kyc',        name: 'kyc',      component: () => import('../views/Kyc.vue'),       meta: { auth: true } },
     { path: '/onboard-meter', name: 'onboard-meter', component: () => import('../views/OnboardMeter.vue'), meta: { auth: true } },
@@ -14,6 +22,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/meter-orders', name: 'meter-orders', component: () => import('../views/MeterOrders.vue'), meta: { auth: true } },
     { path: '/wallet',     name: 'wallet',   component: () => import('../views/Wallet.vue'),    meta: { auth: true } },
     { path: '/wallet/fund', name: 'fund-wallet', component: () => import('../views/FundWallet.vue'), meta: { auth: true, kyc: 1 } },
+    { path: '/wallet/funding', name: 'funding-history', component: () => import('../views/FundingHistory.vue'), meta: { auth: true } },
     { path: '/meters',     name: 'meters',   component: () => import('../views/Meters.vue'),    meta: { auth: true } },
     { path: '/transactions', name: 'transactions', component: () => import('../views/Transactions.vue'), meta: { auth: true } },
     { path: '/receipts',      name: 'receipts',       component: () => import('../views/Receipts.vue'),       meta: { auth: true } },
@@ -22,11 +31,12 @@ const routes: RouteRecordRaw[] = [
     { path: '/profile',    name: 'profile',  component: () => import('../views/Profile.vue'),   meta: { auth: true } },
     { path: '/security',   name: 'security', component: () => import('../views/Security.vue'),  meta: { auth: true } },
     { path: '/disputes',   name: 'disputes', component: () => import('../views/Disputes.vue'),  meta: { auth: true } },
+    { path: '/help',       name: 'help',     component: () => import('../views/Help.vue'),      meta: { auth: true } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue') },
 ];
 
 export const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(portalHistoryBase(import.meta.env.BASE_URL)),
     routes,
     scrollBehavior: () => ({ top: 0 }),
 });

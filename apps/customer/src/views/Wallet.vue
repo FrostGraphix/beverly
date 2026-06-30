@@ -43,8 +43,11 @@ onMounted(async () => {
         <router-link to="/wallet/fund" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
           Add Money
         </router-link>
+        <router-link to="/wallet/funding" class="bw-btn" style="text-decoration:none; flex:1; justify-content:center">
+          Funding
+        </router-link>
         <router-link to="/transactions" class="bw-btn" style="text-decoration:none; flex:1; justify-content:center">
-          History
+          Spending
         </router-link>
       </div>
     </div>

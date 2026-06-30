@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api } from '../lib/api';
+import { api, redirectToPayment } from '../lib/api';
 import { naira } from '../lib/format';
 
 const amountRaw = ref('');
@@ -18,9 +18,9 @@ async function fund() {
     try {
         const r = await api.post<{ authorizationUrl: string }>('/api/v1/customer/wallet/fund', {
             amount_minor: amt,
-            callback_url: `${window.location.origin}/wallet?funded=1`,
+            callback_url: `${window.location.origin}/wallet/fund?funded=1`,
         });
-        window.location.href = r.authorizationUrl;
+        redirectToPayment(r.authorizationUrl);
     } catch (e: any) {
         error.value = e?.message ?? 'Could not initiate payment.';
     } finally { loading.value = false; }

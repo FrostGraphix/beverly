@@ -3,9 +3,11 @@ import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapp
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
+import { isCreditTokenRoute, meterPhaseFromRow } from "./token-flow.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
 
 const tableFetchPageSize = 500;
+const liveReadPageSize = 20;
 const maxTableRows = 20000;
 export const tableSiteOptions = [
   { value: "", label: "All sites" },
@@ -43,10 +45,159 @@ function stationFilter(options) {
   return options.siteId ? { stationId: options.siteId } : {};
 }
 
+function searchFilter(options) {
+  const searchTerm = String(options.searchTerm || "").trim();
+  return searchTerm ? { searchTerm } : {};
+}
+
+function normalizeLiveReadOrderBy(orderBy, keyMap = {}) {
+  const rawOrderBy = String(orderBy || "").trim();
+  if (!rawOrderBy) return "";
+  const [rawKey, rawDirection = "asc"] = rawOrderBy.split(/\s+/);
+  const mappedKey = keyMap[String(rawKey || "").toLowerCase()];
+  if (!mappedKey) return "";
+  const direction = String(rawDirection || "").toLowerCase() === "desc" ? "desc" : "asc";
+  return `${mappedKey} ${direction}`;
+}
+
+const customerOrderByKeys = {
+  id: "customerId",
+  customerid: "customerId",
+  name: "customerName",
+  customername: "customerName"
+};
+
+const accountOrderByKeys = {
+  id: "customerId",
+  customerid: "customerId",
+  name: "customerName",
+  customername: "customerName",
+  meterid: "meterId",
+  tariffid: "tariffId",
+  communicationway: "communicationWay",
+  ctratio: "ctRatio",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const gatewayOrderByKeys = {
+  id: "gatewayId",
+  gatewayid: "gatewayId",
+  name: "gatewayName",
+  gatewayname: "gatewayName",
+  status: "status",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const tariffOrderByKeys = {
+  id: "tariffId",
+  tariffid: "tariffId",
+  name: "tariffName",
+  tariffname: "tariffName",
+  price: "price",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const meterOrderByKeys = {
+  id: "meterId",
+  meterid: "meterId",
+  metertype: "meterType",
+  communicationway: "communicationWay",
+  protocolversion: "protocolVersion",
+  status: "status",
+  stationid: "stationId",
+  createdate: "createDate",
+  updatedate: "updateDate"
+};
+
+const logOrderByKeys = {
+  id: "id",
+  userid: "userId",
+  action: "action",
+  status: "status",
+  remark: "remark",
+  createdate: "createDate",
+  stationid: "stationId"
+};
+
 export function routeSupportsSiteFilter(route) {
   return route.hash.startsWith("#/remote-operation-record/")
     || route.hash.startsWith("#/prepay-report/")
     || route.hash.startsWith("#/remote-support/");
+}
+
+function routeUsesServerPagination(route) {
+  const hash = String(route?.hash || "");
+  return hash.includes("management/customer")
+    || hash.includes("management/account")
+    || hash.includes("management/gateway")
+    || hash.includes("management/tariff")
+    || hash.includes("admin/log")
+    || hash.includes("admin/meter")
+    || hash.includes("token-generate")
+    || hash.includes("prepay-report/abnormal-alarm")
+    || hash.includes("prepay-report/low-purchase-situation")
+    || hash.startsWith("#/remote-operation/");
+}
+
+function isLowPurchaseAllSites(route, options = {}) {
+  return String(route?.hash || "").includes("prepay-report/low-purchase-situation") && !String(options.siteId || "").trim();
+}
+
+function isPrepaySituationRoute(route) {
+  const hash = String(route?.hash || "");
+  return hash.includes("prepay-report/low-purchase-situation") || hash.includes("prepay-report/long-nonpurchase-situation");
+}
+
+function parseOrderBy(orderBy, route) {
+  const raw = String(orderBy || "").trim();
+  if (!raw) return { direction: routeSortDirection(route), field: routeSortPolicy(route).key };
+  const parts = raw.split(/\s+/);
+  const field = parts[0] || routeSortPolicy(route).key;
+  const direction = String(parts[1] || "").toLowerCase() === "desc" ? "desc" : "asc";
+  return { direction, field };
+}
+
+function requiresThreePhaseServerFilter(route, options = {}) {
+  return isCreditTokenRoute(route) && String(options.meterPhaseFilter || "") === "three-phase";
+}
+
+function meterReadRoute() {
+  return {
+    hash: "#/admin/meter",
+    title: "Meter",
+    apis: ["/api/meter/read"],
+    columns: ["meterId"]
+  };
+}
+
+function meterIdSet(rows = []) {
+  return new Set(
+    rows
+      .map((row) => String(row?.meterId || row?.id || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function lowPurchaseAggregateKey(row = {}) {
+  return [
+    row.customerId,
+    row.meterId,
+    row.customerName
+  ].map((value) => String(value || "").trim().toUpperCase()).join(":");
+}
+
+function pushUniqueLowPurchaseRows(targetRows, nextRows, seenKeys) {
+  for (const row of nextRows) {
+    const key = lowPurchaseAggregateKey(row);
+    if (!key || seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    targetRows.push(row);
+  }
 }
 
 export function tableDataPath(route) {
@@ -61,6 +212,7 @@ export function tableDataPath(route) {
   if (route.hash.includes("low-purchase-situation")) return "/api/PrepayReport/LowPurchaseSituation";
   if (route.hash.includes("consumption-statistics")) return "/api/DailyDataMeter/read";
   if (route.hash.includes("daily-data-meter")) return "/api/DailyDataMeter/read";
+  if (route.hash.includes("abnormal-alarm")) return "/api/local/abnormal-alarms";
   if (route.hash.includes("remote-support/file-upload")) return "/api/local/importJobs/read";
   if (route.hash.includes("management/gateway")) return "/api/gateway/read";
   if (route.hash.includes("management/customer")) return "/api/customer/read";
@@ -124,6 +276,109 @@ function buildTableRequest(route, requestOptions) {
       pagination: "pageNumber"
     };
   }
+  if (lowerPath.includes("/api/customer/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/gateway/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/tariff/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/local/abnormal-alarms")) {
+    const hash = String(route.hash || "");
+    const query = hash.includes("?") ? hash.split("?")[1] : "";
+    const params = new URLSearchParams(query);
+    const alarm = params.get("alarm") || "";
+    const pageSize = Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    const { direction, field } = parseOrderBy(requestOptions.orderBy, route);
+    return {
+      path,
+      method: "GET",
+      params: {
+        alarm,
+        station_id: requestOptions.siteId || "",
+        from: requestOptions.from,
+        to: requestOptions.to,
+        searchTerm: requestOptions.searchTerm || "",
+        sortBy: field,
+        sortDirection: direction,
+        offset: (pageNumber - 1) * pageSize,
+        pageLimit: pageSize,
+        limit: pageSize
+      },
+      pagination: "offset"
+    };
+  }
+  if (lowerPath.includes("/api/meter/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...(String(requestOptions.meterPhaseFilter || "") === "three-phase" ? { isThreePhase: true } : {}),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/log/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
+  if (lowerPath.includes("/api/account/read")) {
+    return {
+      path,
+      method: "POST",
+      payload: {
+        pageNumber: requestOptions.pageNumber,
+        pageSize: Math.min(Number(requestOptions.pageSize || liveReadPageSize), liveReadPageSize),
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions)
+      },
+      pagination: "pageNumber"
+    };
+  }
   if (lowerPath.includes("/api/prepayreport/longnonpurchasesituation")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
@@ -137,7 +392,19 @@ function buildTableRequest(route, requestOptions) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
   }
   if (lowerPath.includes("/loadprofile/")) {
-    return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), dateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
+    return {
+      path,
+      method: "POST",
+      payload: {
+        lang: "en",
+        ...stationFilter(requestOptions),
+        ...searchFilter(requestOptions),
+        currentDateRange: [requestOptions.from, requestOptions.to],
+        pageNumber: requestOptions.pageNumber,
+        pageSize: requestOptions.pageSize
+      },
+      pagination: "pageNumber"
+    };
   }
   if (lowerPath.includes("/eventnotification/")) {
     return { path, method: "POST", payload: { lang: "en", ...stationFilter(requestOptions), currentDateRange: [requestOptions.from, requestOptions.to], pageNumber: requestOptions.pageNumber, pageSize: requestOptions.pageSize }, pagination: "pageNumber" };
@@ -153,7 +420,21 @@ export function tableRequest(route, options = {}) {
   const requestOptions = tableOptions(options);
   const req = buildTableRequest(route, requestOptions);
   if (requestOptions.orderBy && req.payload && typeof req.payload === 'object') {
-    req.payload.orderBy = requestOptions.orderBy;
+    const lowerPath = req.path.toLowerCase();
+    const orderBy = lowerPath === "/api/customer/read"
+      ? normalizeLiveReadOrderBy(requestOptions.orderBy, customerOrderByKeys)
+      : lowerPath === "/api/account/read"
+        ? normalizeLiveReadOrderBy(requestOptions.orderBy, accountOrderByKeys)
+        : lowerPath === "/api/gateway/read"
+          ? normalizeLiveReadOrderBy(requestOptions.orderBy, gatewayOrderByKeys)
+          : lowerPath === "/api/tariff/read"
+            ? normalizeLiveReadOrderBy(requestOptions.orderBy, tariffOrderByKeys)
+            : lowerPath === "/api/meter/read"
+              ? normalizeLiveReadOrderBy(requestOptions.orderBy, meterOrderByKeys)
+              : lowerPath === "/api/log/read"
+                ? normalizeLiveReadOrderBy(requestOptions.orderBy, logOrderByKeys)
+                : requestOptions.orderBy;
+    if (orderBy) req.payload.orderBy = orderBy;
   }
   return req;
 }
@@ -286,6 +567,16 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
   }
 
   const pageCount = Math.min(Math.ceil(total / requestedSize), Math.ceil(maxTableRows / requestedSize));
+  if (request.path.toLowerCase() === "/api/account/read") {
+    for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
+      const pageResponse = await sendTableRequest(withPage(request, pageIndex), api);
+      const added = pushUniqueRows(rows, responseRows(pageResponse, route).rows, seenKeys, route);
+      if (!added || rows.length >= maxTableRows) break;
+    }
+    const finalRows = rows.slice(0, Math.min(total || rows.length, maxTableRows));
+    return { rows: finalRows, total: Math.min(total || finalRows.length, finalRows.length) };
+  }
+
   const pageRequests = [];
   for (let pageIndex = 1; pageIndex < pageCount; pageIndex += 1) {
     pageRequests.push(sendTableRequest(withPage(request, pageIndex), api));
@@ -302,8 +593,134 @@ async function fetchAllTableRows(request, route, api = defaultTableApi) {
 }
 
 export async function fetchTableData(route, options = {}, api = defaultTableApi) {
+  const requestOptions = tableOptions(options);
+  const { direction: requestedDirection, field: requestedField } = parseOrderBy(requestOptions.orderBy, route);
+  if (requiresThreePhaseServerFilter(route, requestOptions)) {
+    const meterRoute = meterReadRoute();
+    const meterRequest = tableRequest(meterRoute, {
+      pageNumber: 1,
+      pageSize: tableFetchPageSize,
+      siteId: requestOptions.siteId,
+      meterPhaseFilter: "three-phase"
+    });
+    const meterCollection = await fetchAllTableRows(meterRequest, meterRoute, api);
+    const threePhaseMeterIds = meterIdSet(meterCollection.rows);
+    if (!threePhaseMeterIds.size) {
+      return {
+        envelope: {},
+        rows: [],
+        total: 0,
+        serverPaginated: true,
+        meta: {
+          path: "/api/account/read",
+          method: "POST",
+          source: "meter-phase-filter"
+        }
+      };
+    }
+
+    const accountRequest = tableRequest(route, {
+      ...requestOptions,
+      pageNumber: 1,
+      pageSize: tableFetchPageSize
+    });
+    const accountCollection = await fetchAllTableRows(accountRequest, route, api);
+    const phaseRows = accountCollection.rows
+      .filter((row) => threePhaseMeterIds.has(String(row?.meterId || "").trim()))
+      .map((row) => ({ ...row, isThreePhase: true, meterPhase: meterPhaseFromRow({ ...row, isThreePhase: true }) }));
+    const mappedAll = mapTableCollection({ data: { rows: phaseRows, total: phaseRows.length } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), liveReadPageSize);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: "/api/account/read",
+        method: "POST",
+        source: "meter-phase-filter"
+      }
+    };
+  }
+  if (isLowPurchaseAllSites(route, requestOptions)) {
+    const seenKeys = new Set();
+    const aggregateRows = [];
+    const baseRequest = tableRequest(route, {
+      ...requestOptions,
+      pageNumber: 1,
+      pageSize: tableFetchPageSize
+    });
+    const baseCollection = await fetchAllTableRows(baseRequest, route, api);
+    pushUniqueLowPurchaseRows(aggregateRows, baseCollection.rows, seenKeys);
+    for (const site of tableSiteOptions.filter((option) => option.value)) {
+      const siteRequest = tableRequest(route, {
+        ...requestOptions,
+        siteId: site.value,
+        pageNumber: 1,
+        pageSize: tableFetchPageSize
+      });
+      const siteCollection = await fetchAllTableRows(siteRequest, route, api);
+      pushUniqueLowPurchaseRows(
+        aggregateRows,
+        siteCollection.rows.map((row) => ({ ...row, stationId: row.stationId || site.value })),
+        seenKeys
+      );
+    }
+    const rows = aggregateRows.length ? aggregateRows : baseCollection.rows;
+    const mappedAll = mapTableCollection({ data: { rows, total: rows.length } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), 20);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: "/api/PrepayReport/LowPurchaseSituation",
+        method: "POST",
+        source: "all-sites-aggregate"
+      }
+    };
+  }
   const request = tableRequest(route, options);
   const dataPath = request.path;
+  if (isPrepaySituationRoute(route) && !String(requestOptions.siteId || "").trim()) {
+    const fullCollection = await fetchAllTableRows(request, route, api);
+    const mappedAll = mapTableCollection({ data: { rows: fullCollection.rows, total: fullCollection.total } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.min(Number(requestOptions.pageSize || 10), 20);
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: {
+        path: request.path,
+        method: request.method,
+        source: "verified-live-total"
+      }
+    };
+  }
+  if (routeUsesServerPagination(route)) {
+    const collection = responseRows(await sendTableRequest(request, api), route);
+    const mapped = mapTableCollection({ data: { rows: collection.rows, total: collection.total } }, route);
+    return {
+      ...mapped,
+      serverPaginated: true,
+      meta: {
+        path: request.path,
+        method: request.method,
+        source: mapped.envelope?._proxy?.source || "mapped"
+      }
+    };
+  }
   const backgroundPaths = route.apis.filter((path) => path.toLowerCase() !== dataPath.toLowerCase() && !isWriteEndpoint(path));
   await Promise.all(backgroundPaths.map((path) => api.postApi(path, { pageNumber: 1, pageSize: 20 }).catch(() => null)));
   const collection = await fetchAllTableRows(request, route, api);
@@ -327,4 +744,4 @@ export function printModelForRoute(route, row) {
 }
 
 
-export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages };
+export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, totalPages };

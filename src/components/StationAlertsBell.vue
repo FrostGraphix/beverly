@@ -15,10 +15,10 @@
             <span>{{ unread ? `${unread} new operational alert${unread === 1 ? '' : 's'}` : 'Station health updates' }}</span>
           </div>
           <div class="station-alert-head-actions">
-            <BaseButton class="station-alert-mark-read" :disabled="!unread" @click="markRead">Mark all read</BaseButton>
-            <BaseIconButton class="station-alert-close" aria-label="Close station alerts" @click="closePanel">
+            <button type="button" class="station-alert-mark-read" :disabled="!unread" @click="markRead">Mark all read</button>
+            <button type="button" class="station-alert-close" aria-label="Close station alerts" @click="closePanel">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
-            </BaseIconButton>
+            </button>
           </div>
         </header>
         <div class="station-alert-body">
@@ -44,7 +44,6 @@
 
 <script>
 import BaseIconButton from './base/BaseIconButton.vue';
-import BaseButton from './base/BaseButton.vue';
 import { getApi } from '../services/api.js';
 
 const storageKey = 'beverly.station-health-state';
@@ -58,7 +57,7 @@ function reasonFor(row) {
 }
 
 export default {
-  name: 'StationAlertsBell', components: { BaseIconButton, BaseButton },
+  name: 'StationAlertsBell', components: { BaseIconButton },
   data: () => ({ open: false, loading: false, alerts: [], unread: 0, poller: null }),
   mounted() { this.refresh(); this.poller = window.setInterval(this.refresh, 60000); window.addEventListener('pointerdown', this.closeOutside, true); },
   beforeUnmount() { window.clearInterval(this.poller); window.removeEventListener('pointerdown', this.closeOutside, true); },

@@ -1,10 +1,12 @@
 <template>
   <main class="login-page auth-page" aria-label="Beverly sign in">
     <div class="auth-bg" aria-hidden="true">
+      <div class="auth-bg-orb"></div>
       <div class="auth-bg-beam auth-bg-beam--a"></div>
       <div class="auth-bg-beam auth-bg-beam--b"></div>
       <div class="auth-bg-glow"></div>
       <div class="auth-bg-grid"></div>
+      <div class="auth-bg-flash"></div>
     </div>
 
     <section class="auth-panel auth-panel--right">
@@ -16,7 +18,8 @@
             <span class="auth-card-mark">B</span>
             <span class="auth-card-name">Beverly</span>
           </div>
-          <h2 class="auth-card-title">Sign In</h2>
+          <h2 class="auth-card-title">Sign in</h2>
+          <p class="auth-card-sub">Beverly Operations</p>
         </header>
 
         <transition name="auth-alert-fade">
@@ -42,14 +45,14 @@
           <legend class="sr-only">Credentials</legend>
 
           <label class="auth-field" :class="{ 'auth-field--active': focused === 'user', 'auth-field--filled': form.userId, 'auth-field--invalid': fieldErrors.userId }">
-            <span class="auth-field-label">{{ portalCopy.userLabel }}</span>
+            <span class="auth-field-label">Email</span>
             <span class="auth-field-wrap">
               <BaseInput
                 v-model.trim="form.userId"
                 name="userId"
                 type="text"
                 data-testid="login-user-id"
-                :placeholder="portalCopy.userPlaceholder"
+                placeholder="Enter your email address"
                 autocomplete="username"
                 autofocus
                 @focus="focused = 'user'"
@@ -88,7 +91,7 @@
         <div class="auth-row">
           <BaseCheckbox v-model="rememberUsername" class="auth-remember">Remember me</BaseCheckbox>
           <BaseButton class="auth-link" variant="ghost" size="sm" type="button" @click="forgotPassword">
-            {{ portalCopy.helpLabel }}
+            Forgot password?
           </BaseButton>
         </div>
 
@@ -99,7 +102,7 @@
           native-type="submit"
           :disabled="loading"
         >
-          <span v-if="!loading" class="auth-submit-inner">{{ portalCopy.submitLabel }}</span>
+          <span v-if="!loading" class="auth-submit-inner">Sign in</span>
           <span v-else class="auth-submit-inner">
             <span class="auth-spinner" aria-hidden="true"></span>
             Signing in...
@@ -107,23 +110,32 @@
         </BaseButton>
 
       </form>
+
+      <MfaChallengeModal
+        v-if="mfaRequired"
+        :factor-id="mfaFactorId"
+        @verified="onMfaVerified"
+        @cancelled="onMfaCancelled"
+      />
     </section>
   </main>
 </template>
 
 <script>
-import { demoLogin, login } from "../services/api";
+import { login } from "../services/api";
 import { recordClientError } from "../services/error-logger.mjs";
+import { getMFAStatus } from "../services/mfa-service.mjs";
 import BaseButton from "./base/BaseButton.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
+import MfaChallengeModal from "./MfaChallengeModal.vue";
 
 const rememberedUserKey = "beverly.rememberedUser";
 
 export default {
   name: "LoginPage",
-  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput },
+  components: { BaseButton, BaseCheckbox, BaseIconButton, BaseInput, MfaChallengeModal },
   data() {
     return {
       showPassword: false,
@@ -135,7 +147,8 @@ export default {
       sessionMessage: "",
       maintenanceNotice: "",
       focused: "",
-      portal: "admin",
+      mfaRequired: false,
+      mfaFactorId: null,
       form: {
         userId: "",
         password: "",
@@ -152,34 +165,7 @@ export default {
     }
     this.maintenanceNotice = import.meta.env?.VITE_AUTH_NOTICE || "";
   },
-  computed: {
-    portalCopy() {
-      if (this.portal === "vendor") {
-        return {
-          userLabel: "Vendor username",
-          userPlaceholder: "Enter vendor username",
-          submitLabel: "Sign in",
-          helpLabel: "Forgot password?"
-        };
-      }
-      return {
-        userLabel: "Email",
-        userPlaceholder: "Enter your email address",
-        submitLabel: "Sign in",
-        helpLabel: "Forgot password?"
-      };
-    }
-  },
   methods: {
-    setPortal(portal) {
-      this.portal = portal;
-      this.error = "";
-      this.errorReference = "";
-    },
-    enterDemo(portal) {
-      demoLogin(portal);
-      this.$emit("logged-in");
-    },
     async submit() {
       this.error = "";
       this.errorReference = "";
@@ -198,9 +184,21 @@ export default {
         await login({ userId: this.form.userId, password: this.form.password });
         if (this.rememberUsername) localStorage.setItem(rememberedUserKey, this.form.userId);
         else localStorage.removeItem(rememberedUserKey);
+
+        // Check MFA enrollment
+        try {
+          const mfa = await getMFAStatus();
+          if (mfa.enrolled) {
+            this.mfaRequired = true;
+            this.mfaFactorId = mfa.factorId;
+            this.loading = false;
+            return;
+          }
+        } catch { /* MFA unavailable — proceed without */ }
+
         this.$emit("logged-in");
       } catch (err) {
-        this.error = "Sign in failed. Check credentials and retry.";
+        this.error = err?.message || "Sign in failed. Check credentials and retry.";
         this.errorReference = recordClientError("login-submit-error", err, {
           userId: this.form.userId
         });
@@ -221,10 +219,19 @@ export default {
       });
     },
     forgotPassword() {
-      this.error = this.portal === "vendor" ? "Contact your ACOB administrator." : "Contact your Beverly administrator.";
+      this.error = "Contact your Beverly administrator.";
       this.errorReference = recordClientError("login-help-requested", new Error(this.error), {
         userId: this.form.userId || "unknown"
       });
+    },
+    onMfaVerified() {
+      this.mfaRequired = false;
+      this.mfaFactorId = null;
+      this.$emit("logged-in");
+    },
+    onMfaCancelled() {
+      this.mfaRequired = false;
+      this.mfaFactorId = null;
     }
   },
   watch: {
@@ -236,43 +243,5 @@ export default {
 </script>
 
 <style scoped>
-.portal-switch,
-.demo-entry {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2, 8px);
-  margin-bottom: var(--space-4, 16px);
-}
-
-.portal-switch-button {
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.28));
-  border-radius: var(--radius-md, 12px);
-  background: color-mix(in srgb, var(--surface-elevated, #fff) 86%, transparent);
-  color: var(--text-secondary, #64748b);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 700;
-  padding: 10px 12px;
-}
-
-.portal-switch-button.active {
-  background: var(--primary-color, #16a34a);
-  border-color: var(--primary-color, #16a34a);
-  color: var(--primary-contrast, #fff);
-}
-
-.demo-entry {
-  margin-top: var(--space-3, 12px);
-}
-
-.demo-entry-button {
-  min-height: 42px;
-}
-
-@media (max-width: 640px) {
-  .portal-switch,
-  .demo-entry {
-    grid-template-columns: 1fr;
-  }
-}
+/* Clean login design */
 </style>

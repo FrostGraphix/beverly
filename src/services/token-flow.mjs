@@ -19,6 +19,49 @@ export function isCreditTokenRoute(route = {}) {
   return String(route.hash || "").includes("credit-token") && !String(route.hash || "").includes("clear-credit");
 }
 
+export function meterPhaseFromRow(row = {}) {
+  const direct = row.isThreePhase ?? row.IsThreePhase ?? row.is3Phase ?? row.threePhase;
+  if (direct === true || direct === 1 || direct === "1") return "three-phase";
+  if (direct === false || direct === 0 || direct === "0") return "single-phase";
+
+  const phaseText = [
+    row.meterPhase,
+    row.phase,
+    row.phaseType,
+    row.meterType,
+    row.MeterType,
+    row.type
+  ].map((value) => String(value ?? "").trim().toLowerCase()).find(Boolean) || "";
+
+  if (/(^|[^0-9])3([^0-9]|$)|three|3p|3-phase|3 phase/.test(phaseText)) return "three-phase";
+  if (/(^|[^0-9])1([^0-9]|$)|single|1p|1-phase|1 phase/.test(phaseText)) return "single-phase";
+  return "";
+}
+
+export function isThreePhaseTokenMode(form = {}) {
+  return form.requireThreePhase === true || String(form.meterPhaseMode || "").toLowerCase() === "three-phase";
+}
+
+export function tokenUsesS2(form = {}) {
+  // An explicit per-meter override always wins over the phase-derived guess.
+  // (STS S1/S2 standard is not reliably implied by single/three-phase.)
+  if (form.isS2Override === true) return true;
+  if (form.isS2Override === false) return false;
+  return form.isS2 === true || isThreePhaseTokenMode(form) || meterPhaseFromRow(form) === "three-phase";
+}
+
+export function keySyncEligible(form = {}) {
+  return tokenUsesS2(form) || meterPhaseFromRow(form) === "three-phase";
+}
+
+export function isTokenRejectRemark(value = "") {
+  return /token\s*reject|tokenreject/i.test(String(value || ""));
+}
+
+export function usesLocalTokenPreview(route = {}) {
+  return isCreditTokenRoute(route);
+}
+
 export function tokenEndpoint(route = {}, action = "") {
   const hash = String(route.hash || "");
   if (action === "Recharge") return "/api/token/creditToken/generate";
@@ -64,6 +107,7 @@ export function tokenValidationError(route, form = {}, tariff = null, options = 
   if (!String(form.meterId || "").trim()) return "meterId is required";
   if (requireAuthorization && !String(form.authorizationPassword || "").trim()) return "authorizationPassword is required";
   if (isCreditTokenRoute(route)) {
+    if (isThreePhaseTokenMode(form) && meterPhaseFromRow(form) !== "three-phase") return "3-phase meter is required";
     if (!tariff) return "Tariff data is missing";
     if (!parseTariffUnitPrice(tariff.price)) return "Tariff price is invalid";
     if (String(form.purchaseWay || "paid") === "paid" && !(Number(form.amount) > 0)) return "amount is required";
@@ -94,7 +138,7 @@ export function buildTokenPayload(route, form = {}, options = {}) {
       totalUnit: Number(form.totalUnit || 0),
       payDebtPercent: Number(form.payDebtPercent || 0),
       paymentMethod: form.paymentMethod || "Cash",
-      isS2: false
+      isS2: tokenUsesS2(form)
     };
   }
 
@@ -106,6 +150,39 @@ export function buildTokenPayload(route, form = {}, options = {}) {
   }
 
   return base;
+}
+
+export function buildMeterKeyUpdatePayload(form = {}) {
+  const sgcNew = String(form.sgcNew ?? form.sgc ?? "").trim();
+  const krnNew = Number(form.krnNew ?? form.krn);
+  const kenNew = Number(form.kenNew ?? form.ken);
+  const tiNew = Number(form.tiNew ?? form.ti);
+  const ktNew = Number(form.ktNew ?? form.kt);
+  const baseYearNew = Number(form.baseYearNew ?? form.baseYear);
+  if (!String(form.meterId || "").trim() || !sgcNew) return null;
+  if (![krnNew, kenNew, tiNew, ktNew, baseYearNew].every(Number.isFinite)) return null;
+  return [{
+    meterId: String(form.meterId).trim(),
+    sgcNew,
+    krnNew,
+    kenNew,
+    tiNew,
+    ktNew,
+    baseYearNew
+  }];
+}
+
+export function buildChangeMeterKeyTokenPayload(form = {}) {
+  return {
+    meterId: String(form.meterId || "").trim()
+  };
+}
+
+export function extractChangeMeterKeyTokens(response = {}) {
+  const source = response?.result || response?.data || response || {};
+  return [source.tokenFirst, source.tokenSecond]
+    .map((token) => String(token || "").replace(/\s+/g, ""))
+    .filter(Boolean);
 }
 
 export function guardedPreviewError(error = {}) {
@@ -139,6 +216,7 @@ export function buildLocalTokenPreview(route = {}, form = {}) {
     meterId: form.meterId || "",
     tariffId: form.tariffId || "",
     stationId: form.stationId || "",
+    meterPhase: meterPhaseFromRow(form),
     totalPaid: form.amount || form.totalPaid || "",
     totalUnit: form.totalUnit || "",
     maximumPower: form.maximumPower || "",

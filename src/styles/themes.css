@@ -5,55 +5,78 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --color-brand: #18a957;
-  --color-brand-hover: #128944;
-  --color-brand-strong: #0b5f32;
-  --color-brand-soft: rgba(24, 169, 87, 0.12);
-  --color-text: #243227;
-  --color-text-strong: #07180e;
-  --color-text-muted: #5f6f64;
-  --color-text-faint: #8a9a90;
-  --color-text-inverse: #ffffff;
-  --color-surface-page: #f7fbf6;
-  --color-surface-card: #ffffff;
-  --color-surface-glass: rgba(255, 255, 255, 0.82);
-  --color-surface-overlay: rgba(7, 24, 14, 0.42);
-  --color-border: rgba(24, 169, 87, 0.16);
-  --color-border-strong: rgba(24, 169, 87, 0.30);
-  --color-success: #18a957;
-  --color-success-soft: rgba(24, 169, 87, 0.10);
-  --color-danger: #dc2626;
-  --color-danger-soft: rgba(220, 38, 38, 0.10);
-  --color-warning: #d9a300;
-  --color-warning-soft: rgba(217, 163, 0, 0.12);
-  --color-info: #0f8f63;
-  --color-info-soft: rgba(15, 143, 99, 0.10);
-  --color-neutral: #647067;
-  --color-neutral-soft: rgba(100, 112, 103, 0.10);
-  --color-source-live: #18a957;
-  --color-source-live-soft: rgba(24, 169, 87, 0.12);
-  --color-source-cached: #d9a300;
-  --color-source-cached-soft: rgba(217, 163, 0, 0.12);
-  --color-source-demo: #647067;
-  --color-source-demo-soft: rgba(100, 112, 103, 0.12);
-  --bg-header: rgba(255, 255, 255, 0.94);
-  --theme-color: #18a957;
-  --theme-color-bright: #35d27a;
-  --theme-color-dim: #bdeccf;
-  --sidebar-bg-start: #052b17;
-  --sidebar-bg-end: #0b5f32;
-  --sidebar-text: rgba(232, 247, 237, 0.74);
-  --sidebar-text-hover: #ffffff;
-  --sidebar-active-bg: linear-gradient(90deg, rgba(53, 210, 122, 0.24) 0%, rgba(53, 210, 122, 0.05) 100%);
-  --sidebar-active-border: #35d27a;
-  --sidebar-logo-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(53, 210, 122, 0.08));
-  --sidebar-logo-border: rgba(255, 255, 255, 0.16);
-  --sidebar-hover-bg: rgba(255, 255, 255, 0.08);
-  --sidebar-hover-border: rgba(255, 255, 255, 0.14);
-  --sidebar-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(24, 169, 87, 0.05));
-  --sidebar-footer-border: rgba(255, 255, 255, 0.14);
-  --bev-shadow-glow: 0 0 0 1px rgba(24, 169, 87, 0.18), 0 14px 38px rgba(24, 169, 87, 0.14);
-  --bev-shadow-glow-sm: 0 0 0 1px rgba(24, 169, 87, 0.12), 0 8px 20px rgba(24, 169, 87, 0.12);
+
+  /* ── Brand — wallet oklch green palette ── */
+  --color-brand:        oklch(70% 0.19 145);
+  --color-brand-hover:  oklch(62% 0.17 145);
+  --color-brand-strong: oklch(42% 0.12 145);
+  --color-brand-soft:   oklch(70% 0.19 145 / 0.18);
+
+  /* ── Text — wallet light text scale ── */
+  --color-text:         oklch(42% 0.020 240);
+  --color-text-strong:  oklch(22% 0.020 240);
+  --color-text-muted:   oklch(58% 0.015 240);
+  --color-text-faint:   oklch(72% 0.010 240);
+  /* Dark ink on brand green passes WCAG AA; white on bright green does not */
+  --color-text-inverse: oklch(8% 0.04 145);
+
+  /* ── Surfaces — wallet light surface scale ── */
+  --color-surface-page:    oklch(98% 0.004 240);
+  --color-surface-card:    oklch(100% 0 0);
+  --color-surface-glass:   oklch(100% 0 0 / 0.88);
+  --color-surface-overlay: oklch(20% 0.020 240 / 0.55);
+
+  /* ── Borders — wallet light border scale ── */
+  --color-border:        oklch(20% 0.020 240 / 0.08);
+  --color-border-strong: oklch(20% 0.020 240 / 0.14);
+
+  /* ── Status / semantic ── */
+  --color-success:         oklch(70% 0.19 145);
+  --color-success-soft:    oklch(70% 0.19 145 / 0.14);
+  --color-danger:          oklch(68% 0.20 25);
+  --color-danger-soft:     oklch(68% 0.20 25 / 0.10);
+  --color-warning:         oklch(78% 0.16 75);
+  --color-warning-soft:    oklch(78% 0.16 75 / 0.10);
+  --color-info:            oklch(72% 0.13 220);
+  --color-info-soft:       oklch(72% 0.13 220 / 0.10);
+  --color-neutral:         oklch(58% 0.015 240);
+  --color-neutral-soft:    oklch(97% 0.005 240);
+
+  /* ── Source indicators ── */
+  --color-source-live:        oklch(70% 0.19 145);
+  --color-source-live-soft:   oklch(70% 0.19 145 / 0.14);
+  --color-source-cached:      oklch(78% 0.16 75);
+  --color-source-cached-soft: oklch(78% 0.16 75 / 0.10);
+  --color-source-demo:        oklch(58% 0.015 240);
+  --color-source-demo-soft:   oklch(97% 0.005 240);
+
+  /* ── App chrome — wallet topbar ── */
+  --bg-header: oklch(100% 0 0 / 0.88);
+
+  /* ── Theme accents ── */
+  --theme-color:        oklch(70% 0.19 145);
+  --theme-color-bright: oklch(80% 0.16 145);
+  --theme-color-dim:    oklch(70% 0.19 145 / 0.18);
+
+  /* ── Sidebar — dark green shell (wallet-aligned oklch) ── */
+  --sidebar-bg-start:      oklch(100% 0 0);
+  --sidebar-bg-end:        oklch(100% 0 0);
+  --sidebar-text:          oklch(36% 0.018 240 / 0.88);
+  --sidebar-text-hover:    oklch(22% 0.020 240);
+  --sidebar-active-bg:     linear-gradient(90deg, oklch(70% 0.19 145 / 0.16) 0%, oklch(70% 0.19 145 / 0.05) 100%);
+  --sidebar-active-border: oklch(80% 0.16 145);
+  --sidebar-logo-bg:       oklch(100% 0 0);
+  --sidebar-logo-border:   oklch(20% 0.020 240 / 0.12);
+  --sidebar-hover-bg:      oklch(70% 0.19 145 / 0.08);
+  --sidebar-hover-border:  oklch(70% 0.19 145 / 0.16);
+  --sidebar-footer-bg:     oklch(100% 0 0);
+  --sidebar-footer-border: oklch(20% 0.020 240 / 0.12);
+
+  /* ── Shadows — wallet light shadow scale ── */
+  --bev-shadow-glow:    0 0 0 1px oklch(70% 0.19 145 / 0.18), 0 14px 38px oklch(70% 0.19 145 / 0.10);
+  --bev-shadow-glow-sm: 0 0 0 1px oklch(70% 0.19 145 / 0.12), 0 8px 28px oklch(70% 0.19 145 / 0.10);
+  --tags-view-item-text: oklch(42% 0.12 145);
+  --tags-view-item-active-text: #ffffff;
 }
 
 [data-theme="executive"] {
@@ -98,6 +121,10 @@
   --sidebar-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(74, 222, 128, 0.02));
   --sidebar-footer-border: rgba(74, 222, 128, 0.18);
   --border-dark: rgba(255, 255, 255, 0.14);
+  --tags-view-bg: color-mix(in srgb, var(--bg-card) 94%, var(--primary) 6%);
+  --tags-view-item-bg: color-mix(in srgb, var(--bg-card) 88%, var(--primary) 12%);
+  --tags-view-item-text: var(--color-text-strong);
+  --tags-view-item-active-text: #ffffff;
 }
 
 [data-theme="contrast"] {
@@ -142,4 +169,8 @@
   --sidebar-footer-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 214, 10, 0.02));
   --sidebar-footer-border: rgba(255, 214, 10, 0.18);
   --border-dark: rgba(255, 255, 255, 0.14);
+  --tags-view-bg: color-mix(in srgb, var(--bg-card) 92%, var(--primary) 8%);
+  --tags-view-item-bg: color-mix(in srgb, var(--bg-card) 84%, var(--primary) 16%);
+  --tags-view-item-text: var(--color-text-strong);
+  --tags-view-item-active-text: #ffffff;
 }

@@ -31,27 +31,27 @@
           </span>
         </div>
         <div class="scc-hero-actions">
-          <BaseButton variant="ghost" class="scc-hbtn scc-hbtn--ghost" :disabled="refreshingAgg" @click="refreshAggregates"
+          <button class="scc-hbtn scc-hbtn--ghost" :disabled="refreshingAgg" @click="refreshAggregates"
             :title="lastAggRefresh ? 'Aggregates rebuilt at ' + lastAggRefresh : 'Trigger aggregate refresh now'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" :class="{ 'scc-spin': refreshingAgg }">
               <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
               <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
             </svg>
             {{ refreshingAgg ? 'Rebuilding…' : 'Rebuild' }}
-          </BaseButton>
-          <BaseButton variant="ghost" class="scc-hbtn scc-hbtn--ghost" :disabled="!data || loading" @click="exportCsv" title="Export as CSV">
+          </button>
+          <button class="scc-hbtn scc-hbtn--ghost" :disabled="!data || loading" @click="exportCsv" title="Export as CSV">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Export
-          </BaseButton>
-          <BaseButton variant="primary" class="scc-hbtn scc-hbtn--primary" :disabled="loading" @click="load">
+          </button>
+          <button class="scc-hbtn scc-hbtn--primary" :disabled="loading" @click="load">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" :class="{ 'scc-spin': loading }">
               <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
             {{ loading ? 'Loading…' : 'Refresh' }}
-          </BaseButton>
+          </button>
         </div>
       </div>
     </header>
@@ -65,9 +65,9 @@
         <div class="scc-ctrl-body">
           <div class="scc-daterange">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-cal-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <BaseInput v-model="from" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="from" type="date" class="scc-date" @change="onCustomDate" />
             <span class="scc-date-sep" aria-hidden="true">&rarr;</span>
-            <BaseInput v-model="to" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="to" type="date" class="scc-date" @change="onCustomDate" />
           </div>
         </div>
       </div>
@@ -80,18 +80,18 @@
         <div class="scc-ctrl-body">
           <!-- Granularity -->
           <div class="scc-seg">
-            <BaseButton v-for="g in GRANS" :key="g.key"
+            <button v-for="g in GRANS" :key="g.key"
               :class="['scc-seg-btn', granularity === g.key && 'scc-seg-btn--active']"
-              @click="setGranularity(g.key)">{{ g.label }}</BaseButton>
+              @click="setGranularity(g.key)">{{ g.label }}</button>
           </div>
 
           <!-- Station filter -->
           <div class="scc-select-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-select-icon"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-            <BaseSelect v-model="stationFilter" class="scc-select" @change="load">
+            <select v-model="stationFilter" class="scc-select" @change="load">
               <option value="">All stations</option>
               <option v-for="s in STATIONS" :key="s" :value="s">{{ s }}</option>
-            </BaseSelect>
+            </select>
           </div>
         </div>
       </div>
@@ -297,9 +297,9 @@
         </table>
       </div>
       <div v-if="topMeters.length > topMetersPageSize" class="scc-pagination">
-        <BaseButton class="scc-page-btn" :disabled="topMetersPage <= 1" @click="goTopMetersPage(topMetersPage - 1)">Prev</BaseButton>
+        <button class="scc-page-btn" :disabled="topMetersPage <= 1" @click="goTopMetersPage(topMetersPage - 1)">Prev</button>
         <span class="scc-page-info">{{ topMetersPageStart }}-{{ topMetersPageEnd }} of {{ topMeters.length }}</span>
-        <BaseButton class="scc-page-btn" :disabled="topMetersPage >= topMetersTotalPages" @click="goTopMetersPage(topMetersPage + 1)">Next</BaseButton>
+        <button class="scc-page-btn" :disabled="topMetersPage >= topMetersTotalPages" @click="goTopMetersPage(topMetersPage + 1)">Next</button>
       </div>
     </div>
 
@@ -308,13 +308,13 @@
       <svg class="scc-searchbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
       </svg>
-      <BaseInput v-model="meterQuery" class="scc-searchbar-input"
+      <input v-model="meterQuery" class="scc-searchbar-input"
         placeholder="Enter a meter ID for per-meter consumption + recharge analysis…"
         @keyup.enter="analyzeMeter" />
-      <BaseButton variant="primary" size="sm" class="scc-hbtn scc-hbtn--primary scc-hbtn--sm"
+      <button class="scc-hbtn scc-hbtn--primary scc-hbtn--sm"
         :disabled="!meterQuery.trim() || meterLoading" @click="analyzeMeter">
         {{ meterLoading ? 'Analyzing…' : 'Analyze meter' }}
-      </BaseButton>
+      </button>
     </div>
 
     <!-- ═══════════════════════════════════════ METER ANALYSIS DRAWER ═══ -->
@@ -334,9 +334,9 @@
                 {{ from }} → {{ to }}
               </p>
             </div>
-            <BaseIconButton class="scc-drawer-close" @click="closeMeter" aria-label="Close drawer">
+            <button class="scc-drawer-close" @click="closeMeter" aria-label="Close drawer">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </BaseIconButton>
+            </button>
           </div>
 
           <div v-if="meterError" class="scc-alert scc-alert--err">
@@ -431,13 +431,13 @@
             </div>
 
             <div class="scc-drawer-footer">
-              <BaseButton variant="secondary" class="scc-hbtn scc-hbtn--outline" @click="exportMeterCsv">
+              <button class="scc-hbtn scc-hbtn--outline" @click="exportMeterCsv">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
                 Export meter CSV
-              </BaseButton>
+              </button>
             </div>
           </template>
         </aside>
@@ -449,10 +449,6 @@
 
 <script>
 import EChartPanel from "./EChartPanel.vue";
-import BaseButton from "./base/BaseButton.vue";
-import BaseInput from "./base/BaseInput.vue";
-import BaseSelect from "./base/BaseSelect.vue";
-import BaseIconButton from "./base/BaseIconButton.vue";
 import {
   fetchStationConsumptionAnalytics,
   fetchMeterConsumptionAnalysis,
@@ -473,7 +469,7 @@ function addDays(base, n) { const d = new Date(base); d.setDate(d.getDate() + n)
 
 export default {
   name: "StationConsumptionPage",
-  components: { EChartPanel, BaseButton, BaseInput, BaseSelect, BaseIconButton },
+  components: { EChartPanel },
   props: {
     route: { type: Object, default: () => ({}) },
     hash: { type: String, default: "" },
@@ -724,7 +720,7 @@ export default {
       if (typeof window === "undefined") return fallback;
       const cs = getComputedStyle(document.documentElement);
       const get = (n, fb) => (cs.getPropertyValue(n) || "").trim() || fb;
-      const isDark = document.documentElement.getAttribute("data-theme") === "contrast";
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
       return {
         text:       get("--text-main",   fallback.text),
         muted:      get("--text-muted",  fallback.muted),

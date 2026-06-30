@@ -15,7 +15,7 @@ export type ReportPdfInput = {
 };
 
 const C = {
-    ink: [17, 24, 39], muted: [107, 114, 128], green: [5, 150, 105], leaf: [52, 211, 153], mist: [249, 250, 251], line: [229, 231, 235], white: [255, 255, 255], danger: [220, 38, 38],
+    ink: [18, 35, 29], muted: [92, 112, 102], green: [20, 104, 72], leaf: [112, 171, 107], mist: [232, 242, 235], line: [205, 224, 212], white: [255, 255, 255], danger: [176, 55, 55],
 };
 
 function esc(value: unknown): string { return String(value ?? '').replace(/[\\()]/g, '\\$&').replace(/[^\x20-\x7E]/g, ' '); }
@@ -48,19 +48,21 @@ class Pdf {
         this.page.push(`${this.rgb(color)} ${points.map(([x, y], i) => `${i ? `${x} ${y} l` : `${x} ${y} m`}`).join(' ')} h f`);
     }
     heading(title: string, kicker: string) {
-        this.y = 740;
-        this.text(48, 800, kicker.toUpperCase(), 8, C.green, true);
-        this.text(48, 776, title, 22, C.ink, true);
-        this.line(48, 755, 547, 755, C.line);
+        this.rect(0, 770, 595, 72, C.ink);
+        this.rect(0, 770, 13, 72, C.green);
+        this.text(32, 812, kicker.toUpperCase(), 8, C.leaf, true);
+        this.text(32, 787, title, 20, C.white, true);
+        this.text(478, 787, 'BEVERLY', 9, C.white, true);
+        this.y = 742;
+    }
+    footer(page: number, total: number) {
+        this.line(32, 30, 563, 30);
+        this.text(32, 17, 'CONFIDENTIAL  |  Beverly Wallet Operations', 7, C.muted);
+        this.text(510, 17, `${page} / ${total}`, 7, C.muted);
     }
     finish(filename: string) {
         this.pages.push(this.page);
-        this.pages.forEach((pageArray, i) => {
-            const pageNum = i + 1; const total = this.pages.length; const y = 40;
-            pageArray.push(`${this.stroke(C.line)} 1 w 48 ${y} m 547 ${y} l S`);
-            pageArray.push(`BT /F1 8 Tf ${this.rgb(C.muted)} 1 0 0 1 48 25 Tm (CONFIDENTIAL  -  Beverly Wallet Operations) Tj ET`);
-            pageArray.push(`BT /F1 8 Tf ${this.rgb(C.muted)} 1 0 0 1 520 25 Tm (${pageNum} / ${total}) Tj ET`);
-        });
+        const body = this.pages.map((p, i) => `${p.join('\n')}\n`).join('');
         const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Count ${this.pages.length} /Kids [${this.pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ')}] >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
         this.pages.forEach((p, i) => {
             const contentId = 6 + i * 2;
@@ -76,76 +78,76 @@ class Pdf {
     }
 }
 
-function chart(pdf: Pdf, series: ReportPdfInput['series'], field: keyof ReportPdfInput['series'][number], label: string, yPos: number = 270) {
-    const x = 48, y = yPos, w = 499, h = 140;
-    pdf.text(x, y + h + 20, label, 12, C.ink, true);
+function chart(pdf: Pdf, series: ReportPdfInput['series'], field: keyof ReportPdfInput['series'][number], label: string) {
+    const x = 42, y = 270, w = 511, h = 126;
+    pdf.text(x, y + h + 18, label, 11, C.ink, true);
+    pdf.rect(x, y, w, h, C.mist);
     const values = series.slice(-20).map((row) => Number(row[field]) || 0); const max = Math.max(1, ...values);
-    [0, 0.5, 1].forEach(step => pdf.line(x, y + h * step, x + w, y + h * step, C.mist, 1));
-    values.forEach((v, i) => { const bw = (w / Math.max(values.length, 1)) - 8; const bh = Math.max(2, (v / max) * h); pdf.rect(x + 4 + i * (w / values.length), y, bw, bh, i === values.length - 1 ? C.green : C.leaf); });
-    pdf.text(x, y - 16, series.length ? `Trend from ${series[0].date} to ${series[series.length - 1].date}` : 'No series data', 9, C.muted);
+    values.forEach((v, i) => { const bw = Math.max(4, w / Math.max(values.length, 1) - 5); const bh = Math.max(2, (v / max) * (h - 24)); pdf.rect(x + 5 + i * (w / values.length), y + 12, bw, bh, i === values.length - 1 ? C.green : C.leaf); });
+    pdf.text(x, y - 12, series.length ? `Latest period: ${series[series.length - 1].date}` : 'No series data', 8, C.muted);
 }
 
 function lineChart(pdf: Pdf, series: ReportPdfInput['series']) {
-    const x = 48, y = 460, w = 499, h = 140; const points = series.slice(-16); const values = points.map((row) => Number(row.revenueMinor || 0)); const max = Math.max(1, ...values);
-    pdf.text(x, y + h + 20, 'Revenue Trend', 12, C.ink, true); 
-    [0, 0.5, 1].forEach((step) => pdf.line(x, y + h * step, x + w, y + h * step, C.mist, 1));
-    const coords = values.map((value, index) => [x + (index * (w / Math.max(1, values.length - 1))), y + (value / max) * h] as [number, number]);
-    pdf.polyline(coords, C.green, 3); 
-    coords.forEach(([px, py], i) => { pdf.rect(px - 3, py - 3, 6, 6, C.white); pdf.rect(px - 2, py - 2, 4, 4, i === values.length - 1 ? C.ink : C.green); });
-    pdf.text(x, y - 16, points.length ? `${points[0].date} to ${points[points.length - 1].date}` : 'No trend data', 9, C.muted);
+    const x = 42, y = 430, w = 511, h = 126; const points = series.slice(-16); const values = points.map((row) => Number(row.revenueMinor || 0)); const max = Math.max(1, ...values);
+    pdf.text(x, y + h + 18, 'Revenue trend', 11, C.ink, true); pdf.rect(x, y, w, h, C.mist);
+    [0.25, 0.5, 0.75].forEach((step) => pdf.line(x, y + h * step, x + w, y + h * step, C.line));
+    const coords = values.map((value, index) => [x + 8 + index * ((w - 16) / Math.max(1, values.length - 1)), y + 12 + (value / max) * (h - 24)] as [number, number]);
+    pdf.polyline(coords, C.green, 2.5); coords.forEach(([px, py]) => pdf.rect(px - 2, py - 2, 4, 4, C.green));
+    pdf.text(x, y - 12, points.length ? `${points[0].date} to ${points[points.length - 1].date}` : 'No trend data', 8, C.muted);
 }
 
 function pieChart(pdf: Pdf, rows: ReportPdfInput['statusRows']) {
-    const cx = 160, cy = 250, radius = 70; const palette = [C.ink, C.green, C.leaf, C.muted, C.danger]; const values = rows.slice(0, 5); const total = Math.max(1, values.reduce((sum, row) => sum + row.count, 0)); let start = -Math.PI / 2;
-    pdf.text(48, cy + radius + 30, 'Outcome Distribution', 12, C.ink, true);
-    values.forEach((row, index) => { const angle = (row.count / total) * Math.PI * 2; const steps = Math.max(5, Math.ceil(angle / 0.05)); const points: [number, number][] = [[cx, cy]]; for (let i = 0; i <= steps; i++) { const a = start + angle * (i / steps); points.push([cx + Math.cos(a) * radius, cy + Math.sin(a) * radius]); } pdf.polygon(points, palette[index]); start += angle; });
-    pdf.rect(cx - 45, cy - 45, 90, 90, C.white);
-    values.forEach((row, index) => { const y = cy + 40 - index * 24; pdf.rect(300, y - 4, 10, 10, palette[index]); pdf.text(320, y - 1, row.key, 10, C.ink, true); pdf.text(320, y - 14, `${number(row.count)} (${row.pct}%)`, 9, C.muted); });
+    const cx = 163, cy = 285, radius = 66; const palette = [C.green, C.leaf, [157, 196, 156], [221, 234, 223], C.danger]; const values = rows.slice(0, 5); const total = Math.max(1, values.reduce((sum, row) => sum + row.count, 0)); let start = -Math.PI / 2;
+    pdf.text(42, 370, 'Outcome mix', 11, C.ink, true);
+    values.forEach((row, index) => { const angle = (row.count / total) * Math.PI * 2; const steps = Math.max(3, Math.ceil(angle / 0.12)); const points: [number, number][] = [[cx, cy]]; for (let i = 0; i <= steps; i++) { const a = start + angle * (i / steps); points.push([cx + Math.cos(a) * radius, cy + Math.sin(a) * radius]); } pdf.polygon(points, palette[index]); start += angle; });
+    values.forEach((row, index) => { const y = 340 - index * 21; pdf.rect(275, y - 3, 8, 8, palette[index]); pdf.text(291, y - 1, `${row.key}: ${number(row.count)} (${row.pct}%)`, 8, C.ink); });
 }
 
 function overviewPage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.heading(input.title, 'Executive Summary');
+    pdf.heading(input.title, 'Executive report');
+    pdf.text(32, 718, input.period, 10, C.muted);
+    pdf.text(32, 698, `Compiled ${dateStamp()} by ${input.generatedBy}`, 8, C.muted);
     input.kpis.slice(0, 6).forEach((k, i) => {
-        const col = i % 3; const row = Math.floor(i / 3); const x = 48 + col * 170; const y = 620 - row * 100;
-        pdf.rect(x, y, 150, 80, C.white, C.line); pdf.text(x + 16, y + 58, k.label.toUpperCase(), 7, C.muted, true); pdf.text(x + 16, y + 36, k.value, 16, C.ink, true); pdf.text(x + 16, y + 18, k.note, 8, C.green);
+        const col = i % 3; const row = Math.floor(i / 3); const x = 32 + col * 177; const y = 610 - row * 94;
+        pdf.rect(x, y, 160, 74, C.white, C.line); pdf.text(x + 12, y + 54, k.label.toUpperCase(), 7, C.muted, true); pdf.text(x + 12, y + 33, k.value, 15, C.ink, true); pdf.text(x + 12, y + 16, k.note, 7, C.muted);
     });
-    chart(pdf, input.series, input.family === 'transactions' ? 'purchaseCount' : 'revenueMinor', input.family === 'transactions' ? 'Transaction Volume' : 'Revenue Performance', 380);
-    pdf.text(48, 200, 'Reporting Note', 11, C.ink, true);
-    pdf.text(48, 182, 'Figures reflect approved operational records aggregated in real-time.', 9, C.muted);
+    chart(pdf, input.series, input.family === 'transactions' ? 'purchaseCount' : 'revenueMinor', input.family === 'transactions' ? 'Transaction volume' : 'Revenue performance');
+    pdf.text(32, 220, 'Reporting note', 11, C.ink, true);
+    pdf.text(32, 202, 'Figures reflect approved operational records.', 9, C.muted);
 }
 
 function coverPage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.rect(0, 0, 595, 842, C.white); pdf.rect(48, 780, 48, 4, C.green);
-    pdf.text(48, 620, 'BEVERLY WALLET', 10, C.green, true); pdf.text(48, 580, input.title, 36, C.ink, true); pdf.text(48, 550, 'Operations Intelligence Report', 16, C.muted);
-    pdf.rect(48, 480, 200, 1, C.line); pdf.text(48, 450, 'REPORTING PERIOD', 8, C.muted, true); pdf.text(48, 430, input.period, 12, C.ink);
-    pdf.text(48, 390, 'COMPILED ON', 8, C.muted, true); pdf.text(48, 370, dateStamp(), 12, C.ink);
-    pdf.line(48, 120, 547, 120, C.line); pdf.text(48, 90, 'Prepared for internal decision-making strictly.', 10, C.muted); pdf.text(48, 70, `Source: ${input.generatedBy}`, 10, C.muted);
+    pdf.rect(0, 0, 595, 842, C.ink); pdf.rect(0, 0, 16, 842, C.green); pdf.rect(32, 118, 531, 1, C.leaf);
+    pdf.text(48, 748, 'BEVERLY WALLET', 10, C.leaf, true); pdf.text(48, 684, input.title, 34, C.white, true); pdf.text(48, 648, 'Operations intelligence report', 15, C.white);
+    pdf.text(48, 568, input.period, 11, C.white); pdf.text(48, 540, `Generated ${dateStamp()}`, 9, C.leaf);
+    pdf.text(48, 146, 'Prepared for internal decision-making.', 10, C.white); pdf.text(48, 130, `Source: ${input.generatedBy}`, 8, C.leaf);
 }
 
 function insightsPage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.newPage(); pdf.heading(input.title, 'Insights and Controls'); lineChart(pdf, input.series); pieChart(pdf, input.statusRows);
-    pdf.text(48, 130, 'Decision Notes', 12, C.ink, true);
-    input.insights.slice(0, 3).forEach((insight, index) => { const y = 100 - index * 25; pdf.rect(48, y - 4, 4, 12, C.green); pdf.text(64, y, insight, 10, C.ink); });
+    pdf.newPage(); pdf.heading(input.title, 'Insights and controls'); lineChart(pdf, input.series); pieChart(pdf, input.statusRows);
+    pdf.text(32, 215, 'Decision notes', 12, C.ink, true);
+    input.insights.slice(0, 4).forEach((insight, index) => { const y = 186 - index * 30; pdf.rect(32, y - 3, 8, 8, C.green); pdf.text(52, y - 1, insight, 9, C.ink); });
+    pdf.text(32, 58, 'Review exceptions before settlement approval.', 8, C.muted);
 }
 
 function tablePage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.newPage(); pdf.heading(input.title, 'Performance Breakdown');
-    const rows = input.stations.slice(0, 10); const headerY = 690;
-    pdf.text(48, 720, 'Top Performing Stations', 12, C.ink, true);
-    ['Station Identifier', 'Transactions', 'Gross Revenue'].forEach((h, i) => pdf.text([48, 280, 420][i], headerY, h.toUpperCase(), 8, C.muted, true));
-    pdf.line(48, 680, 547, 680, C.mist, 2);
-    rows.forEach((row, i) => { const y = 650 - i * 32; pdf.text(48, y, row.station_id, 10, C.ink); pdf.text(280, y, number(row.count), 10, C.ink); pdf.text(420, y, input.money(row.revenueMinor), 10, C.ink, true); pdf.line(48, y - 12, 547, y - 12, C.mist, 1); });
-    const statsY = 260; pdf.text(48, statsY + 60, input.family === 'audit' ? 'Activity Distribution' : 'Revenue Channels', 12, C.ink, true);
+    pdf.newPage(); pdf.heading(input.title, 'Performance breakdown');
+    const rows = input.stations.slice(0, 12); const headerY = 690;
+    pdf.text(32, 716, 'Top stations', 12, C.ink, true);
+    ['Station', 'Successful vends', 'Revenue'].forEach((h, i) => pdf.text([42, 285, 438][i], headerY, h.toUpperCase(), 8, C.muted, true));
+    pdf.line(32, 680, 563, 680);
+    rows.forEach((row, i) => { const y = 658 - i * 29; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.mist); pdf.text(42, y, row.station_id, 9); pdf.text(285, y, number(row.count), 9); pdf.text(438, y, input.money(row.revenueMinor), 9, C.green, true); });
+    const statsY = 285; pdf.text(32, statsY + 70, input.family === 'audit' ? 'Activity distribution' : 'Revenue channels', 12, C.ink, true);
     const list = input.family === 'audit' ? input.statusRows.map((r) => ({ label: r.key, value: `${number(r.count)} events`, pct: r.pct })) : input.actorRows.map((r) => ({ label: r.key, value: input.money(r.minor), pct: r.pct }));
-    list.slice(0, 5).forEach((r, i) => { const y = statsY + 20 - i * 34; pdf.text(48, y, r.label, 10, C.ink); pdf.rect(200, y - 4, 200, 6, C.mist); pdf.rect(200, y - 4, Math.max(2, 200 * r.pct / 100), 6, C.green); pdf.text(420, y, r.value, 10, C.ink, true); });
+    list.slice(0, 6).forEach((r, i) => { const y = statsY + 42 - i * 30; pdf.text(42, y, r.label, 9); pdf.rect(195, y - 4, 235, 8, C.mist); pdf.rect(195, y - 4, Math.max(2, 235 * r.pct / 100), 8, C.leaf); pdf.text(448, y, r.value, 9, C.ink, true); });
 }
 
 function dataPage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.newPage(); pdf.heading(input.title, 'Daily Operations Ledger');
-    pdf.text(48, 720, 'Daily Time Series', 12, C.ink, true);
-    const heads = ['Date', 'Revenue', 'Purchases', 'Funding', 'Refunds', 'New Users']; const xs = [48, 120, 220, 300, 390, 480];
-    heads.forEach((h, i) => pdf.text(xs[i], 690, h.toUpperCase(), 8, C.muted, true)); pdf.line(48, 680, 547, 680, C.mist, 2);
-    input.series.slice(-16).forEach((r, i) => { const y = 650 - i * 30; if (i % 2 === 0) pdf.rect(48, y - 10, 499, 26, C.mist); [r.date, input.money(r.revenueMinor), number(r.purchaseCount), input.money(r.fundingMinor), input.money(r.refundMinor), number(r.newCustomers)].forEach((v, j) => pdf.text(xs[j], y, v, 9, j === 1 ? C.green : C.ink, j === 1)); });
+    pdf.newPage(); pdf.heading(input.title, 'Daily appendix');
+    pdf.text(32, 716, 'Daily operational series', 12, C.ink, true);
+    const heads = ['Date', 'Revenue', 'Purchases', 'Funding', 'Refunds', 'New customers']; const xs = [32, 112, 215, 292, 385, 475];
+    heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+    input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.revenueMinor), number(r.purchaseCount), input.money(r.fundingMinor), input.money(r.refundMinor), number(r.newCustomers)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.green : C.ink, j === 1)); });
 }
 
 export function downloadReportPdf(input: ReportPdfInput) {

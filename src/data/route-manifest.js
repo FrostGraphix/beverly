@@ -1,6 +1,8 @@
 export const routeManifest = [
   { group: "Dashboard", title: "Dashboard", hash: "#/dashboard", apis: ["/api/dashboard/readPanelGroup", "/api/dashboard/readLineChart"], columns: [], actions: [], roles: ["super-admin", "operations-manager", "account"] },
-  { group: "Token Generate", title: "Credit Token", hash: "#/token-generate/credit-token", apis: ["/api/item/readItemList", "/api/user/read", "/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "protocolVersion", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Recharge", "Cancel", "Confirm"], note: "Quota(kwh): No Limit", roles: ["super-admin", "account"] },
+  { group: "Data Report", title: "Report Centre", hash: "#/admin/reports", apis: ["/api/reports/revenue", "/api/reports/wallet", "/api/reports/customers", "/api/reports/audit", "/api/reports/settlement"], columns: [], actions: ["Generate", "Export"], isCustomPage: true, customComponent: "ReportsPage", roles: ["super-admin", "operations-manager", "account"] },
+  { group: "Token Generate", title: "Credit Token", hash: "#/token-generate/credit-token", apis: ["/api/item/readItemList", "/api/user/read", "/api/station/read", "/api/account/read", "/api/token/changeMeterKeyToken/generate", "/api/token/meterKey/update"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "protocolVersion", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Recharge", "Cancel", "Confirm"], note: "Quota(kwh): No Limit", roles: ["super-admin", "account"] },
+  { group: "Token Generate", title: "Change Meter Key", hash: "#/token-generate/change-meter-key", apis: ["/api/station/read", "/api/account/read", "/api/meter/read", "/api/token/meterKey/update", "/api/token/changeMeterKeyToken/generate", "/api/token/changeMeterKeyTokenRecord/read", "/API/RemoteMeterTask/CreateTokenTask", "/API/RemoteMeterTask/GetTokenTask"], columns: [], actions: [], isCustomPage: true, customComponent: "MeterKeyChangePage", note: "STS key change (KCT) — re-keys a meter so it accepts credit tokens", roles: ["super-admin", "operations-manager", "account"] },
   { group: "Token Generate", title: "Clear Tamper Token", hash: "#/token-generate/clear-tamper-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
   { group: "Token Generate", title: "Clear Credit Token", hash: "#/token-generate/clear-credit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
   { group: "Token Generate", title: "Set Maximum Power Limit Token", hash: "#/token-generate/set-maximum-power-limit-token", apis: ["/api/station/read", "/api/account/read"], columns: ["customerId", "customerName", "meterId", "meterType", "communicationWay", "tariffId", "remark", "createDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Generate Token", "Cancel", "Confirm"], roles: ["super-admin", "account"] },
@@ -18,6 +20,8 @@ export const routeManifest = [
   { group: "Data Report", title: "Low Purchase Situation", hash: "#/prepay-report/low-purchase-situation", apis: ["/api/customer/read", "/api/meter/read", "/api/tariff/read", "/api/station/read"], columns: ["customerId", "customerName", "meterId", "tariffId", "purchaseTotalUnit", "purchaseTotalPaid", "stationId", "customerAddress"], actions: ["Sort", "Search", "Reset", "Export", "Cancel", "Confirm"], roles: ["super-admin", "operations-manager", "account"] },
   { group: "Data Report", title: "Consumption Statistics", hash: "#/prepay-report/consumption-statistics", apis: ["/api/station/read", "/api/customer/read", "/api/meter/read", "/api/DailyDataMeter/read", "/api/DailyDataMeter/readMonthly"], columns: ["collectionDate", "consumption", "change", "status"], actions: ["Sort", "Search", "Reset", "Export", "Cancel", "Confirm"], isCustomPage: true, customComponent: "ConsumptionStatisticsPage", roles: ["super-admin", "operations-manager", "account"] },
   { group: "Data Report", title: "Interval Data", hash: "#/prepay-report/daily-data-meter", apis: ["/api/station/read", "/api/DailyDataMeter/read"], columns: ["customerId", "customerName", "meterId", "gatewayId", "currentDate", "usage1", "total1", "remain1", "power", "status", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Cancel", "Confirm", "Close"], isCustomPage: true, customComponent: "DailyDataMeterPage", roles: ["super-admin", "operations-manager", "account"] },
+  { group: "Data Report", title: "Abnormal Alarm", hash: "#/prepay-report/abnormal-alarm", apis: ["/api/local/abnormal-alarms"], columns: ["alarmLabel", "meterId", "customerId", "customerName", "stationId", "gatewayId", "total1", "usage1", "batteryLow", "magneticInterference", "terminalCoverOpen", "currentReverse", "currentUnbalance", "currentDate"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager", "account"] },
+  { group: "Data Report", title: "Station Consumption", hash: "#/prepay-report/station-consumption", apis: ["/api/local/consumption/station-analytics"], columns: [], actions: ["Refresh", "Export"], isCustomPage: true, customComponent: "StationConsumptionPage", roles: ["super-admin", "operations-manager", "account"] },
   { group: "Management", title: "Gateway", hash: "#/management/gateway", apis: ["/api/DailyDataMeter/read", "/api/station/read", "/api/gateway/read"], columns: ["status", "successRate", "id", "name", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Management", title: "Customer", hash: "#/management/customer", apis: ["/api/customer/read", "/api/station/read"], columns: ["id", "name", "phone", "address", "certifiName", "certifiNo", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Management", title: "Tariff", hash: "#/management/tariff", apis: ["/api/item/readItemList", "/api/tariff/read"], columns: ["id", "name", "price", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
@@ -29,17 +33,13 @@ export const routeManifest = [
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
-  // Wallet — opens the standalone wallet admin app in a new tab.
-  // Staff: localhost:5175 (dev) / admin.beverly.acoblighting.com (prod)
-  // Vendor portal: localhost:5174 (dev) — vendors log in there directly.
-  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "https://admin.beverly.acoblighting.com", devExternalUrl: "http://localhost:5175", roles: ["super-admin"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLT645", hash: "#/protocol/dlt645", apis: ["/api/dlt645/read"], columns: ["id", "version", "type", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
-  { group: "Remote Support", title: "GPRS Tasks", hash: "#/remote-support/gprs-tasks", apis: ["/api/GPRSMeterTask/GPRSGetReadingTask"], columns: ["id", "gatewayId", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add Task", "Export"], roles: ["super-admin", "operations-manager"] },
-  { group: "Remote Support", title: "GPRS Online Status", hash: "#/remote-support/gprs-online-status", apis: ["/api/GPRSOnlineStatus/Read"], columns: ["status", "successRate", "id", "name", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
-  { group: "Remote Support", title: "Load Profile", hash: "#/remote-support/load-profile", apis: ["/api/LoadProfile/ElectricEnergyCurve"], columns: ["customerId", "meterId", "totalEnergy", "power", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
+  { group: "Remote Support", title: "GPRS Tasks", hash: "#/remote-support/gprs-tasks", apis: ["/API/GPRSMeterTask/GPRSGetReadingTask", "/API/GPRSMeterTask/GPRSGetSettingTask", "/API/GPRSMeterTask/GPRSGetControlTask", "/API/GPRSMeterTask/GPRSGetTokenTask"], columns: ["id", "customerId", "customerName", "meterId", "name", "data", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add Task", "Export"], roles: ["super-admin", "operations-manager"] },
+  { group: "Remote Support", title: "GPRS Online Status", hash: "#/remote-support/gprs-online-status", apis: ["/API/GPRSOnlineStatus/Read"], columns: ["meterId", "isOnline", "statusUpdateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
+  { group: "Remote Support", title: "Load Profile", hash: "#/remote-support/load-profile", apis: ["/api/LoadProfile/ElectricEnergyCurve"], columns: ["customerId", "customerName", "meterId", "headline", "data", "currentDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
   { group: "Remote Support", title: "Event Notification", hash: "#/remote-support/event-notification", apis: ["/API/EventNotification/Read"], columns: ["eventCode", "eventContent", "meterId", "currentDate", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Export"], roles: ["super-admin", "operations-manager"] },
-  { group: "Remote Support", title: "Firmware Update", hash: "#/remote-support/firmware-update", apis: ["/api/UpdateFirmwareTask/GetUpdateFirmwareTask"], columns: ["id", "gatewayId", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add", "Export"], roles: ["super-admin", "operations-manager"] },
+  { group: "Remote Support", title: "Firmware Update", hash: "#/remote-support/firmware-update", apis: ["/API/UpdateFirmwareTask/GetUpdateFirmwareTask"], columns: ["id", "customerId", "customerName", "meterId", "fileName", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add", "Export"], roles: ["super-admin", "operations-manager"] },
   { group: "Remote Support", title: "File Upload", hash: "#/remote-support/file-upload", apis: ["/api/File/Upload"], columns: ["id", "name", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Import", "Export"], roles: ["super-admin"] },
   {
     group: "System",
@@ -52,66 +52,7 @@ export const routeManifest = [
     customComponent: "OnboardingStudioPage",
     roles: ["super-admin"]
   },
-  { group: "System", title: "Automation Command", hash: "#/system/automation-command", apis: ["/api/system/automation-report", "/api/system/automation-control"], columns: [], actions: ["Refresh", "Save", "Test Alert"], isCustomPage: true, customComponent: "AutomationCommandPage", roles: ["super-admin", "operations-manager"] },
-  {
-    group: "Data Report",
-    title: "Site Consumption",
-    hash: "#/prepay-report/site-consumption",
-    apis: ["/api/token/creditTokenRecord/read", "/api/DailyDataMeter/read", "/api/account/read", "/api/tariff/read"],
-    columns: [],
-    actions: ["Export"],
-    isCustomPage: true,
-    roles: ["super-admin", "operations-manager", "account"]
-  },
-  {
-    group: "Data Report",
-    title: "Report Centre",
-    hash: "#/admin/reports",
-    apis: [
-      "/api/reports/revenue",
-      "/api/reports/wallet",
-      "/api/reports/customers",
-      "/api/reports/audit",
-      "/api/reports/settlement"
-    ],
-    columns: [],
-    actions: ["Generate", "Export"],
-    roles: ["super-admin", "operations-manager", "account"]
-  },
-  {
-    group: "Data Report",
-    title: "Abnormal Alarm",
-    hash: "#/prepay-report/abnormal-alarm",
-    apis: ["/api/local/abnormal-alarms"],
-    columns: [
-      "alarmLabel",
-      "meterId",
-      "customerId",
-      "customerName",
-      "stationId",
-      "gatewayId",
-      "total1",
-      "usage1",
-      "batteryLow",
-      "magneticInterference",
-      "terminalCoverOpen",
-      "currentReverse",
-      "currentUnbalance",
-      "currentDate"
-    ],
-    actions: ["Sort", "Search", "Reset", "Export"],
-    roles: ["super-admin", "operations-manager", "account"]
-  },
-  {
-    group: "Data Report",
-    title: "Station Consumption",
-    hash: "#/prepay-report/station-consumption",
-    apis: ["/api/local/consumption/station-analytics"],
-    columns: [],
-    actions: ["Refresh", "Export"],
-    isCustomPage: true,
-    roles: ["super-admin", "operations-manager", "account"]
-  }
+  { group: "System", title: "Automation Command", hash: "#/system/automation-command", apis: ["/api/system/automation-report", "/api/system/automation-control"], columns: [], actions: ["Refresh", "Save", "Test Alert"], isCustomPage: true, customComponent: "AutomationCommandPage", roles: ["super-admin", "operations-manager"] }
 ];
 
 const referenceVisibleHashes = new Set([
@@ -134,10 +75,7 @@ const referenceVisibleHashes = new Set([
   "#/prepay-report/low-purchase-situation",
   "#/prepay-report/consumption-statistics",
   "#/prepay-report/daily-data-meter",
-  "#/prepay-report/site-consumption",
-  "#/admin/reports",
   "#/prepay-report/abnormal-alarm",
-  "#/prepay-report/station-consumption",
   "#/management/gateway",
   "#/management/customer",
   "#/management/tariff",
@@ -158,7 +96,7 @@ const referenceVisibleHashes = new Set([
   "#/remote-support/firmware-update",
   "#/remote-support/file-upload",
   "#/system/station-onboarding-studio",
-  "#/system/automation-command"
+  "#/system/automation-command",
 ]);
 
 
@@ -174,7 +112,7 @@ export function normalizeRoleId(roleId = "super-admin") {
 }
 
 const permissionAliases = {
-  "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken"],
+  "#/token-generate/credit-token": ["Token.CreditToken", "CreditToken", "Token.ChangeMeterKeyToken", "ChangeMeterKeyToken", "Token.MeterKey"],
   "#/token-record/credit-token-record": ["TokenRecord.CreditTokenRecord", "CreditTokenRecord"],
   "#/remote-operation/remote-meter-reading": ["RemoteMeterTask.CreateReadingTask", "GetReadingTask", "RemoteMeterTask.GetReadingTask"],
   "#/remote-operation/remote-meter-control": ["RemoteMeterTask.CreateControlTask", "GetControlTask", "RemoteMeterTask.GetControlTask"],

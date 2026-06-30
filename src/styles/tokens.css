@@ -35,6 +35,7 @@
 
   /* Primitive type tokens */
   --bev-font-sans: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+  --bev-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; /* display face for H1 / eyebrow */
   --bev-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --bev-font-size-2xs: 10px;
   --bev-font-size-xs: 11px;
@@ -81,38 +82,38 @@
   --bev-shadow-glow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 16px rgba(16, 185, 129, 0.3);
   --bev-shadow-glow-sm: 0 0 8px rgba(16, 185, 129, 0.25);
 
-  /* Semantic tokens */
-  --color-brand: var(--bev-color-green-600);
-  --color-brand-hover: var(--bev-color-green-700);
-  --color-brand-strong: var(--bev-color-green-800);
-  --color-brand-soft: rgba(5, 150, 105, 0.12);
-  --color-text: var(--bev-color-slate-700);
-  --color-text-strong: var(--bev-color-slate-900);
-  --color-text-muted: var(--bev-color-slate-500);
-  --color-text-faint: var(--bev-color-slate-400);
-  --color-text-inverse: var(--bev-color-slate-50);
-  --color-surface-page: var(--bev-color-green-50);
-  --color-surface-card: var(--bev-color-white);
-  --color-surface-glass: rgba(255, 255, 255, 0.7);
-  --color-surface-overlay: rgba(2, 44, 34, 0.55);
-  --color-border: var(--bev-color-green-100);
-  --color-border-strong: var(--bev-color-green-200);
-  --color-success: var(--bev-color-green-500);
-  --color-success-soft: rgba(16, 185, 129, 0.1);
-  --color-danger: var(--bev-color-red-500);
-  --color-danger-soft: rgba(239, 68, 68, 0.1);
-  --color-warning: var(--bev-color-amber-500);
-  --color-warning-soft: rgba(245, 158, 11, 0.1);
-  --color-info: var(--bev-color-blue-500);
-  --color-info-soft: rgba(14, 165, 233, 0.1);
-  --color-neutral: var(--bev-color-slate-500);
-  --color-neutral-soft: rgba(100, 116, 139, 0.1);
-  --color-source-live: var(--bev-color-green-600);
-  --color-source-live-soft: rgba(5, 150, 105, 0.12);
-  --color-source-cached: var(--bev-color-amber-500);
-  --color-source-cached-soft: rgba(245, 158, 11, 0.12);
-  --color-source-demo: var(--bev-color-slate-500);
-  --color-source-demo-soft: rgba(100, 116, 139, 0.12);
+  /* Semantic tokens — wallet oklch palette (light theme overrides these in [data-theme="light"]) */
+  --color-brand:        oklch(70% 0.19 145);
+  --color-brand-hover:  oklch(62% 0.17 145);
+  --color-brand-strong: oklch(42% 0.12 145);
+  --color-brand-soft:   oklch(70% 0.19 145 / 0.18);
+  --color-text:         oklch(42% 0.020 240);
+  --color-text-strong:  oklch(22% 0.020 240);
+  --color-text-muted:   oklch(58% 0.015 240);
+  --color-text-faint:   oklch(72% 0.010 240);
+  --color-text-inverse: oklch(8% 0.04 145); /* dark ink on brand-green — WCAG AA */
+  --color-surface-page:    #ffffff;
+  --color-surface-card:    oklch(100% 0 0);
+  --color-surface-glass:   oklch(100% 0 0 / 0.88);
+  --color-surface-overlay: oklch(20% 0.020 240 / 0.55);
+  --color-border:        oklch(20% 0.020 240 / 0.08);
+  --color-border-strong: oklch(20% 0.020 240 / 0.14);
+  --color-success:         oklch(70% 0.19 145);
+  --color-success-soft:    oklch(70% 0.19 145 / 0.14);
+  --color-danger:          oklch(68% 0.20 25);
+  --color-danger-soft:     oklch(68% 0.20 25 / 0.10);
+  --color-warning:         oklch(78% 0.16 75);
+  --color-warning-soft:    oklch(78% 0.16 75 / 0.10);
+  --color-info:            oklch(72% 0.13 220);
+  --color-info-soft:       oklch(72% 0.13 220 / 0.10);
+  --color-neutral:         oklch(58% 0.015 240);
+  --color-neutral-soft:    oklch(97% 0.005 240);
+  --color-source-live:        oklch(70% 0.19 145);
+  --color-source-live-soft:   oklch(70% 0.19 145 / 0.14);
+  --color-source-cached:      oklch(78% 0.16 75);
+  --color-source-cached-soft: oklch(78% 0.16 75 / 0.10);
+  --color-source-demo:        oklch(58% 0.015 240);
+  --color-source-demo-soft:   oklch(97% 0.005 240);
   --wallet-status-available: var(--color-success);
   --wallet-status-available-soft: var(--color-success-soft);
   --wallet-status-held: var(--color-warning);
@@ -157,6 +158,17 @@
   --shell-page-gutter: 24px;
   --icon-button-size: 36px;
   --icon-button-touch-size: var(--bev-touch-target-min);
+  --tags-view-bg: color-mix(in srgb, var(--bg-glass) 88%, var(--primary) 8%);
+  --tags-view-border: var(--border-color);
+  --tags-view-item-bg: color-mix(in srgb, var(--bg-card) 84%, var(--primary) 10%);
+  --tags-view-item-border: color-mix(in srgb, var(--primary) 38%, var(--border-mid));
+  --tags-view-item-text: var(--color-text-strong);
+  --tags-view-item-dot: var(--primary);
+  --tags-view-item-active-bg: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  --tags-view-item-active-text: #ffffff;
+  --tags-view-item-active-border: color-mix(in srgb, var(--primary) 72%, var(--bg-card));
+  --tags-view-item-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--bg-card) 54%, transparent);
+  --tags-view-item-active-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--bg-card) 40%, transparent);
 
   /* Legacy aliases. */
   --primary: var(--color-brand);

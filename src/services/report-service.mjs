@@ -210,7 +210,7 @@ export function columnsForType(reportType) {
 
 /* ── Chart Option Builder ── */
 
-export function buildChartOptions(reportType, data, theme = "contrast") {
+export function buildChartOptions(reportType, data, theme = "executive") {
   reportType = canonicalReportType(reportType);
   const textColor = theme === "light" ? "#334155" : "#94a3b8";
   const gridColor = theme === "light" ? "#e2e8f0" : "rgba(148,163,184,0.12)";

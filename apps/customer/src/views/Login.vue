@@ -2,34 +2,53 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { api, ApiError } from '../lib/api';
+import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
+import {
+    isValidNigerianPhone,
+    normaliseNigerianPhone,
+    readRememberedLogin,
+    safeAuthRedirect,
+    writeRememberedLogin,
+} from '../lib/auth-flow';
 
 const router = useRouter();
 const route = useRoute();
+const auth = useAuthStore();
 const phoneInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<HTMLInputElement | null>(null);
+const loginMode = ref<'email' | 'phone'>('email');
 const phone = ref('');
+const email = ref('');
+const password = ref('');
+const showPassword = ref(false);
+const rememberLogin = ref(true);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
 
-const sessionEnded = computed(() => route.query.reason === 'session_timeout');
+const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
+const redirectTarget = computed(() => safeAuthRedirect(route.query.redirect));
+const submitLabel = computed(() => loginMode.value === 'email' ? 'Sign in' : 'Send code');
+const loadingLabel = computed(() => loginMode.value === 'email' ? 'Signing in...' : 'Sending code...');
 
-onMounted(() => phoneInput.value?.focus());
-
-function normalise(raw: string): string {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.startsWith('234')) return `+${digits}`;
-    if (digits.startsWith('0')) return `+234${digits.slice(1)}`;
-    if (digits.length >= 10) return `+234${digits}`;
-    return `+234${digits}`;
-}
-
-function isValidPhone(raw: string): boolean {
-    return raw.replace(/\D/g, '').length >= 10;
-}
+onMounted(() => {
+    const remembered = readRememberedLogin();
+    if (remembered.includes('@')) email.value = remembered;
+    else if (remembered) phone.value = remembered;
+    rememberLogin.value = Boolean(remembered);
+    if (loginMode.value === 'email') emailInput.value?.focus();
+    else phoneInput.value?.focus();
+});
 
 async function submit() {
-    if (!isValidPhone(phone.value)) {
+    if (loginMode.value === 'email') {
+        if (!email.value || !password.value) {
+            error.value = 'Enter your email and password.';
+            errorCode.value = null;
+            return;
+        }
+    } else if (!isValidNigerianPhone(phone.value)) {
         error.value = 'Enter a valid Nigerian phone number.';
         errorCode.value = null;
         return;
@@ -37,15 +56,45 @@ async function submit() {
     loading.value = true;
     error.value = null;
     errorCode.value = null;
-    const normalised = normalise(phone.value);
     try {
-        const r = await api.post<{ challenge_id: string }>('/api/v1/customer/auth/login', { phone: normalised });
-        await router.push({ name: 'verify', query: { challenge_id: r.challenge_id, phone: normalised } });
+        if (loginMode.value === 'email') {
+            const r = await api.post<{ access_token: string; refresh_token?: string | null; expires_at?: number | null; expires_in?: number | null; customer: any; is_new: boolean }>('/api/v1/customer/auth/email/login', {
+                email: email.value.trim().toLowerCase(),
+                password: password.value,
+            });
+            auth.setSession(r.access_token, r.customer, rememberLogin.value, {
+                refreshToken: r.refresh_token,
+                expiresAt: r.expires_at,
+                expiresIn: r.expires_in,
+            });
+            writeRememberedLogin(email.value.trim().toLowerCase(), rememberLogin.value);
+            await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+            return;
+        }
+        const normalised = normaliseNigerianPhone(phone.value);
+        const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
+            '/api/v1/customer/auth/login',
+            { phone: normalised },
+        );
+        await router.push({
+            name: 'verify',
+            query: {
+                challenge_id: r.challenge_id,
+                phone: normalised,
+                expires_at: r.expires_at,
+                retry_after_seconds: r.retry_after_seconds,
+                redirect: redirectTarget.value,
+                remember: rememberLogin.value ? '1' : '0',
+            },
+        });
+        writeRememberedLogin(normalised, rememberLogin.value);
     } catch (e: any) {
         if (e instanceof ApiError) {
             errorCode.value = e.code;
             if (e.code === 'customer_not_found') {
                 error.value = 'No account found for this number.';
+            } else if (e.code === 'invalid_credentials') {
+                error.value = 'Invalid email or password.';
             } else if (e.code === 'rate_limit') {
                 error.value = 'Too many requests. Wait a few minutes and try again.';
             } else if (e.code === 'account_inactive') {
@@ -65,7 +114,7 @@ async function submit() {
 <template>
   <CustomerAuthShell
     title="Welcome back"
-    subtitle="Enter your phone number to receive a sign-in code"
+    :subtitle="loginMode === 'email' ? 'Enter your email and password' : 'Enter your phone number to receive a sign-in code'"
   >
     <div v-if="sessionEnded" class="session-banner" role="status">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -76,13 +125,17 @@ async function submit() {
     </div>
 
     <form class="auth-form" @submit.prevent="submit" novalidate>
+      <div class="mode-switch" role="tablist" aria-label="Login method">
+        <button type="button" :class="{ active: loginMode === 'email' }" @click="loginMode = 'email'">Email</button>
+        <button type="button" :class="{ active: loginMode === 'phone' }" @click="loginMode = 'phone'">Phone OTP</button>
+      </div>
 
       <!-- Phone field -->
-      <div class="field">
+      <div v-if="loginMode === 'phone'" class="field">
         <label class="field-label" for="login-phone">Phone number</label>
         <div class="phone-wrap">
           <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">🇳🇬</span>
+            <span class="flag" aria-hidden="true">NG</span>
             +234
           </span>
           <input
@@ -100,6 +153,47 @@ async function submit() {
         </div>
       </div>
 
+      <template v-else>
+        <div class="field">
+          <label class="field-label" for="login-email">Email</label>
+          <input
+            id="login-email"
+            ref="emailInput"
+            v-model="email"
+            class="bw-input"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            :disabled="loading"
+            @input="error = null"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" for="login-password">Password</label>
+          <div class="password-field">
+            <input
+              id="login-password"
+              v-model="password"
+              class="bw-input"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="Your password"
+              :disabled="loading"
+              @input="error = null"
+            />
+            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+      </template>
+
+      <label class="remember-row">
+        <input v-model="rememberLogin" type="checkbox" />
+        Remember this login
+      </label>
+
       <!-- Error -->
       <div v-if="error" class="auth-error" role="alert">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
@@ -113,21 +207,16 @@ async function submit() {
       <!-- Submit -->
       <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading">
         <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-        {{ loading ? 'Sending code…' : 'Send code' }}
+        {{ loading ? loadingLabel : submitLabel }}
       </button>
 
     </form>
 
     <!-- Footer links -->
     <div class="auth-links">
-      <p class="auth-links-row">
-        New to Beverly?
-        <router-link to="/signup" class="auth-inline-link">Create account</router-link>
-      </p>
-      <p class="auth-links-row">
-        Lost access?
-        <router-link to="/recover" class="auth-inline-link">Recover account</router-link>
-      </p>
+      <router-link to="/signup" class="auth-inline-link">Create account</router-link>
+      <span aria-hidden="true">•</span>
+      <router-link to="/recover" class="auth-inline-link">Forget password</router-link>
     </div>
   </CustomerAuthShell>
 </template>
@@ -152,7 +241,50 @@ async function submit() {
   gap: var(--s-4);
 }
 
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.mode-switch button {
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  padding: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 700;
+  cursor: pointer;
+}
+.mode-switch button.active {
+  background: var(--glass-bg-strong);
+  color: var(--text);
+}
+
 .field { display: flex; flex-direction: column; gap: 6px; }
+.password-field { position: relative; }
+.password-field .bw-input { padding-right: 76px; }
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
+  cursor: pointer;
+}
+.remember-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--t-sm);
+}
 
 .field-label {
   font-size: var(--t-sm);
@@ -253,20 +385,17 @@ async function submit() {
 .auth-links {
   margin-top: var(--s-5);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: var(--s-2);
-}
-.auth-links-row {
   font-size: var(--t-sm);
   color: var(--text-2);
-  text-align: center;
-  margin: 0;
+  white-space: nowrap;
 }
 .auth-inline-link {
   color: var(--brand);
   font-weight: 600;
   text-decoration: none;
-  margin-left: 4px;
 }
 .auth-inline-link:hover { text-decoration: underline; }
 </style>

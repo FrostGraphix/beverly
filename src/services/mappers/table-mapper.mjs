@@ -64,15 +64,44 @@ function mapRowShape(row, route) {
   }
 
   if (route.hash.includes("remote-operation-record/remote-meter-")) {
+    if (record.id == null) {
+      record.id = record.taskId ?? record.taskID ?? record.recordId ?? record.remoteTaskId ?? record.tokenTaskId ?? record.meterTaskId;
+    }
+    if (record.taskId == null && record.id != null) record.taskId = record.id;
     record.dataItem = record.dataItem || record.name || "";
     record.dataValue = record.dataValue || (!route.hash.includes("remote-meter-token-task") ? record.data : "");
     record.token = route.hash.includes("remote-meter-token-task") ? formatToken(record.token || record.data) : record.token;
     record.status = normalizeRemoteStatus(record.status);
+    if (route.hash.includes("remote-meter-token-task") && record.status === "StandBy") record.status = "Queued";
+    if (String(record.remark || "").toLowerCase().includes("tokenreject")) record.status = "Failure";
   }
 
   if (route.hash.includes("prepay-report/low-purchase-situation")) {
     if (record.totalUnit == null && record.purchaseTotalUnit != null) record.totalUnit = record.purchaseTotalUnit;
     if (record.totalPaid == null && record.purchaseTotalPaid != null) record.totalPaid = record.purchaseTotalPaid;
+  }
+
+  if (route.hash.includes("remote-support/gprs-tasks")) {
+    if (record.id == null && record.taskId != null) record.id = record.taskId;
+    if (record.customerId == null && record.concentratorId != null) record.customerId = record.concentratorId;
+    if (record.status != null) record.status = normalizeRemoteStatus(record.status);
+  }
+
+  if (route.hash.includes("remote-support/gprs-online-status")) {
+    if (record.isOnline === true) record.isOnline = "Online";
+    else if (record.isOnline === false) record.isOnline = "Offline";
+    if (record.statusUpdateDate == null && record.updateDate != null) record.statusUpdateDate = record.updateDate;
+  }
+
+  if (route.hash.includes("remote-support/firmware-update")) {
+    if (record.id == null && record.taskId != null) record.id = record.taskId;
+    if (record.status != null) record.status = normalizeRemoteStatus(record.status);
+  }
+
+  if (route.hash.includes("remote-support/load-profile")) {
+    if (record.currentDate == null && record.createDate != null) record.currentDate = record.createDate;
+    if (record.data == null && record.totalEnergy != null) record.data = record.totalEnergy;
+    if (record.headline == null && record.power != null) record.headline = `Power ${record.power}`;
   }
 
   if (route.hash.includes("admin/user")) {

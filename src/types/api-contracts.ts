@@ -34,7 +34,7 @@ export interface UserProfileState {
 }
 
 export interface UserPreferenceState {
-  theme: "light" | "contrast" | string;
+  theme: "system" | "light" | "executive" | "contrast" | string;
   compact: boolean;
   emailAlerts: boolean;
   tokenAlerts: boolean;

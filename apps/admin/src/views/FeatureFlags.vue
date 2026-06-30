@@ -1,7 +1,6 @@
 <template>
-  <div class="bw-page">
-    <div class="bw-page-header">
-      <h1 class="bw-page-title">Feature Flags</h1>
+  <AppShell title="Feature Flags">
+    <div class="bw-page-actions">
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ New Flag</button>
     </div>
 
@@ -19,7 +18,7 @@
               <th>Rollout</th>
               <th>Regions</th>
               <th>Updated</th>
-              <th></th>
+              <th class="flag-actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -34,7 +33,12 @@
               <td class="bw-text-sm">{{ f.rollout_percent }}%</td>
               <td class="bw-text-sm">{{ f.regions?.length ? f.regions.join(', ') : 'All' }}</td>
               <td class="bw-text-sm">{{ fmtDate(f.updated_at) }}</td>
-              <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openEdit(f)">Edit</button></td>
+              <td class="flag-actions-col">
+                <button class="bw-btn bw-btn-ghost bw-btn-sm flag-row-action" @click="openEdit(f)">Edit</button>
+                <MobileActionMenu label="Feature flag actions">
+                  <button class="mobile-action-item" @click="openEdit(f)">Edit</button>
+                </MobileActionMenu>
+              </td>
             </tr>
             <tr v-if="!flags.length">
               <td colspan="7" class="bw-empty">No flags found.</td>
@@ -56,7 +60,9 @@
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Regions</span><span class="bw-tc-pair-val">{{ f.regions?.length ? f.regions.join(', ') : 'All' }}</span></div>
           </div>
           <div class="bw-tc-foot">
-            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openEdit(f)">Edit</button>
+            <MobileActionMenu label="Feature flag actions">
+              <button class="mobile-action-item" @click="openEdit(f)">Edit</button>
+            </MobileActionMenu>
           </div>
         </div>
       </div>
@@ -125,12 +131,14 @@
         </div>
       </div>
     </div>
-  </div>
+  </AppShell>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
+import AppShell from '../components/AppShell.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 
 const flags   = ref<any[]>([]);
 const loading = ref(false);
@@ -215,14 +223,33 @@ onMounted(load);
 .bw-toggle {
   padding: .25rem .75rem;
   border-radius: var(--r-md);
-  border: 1.5px solid var(--border);
-  background: var(--surface);
+  border: 1.5px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
   cursor: pointer;
   font-weight: 600;
   font-size: .8rem;
   transition: background 0.15s, border-color 0.15s;
 }
-.bw-toggle-on { background: var(--brand); border-color: var(--brand); color: white; }
+.bw-toggle-on { background: var(--brand); border-color: var(--brand); color: oklch(8% 0.04 145); }
 .bw-range { width: 100%; accent-color: var(--brand); }
-.bw-tc-foot { padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-tc-foot { display: flex; justify-content: flex-end; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--glass-border); }
+.flag-actions-col { min-width: 90px; }
+
+@media (max-width: 720px) {
+  .flag-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 3;
+  }
+
+  .flag-row-action {
+    display: none;
+  }
+}
 </style>

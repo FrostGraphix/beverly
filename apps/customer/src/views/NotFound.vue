@@ -2,7 +2,7 @@
 </script>
 
 <template>
-  <div style="min-height:100dvh; display:grid; place-items:center; padding: var(--s-5); background: var(--canvas); text-align:center">
+  <div style="min-height:100dvh; display:grid; place-items:center; padding: var(--s-5); background: transparent; text-align:center">
     <div>
       <p class="bw-mono" style="font-size: 72px; font-weight:800; color: var(--border); line-height:1; margin:0 0 var(--s-4)">404</p>
       <p class="bw-page-title" style="margin-bottom: var(--s-2)">Page not found</p>

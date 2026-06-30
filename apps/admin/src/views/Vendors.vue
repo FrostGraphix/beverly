@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { api, shortDate } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
+import { api, shortDate, ApiError } from '../lib/api';
+import { useStaffAuthStore } from '../stores/auth';
+
+const router = useRouter();
+const auth = useStaffAuthStore();
+const canManageVendors = computed(() => auth.hasPermission('wallet.vendors.manage'));
 
 interface Vendor {
     id: string;
@@ -19,6 +27,99 @@ const vendors = ref<Vendor[]>([]);
 const q = ref('');
 const status = ref<'' | Vendor['status']>('');
 const loading = ref(false);
+const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+// ─ Action modal ──────────────────────────────────────────────
+const modalOpen = ref(false);
+const target = ref<Vendor | null>(null);
+const targetAction = ref<'approved' | 'frozen' | 'suspended'>('approved');
+const reason = ref('');
+const busy = ref(false);
+const deleteOpen = ref(false);
+const deleteTarget = ref<Vendor | null>(null);
+const deleteReason = ref('');
+const deleteBusy = ref(false);
+
+const actionTone = computed<'brand' | 'danger' | 'warn'>(() =>
+    targetAction.value === 'frozen' ? 'danger'
+        : targetAction.value === 'suspended' ? 'warn'
+            : 'brand',
+);
+
+const actionLabel = computed(() => ({
+    approved:  'Reactivate vendor',
+    frozen:    'Freeze vendor',
+    suspended: 'Suspend vendor',
+}[targetAction.value]));
+
+const actionRequiresReason = computed(() =>
+    targetAction.value === 'frozen' || targetAction.value === 'suspended',
+);
+
+const reasonValid = computed(() =>
+    !actionRequiresReason.value || reason.value.trim().length >= 4,
+);
+
+function ask(v: Vendor, next: 'approved' | 'frozen' | 'suspended') {
+    if (!canManageVendors.value) return;
+    target.value = v;
+    targetAction.value = next;
+    reason.value = '';
+    modalOpen.value = true;
+}
+
+function askDelete(v: Vendor) {
+    if (!canManageVendors.value) return;
+    deleteTarget.value = v;
+    deleteReason.value = '';
+    deleteOpen.value = true;
+}
+
+async function doAction() {
+    if (!target.value || !reasonValid.value) return;
+    busy.value = true;
+    banner.value = null;
+    try {
+        await api.patch(`/api/v1/admin/vendors/${target.value.id}/status`, {
+            status: targetAction.value,
+            reason: reason.value.trim() || undefined,
+        });
+        modalOpen.value = false;
+        banner.value = {
+            tone: 'success',
+            text: `${target.value.legal_name} → ${targetAction.value}.`,
+        };
+        target.value = null;
+        await load();
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Update failed.';
+        banner.value = { tone: 'error', text: msg };
+        modalOpen.value = false;
+    } finally {
+        busy.value = false;
+    }
+}
+
+async function deleteVendor() {
+    if (!deleteTarget.value) return;
+    deleteBusy.value = true;
+    banner.value = null;
+    try {
+        await api.del(`/api/v1/admin/vendors/${deleteTarget.value.id}`, {
+            reason: deleteReason.value.trim() || undefined,
+        });
+        banner.value = { tone: 'success', text: `${deleteTarget.value.legal_name} deleted.` };
+        vendors.value = vendors.value.filter((v) => v.id !== deleteTarget.value?.id);
+        deleteOpen.value = false;
+        deleteTarget.value = null;
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Delete failed.';
+        banner.value = { tone: 'error', text: msg };
+        deleteOpen.value = false;
+    } finally {
+        deleteBusy.value = false;
+    }
+}
 
 async function load() {
     loading.value = true;
@@ -28,17 +129,9 @@ async function load() {
         if (q.value) params.set('q', q.value);
         const r = await api.get<{ vendors: Vendor[] }>(`/api/v1/admin/vendors${params.toString() ? '?' + params : ''}`);
         vendors.value = r.vendors;
-    } finally { loading.value = false; }
-}
-
-async function setStatus(v: Vendor, newStatus: 'approved' | 'frozen' | 'suspended') {
-    if (!confirm(`${newStatus} ${v.legal_name}?`)) return;
-    try {
-        await api.patch(`/api/v1/admin/vendors/${v.id}/status`, { status: newStatus });
-        await load();
     } catch (e: any) {
-        alert(e?.message ?? 'Update failed');
-    }
+        banner.value = { tone: 'error', text: e?.message ?? 'Could not load vendors.' };
+    } finally { loading.value = false; }
 }
 
 function statusBadge(s: Vendor['status']) {
@@ -53,6 +146,14 @@ onMounted(load);
 
 <template>
   <AppShell title="Vendors">
+
+    <transition name="banner">
+      <div v-if="banner" :class="['bw-banner', banner.tone]" role="status">
+        {{ banner.text }}
+        <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
+      </div>
+    </transition>
+
     <div class="bw-card" style="padding: 0">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">Vendor organizations</h2>
@@ -65,8 +166,9 @@ onMounted(load);
           <option value="closed">Closed</option>
         </select>
         <span class="bw-spacer"></span>
-        <router-link to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
+        <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
       </div>
+
       <div class="bw-t-wrap">
         <table class="bw-table">
           <thead>
@@ -76,11 +178,11 @@ onMounted(load);
               <th>Contact</th>
               <th>Risk</th>
               <th>Status</th>
-              <th></th>
+              <th class="actions-col"></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="v in vendors" :key="v.id">
+            <tr v-for="v in vendors" :key="v.id" class="v-row" @click="router.push(`/vendors/${v.id}`)">
               <td class="bw-mono bw-muted">{{ shortDate(v.created_at) }}</td>
               <td>
                 <strong>{{ v.legal_name }}</strong>
@@ -92,11 +194,21 @@ onMounted(load);
               </td>
               <td><span class="bw-badge neutral">{{ v.risk_level }}</span></td>
               <td><span :class="['bw-badge', statusBadge(v.status)]">{{ v.status }}</span></td>
-              <td>
-                <div class="bw-row" style="gap: 4px; justify-content: flex-end">
-                  <button v-if="v.status === 'approved'" class="bw-btn sm" @click="setStatus(v, 'frozen')">Freeze</button>
-                  <button v-if="v.status === 'frozen' || v.status === 'suspended'" class="bw-btn sm primary" @click="setStatus(v, 'approved')">Reactivate</button>
+              <td class="actions-col" @click.stop>
+                <div class="action-cluster">
+                  <router-link :to="`/vendors/${v.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
+                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
+                  <button v-if="canManageVendors" class="bw-btn sm danger" @click="askDelete(v)">Delete</button>
                 </div>
+                <MobileActionMenu label="Vendor actions">
+                  <router-link :to="`/vendors/${v.id}`" class="mobile-action-item">View</router-link>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'frozen')">Freeze</button>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'suspended')">Suspend</button>
+                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="mobile-action-item primary" @click="ask(v, 'approved')">Reactivate</button>
+                  <button v-if="canManageVendors" class="mobile-action-item danger" @click="askDelete(v)">Delete</button>
+                </MobileActionMenu>
               </td>
             </tr>
             <tr v-if="!vendors.length && !loading">
@@ -106,5 +218,152 @@ onMounted(load);
         </table>
       </div>
     </div>
+
+    <!-- Status change confirm -->
+    <ConfirmDialog
+      v-model:open="modalOpen"
+      :title="actionLabel"
+      :description="target
+        ? `Change ${target.legal_name} → ${targetAction}. This is logged in the audit trail.`
+        : ''"
+      :confirm-label="actionLabel"
+      :tone="actionTone"
+      :loading="busy"
+      :disable-confirm="!reasonValid"
+      @confirm="doAction"
+    >
+      <template v-if="actionRequiresReason">
+        <label class="cd-input-label">Reason (visible to vendor) *</label>
+        <textarea
+          v-model="reason"
+          rows="3"
+          class="cd-input"
+          placeholder="e.g. Suspected fraud — under investigation."
+        />
+        <p class="cd-input-hint">Minimum 4 characters.</p>
+      </template>
+    </ConfirmDialog>
+
+    <ConfirmDialog
+      v-model:open="deleteOpen"
+      title="Delete vendor"
+      :description="deleteTarget
+        ? `Delete ${deleteTarget.legal_name} from the active vendor list? Financial records stay preserved for audit.`
+        : ''"
+      confirm-label="Delete vendor"
+      tone="danger"
+      :loading="deleteBusy"
+      @confirm="deleteVendor"
+    >
+      <label class="cd-input-label">Reason (optional)</label>
+      <textarea
+        v-model="deleteReason"
+        rows="3"
+        class="cd-input"
+        placeholder="e.g. duplicate vendor record"
+      />
+    </ConfirmDialog>
+
   </AppShell>
 </template>
+
+<style scoped>
+.bw-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  margin-bottom: var(--s-3);
+  font-size: var(--t-sm);
+  border: 1px solid;
+}
+.bw-banner.success {
+  background: oklch(from var(--brand) l c h / 0.08);
+  border-color: oklch(from var(--brand) l c h / 0.30);
+  color: var(--brand);
+}
+.bw-banner.error {
+  background: oklch(from var(--danger) l c h / 0.08);
+  border-color: oklch(from var(--danger) l c h / 0.30);
+  color: var(--danger);
+}
+.bw-banner-x {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 50%;
+  opacity: 0.7;
+}
+.bw-banner-x:hover { opacity: 1; }
+.banner-enter-active, .banner-leave-active { transition: all 0.20s var(--ease-out); }
+.banner-enter-from { opacity: 0; transform: translateY(-4px); }
+.banner-leave-to { opacity: 0; }
+
+.v-row { cursor: pointer; }
+.v-row:hover { background: var(--surface-2); }
+.actions-col { min-width: 260px; }
+.action-cluster {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 720px) {
+  .actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .action-cluster {
+    display: none;
+  }
+
+}
+
+:deep(.cd-body) .cd-input-label {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+:deep(.cd-body) .cd-input {
+  display: block;
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  box-sizing: border-box;
+}
+:deep(.cd-body) .cd-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+:deep(.cd-body) .cd-input-hint {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+</style>
