@@ -133,8 +133,10 @@ async function smokeRoutes(page, routes) {
 async function main() {
   assert(fs.existsSync(path.join(distRoot, "index.html")), "Run npm run build before browser smoke");
   const manifest = await import(pathToFileURL(path.join(root, "src/data/route-manifest.js")).href);
-  const adminRoutes = manifest.routeManifest.filter((route) => manifest.roleAllowsRoute(route, "super-admin"));
-  const vendorRoutes = manifest.routeManifest.filter((route) => manifest.roleAllowsRoute(route, "vendor_user"));
+  const externalRoutes = manifest.routeManifest.filter((route) => route.external);
+  const adminRoutes = manifest.routeManifest.filter((route) => !route.external && manifest.roleAllowsRoute(route, "super-admin"));
+  const vendorRoutes = manifest.routeManifest.filter((route) => !route.external && manifest.roleAllowsRoute(route, "vendor_user"));
+  assert(externalRoutes.every((route) => /^\/[^/]/.test(route.externalUrl)), "External routes require relative deployment URLs");
 
   const server = await startStaticServer();
   const appUrl = `http://127.0.0.1:${server.address().port}`;
@@ -160,6 +162,7 @@ async function main() {
     console.log(JSON.stringify({
       adminRoutes: adminVisited.length,
       vendorRoutes: vendorVisited.length,
+      externalRoutes: externalRoutes.length,
       totalRoutes: adminVisited.length + vendorVisited.length,
       status: "full crm browser smoke passed"
     }, null, 2));

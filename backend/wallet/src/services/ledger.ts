@@ -16,6 +16,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
+import { assertWalletCanTransact } from './wallets.js';
 
 export type EntryType =
     | 'funding_credit'
@@ -159,6 +160,17 @@ export interface Hold {
 export async function createHold(input: HoldInput): Promise<Hold> {
     if (input.amountMinor <= 0) throw new LedgerError('amount must be positive', 'invalid_amount');
     if (!input.idempotencyKey) throw new LedgerError('idempotencyKey is required', 'missing_idempotency_key');
+    const { data: wallet, error: walletError } = await adminClient
+        .from('wallets')
+        .select('id, status')
+        .eq('id', input.walletId)
+        .maybeSingle();
+    if (walletError) throw new LedgerError(walletError.message, 'wallet_lookup_failed');
+    try {
+        assertWalletCanTransact(wallet as any, 'place holds');
+    } catch (error: any) {
+        throw new LedgerError(error.message, error.code ?? 'wallet_inactive');
+    }
     const ttl = input.ttlSeconds ?? 900;
     if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) {
         throw new LedgerError('hold ttl must be between one second and one hour', 'invalid_hold_ttl');

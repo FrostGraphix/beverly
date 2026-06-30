@@ -130,7 +130,7 @@
           <strong>Consumption Trend</strong>
           <span class="scc-card-badge">{{ granularityLabel }} · kWh</span>
         </div>
-        <span class="scc-card-meta">{{ data ? data.temporal.labels.length : 0 }} periods</span>
+        <span class="scc-card-meta">{{ data?.temporal?.labels?.length || 0 }} periods</span>
       </div>
       <div class="scc-chart scc-chart--tall">
         <EChartPanel v-if="hasTemporal" :option="trendOption" />
@@ -186,7 +186,7 @@
           <strong>Station League Table</strong>
           <span class="scc-card-badge">{{ leagueRows.length }} stations</span>
         </div>
-        <span class="scc-card-meta">vs prior {{ data ? data.range.periodDays : 0 }}-day window</span>
+        <span class="scc-card-meta">vs prior {{ data?.range?.periodDays || 0 }}-day window</span>
       </div>
       <div class="scc-table-wrap scc-table-wrap--league">
         <table class="scc-table scc-table--league">
@@ -530,8 +530,8 @@ export default {
     hasSeasonality() {
       return !!(this.data && this.data.seasonality && this.data.seasonality.values.some((v) => v > 0));
     },
-    leagueRows() { return this.data ? this.data.stations : []; },
-    topMeters()  { return this.data ? this.data.topMeters : []; },
+    leagueRows() { return this.data?.stations || []; },
+    topMeters()  { return this.data?.topMeters || []; },
     topMetersTotalPages() {
       return Math.max(1, Math.ceil(this.topMeters.length / this.topMetersPageSize));
     },
@@ -548,8 +548,8 @@ export default {
     },
 
     kpiCards() {
-      const t = this.data ? this.data.totals : null;
-      const top = this.data && this.data.stations[0];
+      const t = this.data?.totals || null;
+      const top = this.data?.stations?.[0];
       const growthIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
       return [
         { label: "Meter Read Total",   value: t ? `${this.fmt(t.latestOdometerKwh)} kWh` : "—", sub: t ? `${this.fmt(t.metersWithLatest, 0)} latest meter reads` : "",       tone: "", accent: "primary" },

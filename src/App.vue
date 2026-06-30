@@ -14,11 +14,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
       </div>
-      <button type="button" class="sidebar-find" aria-label="Find pages" title="Find pages" @click="openSidebarSearch">
+      <BaseButton variant="quiet" class="sidebar-find" aria-label="Find pages" title="Find pages" @click="openSidebarSearch">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
         <span>Find...</span>
         <kbd>F</kbd>
-      </button>
+      </BaseButton>
       <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
         <template v-for="group in groups" :key="`section-${group.name}`">
           <a
@@ -34,8 +34,8 @@
             <span class="sidebar-label">{{ group.routes[0].title }}</span>
           </a>
           <template v-else>
-            <button
-              type="button"
+            <BaseButton
+              variant="quiet"
               :class="sidebarGroupClass(group)"
               :title="group.name"
               :aria-expanded="String(Boolean(expandedGroups[group.name]))"
@@ -44,7 +44,7 @@
               <span class="sidebar-icon" v-html="routeIcon({ group: group.name, title: group.name })"></span>
               <span class="sidebar-label">{{ group.name }}</span>
               <svg class="sidebar-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
-            </button>
+            </BaseButton>
             <div v-show="expandedGroups[group.name]" class="sidebar-submenu">
               <a
                 v-for="route in group.routes"
@@ -92,8 +92,8 @@
           <div class="right-menu">
             <StationAlertsBell />
             <div class="bw-account-menu" ref="accountMenuWrap">
-              <button
-                type="button"
+              <BaseButton
+                variant="quiet"
                 class="bw-user-chip bw-user-chip-btn"
                 @click="openUserMenu"
                 :aria-label="`User menu for ${currentUserName}`"
@@ -112,7 +112,7 @@
                 <svg class="bw-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="m6 9 6 6 6-6"></path>
                 </svg>
-              </button>
+              </BaseButton>
               <transition name="dropdown">
                 <div id="beverly-account-menu" v-show="userDropdownOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly account menu">
                   <div class="bw-user-dropdown-brand">
@@ -125,22 +125,22 @@
                       <small>{{ displayUserName }} - {{ currentRoleName }}</small>
                     </span>
                   </div>
-                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
+                  <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openProfile">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M20 21a8 8 0 0 0-16 0"></path>
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
                     <span>Profile</span>
-                  </button>
-                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSettings">
+                  </BaseButton>
+                  <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openSettings">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"></path>
                       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z"></path>
                     </svg>
                     <span>Settings</span>
-                  </button>
-                  <button
-                    type="button"
+                  </BaseButton>
+                  <BaseButton
+                    variant="quiet"
                     class="bw-user-menu-item"
                     role="menuitem"
                     :aria-expanded="String(userThemePanelOpen)"
@@ -154,12 +154,12 @@
                     <svg class="bw-user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                       <path d="m9 18 6-6-6-6"></path>
                     </svg>
-                  </button>
+                  </BaseButton>
                   <div v-show="userThemePanelOpen" class="user-theme-panel" role="group" aria-label="Theme choices">
-                    <button
+                    <BaseButton
                       v-for="theme in themeOptions"
                       :key="theme.id"
-                      type="button"
+                      variant="quiet"
                       :class="['user-theme-choice', { active: currentTheme === theme.id }]"
                       role="menuitemradio"
                       :aria-checked="String(currentTheme === theme.id)"
@@ -169,18 +169,18 @@
                       <span>
                         <strong>{{ theme.label }}</strong>
                       </span>
-                    </button>
+                    </BaseButton>
                   </div>
                   <div class="bw-user-menu-separator"></div>
-                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSearchFromMenu">
+                  <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openSearchFromMenu">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <circle cx="11" cy="11" r="7"></circle>
                       <path d="m21 21-4.3-4.3"></path>
                     </svg>
                     <span>Global search</span>
                     <kbd>Ctrl K</kbd>
-                  </button>
-                  <button type="button" class="bw-user-menu-item" role="menuitem" @click="openFullscreenFromMenu">
+                  </BaseButton>
+                  <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openFullscreenFromMenu">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
                       <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
@@ -188,15 +188,15 @@
                       <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
                     </svg>
                     <span>Fullscreen</span>
-                  </button>
-                  <button type="button" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="handleSignOut">
+                  </BaseButton>
+                  <BaseButton variant="quiet" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="handleSignOut">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                       <path d="m16 17 5-5-5-5"></path>
                       <path d="M21 12H9"></path>
                     </svg>
                     <span>Sign Out</span>
-                  </button>
+                  </BaseButton>
                 </div>
               </transition>
             </div>

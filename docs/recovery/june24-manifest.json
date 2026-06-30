@@ -50,6 +50,50 @@
       "reason": "Aligned template fields with the computed transaction model"
     }
   ],
+  "verificationRepairs": {
+    "recordedAt": "2026-06-30",
+    "runtime": {
+      "requiredNode": "22.x",
+      "verificationNode": "24.13.1",
+      "packageManager": "pnpm 10.28.0"
+    },
+    "files": [
+      {
+        "path": "backend/wallet/src/services/ledger.ts",
+        "sha256": "5cb1c04037a582ad464f1ad833cddfce0286a15733d50c2b8f1ecafe43c710e2",
+        "reason": "Enforced wallet status before creating holds"
+      },
+      {
+        "path": "src/App.vue",
+        "sha256": "42a8aadd31f8134de7b5ad3c59f775f5e54e25a4d3dc9f8275ac7ec388a78313",
+        "reason": "Restored design-system button contracts"
+      },
+      {
+        "path": "src/components/StationConsumptionPage.vue",
+        "sha256": "e4ea6e4185c7a3c9e6e96e845eee4eff825194006665adc7b84cd805b4779eb2",
+        "reason": "Guarded incomplete station responses"
+      },
+      {
+        "path": "src/data/route-manifest.js",
+        "sha256": "690e602f9407d41527f6362e5e7a9eb28bffe95e83012db0fd254f0aa97c85f2",
+        "reason": "Made wallet routing deployment-relative"
+      },
+      {
+        "path": "tests/full-crm-browser-smoke.test.cjs",
+        "sha256": "a24f7bcb59c23bd387d9e895047acf32158adb1c5fd53719c45a6aaa4f134732",
+        "reason": "Separated external-link validation"
+      }
+    ],
+    "passed": [
+      "typecheck",
+      "build",
+      "test",
+      "test:wallet",
+      "test:browser",
+      "test:visual:audit",
+      "test:full-smoke"
+    ]
+  },
   "exclusions": [
     "Current Antigravity placeholder implementations",
     "Runtime databases and generated logs",
