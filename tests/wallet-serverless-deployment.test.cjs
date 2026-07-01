@@ -7,6 +7,8 @@ const queues = fs.readFileSync("backend/wallet/src/queue/index.ts", "utf8");
 const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
 
 assert.match(adapter, /app\.inject/);
+assert.match(adapter, /export async function injectWallet/);
+assert.match(fs.readFileSync("api/reference.js", "utf8"), /walletApiBaseUrl === "internal"/);
 assert.match(server, /export async function build/);
 assert.match(queues, /WALLET_SERVERLESS/);
 assert(vercel.rewrites.some((route) =>

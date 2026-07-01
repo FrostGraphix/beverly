@@ -18,22 +18,25 @@ function targetUrl(rawUrl = "/") {
   return query ? `${target}?${query}` : target;
 }
 
+export async function injectWallet(request) {
+  const app = await getApp();
+  const method = String(request.method || "GET").toUpperCase();
+  const payload = ["GET", "HEAD"].includes(method)
+    ? undefined
+    : typeof request.body === "string" || Buffer.isBuffer(request.body)
+      ? request.body
+      : JSON.stringify(request.body ?? {});
+  return app.inject({
+    method,
+    url: targetUrl(request.url),
+    headers: request.headers,
+    payload,
+  });
+}
+
 export default async function handler(request, response) {
   try {
-    const app = await getApp();
-    const method = String(request.method || "GET").toUpperCase();
-    const payload = ["GET", "HEAD"].includes(method)
-      ? undefined
-      : typeof request.body === "string" || Buffer.isBuffer(request.body)
-        ? request.body
-        : JSON.stringify(request.body ?? {});
-    const result = await app.inject({
-      method,
-      url: targetUrl(request.url),
-      headers: request.headers,
-      payload,
-    });
-
+    const result = await injectWallet(request);
     for (const [name, value] of Object.entries(result.headers)) {
       if (value !== undefined) response.setHeader(name, value);
     }

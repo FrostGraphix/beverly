@@ -3491,6 +3491,26 @@ async function proxyCanonicalWallet(request, pathname, requestData) {
   }
   if (!headers["content-type"] && requestData.contentType) headers["content-type"] = requestData.contentType;
 
+  if (env.walletApiBaseUrl === "internal") {
+    const { injectWallet } = await import("./wallet-service.mjs");
+    const result = await injectWallet({
+      method: request.method,
+      url: `/api/wallet-service${pathname}${querySuffix(request.url)}`,
+      headers,
+      body: requestData.rawBody,
+    });
+    const contentType = String(result.headers["content-type"] || "");
+    let body = result.body;
+    if (contentType.includes(jsonContentType)) {
+      try {
+        body = JSON.parse(result.body);
+      } catch {
+        body = { error: "wallet_backend_invalid_json", message: "Wallet backend returned invalid JSON." };
+      }
+    }
+    return { status: result.statusCode, body };
+  }
+
   try {
     const response = await axios({
       method: request.method || "GET",

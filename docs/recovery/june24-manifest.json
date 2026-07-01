@@ -149,7 +149,7 @@
       },
       {
         "path": "api/reference.js",
-        "sha256": "d821e8daf5fe4075f4e5df2ac39e8955b28502a8f8e693104911eb3a130a2ec8"
+        "sha256": "7104b789111e8b3ceb08875ec7ead56eb807e6ac1b74f663049015278c454260"
       },
       {
         "path": "package.json",
@@ -193,7 +193,7 @@
       },
       {
         "path": "api/wallet-service.mjs",
-        "sha256": "cfbf476da35eb4fa37959e0700d2cc0ca956e66819d0c375968c7b7a41c00812"
+        "sha256": "66be099e844e56843f81f0c9e666ba7ce968ce1797a0881dea377033f56ea14d"
       },
       {
         "path": "backend/wallet/src/server.ts",
@@ -205,7 +205,7 @@
       },
       {
         "path": "tests/wallet-serverless-deployment.test.cjs",
-        "sha256": "800ec97a79591cfe9fe90678b5933f6e15c2dd6628eb897cbbddaa858b3fe596"
+        "sha256": "0d246fea1e2ef8467987923484145480654b72a605fb76fca2121f28f1a01310"
       },
       {
         "path": "vercel.json",
