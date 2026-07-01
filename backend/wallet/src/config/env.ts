@@ -74,6 +74,11 @@ const schema = z.object({
     FEATURE_CUSTOMER_WALLET: z.coerce.boolean().default(true),
     FEATURE_METER_PURCHASE: z.coerce.boolean().default(true),
     FEATURE_VENDOR_VENDING: z.coerce.boolean().default(true),
+    MONEY_WRITES_ENABLED: z.coerce.boolean().default(false),
+    DEV_CONSOLE_ENABLED: z.coerce.boolean().default(false),
+    DEV_CONSOLE_BREAK_GLASS_TOKEN: z.string().min(32).optional(),
+    // VAT is inclusive of the customer-paid vending amount. Persisted per order.
+    VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(750),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -110,5 +115,5 @@ export function isCorsOriginAllowed(origin: string | undefined): boolean {
         }
     }
 
-    return corsOrigins.length === 0;
+    return false;
 }

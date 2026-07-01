@@ -22,9 +22,9 @@ assert(
   "vercel api functions must exclude tmp deployment artifacts"
 );
 assert(Array.isArray(vercelJson.rewrites), "vercel rewrites must exist");
-assert(vercelJson.env?.ALLOW_LIVE_WRITES === "true", "vercel ALLOW_LIVE_WRITES must stay enabled");
-assert(vercelJson.env?.APPROVED_LIVE_WRITES === "true", "vercel APPROVED_LIVE_WRITES must stay enabled");
-assert(vercelJson.env?.VITE_ALLOW_LIVE_WRITES === "true", "vercel VITE_ALLOW_LIVE_WRITES must stay enabled");
+assert(!vercelJson.env?.ALLOW_LIVE_WRITES, "vercel must not enable live writes");
+assert(!vercelJson.env?.APPROVED_LIVE_WRITES, "vercel must not approve live writes");
+assert(!vercelJson.env?.VITE_ALLOW_LIVE_WRITES, "vercel must not expose live write flags");
 assert(
   vercelJson.rewrites.some((entry) => entry.source === "/api/:path*" && entry.destination === "/api/reference?__pathname=/api/:path*"),
   "vercel.json must forward api paths to api/reference"

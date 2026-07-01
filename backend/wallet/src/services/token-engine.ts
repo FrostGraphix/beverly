@@ -18,14 +18,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
+import { resolveVatRateBasisPoints } from './vat-policy.js';
+import { calculateVendingVatBreakdown } from './vending-vat.js';
 
-const TAX_BY_TARIFF: Record<string, number> = {
-    RESIDENTIAL: 0,
-    COMMERCIAL: 0,
-    KOLO: 0.075,
-    PRODUCTIVE: 0,
-    PUBLIC: 0,
-};
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
     COMMERCIAL: 350,
@@ -80,19 +75,16 @@ async function energyCall<T>(path: string, init: RequestInit = {}): Promise<T> {
 export interface TariffInfo {
     tariffId: string;
     basePricePerKwh: number;
-    taxRate: number;
     effectivePricePerKwh: number;
 }
 
 export function resolveTariffPricing(tariffId: string): TariffInfo {
     const id = tariffId.toUpperCase();
     const base = PRICE_BY_TARIFF[id] ?? 350;
-    const tax = TAX_BY_TARIFF[id] ?? 0;
     return {
         tariffId: id,
         basePricePerKwh: base,
-        taxRate: tax,
-        effectivePricePerKwh: base * (1 + tax),
+        effectivePricePerKwh: base,
     };
 }
 
@@ -101,22 +93,41 @@ export interface PurchasePreview {
     units: number;            // kWh
     effectivePricePerKwh: number;
     taxAmountMinor: number;
+    energyAmountMinor: number;
+    grossAmountMinor: number;
+    vatRateBasisPoints: number;
     tariffId: string;
 }
 
-export function previewPurchase(amountMinor: number, tariffId: string): PurchasePreview {
+export function previewPurchase(
+    amountMinor: number,
+    tariffId: string,
+    vatRateBasisPoints = env.VENDING_VAT_BASIS_POINTS,
+): PurchasePreview {
     if (amountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
     const t = resolveTariffPricing(tariffId);
-    const naira = amountMinor / 100;
-    const units = naira / t.effectivePricePerKwh;
-    const taxMinor = Math.round(amountMinor * (t.taxRate / (1 + t.taxRate)));
+    const vat = calculateVendingVatBreakdown(amountMinor, vatRateBasisPoints);
+    const naira = vat.energyAmountMinor / 100;
+    const units = naira / t.basePricePerKwh;
     return {
         amountMinor,
         units: Number(units.toFixed(4)),
         effectivePricePerKwh: t.effectivePricePerKwh,
-        taxAmountMinor: taxMinor,
+        taxAmountMinor: vat.vatAmountMinor,
+        energyAmountMinor: vat.energyAmountMinor,
+        grossAmountMinor: vat.grossAmountMinor,
+        vatRateBasisPoints: vat.vatRateBasisPoints,
         tariffId: t.tariffId,
     };
+}
+
+export async function previewPurchaseWithPolicy(
+    amountMinor: number,
+    tariffId: string,
+    at = new Date(),
+): Promise<PurchasePreview> {
+    const vatRateBasisPoints = await resolveVatRateBasisPoints(at);
+    return previewPurchase(amountMinor, tariffId, vatRateBasisPoints);
 }
 
 export interface MeterInfo {

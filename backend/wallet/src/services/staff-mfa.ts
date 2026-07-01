@@ -139,11 +139,14 @@ async function consumeRecoveryCode(userId: string, code: string): Promise<boolea
     const target = recoveryHash(code);
     const match = (data || []).find((row: any) => row.code_hash === target);
     if (!match) return false;
-    await adminClient
+    // Guard against race: only update if still unused at the DB level.
+    const { data: updated } = await adminClient
         .from('staff_mfa_recovery_codes')
         .update({ used_at: new Date().toISOString() })
-        .eq('id', (match as any).id);
-    return true;
+        .eq('id', (match as any).id)
+        .is('used_at', null)
+        .select('id');
+    return Boolean(updated?.length);
 }
 
 async function verifyActiveMfaCode(actor: StaffMfaActor, code: string, reason: string, meta: StaffMfaRequestMeta = {}) {

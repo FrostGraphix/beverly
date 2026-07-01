@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
+import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 interface Purchase {
     id: string;
@@ -11,6 +12,9 @@ interface Purchase {
     meter_type: 'single_phase' | 'three_phase' | null;
     station_id: string | null;
     amount_minor: number;
+    energy_amount_minor?: number | null;
+    vat_amount_minor?: number | null;
+    vat_rate_basis_points?: number | null;
     units_kwh: number | null;
     purchase_mode: string;
     status: string;
@@ -46,6 +50,14 @@ function meterTypeLabel(type?: string | null) {
     if (type === 'three_phase') return 'Three Phase';
     if (type === 'single_phase') return 'Single Phase';
     return 'Unknown';
+}
+
+function viewVendReceipt(p: Purchase) {
+    viewReceipt(purchaseReceipt(p));
+}
+
+function printVendReceipt(p: Purchase) {
+    printReceipt(purchaseReceipt(p));
 }
 
 function buildParams(cursor?: string) {
@@ -167,12 +179,14 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <th>Station</th>
               <th>Mode</th>
               <th style="text-align:right">Amount</th>
+              <th style="text-align:right">VAT</th>
               <th>Status</th>
+              <th>Receipt</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading && !items.length">
-              <td colspan="9" style="text-align:center; padding: var(--s-8)">
+              <td colspan="11" style="text-align:center; padding: var(--s-8)">
                 <div class="bw-spinner" style="margin: auto" />
               </td>
             </tr>
@@ -189,13 +203,20 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <td>{{ p.station_id || 'â€”' }}</td>
               <td><span class="bw-badge neutral">{{ p.purchase_mode }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td>
                 <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status.replace(/_/g, ' ') }}</span>
                 <div v-if="p.failure_reason" class="bw-muted" style="font-size: 10px; margin-top: 2px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ p.failure_reason }}</div>
               </td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click="viewVendReceipt(p)">View</button>
+                  <button class="bw-btn sm" @click="printVendReceipt(p)">Print</button>
+                </div>
+              </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="9" class="bw-muted" style="text-align:center; padding: var(--s-8)">No purchases match your filters.</td>
+              <td colspan="11" class="bw-muted" style="text-align:center; padding: var(--s-8)">No purchases match your filters.</td>
             </tr>
           </tbody>
         </table>
@@ -210,6 +231,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <div class="bw-tc-id bw-mono">#{{ p.actor_id.slice(0, 8) }} Â· {{ shortDate(p.created_at) }}</div>
             </div>
             <div class="bw-tc-amt bw-money">{{ naira(p.amount_minor) }}</div>
+            <div class="bw-muted" style="font-size: var(--t-xs)">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
           </div>
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
@@ -229,6 +251,13 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
             <div class="bw-tc-pair" v-if="p.failure_reason">
               <span class="bw-tc-pair-label">Reason</span>
               <span class="bw-tc-pair-val bw-muted" style="font-size: var(--t-xs)">{{ p.failure_reason }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Receipt</span>
+              <span class="receipt-actions">
+                <button class="bw-btn sm" @click="viewVendReceipt(p)">View</button>
+                <button class="bw-btn sm" @click="printVendReceipt(p)">Print</button>
+              </span>
             </div>
           </div>
         </div>
@@ -283,6 +312,11 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 
 .vm-refresh {
   flex: 0 0 auto;
+  white-space: nowrap;
+}
+.receipt-actions {
+  display: inline-flex;
+  gap: 4px;
   white-space: nowrap;
 }
 

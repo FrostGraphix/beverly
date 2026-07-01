@@ -25,7 +25,8 @@
               <th>Requested By</th>
               <th>Status</th>
               <th>Created</th>
-              <th></th>
+              <th>Receipt</th>
+              <th class="refund-actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -36,14 +37,26 @@
               <td class="bw-text-sm bw-mono">{{ r.requested_by_user_id?.slice(0, 8) || 'â€”' }}</td>
               <td><span :class="statusClass(r.status)" class="bw-badge">{{ statusLabel(r.status) }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
-              <td v-if="r.status === 'pending'" class="bw-action-cell">
-                <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openApprove(r)">Approve</button>
-                <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">View</button>
+                  <button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">Print</button>
+                </div>
+              </td>
+              <td v-if="r.status === 'pending'" class="bw-action-cell refund-actions-col">
+                <div class="refund-row-actions">
+                  <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openApprove(r)">Approve</button>
+                  <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+                </div>
+                <MobileActionMenu label="Refund actions">
+                  <button class="mobile-action-item primary" @click="openApprove(r)">Approve</button>
+                  <button class="mobile-action-item danger" @click="openReject(r)">Reject</button>
+                </MobileActionMenu>
               </td>
               <td v-else></td>
             </tr>
             <tr v-if="!refunds.length">
-              <td colspan="7" class="bw-empty">No refunds found.</td>
+              <td colspan="8" class="bw-empty">No refunds found.</td>
             </tr>
           </tbody>
         </table>
@@ -60,10 +73,13 @@
           <div class="bw-tc-mid">
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Reason</span><span class="bw-tc-pair-val">{{ r.reason?.replace(/_/g, ' ') }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Created</span><span class="bw-tc-pair-val">{{ fmtDate(r.created_at) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Receipt</span><span class="receipt-actions"><button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">View</button><button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">Print</button></span></div>
           </div>
           <div v-if="r.status === 'pending'" class="bw-tc-foot">
-            <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openApprove(r)">Approve</button>
-            <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+            <MobileActionMenu label="Refund actions">
+              <button class="mobile-action-item primary" @click="openApprove(r)">Approve</button>
+              <button class="mobile-action-item danger" @click="openReject(r)">Reject</button>
+            </MobileActionMenu>
           </div>
         </div>
       </div>
@@ -116,7 +132,9 @@
 import { ref, onMounted } from 'vue';
 import { api, naira } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { exportCsv, printPdf } from '../lib/export';
+import { printReceipt, refundReceipt, viewReceipt } from '../lib/receipts';
 
 const refunds      = ref<any[]>([]);
 const loading      = ref(false);
@@ -188,6 +206,10 @@ function statusClass(s: string) {
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : 'â€”'; }
 
+function viewRefundReceipt(r: any) { viewReceipt(refundReceipt(r)); }
+
+function printRefundReceipt(r: any) { printReceipt(refundReceipt(r)); }
+
 function exportCsvRows() {
   exportCsv('refunds', refunds.value, [
     { key: 'id', header: 'Refund ID', value: (r) => r.id },
@@ -223,7 +245,26 @@ onMounted(load);
 
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.bw-tc-foot { display: flex; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-tc-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.refund-row-actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.refund-actions-col { min-width: 150px; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .refund-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .refund-row-actions {
+    display: none;
+  }
+}
 </style>
 
 

@@ -62,12 +62,21 @@ assert.match(vendAccess, /\/api\/v1\/vendor\/vend-credential/);
 assert.match(vendAccess, /auth\.refreshMe\(\)/);
 assert.match(vendAccess, /PIN: 4-6 digits/);
 assert.match(vendAccess, /Password: 10\+ characters/);
+assert.match(vendAccess, /credentialProblem/);
+assert.match(vendAccess, /Choose a less predictable PIN/);
+assert.match(vendAccess, /Authorization entries must match/);
 
 for (const view of [vend, remoteSend]) {
   assert.match(view, /ConfirmDialog/);
   assert.match(view, /const authorization = ref\(''\)/);
+  assert.match(view, /const authError = ref\(''\)/);
   assert.match(view, /authorization: authorization\.value/);
   assert.match(view, /Vendor authorization/);
+  assert.match(view, /vend_credential_required/);
+  assert.match(view, /path: '\/vend-access'/);
+  assert.match(view, /redirect: route\.fullPath/);
+  assert.match(view, /invalid_vend_credential/);
+  assert.match(view, /Invalid vendor authorization/);
 }
 assert.match(remoteSend, /mode: 'remote_send'/);
 assert.match(vend, /mode: 'wallet'/);

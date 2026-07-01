@@ -64,6 +64,7 @@ with permission_defaults(role_key, route_hash) as (
     ('super-admin', 'wallet.audit.view'),
     ('super-admin', 'wallet.flags.manage'),
     ('super-admin', 'wallet.access.manage'),
+    ('super-admin', 'dev.console'),
     ('operations-manager', 'wallet.dashboard.view'),
     ('operations-manager', 'wallet.vendors.review'),
     ('operations-manager', 'wallet.vending.monitor'),

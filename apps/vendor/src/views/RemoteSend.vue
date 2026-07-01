@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
+import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 type Step = 'meter' | 'amount' | 'preview' | 'success';
 
@@ -14,6 +16,10 @@ const loading = ref(false);
 const error = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
 const authOpen = ref(false);
 const authorization = ref('');
+const authError = ref('');
+const copied = ref(false);
+const router = useRouter();
+const route = useRoute();
 
 interface MeterInfo {
     meterId: string;
@@ -30,7 +36,14 @@ interface Preview { amountMinor: number; units: number; effectivePricePerKwh: nu
 
 const meter = ref<MeterInfo | null>(null);
 const preview = ref<Preview | null>(null);
-const result = ref<{ remoteTaskId: string | null; units: number; purchaseOrder: any } | null>(null);
+const result = ref<{
+    remoteTaskId: string | null;
+    token: string | null;
+    receiptId: string | null;
+    units: number;
+    purchaseOrder: any;
+    remoteSend?: { status: 'pending' | 'success' | 'failed' | 'unknown'; deliveryState: string; remark?: string | null };
+} | null>(null);
 
 const amountMinor = computed(() => Math.max(0, Math.round(amountNaira.value * 100)));
 // Remote send writes a token straight to the physical meter — never allow it
@@ -64,6 +77,22 @@ function describeApiError(e: unknown, fallback: string) {
                 title: 'Meter rejected the token',
                 message: e.message,
                 action: 'Verify the meter phase and key data (SGC/KRN/TI/KT) match this meter, then retry.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'vend_credential_required') {
+            return {
+                title: 'Vendor authorization required',
+                message: e.message,
+                action: 'Create your vendor PIN or password, then retry this remote send.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'invalid_vend_credential') {
+            return {
+                title: 'Invalid authorization',
+                message: e.message,
+                action: 'Enter the PIN or password created on Vendor Authorization.',
                 code: e.code,
             };
         }
@@ -122,14 +151,23 @@ function confirm() {
         };
         return;
     }
+    authError.value = '';
     authOpen.value = true;
 }
 
 async function submitAuthorization() {
     if (!meter.value || !preview.value || !authorization.value) return;
     loading.value = true; error.value = null;
+    authError.value = '';
     try {
-        const r = await api.post<{ remoteTaskId: string | null; units: number; purchaseOrder: any }>(
+        const r = await api.post<{
+            remoteTaskId: string | null;
+            token: string | null;
+            receiptId: string | null;
+            units: number;
+            purchaseOrder: any;
+            remoteSend?: { status: 'pending' | 'success' | 'failed' | 'unknown'; deliveryState: string; remark?: string | null };
+        }>(
             '/api/v1/vendor/vend',
             {
                 meterId: meter.value.meterId,
@@ -143,6 +181,16 @@ async function submitAuthorization() {
         authOpen.value = false;
         step.value = 'success';
     } catch (e: any) {
+        if (e instanceof ApiError && e.code === 'vend_credential_required') {
+            authOpen.value = false;
+            authorization.value = '';
+            await router.push({ path: '/vend-access', query: { redirect: route.fullPath } });
+            return;
+        }
+        if (e instanceof ApiError && e.code === 'invalid_vend_credential') {
+            authError.value = 'Invalid vendor authorization.';
+            return;
+        }
         error.value = describeApiError(e, e?.message ?? 'Remote send failed');
     } finally {
         loading.value = false;
@@ -157,6 +205,44 @@ function reset() {
     preview.value = null;
     result.value = null;
     error.value = null;
+    copied.value = false;
+}
+
+async function copyToken() {
+    if (!result.value?.token) return;
+    try {
+        await navigator.clipboard.writeText(result.value.token);
+        copied.value = true;
+        window.setTimeout(() => { copied.value = false; }, 2000);
+    } catch {
+        error.value = { title: 'Copy failed', message: 'Select the token and copy it manually.' };
+    }
+}
+
+function receiptRow() {
+    if (!result.value) return null;
+    return {
+        ...(result.value.purchaseOrder ?? {}),
+        token: result.value.token,
+        receipt_id: result.value.receiptId,
+        purchase_order_id: result.value.purchaseOrder?.id,
+        units_kwh: result.value.units,
+        customer_name: meter.value?.customerName,
+        meter_id: meter.value?.meterId,
+        meter_type: meter.value?.isThreePhase ? 'three_phase' : 'single_phase',
+        station_id: meter.value?.stationId,
+        amount_minor: result.value.purchaseOrder?.amount_minor ?? preview.value?.amountMinor,
+    };
+}
+
+function viewResultReceipt() {
+    const row = receiptRow();
+    if (row) viewReceipt(purchaseReceipt(row));
+}
+
+function downloadResultReceipt() {
+    const row = receiptRow();
+    if (row) downloadReceipt(purchaseReceipt(row));
 }
 </script>
 
@@ -168,7 +254,7 @@ function reset() {
       <div v-if="step === 'meter'" class="bw-card">
         <h1 class="bw-h1">Remote send</h1>
         <p class="bw-muted" style="margin: 0 0 var(--s-5)">
-          The token is generated for the meter's phase and delivered straight to the meter — no display, no copy.
+          Beverly generates your token first, then sends it to the meter. The token remains available for manual entry.
         </p>
         <label class="bw-label">Meter number</label>
         <input class="bw-input bw-mono" inputmode="numeric"
@@ -242,8 +328,8 @@ function reset() {
         </div>
 
         <div class="bw-alert" style="margin-top: var(--s-3); display: grid; gap: 4px">
-          <strong>Token goes straight to the meter</strong>
-          <span>It is not shown or copyable. Confirm the meter and phase are correct before dispatching.</span>
+          <strong>Token first, remote delivery second</strong>
+          <span>Your token and receipt remain available if the meter needs manual entry.</span>
         </div>
         <div v-if="!canDispatch" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
           <strong>Remote send blocked for safety</strong>
@@ -265,8 +351,9 @@ function reset() {
       <!-- Step: success -->
       <div v-else-if="step === 'success'" class="bw-stack">
         <div class="bw-token-box">
-          <p class="bw-label" style="color: var(--brand)">Dispatched</p>
-          <h1 class="bw-h1" style="margin: var(--s-2) 0">Token sent to meter</h1>
+          <p class="bw-label" style="color: var(--brand)">{{ result?.remoteSend?.status === 'success' ? 'Delivered' : 'Token generated' }}</p>
+          <h1 class="bw-h1" style="margin: var(--s-2) 0">{{ result?.remoteSend?.status === 'success' ? 'Token sent to meter' : 'Token ready for entry' }}</h1>
+          <p class="bw-token-value">{{ result?.token }}</p>
           <p class="bw-muted bw-mono" style="font-size: var(--t-sm)">
             Task #{{ String(result?.remoteTaskId ?? '').slice(0, 12) }}
           </p>
@@ -278,8 +365,15 @@ function reset() {
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Phase</span><span class="bw-spacer"></span><span>{{ meterTypeLabel(meter?.isThreePhase) }}</span></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Order</span><span class="bw-spacer"></span><span class="bw-mono">#{{ String(result?.purchaseOrder?.id ?? '').slice(0, 8) }}</span></div>
           <p class="bw-muted" style="font-size: var(--t-sm); margin-top: var(--s-3)">
-            Delivery is confirmed asynchronously — track final status in Transactions.
+            {{ result?.remoteSend?.status === 'success'
+              ? 'Delivery confirmed by the meter.'
+              : result?.remoteSend?.remark || 'Remote delivery needs review. Enter this valid token manually if needed.' }}
           </p>
+        </div>
+        <div class="bw-row" style="gap: var(--s-2); flex-wrap: wrap">
+          <button class="bw-btn primary" @click="copyToken">{{ copied ? 'Copied' : 'Copy token' }}</button>
+          <button class="bw-btn" @click="downloadResultReceipt">Download receipt</button>
+          <button class="bw-btn" @click="viewResultReceipt">View receipt</button>
         </div>
         <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New send</button>
       </div>
@@ -303,6 +397,9 @@ function reset() {
         autocomplete="off"
         placeholder="PIN or password"
       />
+      <p v-if="authError" class="bw-alert danger" style="margin-top: var(--s-2)">
+        {{ authError }}
+      </p>
       <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-2)">
         This protects remote token dispatch and confirms the wallet debit.
       </p>

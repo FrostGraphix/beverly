@@ -52,6 +52,10 @@ Keep write safety strict.
 ## Backend
 
 - `api/reference.js` fronts all backend calls.
+- `api/reference.js` proxies `/api/v1/*` only.
+- `backend/wallet/` owns canonical wallet writes.
+- `backend/wallet/src/contracts/route-policy.ts` owns canonical mutation policy, money-write flags, cache exclusion, and developer-only route classification.
+- `api/wallet-route-contract.cjs` owns the legacy gateway's explicit canonical-money proxy contract.
 - `backend/reference-facade/` owns local facade logic.
 - `backend/src/services/wallet-ledger-service.js` owns immutable wallet ledger posting and balance derivation.
 - `backend/src/services/wallet-funding-service.js` owns funding requests, proof metadata, and finance approval.
@@ -60,6 +64,9 @@ Keep write safety strict.
 - `backend/src/services/wallet-approval-service.js` owns maker-checker approval contracts.
 - `backend/src/services/wallet-risk-service.js` owns limits, freeze checks, and anomaly events.
 - `backend/src/services/wallet-audit-service.js` owns structured wallet audit events.
+- `backend/wallet/src/services/payment-transactions.ts` owns Paystack success fulfillment and legacy status compatibility.
+- `backend/wallet/src/services/payment-webhooks.ts` owns verified Paystack webhook reconciliation.
+- `backend/wallet/src/services/dev-console.ts` owns admin developer console data contracts.
 - `LIVE_BEARER_TOKEN` has priority over client auth.
 - `CORS_ORIGINS` controls CORS.
 - `RATE_LIMIT_*` controls rate limiting.
@@ -75,6 +82,8 @@ Keep write safety strict.
 - Wallet Admin is built into `/wallet-admin/` for same-Vercel hosting.
 - Wallet Admin dev stays on `http://localhost:5175`.
 - Wallet Admin must not route to unprovisioned custom domains.
+- Wallet Admin developer console routes live under `/dev/*`.
+- Wallet Admin developer console requires `dev.console`.
 
 ## Data Policy
 
@@ -82,6 +91,7 @@ Keep write safety strict.
 - Live reads are opt-in.
 - Live writes require `ALLOW_LIVE_WRITES=true`.
 - Wallet local mode is development and preview-safe only.
+- Wallet money writes default disabled.
 - Wallet production persistence is Supabase.
 - Wallet financial truth comes from immutable ledger rows.
 - Wallet balances are derived from ledger or trusted snapshots.
@@ -104,6 +114,7 @@ Keep write safety strict.
 - Demo auth requires `DEMO_AUTH_PASSWORD`.
 - No live upstream URL has a code default.
 - Supabase wallet tables live in `supabase/migrations/`.
+- Supabase dev console tables live in `20260601120000_dev_console_access.sql`.
 - Wallet RLS must isolate vendors by organization.
 - Wallet staff reads must follow role claims.
 - Wallet ledger rows must be append-only.
@@ -173,6 +184,11 @@ Keep write safety strict.
 
 - Vercel serves the SPA.
 - Vercel functions serve `/api/*`.
+- Wallet Fastify runs separately.
+- Wallet workers run separately.
+- `WALLET_API_BASE_URL` selects Fastify.
+- `DEV_CONSOLE_ENABLED` is disabled by default; production developer routes always return `404`.
+- Vercel preview never enables money writes.
 - `npm run build` is the build gate.
 - `npm run smoke:vercel` is preview smoke.
 - Protected previews use `VERCEL_PROTECTION_BYPASS`.

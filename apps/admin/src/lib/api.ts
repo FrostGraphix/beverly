@@ -99,6 +99,10 @@ function handleUnauthorized(): void {
     redirectToLogin();
 }
 
+function shouldRedirectUnauthorized(path: string): boolean {
+    return path !== '/api/v1/admin/me';
+}
+
 let mfaRedirecting = false;
 function handleMfaRequired(): void {
     // Session is valid but the app-level MFA grant expired — keep the token and
@@ -132,7 +136,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
     const text = await res.text();
     const json = parseJson(text);
     if (!res.ok) {
-        if (res.status === 401) handleUnauthorized();
+        if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
         else if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
         throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
     }
@@ -153,5 +157,5 @@ export const api = {
     post:  <T>(path: string, body?: unknown) => request<T>('POST', path, body),
     put:   <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
     patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
-    del:   <T>(path: string) => request<T>('DELETE', path),
+    del:   <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
 };

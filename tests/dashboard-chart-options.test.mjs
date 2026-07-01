@@ -33,7 +33,7 @@ assert.strictEqual(bar.yAxis.type, "value");
 assert.strictEqual(bar.animation, true);
 assert.strictEqual(bar.series[0].animationDuration, 1200);
 assert.strictEqual(bar.series[0].animationEasing, "elasticOut");
-assert.strictEqual(bar.series[0].universalTransition, true);
+assert.strictEqual(bar.series[0].universalTransition, undefined);
 assert.strictEqual(bar.series[0].itemStyle.color, "#059669");
 assert.strictEqual(typeof bar.series[0].itemStyle.color, "string");
 assert.strictEqual(themed.series[0].itemStyle.color, "#047857");

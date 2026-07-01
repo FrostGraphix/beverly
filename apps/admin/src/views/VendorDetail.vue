@@ -17,6 +17,7 @@ import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -225,26 +226,50 @@ onMounted(loadDetail);
           </div>
         </div>
         <div class="head-actions">
-          <button
-            v-if="canManageVendors && detail.vendor.status === 'pending'"
-            class="bw-btn primary"
-            @click="askStatus('approved')"
-          >Approve</button>
-          <button
-            v-if="canManageVendors && detail.vendor.status === 'approved'"
-            class="bw-btn"
-            @click="askStatus('suspended')"
-          >Suspend</button>
-          <button
-            v-if="canManageVendors && detail.vendor.status === 'approved'"
-            class="bw-btn danger"
-            @click="askStatus('frozen')"
-          >Freeze</button>
-          <button
-            v-if="canManageVendors && (detail.vendor.status === 'frozen' || detail.vendor.status === 'suspended')"
-            class="bw-btn primary"
-            @click="askStatus('approved')"
-          >Reactivate</button>
+          <div class="head-action-buttons">
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'pending'"
+              class="bw-btn primary"
+              @click="askStatus('approved')"
+            >Approve</button>
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'approved'"
+              class="bw-btn"
+              @click="askStatus('suspended')"
+            >Suspend</button>
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'approved'"
+              class="bw-btn danger"
+              @click="askStatus('frozen')"
+            >Freeze</button>
+            <button
+              v-if="canManageVendors && (detail.vendor.status === 'frozen' || detail.vendor.status === 'suspended')"
+              class="bw-btn primary"
+              @click="askStatus('approved')"
+            >Reactivate</button>
+          </div>
+          <MobileActionMenu label="Vendor actions">
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'pending'"
+              class="mobile-action-item primary"
+              @click="askStatus('approved')"
+            >Approve</button>
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'approved'"
+              class="mobile-action-item"
+              @click="askStatus('suspended')"
+            >Suspend</button>
+            <button
+              v-if="canManageVendors && detail.vendor.status === 'approved'"
+              class="mobile-action-item danger"
+              @click="askStatus('frozen')"
+            >Freeze</button>
+            <button
+              v-if="canManageVendors && (detail.vendor.status === 'frozen' || detail.vendor.status === 'suspended')"
+              class="mobile-action-item primary"
+              @click="askStatus('approved')"
+            >Reactivate</button>
+          </MobileActionMenu>
         </div>
       </div>
 
@@ -353,7 +378,9 @@ onMounted(loadDetail);
                 <th>When</th>
                 <th>Meter</th>
                 <th>Station</th>
-                <th style="text-align:right">Amount</th>
+                <th style="text-align:right">Paid</th>
+                <th style="text-align:right">Energy</th>
+                <th style="text-align:right">VAT</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -363,10 +390,12 @@ onMounted(loadDetail);
                 <td class="bw-mono">{{ tx.meter_id ?? tx.meter_number ?? '—' }}</td>
                 <td class="bw-mono bw-muted">{{ tx.station_id ?? tx.station ?? '—' }}</td>
                 <td class="bw-money" style="text-align:right">{{ naira(tx.amount_minor ?? tx.amount) }}</td>
+                <td class="bw-money" style="text-align:right">{{ naira(tx.energy_amount_minor ?? tx.amount_minor ?? tx.amount) }}</td>
+                <td class="bw-money" style="text-align:right">{{ naira(tx.vat_amount_minor ?? 0) }}</td>
                 <td><span :class="['bw-badge', txBadge(tx.status)]">{{ tx.status }}</span></td>
               </tr>
               <tr v-if="!transactions.length">
-                <td colspan="5" class="bw-muted empty">No transactions yet.</td>
+                <td colspan="7" class="bw-muted empty">No transactions yet.</td>
               </tr>
             </tbody>
           </table>
@@ -487,17 +516,18 @@ onMounted(loadDetail);
   width: 56px; height: 56px; border-radius: 12px;
   background: linear-gradient(135deg, var(--brand-300), var(--brand-600));
   display: grid; place-items: center;
-  font-size: 24px; font-weight: 700; color: white; flex-shrink: 0;
+  font-size: 24px; font-weight: 700; color: oklch(8% 0.04 145); flex-shrink: 0;
 }
 .head-name  { margin: 0 0 2px; font-size: var(--t-xl); }
 .head-trade { margin: 0 0 4px; font-size: var(--t-sm); color: var(--text-muted); }
 .head-meta  { font-size: var(--t-sm); color: var(--text-muted); margin: 0 0 var(--s-2); }
 .head-badges { display: flex; gap: var(--s-2); flex-wrap: wrap; }
 .head-actions { display: flex; gap: var(--s-2); align-items: center; }
+.head-action-buttons { display: flex; gap: var(--s-2); align-items: center; }
 
 /* ── Stat tiles ── */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
-.stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); }
+.stat-tile { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: var(--s-4); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
 .stat-tile.brand { background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent); border-color: oklch(from var(--brand) l c h / 0.25); }
 .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
 .stat-value { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-lg); margin: 0; }
@@ -536,6 +566,8 @@ onMounted(loadDetail);
 
 @media (max-width: 640px) {
   .head-card   { flex-direction: column; }
+  .head-actions { width: 100%; justify-content: flex-end; }
+  .head-action-buttons { display: none; }
   .ov-dl       { grid-template-columns: 1fr; }
   .ov-dl dt    { font-weight: 700; margin-top: var(--s-2); }
   .ledger-row  { grid-template-columns: 1fr auto; }

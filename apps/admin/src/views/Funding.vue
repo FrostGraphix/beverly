@@ -17,8 +17,10 @@ import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
+import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
 
 const router = useRouter();
 const auth = useStaffAuthStore();
@@ -184,6 +186,14 @@ function vendorEmail(f: FundingRequest) {
     return f.vendor_organizations?.contact_email || 'No email on file';
 }
 
+function viewFundingReceipt(f: FundingRequest) {
+    viewReceipt(fundingReceipt(f));
+}
+
+function printFundingReceipt(f: FundingRequest) {
+    printReceipt(fundingReceipt(f));
+}
+
 onMounted(load);
 </script>
 
@@ -230,6 +240,7 @@ onMounted(load);
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
+              <th>Receipt</th>
               <th v-if="canApproveFunding" class="actions-col"></th>
             </tr>
           </thead>
@@ -248,6 +259,12 @@ onMounted(load);
               </td>
               <td class="bw-money" style="text-align: right">{{ naira(f.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span></td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+                  <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+                </div>
+              </td>
               <td v-if="canApproveFunding" class="actions-col">
                 <div class="action-cluster">
                   <button class="bw-btn sm primary" :disabled="busyId === f.id" @click="askApprove(f)">
@@ -257,10 +274,14 @@ onMounted(load);
                     Reject
                   </button>
                 </div>
+                <MobileActionMenu label="Funding actions">
+                  <button class="mobile-action-item primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
+                  <button class="mobile-action-item danger" :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+                </MobileActionMenu>
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td :colspan="canApproveFunding ? 7 : 6" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
+              <td :colspan="canApproveFunding ? 8 : 7" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
             </tr>
           </tbody>
         </table>
@@ -287,9 +308,13 @@ onMounted(load);
             <span v-else-if="f.proof_file_path" class="bw-muted bw-mono" style="font-size: var(--t-xs)">stored</span>
             <span v-else class="bw-muted">—</span>
           </div>
-          <div v-if="canApproveFunding" class="fc-actions">
-            <button class="bw-btn primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
-            <button class="bw-btn danger"  :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+          <div class="fc-actions">
+            <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+            <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+            <MobileActionMenu v-if="canApproveFunding" label="Funding actions">
+              <button class="mobile-action-item primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
+              <button class="mobile-action-item danger" :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+            </MobileActionMenu>
           </div>
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty-card">Queue clear.</div>
@@ -399,6 +424,11 @@ onMounted(load);
   justify-content: flex-end;
   flex-wrap: nowrap;
 }
+.receipt-actions {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
 .row-busy { opacity: 0.55; pointer-events: none; }
 
 /* Mobile cards (shown by .bw-t-cards at <=640px from wallet.css) */
@@ -441,12 +471,29 @@ onMounted(load);
 .fc-actions {
   display: flex;
   gap: var(--s-2);
+  justify-content: flex-end;
   margin-top: var(--s-3);
 }
 .fc-actions .bw-btn {
   flex: 1;
   justify-content: center;
   min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .fund-table .actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 3;
+  }
+
+  .action-cluster {
+    display: none;
+  }
 }
 .empty-card { text-align: center; padding: var(--s-6); }
 

@@ -11,23 +11,36 @@ defineEmits<{ (e: 'launch'): void }>();
       <span class="lp-orb lp-orb--1" />
       <span class="lp-orb lp-orb--3" />
       <div class="lp-grid-overlay" />
+      <!-- Cinematic directional beam, light source behind the phone -->
+      <div class="lp-hero-beam" />
+      <!-- Power-on flash, fires once on load -->
+      <div class="lp-hero-flash" />
     </div>
 
-    <div class="lp-hero-inner">
-      <div class="lp-hero-copy">
-        <span class="lp-pill" v-reveal>
-          <span class="lp-pill-dot" /> Live across 5+ discos
+    <div class="lp-hero-inner lp-hero-inner--showcase">
+      <div class="lp-hero-copy lp-hero-copy--poster">
+        <span class="lp-pill" v-reveal="150">
+          <span class="lp-pill-dot" /> Live across 5 Nasarawa sites
         </span>
-        <h1 class="lp-hero-title" v-reveal="60">
-          Electricity,
-          <span class="lp-grad">instantly.</span>
+
+        <!-- Cinema clip-reveal title. -->
+        <h1 class="lp-hero-title" aria-label="Electricity, instantly.">
+          <span class="lp-title-clip">
+            <span class="lp-title-word lp-title-word--1">Electricity,</span>
+          </span>
+          <span class="lp-title-clip lp-title-clip--grad">
+            <span class="lp-title-word lp-title-word--2">
+              <span class="lp-grad lp-grad--live">instantly.</span>
+            </span>
+          </span>
         </h1>
-        <p class="lp-hero-sub" v-reveal="120">
-          Beverly Wallet is the fastest way to buy prepaid electricity tokens —
-          and the smartest way to run a vending business. One platform, two front doors.
+
+        <p class="lp-hero-sub" v-reveal="380">
+          Beverly Wallet is the fastest way to buy prepaid electricity
+          tokens and run a vending business from one wallet.
         </p>
 
-        <div class="lp-hero-cta" v-reveal="180">
+        <div class="lp-hero-cta" v-reveal="480">
           <button class="lp-btn lp-btn--primary lp-btn--lg" type="button" @click="$emit('launch')">
             Get started free <IconSvg name="arrow" />
           </button>
@@ -36,16 +49,17 @@ defineEmits<{ (e: 'launch'): void }>();
           </a>
         </div>
 
-        <ul class="lp-hero-trust" v-reveal="240">
+        <ul class="lp-hero-trust" v-reveal="600">
           <li><IconSvg name="check" /> No setup fees</li>
           <li><IconSvg name="check" /> Tokens in seconds</li>
           <li><IconSvg name="check" /> Bank-grade security</li>
         </ul>
       </div>
 
-      <div class="lp-hero-art" v-reveal="200">
-        <div class="lp-phone-scene">
-          <!-- Floating electricity streaks -->
+      <!-- Phone art, CSS animation-only. -->
+      <div class="lp-hero-art lp-hero-art--showcase">
+        <div class="lp-device-scene lp-device-scene--showcase">
+          <!-- Electricity streaks -->
           <div class="lp-streaks" aria-hidden="true">
             <svg class="lp-streak lp-streak--1" width="10" height="26" viewBox="0 0 10 26" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M7 0L2 12h3.5L1 26l9-15H6L7 0z" fill="currentColor"/>
@@ -67,71 +81,58 @@ defineEmits<{ (e: 'launch'): void }>();
             </svg>
           </div>
 
-          <!-- iPhone 17 mockup -->
-          <div class="lp-phone" aria-label="Beverly Wallet on iPhone 17">
-            <!-- Physical frame sides -->
-            <span class="lp-phone-side lp-phone-side--action" aria-hidden="true" />
-            <span class="lp-phone-side lp-phone-side--volume" aria-hidden="true" />
-            <span class="lp-phone-side lp-phone-side--power" aria-hidden="true" />
-            <span class="lp-phone-side lp-phone-side--camera" aria-hidden="true" />
-            <!-- Dynamic Island -->
-            <div class="lp-phone-island" aria-hidden="true">
-              <span class="lp-phone-camera" />
-            </div>
-
-            <!-- Back face shown during spin -->
-            <div class="lp-phone-back" aria-hidden="true">
-              <div class="lp-phone-cam-module">
-                <div class="lp-phone-cam-lens lp-phone-cam-lens--main"></div>
-                <div class="lp-phone-cam-lens lp-phone-cam-lens--ultra"></div>
-                <div class="lp-phone-cam-flash"></div>
-              </div>
-              <div class="lp-phone-back-mark">B</div>
-            </div>
-
-            <div class="lp-phone-screen">
-              <div class="lp-ios-status" aria-hidden="true">
-                <span>9:41</span>
-                <span class="lp-ios-signals"><i /><i /><i /></span>
-              </div>
-
-              <div class="lp-app-bar">
-                <span class="lp-app-brand"><span class="lp-app-mark"><IconSvg name="bolt" /></span> Beverly</span>
-                <span class="lp-app-status">Live</span>
-              </div>
-
-              <div class="lp-balance-card">
-                <div class="lp-balance-head">
-                  <span class="lp-balance-label">Wallet balance</span>
-                  <span class="lp-app-avatar">A</span>
+          <!-- Enhanced iPhone-style device. -->
+          <div class="lp-device" aria-label="Enhanced Beverly Wallet device preview">
+            <span class="lp-device-aura" aria-hidden="true" />
+            <span class="lp-device-rail lp-device-rail--left" aria-hidden="true" />
+            <span class="lp-device-rail lp-device-rail--right" aria-hidden="true" />
+            <div class="lp-device-frame">
+              <span class="lp-device-camera" aria-hidden="true" />
+              <div class="lp-device-screen">
+                <div class="lp-device-status" aria-hidden="true">
+                  <span>9:41</span>
+                  <span class="lp-device-bars"><i /><i /><i /></span>
                 </div>
-                <span class="lp-balance-value">₦24,500</span>
-                <span class="lp-balance-meta"><IconSvg name="spark" /> +₦5,000 today</span>
-              </div>
 
-              <div class="lp-buy-row">
-                <div class="lp-buy-field">
-                  <small>Meter</small>
-                  <strong>4521 7790 233</strong>
-                </div>
-                <div class="lp-buy-field">
-                  <small>Amount</small>
-                  <strong>₦5,000</strong>
-                </div>
-              </div>
+                <section class="lp-device-balance">
+                  <div class="lp-device-brand">
+                    <span class="lp-device-mark"><IconSvg name="bolt" /></span>
+                    <span>Beverly</span>
+                  </div>
+                  <span class="lp-device-live">Live</span>
+                  <span class="lp-device-balance-label">Wallet balance</span>
+                  <strong>₦24,500</strong>
+                  <small>+₦5,000 today</small>
+                </section>
 
-              <div class="lp-token">
-                <div class="lp-token-head">
-                  <span class="lp-token-label"><IconSvg name="check" /> Delivered</span>
-                  <span>68.4 kWh</span>
+                <div class="lp-device-metrics">
+                  <span><small>Meter</small><b>4521 7790 233</b></span>
+                  <span><small>Amount</small><b>₦5,000</b></span>
+                  <span><small>Units</small><b>68.4 kWh</b></span>
                 </div>
-                <span class="lp-token-value">4829 1075 6634 2218 9051</span>
-                <span class="lp-token-units">Receipt saved</span>
-              </div>
 
-              <div class="lp-phone-dock">
-                <button class="lp-phone-dock-item" type="button"><IconSvg name="wallet" /> Wallet</button>
-                <button class="lp-app-cta" type="button">Buy <IconSvg name="arrow" /></button>
+                <section class="lp-device-token">
+                  <div class="lp-device-token-head">
+                    <span><IconSvg name="check" /> Delivered</span>
+                    <small><IconSvg name="clock" /> 12s</small>
+                  </div>
+                  <div class="lp-device-token-code" aria-label="Token: 4829 1075 6634 2218 9051">
+                    <span>4829</span>
+                    <span>1075</span>
+                    <span>6634</span>
+                    <span>2218</span>
+                    <span>9051</span>
+                  </div>
+                  <div class="lp-device-token-foot">
+                    <button type="button">Copy token</button>
+                    <span>Receipt saved</span>
+                  </div>
+                </section>
+
+                <div class="lp-device-dock">
+                  <button type="button"><IconSvg name="wallet" /> Wallet</button>
+                  <button type="button">Buy <IconSvg name="arrow" /></button>
+                </div>
               </div>
             </div>
           </div>

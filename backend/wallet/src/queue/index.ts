@@ -14,7 +14,8 @@ import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 
-const queuesEnabled = env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true';
+export const queuesEnabled = process.env.WALLET_SERVERLESS !== 'true'
+    && (env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true');
 
 function disabledQueue(name: string): Queue {
     return {
@@ -44,6 +45,8 @@ export const notificationsQueue = queuesEnabled ? new Queue('notifications', { c
 export const paymentsQueue      = queuesEnabled ? new Queue('payments', { connection }) : disabledQueue('payments');
 export const holdsQueue         = queuesEnabled ? new Queue('holds', { connection }) : disabledQueue('holds');
 export const auditQueue         = queuesEnabled ? new Queue('audit', { connection }) : disabledQueue('audit');
+export const maintenanceQueue   = queuesEnabled ? new Queue('maintenance', { connection }) : disabledQueue('maintenance');
+export const exportsQueue       = queuesEnabled ? new Queue('privacy-exports', { connection }) : disabledQueue('privacy-exports');
 
 export const notificationsEvents = queuesEnabled
     ? new QueueEvents('notifications', { connection })
@@ -55,6 +58,8 @@ export async function closeQueues() {
         paymentsQueue.close(),
         holdsQueue.close(),
         auditQueue.close(),
+        maintenanceQueue.close(),
+        exportsQueue.close(),
         notificationsEvents.close(),
     ]);
     await connection.quit();

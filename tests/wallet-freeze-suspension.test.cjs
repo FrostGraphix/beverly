@@ -26,6 +26,8 @@ function main() {
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
   const adminRoutes = read("backend/wallet/src/routes/admin.ts");
   const webhooks = read("backend/wallet/src/routes/webhooks.ts");
+  const paymentWebhooks = read("backend/wallet/src/services/payment-webhooks.ts");
+  const paymentTransactions = read("backend/wallet/src/services/payment-transactions.ts");
   const onboarding = read("backend/wallet/src/services/vendor-onboarding.ts");
   const migration = read("supabase/migrations/20260521230000_wallet_freeze_guardrails.sql");
 
@@ -44,12 +46,14 @@ function main() {
   assert(vending.includes("assertWalletCanTransact(wallet, 'vend')"), "Vendor vending must reject frozen wallets.");
   assert(customerPurchase.includes("assertWalletCanTransact(customerWallet, 'buy tokens')"), "Customer token purchases must reject frozen wallets.");
   assert(customerPurchase.includes("assertWalletCanTransact(wallet, 'receive funding')"), "Customer funding must reject frozen wallets.");
-  assert(webhooks.includes("blockWebhookFulfillment"), "Paystack webhooks must fail cleanly when wallet state changes after payment init.");
-  assert(webhooks.includes("assertWalletCanTransact(wallet, 'receive funding')"), "Webhook funding credits must reject frozen wallets.");
-  assert(webhooks.includes("assertWalletCanTransact(wallet, 'buy tokens')"), "Webhook direct-pay token delivery must reject frozen wallets.");
-  assert(webhooks.includes("requires_ops_review"), "Blocked webhook payments must be tagged for operations review.");
-  assert(webhooks.includes("status: 'delivery_pending_review'"), "Blocked token delivery must move to pending review.");
-  assert(webhooks.includes("status: 'under_review'"), "Blocked vendor funding must stay in finance review queue.");
+  assert(webhooks.includes("processPaystackChargeSuccess"), "Paystack webhooks must use shared processing.");
+  assert(paymentWebhooks.includes("fulfillSuccessfulPaystackTransaction"), "Paystack webhook processing must use shared fulfillment.");
+  assert(paymentTransactions.includes("blockSuccessfulPaymentFulfillment"), "Paystack fulfillment must fail cleanly when wallet state changes after payment init.");
+  assert(paymentTransactions.includes("assertWalletCanTransact(wallet, 'receive funding')"), "Paystack funding credits must reject frozen wallets.");
+  assert(paymentTransactions.includes("assertWalletCanTransact(wallet, 'buy tokens')"), "Paystack direct-pay token delivery must reject frozen wallets.");
+  assert(paymentTransactions.includes("requires_ops_review"), "Blocked Paystack payments must be tagged for operations review.");
+  assert(paymentTransactions.includes("status: 'delivery_pending_review'"), "Blocked token delivery must move to pending review.");
+  assert(paymentTransactions.includes("status: 'under_review'"), "Blocked vendor funding must stay in finance review queue.");
 
   assert(vendorRoutes.includes("VendingError"), "Vendor vend route must translate vending errors.");
   assert(vendorRoutes.includes("error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403"), "Vendor route must return 403 for inactive wallets.");

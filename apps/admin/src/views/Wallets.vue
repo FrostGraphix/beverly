@@ -20,8 +20,10 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
+import { printReceipt, viewReceipt, walletReceipt } from '../lib/receipts';
 
 interface Wallet {
     id: string;
@@ -279,6 +281,24 @@ function exportPdfDoc() {
     });
 }
 
+function viewWalletReceipt(w: Wallet) {
+    viewReceipt(walletReceipt(w));
+}
+
+function printWalletReceipt(w: Wallet) {
+    printReceipt(walletReceipt(w));
+}
+
+function viewDetailReceipt() {
+    if (!detail.value) return;
+    viewReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
+}
+
+function printDetailReceipt() {
+    if (!detail.value) return;
+    printReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
+}
+
 onMounted(() => { void loadSummary(); void loadList(); });
 
 // Re-trigger list when select filters change
@@ -380,6 +400,7 @@ watch([fOwnerType, fStatus], () => loadList());
               <th style="text-align: right">Available</th>
               <th style="text-align: right">Daily cap</th>
               <th>Status</th>
+              <th>Receipt</th>
               <th></th>
             </tr>
           </thead>
@@ -396,10 +417,16 @@ watch([fOwnerType, fStatus], () => loadList());
                 {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : 'â€”' }}
               </td>
               <td><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click.stop="viewWalletReceipt(w)">View</button>
+                  <button class="bw-btn sm" @click.stop="printWalletReceipt(w)">Print</button>
+                </div>
+              </td>
               <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!wallets.length && !loading">
-              <td colspan="7" class="bw-muted empty">No wallets match the filters.</td>
+              <td colspan="8" class="bw-muted empty">No wallets match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -428,6 +455,10 @@ watch([fOwnerType, fStatus], () => loadList());
               <p class="wc-label">Type</p>
               <span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span>
             </div>
+          </div>
+          <div class="receipt-actions wc-receipts">
+            <button class="bw-btn sm" @click.stop="viewWalletReceipt(w)">View</button>
+            <button class="bw-btn sm" @click.stop="printWalletReceipt(w)">Print</button>
           </div>
         </div>
         <div v-if="!wallets.length && !loading" class="bw-muted empty">No wallets.</div>
@@ -493,7 +524,7 @@ watch([fOwnerType, fStatus], () => loadList());
             <div class="dr-block">
               <div class="dr-block-row">
                 <p class="dr-block-title" style="margin: 0">Limits</p>
-                <button class="bw-btn sm" @click="askLimits">Edit</button>
+                <button class="bw-btn sm dr-limit-edit" @click="askLimits">Edit</button>
               </div>
               <dl class="dr-dl">
                 <dt>Daily cap</dt>
@@ -505,9 +536,21 @@ watch([fOwnerType, fStatus], () => loadList());
               </dl>
 
               <div class="dr-actions">
+                <div class="dr-action-buttons">
                 <button v-if="detail.wallet.status === 'active'" class="bw-btn" @click="askStatus('frozen')">Freeze</button>
                 <button v-if="detail.wallet.status === 'frozen'" class="bw-btn primary" @click="askStatus('active')">Unfreeze</button>
                 <button v-if="detail.wallet.status !== 'closed'" class="bw-btn danger" @click="askStatus('closed')">Close</button>
+                <button class="bw-btn" @click="viewDetailReceipt">View receipt</button>
+                <button class="bw-btn" @click="printDetailReceipt">Print receipt</button>
+              </div>
+              <MobileActionMenu label="Wallet actions">
+                  <button class="mobile-action-item" @click="viewDetailReceipt">View receipt</button>
+                  <button class="mobile-action-item" @click="printDetailReceipt">Print receipt</button>
+                  <button class="mobile-action-item primary" @click="askLimits">Edit limits</button>
+                  <button v-if="detail.wallet.status === 'active'" class="mobile-action-item" @click="askStatus('frozen')">Freeze</button>
+                  <button v-if="detail.wallet.status === 'frozen'" class="mobile-action-item primary" @click="askStatus('active')">Unfreeze</button>
+                  <button v-if="detail.wallet.status !== 'closed'" class="mobile-action-item danger" @click="askStatus('closed')">Close</button>
+                </MobileActionMenu>
               </div>
             </div>
 
@@ -618,12 +661,15 @@ watch([fOwnerType, fStatus], () => loadList());
   margin-bottom: var(--s-3);
 }
 .kpi-tile {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   padding: var(--s-4);
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
 .kpi-tile.brand {
   background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent);
@@ -659,6 +705,7 @@ watch([fOwnerType, fStatus], () => loadList());
 .w-row:hover { background: var(--surface-2); }
 .row-sub { font-size: 10px; margin-top: 2px; color: var(--text-muted); }
 .row-arrow { color: var(--text-muted); text-align: right; width: 24px; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -682,6 +729,12 @@ watch([fOwnerType, fStatus], () => loadList());
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-2);
   padding-top: var(--s-3); border-top: 1px dashed var(--border);
 }
+.wc-receipts {
+  justify-content: flex-end;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px dashed var(--border);
+}
 .wc-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--text-muted); margin: 0 0 2px;
@@ -695,8 +748,10 @@ watch([fOwnerType, fStatus], () => loadList());
 }
 .drawer {
   width: min(640px, 100%); height: 100%;
-  background: var(--surface); border-left: 1px solid var(--border);
+  background: var(--glass-bg-strong); border-left: 1px solid var(--glass-border);
   overflow-y: auto; padding: var(--s-5);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40);
 }
 .drawer-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--s-4); }
@@ -752,9 +807,10 @@ watch([fOwnerType, fStatus], () => loadList());
 .dr-dl dd { margin: 0; word-break: break-word; }
 
 .dr-actions {
-  display: flex; gap: var(--s-2); margin-top: var(--s-4);
+  display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-4);
   padding-top: var(--s-3); border-top: 1px dashed var(--border);
 }
+.dr-action-buttons { display: flex; gap: var(--s-2); }
 
 .ledger-list { list-style: none; margin: 0; padding: 0; }
 .ledger-row {
@@ -807,6 +863,8 @@ watch([fOwnerType, fStatus], () => loadList());
 
 @media (max-width: 640px) {
   .filter-grid { grid-template-columns: 1fr; }
+  .dr-limit-edit { display: none; }
+  .dr-action-buttons { display: none; }
   .drawer { width: 100%; padding: var(--s-4); }
   .dr-dl { grid-template-columns: 1fr; }
   .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }

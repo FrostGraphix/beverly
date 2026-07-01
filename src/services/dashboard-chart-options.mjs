@@ -83,8 +83,7 @@ export function createBarOption(series, title, theme = {}) {
         animationDuration: 1200,
         animationDurationUpdate: 900,
         animationEasing: "elasticOut",
-        animationEasingUpdate: "cubicOut",
-        universalTransition: true
+        animationEasingUpdate: "cubicOut"
       }
     ]
   };

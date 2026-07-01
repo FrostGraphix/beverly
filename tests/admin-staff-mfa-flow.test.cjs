@@ -9,6 +9,7 @@ const migration = read('supabase/migrations/20260520120000_staff_mfa_foundation.
 const service = read('backend/wallet/src/services/staff-mfa.ts');
 const routes = read('backend/wallet/src/routes/staff-mfa.ts');
 const routeIndex = read('backend/wallet/src/routes/index.ts');
+const adminRouter = read('apps/admin/src/router/index.ts');
 const auth = read('backend/wallet/src/plugins/auth.ts');
 const login = read('apps/admin/src/views/Login.vue');
 const security = read('apps/admin/src/views/Security.vue');
@@ -61,13 +62,20 @@ assert.doesNotMatch(routes, /preHandler: fastify\.requireStaff\(\)/);
 assert.match(auth, /staffMfaEnrolled/);
 assert.match(auth, /staffMfaSessionVerified/);
 assert.match(auth, /if \(req\.actor\.mfaEnrolled && !req\.actor\.mfaVerified\)/);
+assert.match(auth, /if \(req\.actor\.mfaEnrolled && !req\.actor\.mfaVerified\)/);
 assert.match(auth, /error: 'mfa_required'/);
 
 assert.match(api, /handleMfaRequired/);
 assert.match(api, /reason', 'mfa_required'/);
+assert.match(adminRouter, /to\.query\.reason !== 'mfa_required'/);
 assert.match(login, /reasonMfa/);
 assert.match(login, /\/api\/v1\/admin\/mfa\/status/);
 assert.match(login, /\/api\/v1\/admin\/mfa\/challenge\/verify/);
+assert.match(login, /isMfaRequired/);
+assert.match(login, /signInFailureMessage/);
+assert.match(login, /Authentication service is temporarily unavailable/);
+assert.match(login, /step\.value = 'challenge'/);
+assert.match(login, /await auth\.refreshSession\(\);/);
 assert.match(login, /:inputmode="useRecovery \? 'text' : 'numeric'"/);
 assert.match(login, /Use a recovery code/);
 

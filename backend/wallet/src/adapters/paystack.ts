@@ -96,7 +96,10 @@ export function verifyWebhookSignature(rawBody: Buffer | string, signature: stri
         .createHmac('sha512', env.PAYSTACK_WEBHOOK_SECRET)
         .update(typeof rawBody === 'string' ? rawBody : rawBody)
         .digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
+    const expected = Buffer.from(computed, 'utf8');
+    const received = Buffer.from(signature.trim(), 'utf8');
+    if (expected.length !== received.length) return false;
+    return crypto.timingSafeEqual(expected, received);
 }
 
 // ── Identity API ──

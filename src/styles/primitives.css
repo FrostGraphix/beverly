@@ -480,7 +480,13 @@
   border-radius: var(--bev-radius-xl);
   background: var(--color-surface-card);
   box-shadow: var(--bev-shadow-sm);
+  overflow: visible;
+  position: relative;
+}
+
+.base-table-shell__body {
   overflow: hidden;
+  border-radius: 0 0 var(--bev-radius-xl) var(--bev-radius-xl);
 }
 
 .base-table-shell__alert {

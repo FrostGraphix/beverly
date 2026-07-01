@@ -20,27 +20,47 @@ function main() {
   const vendorLogin = read("apps/vendor/src/views/Login.vue");
   const vendorVite = read("apps/vendor/vite.config.ts");
   const customerVite = read("apps/customer/vite.config.ts");
+  const adminRouter = read("apps/admin/src/router/index.ts");
   const vendorRouter = read("apps/vendor/src/router/index.ts");
   const customerRouter = read("apps/customer/src/router/index.ts");
+  const adminMeterOrders = read("apps/admin/src/views/MeterOrders.vue");
+  const adminMeterOrderCreate = read("apps/admin/src/views/MeterOrderCreate.vue");
+  const vendorMeterOrders = read("apps/vendor/src/views/MeterOrders.vue");
+  const vendorMeterOrderCreate = read("apps/vendor/src/views/MeterOrderCreate.vue");
+  const meterOrdersService = read("backend/wallet/src/services/meter-orders.ts");
+  const customerMeterOrders = read("backend/wallet/src/routes/customer.ts");
   const walletCss = read("packages/tokens/wallet.css");
   const rootPackage = JSON.parse(read("package.json"));
 
   assertMarkers("backend/wallet/src/routes/admin.ts", [
+    "dev.console",
     "fastify.get('/me'",
     "fastify.get('/access'",
+    "fastify.post('/access/roles'",
+    "fastify.patch('/access/roles/:roleKey'",
+    "fastify.delete('/access/roles/:roleKey'",
     "fastify.put('/access/roles/:roleKey/permissions'",
     "fastify.post('/access/users'",
     "fastify.patch('/access/users/:userId/role'",
+    "fastify.patch('/access/users/:userId/suspension'",
+    "fastify.post('/access/users/:userId/reset-password'",
+    "fastify.post('/access/users/:userId/revoke-sessions'",
+    "access.role.created",
+    "access.role.updated",
+    "access.role.deleted",
     "fastify.get('/stations'",
     "fastify.get('/vendor-applications'",
+    "fastify.delete('/vendor-applications/:id'",
     "fastify.post('/vendors'",
     "fastify.get('/vendors'",
+    "fastify.delete('/vendors/:id'",
     "fastify.patch('/vendors/:id/status'",
     "fastify.get('/vendors/:id'",
     "fastify.get('/vendors/:id/wallet'",
     "fastify.get('/vendors/:id/transactions'",
     "fastify.get('/vendors/:id/funding'",
     "fastify.get('/vendors/:id/staff'",
+    "fastify.post('/meter-orders'",
     "fastify.get('/funding/pending'",
     "fastify.get('/funding/history'",
     "fastify.post('/funding/reconcile-approved'",
@@ -58,6 +78,7 @@ function main() {
     "fastify.get('/customers/:id/wallet'",
     "fastify.get('/customers/:id/purchases'",
     "fastify.get('/customers/:id/funding'",
+    "fastify.delete('/customers/:id'",
     "fastify.patch('/customers/:id/status'",
     "fastify.get('/purchases'",
     "fastify.get('/vending'",
@@ -120,6 +141,10 @@ function main() {
     "fastify.post('/password-change'",
     "fastify.get('/wallet'",
     "fastify.get('/wallet/ledger'",
+    "fastify.get('/customers'",
+    "fastify.post('/meter-orders'",
+    "fastify.get('/meter-orders'",
+    "fastify.get('/meter-orders/:id'",
     "fastify.post('/funding/paystack'",
     "fastify.post('/funding/bank-transfer'",
     "fastify.get('/funding'",
@@ -178,6 +203,10 @@ function main() {
     "fastify.get('/notifications/preferences'",
     "fastify.put('/notifications/preferences'",
   ]);
+  const customerRoutes = read("backend/wallet/src/routes/customer.ts");
+  assert.match(customerRoutes, /Number\(ps\.data\?\.amount\) !== Number\(\(order as any\)\.amount_minor\)/);
+  assert.match(customerRoutes, /payment_amount_mismatch/);
+  assert.match(customerRoutes, /if \(!purchaseRows\?\.length\) return \{ receipts: \[\] \}/);
 
   for (const apiSource of [customerApi, vendorApi]) {
     assert.match(apiSource, /function normalizeBaseUrl/);
@@ -185,7 +214,9 @@ function main() {
     assert.match(apiSource, /function unwrapEnvelope/);
     assert.match(apiSource, /function portalBasePath/);
     assert.match(apiSource, /const loginPath = `\$\{portalBasePath\(\)\}login`/);
-    assert.match(apiSource, /if \(res\.status === 401\) handleUnauthorized\(\)/);
+    assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) \{/);
+    assert.match(apiSource, /const refreshed = await refreshAccessToken\(\)/);
+    assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) handleUnauthorized\(\)/);
     assert.match(apiSource, /Idempotency-Key/);
   }
 
@@ -198,15 +229,46 @@ function main() {
   assert.match(customerVite, /dist\/wallet-customer/);
   assert.match(customerVite, /start_url: base/);
   assert.match(customerVite, /navigateFallback: assetPath\('index\.html'\)/);
+  assert.match(adminRouter, /path: '\/meter-orders'/);
+  assert.match(adminRouter, /path: '\/meter-orders\/new'/);
   assert.match(vendorRouter, /function portalHistoryBase/);
   assert.match(customerRouter, /function portalHistoryBase/);
+  assert.match(vendorRouter, /path: '\/meter-orders'/);
+  assert.match(vendorRouter, /path: '\/meter-orders\/new'/);
   assert.match(vendorRouter, /createWebHistory\(portalHistoryBase\(import\.meta\.env\.BASE_URL\)\)/);
   assert.match(customerRouter, /createWebHistory\(portalHistoryBase\(import\.meta\.env\.BASE_URL\)\)/);
+  assert.match(adminMeterOrders, /source_channel/);
+  assert.match(adminMeterOrders, /sponsor_mode/);
+  assert.match(adminMeterOrders, /vendor_organizations/);
+  assert.match(adminMeterOrders, /sourceLabel/);
+  assert.match(adminMeterOrders, /New Order/);
+  assert.match(adminMeterOrderCreate, /sponsorMode/);
+  assert.match(adminMeterOrderCreate, /vendor_wallet/);
+  assert.match(adminMeterOrderCreate, /\/api\/v1\/admin\/meter-orders/);
+  assert.match(vendorMeterOrders, /\/api\/v1\/vendor\/meter-orders/);
+  assert.match(vendorMeterOrders, /sponsor_mode/);
+  assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/customers/);
+  assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/meter-orders/);
+  const sponsorMigration = read("supabase/migrations/20260622090000_meter_order_sponsor_mode.sql");
+  assert.match(sponsorMigration, /manual_paid/);
+  assert.match(sponsorMigration, /vendor_wallet/);
+  assert.match(meterOrdersService, /METER_ORDER_TRANSITIONS/);
+  assert.match(meterOrdersService, /assertMeterOrderTransition/);
+  assert.match(meterOrdersService, /customer_meter_order/);
+  assert.match(meterOrdersService, /runIdempotentMeterOrder/);
+  assert.match(meterOrdersService, /claimWalletIdempotency/);
+  assert.match(meterOrdersService, /completeWalletIdempotency/);
+  assert.match(meterOrdersService, /abandonWalletIdempotency/);
+  assert.match(meterOrdersService, /deterministicMeterOrderReference\('morda'/);
+  assert.doesNotMatch(meterOrdersService, /Date\.now\(\).*Math\.random/);
+  assert.match(customerMeterOrders, /assertClientIdempotencyKey/);
+  assert.match(customerMeterOrders, /\.eq\('status', 'pending_payment'\)/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);
   assert.match(walletCss, /\.bw-scrim\.open\s*\{[\s\S]*pointer-events:\s*auto;/);
   assert.match(rootPackage.scripts.build, /@beverly\/admin-app build/);
   assert.match(rootPackage.scripts.build, /@beverly\/vendor-app build/);
   assert.match(rootPackage.scripts.build, /@beverly\/customer-app build/);
+  assert.match(rootPackage.scripts["dev-console:user"], /ensure-dev-console-user\.mjs/);
   assert.match(rootPackage.scripts["test:wallet"], /wallet-app-route-contract\.test\.cjs/);
 
   console.log(JSON.stringify({

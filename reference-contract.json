@@ -6,24 +6,48 @@
     "routeManifest": "reference-route-manifest.json",
     "endpointRegistry": "backend/src/services/endpoint-registry.ts"
   },
-  "generatedAt": "2026-04-29T05:15:15.261Z",
+  "generatedAt": "2026-06-30T06:02:38.126Z",
   "documentedTotal": 144,
-  "endpointCount": 158,
-  "endpointCountNote": "matches overview plus wallet migration routes",
+  "endpointCount": 152,
+  "endpointCountNote": "overview count differs from endpoint catalog lines",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 45,
-  "liveWriteEndpointCount": 84,
+  "visibleEndpointCount": 39,
+  "liveWriteEndpointCount": 83,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
     "crawlMissingEndpointCount": 0,
     "crawlMissingEndpoints": [],
-    "routeCount": 38,
-    "fullyMappedRouteCount": 38,
+    "routeCount": 41,
+    "fullyMappedRouteCount": 41,
     "routeCoverage": [
       {
         "group": "Dashboard",
         "title": "Dashboard",
         "hash": "#/dashboard",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Report Centre",
+        "hash": "#/admin/reports",
+        "apiCount": 5,
+        "coveredApiCount": 5,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Station Consumption",
+        "hash": "#/prepay-report/station-consumption",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "System",
+        "title": "Automation Command",
+        "hash": "#/system/automation-command",
         "apiCount": 2,
         "coveredApiCount": 2,
         "fullyMapped": true
@@ -2225,7 +2249,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileDailyDataReadRequest",
       "responseSchema": "LoadProfileDailyDataResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -2248,7 +2272,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileReadRequest",
       "responseSchema": "LoadProfileResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [
         {
           "group": "Remote Support",
@@ -2284,7 +2308,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileInstantaneousValueReadRequest",
       "responseSchema": "LoadProfileInstantaneousValueResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -2307,7 +2331,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileMonthlyDataReadRequest",
       "responseSchema": "LoadProfileMonthlyDataResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -4537,14 +4561,243 @@
       "writeRiskLevel": "none"
     },
     {
+      "module": "Data Report",
+      "path": "/api/reports/revenue",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/revenue",
+        "/API/reports/revenue"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/revenue",
+        "/API/reports/revenue"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/wallet",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/wallet",
+        "/API/reports/wallet"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/wallet",
+        "/API/reports/wallet"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/customers",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/customers",
+        "/API/reports/customers"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/customers",
+        "/API/reports/customers"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/audit",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/audit",
+        "/API/reports/audit"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/audit",
+        "/API/reports/audit"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/settlement",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/settlement",
+        "/API/reports/settlement"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/settlement",
+        "/API/reports/settlement"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/local/consumption/station-analytics",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Station Consumption",
+          "hash": "#/prepay-report/station-consumption",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/local/consumption/station-analytics",
+        "/API/local/consumption/station-analytics"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/local/consumption/station-analytics",
+        "/API/local/consumption/station-analytics"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Station Consumption",
+          "hash": "#/prepay-report/station-consumption"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
       "module": "System",
       "path": "/api/system/automation-report",
       "operationId": "",
-      "method": "GET_OR_POST",
+      "method": "POST",
       "requestSchema": "",
       "responseSchema": "",
-      "operation": "read",
-      "consumers": [],
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/system/automation-report",
@@ -4552,13 +4805,17 @@
       ],
       "liveWrite": false,
       "visibleRoute": true,
-      "registryOnly": false,
+      "manifestOnly": true,
       "casingVariants": [
         "/api/system/automation-report",
         "/API/system/automation-report"
       ],
       "uiRouteConsumers": [
-        "#/system/automation-command"
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command"
+        }
       ],
       "writeRiskLevel": "none"
     },
@@ -4566,11 +4823,18 @@
       "module": "System",
       "path": "/api/system/automation-control",
       "operationId": "",
-      "method": "GET_OR_POST",
+      "method": "POST",
       "requestSchema": "",
       "responseSchema": "",
-      "operation": "read",
-      "consumers": [],
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command",
+          "status": null
+        }
+      ],
       "observed": false,
       "aliases": [
         "/api/system/automation-control",
@@ -4578,288 +4842,19 @@
       ],
       "liveWrite": false,
       "visibleRoute": true,
-      "registryOnly": false,
+      "manifestOnly": true,
       "casingVariants": [
         "/api/system/automation-control",
         "/API/system/automation-control"
       ],
       "uiRouteConsumers": [
-        "#/system/automation-command"
-      ],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/summary",
-      "operationId": "WalletSummary",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletSummaryRequest",
-      "responseSchema": "WalletSummaryResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/summary"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/summary"],
-      "uiRouteConsumers": ["#/wallet/admin/dashboard", "#/wallet/dashboard", "#/wallet/admin/all-wallets"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/funding/list",
-      "operationId": "WalletFundingList",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletFundingFilter",
-      "responseSchema": "WalletFundingListResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/funding/list"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/funding/list"],
-      "uiRouteConsumers": ["#/wallet/admin/dashboard", "#/wallet/admin/funding-credits"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/purchase/list",
-      "operationId": "WalletPurchaseList",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletPurchaseFilter",
-      "responseSchema": "WalletPurchaseListResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/purchase/list"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/purchase/list"],
-      "uiRouteConsumers": ["#/wallet/admin/dashboard", "#/wallet/admin/purchase-monitor"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/ledger/list",
-      "operationId": "WalletLedgerList",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletLedgerFilter",
-      "responseSchema": "WalletLedgerListResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/ledger/list"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/ledger/list"],
-      "uiRouteConsumers": ["#/wallet/admin/all-wallets", "#/wallet/admin/audit-log"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/manual-credit/list",
-      "operationId": "WalletManualCreditList",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletManualCreditFilter",
-      "responseSchema": "WalletManualCreditListResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/manual-credit/list"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/manual-credit/list"],
-      "uiRouteConsumers": ["#/wallet/admin/funding-credits"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/reconciliation/report",
-      "operationId": "WalletReconciliationReport",
-      "method": "GET_OR_POST",
-      "requestSchema": "WalletReconciliationFilter",
-      "responseSchema": "WalletReconciliationReport",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/reconciliation/report"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/reconciliation/report"],
-      "uiRouteConsumers": ["#/wallet/admin/exceptions", "#/wallet/admin/reports"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Wallet",
-      "path": "/api/wallet/funding/approve",
-      "operationId": "WalletFundingApprove",
-      "method": "POST",
-      "requestSchema": "WalletFundingApprovalRequest",
-      "responseSchema": "WalletFundingApprovalResponse",
-      "operation": "write",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/wallet/funding/approve"],
-      "liveWrite": true,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/wallet/funding/approve"],
-      "uiRouteConsumers": ["#/wallet/admin/funding-credits"],
-      "writeRiskLevel": "high"
-    },
-    {
-      "module": "Vendor",
-      "path": "/api/vendor/organization/create",
-      "operationId": "VendorOrganizationCreate",
-      "method": "POST",
-      "requestSchema": "VendorOrganizationRequest",
-      "responseSchema": "VendorOrganizationResponse",
-      "operation": "write",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/vendor/organization/create"],
-      "liveWrite": true,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/vendor/organization/create"],
-      "uiRouteConsumers": ["#/wallet/admin/vendors", "#/wallet/admin/vendors/create"],
-      "writeRiskLevel": "medium"
-    },
-    {
-      "module": "Vendor",
-      "path": "/api/vendor/onboarding/list",
-      "operationId": "VendorOnboardingList",
-      "method": "GET_OR_POST",
-      "requestSchema": "VendorOnboardingFilter",
-      "responseSchema": "VendorOnboardingListResponse",
-      "operation": "read",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/vendor/onboarding/list"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/vendor/onboarding/list"],
-      "uiRouteConsumers": ["#/wallet/admin/verification"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Vendor",
-      "path": "/api/vendor/onboarding/review",
-      "operationId": "VendorOnboardingReview",
-      "method": "POST",
-      "requestSchema": "VendorOnboardingReviewRequest",
-      "responseSchema": "VendorOnboardingReviewResponse",
-      "operation": "write",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/vendor/onboarding/review"],
-      "liveWrite": true,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/vendor/onboarding/review"],
-      "uiRouteConsumers": ["#/wallet/admin/verification"],
-      "writeRiskLevel": "high"
-    },
-    {
-      "module": "Vendor",
-      "path": "/api/vendor/onboarding/submit",
-      "operationId": "VendorOnboardingSubmit",
-      "method": "POST",
-      "requestSchema": "VendorOnboardingSubmitRequest",
-      "responseSchema": "VendorOnboardingSubmitResponse",
-      "operation": "write",
-      "consumers": [],
-      "observed": false,
-      "aliases": ["/api/vendor/onboarding/submit"],
-      "liveWrite": true,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/vendor/onboarding/submit"],
-      "uiRouteConsumers": ["#/wallet/admin/vendors/create"],
-      "writeRiskLevel": "medium"
-    },
-    {
-      "module": "Local Consumption",
-      "path": "/api/local/consumption/station-analytics",
-      "operationId": "LocalConsumptionStationAnalytics",
-      "method": "POST",
-      "requestSchema": "StationAnalyticsRequest",
-      "responseSchema": "StationAnalyticsResponse",
-      "operation": "analytics-read",
-      "consumers": [
         {
-          "group": "Data Report",
-          "title": "Station Consumption",
-          "hash": "#/prepay-report/station-consumption",
-          "status": 200
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command"
         }
       ],
-      "observed": false,
-      "aliases": ["/api/local/consumption/station-analytics"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/local/consumption/station-analytics"],
-      "uiRouteConsumers": ["#/prepay-report/station-consumption"],
       "writeRiskLevel": "none"
-    },
-    {
-      "module": "Local Consumption",
-      "path": "/api/local/consumption/live-probe",
-      "operationId": "LocalConsumptionLiveProbe",
-      "method": "POST",
-      "requestSchema": "LiveProbeRequest",
-      "responseSchema": "LiveProbeResponse",
-      "operation": "diagnostic-read",
-      "consumers": [
-        {
-          "group": "Automation Command",
-          "title": "Live Probing",
-          "hash": "#/automation-command/live-probing",
-          "status": 200
-        }
-      ],
-      "observed": false,
-      "aliases": ["/api/local/consumption/live-probe"],
-      "liveWrite": false,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/local/consumption/live-probe"],
-      "uiRouteConsumers": ["#/automation-command/live-probing"],
-      "writeRiskLevel": "none"
-    },
-    {
-      "module": "Local Consumption",
-      "path": "/api/local/consumption/trigger-sync",
-      "operationId": "LocalConsumptionTriggerSync",
-      "method": "POST",
-      "requestSchema": "TriggerSyncRequest",
-      "responseSchema": "TriggerSyncResponse",
-      "operation": "sync-write",
-      "consumers": [
-        {
-          "group": "Automation Command",
-          "title": "Live Probing",
-          "hash": "#/automation-command/live-probing",
-          "status": 200
-        }
-      ],
-      "observed": false,
-      "aliases": ["/api/local/consumption/trigger-sync"],
-      "liveWrite": true,
-      "visibleRoute": true,
-      "registryOnly": false,
-      "casingVariants": ["/api/local/consumption/trigger-sync"],
-      "uiRouteConsumers": ["#/automation-command/live-probing"],
-      "writeRiskLevel": "medium"
     }
   ]
 }

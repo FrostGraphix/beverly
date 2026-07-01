@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -34,6 +35,10 @@ const target = ref<Vendor | null>(null);
 const targetAction = ref<'approved' | 'frozen' | 'suspended'>('approved');
 const reason = ref('');
 const busy = ref(false);
+const deleteOpen = ref(false);
+const deleteTarget = ref<Vendor | null>(null);
+const deleteReason = ref('');
+const deleteBusy = ref(false);
 
 const actionTone = computed<'brand' | 'danger' | 'warn'>(() =>
     targetAction.value === 'frozen' ? 'danger'
@@ -63,6 +68,13 @@ function ask(v: Vendor, next: 'approved' | 'frozen' | 'suspended') {
     modalOpen.value = true;
 }
 
+function askDelete(v: Vendor) {
+    if (!canManageVendors.value) return;
+    deleteTarget.value = v;
+    deleteReason.value = '';
+    deleteOpen.value = true;
+}
+
 async function doAction() {
     if (!target.value || !reasonValid.value) return;
     busy.value = true;
@@ -85,6 +97,27 @@ async function doAction() {
         modalOpen.value = false;
     } finally {
         busy.value = false;
+    }
+}
+
+async function deleteVendor() {
+    if (!deleteTarget.value) return;
+    deleteBusy.value = true;
+    banner.value = null;
+    try {
+        await api.del(`/api/v1/admin/vendors/${deleteTarget.value.id}`, {
+            reason: deleteReason.value.trim() || undefined,
+        });
+        banner.value = { tone: 'success', text: `${deleteTarget.value.legal_name} deleted.` };
+        vendors.value = vendors.value.filter((v) => v.id !== deleteTarget.value?.id);
+        deleteOpen.value = false;
+        deleteTarget.value = null;
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Delete failed.';
+        banner.value = { tone: 'error', text: msg };
+        deleteOpen.value = false;
+    } finally {
+        deleteBusy.value = false;
     }
 }
 
@@ -167,7 +200,15 @@ onMounted(load);
                   <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
                   <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
                   <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
+                  <button v-if="canManageVendors" class="bw-btn sm danger" @click="askDelete(v)">Delete</button>
                 </div>
+                <MobileActionMenu label="Vendor actions">
+                  <router-link :to="`/vendors/${v.id}`" class="mobile-action-item">View</router-link>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'frozen')">Freeze</button>
+                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'suspended')">Suspend</button>
+                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="mobile-action-item primary" @click="ask(v, 'approved')">Reactivate</button>
+                  <button v-if="canManageVendors" class="mobile-action-item danger" @click="askDelete(v)">Delete</button>
+                </MobileActionMenu>
               </td>
             </tr>
             <tr v-if="!vendors.length && !loading">
@@ -201,6 +242,26 @@ onMounted(load);
         />
         <p class="cd-input-hint">Minimum 4 characters.</p>
       </template>
+    </ConfirmDialog>
+
+    <ConfirmDialog
+      v-model:open="deleteOpen"
+      title="Delete vendor"
+      :description="deleteTarget
+        ? `Delete ${deleteTarget.legal_name} from the active vendor list? Financial records stay preserved for audit.`
+        : ''"
+      confirm-label="Delete vendor"
+      tone="danger"
+      :loading="deleteBusy"
+      @confirm="deleteVendor"
+    >
+      <label class="cd-input-label">Reason (optional)</label>
+      <textarea
+        v-model="deleteReason"
+        rows="3"
+        class="cd-input"
+        placeholder="e.g. duplicate vendor record"
+      />
     </ConfirmDialog>
 
   </AppShell>
@@ -254,6 +315,23 @@ onMounted(load);
   flex-wrap: nowrap;
 }
 
+@media (max-width: 720px) {
+  .actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .action-cluster {
+    display: none;
+  }
+
+}
+
 :deep(.cd-body) .cd-input-label {
   display: block;
   font-size: var(--t-xs);
@@ -261,9 +339,10 @@ onMounted(load);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 6px;
+  margin: 0 0 6px;
 }
 :deep(.cd-body) .cd-input {
+  display: block;
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -271,9 +350,11 @@ onMounted(load);
   padding: 10px 12px;
   color: var(--text);
   font-size: var(--t-sm);
+  line-height: 1.45;
   font-family: inherit;
   resize: vertical;
   min-height: 80px;
+  box-sizing: border-box;
 }
 :deep(.cd-body) .cd-input:focus {
   outline: none;

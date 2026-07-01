@@ -80,14 +80,20 @@ export async function fetchSettlementReport(dateRange, filters = {}) {
 /* ── Report Type Registry ── */
 
 export const reportTypes = [
-  { id: "revenue", label: "Revenue Summary", icon: "chart", description: "Daily/weekly/monthly revenue from token sales" },
-  { id: "wallet", label: "Wallet Activity", icon: "wallet", description: "Ledger movements, funding, and purchases" },
-  { id: "customers", label: "Customer Usage", icon: "users", description: "Consumption patterns and top customers" },
-  { id: "audit", label: "Operations Audit", icon: "shield", description: "System actions and compliance trail" },
-  { id: "settlement", label: "Settlement", icon: "bank", description: "Settlement periods and disbursements" }
+  { id: "financial", label: "Financial Reports", icon: "chart", description: "Revenue, collections, settlement, and trends" },
+  { id: "transactions", label: "Transaction Reports", icon: "wallet", description: "Token sales, outcomes, and volumes" },
+  { id: "vendors-wallets", label: "Vendors and Wallets", icon: "users", description: "Wallet funding, balances, and vendor activity" },
+  { id: "audit", label: "Audit Reports", icon: "shield", description: "System actions, exceptions, and control trails" },
+  { id: "disputes", label: "Dispute Reports", icon: "bank", description: "Refunds, resolutions, and service recovery" },
+  { id: "general", label: "General Reports", icon: "chart", description: "Executive operating performance overview" }
 ];
 
+export function canonicalReportType(reportType) {
+  return ({ financial: "revenue", transactions: "revenue", "vendors-wallets": "wallet", audit: "audit", disputes: "settlement", general: "customers" })[reportType] || reportType;
+}
+
 export function fetcherForType(reportType) {
+  reportType = canonicalReportType(reportType);
   const map = {
     revenue: fetchRevenueReport,
     wallet: fetchWalletReport,
@@ -101,6 +107,7 @@ export function fetcherForType(reportType) {
 /* ── KPI Builder ── */
 
 export function buildKPIs(reportType, data) {
+  reportType = canonicalReportType(reportType);
   if (reportType === "revenue") {
     return [
       { label: "Total Revenue", value: formatMoney(data.summary?.totalRevenue || 0), delta: data.summary?.revenueDelta, tone: "good" },
@@ -147,6 +154,7 @@ export function buildKPIs(reportType, data) {
 /* ── Column Definitions per Report ── */
 
 export function columnsForType(reportType) {
+  reportType = canonicalReportType(reportType);
   if (reportType === "revenue") {
     return [
       { key: "date", label: "Date" },
@@ -203,6 +211,7 @@ export function columnsForType(reportType) {
 /* ── Chart Option Builder ── */
 
 export function buildChartOptions(reportType, data, theme = "executive") {
+  reportType = canonicalReportType(reportType);
   const textColor = theme === "light" ? "#334155" : "#94a3b8";
   const gridColor = theme === "light" ? "#e2e8f0" : "rgba(148,163,184,0.12)";
   const accentColor = "#22c55e";

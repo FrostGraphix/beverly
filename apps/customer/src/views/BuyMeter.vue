@@ -185,7 +185,7 @@ async function submitOrder() {
   color: var(--fg-2);
   transition: background 0.2s, color 0.2s;
 }
-.bw-step.active { background: var(--brand); color: #fff; }
+.bw-step.active { background: var(--brand); color: oklch(8% 0.04 145); }
 .bw-step.done   { background: oklch(70% 0.19 145 / 0.25); color: var(--brand); }
 .bw-step-line   { flex: 1; height: 2px; background: var(--surface-2); }
 

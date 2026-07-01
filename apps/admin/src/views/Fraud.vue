@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, ApiError, naira, shortDate } from '../lib/api';
 
 interface Signal {
@@ -89,11 +90,11 @@ onMounted(load);
 
 <template>
   <AppShell title="Fraud Review">
-    <template #topbar-end>
+    <div class="bw-page-actions">
       <button class="bw-icon-btn" @click="load" title="Refresh">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
       </button>
-    </template>
+    </div>
 
     <!-- Filters -->
     <div class="bw-toolbar">
@@ -140,7 +141,7 @@ onMounted(load);
             <th>Action</th>
             <th>Signals</th>
             <th>Date</th>
-            <th></th>
+            <th class="fraud-actions-col"></th>
           </tr>
         </thead>
         <tbody>
@@ -169,14 +170,17 @@ onMounted(load);
               </div>
             </td>
             <td style="font-size:var(--t-xs); color:var(--fg-2); white-space:nowrap">{{ shortDate(a.created_at) }}</td>
-            <td>
+            <td class="fraud-actions-col">
               <button
                 v-if="!a.resolved"
-                class="bw-btn sm"
+                class="bw-btn sm fraud-row-action"
                 @click="openResolve(a.id)"
               >
                 Resolve
               </button>
+              <MobileActionMenu v-if="!a.resolved" label="Fraud actions">
+                <button class="mobile-action-item" @click="openResolve(a.id)">Resolve</button>
+              </MobileActionMenu>
               <span v-else class="bw-muted" style="font-size:var(--t-xs)">Resolved</span>
             </td>
           </tr>
@@ -218,8 +222,25 @@ onMounted(load);
 .bw-signal-chip { display:inline-flex; align-items:center; gap:4px; background:var(--surface-2); border-radius:var(--r-sm); padding:1px 6px; font-size:10px; margin:1px; white-space:nowrap; }
 .bw-signal-weight { font-weight:700; opacity:0.7; }
 .bw-row-muted td { opacity:0.5; }
+.fraud-actions-col { min-width: 100px; }
 .bw-modal-backdrop { position:fixed; inset:0; background:oklch(0% 0 0 / 0.5); display:grid; place-items:center; z-index:200; }
 .bw-modal { background:var(--surface-0); border:1px solid var(--border); border-radius:var(--r-xl); padding:var(--s-6); width:min(480px,90vw); display:flex; flex-direction:column; gap:var(--s-4); }
 .bw-modal-head { display:flex; align-items:center; justify-content:space-between; }
 .bw-modal-foot { display:flex; gap:var(--s-3); justify-content:flex-end; }
+
+@media (max-width: 720px) {
+  .fraud-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 3;
+  }
+
+  .fraud-row-action {
+    display: none;
+  }
+}
 </style>

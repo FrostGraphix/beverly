@@ -12,10 +12,11 @@
  *   &limit=50 &cursor=<iso>
  */
 import { onMounted, ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
+import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
 
 interface VendorOrg {
     legal_name?: string | null;
@@ -53,8 +54,6 @@ interface HistoryResponse {
     nextCursor: string | null;
     summary?: Summary | null;
 }
-
-const router = useRouter();
 
 // ── filters ──────────────────────────────────────────────────────
 const statusFilter  = ref<'all' | 'approved' | 'pending' | 'rejected'>('all');
@@ -172,8 +171,14 @@ function doExport() {
     exportCsv('beverly-funding-history', displayItems.value, CSV_COLS);
 }
 
-// ── navigate to pending queue ─────────────────────────────────────
-function goQueue() { void router.push('/funding'); }
+function viewFundingReceipt(f: FundingRow) {
+    viewReceipt(fundingReceipt(f, 'history'));
+}
+
+function printFundingReceipt(f: FundingRow) {
+    printReceipt(fundingReceipt(f, 'history'));
+}
+
 </script>
 
 <template>
@@ -242,15 +247,17 @@ function goQueue() { void router.push('/funding'); }
       </div>
 
       <!-- Actions -->
-      <button class="bw-btn sm" :disabled="loading" @click="load">
-        {{ loading ? 'Loading…' : 'Refresh' }}
-      </button>
-      <button class="bw-btn sm" :disabled="!displayItems.length" @click="doExport">
-        Export CSV
-      </button>
-      <button class="bw-btn sm primary" @click="goQueue">
-        Approval Queue →
-      </button>
+      <div class="fh-action-row">
+        <button class="bw-btn sm" :disabled="loading" @click="load">
+          {{ loading ? 'Loading…' : 'Refresh' }}
+        </button>
+        <button class="bw-btn sm" :disabled="!displayItems.length" @click="doExport">
+          Export CSV
+        </button>
+        <RouterLink class="bw-btn sm primary fh-queue-link" :to="{ name: 'funding' }">
+          Approval Queue
+        </RouterLink>
+      </div>
     </div>
 
     <!-- Table -->
@@ -273,6 +280,7 @@ function goQueue() { void router.push('/funding'); }
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
+              <th>Receipt</th>
             </tr>
           </thead>
           <tbody>
@@ -298,9 +306,15 @@ function goQueue() { void router.push('/funding'); }
                 <div v-if="f.rejection_reason" class="fh-reject">{{ f.rejection_reason }}</div>
                 <div v-if="f.approved_at" class="fh-sub">{{ shortDate(f.approved_at) }}</div>
               </td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+                  <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+                </div>
+              </td>
             </tr>
             <tr v-if="!displayItems.length && !loading">
-              <td colspan="7" class="bw-muted" style="text-align:center; padding:var(--s-6)">
+              <td colspan="8" class="bw-muted" style="text-align:center; padding:var(--s-6)">
                 No funding records match the current filters.
               </td>
             </tr>
@@ -338,6 +352,13 @@ function goQueue() { void router.push('/funding'); }
           <div class="fh-card-row" v-if="f.rejection_reason">
             <span class="fh-card-lbl">Reason</span>
             <span style="color:var(--danger); font-size:var(--t-xs)">{{ f.rejection_reason }}</span>
+          </div>
+          <div class="fh-card-row">
+            <span class="fh-card-lbl">Receipt</span>
+            <span class="receipt-actions">
+              <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+              <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+            </span>
           </div>
         </div>
         <div v-if="!displayItems.length && !loading" class="bw-muted" style="text-align:center; padding:var(--s-6); font-size:var(--t-sm)">
@@ -380,11 +401,14 @@ function goQueue() { void router.push('/funding'); }
   margin-bottom: var(--s-3);
 }
 .fh-kpi {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
   padding: var(--s-4);
   display: flex; flex-direction: column; gap: 4px;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
 .fh-kpi-label { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .fh-kpi-value { font-family: var(--font-mono); font-size: var(--t-xl); font-weight: 700; color: var(--text); }
@@ -399,13 +423,17 @@ function goQueue() { void router.push('/funding'); }
   gap: var(--s-2); margin-bottom: var(--s-3);
 }
 .fh-select {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
   border-radius: var(--r-md); padding: 6px 10px;
   color: var(--text); font-size: var(--t-sm); cursor: pointer;
 }
-.fh-date-range { display: flex; align-items: center; gap: 4px; }
+.fh-date-range { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fh-date-range .fh-input { flex: 1 1 0; min-width: 0; }
+.fh-action-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.fh-action-row .bw-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+.fh-queue-link { text-decoration: none; justify-content: center; }
 .fh-input {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
   border-radius: var(--r-md); padding: 6px 8px;
   color: var(--text); font-size: var(--t-sm);
   width: 130px;
@@ -422,6 +450,7 @@ function goQueue() { void router.push('/funding'); }
 .fh-table .fh-sub  { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
 .fh-table .fh-reject { font-size: 10px; color: var(--danger); margin-top: 2px; max-width: 200px; }
 .fh-proof { color: var(--brand); font-family: var(--font-mono); font-size: var(--t-xs); text-decoration: underline; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 
 /* Mobile cards */
 .fh-cards { padding: var(--s-3); }
@@ -451,8 +480,9 @@ function goQueue() { void router.push('/funding'); }
 @media (max-width: 480px) {
   .fh-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fh-toolbar { flex-direction: column; align-items: stretch; }
-  .fh-date-range { flex-direction: column; }
+  .fh-date-range { flex-direction: row; width: 100%; }
+  .fh-date-sep { flex: 0 0 auto; }
+  .fh-action-row { width: 100%; }
   .fh-input { width: 100%; }
 }
 </style>
-

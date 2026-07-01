@@ -19,14 +19,18 @@ const browserQa = read("tests/vue-app.browser.test.cjs");
 
 assert(vercelSmoke.includes("process.env.PREVIEW_TARGET_URL"), "vercel smoke must accept preview target fallback");
 assert(vercelSmoke.includes("x-vercel-protection-bypass"), "vercel smoke must support Vercel protection bypass");
+assert(vercelSmoke.includes("VERCEL_AUTOMATION_BYPASS"), "vercel smoke must support automation bypass alias");
 assert(vercelSmoke.includes("SMOKE_AUTH_TOKEN"), "vercel smoke must support token-authenticated previews");
 assert(vercelSmoke.includes("SMOKE_USER_ID"), "vercel smoke must support smoke login credentials");
 assert(vercelSmoke.includes("dashboard read unauthorized"), "vercel smoke must explain API auth failures");
 assert(vercelSmoke.includes("Expected JSON from"), "vercel smoke must report non-JSON protection failures clearly");
 assert(vercelSmoke.includes("if (!protectionBypass) return \"\";"), "vercel smoke must not post protected failure hooks without bypass");
+assert(vercelSmoke.includes("VERCEL_PROTECTION_BYPASS is required"), "vercel smoke must preflight protected previews");
+assert(vercelSmoke.includes("SMOKE_AUTH_TOKEN or SMOKE_USER_ID"), "vercel smoke must preflight preview authentication");
 
 assert(stagingSmoke.includes("process.env.PREVIEW_TARGET_URL"), "staging smoke must fall back to preview target");
 assert(stagingSmoke.includes("x-vercel-protection-bypass"), "staging smoke must support Vercel protection bypass");
+assert(stagingSmoke.includes("VERCEL_AUTOMATION_BYPASS"), "staging smoke must support automation bypass alias");
 assert(stagingSmoke.includes("set VERCEL_PROTECTION_BYPASS"), "staging smoke must explain protected preview failures");
 
 assert(browserQa.includes("defaultBrowserTarget"), "browser QA must choose a platform-safe default");
