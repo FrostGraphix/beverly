@@ -74,4 +74,6 @@ The external evidence vault contains repository archives, Git archives, reflogs,
 
 The recovery preview uses branch-scoped demo authentication. Credential values remain encrypted.
 
+The general preview defaults stay disabled. Only the recovery branch overrides them.
+
 Vercel deployment protection remains enabled.
