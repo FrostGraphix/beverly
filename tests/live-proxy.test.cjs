@@ -388,6 +388,18 @@ async function main() {
       assert.strictEqual(localLogin.body.data.userId, "admin");
       assert.strictEqual(localLogin.body._proxy.source, "local-auth");
 
+      const currentUser = await request(proxyPort, "POST", "/api/user/read", {
+        headers: {
+          "Authorization": "Bearer local-dev-token",
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ userId: "admin", pageNumber: 1, pageSize: 1 }))
+      });
+      assert.strictEqual(currentUser.status, 200);
+      const currentUserRows = currentUser.body.result?.data || currentUser.body.data?.data || [];
+      assert.strictEqual(currentUserRows.length, 1);
+      assert.strictEqual(currentUserRows[0].userId, "admin");
+
       const blockedWrite = await request(proxyPort, "POST", "/api/account/create", {
         headers: {
           "Content-Type": "application/json"

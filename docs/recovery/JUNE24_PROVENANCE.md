@@ -59,6 +59,7 @@ Three dashboard template fields were aligned. Their computed model already used 
 - VAT policy changes produce audit records.
 - The notification panel now layers correctly on mobile.
 - Direct bell and panel browser coverage was added.
+- Preview profile lookup now preserves super-admin routing.
 - Tracked runtime artifacts match the mainline versions.
 - Backend verification now passes one hundred tests.
 - The complete recovery smoke suite passes.

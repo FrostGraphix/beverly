@@ -100,6 +100,7 @@
       "Atomic meter-order request claims and deterministic references",
       "Runtime VAT policy wiring with maker-checker approval",
       "Mobile notification panel layering and direct browser coverage",
+      "Preview profile filtering preserves authenticated route access",
       "Tracked runtime artifacts restored from origin/main"
     ],
     "files": [
@@ -144,6 +145,10 @@
         "sha256": "f013207bc13dd35ba0fc84bd851f391b37c348629bd324a8dbca6f27d3ae7728"
       },
       {
+        "path": "api/reference.js",
+        "sha256": "d821e8daf5fe4075f4e5df2ac39e8955b28502a8f8e693104911eb3a130a2ec8"
+      },
+      {
         "path": "package.json",
         "sha256": "d542c493082a075c4122ccb2fde8534764aa3f9bf897ab6492196e8349658bd7"
       },
@@ -158,6 +163,10 @@
       {
         "path": "tests/station-alerts.browser.test.cjs",
         "sha256": "bf35fc2ccadcfea3cfcc883aa7ff7f5dd2e97295741bfcddba7d05b7cadd792a"
+      },
+      {
+        "path": "tests/live-proxy.test.cjs",
+        "sha256": "a878a929b53de629ee58e823dc67456fdcf12fe3412cfd20017a328635e9a948"
       },
       {
         "path": "tests/vending-vat-contract.test.cjs",

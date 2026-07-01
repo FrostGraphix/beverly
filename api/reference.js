@@ -978,6 +978,15 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
     filtered = filtered.filter((row) => String(row.stationId || row.station || "").toUpperCase() === String(stationId).toUpperCase());
   }
 
+  if (pathname === "/api/user/read" || pathname === "/api/user/info") {
+    const userId = String(payload.userId || payload.username || "").trim().toLowerCase();
+    if (userId) {
+      filtered = filtered.filter((row) =>
+        String(row.userId || row.username || "").trim().toLowerCase() === userId
+      );
+    }
+  }
+
   if (pathname === "/api/item/read") {
     const query = String(payload.itemType || payload.type || payload.keyword || "").trim().toLowerCase();
     if (query) {
