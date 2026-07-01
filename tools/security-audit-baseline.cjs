@@ -1,14 +1,35 @@
 "use strict";
 
 const { execSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const accepted = new Map([
   ["@vitejs/plugin-vue2", "Vue 2 bridge is required until framework migration."],
   ["vue", "Vue 2 migration is tracked separately."],
   ["vuex", "Vuex 3 remains coupled to Vue 2."],
   ["vite", "Patched fix requires Vite major upgrade."],
-  ["esbuild", "Transitive Vite dev-server advisory."]
+  ["esbuild", "Transitive Vite dev-server advisory."],
+  ["echarts", "The affected Lines-series tooltip path is prohibited by the source guard."]
 ]);
+
+function sourceFiles(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) return sourceFiles(fullPath);
+    return /\.(?:js|mjs|cjs|ts|vue)$/.test(entry.name) ? [fullPath] : [];
+  });
+}
+
+function assertNoVulnerableEchartsLinesSeries() {
+  const roots = ["src", "apps"].map((entry) => path.resolve(entry));
+  const pattern = /\btype\s*:\s*["']lines["']/;
+  const matches = roots.flatMap(sourceFiles).filter((filePath) => pattern.test(fs.readFileSync(filePath, "utf8")));
+  if (matches.length) {
+    throw new Error(`ECharts Lines series requires upgrading to 6.1.0: ${matches.join(", ")}`);
+  }
+}
 
 function readAudit() {
   try {
@@ -20,6 +41,7 @@ function readAudit() {
   }
 }
 
+assertNoVulnerableEchartsLinesSeries();
 const report = readAudit();
 const vulnerabilities = Object.values(report.vulnerabilities || {});
 const unknown = vulnerabilities.filter((item) => !accepted.has(item.name));

@@ -101,6 +101,7 @@
       "Runtime VAT policy wiring with maker-checker approval",
       "Mobile notification panel layering and direct browser coverage",
       "Preview profile filtering preserves authenticated route access",
+      "Guarded ECharts advisory acceptance prohibits affected Lines-series usage",
       "Tracked runtime artifacts restored from origin/main"
     ],
     "files": [
@@ -175,6 +176,10 @@
       {
         "path": "tests/wallet-app-route-contract.test.cjs",
         "sha256": "53594debeb218728f9d698e72e08cdbde5bcc83a6759f0100825e01c39c38020"
+      },
+      {
+        "path": "tools/security-audit-baseline.cjs",
+        "sha256": "2bcb812cade0ea912d641e05063c64a7d06c02213e1773b9e2c7040a1d0d0a7d"
       }
     ],
     "verification": {
