@@ -103,6 +103,7 @@
       "Preview profile filtering preserves authenticated route access",
       "Guarded ECharts advisory acceptance prohibits affected Lines-series usage",
       "Dashboard chart transition conflict removed",
+      "Canonical wallet backend restored for protected previews",
       "Tracked runtime artifacts restored from origin/main"
     ],
     "files": [
@@ -152,7 +153,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "d542c493082a075c4122ccb2fde8534764aa3f9bf897ab6492196e8349658bd7"
+        "sha256": "2fadd089d4c090c29d6e11ae9ee924b23764c3d220b8f776e4b160e8abe0bd0f"
       },
       {
         "path": "src/components/StationAlertsBell.vue",
@@ -189,6 +190,26 @@
       {
         "path": "tests/dashboard-chart-options.test.mjs",
         "sha256": "166f8e437ada3974ba784b106a647ca51e2721c627be7c2743f7f3db73d3aac5"
+      },
+      {
+        "path": "api/wallet-service.mjs",
+        "sha256": "cfbf476da35eb4fa37959e0700d2cc0ca956e66819d0c375968c7b7a41c00812"
+      },
+      {
+        "path": "backend/wallet/src/server.ts",
+        "sha256": "782f57f67ff9f41219a89f110d03b3c1de17eed94493d3f8cc5dfea290ec6a89"
+      },
+      {
+        "path": "backend/wallet/src/queue/index.ts",
+        "sha256": "036cf4013d3d57facd265183b62aa594ba9fefa7855436fc3660ddc5783f3dfe"
+      },
+      {
+        "path": "tests/wallet-serverless-deployment.test.cjs",
+        "sha256": "800ec97a79591cfe9fe90678b5933f6e15c2dd6628eb897cbbddaa858b3fe596"
+      },
+      {
+        "path": "vercel.json",
+        "sha256": "550507a367ef8bf6bcc3f9626c1ac406806412eb3f1ea25112fdb6d71761a2e2"
       }
     ],
     "verification": {

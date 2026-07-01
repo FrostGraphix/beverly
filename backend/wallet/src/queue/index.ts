@@ -14,7 +14,8 @@ import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 
-const queuesEnabled = env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true';
+export const queuesEnabled = process.env.WALLET_SERVERLESS !== 'true'
+    && (env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true');
 
 function disabledQueue(name: string): Queue {
     return {
@@ -65,4 +66,3 @@ export async function closeQueues() {
 }
 
 export { connection as redisConnection };
-export { queuesEnabled };

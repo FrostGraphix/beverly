@@ -19,6 +19,7 @@
     { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" }
   ],
   "rewrites": [
+    { "source": "/api/wallet-service/:path*", "destination": "/api/wallet-service" },
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/wallet", "destination": "/wallet/index.html" },
     { "source": "/wallet/:path*", "destination": "/wallet/index.html" },

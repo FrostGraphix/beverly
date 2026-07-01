@@ -62,6 +62,7 @@ Three dashboard template fields were aligned. Their computed model already used 
 - Preview profile lookup now preserves super-admin routing.
 - ECharts Lines-series usage is prohibited by audit.
 - Dashboard chart transitions no longer double-animate.
+- Wallet previews now host the canonical backend.
 - Tracked runtime artifacts match the mainline versions.
 - Backend verification now passes one hundred tests.
 - The complete recovery smoke suite passes.

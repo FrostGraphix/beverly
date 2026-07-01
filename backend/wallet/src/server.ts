@@ -12,6 +12,7 @@
  * Graceful shutdown on SIGTERM/SIGINT closes Fastify + BullMQ + Redis cleanly.
  */
 import Fastify from 'fastify';
+import { pathToFileURL } from 'node:url';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -21,10 +22,10 @@ import authPlugin from './plugins/auth.js';
 import auditTap from './plugins/audit-tap.js';
 import errorHandler from './plugins/error-handler.js';
 import routes from './routes/index.js';
-import { redisConnection, closeQueues } from './queue/index.js';
+import { redisConnection, closeQueues, queuesEnabled } from './queue/index.js';
 import { resolveMutationRoutePolicy } from './contracts/route-policy.js';
 
-async function build() {
+export async function build() {
     if (env.NODE_ENV === 'production' && corsOrigins.length === 0) {
         throw new Error('CORS_ORIGINS is required in production.');
     }
@@ -64,7 +65,7 @@ async function build() {
         timeWindow: '1 minute',
         keyGenerator: (req) => req.ip,
     };
-    if (!isDev) rateLimitOptions.redis = redisConnection;
+    if (queuesEnabled) rateLimitOptions.redis = redisConnection;
     await app.register(rateLimit, rateLimitOptions);
 
     app.addHook('onRequest', async (req, reply) => {
@@ -121,4 +122,7 @@ async function main() {
     }
 }
 
-void main();
+const invokedAsScript = process.argv[1]
+    && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedAsScript) void main();
