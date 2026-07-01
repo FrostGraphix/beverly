@@ -61,6 +61,7 @@ Three dashboard template fields were aligned. Their computed model already used 
 - Direct bell and panel browser coverage was added.
 - Preview profile lookup now preserves super-admin routing.
 - ECharts Lines-series usage is prohibited by audit.
+- Dashboard chart transitions no longer double-animate.
 - Tracked runtime artifacts match the mainline versions.
 - Backend verification now passes one hundred tests.
 - The complete recovery smoke suite passes.

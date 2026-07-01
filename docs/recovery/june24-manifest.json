@@ -102,6 +102,7 @@
       "Mobile notification panel layering and direct browser coverage",
       "Preview profile filtering preserves authenticated route access",
       "Guarded ECharts advisory acceptance prohibits affected Lines-series usage",
+      "Dashboard chart transition conflict removed",
       "Tracked runtime artifacts restored from origin/main"
     ],
     "files": [
@@ -180,6 +181,14 @@
       {
         "path": "tools/security-audit-baseline.cjs",
         "sha256": "2bcb812cade0ea912d641e05063c64a7d06c02213e1773b9e2c7040a1d0d0a7d"
+      },
+      {
+        "path": "src/services/dashboard-chart-options.mjs",
+        "sha256": "3362cb3bad0f63b2094bc8f4f250321faffde567042e1749027971802293dee6"
+      },
+      {
+        "path": "tests/dashboard-chart-options.test.mjs",
+        "sha256": "166f8e437ada3974ba784b106a647ca51e2721c627be7c2743f7f3db73d3aac5"
       }
     ],
     "verification": {
