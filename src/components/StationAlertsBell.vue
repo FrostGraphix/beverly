@@ -45,7 +45,7 @@
 <script>
 import BaseIconButton from './base/BaseIconButton.vue';
 import BaseButton from './base/BaseButton.vue';
-import { getApi } from '../services/api.js';
+import { postApi } from '../services/api.js';
 
 const storageKey = 'beverly.station-health-state';
 const historyKey = 'beverly.station-health-history';
@@ -70,7 +70,7 @@ export default {
     async refresh() {
       this.loading = true;
       try {
-        const response = await getApi('/api/station/read');
+        const response = await postApi('/api/station/read', { pageNumber: 1, pageSize: 500 });
         const rows = Array.isArray(response.data) ? response.data : (response.data?.rows || response.data?.records || []);
         const previous = readState(); const history = readHistory(); const now = new Date(); const next = {}; const events = [];
         rows.forEach((row) => {

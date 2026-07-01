@@ -59,6 +59,7 @@ Three dashboard template fields were aligned. Their computed model already used 
 - VAT policy changes produce audit records.
 - The notification panel now layers correctly on mobile.
 - Direct bell and panel browser coverage was added.
+- Notification station reads use the supported POST method.
 - Preview profile lookup now preserves super-admin routing.
 - ECharts Lines-series usage is prohibited by audit.
 - Dashboard chart transitions no longer double-animate.

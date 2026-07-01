@@ -100,6 +100,7 @@
       "Atomic meter-order request claims and deterministic references",
       "Runtime VAT policy wiring with maker-checker approval",
       "Mobile notification panel layering and direct browser coverage",
+      "Notification station reads use the supported POST method",
       "Preview profile filtering preserves authenticated route access",
       "Guarded ECharts advisory acceptance prohibits affected Lines-series usage",
       "Dashboard chart transition conflict removed",
@@ -157,7 +158,7 @@
       },
       {
         "path": "src/components/StationAlertsBell.vue",
-        "sha256": "c8b794b5cde28a40693b47b28337e856a19229026b958c8ac0ad3862d945f2aa"
+        "sha256": "d45eb2eb7c47b1350c39d16641036fd46755dc57ea1e44325e4dee9d8ec66ee5"
       },
       {
         "path": "supabase/migrations/20260624100000_phase7_data_governance.sql",
@@ -165,7 +166,7 @@
       },
       {
         "path": "tests/station-alerts.browser.test.cjs",
-        "sha256": "bf35fc2ccadcfea3cfcc883aa7ff7f5dd2e97295741bfcddba7d05b7cadd792a"
+        "sha256": "74e81df2f79c01a5a146e67e6eda032caf759236d1b92d28ba5c0af93f63b9ff"
       },
       {
         "path": "tests/live-proxy.test.cjs",

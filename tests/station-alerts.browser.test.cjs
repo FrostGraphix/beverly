@@ -37,6 +37,7 @@ async function main() {
   const browser = await chromium.launch({ channel: "msedge", headless: true });
   const page = await browser.newPage({ viewport: { width: 1365, height: 768 } });
   const errors = [];
+  const stationMethods = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
@@ -49,6 +50,7 @@ async function main() {
     } else if (url.includes("/user/read")) {
       data = { data: [{ userId: "admin", name: "ACB(admin)", roleId: "super-admin" }], total: 1 };
     } else if (url.includes("/station/read")) {
+      stationMethods.push(route.request().method());
       data = [
         { stationId: "KYAKALE", name: "Kyakale", status: "offline", successRate: 0 },
         { stationId: "CENTRAL", name: "Central", status: "online", successRate: 100 },
@@ -78,6 +80,7 @@ async function main() {
     const panel = await page.locator(".station-alert-popover").boundingBox();
     assert(panel, "Mobile notification panel must remain visible.");
     assert(panel.x >= 0 && panel.x + panel.width <= 390, "Mobile notification panel must stay onscreen.");
+    assert.deepEqual(stationMethods, ["POST"]);
 
     await page.click(".station-alert-popover footer a");
     await page.waitForFunction(() => window.location.hash === "#/prepay-report/station-consumption");
