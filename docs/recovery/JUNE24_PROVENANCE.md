@@ -71,4 +71,6 @@ No force-push is permitted. Production promotion requires explicit visual approv
 
 The external evidence vault contains repository archives, Git archives, reflogs, unreachable-object listings, working-tree patches, and SHA-256 checksums.
 
-The recovery preview uses branch-scoped demo authentication. Vercel deployment protection remains enabled.
+The recovery preview uses branch-scoped demo authentication. Credential values remain encrypted.
+
+Vercel deployment protection remains enabled.
