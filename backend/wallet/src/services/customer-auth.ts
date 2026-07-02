@@ -87,6 +87,7 @@ const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RATE_LIMIT_WINDOW_MS = env.SMS_OTP_RATE_LIMIT_WINDOW_SECONDS * 1000;
 const OTP_RATE_LIMIT_MAX = env.SMS_OTP_RATE_LIMIT_MAX;
 const OTP_MAX_ATTEMPTS = 5;
+const OTP_MEMORY_FALLBACK_ENABLED = env.NODE_ENV === 'test';
 export const CUSTOMER_OTP_TTL_SECONDS = OTP_TTL_MS / 1000;
 export const CUSTOMER_OTP_RETRY_AFTER_SECONDS = env.SMS_OTP_RESEND_COOLDOWN_SECONDS;
 
@@ -283,7 +284,16 @@ export async function requestOtp(
     if (rateLimitResult.error && !isOtpStorageMissing(rateLimitResult.error.message)) {
         throw new AuthError(rateLimitResult.error.message, 'challenge_lookup_failed');
     }
-    const count = rateLimitResult.error && isOtpStorageMissing(rateLimitResult.error.message)
+    if (
+        rateLimitResult.error
+        && isOtpStorageMissing(rateLimitResult.error.message)
+        && !OTP_MEMORY_FALLBACK_ENABLED
+    ) {
+        throw otpChallengeCreateError(rateLimitResult.error.message);
+    }
+    const count = rateLimitResult.error
+        && isOtpStorageMissing(rateLimitResult.error.message)
+        && OTP_MEMORY_FALLBACK_ENABLED
         ? fallbackOtpRequestCount(normalised, since)
         : rateLimitResult.count;
     if ((count ?? 0) >= OTP_RATE_LIMIT_MAX) {
@@ -307,7 +317,9 @@ export async function requestOtp(
         })
         .select('id')
         .single();
-    const fallbackChallenge = insertResult.error && isOtpStorageMissing(insertResult.error.message)
+    const fallbackChallenge = insertResult.error
+        && isOtpStorageMissing(insertResult.error.message)
+        && OTP_MEMORY_FALLBACK_ENABLED
         ? storeFallbackOtpChallenge({
             phone: normalised,
             otp_hash: otp ? hashOtp(otp) : 'twilio-verify',
@@ -610,7 +622,12 @@ export async function verifyOtp(
     if (error && !isOtpStorageMissing(error.message)) {
         throw new AuthError(error.message, 'challenge_lookup_failed');
     }
-    const fallbackRow = error && isOtpStorageMissing(error.message) ? fallbackOtpChallenges.get(challengeId) : null;
+    if (error && isOtpStorageMissing(error.message) && !OTP_MEMORY_FALLBACK_ENABLED) {
+        throw otpChallengeCreateError(error.message);
+    }
+    const fallbackRow = error && isOtpStorageMissing(error.message) && OTP_MEMORY_FALLBACK_ENABLED
+        ? fallbackOtpChallenges.get(challengeId)
+        : null;
     if (!row && !fallbackRow) throw new AuthError('Challenge not found or already used.', 'challenge_not_found');
 
     const ch = (row ?? fallbackRow) as StoredOtpChallenge;
