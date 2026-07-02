@@ -44,8 +44,6 @@ function checkProductionConfig(env = process.env) {
   const production = nodeEnv === "production";
   const jwtSecret = String(env.JWT_SECRET || "");
   const corsOrigins = splitOrigins(env.CORS_ORIGINS);
-  const allowLiveWrites = String(env.ALLOW_LIVE_WRITES || "false").toLowerCase() === "true";
-  const approvedLiveWrites = String(env.APPROVED_LIVE_WRITES || "false").toLowerCase() === "true";
 
   if (production && defaultJwtSecrets.has(jwtSecret)) {
     failures.push("JWT_SECRET must be replaced in production");
@@ -59,8 +57,8 @@ function checkProductionConfig(env = process.env) {
   if (production && corsOrigins.some((origin) => origin === "*" || origin.includes("localhost") || origin.includes("127.0.0.1"))) {
     failures.push("CORS_ORIGINS must use production origins only");
   }
-  if (production && allowLiveWrites && !approvedLiveWrites) {
-    failures.push("ALLOW_LIVE_WRITES=true requires APPROVED_LIVE_WRITES=true in production");
+  if (production && ["ALLOW_LIVE_WRITES", "APPROVED_LIVE_WRITES", "VITE_ALLOW_LIVE_WRITES"].some((key) => key in env)) {
+    failures.push("live-write environment flags are forbidden; use runtime control");
   }
   if (!env.LIVE_API_BEARER_TOKEN && !env.UPSTREAM_BEARER_TOKEN) {
     warnings.push("live bearer token is missing");

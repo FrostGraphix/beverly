@@ -35,7 +35,9 @@ const {
   createAuthUser,
   updateAuthUser,
   deleteAuthUser,
-  getAuthUserByUserId
+  getAuthUserByUserId,
+  restRequest,
+  serviceConfigured
 } = require("../backend/src/services/supabase-service");
 const {
   readSnapshot,
@@ -101,16 +103,133 @@ loadEnvFile();
 
 let contractAliasMap = null;
 let accessControlModulePromise = null;
+const liveWriteControl = {
+  enabled: false,
+  environment: null,
+  updatedAt: null,
+  changedBy: null,
+  reason: null,
+  source: "safe-default",
+  loadedAt: 0
+};
+const liveWriteControlTtlMs = 5000;
+
+function liveWriteEnvironment() {
+  const configured = String(process.env.VERCEL_ENV || "").trim().toLowerCase();
+  if (["production", "preview", "development"].includes(configured)) return configured;
+  return process.env.NODE_ENV === "production" ? "production" : "development";
+}
+
+function liveWriteFlagKey() {
+  return `crm.live_writes.${liveWriteEnvironment()}.enabled`;
+}
+
+async function refreshLiveWriteControl(force = false) {
+  const environment = liveWriteEnvironment();
+  if (
+    !force
+    && liveWriteControl.environment === environment
+    && Date.now() - liveWriteControl.loadedAt < liveWriteControlTtlMs
+  ) {
+    return liveWriteControl;
+  }
+  if (!serviceConfigured()) {
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment,
+      source: "safe-default",
+      loadedAt: Date.now()
+    });
+    return liveWriteControl;
+  }
+  try {
+    const key = liveWriteFlagKey();
+    const rows = await restRequest(`/feature_flags?key=eq.${encodeURIComponent(key)}&select=enabled,updated_at,changed_by,change_reason`);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    Object.assign(liveWriteControl, {
+      enabled: row?.enabled === true,
+      environment,
+      updatedAt: row?.updated_at || null,
+      changedBy: row?.changed_by || null,
+      reason: row?.change_reason || null,
+      source: row ? "runtime-control" : "safe-default",
+      loadedAt: Date.now()
+    });
+  } catch (error) {
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment,
+      source: "safe-default",
+      loadedAt: Date.now()
+    });
+    console.error("[live-write-control-read]", error instanceof Error ? error.message : String(error));
+  }
+  return liveWriteControl;
+}
+
+async function saveLiveWriteControl({ enabled, actor, reason }) {
+  const environment = liveWriteEnvironment();
+  const updatedAt = new Date().toISOString();
+  await restRequest("/feature_flags?on_conflict=key", {
+    method: "POST",
+    prefer: "resolution=merge-duplicates,return=representation",
+    body: {
+      key: liveWriteFlagKey(),
+      description: `Controls Beverly CRM live upstream writes in ${environment}.`,
+      enabled,
+      rollout_percent: enabled ? 100 : 0,
+      regions: [],
+      changed_by: actor,
+      change_reason: reason,
+      updated_at: updatedAt
+    }
+  });
+  Object.assign(liveWriteControl, {
+    enabled,
+    environment,
+    updatedAt,
+    changedBy: actor,
+    reason,
+    source: "runtime-control",
+    loadedAt: Date.now()
+  });
+  return liveWriteControl;
+}
+
+function validateLiveWriteChange(payload = {}) {
+  if (typeof payload.enabled !== "boolean") {
+    return { error: "Enabled must be true or false" };
+  }
+  const reason = String(payload.reason || "").trim();
+  if (reason.length < 8 || reason.length > 240) {
+    return { error: "Reason must contain 8 to 240 characters" };
+  }
+  const expectedConfirmation = payload.enabled ? "ENABLE LIVE WRITES" : "DISABLE LIVE WRITES";
+  if (String(payload.confirmation || "").trim() !== expectedConfirmation) {
+    return { error: `Type ${expectedConfirmation} to confirm` };
+  }
+  return { enabled: payload.enabled, reason };
+}
+
+function liveWriteControlActor(request) {
+  if (request.__auth) return request.__auth;
+  const localDemoActor = process.env.NODE_ENV !== "production"
+    && !supabaseAuthEnabled()
+    && getEnv().demoAuthEnabled
+    && authHeaderToken(request) === "local-dev-token";
+  if (!localDemoActor) return null;
+  return {
+    userId: getEnv().demoAuthUser,
+    userName: "ACB(admin)",
+    roleId: "super-admin"
+  };
+}
 
 function getEnv() {
   const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
   const liveBaseUrl = process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault;
   const walletApiBaseUrl = String(process.env.WALLET_API_BASE_URL || "").trim().replace(/\/+$/, "");
-  const configuredLiveWrites = process.env.ALLOW_LIVE_WRITES;
   const isPreviewDeployment = Boolean(process.env.VERCEL_ENV) && process.env.VERCEL_ENV !== "production";
-  const allowLiveWrites = configuredLiveWrites === "true"
-    && process.env.APPROVED_LIVE_WRITES === "true"
-    && !isPreviewDeployment;
   return {
     readMode,
     liveBaseUrl,
@@ -119,7 +238,7 @@ function getEnv() {
     allowLegacyWalletTestMode: process.env.NODE_ENV === "test" && process.env.LEGACY_WALLET_TEST_MODE === "true",
     liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
-    allowLiveWrites,
+    allowLiveWrites: liveWriteControl.enabled === true,
     corsOrigins: splitCsv(process.env.CORS_ORIGINS || defaultCorsOrigins.join(",")),
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== "false",
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
@@ -1703,6 +1822,65 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       liveProxyEnabled: getEnv().liveProxyEnabled,
       allowLiveWrites: getEnv().allowLiveWrites,
       databasePath: process.env.LOCAL_DB_PATH || "tmp/reference-crm.sqlite"
+    });
+  }
+  if (pathname === "/api/system/live-write-control") {
+    const method = String(request.method || "GET").toUpperCase();
+    const access = await getAccessControlModule();
+    const controlActor = liveWriteControlActor(request);
+    if (!controlActor) return authFailure(401, pathname, "Authentication required");
+    const normalizedRole = access.normalizeRoleId(controlActor.roleId);
+    if (normalizedRole !== "super-admin") return authFailure(403, pathname, "Super admin required");
+    const actor = String(controlActor.userId || controlActor.email);
+
+    if (method === "GET") {
+      const state = await refreshLiveWriteControl(true);
+      return localJobResponse({
+        enabled: state.enabled === true,
+        environment: state.environment,
+        source: state.source,
+        updatedAt: state.updatedAt,
+        changedBy: state.changedBy,
+        reason: state.reason,
+        canManage: true
+      });
+    }
+
+    if (method !== "PUT") return authFailure(405, pathname, "Method not allowed");
+    const payload = requestData?.parsedBody || {};
+    const validated = validateLiveWriteChange(payload);
+    if (validated.error) return authFailure(400, pathname, validated.error);
+
+    const previous = { ...(await refreshLiveWriteControl(true)) };
+    if (previous.enabled === validated.enabled) {
+      return localJobResponse({
+        enabled: previous.enabled === true,
+        previousEnabled: previous.enabled === true,
+        unchanged: true,
+        environment: previous.environment,
+        source: previous.source,
+        updatedAt: previous.updatedAt,
+        changedBy: previous.changedBy,
+        reason: previous.reason,
+        canManage: true
+      });
+    }
+
+    const state = await saveLiveWriteControl({
+      enabled: validated.enabled,
+      actor,
+      reason: validated.reason
+    });
+    return localJobResponse({
+      enabled: state.enabled === true,
+      previousEnabled: previous.enabled === true,
+      unchanged: false,
+      environment: state.environment,
+      source: state.source,
+      updatedAt: state.updatedAt,
+      changedBy: state.changedBy,
+      reason: state.reason,
+      canManage: true
     });
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/live-report") {
@@ -3573,6 +3751,7 @@ async function handler(request, response) {
       response.status(result.status).json(result.body);
       return;
     }
+    await refreshLiveWriteControl();
     if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
       result = {
         status: 410,
@@ -3734,11 +3913,21 @@ module.exports._test = {
   isLegacyFinancialMutation,
   readRequest,
   rateLimitResult,
+  validateLiveWriteChange,
   refreshTargets,
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;
     accessControlModulePromise = null;
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment: null,
+      updatedAt: null,
+      changedBy: null,
+      reason: null,
+      source: "safe-default",
+      loadedAt: 0
+    });
     rateLimitBuckets.clear();
     resetForTests();
   }

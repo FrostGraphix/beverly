@@ -225,6 +225,12 @@ export async function getApi(path, params = {}) {
   return validateApiEnvelope(response.data, cleanPath || "getApi");
 }
 
+export async function putApi(path, payload = {}) {
+  const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  const response = await apiClient.put(cleanPath, payload);
+  return validateApiEnvelope(response.data, cleanPath || "putApi");
+}
+
 export async function uploadApi(path, formData, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, formData, {
@@ -325,19 +331,19 @@ export async function currentUserInfo() {
   }
 }
 
+let runtimeLiveWritesAllowed = false;
+
+export function setRuntimeLiveWritesAllowed(enabled) {
+  runtimeLiveWritesAllowed = enabled === true;
+}
+
+export async function refreshLiveWriteStatus() {
+  const response = await getApi("/api/system/live-write-control");
+  const state = response?.data || response?.result || {};
+  setRuntimeLiveWritesAllowed(state.enabled);
+  return state;
+}
+
 export function liveWritesAllowed() {
-  const override = typeof window !== "undefined"
-    ? window.localStorage?.getItem("beverly.allow_live_writes")
-    : "";
-  if (override === "true") return true;
-  if (override === "false") return false;
-
-  const host = typeof window !== "undefined" ? window.location?.hostname : "";
-  if (["localhost", "127.0.0.1", "::1"].includes(host)) return true;
-
-  const configured = import.meta.env?.VITE_ALLOW_LIVE_WRITES;
-  if (configured === "true") return true;
-  if (configured === "false") return false;
-
-  return false;
+  return runtimeLiveWritesAllowed;
 }
