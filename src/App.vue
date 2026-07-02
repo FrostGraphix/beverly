@@ -296,7 +296,7 @@ import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import ReportsPage from "./components/ReportsPage.vue";
 import StationAlertsBell from "./components/StationAlertsBell.vue";
-import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, touchSession } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, refreshLiveWriteStatus, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
@@ -596,6 +596,16 @@ export default {
         const response = await currentUserInfo();
         this.currentRoleId = response.data?.roleId || this.currentRoleId;
         this.currentUserName = response.data?.name || this.currentUserName;
+        const normalizedRole = String(this.currentRoleId || "").toLowerCase().replace(/_/g, "-");
+        if (normalizedRole === "super-admin") {
+          try {
+            await refreshLiveWriteStatus();
+          } catch {
+            setRuntimeLiveWritesAllowed(false);
+          }
+        } else {
+          setRuntimeLiveWritesAllowed(false);
+        }
         this.syncProfileIdentity();
         this.syncHash();
       } catch (error) {
