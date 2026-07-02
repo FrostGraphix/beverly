@@ -6,7 +6,8 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const adminApi = fs.readFileSync(path.join(root, "apps/admin/src/lib/api.ts"), "utf8");
-const adminEnv = fs.readFileSync(path.join(root, "apps/admin/.env.local"), "utf8");
+const adminEnvPath = path.join(root, "apps/admin/.env.local");
+const adminEnv = fs.existsSync(adminEnvPath) ? fs.readFileSync(adminEnvPath, "utf8") : "";
 const adminVite = fs.readFileSync(path.join(root, "apps/admin/vite.config.ts"), "utf8");
 const adminShell = fs.readFileSync(path.join(root, "apps/admin/src/components/AppShell.vue"), "utf8");
 const vendorCreate = fs.readFileSync(path.join(root, "apps/admin/src/views/VendorCreate.vue"), "utf8");
@@ -14,7 +15,7 @@ const legacyVendorAuth = fs.readFileSync(path.join(root, "src/components/vendor/
 
 assert.match(
   adminVite,
-  /proxy:\s*\{\s*'\/api':\s*\{\s*target:\s*'http:\/\/localhost:4000'/,
+  /proxy:\s*\{\s*'\/api':\s*\{\s*target:\s*`http:\/\/localhost:\$\{process\.env\.WALLET_PORT \|\| 4000\}`/,
   "admin dev server must proxy /api to the wallet backend"
 );
 assert.match(adminVite, /base: process\.env\.VITE_ADMIN_BASE \?\? \(command === 'build' \? '\/wallet-admin\/' : '\/'\)/, "admin build must mount under /wallet-admin/");

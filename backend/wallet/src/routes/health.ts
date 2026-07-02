@@ -56,8 +56,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/version', async () => ({
         service: 'beverly-wallet-backend',
         version: process.env.npm_package_version ?? '0.1.0',
-        node: process.version,
-        env: process.env.NODE_ENV,
+        build: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RENDER_GIT_COMMIT ?? 'unknown',
     }));
 };
 

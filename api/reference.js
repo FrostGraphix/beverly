@@ -592,7 +592,8 @@ function buildCacheKey(request, requestData) {
 
 function cronAuthorized(request) {
   const secret = process.env.CRON_SECRET || "";
-  if (!secret && process.env.NODE_ENV !== "production") return true;
+  const deployed = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
+  if (!secret) return !deployed;
   return String(request.headers.authorization || "") === `Bearer ${secret}`;
 }
 
