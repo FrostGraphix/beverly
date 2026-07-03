@@ -46,6 +46,43 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function uuidOrNull(value) {
+  const text = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+
+function mapAuditRow(entry = {}) {
+  const method = String(entry.method || "GET").toUpperCase();
+  const path = String(entry.path || "/");
+  const normalizedPath = path.toLowerCase();
+  const action = normalizedPath.includes("login") ? "login"
+    : normalizedPath.includes("logout") ? "logout"
+      : normalizedPath.includes("import") ? "import"
+        : normalizedPath.includes("export") ? "export"
+          : normalizedPath.includes("remote") ? "remote_command"
+            : method === "DELETE" ? "delete"
+              : ["PUT", "PATCH"].includes(method) ? "update"
+                : method === "POST" ? "create"
+                  : "download";
+  const details = sanitizeValue({
+    ...(entry.details || {}),
+    method,
+    outcome: String(entry.outcome || "success"),
+    statusCode: Number(entry.statusCode || 200),
+    proxySource: String(entry.proxySource || "unknown")
+  });
+  return {
+    user_id: uuidOrNull(entry.userId),
+    action,
+    resource: path,
+    resource_id: entry.resourceId || null,
+    detail: details,
+    source: String(entry.proxySource || "unknown"),
+    request_id: uuidOrNull(entry.requestId),
+    metadata: details
+  };
+}
+
 function stableId(prefix) {
   return crypto.createHash("sha256").update(prefix).digest("hex");
 }
@@ -140,16 +177,7 @@ async function recordAuditLog(entry) {
     () => supabase.restRequest("/audit_logs", {
       method: "POST",
       prefer: "return=minimal",
-      body: {
-        method: String(entry.method || "GET").toUpperCase(),
-        path: String(entry.path || "/"),
-        outcome: String(entry.outcome || "success"),
-        status_code: Number(entry.statusCode || 200),
-        proxy_source: String(entry.proxySource || "unknown"),
-        detail_json: sanitizeValue(entry.details || {}),
-        user_id: entry.userId || null,
-        request_id: entry.requestId || null
-      }
+      body: mapAuditRow(entry)
     })
   );
 }
@@ -522,6 +550,7 @@ module.exports = {
   getSgcTokenRule,
   setSgcTokenRule,
   listSgcTokenRules,
+  mapAuditRow,
   listAutomationDeliveries,
   listAccountBindings,
   listImportJobs,
