@@ -29,6 +29,7 @@ function main() {
   const liveWriteControl = readMigration("20260702120000_crm_live_write_control.sql");
   const environmentLiveWriteControl = readMigration("20260702143000_environment_live_write_control.sql");
   const fullRls = readMigration("20260702150000_full_rls_permissions.sql");
+  const liveWriteActivation = readMigration("20260703100000_enable_live_writes.sql");
 
   const requiredTables = [
     "roles",
@@ -167,6 +168,13 @@ function main() {
   assert(environmentLiveWriteControl.includes("'crm.live_writes.production.enabled'"), "missing production live-write control");
   assert(environmentLiveWriteControl.includes("'crm.live_writes.preview.enabled'"), "missing preview live-write control");
   assert(environmentLiveWriteControl.includes("'crm.live_writes.development.enabled'"), "missing development live-write control");
+  for (const environment of ["production", "preview", "development"]) {
+    assert(
+      liveWriteActivation.includes(`'crm.live_writes.${environment}.enabled'`),
+      `missing ${environment} live-write activation`
+    );
+  }
+  assert(liveWriteActivation.includes("enabled = excluded.enabled"), "live-write activation must update existing flags");
   for (const helper of [
     "private.current_staff_role",
     "private.has_permission",
@@ -196,7 +204,7 @@ function main() {
   }
 
   console.log(JSON.stringify({
-    migrations: 16,
+    migrations: 17,
     tables: requiredTables.length + 6,
     buckets: 4,
     status: "supabase migrations passed"

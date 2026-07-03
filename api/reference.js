@@ -3537,8 +3537,8 @@ async function proxyLive(request, pathname, requestData) {
       status: 403,
       body: {
         code: 403,
-        msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+        msg: "Live writes are disabled for this environment.",
+        reason: "Live writes are disabled for this environment.",
         data: null,
         result: null,
         _proxy: {
@@ -3772,8 +3772,8 @@ async function handler(request, response) {
         status: 403,
         body: {
           code: 403,
-          msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-          reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+          msg: "Live writes are disabled for this environment.",
+          reason: "Live writes are disabled for this environment.",
           data: null,
           result: null,
           _proxy: {
