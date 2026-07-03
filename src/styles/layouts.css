@@ -699,23 +699,25 @@ a {
   top: calc(100% + 10px);
   right: 0;
   z-index: 1000;
-  width: min(260px, calc(100vw - 24px));
+  width: min(344px, calc(100vw - 24px));
   min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-lg);
+  padding: 20px 22px 22px;
+  border: 1px solid color-mix(in srgb, var(--theme-color) 24%, var(--border-color));
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--theme-color) 9%, transparent) 1px, transparent 1.5px) 0 0 / 24px 24px,
+    color-mix(in srgb, var(--bg-card) 97%, var(--theme-color) 3%);
+  box-shadow: var(--shadow-xl), 0 0 0 1px color-mix(in srgb, var(--theme-color) 8%, transparent);
   transform-origin: top right;
 }
 
 .bw-user-dropdown::before {
   content: "";
   position: absolute;
-  top: -6px;
-  right: 28px;
-  width: 10px;
-  height: 10px;
+  top: -8px;
+  right: 30px;
+  width: 14px;
+  height: 14px;
   border-left: 1px solid var(--border-color);
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
@@ -725,23 +727,24 @@ a {
 .bw-user-dropdown-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
-  padding: 12px;
-  border-bottom: 0;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  gap: 14px;
+  margin-bottom: 8px;
+  padding: 4px 6px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
 }
 
 .bw-user-dropdown-logo {
-  width: 34px;
-  height: 34px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--theme-color-bright), var(--primary-hover));
   color: var(--text-inverse);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 900;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 18%, transparent);
 }
@@ -753,7 +756,7 @@ a {
 .bw-user-dropdown-brand strong {
   display: block;
   color: var(--text-strong);
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.15;
 }
 
@@ -762,7 +765,7 @@ a {
   margin-top: 2px;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -770,25 +773,33 @@ a {
 
 .bw-user-menu-item {
   width: 100%;
-  min-height: 46px;
+  min-height: 58px;
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 0 13px;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 11px;
   background: transparent;
   color: var(--text-main);
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 650;
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 
-.bw-user-menu-item:hover {
-  background: var(--primary-light);
+.bw-user-menu-item:hover,
+.bw-user-menu-item:focus-visible {
+  background: linear-gradient(90deg, var(--primary-light), color-mix(in srgb, var(--theme-color) 7%, transparent));
   color: var(--primary);
+  transform: translateX(2px);
+}
+
+.bw-user-menu-item > span {
+  min-width: 0;
+  flex: 1;
 }
 
 .bw-user-menu-item--danger {
@@ -801,10 +812,19 @@ a {
 }
 
 .bw-user-menu-icon {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--theme-color);
+}
+
+.bw-user-menu-item--danger .bw-user-menu-icon {
+  background: transparent;
+  color: var(--danger);
 }
 
 .bw-user-menu-chevron {
@@ -826,7 +846,7 @@ a {
 
 .bw-user-menu-separator {
   height: 1px;
-  margin: 10px 13px;
+  margin: 11px 8px;
   background: var(--border-color);
 }
 
@@ -848,69 +868,71 @@ a {
   }
 
   .bw-user-dropdown {
-    width: min(224px, calc(100vw - 18px));
-    max-height: calc(100dvh - 86px);
-    padding: 7px;
-    border-radius: 16px;
+    width: min(390px, calc(100vw - 24px));
+    max-height: calc(100dvh - 72px - env(safe-area-inset-bottom, 0px));
+    padding: 24px 28px 26px;
+    border-radius: 30px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .bw-user-dropdown::before {
-    right: 20px;
+    right: 30px;
   }
 
   .bw-user-dropdown-brand {
-    gap: 7px;
-    margin-bottom: 5px;
-    padding: 7px 7px 8px;
+    gap: 14px;
+    margin-bottom: 8px;
+    padding: 4px 2px 18px;
   }
 
   .bw-user-dropdown-logo {
-    width: 26px;
-    height: 26px;
-    border-radius: 10px;
-    font-size: 13px;
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+    font-size: 22px;
   }
 
   .bw-user-dropdown-brand strong {
-    font-size: 13px;
-    line-height: 1.1;
+    font-size: 21px;
+    line-height: 1.15;
   }
 
   .bw-user-dropdown-brand small {
-    max-width: 160px;
-    font-size: 9px;
-    line-height: 1.15;
+    max-width: 260px;
+    font-size: 16px;
+    line-height: 1.25;
   }
 
   .bw-user-menu-item {
-    min-height: 44px;
-    gap: 9px;
-    padding: 0 9px;
-    border-radius: 11px;
-    font-size: 12px;
-    line-height: 1.15;
+    min-height: 68px;
+    gap: 18px;
+    padding: 0 8px;
+    border-radius: 14px;
+    font-size: 21px;
+    line-height: 1.2;
   }
 
   .bw-user-menu-icon {
-    width: 15px;
-    height: 15px;
+    width: 27px;
+    height: 27px;
+    padding: 0;
   }
 
   .bw-user-menu-chevron {
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
   }
 
   .bw-user-menu-item kbd {
-    padding: 2px 5px;
-    border-radius: 6px;
-    font-size: 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    font-size: 17px;
   }
 
   .bw-user-menu-separator {
-    margin: 6px 9px;
+    margin: 10px 8px;
   }
 
   .user-theme-panel {
@@ -1417,8 +1439,10 @@ a {
     padding: 0 8px 64px;
   }
 
+  .mobile .sidebar-find,
+  .mobile .sidebar-signout,
   .mobile .sidebar-item {
-    min-height: 38px;
+    min-height: 44px;
     margin-bottom: 2px;
     padding-inline: 9px;
     border-radius: var(--radius-sm);
@@ -1426,7 +1450,7 @@ a {
   }
 
   .mobile .sidebar-item.indent {
-    min-height: 34px;
+    min-height: 44px;
     padding-left: 30px;
     font-size: 12px;
   }

@@ -22,6 +22,8 @@ const legacyCss = fs.readdirSync(path.join(root, "src/styles"))
 const combinedCss = `${referenceCss}\n${legacyCss}`;
 const themesCss = readProjectFile("src/styles/themes.css");
 const tokensCss = readProjectFile("src/styles/tokens.css");
+const layoutsCss = readProjectFile("src/styles/layouts.css");
+const vercelShellCss = readProjectFile("src/styles/vercel-shell.css");
 
 for (const theme of ["system", "light", "executive", "contrast"]) {
   assertIncludes(app, `id: "${theme}"`);
@@ -30,6 +32,9 @@ for (const theme of ["system", "light", "executive", "contrast"]) {
 
 assertIncludes(app, "data-theme-choice");
 assertIncludes(app, "role=\"menuitemradio\"");
+assertIncludes(app, "handleUserMenuKeydown");
+assertIncludes(app, ":inert=\"width <= 1024 && !sidebarOpen ? '' : null\"");
+assertIncludes(app, ":inert=\"width <= 1024 && sidebarOpen ? '' : null\"");
 assertIncludes(themesCss, "[data-theme=\"executive\"]");
 assertIncludes(themesCss, "[data-theme=\"contrast\"]");
 assertIncludes(themesCss, "--color-brand: #22c55e");
@@ -47,6 +52,18 @@ assertIncludes(themesCss, "color-scheme: dark");
 assertIncludes(themesCss, "color-scheme: light");
 assertIncludes(combinedCss, ".sidebar-logo-icon");
 assertIncludes(combinedCss, "color: var(--text-inverse)");
+assertIncludes(vercelShellCss, "background: linear-gradient(180deg, var(--sidebar-bg-start), var(--sidebar-bg-end))");
+assertIncludes(vercelShellCss, "background: var(--sidebar-hover-bg)");
+assertIncludes(vercelShellCss, "border-color: var(--sidebar-hover-border)");
+assertIncludes(vercelShellCss, "box-shadow: inset 3px 0 0 var(--sidebar-active-border)");
+assertIncludes(vercelShellCss, ".sidebar-item:focus-visible");
+assertIncludes(vercelShellCss, "background: transparent !important");
+assertIncludes(layoutsCss, "justify-content: flex-start");
+assertIncludes(layoutsCss, ".bw-user-menu-item > span");
+assertIncludes(layoutsCss, "env(safe-area-inset-bottom, 0px)");
+assertIncludes(layoutsCss, "scrollbar-gutter: stable");
+assertIncludes(layoutsCss, "min-height: 44px");
+assert((app.match(/class="bw-user-menu-separator"/g) || []).length >= 2, "Account menu needs grouped action sections");
 
 const lightThemeCss = themesCss.match(/\[data-theme="light"\]\s*\{[\s\S]*?\n\}/)?.[0] || "";
 // Wallet-mirrored light theme uses oklch values from packages/tokens/theme.css
