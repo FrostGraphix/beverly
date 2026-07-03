@@ -617,14 +617,9 @@ export default {
         const response = await currentUserInfo();
         this.currentRoleId = response.data?.roleId || this.currentRoleId;
         this.currentUserName = response.data?.name || this.currentUserName;
-        const normalizedRole = String(this.currentRoleId || "").toLowerCase().replace(/_/g, "-");
-        if (normalizedRole === "super-admin") {
-          try {
-            await refreshLiveWriteStatus();
-          } catch {
-            setRuntimeLiveWritesAllowed(false);
-          }
-        } else {
+        try {
+          await refreshLiveWriteStatus();
+        } catch {
           setRuntimeLiveWritesAllowed(false);
         }
         this.syncProfileIdentity();

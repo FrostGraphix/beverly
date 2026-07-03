@@ -480,6 +480,10 @@ async function authorizeRequest(request, pathname, requestData) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
+  if (lowerPath === "/api/system/live-write-control" && String(request.method || "GET").toUpperCase() === "GET") {
+    return null;
+  }
+
   if (lowerPath.startsWith("/api/system/")) {
     if (lowerPath === "/api/system/automation-report" || lowerPath === "/api/system/automation-control" || lowerPath === "/api/system/automation-hooks/test") {
       return (normalizedRole === "super-admin" || normalizedRole === "operations-manager") ? null : authFailure(403, pathname, "Insufficient permissions");
@@ -1830,7 +1834,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const controlActor = liveWriteControlActor(request);
     if (!controlActor) return authFailure(401, pathname, "Authentication required");
     const normalizedRole = access.normalizeRoleId(controlActor.roleId);
-    if (normalizedRole !== "super-admin") return authFailure(403, pathname, "Super admin required");
+    const canManage = normalizedRole === "super-admin";
     const actor = String(controlActor.userId || controlActor.email);
 
     if (method === "GET") {
@@ -1842,11 +1846,12 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         updatedAt: state.updatedAt,
         changedBy: state.changedBy,
         reason: state.reason,
-        canManage: true
+        canManage
       });
     }
 
     if (method !== "PUT") return authFailure(405, pathname, "Method not allowed");
+    if (!canManage) return authFailure(403, pathname, "Super admin required");
     const payload = requestData?.parsedBody || {};
     const validated = validateLiveWriteChange(payload);
     if (validated.error) return authFailure(400, pathname, validated.error);
