@@ -12,6 +12,11 @@
           <p>Staff Identity</p>
           <h1>{{ form.name || userName }}</h1>
         </div>
+        <BaseIconButton class="wallet-profile-close" aria-label="Return to dashboard" @click="$emit('close')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </BaseIconButton>
       </div>
 
       <div class="wallet-profile-meta">
@@ -70,12 +75,14 @@
 
 <script>
 import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import { loadProfileState, updateRemoteProfile } from "../services/profile-store.mjs";
 
 export default {
   name: "ProfilePage",
-  components: { BaseButton, BaseInput },
+  components: { BaseButton, BaseIconButton, BaseInput },
+  emits: ["close"],
   props: {
     userName: { type: String, default: "ACB(admin)" },
     roleId: { type: String, default: "super-admin" },
@@ -142,9 +149,24 @@ export default {
 
 .wallet-profile-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 20px;
+}
+
+.wallet-profile-close {
+  width: 42px;
+  height: 42px;
+  align-self: start;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+.wallet-profile-close svg {
+  width: 20px;
+  height: 20px;
 }
 
 .wallet-profile-avatar-wrap {

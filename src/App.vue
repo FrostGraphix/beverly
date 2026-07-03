@@ -227,6 +227,7 @@
             :user-name="currentUserName"
             :role-id="currentRoleId"
             :profile-picture-url="profilePictureUrl"
+            @close="profileOpen = false"
           />
           <SettingsPage
             v-else-if="settingsOpen"
