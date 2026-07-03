@@ -151,13 +151,20 @@ function runAudit(options = {}) {
       ["src/components/TablePage.vue", "src/styles/tokens.css", "src/styles/reference.css"]
     ),
     result(
-      "modal-hover-profile",
-      "modals",
-      profile.includes("profile-overlay") &&
+      "account-profile-surface",
+      "account",
+      (
+        profile.includes("wallet-profile-shell") &&
+        profile.includes("wallet-profile-card") &&
+        profile.includes("BaseIconButton") &&
+        profile.includes('aria-label="Return to dashboard"')
+      ) || (
+        profile.includes("profile-overlay") &&
         profile.includes("profile-panel") &&
         profilePanel.includes("border-radius: var(--radius-lg)") &&
-        !/border-radius:\s*50%/.test(profilePanel),
-      "Profile settings use centered hover modal, not circular page.",
+        !/border-radius:\s*50%/.test(profilePanel)
+      ),
+      "Profile uses an accessible account surface with a clear return control.",
       ["src/components/ProfilePage.vue", "src/styles/reference.css"]
     ),
     result(
