@@ -25,6 +25,10 @@
           <span class="profile-tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5h18v2H3V5zm4 6h10v2H7v-2zm-2 6h14v2H5v-2z"/></svg></span>
           Preferences
         </BaseButton>
+        <BaseButton v-if="isSuperAdmin" :class="['profile-tab', { active: activeTab === 'operations' }]" @click="openOperations">
+          <span class="profile-tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 2h10v2H7zM5 6h14v16H5zM9 9h6v2H9zm0 4h6v2H9z"/></svg></span>
+          Operations
+        </BaseButton>
       </div>
 
       <div class="profile-body">
@@ -138,6 +142,59 @@
             {{ prefsMessage }}
           </div>
         </div>
+
+        <div v-if="activeTab === 'operations' && isSuperAdmin" class="profile-section">
+          <div class="profile-section-title">Live Write Control</div>
+          <div class="live-control-card">
+            <div class="live-control-status">
+              <div>
+                <span class="profile-pref-name">{{ liveControl.enabled ? 'Live writes enabled' : 'Live writes disabled' }}</span>
+                <span class="profile-pref-desc">Environment: {{ liveControl.environment || 'unknown' }}</span>
+              </div>
+              <span :class="['live-control-badge', { enabled: liveControl.enabled }]">
+                {{ liveControl.enabled ? 'Enabled' : 'Disabled' }}
+              </span>
+            </div>
+
+            <p class="live-control-warning">
+              This changes real meter operations.
+            </p>
+
+            <label class="profile-label" for="live-write-reason">Change reason</label>
+            <textarea
+              id="live-write-reason"
+              v-model="liveControl.reasonInput"
+              class="profile-input live-control-reason"
+              maxlength="240"
+              placeholder="Explain this operational change"
+            ></textarea>
+
+            <label class="profile-label" for="live-write-confirmation">
+              Type {{ expectedConfirmation }}
+            </label>
+            <BaseInput
+              id="live-write-confirmation"
+              v-model="liveControl.confirmation"
+              class="profile-input"
+              :placeholder="expectedConfirmation"
+              autocomplete="off"
+            />
+
+            <div v-if="liveControl.error" class="live-control-error" role="alert">{{ liveControl.error }}</div>
+            <div v-if="liveControl.message" class="profile-save-notice">{{ liveControl.message }}</div>
+
+            <div class="profile-form-actions live-control-actions">
+              <BaseButton variant="ghost" :disabled="liveControl.busy" @click="loadLiveControl">Refresh</BaseButton>
+              <BaseButton
+                :variant="liveControl.enabled ? 'danger' : 'primary'"
+                :disabled="!canSubmitLiveControl"
+                @click="updateLiveControl"
+              >
+                {{ liveControl.busy ? 'Saving...' : (liveControl.enabled ? 'Disable Live Writes' : 'Enable Live Writes') }}
+              </BaseButton>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -151,6 +208,7 @@ import BaseToggle from "./base/BaseToggle.vue";
 import MfaSetupFlow from "./MfaSetupFlow.vue";
 import { changeUserPassword, loadPreferenceState, savePreferenceState } from "../services/profile-store.mjs";
 import { getMFAStatus, unenrollMFA } from "../services/mfa-service.mjs";
+import { getApi, putApi, setRuntimeLiveWritesAllowed } from "../services/api.js";
 
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
 
@@ -189,7 +247,16 @@ export default {
       ],
       mfaStatus: { enrolled: false, factorId: null },
       mfaLoading: true,
-      mfaSetupOpen: false
+      mfaSetupOpen: false,
+      liveControl: {
+        enabled: false,
+        environment: "",
+        busy: false,
+        error: "",
+        message: "",
+        reasonInput: "",
+        confirmation: ""
+      }
     };
   },
   async mounted() {
@@ -215,6 +282,17 @@ export default {
     },
     canChangePw() {
       return this.pw.current && this.pw.next.length >= 8 && this.pw.next === this.pw.confirm;
+    },
+    isSuperAdmin() {
+      return String(this.roleId || "").toLowerCase().replace(/_/g, "-") === "super-admin";
+    },
+    expectedConfirmation() {
+      return this.liveControl.enabled ? "DISABLE LIVE WRITES" : "ENABLE LIVE WRITES";
+    },
+    canSubmitLiveControl() {
+      return !this.liveControl.busy
+        && this.liveControl.reasonInput.trim().length >= 8
+        && this.liveControl.confirmation.trim() === this.expectedConfirmation;
     }
   },
   watch: {
@@ -224,7 +302,51 @@ export default {
   },
   methods: {
     normalizeTab(tab) {
-      return ["security", "settings"].includes(tab) ? tab : "security";
+      return ["security", "settings", "operations"].includes(tab) ? tab : "security";
+    },
+    async openOperations() {
+      this.activeTab = "operations";
+      await this.loadLiveControl();
+    },
+    async loadLiveControl() {
+      if (!this.isSuperAdmin) return;
+      this.liveControl.busy = true;
+      this.liveControl.error = "";
+      try {
+        const response = await getApi("/api/system/live-write-control");
+        const state = response?.data || response?.result || {};
+        this.liveControl.enabled = state.enabled === true;
+        this.liveControl.environment = state.environment || "";
+        setRuntimeLiveWritesAllowed(this.liveControl.enabled);
+      } catch (error) {
+        this.liveControl.error = error?.message || "Live-write status failed";
+      } finally {
+        this.liveControl.busy = false;
+      }
+    },
+    async updateLiveControl() {
+      if (!this.canSubmitLiveControl) return;
+      this.liveControl.busy = true;
+      this.liveControl.error = "";
+      this.liveControl.message = "";
+      try {
+        const response = await putApi("/api/system/live-write-control", {
+          enabled: !this.liveControl.enabled,
+          reason: this.liveControl.reasonInput.trim(),
+          confirmation: this.liveControl.confirmation.trim()
+        });
+        const state = response?.data || response?.result || {};
+        this.liveControl.enabled = state.enabled === true;
+        this.liveControl.environment = state.environment || this.liveControl.environment;
+        this.liveControl.reasonInput = "";
+        this.liveControl.confirmation = "";
+        this.liveControl.message = "Live-write status updated.";
+        setRuntimeLiveWritesAllowed(this.liveControl.enabled);
+      } catch (error) {
+        this.liveControl.error = error?.message || "Live-write update failed";
+      } finally {
+        this.liveControl.busy = false;
+      }
     },
     async changePassword() {
       if (!this.canChangePw) return;
@@ -261,3 +383,77 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.live-control-card {
+  display: grid;
+  gap: 14px;
+  max-width: 680px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.live-control-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.live-control-status > div {
+  display: grid;
+  gap: 4px;
+}
+
+.live-control-badge {
+  padding: 6px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.live-control-badge.enabled {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.live-control-warning,
+.live-control-error {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.live-control-warning {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--text-main);
+}
+
+.live-control-error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.live-control-reason {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.live-control-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .live-control-card {
+    padding: 14px;
+  }
+
+  .live-control-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>
