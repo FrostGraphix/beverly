@@ -1,21 +1,12 @@
 <template>
-  <div class="profile-overlay" @click.self="$emit('close')">
-    <div class="profile-panel">
-      <div class="profile-panel-header">
-        <div class="profile-panel-title">
-          <div class="profile-panel-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54A.484.484 0 0 0 14 2h-4a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h4c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-          </div>
-          <div>
-            <div class="profile-panel-name">Settings</div>
-            <div class="profile-panel-role">{{ userName }} - {{ roleName }}</div>
-          </div>
-        </div>
-        <BaseIconButton class="profile-close-btn" @click="$emit('close')" aria-label="Close settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </BaseIconButton>
-      </div>
+  <div class="wallet-settings-shell">
+    <section class="wallet-settings-hero">
+      <p>Workspace Control</p>
+      <h1>Settings</h1>
+      <span>{{ userName }} - {{ roleName }}</span>
+    </section>
 
+    <section class="wallet-settings-card">
       <div class="profile-tabs">
         <BaseButton :class="['profile-tab', { active: activeTab === 'security' }]" @click="activeTab = 'security'">
           <span class="profile-tab-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></span>
@@ -196,7 +187,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 

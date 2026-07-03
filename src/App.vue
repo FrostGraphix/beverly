@@ -4,13 +4,18 @@
   <div v-else :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']">
 
     <div class="drawer-bg" @click="closeSidebar"></div>
-    <aside class="sidebar-container">
+    <aside
+      class="sidebar-container"
+      aria-label="Primary navigation"
+      :aria-hidden="width <= 1024 && !sidebarOpen ? 'true' : 'false'"
+      :inert="width <= 1024 && !sidebarOpen ? '' : null"
+    >
       <div class="sidebar-logo">
         <span class="sidebar-logo-icon">B</span>
         <span class="sidebar-logo-text sidebar-brand-copy">
           <strong>Beverly</strong>
         </span>
-        <BaseIconButton v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
+        <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
       </div>
@@ -73,26 +78,30 @@
         </BaseButton>
       </div>
     </aside>
-    <section :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]">
+    <section
+      :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]"
+      :inert="width <= 1024 && sidebarOpen ? '' : null"
+    >
       <div
         v-if="userDropdownOpen && width <= 1024"
         class="bw-account-scrim"
         @click="closeUserMenu"
       ></div>
       <header class="fixed-header">
-        <div class="navbar" :aria-label="`${route.title} ${currentUserName}`">
-          <BaseIconButton class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
+        <div class="navbar" :aria-label="`${activePageTitle} ${currentUserName}`">
+          <BaseIconButton ref="sidebarToggleButton" class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
             <span class="hamburger-lines">
               <span></span>
               <span></span>
               <span></span>
             </span>
           </BaseIconButton>
-          <a class="top-route" :href="route.hash" :aria-current="'page'">{{ route.title }}</a>
+          <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
           <div class="right-menu">
             <StationAlertsBell />
             <div class="bw-account-menu" ref="accountMenuWrap">
               <BaseButton
+                ref="userMenuButton"
                 variant="quiet"
                 class="bw-user-chip bw-user-chip-btn"
                 @click="openUserMenu"
@@ -114,7 +123,15 @@
                 </svg>
               </BaseButton>
               <transition name="dropdown">
-                <div id="beverly-account-menu" v-show="userDropdownOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly account menu">
+                <div
+                  id="beverly-account-menu"
+                  ref="userMenu"
+                  v-show="userDropdownOpen"
+                  class="bw-user-dropdown"
+                  role="menu"
+                  aria-label="Beverly account menu"
+                  @keydown="handleUserMenuKeydown"
+                >
                   <div class="bw-user-dropdown-brand">
                     <span class="bw-user-dropdown-logo bw-user-dropdown-logo--avatar">
                       <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
@@ -189,6 +206,7 @@
                     </svg>
                     <span>Fullscreen</span>
                   </BaseButton>
+                  <div class="bw-user-menu-separator"></div>
                   <BaseButton variant="quiet" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="handleSignOut">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -204,7 +222,21 @@
         </div>
       </header>
         <main :class="['content-page', route.hash === '#/dashboard' ? 'dashboard-editor-container' : '']">
-          <DashboardPage v-if="route.hash === '#/dashboard'" />
+          <ProfilePage
+            v-if="profileOpen"
+            :user-name="currentUserName"
+            :role-id="currentRoleId"
+            :profile-picture-url="profilePictureUrl"
+            @close="profileOpen = false"
+          />
+          <SettingsPage
+            v-else-if="settingsOpen"
+            :user-name="currentUserName"
+            :role-id="currentRoleId"
+            :initial-tab="settingsInitialTab"
+            @theme-change="setTheme"
+          />
+          <DashboardPage v-else-if="route.hash === '#/dashboard'" />
           <ReportsPage v-else-if="route.customComponent === 'ReportsPage'" />
           <DailyDataMeterPage v-else-if="route.hash === '#/prepay-report/daily-data-meter'" :route="route" />
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
@@ -222,22 +254,6 @@
         </main>
     </section>
     <ToastNotification />
-
-    <!-- Profile Panel -->
-    <ProfilePage
-      v-if="profileOpen"
-      :user-name="currentUserName"
-      :role-id="currentRoleId"
-      @close="profileOpen = false"
-    />
-    <SettingsPage
-      v-if="settingsOpen"
-      :user-name="currentUserName"
-      :role-id="currentRoleId"
-      :initial-tab="settingsInitialTab"
-      @close="settingsOpen = false"
-      @theme-change="setTheme"
-    />
 
     <!-- Global Search Overlay -->
     <div v-if="searchOpen" class="search-overlay" @click.self="searchOpen = false">
@@ -437,6 +453,11 @@ export default {
     },
     route() {
       return findRoute(this.hash, this.currentRoleId);
+    },
+    activePageTitle() {
+      if (this.profileOpen) return "Profile";
+      if (this.settingsOpen) return "Settings";
+      return this.route.title;
     },
     groups() {
       return routeGroups(this.currentRoleId);
@@ -660,8 +681,15 @@ export default {
       this.profilePictureUrl = profile.profilePictureUrl || "";
     },
     toggleSidebar() {
-      if (this.width <= 1024) this.sidebarOpen = !this.sidebarOpen;
-      else this.collapsed = !this.collapsed;
+      if (this.width <= 1024) {
+        this.sidebarOpen = !this.sidebarOpen;
+        if (this.sidebarOpen) {
+          this.closeUserMenu();
+          this.$nextTick(() => this.$refs.sidebarCloseButton?.$el?.focus());
+        }
+        return;
+      }
+      this.collapsed = !this.collapsed;
     },
     closeSidebar() {
       if (this.width <= 1024) this.sidebarOpen = false;
@@ -734,7 +762,12 @@ export default {
     openUserMenu() {
       this.userDropdownOpen = !this.userDropdownOpen;
       this.themeDropdownOpen = false;
-      if (!this.userDropdownOpen) this.userThemePanelOpen = false;
+      if (!this.userDropdownOpen) {
+        this.userThemePanelOpen = false;
+        return;
+      }
+      if (this.width <= 1024) this.sidebarOpen = false;
+      this.$nextTick(() => this.$refs.userMenu?.querySelector('[role="menuitem"]')?.focus());
     },
     closeUserMenu() {
       this.userDropdownOpen = false;
@@ -779,10 +812,31 @@ export default {
     handleGlobalKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.searchOpen = !this.searchOpen; }
       if (e.key === 'Escape') {
+        const restoreUserMenu = this.userDropdownOpen;
+        const restoreSidebar = this.width <= 1024 && this.sidebarOpen;
         this.searchOpen = false;
         this.themeDropdownOpen = false;
         this.closeUserMenu();
+        this.closeSidebar();
+        this.$nextTick(() => {
+          if (restoreUserMenu) this.$refs.userMenuButton?.$el?.focus();
+          else if (restoreSidebar) this.$refs.sidebarToggleButton?.$el?.focus();
+        });
       }
+    },
+    handleUserMenuKeydown(e) {
+      const items = [...this.$refs.userMenu.querySelectorAll('[role="menuitem"], [role="menuitemradio"]')]
+        .filter((item) => item.offsetParent !== null);
+      if (!items.length) return;
+      const current = Math.max(0, items.indexOf(document.activeElement));
+      let next = current;
+      if (e.key === 'ArrowDown') next = (current + 1) % items.length;
+      else if (e.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = items.length - 1;
+      else return;
+      e.preventDefault();
+      items[next].focus();
     },
     goFirstSearchResult() {
       if (this.firstSearchResult) {
