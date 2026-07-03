@@ -26,6 +26,8 @@ function main() {
   const atomicHolds = readMigration("20260622140000_wallet_atomic_holds.sql");
   const paymentLeases = readMigration("20260622150000_payment_fulfillment_leases.sql");
   const announcementRls = readMigration("20260622160000_announcement_rls.sql");
+  const liveWriteControl = readMigration("20260702120000_crm_live_write_control.sql");
+  const environmentLiveWriteControl = readMigration("20260702143000_environment_live_write_control.sql");
   const fullRls = readMigration("20260702150000_full_rls_permissions.sql");
 
   const requiredTables = [
@@ -161,6 +163,10 @@ function main() {
   assert(announcementRls.includes("force row level security"), "announcement records must force RLS");
   assert(announcementRls.includes("customers read own announcement deliveries"), "customers need own-delivery RLS");
   assert(announcementRls.includes("vendors read own announcement deliveries"), "vendors need own-delivery RLS");
+  assert(liveWriteControl.includes("'crm.live_writes.enabled'"), "missing legacy live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.production.enabled'"), "missing production live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.preview.enabled'"), "missing preview live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.development.enabled'"), "missing development live-write control");
   for (const helper of [
     "private.current_staff_role",
     "private.has_permission",
@@ -190,7 +196,7 @@ function main() {
   }
 
   console.log(JSON.stringify({
-    migrations: 14,
+    migrations: 16,
     tables: requiredTables.length + 6,
     buckets: 4,
     status: "supabase migrations passed"

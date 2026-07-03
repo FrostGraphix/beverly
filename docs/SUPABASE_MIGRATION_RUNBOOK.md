@@ -58,6 +58,18 @@ npx supabase db push --linked --dry-run
 Stop when migration histories differ.
 Never repair production history blindly.
 
+Reconcile remote-only versions:
+
+```powershell
+npx supabase migration fetch --linked
+git status --short
+```
+
+Keep only missing remote migrations.
+Restore any overwritten local migrations.
+Review every fetched SQL file.
+Then rerun the three checks.
+
 Apply only from reviewed CI:
 
 ```powershell
