@@ -132,24 +132,28 @@ function chart(pdf, chartData, label) {
   const x = 42, y = 270, w = 511, h = 126;
   pdf.text(x, y + h + 18, label, 11, C.ink, true);
   pdf.rect(x, y, w, h, C.mist);
-  const values = chartData.slice(-20).map((row) => Number(row.value) || 0);
-  const max = Math.max(1, ...values);
-  values.forEach((v, i) => {
-    const bw = Math.max(4, w / Math.max(values.length, 1) - 5);
+  const values = (chartData || []).map((row) => Number(row.value ?? row.net ?? row.purchases ?? row.revenue ?? 0));
+  if (!values.length) return;
+  const sliced = values.slice(-20);
+  const max = Math.max(1, ...sliced);
+  sliced.forEach((v, i) => {
+    const bw = Math.max(4, w / Math.max(sliced.length, 1) - 5);
     const bh = Math.max(2, (v / max) * (h - 24));
-    pdf.rect(x + 5 + i * (w / values.length), y + 12, bw, bh, i === values.length - 1 ? C.green : C.leaf);
+    pdf.rect(x + 5 + i * (w / sliced.length), y + 12, bw, bh, i === sliced.length - 1 ? C.green : C.leaf);
   });
 }
 
 function lineChart(pdf, chartData, label) {
   const x = 42, y = 430, w = 511, h = 126;
-  const values = chartData.slice(-16).map((row) => Number(row.value || 0));
-  const max = Math.max(1, ...values);
+  const values = (chartData || []).map((row) => Number(row.value ?? row.net ?? row.purchases ?? row.revenue ?? 0));
+  if (!values.length) return;
+  const sliced = values.slice(-16);
+  const max = Math.max(1, ...sliced);
   pdf.text(x, y + h + 18, label, 11, C.ink, true);
   pdf.rect(x, y, w, h, C.mist);
   [0.25, 0.5, 0.75].forEach((step) => pdf.line(x, y + h * step, x + w, y + h * step, C.line));
-  const coords = values.map((value, index) => [
-    x + 8 + index * ((w - 16) / Math.max(1, values.length - 1)),
+  const coords = sliced.map((value, index) => [
+    x + 8 + index * ((w - 16) / Math.max(1, sliced.length - 1)),
     y + 12 + (value / max) * (h - 24)
   ]);
   pdf.polyline(coords, C.green, 2.5);
@@ -189,7 +193,9 @@ function overviewPage(pdf, input) {
     }
   });
 
-  chart(pdf, input.chartData, "Trend Metrics");
+  if (input.chartData && input.chartData.length) {
+    chart(pdf, input.chartData, "Trend Metrics");
+  }
   pdf.text(32, 220, "Reporting note", 11, C.ink, true);
   pdf.text(32, 202, "All statistics represent verified transaction state.", 9, C.muted);
 }
@@ -216,7 +222,9 @@ function tablePage(pdf, input) {
     });
   });
 
-  lineChart(pdf, input.chartData, "Operational Performance Trend");
+  if (input.chartData && input.chartData.length) {
+    lineChart(pdf, input.chartData, "Operational Performance Trend");
+  }
 }
 
 export function downloadReportPdf(input) {
