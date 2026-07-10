@@ -5,7 +5,7 @@ import { api, naira } from '../lib/api';
 import { downloadAuthedCsv } from '../lib/export';
 import { downloadReportPdf, type ReportFamily } from '../lib/report-pdf';
 
-interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; }
+interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
 interface ReportOverview {
     range: { since: string; until: string; days: number };
     kpis: {
@@ -14,12 +14,15 @@ interface ReportOverview {
         fundingApprovedMinor: number; fundingCount: number; settlementNetMinor: number;
         settlementGrossMinor: number; settlementBatches: number; refundApprovedMinor: number;
         refundCount: number; disputesOpened: number; newCustomers: number;
+        auditLogsCount?: number; securityEventsCount?: number; securityAlertsHigh?: number;
     };
     series: { daily: DailyPoint[] };
     breakdowns: {
         purchasesByStatus: Record<string, number>;
         revenueByActorType: Record<string, number>;
         topStations: { station_id: string; count: number; revenueMinor: number }[];
+        auditActionsBreakdown?: Record<string, number>;
+        securitySeveritiesBreakdown?: Record<string, number>;
     };
 }
 
@@ -158,12 +161,35 @@ async function exportCsv() {
 function exportPdf() {
     if (!report.value) return;
     const kp = report.value.kpis;
+    const auditObj = report.value.breakdowns.auditActionsBreakdown || {};
+    const auditTotal = Object.values(auditObj).reduce((s: any, n: any) => s + n, 0) || 1;
+    const auditBreakdown = Object.entries(auditObj).map(([action, count]) => ({
+        action,
+        count: Number(count),
+        pct: Math.round((Number(count) / auditTotal) * 100)
+    })).sort((a, b) => b.count - a.count);
+
+    const secObj = report.value.breakdowns.securitySeveritiesBreakdown || {};
+    const secTotal = Object.values(secObj).reduce((s: any, n: any) => s + n, 0) || 1;
+    const securityBreakdown = Object.entries(secObj).map(([severity, count]) => ({
+        severity,
+        count: Number(count),
+        pct: Math.round((Number(count) / secTotal) * 100)
+    })).sort((a, b) => b.count - a.count);
+
     downloadReportPdf({
         family: selectedFamily.value,
         title: selectedTemplate.value.title,
         period: `${report.value.range.since.slice(0, 10)} to ${report.value.range.until.slice(0, 10)} | ${report.value.range.days} days`,
         generatedBy: 'Beverly Wallet Admin',
-        kpis: [
+        kpis: selectedFamily.value === 'audit' ? [
+            { label: 'Audit Logs', value: fmtNum(kp.auditLogsCount || 0), note: 'Total events recorded' },
+            { label: 'Security Events', value: fmtNum(kp.securityEventsCount || 0), note: 'Auth & abuse events' },
+            { label: 'High Alerts', value: fmtNum(kp.securityAlertsHigh || 0), note: 'High & critical severity' },
+            { label: 'Success rate', value: `${kp.successRate}%`, note: `${fmtNum(kp.failedCount)} failed vends` },
+            { label: 'Funding inflow', value: naira(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} top-ups` },
+            { label: 'Disputes opened', value: fmtNum(kp.disputesOpened), note: `${fmtNum(kp.refundCount)} refunds` },
+        ] : [
             { label: 'Revenue', value: naira(kp.revenueMinor), note: `${fmtNum(kp.deliveredCount)} delivered` },
             { label: 'Energy value', value: naira(kp.energyRevenueMinor), note: 'Token value' },
             { label: 'Funding inflow', value: naira(kp.fundingApprovedMinor), note: `${fmtNum(kp.fundingCount)} top-ups` },
@@ -177,6 +203,8 @@ function exportPdf() {
         stations: report.value.breakdowns.topStations,
         insights: reportInsights(kp),
         money: naira,
+        auditBreakdown,
+        securityBreakdown,
     });
 }
 
