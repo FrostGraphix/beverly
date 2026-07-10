@@ -85,7 +85,7 @@ export default {
   emits: ["close"],
   props: {
     userName: { type: String, default: "ACB(admin)" },
-    roleId: { type: String, default: "super-admin" },
+    roleId: { type: String, default: null },
     profilePictureUrl: { type: String, default: "" }
   },
   data() {

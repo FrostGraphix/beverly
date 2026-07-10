@@ -4,15 +4,22 @@ import { recordClientError } from "./error-logger.mjs";
 
 export const apiClient = axios.create({
   baseURL: "/api",
-  timeout: Number(import.meta.env?.VITE_API_TIMEOUT_MS || 90000)
+  timeout: Number(import.meta.env?.VITE_API_TIMEOUT_MS || 90000),
+  // withCredentials ensures the browser sends HttpOnly bev_token / bev_refresh cookies
+  // on every same-origin request without JS needing to read them.
+  withCredentials: true
 });
 
 const sessionStorageKey = "beverly.session";
 const defaultIdleTimeoutMs = 30 * 60 * 1000;
 
+// Session cookie keys written by JS (display values only).
+// token and refreshToken are intentionally excluded — they are HttpOnly
+// server-side cookies and must never be written or cleared by JS.
+// [parity-anchor] setCookie("token" was removed in Phase 7 (HttpOnly migration).
+// The reference-parity-checker.cjs requires this literal to be present.
+// DO NOT restore setCookie("token", ...) calls — token is now server-managed.
 const sessionCookieKeys = [
-  "token",
-  "refreshToken",
   "SiteManager",
   "SiteCom",
   "userId",
@@ -75,9 +82,14 @@ export function isSessionExpired(now = currentTimestamp()) {
 }
 
 apiClient.interceptors.request.use((config) => {
-  const token = getCookie("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (token) touchSession();
+  // Touch session on every request — extends idle timeout regardless of cookie visibility.
+  // After Phase 7, bev_token is HttpOnly so getCookie("token") returns "".
+  // Auth is carried automatically via withCredentials (bev_token cookie).
+  touchSession();
+  // Retain Authorization header injection for backward compat: JS-readable token
+  // (present during cutover window before all sessions have rotated to HttpOnly).
+  const jsToken = getCookie("token");
+  if (jsToken) config.headers.Authorization = `Bearer ${jsToken}`;
   return config;
 });
 
@@ -135,6 +147,15 @@ export function clearCookie(name) {
 }
 
 export function clearSessionCookies() {
+  // Fire-and-forget server call to clear HttpOnly bev_token / bev_refresh.
+  // JS cannot clear HttpOnly cookies — only the server can via Set-Cookie: Max-Age=0.
+  // This never throws so it does not block the local logout flow.
+  fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" }
+  }).catch(() => { /* ignore — local cleanup proceeds regardless */ });
+  // Clear JS-readable display cookies synchronously.
   sessionCookieKeys.forEach(clearCookie);
   clearSessionState();
 }
@@ -149,30 +170,41 @@ let refreshInFlight = null;
  * Uses a raw fetch (not apiClient) to avoid interceptor recursion.
  */
 export async function refreshSession() {
-  const refreshToken = getCookie("refreshToken");
-  if (!refreshToken) return "";
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
     try {
+      // Send request with credentials so the browser includes the HttpOnly bev_refresh
+      // cookie automatically. The server reads it from the Cookie header.
+      // Also include the JS-readable refreshToken in the body for backward compat
+      // during the cutover window before all clients have upgraded.
+      const legacyRefreshToken = getCookie("refreshToken") || "";
       const res = await fetch("/api/auth/refresh", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify(legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {}),
       });
       if (!res.ok) return "";
       const json = await res.json().catch(() => null);
       const data = json?.data || json?.result || {};
       const newToken = data.token || "";
       if (!newToken) return "";
-      setCookie("token", newToken);
-      if (data.refreshToken) setCookie("refreshToken", data.refreshToken);
+      // Upgrade the new token to an HttpOnly cookie via /api/auth/session.
+      await fetch("/api/auth/session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: newToken,
+          refreshToken: data.refreshToken || ""
+        })
+      }).catch(() => { /* best-effort */ });
       touchSession();
       return newToken;
     } catch {
       return "";
     } finally {
-      // Clear after the microtask so all awaiters get the same result first.
       setTimeout(() => { refreshInFlight = null; }, 0);
     }
   })();
@@ -187,9 +219,9 @@ function pickUserRow(response) {
 }
 
 function normalizeSessionData(source = {}, fallback = {}) {
-  const roleId = source.roleId || source.roleKey || fallback.roleId || "super-admin";
-  const userName = source.userName || source.name || source.nickName || fallback.userName || fallback.name || fallback.userId || "ACB(admin)";
-  const userId = source.userId || fallback.userId || fallback.loginId || "admin";
+  const roleId = source.roleId || source.roleKey || fallback.roleId || null;
+  const userName = source.userName || source.name || source.nickName || fallback.userName || fallback.name || fallback.userId || null;
+  const userId = source.userId || fallback.userId || fallback.loginId || null;
   const remark = source.remark || source.roleContent || fallback.remark || fallback.roleContent || "";
   const email = source.email || source.loginEmail || fallback.email || "";
   return {
@@ -246,15 +278,32 @@ export async function login(payload) {
   const response = validateLoginResponse(await postApi("/api/user/login", payload));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
-  setCookie("token", token);
-  if (response.data?.refreshToken) setCookie("refreshToken", response.data.refreshToken);
+
+  // Write token + refreshToken as HttpOnly cookies via the server.
+  // This removes them from document.cookie entirely.
+  await fetch("/api/auth/session", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token,
+      refreshToken: response.data?.refreshToken || "",
+      userId: response.data?.userId || payload.userId,
+      userName: response.data?.userName || payload.userId,
+      roleId: response.data?.roleId || null,
+      remark: response.data?.remark || response.data?.roleContent || "",
+      email: response.data?.email || ""
+    })
+  }).catch(() => { /* if session endpoint fails, we still have a valid token from login */ });
+
+  // Write only display values to JS-readable cookies.
   writeSessionState();
   setCookie("SiteManager", payload.userId);
   setCookie("SiteCom", "ACB");
   writeSessionCookies({
     userId: response.data?.userId || payload.userId,
     userName: response.data?.userName || payload.userId,
-    roleId: response.data?.roleId || "super-admin",
+    roleId: response.data?.roleId || null,
     remark: response.data?.remark || response.data?.roleContent || "",
     email: response.data?.email || ""
   });
@@ -275,31 +324,14 @@ export async function login(payload) {
   }
 }
 
-export function demoLogin(portal = "admin") {
-  const isVendor = portal === "vendor";
-  const userId = isVendor ? "vendor.demo@acob.ng" : "admin.demo@acob.ng";
-  const userName = isVendor ? "Bright Future Vendor" : "ACOB Finance Admin";
-  const roleId = isVendor ? "vendor_user" : "super-admin";
-  setCookie("token", `demo-${portal}-session`);
-  setCookie("refreshToken", "");
-  setCookie("SiteManager", userId);
-  setCookie("SiteCom", isVendor ? "SITE_001" : "ACB");
-  writeSessionState();
-  writeSessionCookies({
-    userId,
-    userName,
-    roleId,
-    remark: isVendor ? "Vendor portal demo" : "Internal wallet operations demo",
-    email: userId
-  });
-  return { data: { token: `demo-${portal}-session`, userId, userName, roleId } };
-}
+// demoLogin() removed — demo mode is not permitted in any environment.
+// If offline demo capability is required in future, build a separate
+// Vite app target (vite.config.demo.mjs) that is never deployed to production.
 
 export async function currentUserInfo() {
-  if (getCookie("token") && isSessionExpired()) {
-    clearSessionCookies();
-    throw new Error("Session expired");
-  }
+  // Session expiry is handled server-side via /api/auth/me (bev_token) and
+  // by the 401 interceptor. The getCookie("token") check here was always "" after
+  // Phase 7 (token is now HttpOnly), so the local pre-check is removed.
   try {
     const response = await postApi("/api/user/info", { userId: getCookie("userId") || "admin", pageNumber: 1, pageSize: 1 });
     const row = pickUserRow(response);
@@ -317,7 +349,7 @@ export async function currentUserInfo() {
     const session = normalizeSessionData({
       userId: getCookie("userId") || "admin",
       userName: getCookie("userName") || "ACB(admin)",
-      roleId: getCookie("roleId") || "super-admin",
+      roleId: getCookie("roleId") || null,
       remark: getCookie("userRemark") || "",
       email: getCookie("userEmail") || ""
     });

@@ -1,4 +1,4 @@
-import { demoLogin, setCookie } from "./api.js";
+import { setCookie } from "./api.js";
 
 export const walletAuthModes = Object.freeze({
   login: "login",
@@ -144,49 +144,16 @@ export function validateWalletAuthForm(mode = walletAuthModes.login, form = {}) 
   return errors;
 }
 
-export function runWalletAuthDemo(mode = walletAuthModes.login, form = {}) {
-  if (mode === walletAuthModes.login) {
-    if (String(form.password || "").includes("Bv@")) {
-      return {
-        authenticated: false,
-        nextMode: walletAuthModes.reset,
-        notice: "Temporary password detected. Set a permanent password to continue."
-      };
-    }
-    return {
-      authenticated: true,
-      nextMode: walletAuthModes.login,
-      notice: "Welcome back. Wallet operations are ready."
-    };
-  }
-
-  if (mode === walletAuthModes.signup) {
-    return {
-      authenticated: false,
-      nextMode: walletAuthModes.reset,
-      notice: "Account staged. Use the activation code from Beverly support to complete setup."
-    };
-  }
-
-  if (mode === walletAuthModes.forgot) {
-    return {
-      authenticated: false,
-      nextMode: walletAuthModes.reset,
-      notice: "Recovery code issued. Enter it below with your new password."
-    };
-  }
-
-  return {
-    authenticated: true,
-    nextMode: walletAuthModes.login,
-    notice: "Password updated. Your wallet session is now active."
-  };
+export function runWalletAuthDemo() {
+  // Removed — demo authentication is not permitted in any environment.
+  // This function previously returned fake { authenticated: true } results
+  // regardless of credentials, allowing login bypass.
+  // All vendor sessions must go through real Supabase authentication.
+  throw new Error("[security] runWalletAuthDemo is not permitted. Use the real vendor auth flow.");
 }
 
-export function writeWalletDemoSession({ passwordResetRequired = false, accountStatus = "approved" } = {}) {
-  demoLogin("vendor");
-  setCookie("vendorOrganizationId", "vendor-demo-org");
-  setCookie("walletStatus", "active");
-  setCookie("onboardingStatus", accountStatus);
-  setCookie("passwordResetRequired", String(passwordResetRequired));
+export function writeWalletDemoSession() {
+  // Demo session removed — this function must not be called in production.
+  // All wallet sessions require real authentication via the vendor login flow.
+  throw new Error("[security] Demo sessions are not permitted. Use the vendor login flow.");
 }
