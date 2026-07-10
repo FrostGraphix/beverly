@@ -7,6 +7,17 @@ Current production host:
 - Vendor wallet: `https://acob-beverly.vercel.app/wallet-vendor/`
 - Customer wallet: `https://acob-beverly.vercel.app/wallet-customer/`
 
+Current deployment truth, checked 2026-07-10:
+
+- Production deployment: `dpl_8G3DXooMiE8YCDoGiiDJbzNZsopf`
+- Production commit: `af455ac2741d4ceb89a89902c517bc49b4e652f1`
+- PR #9 preview: `https://beverly-kpdyn47c9-danmusa-abdulsamads-projects.vercel.app`
+- PR #9 commit: `de989ef7919144e927f079289e96926bf5c10930`
+- Current branch alias: `https://beverly-git-codex-post-june-046264-danmusa-abdulsamads-projects.vercel.app`
+- Current branch latest observed state: `QUEUED`
+- Separate avatar preview: `https://beverly-ce61s6h78-danmusa-abdulsamads-projects.vercel.app`
+- Separate avatar branch: `codex/mobile-avatar-dropdown-fix`
+
 Recommended domain map:
 
 - CRM: `acob-beverly.vercel.app`
@@ -37,6 +48,23 @@ Build output:
 - Staff admin: `dist/wallet-admin/`
 - Vendor portal: `dist/wallet-vendor/`
 - Customer PWA: `dist/wallet-customer/`
+
+Smoke command:
+
+```powershell
+cd "C:\Users\ACOB\Desktop\VS Code\Beverly"
+$env:TARGET_URL="https://acob-beverly.vercel.app"
+$env:VERCEL_PROTECTION_BYPASS="<bypass-secret>"
+$env:SMOKE_AUTH_TOKEN="<smoke-token>"
+npm run smoke:vercel
+```
+
+Expected smoke fields:
+
+- `allowLiveWrites`
+- `liveWriteControl.enabled`
+- `mutationCheckSkipped`
+- `writeGuarded`
 
 Custom domain rollout:
 

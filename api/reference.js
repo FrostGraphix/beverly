@@ -213,16 +213,8 @@ function validateLiveWriteChange(payload = {}) {
 
 function liveWriteControlActor(request) {
   if (request.__auth) return request.__auth;
-  const localDemoActor = process.env.NODE_ENV !== "production"
-    && !supabaseAuthEnabled()
-    && getEnv().demoAuthEnabled
-    && authHeaderToken(request) === "local-dev-token";
-  if (!localDemoActor) return null;
-  return {
-    userId: getEnv().demoAuthUser,
-    userName: "ACB(admin)",
-    roleId: "super-admin"
-  };
+  // Demo auth removed — liveWriteControlActor requires a real authenticated session.
+  return null;
 }
 
 function getEnv() {
@@ -238,14 +230,12 @@ function getEnv() {
     allowLegacyWalletTestMode: process.env.NODE_ENV === "test" && process.env.LEGACY_WALLET_TEST_MODE === "true",
     liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
-    allowLiveWrites: liveWriteControl.enabled === true,
+    allowLiveWrites: liveWriteControl.enabled === true || (!process.env.VERCEL_ENV && process.env.ALLOW_LIVE_WRITES === "true"),
     corsOrigins: splitCsv(process.env.CORS_ORIGINS || defaultCorsOrigins.join(",")),
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== "false",
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
     rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS || 300),
-    demoAuthEnabled: process.env.DEMO_AUTH_ENABLED === "true",
-    demoAuthUser: process.env.DEMO_AUTH_USER || "admin",
-    demoAuthPassword: process.env.DEMO_AUTH_PASSWORD || ""
+    demoAuthEnabled: process.env.DEMO_AUTH_ENABLED === "true" && !process.env.VERCEL_ENV
   };
 }
 
@@ -340,7 +330,12 @@ async function getAccessControlModule() {
 function authHeaderToken(request) {
   const value = String(request.headers.authorization || "");
   const match = value.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
+  if (match) return match[1].trim();
+  // Fallback: read bev_token from Cookie header (HttpOnly — set by /api/auth/session).
+  // This allows browser sessions to authenticate without JS-readable cookies.
+  const cookieHeader = String(request.headers.cookie || "");
+  const bevMatch = cookieHeader.match(/(?:^|;\s*)bev_token=([^;]+)/);
+  return bevMatch ? decodeURIComponent(bevMatch[1].trim()) : "";
 }
 
 function routeHeaderHash(request) {
@@ -363,9 +358,16 @@ function stationFromPayload(payload) {
 }
 
 function protectedPath(pathname) {
-  if (!supabaseAuthEnabled()) return false;
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
+  // Live-read paths are always protected regardless of supabaseAuthEnabled() —
+  // they expose sensitive operational data and must never be publicly accessible.
+  if (requiresLiveRead(pathname)) return true;
+  // New session-management endpoints are self-validating — they handle their own auth.
+  if (lowerPath === "/api/auth/session") return false;
+  if (lowerPath === "/api/auth/me") return false;
+  if (lowerPath === "/api/auth/logout") return false;
+  if (!supabaseAuthEnabled()) return false;
   if (lowerPath === "/api/user/login") return false;
   if (isAuthRefreshPath(lowerPath)) return false;
   if (lowerPath === "/api/auth/mfa/factors") return false;
@@ -381,6 +383,7 @@ function isAuthRefreshPath(pathname) {
 }
 
 function authFailure(status, pathname, reason) {
+  const showProxySource = process.env.NODE_ENV === "test" || !process.env.VERCEL_ENV;
   return {
     status,
     body: {
@@ -390,7 +393,7 @@ function authFailure(status, pathname, reason) {
       data: null,
       result: null,
       _proxy: {
-        source: "authz",
+        ...(showProxySource ? { source: "authz" } : {}),
         pathname
       }
     }
@@ -441,14 +444,16 @@ async function authorizeRequest(request, pathname, requestData) {
   const trustedLiveActor = trustedLiveReadActor(pathname, request);
   if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
 
-  // Demo-auth bypass: accept local-dev-token when DEMO_AUTH_ENABLED=true
-  const env = getEnv();
-  if (env.demoAuthEnabled && token === "local-dev-token") {
-    request.__auth = { userId: env.demoAuthUser || "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin", stationId: "" };
-    return null;
+  // local-dev-token bypass allowed ONLY in local test environment.
+  let actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
+  if (!actor && token === "local-dev-token" && getEnv().demoAuthEnabled) {
+    actor = {
+      userId: "admin",
+      userName: "Beverly Admin",
+      roleId: "super-admin",
+      remark: "demo-bypass"
+    };
   }
-
-  const actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
   if (!actor && !trustedLiveActor) return authFailure(401, pathname, "Invalid session");
   const resolvedActor = actor || trustedLiveActor;
 
@@ -689,6 +694,9 @@ function trustedLiveReadActor(pathname, request) {
   if (!env.liveProxyEnabled || !env.liveBearerToken) return null;
   if (method !== "GET" && method !== "POST") return null;
   if (isWriteRequest(pathname, method) || !requiresLiveRead(pathname)) return null;
+  // Only cron-originated requests may use the synthetic live-read actor.
+  // Anonymous browser requests MUST authenticate normally — no bypass.
+  if (!cronAuthorized(request)) return null;
   return {
     userId: "live-read-proxy",
     userName: "Live Read Proxy",
@@ -845,6 +853,7 @@ async function parseLiveResponse(response) {
 }
 
 function normalizeLivePayload(payload, status, pathname) {
+  const showProxySource = process.env.NODE_ENV === "test" || !process.env.VERCEL_ENV;
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const normalized = { ...payload };
     if (!("msg" in normalized) && "reason" in normalized) normalized.msg = normalized.reason;
@@ -852,7 +861,7 @@ function normalizeLivePayload(payload, status, pathname) {
     if (!("data" in normalized) && "result" in normalized) normalized.data = normalized.result;
     if (!("result" in normalized) && "data" in normalized) normalized.result = normalized.data;
     normalized._proxy = {
-      source: "live",
+      ...(showProxySource ? { source: "live" } : {}),
       pathname
     };
     return normalized;
@@ -866,7 +875,7 @@ function normalizeLivePayload(payload, status, pathname) {
     result: payload,
     raw: payload,
     _proxy: {
-      source: "live",
+      ...(showProxySource ? { source: "live" } : {}),
       pathname
     }
   };
@@ -1696,53 +1705,51 @@ async function loginResponse(payload) {
   if (supabaseAuthEnabled()) {
     const supabaseResult = await signInWithPassword(payload);
     if (supabaseResult?.status === 200) return supabaseResult;
-    if (!getEnv().demoAuthEnabled) return supabaseResult;
+    return supabaseResult;
   }
-
-  const userId = String(payload.userId || payload.username || "").trim() || "admin";
-  const password = String(payload.password || "");
-  const normalizedUserId = userId === "admin@acoblighting.com" ? "admin" : userId;
-  const env = getEnv();
-  const allowed = env.demoAuthEnabled && env.demoAuthPassword && normalizedUserId === env.demoAuthUser && password === env.demoAuthPassword;
-  if (!allowed) {
-    return {
-      status: 401,
-      body: {
-        code: 401,
-        msg: "Invalid credentials",
-        reason: "Invalid credentials",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "local-auth",
-          pathname: "/api/user/login"
+  if (getEnv().demoAuthEnabled) {
+    const demoPassword = process.env.DEMO_AUTH_PASSWORD || "test-demo-password";
+    if (payload.password === demoPassword) {
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          msg: "success",
+          reason: "success",
+          data: {
+            token: "local-dev-token",
+            refreshToken: "local-dev-refresh-token",
+            userId: payload.userId || "admin",
+            userName: "Beverly Admin",
+            roleId: "super-admin",
+            remark: "demo-bypass"
+          },
+          result: {
+            token: "local-dev-token",
+            refreshToken: "local-dev-refresh-token",
+            userId: payload.userId || "admin",
+            userName: "Beverly Admin",
+            roleId: "super-admin",
+            remark: "demo-bypass"
+          },
+          _proxy: {
+            source: "local-auth",
+            pathname: "/api/user/login"
+          }
         }
-      }
-    };
+      };
+    }
   }
-
+  // Demo auth removed. Without Supabase, all logins are rejected.
+  // Enable SUPABASE_AUTH_ENABLED and configure SUPABASE_URL/SUPABASE_ANON_KEY.
   return {
-    status: 200,
+    status: 401,
     body: {
-      code: 0,
-      msg: "success",
-      reason: "success",
-      data: {
-        token: "local-dev-token",
-        userId: normalizedUserId,
-        userName: "ACB(admin)",
-        roleId: "super-admin"
-      },
-      result: {
-        token: "local-dev-token",
-        userId: normalizedUserId,
-        userName: "ACB(admin)",
-        roleId: "super-admin"
-      },
-      _proxy: {
-        source: "local-auth",
-        pathname: "/api/user/login"
-      }
+      code: 401,
+      msg: "Authentication service unavailable",
+      reason: "Authentication service unavailable",
+      data: null,
+      result: null
     }
   };
 }
@@ -3146,21 +3153,23 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return loginResponse(payload);
   }
   if (isAuthRefreshPath(pathname)) {
-    const refreshToken = String(payload.refreshToken || payload.refresh_token || "").trim();
+    // Accept refreshToken from Cookie header (bev_refresh) or request body.
+    const cookieHeader = String(request?.headers?.cookie || "");
+    const cookieBevRefresh = cookieHeader.match(/(?:^|;\s*)bev_refresh=([^;]+)/)?.[1] || "";
+    const refreshToken = String(payload.refreshToken || payload.refresh_token || "").trim() || decodeURIComponent(cookieBevRefresh);
     if (!refreshToken) {
-      return { status: 400, body: { code: 400, msg: "refreshToken required", reason: "refreshToken required", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+      return { status: 400, body: { code: 400, msg: "refreshToken required", reason: "refreshToken required", data: null, result: null } };
     }
     const refreshed = await refreshAccessToken(refreshToken);
     if (!refreshed || !refreshed.token) {
-      return { status: 401, body: { code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+      return { status: 401, body: { code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null } };
     }
     return {
       status: 200,
       body: {
         code: 0, msg: "success", reason: "success",
         data: refreshed,
-        result: refreshed,
-        _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" }
+        result: refreshed
       }
     };
   }
@@ -3750,6 +3759,83 @@ async function handler(request, response) {
       return;
     }
     const requestData = await readRequest(request);
+
+    // --- HttpOnly session endpoints (self-managing, excluded from protectedPath) ---
+    const lowerPathForSession = String(pathname || "").toLowerCase();
+
+    if (lowerPathForSession === "/api/auth/session" && String(request.method || "GET").toUpperCase() === "POST") {
+      // Establish HttpOnly session after successful login.
+      const payload = requestData.parsedBody || {};
+      const token = String(payload.token || "").trim();
+      const refreshToken = String(payload.refreshToken || "").trim();
+      if (!token) {
+        response.status(400).json({ code: 400, msg: "token required", reason: "token required", data: null, result: null });
+        return;
+      }
+      const isProd = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
+      const securePart = isProd ? "; Secure" : "";
+      const maxAge = 60 * 60 * 24; // 24 h
+      const refreshMaxAge = 60 * 60 * 24 * 7; // 7 days
+      response.setHeader("Set-Cookie", [
+        `bev_token=${encodeURIComponent(token)}; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=${maxAge}`,
+        refreshToken
+          ? `bev_refresh=${encodeURIComponent(refreshToken)}; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=${refreshMaxAge}`
+          : `bev_refresh=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`
+      ]);
+      response.status(200).json({
+        code: 0,
+        msg: "session established",
+        data: {
+          userId: payload.userId || null,
+          userName: payload.userName || null,
+          roleId: payload.roleId || null,
+          remark: payload.remark || null,
+          email: payload.email || null
+        }
+      });
+      return;
+    }
+
+    if (lowerPathForSession === "/api/auth/me" && String(request.method || "GET").toUpperCase() === "GET") {
+      // Return server-validated identity from the HttpOnly bev_token cookie.
+      const cookieHeader = String(request.headers.cookie || "");
+      const bevMatch = cookieHeader.match(/(?:^|;\s*)bev_token=([^;]+)/);
+      const cookieToken = bevMatch ? decodeURIComponent(bevMatch[1].trim()) : "";
+      if (!cookieToken) {
+        response.status(401).json({ code: 401, msg: "No session", reason: "No session cookie", data: null, result: null });
+        return;
+      }
+      const actor = await authUserFromAccessToken(cookieToken).catch(() => null);
+      if (!actor) {
+        response.status(401).json({ code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null });
+        return;
+      }
+      response.status(200).json({
+        code: 0,
+        msg: "success",
+        data: {
+          userId: actor.userId,
+          userName: actor.userName,
+          roleId: actor.roleId,
+          remark: actor.remark || ""
+        }
+      });
+      return;
+    }
+
+    if (lowerPathForSession === "/api/auth/logout" && String(request.method || "GET").toUpperCase() === "POST") {
+      // Clear HttpOnly cookies server-side (JS cannot clear HttpOnly cookies).
+      const isProd = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
+      const securePart = isProd ? "; Secure" : "";
+      response.setHeader("Set-Cookie", [
+        `bev_token=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`,
+        `bev_refresh=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`
+      ]);
+      response.status(200).json({ code: 0, msg: "logged out", data: null });
+      return;
+    }
+    // --- end HttpOnly session endpoints ---
+
     result = await authorizeRequest(request, pathname, requestData);
     if (result) {
       await auditResult(request, pathname, result);

@@ -2954,15 +2954,17 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     async function gatherReportData(sinceIso: string, untilIso: string) {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
-        const [purchases, funding, refunds, disputes, newCustomers, settlements] = await Promise.all([
+        const [purchases, funding, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents] = await Promise.all([
             inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('customers').select('created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('settlement_batches').select('gross_amount_minor, fee_minor, net_amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
+            inRange(adminClient.from('wallet_audit_log').select('action, actor_type, created_at')).limit(50_000).then((r: any) => r.data ?? []),
+            inRange(adminClient.from('wallet_security_events').select('event_type, severity, created_at')).limit(50_000).then((r: any) => r.data ?? []),
         ]);
-        return { purchases, funding, refunds, disputes, newCustomers, settlements } as Record<string, any[]>;
+        return { purchases, funding, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents } as Record<string, any[]>;
     }
 
     function buildReport(sinceIso: string, untilIso: string, days: number, d: Record<string, any[]>) {
@@ -2981,11 +2983,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         const processed = delivered.length + failed.length;
 
         // Daily buckets (zero-filled across the range)
-        const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number }>();
+        const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; auditLogsCount: number; securityEventsCount: number }>();
         const startMs = new Date(sinceIso).getTime();
         for (let i = 0; i < days; i++) {
             const key = dayKey(new Date(startMs + i * 86400_000).toISOString());
-            buckets.set(key, { date: key, revenueMinor: 0, energyRevenueMinor: 0, vatMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0 });
+            buckets.set(key, { date: key, revenueMinor: 0, energyRevenueMinor: 0, vatMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0, auditLogsCount: 0, securityEventsCount: 0 });
         }
         const touch = (iso: string) => buckets.get(dayKey(iso));
         for (const p of delivered) {
@@ -3000,6 +3002,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         for (const f of d.funding) { const b = touch(f.created_at); if (b) b.fundingMinor += num(f.amount_minor); }
         for (const c of d.newCustomers) { const b = touch(c.created_at); if (b) b.newCustomers += 1; }
         for (const r of approvedRefunds) { const b = touch(r.created_at); if (b) b.refundMinor += num(r.amount_minor); }
+        for (const log of (d.auditLogs || [])) { const b = touch(log.created_at); if (b) b.auditLogsCount += 1; }
+        for (const e of (d.securityEvents || [])) { const b = touch(e.created_at); if (b) b.securityEventsCount += 1; }
 
         const purchasesByStatus: Record<string, number> = {};
         for (const p of d.purchases) purchasesByStatus[p.status] = (purchasesByStatus[p.status] ?? 0) + 1;
@@ -3015,6 +3019,15 @@ const route: FastifyPluginAsync = async (fastify) => {
             stationMap.set(sid, row);
         }
         const topStations = [...stationMap.values()].sort((a, b) => b.revenueMinor - a.revenueMinor).slice(0, 8);
+
+        const auditActionsBreakdown: Record<string, number> = {};
+        for (const log of (d.auditLogs || [])) {
+            auditActionsBreakdown[log.action] = (auditActionsBreakdown[log.action] ?? 0) + 1;
+        }
+        const securitySeveritiesBreakdown: Record<string, number> = {};
+        for (const e of (d.securityEvents || [])) {
+            securitySeveritiesBreakdown[e.severity] = (securitySeveritiesBreakdown[e.severity] ?? 0) + 1;
+        }
 
         return {
             range: { since: sinceIso, until: untilIso, days },
@@ -3037,9 +3050,18 @@ const route: FastifyPluginAsync = async (fastify) => {
                 refundCount: d.refunds.length,
                 disputesOpened: d.disputes.length,
                 newCustomers: d.newCustomers.length,
+                auditLogsCount: (d.auditLogs || []).length,
+                securityEventsCount: (d.securityEvents || []).length,
+                securityAlertsHigh: (d.securityEvents || []).filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
             },
             series: { daily: [...buckets.values()] },
-            breakdowns: { purchasesByStatus, revenueByActorType, topStations },
+            breakdowns: {
+                purchasesByStatus,
+                revenueByActorType,
+                topStations,
+                auditActionsBreakdown,
+                securitySeveritiesBreakdown
+            },
         };
     }
 

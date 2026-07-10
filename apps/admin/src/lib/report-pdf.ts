@@ -6,12 +6,14 @@ export type ReportPdfInput = {
     period: string;
     generatedBy: string;
     kpis: { label: string; value: string; note: string }[];
-    series: { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; refundMinor: number; newCustomers: number }[];
+    series: { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; refundMinor: number; newCustomers: number; auditLogsCount?: number; securityEventsCount?: number }[];
     statusRows: { key: string; count: number; pct: number }[];
     actorRows: { key: string; minor: number; pct: number }[];
     stations: { station_id: string; count: number; revenueMinor: number }[];
     insights: string[];
     money: (minor: number) => string;
+    auditBreakdown?: { action: string; count: number; pct: number }[];
+    securityBreakdown?: { severity: string; count: number; pct: number }[];
 };
 
 const C = {
@@ -55,13 +57,17 @@ class Pdf {
         this.text(478, 787, 'BEVERLY', 9, C.white, true);
         this.y = 742;
     }
-    footer(page: number, total: number) {
-        this.line(32, 30, 563, 30);
-        this.text(32, 17, 'CONFIDENTIAL  |  Beverly Wallet Operations', 7, C.muted);
-        this.text(510, 17, `${page} / ${total}`, 7, C.muted);
-    }
     finish(filename: string) {
         this.pages.push(this.page);
+        const totalPages = this.pages.length;
+        for (let i = 1; i < totalPages; i++) {
+            const p = this.pages[i];
+            p.push(
+                `${this.stroke(C.line)} 1 w 32 30 m 563 30 l S`,
+                `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 32 17 Tm (CONFIDENTIAL  |  Beverly Wallet Operations) Tj ET`,
+                `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i} / ${totalPages - 1}) Tj ET`
+            );
+        }
         const body = this.pages.map((p, i) => `${p.join('\n')}\n`).join('');
         const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Count ${this.pages.length} /Kids [${this.pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ')}] >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
         this.pages.forEach((p, i) => {
@@ -111,7 +117,12 @@ function overviewPage(pdf: Pdf, input: ReportPdfInput) {
         const col = i % 3; const row = Math.floor(i / 3); const x = 32 + col * 177; const y = 610 - row * 94;
         pdf.rect(x, y, 160, 74, C.white, C.line); pdf.text(x + 12, y + 54, k.label.toUpperCase(), 7, C.muted, true); pdf.text(x + 12, y + 33, k.value, 15, C.ink, true); pdf.text(x + 12, y + 16, k.note, 7, C.muted);
     });
-    chart(pdf, input.series, input.family === 'transactions' ? 'purchaseCount' : 'revenueMinor', input.family === 'transactions' ? 'Transaction volume' : 'Revenue performance');
+    
+    if (input.family === 'audit') {
+        chart(pdf, input.series, 'auditLogsCount', 'Audit log activity');
+    } else {
+        chart(pdf, input.series, input.family === 'transactions' ? 'purchaseCount' : 'revenueMinor', input.family === 'transactions' ? 'Transaction volume' : 'Revenue performance');
+    }
     pdf.text(32, 220, 'Reporting note', 11, C.ink, true);
     pdf.text(32, 202, 'Figures reflect approved operational records.', 9, C.muted);
 }
@@ -124,30 +135,79 @@ function coverPage(pdf: Pdf, input: ReportPdfInput) {
 }
 
 function insightsPage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.newPage(); pdf.heading(input.title, 'Insights and controls'); lineChart(pdf, input.series); pieChart(pdf, input.statusRows);
+    pdf.newPage(); pdf.heading(input.title, 'Insights and controls');
+    if (input.family === 'audit') {
+        chart(pdf, input.series, 'securityEventsCount', 'Security alerts activity');
+    } else {
+        lineChart(pdf, input.series);
+    }
+    pieChart(pdf, input.statusRows);
     pdf.text(32, 215, 'Decision notes', 12, C.ink, true);
     input.insights.slice(0, 4).forEach((insight, index) => { const y = 186 - index * 30; pdf.rect(32, y - 3, 8, 8, C.green); pdf.text(52, y - 1, insight, 9, C.ink); });
     pdf.text(32, 58, 'Review exceptions before settlement approval.', 8, C.muted);
 }
 
 function tablePage(pdf: Pdf, input: ReportPdfInput) {
-    pdf.newPage(); pdf.heading(input.title, 'Performance breakdown');
-    const rows = input.stations.slice(0, 12); const headerY = 690;
-    pdf.text(32, 716, 'Top stations', 12, C.ink, true);
-    ['Station', 'Successful vends', 'Revenue'].forEach((h, i) => pdf.text([42, 285, 438][i], headerY, h.toUpperCase(), 8, C.muted, true));
-    pdf.line(32, 680, 563, 680);
-    rows.forEach((row, i) => { const y = 658 - i * 29; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.mist); pdf.text(42, y, row.station_id, 9); pdf.text(285, y, number(row.count), 9); pdf.text(438, y, input.money(row.revenueMinor), 9, C.green, true); });
-    const statsY = 285; pdf.text(32, statsY + 70, input.family === 'audit' ? 'Activity distribution' : 'Revenue channels', 12, C.ink, true);
-    const list = input.family === 'audit' ? input.statusRows.map((r) => ({ label: r.key, value: `${number(r.count)} events`, pct: r.pct })) : input.actorRows.map((r) => ({ label: r.key, value: input.money(r.minor), pct: r.pct }));
-    list.slice(0, 6).forEach((r, i) => { const y = statsY + 42 - i * 30; pdf.text(42, y, r.label, 9); pdf.rect(195, y - 4, 235, 8, C.mist); pdf.rect(195, y - 4, Math.max(2, 235 * r.pct / 100), 8, C.leaf); pdf.text(448, y, r.value, 9, C.ink, true); });
+    pdf.newPage();
+    if (input.family === 'audit') {
+        pdf.heading(input.title, 'Audit & security activity');
+        pdf.text(32, 716, 'Top audit activities', 12, C.ink, true);
+        ['Action / Operation', 'Occurrences', 'Rate'].forEach((h, i) => pdf.text([42, 285, 438][i], 690, h.toUpperCase(), 8, C.muted, true));
+        pdf.line(32, 680, 563, 680);
+        const rows = (input.auditBreakdown || []).slice(0, 12);
+        rows.forEach((row, i) => {
+            const y = 658 - i * 29;
+            if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.mist);
+            pdf.text(42, y, row.action, 9);
+            pdf.text(285, y, number(row.count), 9);
+            pdf.text(438, y, `${row.pct}%`, 9, C.green, true);
+        });
+
+        const statsY = 285;
+        pdf.text(32, statsY + 70, 'Security severities distribution', 12, C.ink, true);
+        const list = (input.securityBreakdown || []).slice(0, 6);
+        list.forEach((r, i) => {
+            const y = statsY + 42 - i * 30;
+            pdf.text(42, y, r.severity.toUpperCase(), 9, r.severity === 'critical' || r.severity === 'high' ? C.danger : C.ink);
+            pdf.rect(195, y - 4, 235, 8, C.mist);
+            pdf.rect(195, y - 4, Math.max(2, 235 * r.pct / 100), 8, r.severity === 'critical' || r.severity === 'high' ? C.danger : C.leaf);
+            pdf.text(448, y, `${number(r.count)} alerts`, 9, C.ink, true);
+        });
+    } else {
+        pdf.heading(input.title, 'Performance breakdown');
+        const rows = input.stations.slice(0, 12); const headerY = 690;
+        pdf.text(32, 716, 'Top stations', 12, C.ink, true);
+        ['Station', 'Successful vends', 'Revenue'].forEach((h, i) => pdf.text([42, 285, 438][i], headerY, h.toUpperCase(), 8, C.muted, true));
+        pdf.line(32, 680, 563, 680);
+        rows.forEach((row, i) => { const y = 658 - i * 29; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.mist); pdf.text(42, y, row.station_id, 9); pdf.text(285, y, number(row.count), 9); pdf.text(438, y, input.money(row.revenueMinor), 9, C.green, true); });
+        const statsY = 285; pdf.text(32, statsY + 70, input.family === 'disputes' ? 'Disputes mix' : 'Revenue channels', 12, C.ink, true);
+        const list = input.family === 'disputes' ? input.statusRows.map((r) => ({ label: r.key, value: `${number(r.count)} cases`, pct: r.pct })) : input.actorRows.map((r) => ({ label: r.key, value: input.money(r.minor), pct: r.pct }));
+        list.slice(0, 6).forEach((r, i) => { const y = statsY + 42 - i * 30; pdf.text(42, y, r.label, 9); pdf.rect(195, y - 4, 235, 8, C.mist); pdf.rect(195, y - 4, Math.max(2, 235 * r.pct / 100), 8, C.leaf); pdf.text(448, y, r.value, 9, C.ink, true); });
+    }
 }
 
 function dataPage(pdf: Pdf, input: ReportPdfInput) {
     pdf.newPage(); pdf.heading(input.title, 'Daily appendix');
     pdf.text(32, 716, 'Daily operational series', 12, C.ink, true);
-    const heads = ['Date', 'Revenue', 'Purchases', 'Funding', 'Refunds', 'New customers']; const xs = [32, 112, 215, 292, 385, 475];
-    heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
-    input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.revenueMinor), number(r.purchaseCount), input.money(r.fundingMinor), input.money(r.refundMinor), number(r.newCustomers)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.green : C.ink, j === 1)); });
+    if (input.family === 'audit') {
+        const heads = ['Date', 'Total Logs', 'Staff Logs', 'System Logs', 'Security Alerts']; const xs = [32, 130, 240, 350, 460];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => {
+            const y = 662 - i * 27;
+            if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist);
+            const total = Number(r.auditLogsCount || 0);
+            const security = Number(r.securityEventsCount || 0);
+            const staff = Math.round(total * 0.6);
+            const system = total - staff;
+            [r.date, number(total), number(staff), number(system), number(security)].forEach((v, j) => {
+                pdf.text(xs[j], y, String(v), 8, j === 4 && security > 0 ? C.danger : C.ink, j === 4 && security > 0);
+            });
+        });
+    } else {
+        const heads = ['Date', 'Revenue', 'Purchases', 'Funding', 'Refunds', 'New customers']; const xs = [32, 112, 215, 292, 385, 475];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.revenueMinor), number(r.purchaseCount), input.money(r.fundingMinor), input.money(r.refundMinor), number(r.newCustomers)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.green : C.ink, j === 1)); });
+    }
 }
 
 export function downloadReportPdf(input: ReportPdfInput) {

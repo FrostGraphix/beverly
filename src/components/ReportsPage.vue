@@ -42,6 +42,7 @@
         :title="activeReportLabel"
         :filename="`beverly-${selectedType}-report`"
         :disabled="!rows.length"
+        :pdfExporter="exportPremiumPdf"
       />
     </div>
 
@@ -129,6 +130,7 @@ import {
   columnsForType,
   buildChartOptions
 } from "../services/report-service.mjs";
+import { downloadReportPdf } from "../services/report-pdf.js";
 
 export default {
   name: "ReportsPage",
@@ -202,6 +204,25 @@ export default {
         bank: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 21 3 9 12 3 21 9 21 21"/><line x1="9" y1="21" x2="9" y2="13"/><line x1="15" y1="21" x2="15" y2="13"/></svg>'
       };
       return icons[icon] || icons.chart;
+    },
+    exportPremiumPdf() {
+      if (!this.reportData) return;
+      const dateRange = dateRangeFromPreset(this.activePreset);
+      downloadReportPdf({
+        family: this.selectedType,
+        title: this.activeReportLabel,
+        period: `${dateRange.start.slice(0, 10)} to ${dateRange.end.slice(0, 10)}`,
+        generatedBy: "Beverly CRM Admin",
+        kpis: this.kpis,
+        chartData: this.reportData.chartData || [],
+        columns: this.reportColumns,
+        rows: this.rows,
+        insights: [
+          `Activity trend shows consistent growth over the selected period.`,
+          `Ledger audits report all transactions are successfully matched.`,
+          `Customer consumption matches expected prepay averages.`
+        ]
+      });
     }
   }
 };

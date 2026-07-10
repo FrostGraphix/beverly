@@ -267,14 +267,13 @@ import BaseInput from "../base/BaseInput.vue";
 import {
   defaultWalletAuthForm,
   resolveWalletAuthMode,
-  runWalletAuthDemo,
   walletAuthCopy,
   walletAuthHash,
   walletAuthHighlights,
   walletAuthModes,
-  writeWalletDemoSession,
   validateWalletAuthForm
 } from "../../services/vendor-auth-service.mjs";
+import { login } from "../../services/api.js";
 
 export default {
   name: "VendorAuthPage",
@@ -391,20 +390,18 @@ export default {
 
       this.submitting = true;
       try {
-        const outcome = runWalletAuthDemo(this.mode, this.form);
-        this.notice = outcome.notice || "";
-
-        if (outcome.authenticated) {
-          writeWalletDemoSession({ passwordResetRequired: false, accountStatus: this.mode === this.modes.signup ? "pending" : "approved" });
+        if (this.mode === this.modes.login) {
+          // Real Supabase-backed login via /api/user/login
+          await login({ userId: this.form.identity, password: this.form.password });
           this.$emit("vendor-authenticated");
           return;
         }
-
-        if (this.mode === this.modes.signup && !this.form.recoveryCode) {
-          this.form.recoveryCode = "BVR-4281";
-        }
-        this.setMode(outcome.nextMode || this.modes.login);
-        this.notice = outcome.notice || "";
+        // Signup / forgot-password / password-reset flows require backend
+        // provisioning endpoints that are not yet exposed on this portal.
+        // Surface a clear actionable message instead of crashing.
+        this.error = "This action is not yet available on the vendor portal. Contact Beverly support.";
+      } catch (err) {
+        this.error = err?.message || "Authentication failed. Check your credentials and try again.";
       } finally {
         this.submitting = false;
       }

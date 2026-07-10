@@ -54,6 +54,9 @@ function createApiServer() {
     }
     try {
       await referenceHandler(request, {
+        setHeader(name, value) {
+          response.setHeader(name, value);
+        },
         status(statusCode) {
           return { json(body) { writeJson(response, statusCode, body); } };
         }
