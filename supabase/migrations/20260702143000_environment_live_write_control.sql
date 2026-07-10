@@ -2,7 +2,6 @@
 ALTER TABLE feature_flags
   ADD COLUMN IF NOT EXISTS changed_by TEXT,
   ADD COLUMN IF NOT EXISTS change_reason TEXT;
-
 INSERT INTO feature_flags (
   key,
   description,
@@ -40,7 +39,6 @@ INSERT INTO feature_flags (
     'Development starts disabled'
   )
 ON CONFLICT (key) DO NOTHING;
-
 UPDATE feature_flags
 SET
   enabled = false,

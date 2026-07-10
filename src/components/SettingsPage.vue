@@ -214,7 +214,7 @@ export default {
   components: { BaseButton, BaseIconButton, BaseInput, BaseToggle, MfaSetupFlow },
   props: {
     userName: { type: String, default: "ACB(admin)" },
-    roleId: { type: String, default: "super-admin" },
+    roleId: { type: String, default: null },
     initialTab: { type: String, default: "security" }
   },
   data() {

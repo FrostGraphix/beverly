@@ -319,6 +319,37 @@ Before live review:
 7. Confirm CSV export fields are correct.
 8. Confirm permission gates are correct.
 
+## Next smoke checklist
+
+Use the newest READY Vercel deployment.
+Do not hard-code old preview hostnames.
+
+Current production commit:
+
+- `f0eb5b5b` — `Allow operators to read live-write status (#9)`
+- URL: `https://beverly-2a2bw36xr-danmusa-abdulsamads-projects.vercel.app`
+- Alias: `https://beverly-git-main-danmusa-abdulsamads-projects.vercel.app`
+
+Smoke these routes:
+
+1. Admin: `/wallet-admin/meter-orders`
+2. Admin: `/wallet-admin/meter-orders/new`
+3. Vendor: `/wallet-vendor/meter-orders`
+4. Vendor: `/wallet-vendor/meter-orders/new`
+5. Customer: `/wallet-customer/meter-orders`
+6. Customer: `/wallet-customer/meters`
+
+Create-path checks:
+
+1. Admin staff-assisted order creates `paid`.
+2. Admin vendor-wallet order debits vendor wallet.
+3. Vendor order debits vendor wallet.
+4. Customer order opens Paystack.
+5. Customer payment verification marks `paid`.
+6. Admin status moves `paid -> assigned -> dispatched -> installed`.
+7. Invalid status jumps fail with `invalid_status_transition`.
+8. Repeated submit replays idempotently.
+
 ## Design notes
 
 ### UX goals

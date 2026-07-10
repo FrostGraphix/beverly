@@ -72,12 +72,16 @@ function shouldMirrorUserWrite(route, action, endpoint) {
 }
 
 async function mirrorUserWrite(route, action, endpoint, payload) {
-  const token = getCookie("token");
+  // NOTE: After Phase 7, bev_token is HttpOnly and SameSite=Strict.
+  // Cross-origin fetch() cannot carry HttpOnly cookies — this is by design.
+  // The mirror is disabled via VITE_USER_MIRROR_ENABLED=false and should
+  // not execute in any deployed environment. This code path is a dead branch.
+  const jsToken = getCookie("token"); // empty string after Phase 7 cutover
   const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(jsToken ? { Authorization: `Bearer ${jsToken}` } : {}),
       ...requestHeaders(route, action),
     },
     body: JSON.stringify(payload || {}),

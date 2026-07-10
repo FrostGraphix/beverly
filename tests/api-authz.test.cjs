@@ -148,6 +148,22 @@ async function main() {
       assert.strictEqual(forbiddenAdminRead.status, 403);
       assert.strictEqual(forbiddenAdminRead.body.reason, "Super admin required");
 
+      const readableLiveWriteStatus = await request(port, "GET", "/api/system/live-write-control", null, {
+        Authorization: "Bearer ops-token"
+      });
+      assert.strictEqual(readableLiveWriteStatus.status, 200);
+      assert.strictEqual(readableLiveWriteStatus.body.data.canManage, false);
+
+      const forbiddenLiveWriteChange = await request(port, "PUT", "/api/system/live-write-control", {
+        enabled: true,
+        reason: "Unauthorized role test",
+        confirmation: "ENABLE LIVE WRITES"
+      }, {
+        Authorization: "Bearer ops-token"
+      });
+      assert.strictEqual(forbiddenLiveWriteChange.status, 403);
+      assert.strictEqual(forbiddenLiveWriteChange.body.reason, "Super admin required");
+
       const selfRead = await request(port, "POST", "/api/user/read", { userId: "TEMPER", pageNumber: 1, pageSize: 1 }, {
         Authorization: "Bearer self-token"
       });

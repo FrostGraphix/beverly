@@ -12,6 +12,7 @@ function readMigration(name) {
 }
 
 function main() {
+  const adminRoutes = fs.readFileSync(path.join(root, "backend", "wallet", "src", "routes", "admin.ts"), "utf8");
   const schema = readMigration("20260505124500_crm_operational_storage.sql");
   const storage = readMigration("20260505125000_storage_buckets.sql");
   const snapshots = readMigration("20260507110000_operational_snapshots.sql");
@@ -25,6 +26,10 @@ function main() {
   const atomicHolds = readMigration("20260622140000_wallet_atomic_holds.sql");
   const paymentLeases = readMigration("20260622150000_payment_fulfillment_leases.sql");
   const announcementRls = readMigration("20260622160000_announcement_rls.sql");
+  const liveWriteControl = readMigration("20260702120000_crm_live_write_control.sql");
+  const environmentLiveWriteControl = readMigration("20260702143000_environment_live_write_control.sql");
+  const fullRls = readMigration("20260702150000_full_rls_permissions.sql");
+  const liveWriteActivation = readMigration("20260703100000_enable_live_writes.sql");
 
   const requiredTables = [
     "roles",
@@ -116,7 +121,7 @@ function main() {
   assert(hardening.includes("create or replace function public.current_role_key"), "missing current role function");
   assert(hardening.includes("create or replace function public.current_station_id"), "missing current station function");
   assert(hardening.includes("create or replace function public.has_route_permission"), "missing route permission function");
-  assert(hardening.includes("alter table public.users\n+add column if not exists station_id text;".replace("\n+","\n")), "missing users station_id column");
+  assert(/alter table public\.users\s+add column if not exists station_id text;/.test(hardening), "missing users station_id column");
   for (const table of [...requiredTables, "operational_snapshots", "daily_meter_readings"]) {
     assert(hardening.includes(`alter table public.${table} force row level security;`), `missing forced RLS for ${table}`);
   }
@@ -159,9 +164,47 @@ function main() {
   assert(announcementRls.includes("force row level security"), "announcement records must force RLS");
   assert(announcementRls.includes("customers read own announcement deliveries"), "customers need own-delivery RLS");
   assert(announcementRls.includes("vendors read own announcement deliveries"), "vendors need own-delivery RLS");
+  assert(liveWriteControl.includes("'crm.live_writes.enabled'"), "missing legacy live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.production.enabled'"), "missing production live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.preview.enabled'"), "missing preview live-write control");
+  assert(environmentLiveWriteControl.includes("'crm.live_writes.development.enabled'"), "missing development live-write control");
+  for (const environment of ["production", "preview", "development"]) {
+    assert(
+      liveWriteActivation.includes(`'crm.live_writes.${environment}.enabled'`),
+      `missing ${environment} live-write activation`
+    );
+  }
+  assert(liveWriteActivation.includes("enabled = excluded.enabled"), "live-write activation must update existing flags");
+  for (const helper of [
+    "private.current_staff_role",
+    "private.has_permission",
+    "private.current_vendor_organization_id",
+    "private.current_customer_id"
+  ]) {
+    assert(fullRls.includes(`function ${helper}`), `missing ${helper} RLS helper`);
+  }
+  assert(fullRls.includes("force row level security"), "all public tables must force RLS");
+  assert(fullRls.includes("revoke all on all tables in schema public from anon"), "anon table access must be revoked");
+  assert(fullRls.includes("revoke insert, update, delete, truncate, references, trigger"), "authenticated writes must be revoked");
+  assert(fullRls.includes("revoke execute on all functions in schema public from anon, authenticated"), "public RPC execution must default deny");
+  assert(fullRls.includes("from pg_views"), "public views must be inventoried");
+  assert(fullRls.includes("revoke all on %I.%I from anon, authenticated"), "public views must stay backend-only");
+  assert(!fullRls.includes("user_metadata"), "authorization must not trust user metadata");
+  assert(fullRls.includes('create policy "Actors read own purchase orders"'), "missing actor purchase isolation");
+  assert(fullRls.includes('create policy "Actors read own receipts"'), "missing actor receipt isolation");
+  assert(fullRls.includes('create policy "Actors read own support messages"'), "missing support message isolation");
+  assert(fullRls.includes("not is_internal"), "internal support messages must stay staff-only");
+  const catalogSource = adminRoutes.match(/const PERMISSION_CATALOG = \[([\s\S]*?)\n\];/)?.[1] ?? "";
+  const catalogKeys = [...catalogSource.matchAll(/\{ key: '([^']+)'/g)].map((match) => match[1]);
+  for (const permission of catalogKeys) {
+    assert(
+      fullRls.includes(`('super-admin', '${permission}')`),
+      `missing super-admin permission ${permission}`
+    );
+  }
 
   console.log(JSON.stringify({
-    migrations: 13,
+    migrations: 17,
     tables: requiredTables.length + 6,
     buckets: 4,
     status: "supabase migrations passed"

@@ -45,9 +45,36 @@ DATA_GOVERNANCE_ENABLED=false
 
 ## Apply
 
-Use Supabase SQL editor first.
-
 Run migrations in timestamp order.
+
+Before pushing:
+
+```powershell
+npx supabase migration list --linked
+npx supabase db lint --linked --level error
+npx supabase db push --linked --dry-run
+```
+
+Stop when migration histories differ.
+Never repair production history blindly.
+
+Reconcile remote-only versions:
+
+```powershell
+npx supabase migration fetch --linked
+git status --short
+```
+
+Keep only missing remote migrations.
+Restore any overwritten local migrations.
+Review every fetched SQL file.
+Then rerun the three checks.
+
+Apply only from reviewed CI:
+
+```powershell
+npx supabase db push --linked
+```
 
 Then verify:
 
@@ -80,13 +107,54 @@ order by id;
 
 ## Security
 
-RLS is enabled.
+Every public table forces RLS.
 
 No anon table policies exist.
 
-Backend uses service role only.
+Authenticated database writes are revoked.
+
+Backend mutations use service role.
+
+Authorization uses database identity mappings.
+
+User metadata grants no permissions.
 
 Frontend must not receive service role keys.
+
+Verify RLS coverage:
+
+```sql
+select n.nspname as schema_name, c.relname as table_name,
+       c.relrowsecurity as rls_enabled,
+       c.relforcerowsecurity as rls_forced
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind in ('r', 'p')
+  and (not c.relrowsecurity or not c.relforcerowsecurity);
+```
+
+Expected result: zero rows.
+
+Verify browser privileges:
+
+```sql
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee in ('anon', 'authenticated')
+  and privilege_type <> 'SELECT';
+```
+
+Expected result: zero rows.
+
+Test customer and vendor isolation.
+
+Test every staff permission role.
+
+Test internal messages stay hidden.
+
+Test public views stay backend-only.
 
 ## Key Rotation
 

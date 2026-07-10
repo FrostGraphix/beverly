@@ -117,6 +117,11 @@ Keep write safety strict.
 - Supabase dev console tables live in `20260601120000_dev_console_access.sql`.
 - Wallet RLS must isolate vendors by organization.
 - Wallet staff reads must follow role claims.
+- RLS identity comes from database mappings.
+- User metadata never grants authorization.
+- Public tables force row-level security.
+- Client database access stays read-only.
+- Trusted backend mutations use service role.
 - Wallet ledger rows must be append-only.
 - Wallet corrections use compensating entries.
 

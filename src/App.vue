@@ -1,6 +1,10 @@
 <template>
   <div id="app-root">
   <LoginPage v-if="isLogin" @logged-in="goDashboard" />
+  <div v-else-if="!isRoleReady" class="app-role-loading" role="status" aria-label="Authenticating">
+    <div class="app-role-loading-spinner" aria-hidden="true"></div>
+    <p class="app-role-loading-text">Verifying session&hellip;</p>
+  </div>
   <div v-else :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']">
 
     <div class="drawer-bg" @click="closeSidebar"></div>
@@ -312,7 +316,7 @@ import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import ReportsPage from "./components/ReportsPage.vue";
 import StationAlertsBell from "./components/StationAlertsBell.vue";
-import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, refreshLiveWriteStatus, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 
@@ -429,8 +433,8 @@ export default {
       sidebarOpen: window.innerWidth > 1024,
       collapsed: false,
       width: window.innerWidth,
-      currentRoleId: getCookie("roleId") || "super-admin",
-      currentUserName: getCookie("userName") || "ACB(admin)",
+      currentRoleId: getCookie("roleId") || null,
+      currentUserName: getCookie("userName") || null,
       profilePictureUrl: "",
       expandedGroups: {},
       currentTheme: normalizeThemeChoice(localStorage.getItem('acob-theme') || 'system'),
@@ -450,6 +454,9 @@ export default {
   computed: {
     isLogin() {
       return this.hash.startsWith("#/login") || !this.hash;
+    },
+    isRoleReady() {
+      return this.currentRoleId !== null;
     },
     route() {
       return findRoute(this.hash, this.currentRoleId);
@@ -567,7 +574,9 @@ export default {
   },
   methods: {
     bumpSessionActivity() {
-      if (this.isLogin || !getCookie("token")) return;
+      // readSessionState() is the authoritative "logged in" signal after Phase 7.
+      // token is now an HttpOnly cookie — getCookie("token") always returns "".
+      if (this.isLogin || !readSessionState()) return;
       const now = Date.now();
       if (now - this.lastSessionTouchAt < 15000) return;
       this.lastSessionTouchAt = now;
@@ -576,7 +585,8 @@ export default {
     armSessionTimer() {
       if (this.sessionTimer) window.clearInterval(this.sessionTimer);
       this.sessionTimer = window.setInterval(() => {
-        if (!this.isLogin && getCookie("token") && isSessionExpired()) {
+        // readSessionState() replaces getCookie("token") — token is now HttpOnly.
+        if (!this.isLogin && readSessionState() && isSessionExpired()) {
           this.expireSession();
         }
       }, 15000);
@@ -612,29 +622,47 @@ export default {
       return visibleRoutes(this.currentRoleId).some((route) => route.hash === normalizedHash);
     },
     async loadUser() {
-      if (this.isLogin || !getCookie("token")) return;
+      if (this.isLogin) return;
       try {
-        const response = await currentUserInfo();
-        this.currentRoleId = response.data?.roleId || this.currentRoleId;
-        this.currentUserName = response.data?.name || this.currentUserName;
-        const normalizedRole = String(this.currentRoleId || "").toLowerCase().replace(/_/g, "-");
-        if (normalizedRole === "super-admin") {
-          try {
-            await refreshLiveWriteStatus();
-          } catch {
-            setRuntimeLiveWritesAllowed(false);
-          }
+        // Primary: use /api/auth/me which validates the HttpOnly bev_token cookie server-side.
+        // Falls back to currentUserInfo() if /api/auth/me is not yet available (during cutover).
+        const meRes = await fetch("/api/auth/me", { credentials: "include" });
+        if (meRes.status === 401) {
+          // No valid session — clear local state and redirect.
+          clearSessionCookies();
+          this.currentRoleId = null;
+          this.currentUserName = null;
+          if (!this.isLogin) window.location.hash = "#/login";
+          this.syncHash();
+          return;
+        }
+        const meJson = await meRes.json().catch(() => null);
+        if (meJson?.code === 0 && meJson?.data) {
+          this.currentRoleId = meJson.data.roleId || null;
+          this.currentUserName = meJson.data.userName || null;
+          // Keep display cookies in sync for components that read them directly.
+          if (meJson.data.userId) setCookie("userId", meJson.data.userId);
+          if (meJson.data.userName) setCookie("userName", meJson.data.userName);
+          if (meJson.data.roleId) setCookie("roleId", meJson.data.roleId);
         } else {
+          // /api/auth/me responded but with unexpected shape — fall back to currentUserInfo.
+          const response = await currentUserInfo();
+          this.currentRoleId = response.data?.roleId || null;
+          this.currentUserName = response.data?.name || response.data?.userName || null;
+        }
+        try {
+          await refreshLiveWriteStatus();
+        } catch {
           setRuntimeLiveWritesAllowed(false);
         }
         this.syncProfileIdentity();
         this.syncHash();
       } catch (error) {
-        if ((error?.message || "").includes("Session expired")) {
-          this.expireSession();
-          return;
-        }
-        throw error;
+        // On any auth failure, fail closed — do not keep a stale super-admin role.
+        this.currentRoleId = null;
+        clearSessionCookies();
+        if (!this.isLogin) window.location.hash = "#/login";
+        this.syncHash();
       }
     },
     syncHash() {
@@ -669,8 +697,8 @@ export default {
       this.width = window.innerWidth;
     },
     goDashboard() {
-      this.currentRoleId = getCookie("roleId") || "super-admin";
-      this.currentUserName = getCookie("userName") || "ACB(admin)";
+      this.currentRoleId = getCookie("roleId") || null;
+      this.currentUserName = getCookie("userName") || null;
       this.syncProfileIdentity();
       window.location.hash = this.nextRoute("#/dashboard").hash;
       this.syncHash();
@@ -753,8 +781,10 @@ export default {
       if (text.includes("system") || text.includes("automation")) return "slate";
       return "emerald";
     },
-    handleSignOut() {
+    async handleSignOut() {
       clearSessionCookies();
+      this.currentRoleId = null;
+      this.currentUserName = null;
       window.location.hash = "#/login";
       this.closeUserMenu();
       this.syncHash();
@@ -946,5 +976,37 @@ export default {
   .main-container--account-menu-open :deep(.content-page) {
     filter: none;
   }
+}
+
+/* Security loading screen — shown while server-side role is being confirmed */
+.app-role-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  background: var(--color-bg, #0a0f0a);
+  z-index: 9999;
+}
+
+.app-role-loading-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--color-accent, #22c55e);
+  border-radius: 50%;
+  animation: app-spin 0.75s linear infinite;
+}
+
+.app-role-loading-text {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.45));
+  letter-spacing: 0.02em;
+}
+
+@keyframes app-spin {
+  to { transform: rotate(360deg); }
 }
 </style>
