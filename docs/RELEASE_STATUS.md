@@ -2,21 +2,24 @@
 
 Evidence date: 2026-07-10.
 
-Status: preview ready.
+Status: branch preview rolling.
 
 Current Vercel truth:
 
 - Production alias: `https://acob-beverly.vercel.app`
-- Production deployment: `dpl_H2FAtGAtcccYwC7zRZ2ZgT43vo7x`
-- Production URL: `https://beverly-2a2bw36xr-danmusa-abdulsamads-projects.vercel.app`
-- Production commit: `f0eb5b5b2f2707175eefbe3be9fb9a1bc8c776cd`
+- Production deployment: `dpl_8G3DXooMiE8YCDoGiiDJbzNZsopf`
+- Production URL: `https://beverly-ko88e8hyh-danmusa-abdulsamads-projects.vercel.app`
+- Production commit: `af455ac2741d4ceb89a89902c517bc49b4e652f1`
 - PR #9 preview deployment: `dpl_FLQH1voAnWntR5TnYLdnF2oTQF3K`
 - PR #9 preview URL: `https://beverly-kpdyn47c9-danmusa-abdulsamads-projects.vercel.app`
 - PR #9 commit: `de989ef7919144e927f079289e96926bf5c10930`
-- Current branch deployment: `dpl_Ui3vGycnYMtDQZ3FJxdzH4rktLWq`
-- Current branch URL: `https://beverly-d9td8de7j-danmusa-abdulsamads-projects.vercel.app`
-- Current branch commit: `8a9ffd2d838da21bc496617ef079c10b5efabe4d`
-- Current branch state: `READY`
+- Current branch alias: `https://beverly-git-codex-post-june-046264-danmusa-abdulsamads-projects.vercel.app`
+- Current branch name: `codex/post-june24-features`
+- Current branch deployment changes after every push.
+- Latest observed branch deployment: `dpl_9RiPZQRvWVjsWcUSdQN77xiMcmzA`
+- Latest observed branch URL: `https://beverly-he3e8k63p-danmusa-abdulsamads-projects.vercel.app`
+- Latest observed branch commit: `8ada91be4b2b974f343263b19581f72df24751d8`
+- Latest observed branch state: `QUEUED`
 - Latest separate feature preview: `dpl_A6ZTx9QqhiiXsv8YYqoBhA5m1Sua`
 - Latest separate feature URL: `https://beverly-ce61s6h78-danmusa-abdulsamads-projects.vercel.app`
 - Latest separate feature branch: `codex/mobile-avatar-dropdown-fix`
@@ -70,7 +73,7 @@ npm run smoke:vercel
 
 Current branch preview checklist:
 
-1. Set `TARGET_URL` to `https://beverly-d9td8de7j-danmusa-abdulsamads-projects.vercel.app`.
+1. Set `TARGET_URL` to `https://beverly-git-codex-post-june-046264-danmusa-abdulsamads-projects.vercel.app`.
 2. Set `VERCEL_PROTECTION_BYPASS`.
 3. Set `SMOKE_AUTH_TOKEN`.
 4. Run `npm run smoke:vercel`.

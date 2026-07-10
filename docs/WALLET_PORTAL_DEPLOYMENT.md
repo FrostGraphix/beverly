@@ -9,12 +9,12 @@ Current production host:
 
 Current deployment truth, checked 2026-07-10:
 
-- Production deployment: `dpl_H2FAtGAtcccYwC7zRZ2ZgT43vo7x`
-- Production commit: `f0eb5b5b2f2707175eefbe3be9fb9a1bc8c776cd`
+- Production deployment: `dpl_8G3DXooMiE8YCDoGiiDJbzNZsopf`
+- Production commit: `af455ac2741d4ceb89a89902c517bc49b4e652f1`
 - PR #9 preview: `https://beverly-kpdyn47c9-danmusa-abdulsamads-projects.vercel.app`
 - PR #9 commit: `de989ef7919144e927f079289e96926bf5c10930`
-- Current branch preview: `https://beverly-d9td8de7j-danmusa-abdulsamads-projects.vercel.app`
-- Current branch state: `READY`
+- Current branch alias: `https://beverly-git-codex-post-june-046264-danmusa-abdulsamads-projects.vercel.app`
+- Current branch latest observed state: `QUEUED`
 - Separate avatar preview: `https://beverly-ce61s6h78-danmusa-abdulsamads-projects.vercel.app`
 - Separate avatar branch: `codex/mobile-avatar-dropdown-fix`
 
