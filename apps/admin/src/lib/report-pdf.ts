@@ -57,13 +57,17 @@ class Pdf {
         this.text(478, 787, 'BEVERLY', 9, C.white, true);
         this.y = 742;
     }
-    footer(page: number, total: number) {
-        this.line(32, 30, 563, 30);
-        this.text(32, 17, 'CONFIDENTIAL  |  Beverly Wallet Operations', 7, C.muted);
-        this.text(510, 17, `${page} / ${total}`, 7, C.muted);
-    }
     finish(filename: string) {
         this.pages.push(this.page);
+        const totalPages = this.pages.length;
+        for (let i = 1; i < totalPages; i++) {
+            const p = this.pages[i];
+            p.push(
+                `${this.stroke(C.line)} 1 w 32 30 m 563 30 l S`,
+                `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 32 17 Tm (CONFIDENTIAL  |  Beverly Wallet Operations) Tj ET`,
+                `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i} / ${totalPages - 1}) Tj ET`
+            );
+        }
         const body = this.pages.map((p, i) => `${p.join('\n')}\n`).join('');
         const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Count ${this.pages.length} /Kids [${this.pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ')}] >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
         this.pages.forEach((p, i) => {

@@ -27,6 +27,9 @@ assert(vercelSmoke.includes("Expected JSON from"), "vercel smoke must report non
 assert(vercelSmoke.includes("if (!protectionBypass) return \"\";"), "vercel smoke must not post protected failure hooks without bypass");
 assert(vercelSmoke.includes("VERCEL_PROTECTION_BYPASS is required"), "vercel smoke must preflight protected previews");
 assert(vercelSmoke.includes("SMOKE_AUTH_TOKEN or SMOKE_USER_ID"), "vercel smoke must preflight preview authentication");
+assert(vercelSmoke.includes("/api/system/live-write-control"), "vercel smoke must read live-write control state");
+assert(vercelSmoke.includes("live-write health/control mismatch"), "vercel smoke must compare health and live-write control");
+assert(vercelSmoke.includes("mutationCheckSkipped"), "vercel smoke must skip write probes when live writes are enabled");
 
 assert(stagingSmoke.includes("process.env.PREVIEW_TARGET_URL"), "staging smoke must fall back to preview target");
 assert(stagingSmoke.includes("x-vercel-protection-bypass"), "staging smoke must support Vercel protection bypass");

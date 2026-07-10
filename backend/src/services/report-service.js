@@ -19,8 +19,10 @@ async function revenueReport(dateRange = {}, filters = {}) {
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
 
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
+  let startMs = new Date(start).getTime();
+  let endMs = new Date(end).getTime();
+  if (isNaN(startMs)) startMs = Date.now() - 30 * 86400000;
+  if (isNaN(endMs)) endMs = Date.now();
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
@@ -96,33 +98,47 @@ function getRevenueStats(db, start, end, stationId) {
       const dateStr = p.createdAt.slice(0, 10);
       const station = p.detail?.station || p.detail?.stationId || "Station A";
       if (stationId && station !== stationId) continue;
-      if (!groups[dateStr]) {
-        groups[dateStr] = { date: dateStr, transactions: 0, revenue: 0, station };
+      const groupKey = stationId ? dateStr : `${dateStr}_${station}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { date: dateStr, transactions: 0, revenue: 0, station };
       }
-      groups[dateStr].transactions += 1;
+      groups[groupKey].transactions += 1;
       if (p.status === "delivered") {
-        groups[dateStr].revenue += p.amountMinor;
+        groups[groupKey].revenue += p.amountMinor;
       }
     }
     return Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
   } else {
     try {
-      const sql = `
-        SELECT 
-          substr(created_at, 1, 10) as date,
-          count(*) as transactions,
-          sum(case when status = 'delivered' then amount_minor else 0 end) as revenue,
-          COALESCE(json_extract(detail_json, '$.station'), 'Station A') as station
-        FROM wallet_purchase_orders
-        WHERE created_at >= ? AND created_at <= ?
-        GROUP BY date
-        ORDER BY date ASC
-      `;
-      const rows = db.prepare(sql).all(start, end);
+      let sql, args;
       if (stationId) {
-        return rows.filter(r => r.station === stationId);
+        sql = `
+          SELECT 
+            substr(created_at, 1, 10) as date,
+            count(*) as transactions,
+            sum(case when status = 'delivered' then amount_minor else 0 end) as revenue,
+            ? as station
+          FROM wallet_purchase_orders
+          WHERE created_at >= ? AND created_at <= ? AND COALESCE(json_extract(detail_json, '$.station'), 'Station A') = ?
+          GROUP BY date
+          ORDER BY date ASC
+        `;
+        args = [stationId, start, end, stationId];
+      } else {
+        sql = `
+          SELECT 
+            substr(created_at, 1, 10) as date,
+            count(*) as transactions,
+            sum(case when status = 'delivered' then amount_minor else 0 end) as revenue,
+            'All Stations' as station
+          FROM wallet_purchase_orders
+          WHERE created_at >= ? AND created_at <= ?
+          GROUP BY date
+          ORDER BY date ASC
+        `;
+        args = [start, end];
       }
-      return rows;
+      return db.prepare(sql).all(...args);
     } catch {
       return [];
     }
@@ -136,8 +152,10 @@ async function walletReport(dateRange = {}, filters = {}) {
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
 
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
+  let startMs = new Date(start).getTime();
+  let endMs = new Date(end).getTime();
+  if (isNaN(startMs)) startMs = Date.now() - 30 * 86400000;
+  if (isNaN(endMs)) endMs = Date.now();
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
@@ -180,7 +198,16 @@ async function walletReport(dateRange = {}, filters = {}) {
     const amt = e.direction === "credit" ? e.amountMinor : -e.amountMinor;
     balance += amt;
     const dateStr = e.createdAt.replace("T", " ").slice(0, 16);
-    const details = isMemory(db) ? (e.detail || {}) : JSON.parse(e.detail_json || "{}");
+    let details = {};
+    if (isMemory(db)) {
+      details = e.detail || {};
+    } else {
+      try {
+        details = JSON.parse(e.detail_json || "{}");
+      } catch {
+        details = {};
+      }
+    }
     rows.push({
       date: dateStr,
       type: e.entryType || e.entry_type,
@@ -216,8 +243,9 @@ async function walletReport(dateRange = {}, filters = {}) {
     }
   }
 
-  const chartData = [];
-  const days = Math.ceil((new Date(end) - new Date(start)) / 86400000) || 7;
+  const diff = new Date(end).getTime() - new Date(start).getTime();
+  let days = Math.ceil(diff / 86400000);
+  if (isNaN(days) || days <= 0) days = 7;
   for (let i = 0; i < days; i++) {
     const d = new Date(new Date(start).getTime() + i * 86400000);
     const dateStr = d.toISOString().slice(0, 10);
@@ -275,8 +303,10 @@ async function customerReport(dateRange = {}, filters = {}) {
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
 
-  const startMs = new Date(start).getTime();
-  const endMs = new Date(end).getTime();
+  let startMs = new Date(start).getTime();
+  let endMs = new Date(end).getTime();
+  if (isNaN(startMs)) startMs = Date.now() - 30 * 86400000;
+  if (isNaN(endMs)) endMs = Date.now();
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
@@ -301,6 +331,7 @@ async function customerReport(dateRange = {}, filters = {}) {
     const station = r.station_id || r.stationId || "Station A";
     const total1 = Number(r.total1);
 
+    if (filters.stationId && station !== filters.stationId) continue;
     if (!customerMap[mid]) {
       customerMap[mid] = {
         customerId: cid,
@@ -380,7 +411,10 @@ async function customerReport(dateRange = {}, filters = {}) {
   const chartMap = {};
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   for (const r of currentReadings) {
-    const date = new Date(r.reading_date || r.readingDate);
+    const dateStr = r.reading_date || r.readingDate;
+    if (!dateStr) continue;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) continue;
     const mName = monthNames[date.getMonth()];
     if (!chartMap[mName]) chartMap[mName] = 0;
     chartMap[mName] += 1;
@@ -430,7 +464,16 @@ async function auditReport(dateRange = {}, filters = {}) {
   let failures = 0;
 
   for (const l of logs) {
-    const details = isMemory(db) ? (l.details || {}) : JSON.parse(l.detail_json || "{}");
+    let details = {};
+    if (isMemory(db)) {
+      details = l.details || {};
+    } else {
+      try {
+        details = JSON.parse(l.detail_json || "{}");
+      } catch {
+        details = {};
+      }
+    }
     const actor = details.userId || details.userName || details.actor || "system";
     const role = details.role || "system";
     const action = l.method + " " + l.path;
