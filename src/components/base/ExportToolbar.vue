@@ -50,7 +50,8 @@ export default {
     columns: { type: Array, required: true },
     title: { type: String, default: "Export" },
     filename: { type: String, default: "beverly-export" },
-    disabled: { type: Boolean, default: false }
+    disabled: { type: Boolean, default: false },
+    pdfExporter: { type: Function, default: null }
   },
   data() {
     return {
@@ -99,8 +100,12 @@ export default {
           const xml = exportReportExcelXml(this.title, this.columns, this.rows);
           downloadTextFile(`${base}.xls`, xml, "application/vnd.ms-excel");
         } else if (format === "pdf") {
-          const pdf = exportReportPdfText(this.title, this.columns, this.rows);
-          downloadTextFile(`${base}.pdf`, pdf, "application/pdf");
+          if (this.pdfExporter) {
+            await this.pdfExporter();
+          } else {
+            const pdf = exportReportPdfText(this.title, this.columns, this.rows);
+            downloadTextFile(`${base}.pdf`, pdf, "application/pdf");
+          }
         } else if (format === "json") {
           const json = JSON.stringify(this.rows, null, 2);
           downloadTextFile(`${base}.json`, json, "application/json");
