@@ -81,14 +81,17 @@ class Pdf {
     this.y = 742;
   }
 
-  footer(page, total) {
-    this.line(32, 30, 563, 30);
-    this.text(32, 17, "CONFIDENTIAL  |  Beverly CRM Operations Report", 7, C.muted);
-    this.text(510, 17, `${page} / ${total}`, 7, C.muted);
-  }
-
   finish(filename) {
     this.pages.push(this.page);
+    const totalPages = this.pages.length;
+    for (let i = 1; i < totalPages; i++) {
+      const page = this.pages[i];
+      page.push(
+        `${this.stroke(C.line)} 1 w 32 30 m 563 30 l S`,
+        `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 32 17 Tm (CONFIDENTIAL  |  Beverly CRM Operations Report) Tj ET`,
+        `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i} / ${totalPages - 1}) Tj ET`
+      );
+    }
     const body = this.pages.map((p) => `${p.join("\n")}\n`).join("");
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",
@@ -233,6 +236,5 @@ export function downloadReportPdf(input) {
     pdf.rect(32, y - 2, 6, 6, C.green);
     pdf.text(48, y, insight, 9, C.ink);
   });
-  pdf.footer(3, 3);
   pdf.finish(`beverly-crm-${input.family}-report-${dateStamp()}.pdf`);
 }
