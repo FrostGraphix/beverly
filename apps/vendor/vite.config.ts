@@ -21,7 +21,7 @@ export default defineConfig(({ command }) => ({
     },
     build: {
         target: 'es2022',
-        sourcemap: true,
+        sourcemap: false,
         outDir: resolve(__dirname, process.env.VITE_VENDOR_OUT_DIR ?? '../../dist/wallet-vendor'),
         emptyOutDir: false,
     },

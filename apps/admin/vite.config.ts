@@ -21,7 +21,7 @@ export default defineConfig(({ command }) => ({
     },
     build: {
         target: 'es2022',
-        sourcemap: true,
+        sourcemap: false,
         outDir: resolve(__dirname, '../../dist/wallet-admin'),
         emptyOutDir: false,
     },

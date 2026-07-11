@@ -6,6 +6,8 @@ import { downloadAuthedCsv } from '../lib/export';
 import { downloadReportPdf, type ReportFamily } from '../lib/report-pdf';
 
 interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
+interface CountRow { key: string; count: number; pct: number; }
+interface MoneyRow { key: string; minor: number; pct: number; }
 interface ReportOverview {
     range: { since: string; until: string; days: number };
     kpis: {
@@ -23,7 +25,13 @@ interface ReportOverview {
         topStations: { station_id: string; count: number; revenueMinor: number }[];
         auditActionsBreakdown?: Record<string, number>;
         securitySeveritiesBreakdown?: Record<string, number>;
+        fundingByChannel?: Record<string, number>;
+        fundingRequestsByStatus?: Record<string, number>;
+        disputesByStatus?: Record<string, number>;
+        refundsByStatus?: Record<string, number>;
+        settlementByStatus?: Record<string, number>;
     };
+    sources?: Record<string, number>;
 }
 
 const PRESETS = [
@@ -140,6 +148,18 @@ const statusRows = computed(() => {
         .map(([key, count]) => ({ key, count, pct: Math.round((count / total) * 100), color: palette[key] ?? '#64748b' }));
 });
 
+function countRows(obj: Record<string, number> | undefined): CountRow[] {
+    const rows = Object.entries(obj ?? {}).map(([key, count]) => ({ key, count: Number(count) }));
+    const total = rows.reduce((s, row) => s + row.count, 0) || 1;
+    return rows.sort((a, b) => b.count - a.count).map((row) => ({ ...row, pct: Math.round((row.count / total) * 100) }));
+}
+
+function moneyRows(obj: Record<string, number> | undefined): MoneyRow[] {
+    const rows = Object.entries(obj ?? {}).map(([key, minor]) => ({ key, minor: Number(minor) }));
+    const total = rows.reduce((s, row) => s + row.minor, 0) || 1;
+    return rows.sort((a, b) => b.minor - a.minor).map((row) => ({ ...row, pct: Math.round((row.minor / total) * 100) }));
+}
+
 const actorRows = computed(() => {
     const obj = report.value?.breakdowns.revenueByActorType ?? {};
     const total = Object.values(obj).reduce((s, n) => s + n, 0) || 1;
@@ -205,6 +225,12 @@ function exportPdf() {
         money: naira,
         auditBreakdown,
         securityBreakdown,
+        fundingRows: moneyRows(report.value.breakdowns.fundingByChannel),
+        fundingStatusRows: countRows(report.value.breakdowns.fundingRequestsByStatus),
+        disputeRows: countRows(report.value.breakdowns.disputesByStatus),
+        refundRows: countRows(report.value.breakdowns.refundsByStatus),
+        settlementRows: countRows(report.value.breakdowns.settlementByStatus),
+        sources: report.value.sources ?? {},
     });
 }
 

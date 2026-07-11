@@ -1,4 +1,4 @@
-import { getCookie, liveWritesAllowed, postApi, uploadApi } from "./api.js";
+import { liveWritesAllowed, postApi, uploadApi } from "./api.js";
 import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
 import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
@@ -59,8 +59,8 @@ function requestHeaders(route, action) {
   };
 }
 
-const mirrorUserWriteOrigin = (import.meta.env?.VITE_USER_MIRROR_ORIGIN || "http://8.208.16.168:9311").replace(/\/+$/, "");
-const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "true").toLowerCase() !== "false";
+const mirrorUserWriteOrigin = String(import.meta.env?.VITE_USER_MIRROR_ORIGIN || "").replace(/\/+$/, "");
+const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "false").toLowerCase() === "true";
 
 function shouldMirrorUserWrite(route, action, endpoint) {
   if (!mirrorUserWriteEnabled) return false;
@@ -76,14 +76,13 @@ async function mirrorUserWrite(route, action, endpoint, payload) {
   // Cross-origin fetch() cannot carry HttpOnly cookies — this is by design.
   // The mirror is disabled via VITE_USER_MIRROR_ENABLED=false and should
   // not execute in any deployed environment. This code path is a dead branch.
-  const jsToken = getCookie("token"); // empty string after Phase 7 cutover
   const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(jsToken ? { Authorization: `Bearer ${jsToken}` } : {}),
       ...requestHeaders(route, action),
     },
+    credentials: "include",
     body: JSON.stringify(payload || {}),
   });
 
