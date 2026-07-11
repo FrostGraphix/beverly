@@ -2954,9 +2954,10 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     async function gatherReportData(sinceIso: string, untilIso: string) {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
-        const [purchases, funding, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents] = await Promise.all([
+        const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents] = await Promise.all([
             inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
+            inRange(adminClient.from('funding_requests').select('amount_minor, channel, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('customers').select('created_at')).limit(50_000).then((r: any) => r.data ?? []),
@@ -2964,7 +2965,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             inRange(adminClient.from('wallet_audit_log').select('action, actor_type, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('wallet_security_events').select('event_type, severity, created_at')).limit(50_000).then((r: any) => r.data ?? []),
         ]);
-        return { purchases, funding, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents } as Record<string, any[]>;
+        return { purchases, funding, fundingRequests, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents } as Record<string, any[]>;
     }
 
     function buildReport(sinceIso: string, untilIso: string, days: number, d: Record<string, any[]>) {
@@ -3010,6 +3011,22 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const revenueByActorType: Record<string, number> = {};
         for (const p of delivered) revenueByActorType[p.actor_type ?? 'unknown'] = (revenueByActorType[p.actor_type ?? 'unknown'] ?? 0) + num(p.amount_minor);
+
+        const fundingByChannel: Record<string, number> = {};
+        const fundingRequestsByStatus: Record<string, number> = {};
+        for (const f of d.fundingRequests || []) {
+            fundingByChannel[f.channel ?? 'unknown'] = (fundingByChannel[f.channel ?? 'unknown'] ?? 0) + num(f.amount_minor);
+            fundingRequestsByStatus[f.status ?? 'unknown'] = (fundingRequestsByStatus[f.status ?? 'unknown'] ?? 0) + 1;
+        }
+
+        const disputesByStatus: Record<string, number> = {};
+        for (const dispute of d.disputes) disputesByStatus[dispute.status ?? 'unknown'] = (disputesByStatus[dispute.status ?? 'unknown'] ?? 0) + 1;
+
+        const refundsByStatus: Record<string, number> = {};
+        for (const refund of d.refunds) refundsByStatus[refund.status ?? 'unknown'] = (refundsByStatus[refund.status ?? 'unknown'] ?? 0) + 1;
+
+        const settlementByStatus: Record<string, number> = {};
+        for (const settlement of d.settlements) settlementByStatus[settlement.status ?? 'unknown'] = (settlementByStatus[settlement.status ?? 'unknown'] ?? 0) + 1;
 
         const stationMap = new Map<string, { station_id: string; count: number; revenueMinor: number }>();
         for (const p of delivered) {
@@ -3060,7 +3077,23 @@ const route: FastifyPluginAsync = async (fastify) => {
                 revenueByActorType,
                 topStations,
                 auditActionsBreakdown,
-                securitySeveritiesBreakdown
+                securitySeveritiesBreakdown,
+                fundingByChannel,
+                fundingRequestsByStatus,
+                disputesByStatus,
+                refundsByStatus,
+                settlementByStatus,
+            },
+            sources: {
+                purchases: d.purchases.length,
+                paymentTransactions: d.funding.length,
+                fundingRequests: (d.fundingRequests || []).length,
+                refunds: d.refunds.length,
+                disputes: d.disputes.length,
+                customers: d.newCustomers.length,
+                settlements: d.settlements.length,
+                auditLogs: (d.auditLogs || []).length,
+                securityEvents: (d.securityEvents || []).length,
             },
         };
     }
