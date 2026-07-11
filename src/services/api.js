@@ -86,10 +86,6 @@ apiClient.interceptors.request.use((config) => {
   // After Phase 7, bev_token is HttpOnly so getCookie("token") returns "".
   // Auth is carried automatically via withCredentials (bev_token cookie).
   touchSession();
-  // Retain Authorization header injection for backward compat: JS-readable token
-  // (present during cutover window before all sessions have rotated to HttpOnly).
-  const jsToken = getCookie("token");
-  if (jsToken) config.headers.Authorization = `Bearer ${jsToken}`;
   return config;
 });
 

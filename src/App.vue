@@ -623,6 +623,13 @@ export default {
     },
     async loadUser() {
       if (this.isLogin) return;
+      if (!readSessionState()) {
+        this.currentRoleId = null;
+        this.currentUserName = null;
+        window.location.hash = "#/login";
+        this.syncHash();
+        return;
+      }
       try {
         // Primary: use /api/auth/me which validates the HttpOnly bev_token cookie server-side.
         // Falls back to currentUserInfo() if /api/auth/me is not yet available (during cutover).

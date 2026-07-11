@@ -63,7 +63,7 @@ export default defineConfig(({ command }) => {
     },
     build: {
         target: 'es2022',
-        sourcemap: true,
+        sourcemap: false,
         outDir: resolve(__dirname, process.env.VITE_CUSTOMER_OUT_DIR ?? '../../dist/wallet-customer'),
         emptyOutDir: false,
     },

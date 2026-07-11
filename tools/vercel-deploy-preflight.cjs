@@ -4,10 +4,11 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
+const beverlyTeamId = "team_QaH3UbO8a73beiWz5LmJc5k4";
 
 function readJson(relativePath, fallback = null) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8").replace(/^\uFEFF/, ""));
   } catch {
     return fallback;
   }
@@ -17,7 +18,8 @@ function fail(message) {
   throw new Error(message);
 }
 
-function checkVercelDeployPreflight() {
+function checkVercelDeployPreflight(options = {}) {
+  const env = options.env || process.env;
   const packageJson = readJson("package.json", {});
   const vercelJson = readJson("vercel.json", {});
   const vercelProject = readJson(".vercel/project.json", null);
@@ -47,7 +49,13 @@ function checkVercelDeployPreflight() {
     failures.push("Hobby-safe Vercel crons must run once daily");
   }
 
-  if (vercelRepo?.projects?.[0]?.orgId && !process.env.VERCEL_SCOPE && !process.env.VERCEL_TEAM_ID) {
+  const linkedOrgId = vercelProject?.orgId || vercelRepo?.projects?.[0]?.orgId || "";
+  const requestedScope = env.VERCEL_TEAM_ID || env.VERCEL_ORG_ID || env.VERCEL_SCOPE || "";
+  if (linkedOrgId === beverlyTeamId && requestedScope !== beverlyTeamId) {
+    failures.push(
+      `Vercel deploy scope must be ${beverlyTeamId}. July 2 failed because a non-member actor deployed from a personal scope; set VERCEL_TEAM_ID or VERCEL_ORG_ID to ${beverlyTeamId} before running vercel deploy.`
+    );
+  } else if (linkedOrgId && !requestedScope) {
     warnings.push("local Vercel link is scoped; set VERCEL_SCOPE or re-authenticate before CLI deploys");
   }
 
