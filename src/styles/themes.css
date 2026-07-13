@@ -25,6 +25,11 @@
   --color-surface-card:    oklch(100% 0 0);
   --color-surface-glass:   oklch(100% 0 0 / 0.88);
   --color-surface-overlay: oklch(20% 0.020 240 / 0.55);
+  --glass-surface:         oklch(100% 0 0 / 0.68);
+  --glass-surface-strong:  oklch(100% 0 0 / 0.84);
+  --glass-border:          oklch(100% 0 0 / 0.78);
+  --glass-highlight:       inset 0 1px 0 oklch(100% 0 0 / 0.82);
+  --glass-shadow:          0 18px 46px oklch(22% 0.02 240 / 0.09), 0 2px 8px oklch(22% 0.02 240 / 0.05);
 
   /* ── Borders — wallet light border scale ── */
   --color-border:        oklch(20% 0.020 240 / 0.08);
@@ -94,6 +99,11 @@
   --color-surface-card: #0b140e;
   --color-surface-glass: rgba(7, 14, 10, 0.94);
   --color-surface-overlay: rgba(1, 6, 3, 0.9);
+  --glass-surface: rgba(9, 22, 14, 0.72);
+  --glass-surface-strong: rgba(9, 22, 14, 0.88);
+  --glass-border: rgba(134, 239, 172, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(220, 252, 231, 0.12);
+  --glass-shadow: 0 20px 52px rgba(0, 0, 0, 0.34), 0 2px 8px rgba(0, 0, 0, 0.22);
   --color-border: rgba(74, 222, 128, 0.34);
   --color-border-strong: rgba(134, 239, 172, 0.62);
   --color-success: #4ade80;
@@ -142,6 +152,11 @@
   --color-surface-card: #0f0f0f;
   --color-surface-glass: rgba(10, 10, 10, 0.92);
   --color-surface-overlay: rgba(0, 0, 0, 0.88);
+  --glass-surface: rgba(12, 12, 12, 0.9);
+  --glass-surface-strong: rgba(12, 12, 12, 0.96);
+  --glass-border: rgba(255, 214, 10, 0.44);
+  --glass-highlight: inset 0 1px 0 rgba(255, 243, 163, 0.2);
+  --glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 214, 10, 0.08);
   --color-border: rgba(255, 214, 10, 0.42);
   --color-border-strong: rgba(255, 214, 10, 0.72);
   --color-success: #22c55e;

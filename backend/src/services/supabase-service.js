@@ -538,27 +538,6 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
-/* ── MFA / 2FA (production stubs) ── */
-
-async function enrollMFAFactor() {
-  // TODO: Production — call supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'Beverly' })
-  return { factorId: null, totpUri: null, secret: null };
-}
-
-async function verifyMFAFactor(factorId, code) {
-  // TODO: Production — call supabase.auth.mfa.challengeAndVerify({ factorId, code })
-  return { verified: false };
-}
-
-async function listMFAFactors() {
-  // TODO: Production — call supabase.auth.mfa.listFactors()
-  return { factors: [] };
-}
-
-async function unenrollMFAFactor(factorId) {
-  // TODO: Production — call supabase.auth.mfa.unenroll({ factorId })
-  return { success: false };
-}
 
 module.exports = {
   authEnabled,
@@ -569,11 +548,9 @@ module.exports = {
   deleteAuthUser,
   resolveAuthEmail,
   emailFromLogin,
-  enrollMFAFactor,
   getAuthUserByIdentifier,
   getAuthUserByUserId,
   ensureStorageBuckets,
-  listMFAFactors,
   restRequest,
   restRequestWithResponse,
   serviceConfigured,
@@ -582,7 +559,5 @@ module.exports = {
   authUserFromAccessToken,
   storageEnabled,
   storageReport,
-  unenrollMFAFactor,
-  uploadStorageObject,
-  verifyMFAFactor
+  uploadStorageObject
 };

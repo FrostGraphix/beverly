@@ -47,7 +47,15 @@ function sampleRow() {
 }
 
 function apiBody(url) {
-  if (url.includes("/user/login")) return { code: 0, data: { token: "qa-token", userId: "admin" } };
+  if (url.includes("/auth/me")) {
+    return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin" } };
+  }
+  if (url.includes("/user/login")) {
+    return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin" } };
+  }
+  if (url.includes("/user/info")) {
+    return { code: 0, data: { data: [{ userId: "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin" }], total: 1 } };
+  }
   if (url.includes("/dashboard/readPanelGroup")) {
     return { code: 0, data: { totalAccountCount: 100, totalPurchaseTimes: 20, totalPurchaseUnit: 300, totalPurchaseMoney: 400 } };
   }
@@ -115,6 +123,17 @@ async function login(page) {
   await page.fill('[data-testid="login-password"]', "admin");
   await page.click('[data-testid="login-submit"]');
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
+}
+
+async function seedAuth(page) {
+  await page.evaluate(() => {
+    const now = Date.now();
+    localStorage.setItem("beverly.session", JSON.stringify({ lastActiveAt: now, expiresAt: now + 30 * 60 * 1000 }));
+    document.cookie = "userId=admin; path=/";
+    document.cookie = "userName=ACB(admin); path=/";
+    document.cookie = "roleId=super-admin; path=/";
+    document.cookie = "userRemark=super-admin; path=/";
+  });
 }
 
 async function assertKeyboardHealth(page) {
@@ -194,13 +213,24 @@ async function main() {
 
       for (const theme of themes) {
         await page.evaluate((nextTheme) => {
-          localStorage.setItem("beverly.theme", nextTheme);
+          localStorage.setItem("acob-theme", nextTheme);
           document.documentElement.dataset.theme = nextTheme;
         }, theme);
 
         for (const route of routes) {
+          if (route.name !== "login") await seedAuth(page);
           await page.goto(`${appUrl}/${route.hash}`, { waitUntil: "domcontentloaded" });
-          await page.waitForSelector(route.ready, { state: "attached", timeout: 10000 });
+          try {
+            await page.waitForSelector(route.ready, { state: "attached", timeout: 10000 });
+          } catch (error) {
+            const state = await page.evaluate(() => ({
+              href: location.href,
+              title: document.title,
+              rootClass: document.querySelector("#app-root")?.className || "",
+              text: document.body.innerText.slice(0, 240)
+            }));
+            throw new Error(`Route ${route.name} did not reach ${route.ready}: ${JSON.stringify(state)}: ${error.message}`);
+          }
           await page.emulateMedia({ reducedMotion: "reduce" });
           await assertPageHealth(page, theme);
           const screenshot = path.join(artifactDir, `${viewport.name}-${theme}-${route.name}.png`);
@@ -208,6 +238,7 @@ async function main() {
           results.push(path.relative(root, screenshot).replace(/\\/g, "/"));
         }
 
+        await seedAuth(page);
         await page.goto(`${appUrl}/#/management/account`, { waitUntil: "domcontentloaded" });
         await page.waitForSelector(".table-page", { timeout: 10000 });
         await page.evaluate(() => {

@@ -137,6 +137,9 @@ function apiBody(url) {
   if (normalizedUrl.includes("/user/login")) {
     return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)" } };
   }
+  if (normalizedUrl.includes("/auth/me")) {
+    return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
+  }
   if (normalizedUrl.includes("/user/read")) {
     return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
   }

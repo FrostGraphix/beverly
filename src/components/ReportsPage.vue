@@ -12,9 +12,10 @@
 
     <!-- Report Type Selector -->
     <div class="report-type-strip">
-      <button
+      <BaseButton
         v-for="rt in reportTypes"
         :key="rt.id"
+        variant="quiet"
         class="report-type-card"
         :class="{ active: selectedType === rt.id }"
         @click="selectType(rt.id)"
@@ -22,26 +23,28 @@
         <span class="report-type-icon" v-html="typeIcon(rt.icon)"></span>
         <span class="report-type-label">{{ rt.label }}</span>
         <span class="report-type-desc">{{ rt.description }}</span>
-      </button>
+      </BaseButton>
     </div>
 
     <!-- Controls Bar -->
     <div class="report-controls">
       <div class="report-presets">
-        <button
+        <BaseButton
           v-for="p in presets"
           :key="p.value"
+          variant="quiet"
           class="report-preset-btn"
           :class="{ active: activePreset === p.value }"
           @click="applyPreset(p.value)"
-        >{{ p.label }}</button>
+        >{{ p.label }}</BaseButton>
       </div>
       <ExportToolbar
         :rows="rows"
         :columns="reportColumns"
         :title="activeReportLabel"
         :filename="`beverly-${selectedType}-report`"
-        :disabled="!rows.length"
+        :disabled="loading || !reportData"
+        :allowed-formats="['csv', 'excel', 'pdf']"
         :pdfExporter="exportPremiumPdf"
       />
     </div>
@@ -78,32 +81,55 @@
     </div>
 
     <!-- Empty -->
-    <div v-else-if="!rows.length && !loading" class="ops-empty">No data for this report period.</div>
+    <div v-else-if="!rows.length && !loading" class="ops-empty">
+      <strong>No report data</strong>
+      <span>Try another period.</span>
+      <BaseButton size="sm" @click="applyPreset('30d')">Use 30 days</BaseButton>
+    </div>
 
     <!-- Data Table -->
-    <div v-else class="ops-table-wrap">
-      <table class="ops-table" :aria-label="`${activeReportLabel} table`">
+    <BaseTableShell v-else class="report-table-shell">
+      <div class="ops-table-wrap">
+        <table class="ops-table" :aria-label="`${activeReportLabel} table`">
         <thead>
           <tr>
             <th v-for="col in reportColumns" :key="col.key">{{ col.label }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, ri) in rows" :key="ri" @click="selectedRow = row" :class="{ 'row-selected': selectedRow === row }">
+          <tr v-for="(row, ri) in pagedRows" :key="ri" @click="selectedRow = row" :class="{ 'row-selected': selectedRow === row }">
             <td v-for="col in reportColumns" :key="col.key">
               <template v-if="typeof col.value === 'function'">{{ col.value(row) }}</template>
               <template v-else>{{ row[col.key] ?? '—' }}</template>
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+      <template #footer>
+        <div class="pagination">
+          <span>Total {{ rows.length }}</span>
+          <BaseSelect v-model="pageSize" class="sort-select" aria-label="Page size" @change="changePageSize">
+            <option v-for="option in pageSizeOptions" :key="option" :value="option">{{ option }}/page</option>
+          </BaseSelect>
+          <BaseButton class="page-chip" size="sm" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">&#8249;</BaseButton>
+          <BaseButton v-for="page in pages" :key="page" :class="['page-chip', page === currentPage ? 'active' : '']" size="sm" @click="goToPage(page)">{{ page }}</BaseButton>
+          <BaseButton class="page-chip" size="sm" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">&#8250;</BaseButton>
+          <span>Go to</span>
+          <BaseInput v-model="gotoPageInput" class="goto-input" type="number" min="1" :max="pageCount" aria-label="Go to page" @keyup.enter="applyGoto" />
+          <BaseButton class="page-chip" size="sm" @click="applyGoto">Go</BaseButton>
+        </div>
+      </template>
+    </BaseTableShell>
 
     <!-- Detail Drawer -->
-    <aside v-if="selectedRow" class="ops-drawer" aria-label="Row detail">
+    <div v-if="selectedRow" class="ops-drawer-overlay" @click.self="closeDrawer">
+    <aside class="ops-drawer" role="dialog" aria-modal="true" aria-label="Row detail">
       <div class="drawer-head">
         <strong>{{ activeReportLabel }} Detail</strong>
-        <BaseButton size="sm" variant="ghost" @click="selectedRow = null">✕</BaseButton>
+        <BaseIconButton class="drawer-close" aria-label="Close row detail" @click="closeDrawer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </BaseIconButton>
       </div>
       <dl class="drawer-fields">
         <template v-for="col in reportColumns" :key="col.key">
@@ -115,13 +141,19 @@
         </template>
       </dl>
     </aside>
+    </div>
   </section>
 </template>
 
 <script>
 import BaseButton from "./base/BaseButton.vue";
+import BaseIconButton from "./base/BaseIconButton.vue";
+import BaseInput from "./base/BaseInput.vue";
+import BaseSelect from "./base/BaseSelect.vue";
+import BaseTableShell from "./base/BaseTableShell.vue";
 import ExportToolbar from "./base/ExportToolbar.vue";
 import EChartPanel from "./EChartPanel.vue";
+import { pageNumbers, pageSizeOptions as tablePageSizeOptions, paginateRows, totalPages } from "../services/table-helpers.mjs";
 import {
   reportTypes,
   fetcherForType,
@@ -134,36 +166,50 @@ import { downloadReportPdf } from "../services/report-pdf.js";
 
 export default {
   name: "ReportsPage",
-  components: { BaseButton, ExportToolbar, EChartPanel },
+  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect, BaseTableShell, ExportToolbar, EChartPanel },
   data() {
     return {
       reportTypes,
-      selectedType: "revenue",
-      activePreset: "30d",
+      selectedType: "financial",
+      activePreset: "7d",
       rows: [],
-      reportData: {},
+      reportData: null,
       kpis: [],
       chartOptions: null,
       loading: false,
       error: "",
       selectedRow: null,
+      themeObserver: null,
+      currentPage: 1,
+      pageSize: 10,
+      pageSizeOptions: tablePageSizeOptions,
+      gotoPageInput: "1",
       presets: [
-        { label: "Today", value: "today" },
+        { label: "1 Day", value: "1d" },
         { label: "7 Days", value: "7d" },
         { label: "30 Days", value: "30d" },
-        { label: "90 Days", value: "90d" },
         { label: "1 Year", value: "365d" }
       ]
     };
   },
   computed: {
     reportColumns() { return columnsForType(this.selectedType); },
+    pageCount() { return totalPages(this.rows.length, this.pageSize); },
+    pages() { return pageNumbers(this.currentPage, this.pageCount); },
+    pagedRows() { return paginateRows(this.rows, this.currentPage, this.pageSize); },
     activeReportLabel() {
       return this.reportTypes.find((t) => t.id === this.selectedType)?.label || "Report";
     }
   },
   mounted() {
+    this.themeObserver = new MutationObserver(() => this.rebuildChart());
+    this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    document.addEventListener("keydown", this.handleKeydown);
     this.loadReport();
+  },
+  beforeUnmount() {
+    this.themeObserver?.disconnect();
+    document.removeEventListener("keydown", this.handleKeydown);
   },
   methods: {
     selectType(type) {
@@ -184,10 +230,13 @@ export default {
         const fetcher = fetcherForType(this.selectedType);
         this.reportData = await fetcher(dateRange);
         this.rows = this.reportData.rows || [];
+        this.currentPage = 1;
+        this.gotoPageInput = "1";
         this.kpis = buildKPIs(this.selectedType, this.reportData);
-        this.chartOptions = buildChartOptions(this.selectedType, this.reportData);
+        this.chartOptions = buildChartOptions(this.selectedType, this.reportData, this.currentTheme());
       } catch (e) {
         this.error = e?.message || "Failed to load report.";
+        this.reportData = null;
         this.rows = [];
         this.kpis = [];
         this.chartOptions = null;
@@ -205,6 +254,23 @@ export default {
       };
       return icons[icon] || icons.chart;
     },
+    goToPage(page) {
+      this.currentPage = Math.max(1, Math.min(this.pageCount, Number(page) || 1));
+      this.gotoPageInput = String(this.currentPage);
+      this.selectedRow = null;
+    },
+    changePageSize() {
+      this.goToPage(1);
+    },
+    applyGoto() {
+      this.goToPage(this.gotoPageInput);
+    },
+    closeDrawer() {
+      this.selectedRow = null;
+    },
+    handleKeydown(event) {
+      if (event.key === "Escape") this.closeDrawer();
+    },
     exportPremiumPdf() {
       if (!this.reportData) return;
       const dateRange = dateRangeFromPreset(this.activePreset);
@@ -217,19 +283,40 @@ export default {
         chartData: this.reportData.chartData || [],
         columns: this.reportColumns,
         rows: this.rows,
-        insights: [
-          `Activity trend shows consistent growth over the selected period.`,
-          `Ledger audits report all transactions are successfully matched.`,
-          `Customer consumption matches expected prepay averages.`
-        ]
+        insights: this.reportInsights()
       });
+    },
+    currentTheme() {
+      return document.documentElement.dataset.theme || "light";
+    },
+    rebuildChart() {
+      if (!this.reportData) return;
+      this.chartOptions = buildChartOptions(this.selectedType, this.reportData, this.currentTheme());
+    },
+    reportInsights() {
+      const sources = Object.entries(this.reportData?.sources || {}).filter(([, value]) => Number(value) > 0);
+      return [
+        `${this.rows.length.toLocaleString("en-NG")} detail rows matched this report period.`,
+        sources.length ? `${sources.length} verified data sources contributed records.` : "No contributing records were returned.",
+        "No report request errors occurred."
+      ];
     }
   }
 };
 </script>
 
 <style scoped>
-.reports-page { display: flex; flex-direction: column; gap: 20px; padding: 24px; min-height: 100%; }
+.reports-page {
+  --report-accent: var(--primary);
+  --report-accent-2: var(--primary-hover);
+  --report-good: var(--success);
+  --report-border: color-mix(in srgb, var(--border-color, #e2e8f0) 78%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  min-height: 100%;
+}
 
 /* Header */
 .ops-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
@@ -245,6 +332,10 @@ export default {
 }
 
 .report-type-card {
+  width: 100%;
+  height: auto;
+  min-height: 112px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -256,23 +347,32 @@ export default {
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   text-align: left;
+  white-space: normal;
   font-family: inherit;
   color: inherit;
 }
 .report-type-card:hover {
-  border-color: var(--bev-color-green-300, #86efac);
+  border-color: var(--report-accent);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.08);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--report-accent) 16%, transparent);
 }
 .report-type-card.active {
-  border-color: var(--bev-color-green-600, #059669);
-  background: linear-gradient(135deg, rgba(5, 150, 105, 0.06), rgba(5, 150, 105, 0.02));
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+  border-color: var(--report-accent);
+  background: color-mix(in srgb, var(--primary-light) 76%, var(--glass-surface-strong));
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.report-type-icon { width: 20px; height: 20px; color: var(--bev-color-green-600, #059669); }
+.report-type-icon { width: 20px; height: 20px; color: var(--report-accent); }
 .report-type-icon svg { width: 100%; height: 100%; }
-.report-type-label { font-size: 13px; font-weight: 700; color: var(--text-strong); }
+.report-type-label,
+.report-type-desc {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.report-type-label { font-size: 13px; font-weight: 700; line-height: 1.3; color: var(--text-strong); }
 .report-type-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
 
 /* Controls */
@@ -290,10 +390,10 @@ export default {
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.report-preset-btn:hover { border-color: var(--bev-color-green-300, #86efac); color: var(--text-main); }
+.report-preset-btn:hover { border-color: var(--report-accent); color: var(--text-main); }
 .report-preset-btn.active {
-  background: var(--bev-color-green-600, #059669);
-  border-color: var(--bev-color-green-600, #059669);
+  background: var(--report-accent);
+  border-color: var(--report-accent);
   color: #fff;
 }
 
@@ -304,11 +404,11 @@ export default {
 .kpi-value { font-size: var(--bev-font-size-2xl, 18px); font-weight: 800; color: var(--text-strong); }
 .tone-warn .kpi-value { color: var(--bev-color-amber-500, #f59e0b); }
 .tone-danger .kpi-value { color: var(--bev-color-red-500, #ef4444); }
-.tone-good .kpi-value { color: var(--bev-color-green-600, #059669); }
-.tone-info .kpi-value { color: var(--bev-color-blue-500, #0ea5e9); }
+.tone-good .kpi-value { color: var(--report-good); }
+.tone-info .kpi-value { color: var(--primary); }
 
 .kpi-delta { font-size: 11px; font-weight: 700; }
-.delta-up { color: var(--bev-color-green-600, #059669); }
+.delta-up { color: var(--report-good); }
 .delta-down { color: var(--bev-color-red-500, #ef4444); }
 
 /* Chart */
@@ -332,11 +432,14 @@ export default {
 .skeleton-row-strip { height: 44px; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-page) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--bev-radius-sm, 6px); }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .ops-error { background: var(--bev-color-red-50, #fef2f2); border: 1px solid var(--bev-color-red-100, #fee2e2); color: var(--bev-color-red-600, #dc2626); border-radius: var(--bev-radius-md, 8px); padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: 13px; }
-.ops-empty { padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.ops-empty { display: grid; justify-items: center; gap: 8px; padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.ops-empty strong { color: var(--text-strong); font-size: 16px; }
 
 /* Drawer */
-.ops-drawer { position: fixed; top: 0; right: 0; width: 360px; max-width: 100vw; height: 100vh; background: var(--bg-card); border-left: 1px solid var(--border-color); box-shadow: var(--bev-shadow-xl); padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; z-index: 200; }
+.ops-drawer-overlay { position: fixed; inset: 0; z-index: 2100; background: var(--bg-overlay); }
+.ops-drawer { position: absolute; top: 0; right: 0; width: min(400px, 100vw); height: 100%; background: var(--bg-card); border-left: 1px solid var(--border-color); box-shadow: var(--bev-shadow-xl); padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; }
+.drawer-close svg { width: 18px; height: 18px; }
 .drawer-fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 13px; }
 .drawer-fields dt { color: var(--text-muted); font-weight: 700; font-size: 11px; text-transform: uppercase; padding-top: 2px; }
 .drawer-fields dd { color: var(--text-main); word-break: break-all; }
@@ -463,6 +566,54 @@ export default {
   border-color: #e5e5e5;
 }
 
+/* Theme-safe report interactions. */
+:global([data-theme="light"]) .report-type-card:hover,
+:global([data-theme="light"]) .report-type-card.active,
+:global([data-theme="light"]) .report-preset-btn:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-light) 70%, var(--glass-surface-strong));
+  color: var(--text-strong);
+}
+
+:global([data-theme="executive"]) .report-type-card:hover,
+:global([data-theme="executive"]) .report-type-card.active,
+:global([data-theme="executive"]) .report-preset-btn:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-light) 72%, var(--glass-surface-strong));
+  color: var(--text-strong);
+}
+
+:global([data-theme="contrast"]) .report-type-card:hover,
+:global([data-theme="contrast"]) .report-type-card.active,
+:global([data-theme="contrast"]) .report-preset-btn:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-light) 72%, var(--glass-surface-strong));
+  color: var(--text-strong);
+}
+
+:global([data-theme]) .report-type-icon {
+  color: var(--primary);
+}
+
+:global([data-theme]) .report-preset-btn.active,
+:global([data-theme]) .reports-page :deep(.base-button--primary) {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--text-inverse);
+  box-shadow: none;
+}
+
+:global([data-theme]) .reports-page :deep(.base-button--primary:hover) {
+  border-color: var(--primary-hover);
+  background: var(--primary-hover);
+  color: var(--text-inverse);
+}
+
+:global([data-theme]) .ops-table tbody tr:hover,
+:global([data-theme]) .ops-table tbody tr.row-selected {
+  background: var(--primary-light);
+}
+
 @media (max-width: 768px) {
   .reports-page { padding: 16px; }
   .report-type-strip { grid-template-columns: repeat(2, 1fr); }
@@ -474,5 +625,21 @@ export default {
 
 @media (max-width: 480px) {
   .report-type-strip { grid-template-columns: 1fr; }
+}
+
+.reports-page .report-type-card.active {
+  border-color: var(--report-accent) !important;
+  background: color-mix(in srgb, var(--primary-light) 76%, var(--glass-surface-strong)) !important;
+  box-shadow: 0 0 0 3px var(--primary-light) !important;
+}
+
+.reports-page .report-type-icon {
+  color: var(--report-accent) !important;
+}
+
+.reports-page .report-preset-btn.active {
+  background: var(--report-accent) !important;
+  border-color: var(--report-accent) !important;
+  color: var(--text-inverse) !important;
 }
 </style>

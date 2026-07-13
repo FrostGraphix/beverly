@@ -81,11 +81,6 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // Enrollment status never proves this session passed MFA.
     const mfaVerified = false;
 
-    const rawRole = (user.user_metadata?.['role_key'] as string | undefined)
-        ?? (user.app_metadata?.['role_key'] as string | undefined)
-        ?? (user.user_metadata?.['role'] as string | undefined)
-        ?? (user.app_metadata?.['role'] as string | undefined);
-
     // 1. Vendor user lookup
     const { data: vu } = await adminClient
         .from('vendor_users')
@@ -147,7 +142,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
         .select('id, auth_user_id, user_id, email, role_key')
         .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
-    const staffRole = (staffRow as any)?.role_key ?? rawRole;
+    const staffRole = (staffRow as { role_key?: string } | null)?.role_key;
 
     if (staffRow && staffRole && (STAFF_ROLES.has(staffRole) || staffRole.startsWith('custom-'))) {
         const mfaEnrolled = await staffMfaEnrolled(userId);

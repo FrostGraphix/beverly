@@ -3,7 +3,7 @@
     <BaseButton
       class="export-trigger"
       size="sm"
-      :disabled="disabled || !rows.length"
+      :disabled="disabled || (!rows.length && !pdfExporter)"
       @click="open = !open"
       :aria-expanded="String(open)"
       aria-haspopup="menu"
@@ -16,7 +16,7 @@
     <transition name="export-drop">
       <div v-show="open" class="export-menu" role="menu" aria-label="Export formats">
         <button
-          v-for="fmt in formats"
+          v-for="fmt in visibleFormats"
           :key="fmt.id"
           type="button"
           class="export-option"
@@ -51,7 +51,11 @@ export default {
     title: { type: String, default: "Export" },
     filename: { type: String, default: "beverly-export" },
     disabled: { type: Boolean, default: false },
-    pdfExporter: { type: Function, default: null }
+    pdfExporter: { type: Function, default: null },
+    allowedFormats: {
+      type: Array,
+      default: () => ["csv", "excel", "pdf", "json", "print"]
+    }
   },
   data() {
     return {
@@ -66,6 +70,11 @@ export default {
         { id: "print", label: "Print", ext: "", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>' }
       ]
     };
+  },
+  computed: {
+    visibleFormats() {
+      return this.formats.filter((format) => this.allowedFormats.includes(format.id));
+    }
   },
   mounted() {
     document.addEventListener("pointerdown", this.handleOutside, true);
@@ -85,7 +94,7 @@ export default {
       if (e.key === "Escape" && this.open) this.open = false;
     },
     async doExport(format) {
-      if (!this.rows.length) return;
+      if (!this.rows.length && !(format === "pdf" && this.pdfExporter)) return;
       this.exporting = true;
       this.open = false;
 

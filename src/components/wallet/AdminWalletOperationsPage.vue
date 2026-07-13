@@ -14,7 +14,9 @@
         <div v-for="section in walletNavSections" :key="section.label" class="wallet-nav-section">
           <p>{{ section.label }}</p>
           <a v-for="item in section.items" :key="item.page" :href="item.hash" :class="['wallet-nav-item', activePage === item.page ? 'active' : '']">
-            <span class="wallet-nav-icon" v-html="item.icon"></span>
+            <span class="wallet-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path :d="item.icon"/></svg>
+            </span>
             <span>{{ item.label }}</span>
             <b v-if="item.count">{{ item.count }}</b>
           </a>
@@ -193,17 +195,17 @@ export default {
   computed: {
     walletNavSections() {
       const icon = {
-        dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
-        pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
-        users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>',
-        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>',
-        check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="10"/></svg>',
-        wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a3 3 0 0 1 3-3h14v16H6a3 3 0 0 1-3-3V7z"/><path d="M16 12h4"/></svg>',
-        money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>',
-        box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21 16-9 5-9-5V8l9-5 9 5v8z"/><path d="M3.3 7.3 12 12l8.7-4.7M12 22V12"/></svg>',
-        flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1v12z"/><path d="M4 22v-7"/></svg>',
-        chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
-        audit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+        dashboard: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
+        pulse: "M3 12h4l3-8 4 16 3-8h4",
+        users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.87",
+        plus: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M12 8v8M8 12h8",
+        check: "M20 6 9 17l-5-5M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20",
+        wallet: "M3 7a3 3 0 0 1 3-3h14v16H6a3 3 0 0 1-3-3V7zM16 12h4",
+        money: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6",
+        box: "m21 16-9 5-9-5V8l9-5 9 5v8zM3.3 7.3 12 12l8.7-4.7M12 22V12",
+        flag: "M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1v19",
+        chart: "M3 3v18h18m-2-12-5 5-4-4-3 3",
+        audit: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
       };
       return [
         { label: "Overview", items: [

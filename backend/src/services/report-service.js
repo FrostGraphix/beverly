@@ -5,8 +5,188 @@
  * Depends on: wallet-ledger-service.js, wallet-funding-service.js, wallet-purchase-service.js
  */
 
-const crypto = require("crypto");
 const { ensureDatabase } = require("./local-database");
+const supabase = require("./supabase-service");
+const consumptionStore = require("./consumption-store");
+const { stations: reportStations } = require("./refresh-targets");
+
+const liveTokenPath = "/api/token/creditTokenRecord/readMore";
+
+function liveApiBaseUrl() {
+  return String(process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || "").replace(/\/+$/, "");
+}
+
+function usesShortLiveRange(start, end) {
+  const duration = new Date(end).getTime() - new Date(start).getTime();
+  return Number.isFinite(duration) && duration >= 0 && duration <= 31 * 86400000;
+}
+
+async function liveTokenPayments(start, end, filters = {}) {
+  const baseUrl = liveApiBaseUrl();
+  if (!baseUrl || !usesShortLiveRange(start, end)) return null;
+  const token = process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "";
+  const stationIds = filters.stationId ? [filters.stationId] : reportStations;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const batches = await Promise.all(stationIds.map(async (stationId) => {
+      const url = new URL(`${baseUrl}${liveTokenPath}`);
+      url.searchParams.set("FROM", start);
+      url.searchParams.set("TO", end);
+      url.searchParams.set("SITE_ID", stationId);
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        signal: controller.signal
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.reason || body.msg || `Live report request failed: ${response.status}`);
+      const rows = Array.isArray(body.payments) ? body.payments : [];
+      if (!rows.length && Array.isArray(body.errors) && body.errors.length) throw new Error(`Live report source failed for ${stationId}`);
+      return rows.map((row) => ({ ...row, reportStationId: stationId }));
+    }));
+    return batches.flat();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function liveRevenueReport(payments, stationId = "") {
+  const byDate = new Map();
+  const meters = new Set();
+  const activeStations = new Set();
+  for (const payment of payments) {
+    const date = String(payment.timestamp || "").slice(0, 10);
+    if (!date) continue;
+    const station = payment.reportStationId || stationId;
+    if (station) activeStations.add(station);
+    const current = byDate.get(date) || { date, transactions: 0, revenue: 0, meters: new Set() };
+    current.transactions += 1;
+    current.revenue += Math.round((Number(payment.amount) || 0) * 100);
+    const meter = payment.meterId || payment.serialNumber || "";
+    if (meter) {
+      current.meters.add(meter);
+      meters.add(`${station}:${meter}`);
+    }
+    byDate.set(date, current);
+  }
+  const rows = Array.from(byDate.values())
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .map((row) => ({
+      date: row.date,
+      transactions: row.transactions,
+      revenue: row.revenue,
+      avgTicket: row.transactions ? Math.round(row.revenue / row.transactions) : 0,
+      station: stationId || "All Stations"
+    }));
+  const totalRevenue = rows.reduce((sum, row) => sum + row.revenue, 0);
+  const totalTransactions = rows.reduce((sum, row) => sum + row.transactions, 0);
+  return {
+    rows,
+    chartData: rows.map((row) => ({ label: row.date, value: row.revenue })),
+    summary: {
+      totalRevenue,
+      totalTransactions,
+      avgTicket: totalTransactions ? Math.round(totalRevenue / totalTransactions) : 0,
+      activeMeters: meters.size,
+      activeStations: activeStations.size,
+      revenueDelta: 0,
+      transactionDelta: 0,
+      avgTicketDelta: 0
+    }
+  };
+}
+
+function liveTransactionReport(payments, stationId = "") {
+  const rows = payments.map((payment) => ({
+    date: String(payment.timestamp || "").replace("T", " ").slice(0, 16),
+    meter: payment.meterId || payment.serialNumber || "-",
+    station: payment.reportStationId || stationId || "All Stations",
+    customer: payment.customerId || "-",
+    amount: Math.round((Number(payment.amount) || 0) * 100),
+    kwh: Number(payment.transactionKwh) || 0
+  })).sort((left, right) => right.date.localeCompare(left.date));
+  const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+  const totalKwh = rows.reduce((sum, row) => sum + row.kwh, 0);
+  return {
+    rows,
+    chartData: rows.slice().reverse().map((row) => ({ label: row.date.slice(0, 10), value: row.amount })),
+    summary: {
+      totalAmount,
+      totalTransactions: rows.length,
+      totalKwh: Math.round(totalKwh * 1000) / 1000,
+      uniqueMeters: new Set(rows.filter((row) => row.meter !== "-").map((row) => `${row.station}:${row.meter}`)).size
+    }
+  };
+}
+
+async function supabaseRows(table, dateColumn, start, end, select = "*") {
+  const filters = [`select=${select}`];
+  if (start) filters.push(`${dateColumn}=gte.${encodeURIComponent(start)}`);
+  if (end) filters.push(`${dateColumn}=lte.${encodeURIComponent(end)}`);
+  filters.push(`order=${dateColumn}.asc`);
+  const pathname = `/${table}?${filters.join("&")}`;
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { body } = await supabase.restRequestWithResponse(pathname, {
+      headers: { Range: `${offset}-${offset + pageSize - 1}` }
+    });
+    const page = Array.isArray(body) ? body : [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+function objectValue(value) {
+  if (value && typeof value === "object") return value;
+  try { return JSON.parse(value || "{}"); } catch { return {}; }
+}
+
+function tokenSummaryReport(rows, previousRows, meterRows) {
+  const byDate = new Map();
+  for (const row of rows) {
+    const date = row.tx_date;
+    const current = byDate.get(date) || { date, transactions: 0, revenue: 0, meters: 0, station: "All Stations" };
+    current.transactions += Number(row.tx_count) || 0;
+    current.revenue += Math.round((Number(row.total_revenue) || 0) * 100);
+    current.meters += Number(row.unique_meters) || 0;
+    byDate.set(date, current);
+  }
+  const reportRows = Array.from(byDate.values()).sort((left, right) => left.date.localeCompare(right.date));
+  const totalRevenue = reportRows.reduce((sum, row) => sum + row.revenue, 0);
+  const totalTransactions = reportRows.reduce((sum, row) => sum + row.transactions, 0);
+  const previousRevenue = previousRows.reduce((sum, row) => sum + Math.round((Number(row.total_revenue) || 0) * 100), 0);
+  const previousTransactions = previousRows.reduce((sum, row) => sum + (Number(row.tx_count) || 0), 0);
+  const avgTicket = totalTransactions ? Math.round(totalRevenue / totalTransactions) : 0;
+  const previousAvg = previousTransactions ? Math.round(previousRevenue / previousTransactions) : 0;
+  const meters = new Set();
+  const activeStations = new Set();
+  for (const row of meterRows) {
+    const station = String(row.site_code || row.site_id || "").toUpperCase();
+    const meter = row.meter_id || row.meter_sn || "";
+    if (station) activeStations.add(station);
+    if (station && meter) meters.add(`${station}:${meter}`);
+  }
+  const delta = (current, previous) => previous ? Math.round(((current - previous) / previous) * 1000) / 10 : 0;
+  return {
+    rows: reportRows,
+    chartData: reportRows.map((row) => ({ label: row.date, value: row.revenue })),
+    summary: {
+      totalRevenue,
+      totalTransactions,
+      avgTicket,
+      activeMeters: meters.size,
+      activeStations: activeStations.size,
+      revenueDelta: delta(totalRevenue, previousRevenue),
+      transactionDelta: delta(totalTransactions, previousTransactions),
+      avgTicketDelta: delta(avgTicket, previousAvg)
+    }
+  };
+}
 
 function isMemory(db) {
   return Boolean(db?.memoryStore);
@@ -15,9 +195,11 @@ function isMemory(db) {
 /* ── Revenue Report ── */
 
 async function revenueReport(dateRange = {}, filters = {}) {
-  const db = ensureDatabase();
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
+
+  const livePayments = await liveTokenPayments(start, end, filters);
+  if (livePayments) return liveRevenueReport(livePayments, filters.stationId);
 
   let startMs = new Date(start).getTime();
   let endMs = new Date(end).getTime();
@@ -26,6 +208,18 @@ async function revenueReport(dateRange = {}, filters = {}) {
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
+
+  if (supabase.serviceConfigured()) {
+    const select = "site_id,tx_date,tx_count,total_revenue,total_kwh,unique_meters";
+    const [currentRows, previousRows, meterRows] = await Promise.all([
+      supabaseRows("mv_token_daily_summary", "tx_date", start.slice(0, 10), end.slice(0, 10), select),
+      supabaseRows("mv_token_daily_summary", "tx_date", prevStart.slice(0, 10), prevEnd.slice(0, 10), select),
+      supabaseRows("token_transactions", "transaction_at", start, end, "site_id,site_code,meter_id,meter_sn")
+    ]);
+    return tokenSummaryReport(currentRows, previousRows, meterRows);
+  }
+
+  const db = ensureDatabase();
 
   const currentData = getRevenueStats(db, start, end, filters.stationId);
   const prevData = getRevenueStats(db, prevStart, prevEnd, filters.stationId);
@@ -57,20 +251,20 @@ async function revenueReport(dateRange = {}, filters = {}) {
   const avgTicket = totalTransactions ? Math.round(totalRevenue / totalTransactions) : 0;
   const avgTicketDelta = prevAvgTicket ? Math.round(((avgTicket - prevAvgTicket) / prevAvgTicket) * 1000) / 10 : 0;
 
-  let activeMeters = 0;
+  let meters = 0;
   if (isMemory(db)) {
-    const meters = new Set(
+    const meterIds = new Set(
       (db.memoryStore.wallet_purchase_orders || [])
         .filter(p => p.createdAt >= start && p.createdAt <= end)
         .map(p => p.targetMeter)
     );
-    activeMeters = meters.size;
+    meters = meterIds.size;
   } else {
     try {
       const row = db.prepare(`SELECT count(distinct target_meter) as count FROM wallet_purchase_orders WHERE created_at >= ? AND created_at <= ?`).get(start, end);
-      activeMeters = row?.count || 0;
+      meters = row?.count || 0;
     } catch {
-      activeMeters = 0;
+      meters = 0;
     }
   }
 
@@ -81,10 +275,46 @@ async function revenueReport(dateRange = {}, filters = {}) {
       totalRevenue,
       totalTransactions,
       avgTicket,
-      activeMeters,
+      activeMeters: meters,
+      activeStations: new Set(currentData.map((row) => row.station).filter((station) => station && station !== "All Stations")).size,
       revenueDelta,
       transactionDelta,
       avgTicketDelta
+    }
+  };
+}
+
+async function transactionReport(dateRange = {}, filters = {}) {
+  const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
+  const end = dateRange.end || new Date().toISOString();
+  const livePayments = await liveTokenPayments(start, end, filters);
+  if (livePayments) return liveTransactionReport(livePayments, filters.stationId);
+  if (!supabase.serviceConfigured()) return revenueReport(dateRange, filters);
+  const source = await supabaseRows(
+    "token_transactions",
+    "transaction_at",
+    start,
+    end,
+    "id,meter_sn,meter_id,site_id,site_code,customer_name,amount,kwh,transaction_at"
+  );
+  const rows = source.map((row) => ({
+    date: String(row.transaction_at || "").replace("T", " ").slice(0, 16),
+    meter: row.meter_sn || row.meter_id || "-",
+    station: String(row.site_code || row.site_id || "-").toUpperCase(),
+    customer: row.customer_name || "-",
+    amount: Math.round((Number(row.amount) || 0) * 100),
+    kwh: Number(row.kwh) || 0
+  })).reverse();
+  const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+  const totalKwh = rows.reduce((sum, row) => sum + row.kwh, 0);
+  return {
+    rows,
+    chartData: rows.slice().reverse().map((row) => ({ label: row.date.slice(0, 10), value: row.amount })),
+    summary: {
+      totalAmount,
+      totalTransactions: rows.length,
+      totalKwh: Math.round(totalKwh * 1000) / 1000,
+      uniqueMeters: new Set(rows.filter((row) => row.meter !== "-").map((row) => `${row.station}:${row.meter}`)).size
     }
   };
 }
@@ -148,7 +378,6 @@ function getRevenueStats(db, start, end, stationId) {
 /* ── Wallet Report ── */
 
 async function walletReport(dateRange = {}, filters = {}) {
-  const db = ensureDatabase();
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
 
@@ -159,6 +388,22 @@ async function walletReport(dateRange = {}, filters = {}) {
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
+
+  let db;
+  if (supabase.serviceConfigured()) {
+    const [ledger, funding, purchases] = await Promise.all([
+      supabaseRows("wallet_ledger_entries", "created_at", null, end, "*"),
+      supabaseRows("wallet_funding_requests", "created_at", prevStart, end, "*"),
+      supabaseRows("wallet_purchase_orders", "created_at", prevStart, end, "*")
+    ]);
+    db = { memoryStore: {
+      wallet_ledger_entries: ledger.map((row) => ({ ...row, walletId: row.wallet_id, entryType: row.entry_type, amountMinor: Number(row.amount_minor) || 0, createdAt: row.created_at, detail: objectValue(row.detail_json) })),
+      wallet_funding_requests: funding.map((row) => ({ ...row, amountMinor: Number(row.amount_minor) || 0, verifiedAmountMinor: Number(row.verified_amount_minor) || 0, createdAt: row.created_at })),
+      wallet_purchase_orders: purchases.map((row) => ({ ...row, amountMinor: Number(row.amount_minor) || 0, createdAt: row.created_at }))
+    } };
+  } else {
+    db = ensureDatabase();
+  }
 
   let entries = [];
   if (isMemory(db)) {
@@ -193,6 +438,7 @@ async function walletReport(dateRange = {}, filters = {}) {
   }
 
   const rows = [];
+  const chartData = [];
   const dailyChart = {};
   for (const e of entries) {
     const amt = e.direction === "credit" ? e.amountMinor : -e.amountMinor;
@@ -299,7 +545,6 @@ function getPurchaseVolume(db, start, end) {
 /* ── Customer Report ── */
 
 async function customerReport(dateRange = {}, filters = {}) {
-  const db = ensureDatabase();
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
 
@@ -310,6 +555,42 @@ async function customerReport(dateRange = {}, filters = {}) {
   const duration = endMs - startMs;
   const prevStart = new Date(startMs - duration).toISOString();
   const prevEnd = start;
+
+  if (supabase.serviceConfigured()) {
+    const days = Math.max(1, Math.ceil(duration / 86400000));
+    const granularity = days > 185 ? "monthly" : days > 45 ? "weekly" : "daily";
+    const payload = (from, to) => ({ requestPayload: { from: from.slice(0, 10), to: to.slice(0, 10), granularity, stationId: filters.stationId || "" } });
+    const [current, previous] = await Promise.all([
+      consumptionStore.readDailyMeterSummary(payload(start, end)),
+      consumptionStore.readDailyMeterSummary(payload(prevStart, prevEnd))
+    ]);
+    const data = current?.body?.data || {};
+    const previousData = previous?.body?.data || {};
+    const rows = (data.stationBar || []).map((row) => ({
+      station: row.station,
+      consumption: Number(row.totalKwh) || 0
+    }));
+    const totalConsumption = Number(data.consumedKwh) || 0;
+    const previousConsumption = Number(previousData.consumedKwh) || 0;
+    const meterCount = Number(data.meta?.meterCount) || 0;
+    const previousMeters = Number(previousData.meta?.meterCount) || 0;
+    const labels = data.temporal?.labels || [];
+    const values = data.temporal?.kwhSeries || [];
+    return {
+      rows,
+      chartData: labels.map((label, index) => ({ label, value: Number(values[index]) || 0 })),
+      summary: {
+        totalCustomers: meterCount,
+        totalConsumption,
+        avgMonthly: meterCount ? Math.round(totalConsumption / meterCount) : 0,
+        zeroUsage: Math.max(0, meterCount - (Number(data.meta?.metersWithConsumption) || 0)),
+        customerDelta: previousMeters ? Math.round(((meterCount - previousMeters) / previousMeters) * 1000) / 10 : 0,
+        avgDelta: previousConsumption ? Math.round(((totalConsumption - previousConsumption) / previousConsumption) * 1000) / 10 : 0
+      }
+    };
+  }
+
+  const db = ensureDatabase();
 
   let currentReadings = [];
   if (isMemory(db)) {
@@ -420,15 +701,11 @@ async function customerReport(dateRange = {}, filters = {}) {
     chartMap[mName] += 1;
   }
   const chartData = monthNames.map(m => ({ label: m, value: chartMap[m] || 0 })).filter(c => c.value > 0);
-  if (!chartData.length) {
-    chartData.push({ label: "Jul", value: customerCount || 10 });
-  }
-
   return {
     rows,
     chartData,
     summary: {
-      totalCustomers: customerCount || 10,
+      totalCustomers: customerCount,
       totalConsumption,
       avgMonthly,
       zeroUsage,
@@ -441,9 +718,41 @@ async function customerReport(dateRange = {}, filters = {}) {
 /* ── Audit Report ── */
 
 async function auditReport(dateRange = {}, filters = {}) {
-  const db = ensureDatabase();
   const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = dateRange.end || new Date().toISOString();
+
+  if (supabase.serviceConfigured()) {
+    const source = await supabase.restRequest(`/audit_logs?select=user_id,actor_user_id,action,resource,resource_id,entity_type,entity_id,ip_address,source,created_at&created_at=gte.${encodeURIComponent(start)}&created_at=lte.${encodeURIComponent(end)}&order=created_at.desc&limit=500`);
+    const actionCounts = {};
+    const users = new Set();
+    const rows = source.map((row) => {
+      const action = row.action || "unknown";
+      const actor = row.user_id || row.actor_user_id || "system";
+      actionCounts[action] = (actionCounts[action] || 0) + 1;
+      users.add(actor);
+      return {
+        timestamp: String(row.created_at || "").replace("T", " ").slice(0, 16),
+        actor,
+        role: "system",
+        action,
+        target: row.resource_id || row.entity_id || row.resource || row.entity_type || "system",
+        status: "recorded",
+        ip: row.ip_address || row.source || "-"
+      };
+    });
+    return {
+      rows,
+      chartData: Object.entries(actionCounts).map(([label, value]) => ({ label, value })),
+      summary: {
+        totalEvents: rows.length,
+        writeOps: rows.filter((row) => /create|update|delete|write|approve|reject|refund/i.test(row.action)).length,
+        uniqueUsers: users.size,
+        failures: rows.filter((row) => /fail|error|reject/i.test(row.action)).length
+      }
+    };
+  }
+
+  const db = ensureDatabase();
 
   let logs = [];
   if (isMemory(db)) {
@@ -491,7 +800,7 @@ async function auditReport(dateRange = {}, filters = {}) {
     }
 
     rows.push({
-      timestamp: l.createdAt.replace("T", " ").slice(0, 16),
+      timestamp: String(l.createdAt || l.created_at || "").replace("T", " ").slice(0, 16),
       actor,
       role,
       action,
@@ -511,6 +820,31 @@ async function auditReport(dateRange = {}, filters = {}) {
       writeOps,
       uniqueUsers: uniqueUsers.size,
       failures
+    }
+  };
+}
+
+async function disputeReport(dateRange = {}, filters = {}) {
+  const start = dateRange.start || new Date(Date.now() - 30 * 86400000).toISOString();
+  const end = dateRange.end || new Date().toISOString();
+  if (!supabase.serviceConfigured()) return settlementReport(dateRange, filters);
+  const source = await supabaseRows("disputes", "created_at", start, end, "id,reference,subject,status,created_at,resolved_at");
+  const rows = source.map((row) => ({
+    reference: row.reference,
+    subject: row.subject,
+    status: row.status,
+    createdAt: String(row.created_at || "").replace("T", " ").slice(0, 16),
+    resolvedAt: row.resolved_at ? String(row.resolved_at).replace("T", " ").slice(0, 16) : "-"
+  })).reverse();
+  const counts = rows.reduce((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {});
+  return {
+    rows,
+    chartData: Object.entries(counts).map(([label, value]) => ({ label, value })),
+    summary: {
+      totalDisputes: rows.length,
+      openDisputes: (counts.open || 0) + (counts.under_review || 0),
+      resolvedDisputes: (counts.resolved || 0) + (counts.refund_issued || 0),
+      rejectedDisputes: counts.rejected || 0
     }
   };
 }
@@ -585,8 +919,10 @@ async function settlementReport(dateRange = {}, filters = {}) {
 
 module.exports = {
   revenueReport,
+  transactionReport,
   walletReport,
   customerReport,
   auditReport,
+  disputeReport,
   settlementReport
 };

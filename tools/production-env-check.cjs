@@ -43,6 +43,7 @@ function checkProductionConfig(env = process.env) {
   const nodeEnv = String(env.NODE_ENV || "development").toLowerCase();
   const production = nodeEnv === "production";
   const jwtSecret = String(env.JWT_SECRET || "");
+  const encryptionKey = String(env.APP_ENCRYPTION_KEY || "");
   const corsOrigins = splitOrigins(env.CORS_ORIGINS);
 
   if (production && defaultJwtSecrets.has(jwtSecret)) {
@@ -50,6 +51,9 @@ function checkProductionConfig(env = process.env) {
   }
   if (production && jwtSecret.length < 32) {
     failures.push("JWT_SECRET must be at least 32 characters in production");
+  }
+  if (production && encryptionKey.length < 32) {
+    failures.push("APP_ENCRYPTION_KEY must be at least 32 characters in production");
   }
   if (production && !corsOrigins.length) {
     failures.push("CORS_ORIGINS must be set in production");

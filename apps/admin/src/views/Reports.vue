@@ -300,42 +300,42 @@ onMounted(() => applyPreset(30, '30d'));
     <div class="rp-kpis">
       <div class="rp-kpi rp-kpi--hero">
         <span class="rp-kpi-label">Revenue</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.deliveredCount ?? 0) }} delivered &middot; avg {{ fmtMoney(k?.avgOrderValueMinor ?? 0) }}</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">VAT collected</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtMoney(k?.vatMinor ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.vatMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">energy {{ fmtMoney(k?.energyRevenueMinor ?? 0) }}</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Success rate</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : (k?.successRate ?? 0) + '%' }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : (k?.successRate ?? 0) + '%' }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.failedCount ?? 0) }} failed</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Funding inflow</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.fundingCount ?? 0) }} top-ups</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Settlement (net)</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtMoney(k?.settlementNetMinor ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.settlementNetMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.settlementBatches ?? 0) }} batches</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Refunds approved</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtMoney(k?.refundApprovedMinor ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.refundApprovedMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.refundCount ?? 0) }} requests</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Disputes</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtNum(k?.disputesOpened ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.disputesOpened ?? 0) }}</strong>
         <span class="rp-kpi-sub">opened in range</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">New customers</span>
-        <strong class="rp-kpi-value">{{ loading ? '-' : fmtNum(k?.newCustomers ?? 0) }}</strong>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.newCustomers ?? 0) }}</strong>
         <span class="rp-kpi-sub">in range</span>
       </div>
     </div>
@@ -356,8 +356,11 @@ onMounted(() => applyPreset(30, '30d'));
         </div>
       </div>
 
-      <div v-if="loading" class="bw-loading">Loading...</div>
-      <div v-else-if="!daily.length" class="bw-empty">No data for this range.</div>
+      <div v-if="loading" class="rp-chart-skeleton" aria-label="Loading report"></div>
+      <div v-else-if="!daily.length" class="bw-empty rp-empty">
+        <span>No report data.</span>
+        <button class="bw-btn bw-btn-sm" @click="applyPreset(30, '30d')">Use 30 days</button>
+      </div>
       <svg v-else class="rp-chart" :viewBox="`0 0 ${CHART_W} ${CHART_H + 24}`" preserveAspectRatio="none">
         <defs>
           <linearGradient :id="`rp-fill`" x1="0" y1="0" x2="0" y2="1">
@@ -423,6 +426,12 @@ onMounted(() => applyPreset(30, '30d'));
 
 <style scoped>
 .rp-intro { display:flex; justify-content:space-between; gap:var(--s-4); align-items:flex-end; padding:var(--s-5); margin-bottom:var(--s-4); border:1px solid oklch(from var(--brand) l c h / .28); border-radius:var(--r-lg, 14px); background:linear-gradient(118deg, oklch(from var(--brand) l c h / .16), var(--surface, #0d1117) 56%); }
+.rp-skeleton, .rp-chart-skeleton { color: transparent; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: rp-shimmer 1.4s ease-in-out infinite; }
+.rp-skeleton { display: block; width: 72%; min-height: 28px; }
+.rp-chart-skeleton { min-height: 280px; }
+.rp-empty { display: grid; justify-items: center; gap: var(--s-3); }
+@keyframes rp-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .rp-skeleton, .rp-chart-skeleton { animation: none; } }
 .rp-intro h1 { margin:4px 0 7px; font-size:clamp(24px, 3vw, 34px); letter-spacing:-.045em; color:var(--text, #e2e8f0); }
 .rp-intro p { margin:0; color:var(--text-muted, #94a3b8); font-size:var(--t-sm); }
 .rp-download-note { display:grid; gap:3px; min-width:180px; padding:var(--s-3) var(--s-4); border-left:2px solid var(--brand); background:oklch(from var(--brand) l c h / .08); }

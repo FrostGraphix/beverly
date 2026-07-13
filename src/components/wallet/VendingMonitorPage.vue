@@ -19,23 +19,23 @@
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total Orders</span>
-        <span class="kpi-value">{{ summary.total ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.total ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-info">
         <span class="kpi-label">Active</span>
-        <span class="kpi-value">{{ summary.active ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.active ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Delivered</span>
-        <span class="kpi-value">{{ summary.delivered ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.delivered ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Failed</span>
-        <span class="kpi-value">{{ summary.failed ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.failed ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Pending Review</span>
-        <span class="kpi-value">{{ summary.pendingReview ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.pendingReview ?? '-' }}</span>
       </div>
       <div class="kpi-cell">
         <span class="kpi-label">Today Revenue</span>
@@ -43,7 +43,7 @@
       </div>
       <div class="kpi-cell">
         <span class="kpi-label">Today Orders</span>
-        <span class="kpi-value">{{ summary.todayTotal ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.todayTotal ?? '-' }}</span>
       </div>
     </div>
 
@@ -58,7 +58,7 @@
         <option value="failed">Failed</option>
         <option value="reversed">Reversed</option>
       </BaseSelect>
-      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search meter, customer…" aria-label="Search vend orders" />
+      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search meter, customer..." aria-label="Search vend orders" />
       <ExportToolbar :rows="filteredRows" :columns="exportColumns" title="Vending Monitor Report" filename="beverly-vending-monitor" :disabled="!filteredRows.length" />
       <span class="last-updated">Updated {{ lastUpdated }}</span>
     </div>
@@ -86,14 +86,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
-            <td><span class="mode-badge">{{ row.mode || '—' }}</span></td>
-            <td>{{ row.targetMeter || '—' }}</td>
-            <td>{{ row.customerName || '—' }}</td>
+            <td><span class="mode-badge">{{ row.mode || '-' }}</span></td>
+            <td>{{ row.targetMeter || '-' }}</td>
+            <td>{{ row.customerName || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
-            <td>{{ row.organizationId || '—' }}</td>
+            <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatDate(row.createdAt) }}</td>
           </tr>
         </tbody>
@@ -104,19 +104,19 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Vend order detail">
       <div class="drawer-head">
         <strong>Order {{ shortId(selected.id) }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <div :class="['status-banner', statusTone(selected.status)]">
         {{ statusLabel(selected.status) }}
       </div>
       <dl class="drawer-fields">
-        <dt>Mode</dt><dd>{{ selected.mode || '—' }}</dd>
-        <dt>Target Meter</dt><dd>{{ selected.targetMeter || '—' }}</dd>
-        <dt>Customer</dt><dd>{{ selected.customerName || '—' }}</dd>
+        <dt>Mode</dt><dd>{{ selected.mode || '-' }}</dd>
+        <dt>Target Meter</dt><dd>{{ selected.targetMeter || '-' }}</dd>
+        <dt>Customer</dt><dd>{{ selected.customerName || '-' }}</dd>
         <dt>Amount</dt><dd>{{ formatMoney(selected.amountMinor) }}</dd>
-        <dt>Organization</dt><dd>{{ selected.organizationId || '—' }}</dd>
-        <dt>Actor</dt><dd>{{ selected.actorId || '—' }}</dd>
-        <dt>Receipt</dt><dd><code class="mono-id">{{ selected.receiptNumber || '—' }}</code></dd>
+        <dt>Organization</dt><dd>{{ selected.organizationId || '-' }}</dd>
+        <dt>Actor</dt><dd>{{ selected.actorId || '-' }}</dd>
+        <dt>Receipt</dt><dd><code class="mono-id">{{ selected.receiptNumber || '-' }}</code></dd>
         <dt>Hold ID</dt><dd><code class="mono-id">{{ shortId(selected.holdId) }}</code></dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
         <dt>Updated</dt><dd>{{ formatDate(selected.updatedAt) }}</dd>
@@ -148,7 +148,7 @@ export default {
       loading: false,
       error: "",
       autoRefresh: true,
-      lastUpdated: "—",
+      lastUpdated: "-",
       refreshTimer: null
     };
   },
@@ -219,7 +219,7 @@ export default {
     statusLabel: vendStatusLabel,
     statusTone: vendStatusTone,
     shortId: (id) => String(id || "").slice(0, 8).toUpperCase(),
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"; }
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-"; }
   }
 };
 </script>

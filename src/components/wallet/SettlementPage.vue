@@ -14,19 +14,19 @@
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total Batches</span>
-        <span class="kpi-value">{{ summary.totalBatches ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.totalBatches ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Pending</span>
-        <span class="kpi-value">{{ summary.pendingBatches ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.pendingBatches ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Settled</span>
-        <span class="kpi-value">{{ summary.settledBatches ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.settledBatches ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Failed</span>
-        <span class="kpi-value">{{ summary.failedBatches ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.failedBatches ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Total Settled</span>
@@ -75,7 +75,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-for="row in rows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ row.batchRef }}</code></td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatMoney(row.totalPurchaseMinor) }}</td>
@@ -83,7 +83,7 @@
             <td :class="row.netMinor >= 0 ? 'tone-good' : 'tone-danger'">{{ formatMoney(row.netMinor) }}</td>
             <td>{{ row.purchaseCount }}</td>
             <td class="period-cell">{{ formatDate(row.periodEnd) }}</td>
-            <td>{{ row.settledAt ? formatDate(row.settledAt) : '—' }}</td>
+            <td>{{ row.settledAt ? formatDate(row.settledAt) : '-' }}</td>
             <td class="action-cell">
               <BaseButton v-if="row.status === 'pending'" size="sm" variant="primary" :disabled="submitting" @click.stop="runSettle(row)">Settle</BaseButton>
             </td>
@@ -96,7 +96,7 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Batch detail">
       <div class="drawer-head">
         <strong>{{ selected.batchRef }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <dl class="drawer-fields">
         <dt>Status</dt><dd><span :class="['status-pill', statusTone(selected.status)]">{{ statusLabel(selected.status) }}</span></dd>
@@ -107,9 +107,9 @@
         <dt>Purchase Orders</dt><dd>{{ selected.purchaseCount }}</dd>
         <dt>Funding Items</dt><dd>{{ selected.fundingCount }}</dd>
         <dt>Initiated By</dt><dd>{{ selected.initiatedBy }}</dd>
-        <dt>Settled By</dt><dd>{{ selected.settledBy || '—' }}</dd>
+        <dt>Settled By</dt><dd>{{ selected.settledBy || '-' }}</dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
-        <dt>Settled At</dt><dd>{{ selected.settledAt ? formatDate(selected.settledAt) : '—' }}</dd>
+        <dt>Settled At</dt><dd>{{ selected.settledAt ? formatDate(selected.settledAt) : '-' }}</dd>
       </dl>
       <div v-if="selected.status === 'pending'" style="margin-top: auto;">
         <BaseButton variant="primary" style="width:100%;" :disabled="submitting" @click="runSettle(selected)">Settle This Batch</BaseButton>
@@ -202,7 +202,7 @@ export default {
       }
     },
     formatMoney,
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"; },
     statusLabel(s) {
       const map = { pending: "Pending", processing: "Processing", settled: "Settled", failed: "Failed", cancelled: "Cancelled" };
       return map[s] || s;

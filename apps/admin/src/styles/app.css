@@ -118,3 +118,23 @@ html[data-admin-reduce-motion="true"] *::after {
     min-height: 40px;
   }
 }
+/* Shared content states */
+.bw-skeleton {
+  min-height: 48px;
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: bw-shimmer 1.4s ease-in-out infinite;
+}
+
+.bw-empty-action {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-3);
+  padding: var(--s-6);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@keyframes bw-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .bw-skeleton { animation: none; } }

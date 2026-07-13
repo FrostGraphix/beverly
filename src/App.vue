@@ -23,10 +23,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
       </div>
-      <BaseButton variant="quiet" class="sidebar-find" aria-label="Find pages" title="Find pages" @click="openSidebarSearch">
+      <BaseButton variant="quiet" class="sidebar-find" aria-label="Search pages" title="Search pages" aria-keyshortcuts="Control+K Meta+K" @click="openSidebarSearch">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-        <span>Find...</span>
-        <kbd>F</kbd>
+        <span>Search</span>
+        <kbd>Ctrl K</kbd>
       </BaseButton>
       <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
         <template v-for="group in groups" :key="`section-${group.name}`">
@@ -39,7 +39,9 @@
             :title="group.routes[0].title"
             @click="closeSidebar"
           >
-            <span class="sidebar-icon" v-html="routeIcon(group.routes[0])"></span>
+            <span class="sidebar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(group.routes[0])"/></svg>
+            </span>
             <span class="sidebar-label">{{ group.routes[0].title }}</span>
           </a>
           <template v-else>
@@ -50,7 +52,9 @@
               :aria-expanded="String(Boolean(expandedGroups[group.name]))"
               @click.stop="toggleGroup(group.name)"
             >
-              <span class="sidebar-icon" v-html="routeIcon({ group: group.name, title: group.name })"></span>
+              <span class="sidebar-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath({ group: group.name, title: group.name })"/></svg>
+              </span>
               <span class="sidebar-label">{{ group.name }}</span>
               <svg class="sidebar-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
             </BaseButton>
@@ -65,7 +69,9 @@
                 :title="route.title"
                 @click="closeSidebar"
               >
-                <span class="sidebar-icon" v-html="routeIcon(route)"></span>
+                <span class="sidebar-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(route)"/></svg>
+                </span>
                 <span class="sidebar-label">{{ route.title }}</span>
                 <svg v-if="route.external" class="sidebar-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               </a>
@@ -102,6 +108,11 @@
           </BaseIconButton>
           <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
           <div class="right-menu">
+            <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openSidebarSearch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+              <span>Search</span>
+              <kbd>Ctrl K</kbd>
+            </BaseButton>
             <StationAlertsBell />
             <div class="bw-account-menu" ref="accountMenuWrap">
               <BaseButton
@@ -160,37 +171,36 @@
                     </svg>
                     <span>Settings</span>
                   </BaseButton>
-                  <BaseButton
-                    variant="quiet"
-                    class="bw-user-menu-item"
-                    role="menuitem"
-                    :aria-expanded="String(userThemePanelOpen)"
-                    @click="userThemePanelOpen = !userThemePanelOpen"
-                  >
-                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                      <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"></path>
-                      <path d="M6 19c3-5 7-8 13-8"></path>
-                    </svg>
-                    <span>Theme</span>
-                    <svg class="bw-user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <path d="m9 18 6-6-6-6"></path>
-                    </svg>
-                  </BaseButton>
-                  <div v-show="userThemePanelOpen" class="user-theme-panel" role="group" aria-label="Theme choices">
+                  <div class="user-theme-submenu">
                     <BaseButton
-                      v-for="theme in themeOptions"
-                      :key="theme.id"
                       variant="quiet"
-                      :class="['user-theme-choice', { active: currentTheme === theme.id }]"
-                      role="menuitemradio"
-                      :aria-checked="String(currentTheme === theme.id)"
-                      @click="setTheme(theme.id)"
+                      class="bw-user-menu-item"
+                      role="menuitem"
+                      :aria-expanded="String(userThemePanelOpen)"
+                      @click="userThemePanelOpen = !userThemePanelOpen"
                     >
-                      <span class="theme-swatch" :style="{ background: theme.swatch }"></span>
-                      <span>
-                        <strong>{{ theme.label }}</strong>
-                      </span>
+                      <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"></path>
+                        <path d="M6 19c3-5 7-8 13-8"></path>
+                      </svg>
+                      <span>Theme</span>
+                      <svg class="bw-user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6"></path>
+                      </svg>
                     </BaseButton>
+                    <div v-show="userThemePanelOpen" class="user-theme-panel" role="group" aria-label="Theme choices">
+                      <BaseButton
+                        v-for="theme in themeOptions"
+                        :key="theme.id"
+                        variant="quiet"
+                        :class="['user-theme-choice', { active: currentTheme === theme.id }]"
+                        role="menuitemradio"
+                        :aria-checked="String(currentTheme === theme.id)"
+                        @click="setTheme(theme.id)"
+                      >
+                        <strong>{{ theme.label }}</strong>
+                      </BaseButton>
+                    </div>
                   </div>
                   <div class="bw-user-menu-separator"></div>
                   <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openSearchFromMenu">
@@ -261,17 +271,19 @@
 
     <!-- Global Search Overlay -->
     <div v-if="searchOpen" class="search-overlay" @click.self="searchOpen = false">
-      <div class="search-overlay-box">
+      <div class="search-overlay-box" role="dialog" aria-modal="true" aria-label="Search Beverly">
         <div class="search-overlay-input-row">
-          <svg viewBox="0 0 128 128" aria-hidden="true"><path d="M55 0C24.624 0 0 24.624 0 55s24.624 55 55 55c13.025 0 24.994-4.532 34.408-12.112L120.52 128 128 120.52 97.888 89.408C105.468 79.994 110 68.025 110 55 110 24.624 85.376 0 55 0zm0 10c24.853 0 45 20.147 45 45s-20.147 45-45 45-45-20.147-45-45 20.147-45 45-45z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
           <input
             ref="searchInput"
             class="search-overlay-input"
             v-model="searchQuery"
-            placeholder="Search pages & features..."
+            aria-label="Search pages and features"
+            placeholder="Search pages and features"
             @keydown.esc="searchOpen = false"
             @keydown.enter="goFirstSearchResult"
           />
+          <kbd>Esc</kbd>
         </div>
         <div class="search-overlay-results" v-if="searchResults.length">
           <div v-for="group in searchResults" :key="group.group">
@@ -286,7 +298,10 @@
           </div>
         </div>
         <div class="search-result-empty" v-else-if="searchQuery.length > 0">No results for "{{ searchQuery }}"</div>
-        <div class="search-overlay-hint" v-else>Start typing to search pages and features</div>
+        <div class="search-overlay-hint" v-else>
+          <span>Search every Beverly workspace.</span>
+          <span><kbd>Enter</kbd> opens first result.</span>
+        </div>
       </div>
     </div>
   </div>
@@ -404,6 +419,7 @@ const routeIconOverrides = {
   "#/admin/item": "M3 7 12 2l9 5v10l-9 5-9-5V7zm0 0 9 5 9-5M12 12v10",
   "#/admin/meter": "M3 3h18v18H3zm4 5h10m-7 4h4m-5 4h6",
   "#/admin/debt": "M3 3h18v18H3zm4 5h10m-7 5h8m-8 4h5",
+  "#/wallet": "M4 7h15a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12v4M16 12h5v5h-5a2.5 2.5 0 0 1 0-5z",
   "#/protocol/dlms": "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5",
   "#/protocol/dlt645": "M4 5h16M4 12h16M4 19h16M8 3v18m8-18v18",
   "#/remote-support/gprs-tasks": "M12 20v-8m0-4v.01M5.6 5.6a9 9 0 0 1 12.8 0M2.8 2.8a13 13 0 0 1 18.4 0",
@@ -413,7 +429,7 @@ const routeIconOverrides = {
   "#/remote-support/firmware-update": "M12 3v12m-4-4 4 4 4-4M5 21h14",
   "#/remote-support/file-upload": "M14 2H6v20h12V8zm0 0v6h6M12 18v-7m-3 3 3-3 3 3",
   "#/system/station-onboarding-studio": "M13 2 3 14h7l-1 8 12-14h-7l-1-6z",
-  "#/system/automation-command": "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.4-.5a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a1.65 1.65 0 0 0 1-1.51V3"
+  "#/system/automation-command": "M8 4h8M9 4V2m6 2V2M5 8h14v10H5zM8 12h.01M16 12h.01M9 18v3m6-3v3M3 12H1m22 0h-2"
 };
 
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
@@ -456,7 +472,7 @@ export default {
       return this.hash.startsWith("#/login") || !this.hash;
     },
     isRoleReady() {
-      return this.currentRoleId !== null;
+      return !["", "null", "undefined"].includes(String(this.currentRoleId || "").trim().toLowerCase());
     },
     route() {
       return findRoute(this.hash, this.currentRoleId);
@@ -481,7 +497,8 @@ export default {
       return this.displayUserName.split(/[\s()_-]+/).filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('') || "U";
     },
     displayUserName() {
-      return String(this.currentUserName || "User").trim();
+      const name = String(this.currentUserName || "").trim();
+      return name && !["null", "undefined"].includes(name.toLowerCase()) ? name : "User";
     },
     currentUserFirstName() {
       return this.displayUserName.split(/[\s(]+/)[0] || "User";
@@ -501,10 +518,10 @@ export default {
     },
     themeOptions() {
       return [
-        { id: "system", label: "System", description: "Follow device", swatch: "linear-gradient(135deg, #10b981, #0f172a)" },
-        { id: "light", label: "Light", description: "Wallet light", swatch: "linear-gradient(135deg, #f2f4f2, #ffffff 58%, #c6e000)" },
-        { id: "executive", label: "Executive", description: "Maximum legibility in green", swatch: "linear-gradient(135deg, #020202, #22c55e)" },
-        { id: "contrast", label: "Contrast", description: "Maximum legibility", swatch: "linear-gradient(135deg, #000000, #facc15)" }
+        { id: "system", label: "System" },
+        { id: "light", label: "Light" },
+        { id: "executive", label: "Executive" },
+        { id: "contrast", label: "Contrast" }
       ];
     },
     themeIcon() {
@@ -523,7 +540,9 @@ export default {
         vendor_manager: "Vendor Manager",
         "finance-checker": "Finance Checker"
       };
-      return labels[this.currentRoleId] || String(this.currentRoleId || "User").replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+      const roleId = String(this.currentRoleId || "").trim();
+      if (!roleId || ["null", "undefined"].includes(roleId.toLowerCase())) return "User";
+      return labels[roleId] || roleId.replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
     },
     primaryCreateTarget() {
       const routes = visibleRoutes(this.currentRoleId);
@@ -646,7 +665,7 @@ export default {
         const meJson = await meRes.json().catch(() => null);
         if (meJson?.code === 0 && meJson?.data) {
           this.currentRoleId = meJson.data.roleId || null;
-          this.currentUserName = meJson.data.userName || null;
+          this.currentUserName = meJson.data.userName || meJson.data.name || meJson.data.email || meJson.data.userId || null;
           // Keep display cookies in sync for components that read them directly.
           if (meJson.data.userId) setCookie("userId", meJson.data.userId);
           if (meJson.data.userName) setCookie("userName", meJson.data.userName);
@@ -701,14 +720,16 @@ export default {
       }
     },
     syncWidth() {
+      const wasDesktop = this.width > 1024;
       this.width = window.innerWidth;
+      if (wasDesktop && this.width <= 1024) this.sidebarOpen = false;
     },
-    goDashboard() {
-      this.currentRoleId = getCookie("roleId") || null;
-      this.currentUserName = getCookie("userName") || null;
-      this.syncProfileIdentity();
-      window.location.hash = this.nextRoute("#/dashboard").hash;
-      this.syncHash();
+    async goDashboard() {
+      this.currentRoleId = null;
+      this.currentUserName = null;
+      this.hash = "#/dashboard";
+      window.location.hash = "#/dashboard";
+      await this.loadUser();
     },
     syncProfileIdentity() {
       const profile = loadProfileState(this.currentUserName);
@@ -739,10 +760,10 @@ export default {
     sidebarSectionLabel(groupName) {
       return sidebarSectionLabels[groupName] || groupName;
     },
-    routeIcon(route) {
+    routeIconPath(route) {
       const directIcon = routeIconOverrides[route?.hash];
       if (directIcon) {
-        return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${directIcon}"/></svg>`;
+        return directIcon;
       }
       const text = `${route?.group || ""} ${route?.title || ""} ${route?.hash || ""}`.toLowerCase();
       let icon = "meter";
@@ -762,7 +783,7 @@ export default {
       else if (text.includes("protocol") || text.includes("dlms") || text.includes("dlt645")) icon = "protocol";
       else if (text.includes("support") || text.includes("gprs") || text.includes("firmware") || text.includes("profile") || text.includes("event") || text.includes("upload")) icon = "support";
       else if (text.includes("system") || text.includes("automation")) icon = "system";
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${routeIconPaths[icon]}"/></svg>`;
+      return routeIconPaths[icon];
     },
     sidebarClass(route, indent) {
       return ["sidebar-item", indent ? "indent" : "", `sidebar-tone-${this.routeTone(route)}`, route.hash === this.route.hash ? "active" : ""];
@@ -984,6 +1005,7 @@ export default {
     filter: none;
   }
 }
+
 
 /* Security loading screen — shown while server-side role is being confirmed */
 .app-role-loading {

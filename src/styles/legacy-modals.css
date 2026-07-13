@@ -429,7 +429,7 @@
     }
     @media (max-width: 480px) {
       .modal-backdrop.show {
-        align-items: stretch;
+        align-items: center;
         justify-content: center;
         padding: 10px;
       }

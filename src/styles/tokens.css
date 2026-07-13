@@ -96,6 +96,13 @@
   --color-surface-card:    oklch(100% 0 0);
   --color-surface-glass:   oklch(100% 0 0 / 0.88);
   --color-surface-overlay: oklch(20% 0.020 240 / 0.55);
+  --glass-surface:         oklch(100% 0 0 / 0.72);
+  --glass-surface-strong:  oklch(100% 0 0 / 0.86);
+  --glass-border:          oklch(100% 0 0 / 0.72);
+  --glass-highlight:       inset 0 1px 0 oklch(100% 0 0 / 0.72);
+  --glass-shadow:          0 16px 40px rgba(15, 23, 42, 0.09), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --glass-blur:            24px;
+  --glass-blur-soft:       14px;
   --color-border:        oklch(20% 0.020 240 / 0.08);
   --color-border-strong: oklch(20% 0.020 240 / 0.14);
   --color-success:         oklch(70% 0.19 145);

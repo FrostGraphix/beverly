@@ -156,10 +156,7 @@
 }
 
 [data-theme="light"] .app-page:not(.wallet-admin-host) .bw-user-chip {
-  min-height: 34px;
-  padding: 3px 8px 3px 3px;
   border-color: #eaeaea;
-  border-radius: 7px;
   box-shadow: none;
 }
 
@@ -173,6 +170,60 @@
   background: #fafafa;
   border-color: #bbb;
   box-shadow: none;
+}
+
+.app-page:not(.wallet-admin-host) .toolbar-search {
+  width: min(188px, 22vw);
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-page);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-page:not(.wallet-admin-host) .toolbar-search:hover,
+.app-page:not(.wallet-admin-host) .toolbar-search:focus-visible {
+  border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border-color));
+  background: var(--bg-card);
+  color: var(--text-main);
+  outline: 0;
+}
+
+.app-page:not(.wallet-admin-host) .toolbar-search svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.app-page:not(.wallet-admin-host) .toolbar-search kbd {
+  margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font: 600 9px/1.1 var(--font-sans);
+}
+
+@media (max-width: 760px) {
+  .app-page:not(.wallet-admin-host) .toolbar-search {
+    width: 34px;
+    min-width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-page:not(.wallet-admin-host) .toolbar-search span,
+  .app-page:not(.wallet-admin-host) .toolbar-search kbd {
+    display: none;
+  }
 }
 
 /* Dark themes keep Vercel's restraint while honoring their palette tokens. */
@@ -268,10 +319,13 @@
 [data-theme="contrast"] .app-page:not(.wallet-admin-host) .tags-view-item { border-radius: 5px; background: #1a1a1a; color: #fff; }
 
 [data-theme="executive"] .app-page:not(.wallet-admin-host) .bw-user-chip,
-[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-user-chip { min-height: 34px; padding: 3px 8px 3px 3px; border-color: #333; border-radius: 7px; background: #000; box-shadow: none; }
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-user-chip { border-color: #333; background: #000; box-shadow: none; }
 
 [data-theme="executive"] .app-page:not(.wallet-admin-host) .bw-avatar.green,
-[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-avatar.green { background: #fff; color: #000; }
+[data-theme="contrast"] .app-page:not(.wallet-admin-host) .bw-avatar.green {
+  background: #fff;
+  color: #000;
+}
 
 .app-page:not(.wallet-admin-host) .sidebar-find {
   width: calc(100% - 20px);
@@ -421,16 +475,16 @@
   opacity: .65;
 }
 
-/* Light mode keeps neutral links, with one recognizable color per icon family. */
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-emerald .sidebar-icon { color: #059669; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-violet .sidebar-icon { color: #7c3aed; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-blue .sidebar-icon { color: #2563eb; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-orange .sidebar-icon { color: #ea580c; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-cyan .sidebar-icon { color: #0891b2; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-rose .sidebar-icon { color: #e11d48; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-amber .sidebar-icon { color: #b45309; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-indigo .sidebar-icon { color: #4f46e5; }
-[data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-tone-slate .sidebar-icon { color: #475569; }
+/* Icons inherit their item's single state color. */
+.app-page:not(.wallet-admin-host) .sidebar-icon,
+.app-page:not(.wallet-admin-host) .sidebar-item:hover .sidebar-icon {
+  color: currentColor;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-item.active .sidebar-icon {
+  color: var(--sidebar-active-border);
+  opacity: 1;
+}
 
 [data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-item {
   min-height: 42px;

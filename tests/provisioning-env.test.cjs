@@ -9,11 +9,13 @@ const valid = {
   LIVE_API_BASE_URL: "https://meter-api.acoblighting.com",
   LIVE_API_BEARER_TOKEN: "bearer",
   JWT_SECRET: "a-secure-production-secret-with-32-characters-minimum",
+  APP_ENCRYPTION_KEY: "a-separate-production-encryption-key-32chars",
   CORS_ORIGINS: "https://beverly.acoblighting.com"
 };
 
 assert(requiredProductionKeys.includes("SUPABASE_URL"));
 assert(requiredProductionKeys.includes("LIVE_API_BASE_URL"));
+assert(requiredProductionKeys.includes("APP_ENCRYPTION_KEY"));
 assert(validateProvisioningEnv(valid).ok);
 assert(!validateProvisioningEnv({ ...valid, LIVE_API_BASE_URL: "" }).ok);
 assert(!validateProvisioningEnv({ ...valid, SUPABASE_SERVICE_ROLE_KEY: "changeme" }).ok);
