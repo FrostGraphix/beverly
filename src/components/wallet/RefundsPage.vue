@@ -13,19 +13,19 @@
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total</span>
-        <span class="kpi-value">{{ summary.total ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.total ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Requested</span>
-        <span class="kpi-value">{{ summary.requested ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.requested ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-info">
         <span class="kpi-label">Under Review</span>
-        <span class="kpi-value">{{ summary.underReview ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.underReview ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Completed</span>
-        <span class="kpi-value">{{ summary.completed ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.completed ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Total Refunded</span>
@@ -33,7 +33,7 @@
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Rejected</span>
-        <span class="kpi-value">{{ summary.rejected ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.rejected ?? '-' }}</span>
       </div>
     </div>
 
@@ -47,7 +47,7 @@
         <option value="completed">Completed</option>
         <option value="rejected">Rejected</option>
       </BaseSelect>
-      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search org or order ID…" aria-label="Search refunds" />
+      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search org or order ID..." aria-label="Search refunds" />
       <ExportToolbar :rows="filteredRows" :columns="exportColumns" title="Refunds Report" filename="beverly-refunds" :disabled="!filteredRows.length" />
     </div>
 
@@ -75,12 +75,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td><code class="mono-id">{{ shortId(row.purchaseOrderId) }}</code></td>
-            <td>{{ row.organizationId || '—' }}</td>
+            <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
-            <td>{{ row.approvedAmountMinor ? formatMoney(row.approvedAmountMinor) : '—' }}</td>
+            <td>{{ row.approvedAmountMinor ? formatMoney(row.approvedAmountMinor) : '-' }}</td>
             <td>{{ reasonLabel(row.reason) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatDate(row.createdAt) }}</td>
@@ -97,53 +97,53 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Refund detail">
       <div class="drawer-head">
         <strong>Refund {{ shortId(selected.id) }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <dl class="drawer-fields">
         <dt>Status</dt><dd><span :class="['status-pill', statusTone(selected.status)]">{{ statusLabel(selected.status) }}</span></dd>
         <dt>Organization</dt><dd>{{ selected.organizationId }}</dd>
         <dt>Purchase Order</dt><dd>{{ selected.purchaseOrderId }}</dd>
         <dt>Requested Amount</dt><dd>{{ formatMoney(selected.amountMinor) }}</dd>
-        <dt>Approved Amount</dt><dd>{{ selected.approvedAmountMinor ? formatMoney(selected.approvedAmountMinor) : '—' }}</dd>
+        <dt>Approved Amount</dt><dd>{{ selected.approvedAmountMinor ? formatMoney(selected.approvedAmountMinor) : '-' }}</dd>
         <dt>Reason</dt><dd>{{ reasonLabel(selected.reason) }}</dd>
         <dt>Requested By</dt><dd>{{ selected.requestedBy }}</dd>
-        <dt>Reviewed By</dt><dd>{{ selected.reviewedBy || '—' }}</dd>
-        <dt>Review Note</dt><dd>{{ selected.reviewerNote || '—' }}</dd>
+        <dt>Reviewed By</dt><dd>{{ selected.reviewedBy || '-' }}</dd>
+        <dt>Review Note</dt><dd>{{ selected.reviewerNote || '-' }}</dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
       </dl>
     </aside>
 
-    <!-- Approve modal -->
-    <div v-if="approveModal.open" class="ops-modal-bg" @click.self="approveModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Approve refund">
-        <h2>Approve Refund</h2>
-        <p class="modal-sub">Refund {{ shortId(approveModal.row?.id) }} · Requested {{ formatMoney(approveModal.row?.amountMinor) }}</p>
-        <label>Approved Amount (NGN)<BaseInput v-model.number="approveModal.approvedNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
-        <label>Review Note<textarea v-model="approveModal.note" class="ops-textarea" rows="3"></textarea></label>
-        <div class="modal-actions">
-          <BaseButton @click="approveModal.open = false">Cancel</BaseButton>
-          <BaseButton variant="primary" :disabled="submitting" @click="submitApprove">Approve</BaseButton>
-        </div>
-      </div>
-    </div>
+    <BaseConfirmDialog
+      :open="approveModal.open"
+      title="Approve refund?"
+      :description="`Credit ${formatMoney(approveModal.row?.amountMinor)} immediately? This cannot be undone.`"
+      confirm-label="Approve refund"
+      :loading="submitting"
+      @cancel="approveModal.open = false"
+      @confirm="submitApprove"
+    >
+      <label>Approved Amount (NGN)<BaseInput v-model.number="approveModal.approvedNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
+      <label>Review Note<textarea v-model="approveModal.note" class="ops-textarea" rows="3"></textarea></label>
+    </BaseConfirmDialog>
 
-    <!-- Reject modal -->
-    <div v-if="rejectModal.open" class="ops-modal-bg" @click.self="rejectModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Reject refund">
-        <h2>Reject Refund</h2>
-        <p class="modal-sub">Refund {{ shortId(rejectModal.row?.id) }}</p>
-        <label>Rejection Reason<textarea v-model="rejectModal.note" class="ops-textarea" rows="3"></textarea></label>
-        <div class="modal-actions">
-          <BaseButton @click="rejectModal.open = false">Cancel</BaseButton>
-          <BaseButton variant="danger" :disabled="submitting" @click="submitReject">Reject</BaseButton>
-        </div>
-      </div>
-    </div>
+    <BaseConfirmDialog
+      :open="rejectModal.open"
+      title="Reject refund?"
+      :description="`Reject refund ${shortId(rejectModal.row?.id)}?`"
+      confirm-label="Reject refund"
+      :loading="submitting"
+      :disabled="!rejectModal.note.trim()"
+      @cancel="rejectModal.open = false"
+      @confirm="submitReject"
+    >
+      <label>Rejection Reason<textarea v-model="rejectModal.note" class="ops-textarea" rows="3"></textarea></label>
+    </BaseConfirmDialog>
   </section>
 </template>
 
 <script>
 import BaseButton from "../base/BaseButton.vue";
+import BaseConfirmDialog from "../base/BaseConfirmDialog.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
@@ -151,7 +151,7 @@ import { listRefunds, approveRefund, rejectRefund, refundSummary, formatMoney } 
 
 export default {
   name: "RefundsPage",
-  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar },
   data() {
     return {
       rows: [],
@@ -182,7 +182,7 @@ export default {
         { key: "purchaseOrderId", label: "Purchase Order", value: r => (r.purchaseOrderId || "").slice(0, 8) },
         { key: "organizationId", label: "Organization" },
         { key: "amountMinor", label: "Requested", value: r => formatMoney(r.amountMinor) },
-        { key: "approvedAmountMinor", label: "Approved", value: r => r.approvedAmountMinor ? formatMoney(r.approvedAmountMinor) : "—" },
+        { key: "approvedAmountMinor", label: "Approved", value: r => r.approvedAmountMinor ? formatMoney(r.approvedAmountMinor) : "-" },
         { key: "reason", label: "Reason" },
         { key: "status", label: "Status" },
         { key: "createdAt", label: "Created", value: r => r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "" }
@@ -246,7 +246,7 @@ export default {
     },
     formatMoney,
     shortId(id) { return String(id || "").slice(0, 8).toUpperCase(); },
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"; },
     reasonLabel(r) {
       const map = { vend_failure: "Vend Failure", overcharge: "Overcharge", duplicate: "Duplicate", service_unavailable: "Service Down", customer_request: "Customer Request", system_error: "System Error" };
       return map[r] || r;

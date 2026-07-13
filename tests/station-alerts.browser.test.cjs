@@ -47,6 +47,8 @@ async function main() {
     let data = { data: [], total: 0 };
     if (url.includes("/user/login")) {
       data = { token: "station-alert-test", userId: "admin", userName: "ACB(admin)", roleId: "super-admin" };
+    } else if (url.includes("/auth/me")) {
+      data = { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" };
     } else if (url.includes("/user/read")) {
       data = { data: [{ userId: "admin", name: "ACB(admin)", roleId: "super-admin" }], total: 1 };
     } else if (url.includes("/station/read")) {

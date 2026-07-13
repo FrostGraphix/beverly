@@ -1,0 +1,192 @@
+/* Beverly liquid glass: one surface contract across the CRM. */
+.app-page:not(.wallet-admin-host) .content-page {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 4%, var(--bg-page)), var(--bg-page) 42%, color-mix(in srgb, var(--color-info) 3%, var(--bg-page)));
+}
+
+.app-page:not(.wallet-admin-host) .fixed-header,
+.app-page:not(.wallet-admin-host) .sidebar-container {
+  background: color-mix(in srgb, var(--bg-header) 86%, transparent) !important;
+  border-color: color-mix(in srgb, var(--glass-border) 64%, var(--border-color)) !important;
+  box-shadow: var(--glass-highlight), 0 10px 30px color-mix(in srgb, var(--text-strong) 7%, transparent) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.24);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.24);
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-container {
+  background: color-mix(in srgb, var(--sidebar-bg-start) 88%, transparent) !important;
+}
+
+.auth-page {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--primary) 9%, var(--bg-page)), var(--bg-page) 48%, color-mix(in srgb, var(--color-info) 5%, var(--bg-page))) !important;
+  color: var(--text-main);
+}
+
+.auth-bg::before {
+  background: linear-gradient(120deg, transparent 24%, color-mix(in srgb, var(--glass-border) 22%, transparent) 48%, transparent 72%);
+  filter: none;
+}
+
+.auth-bg-orb,
+.auth-bg-beam,
+.auth-bg-glow,
+.auth-bg-grid,
+.auth-bg-flash {
+  display: none;
+}
+
+.auth-page .auth-card {
+  width: min(100%, 390px);
+  padding: 30px;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 72%, var(--border-color));
+  border-radius: 20px;
+  background: var(--glass-surface-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.22);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.22);
+}
+
+.auth-page .auth-card::before {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--glass-border) 24%, transparent), transparent 38%);
+  opacity: 1;
+}
+
+.auth-page .auth-card-brand {
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--glass-border));
+  background: color-mix(in srgb, var(--glass-surface) 84%, var(--primary-light));
+  color: var(--primary);
+  box-shadow: var(--glass-highlight);
+  animation: auth-card-enter 0.58s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+}
+
+.auth-page .auth-card-name,
+.auth-page .auth-card-title {
+  color: var(--text-strong);
+}
+
+.auth-page .auth-card-sub,
+.auth-page .auth-field-label,
+.auth-page .auth-remember {
+  color: var(--text-muted);
+}
+
+.auth-page .auth-field input {
+  border-color: color-mix(in srgb, var(--glass-border) 52%, var(--border-color));
+  background: color-mix(in srgb, var(--glass-surface-strong) 88%, transparent);
+  color: var(--text-strong);
+  box-shadow: var(--glass-highlight);
+}
+
+.auth-page .auth-field input::placeholder,
+.auth-page .auth-eye {
+  color: var(--text-faint);
+}
+
+.auth-page .auth-field input:focus {
+  border-color: var(--primary);
+  background: var(--glass-surface-strong);
+  box-shadow: 0 0 0 3px var(--primary-light), var(--glass-highlight);
+}
+
+.auth-page .auth-remember .base-checkbox__mark {
+  border-color: var(--border-mid);
+  background: var(--glass-surface);
+}
+
+.auth-page .auth-link {
+  color: var(--primary) !important;
+}
+
+.auth-page .auth-submit {
+  height: 48px !important;
+  border: 1px solid var(--primary) !important;
+  border-radius: 10px !important;
+  background: var(--primary) !important;
+  color: var(--text-inverse) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 22%, transparent), var(--glass-highlight) !important;
+}
+
+.auth-page .auth-submit:hover:not(:disabled) {
+  background: var(--primary-hover) !important;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--primary) 28%, transparent), var(--glass-highlight) !important;
+}
+
+:is(
+  .base-card,
+  .base-table-shell,
+  .dashboard-live-page,
+  .dashboard-stat-card,
+  .dashboard-chart-card,
+  .chart-wrapper,
+  .report-type-card,
+  .report-chart-container,
+  .wallet-profile-card,
+  .wallet-settings-card,
+  .mobile-table-card
+) {
+  background: var(--glass-surface-strong);
+  border-color: color-mix(in srgb, var(--glass-border) 58%, var(--border-color));
+  box-shadow: var(--glass-highlight), var(--shadow-sm);
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--glass-blur-soft)) saturate(1.12);
+}
+
+:is(
+  .bw-user-dropdown,
+  .search-overlay-box,
+  .station-alert-popover,
+  .theme-command-menu,
+  .sort-direction-menu__panel,
+  .row-action-menu__panel,
+  .base-modal-shell,
+  .bev-modal-shell
+) {
+  background: var(--glass-surface-strong) !important;
+  border-color: color-mix(in srgb, var(--glass-border) 72%, var(--border-color)) !important;
+  box-shadow: var(--glass-highlight), var(--glass-shadow) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.28) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.28) !important;
+}
+
+:is(.bev-field, .base-input, .base-select, .search-input, .sort-select, .pagination-select, .goto-input),
+.app-page:not(.wallet-admin-host) :is(.toolbar-search, .sidebar-find, .bw-user-chip) {
+  background: color-mix(in srgb, var(--glass-surface-strong) 88%, transparent);
+  border-color: color-mix(in srgb, var(--glass-border) 52%, var(--border-color));
+  box-shadow: var(--glass-highlight);
+  backdrop-filter: blur(var(--glass-blur-soft));
+  -webkit-backdrop-filter: blur(var(--glass-blur-soft));
+}
+
+.app-page:not(.wallet-admin-host) :is(.toolbar-search, .sidebar-find, .bw-user-chip):hover,
+.app-page:not(.wallet-admin-host) :is(.toolbar-search, .sidebar-find, .bw-user-chip):focus-visible {
+  background: color-mix(in srgb, var(--glass-surface-strong) 76%, var(--primary-light));
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--glass-border));
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(
+    .fixed-header,
+    .sidebar-container,
+    .base-card,
+    .base-table-shell,
+    .dashboard-live-page,
+    .dashboard-stat-card,
+    .dashboard-chart-card,
+    .auth-card,
+    .bw-user-dropdown,
+    .search-overlay-box,
+    .base-modal-shell
+  ) {
+    background: var(--bg-card) !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-surface: var(--bg-card);
+    --glass-surface-strong: var(--bg-card);
+    --glass-blur: 0px;
+    --glass-blur-soft: 0px;
+  }
+}

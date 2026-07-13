@@ -14,19 +14,19 @@
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total</span>
-        <span class="kpi-value">{{ summary.total ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.total ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Open</span>
-        <span class="kpi-value">{{ summary.open ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.open ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-info">
         <span class="kpi-label">Under Review</span>
-        <span class="kpi-value">{{ summary.underReview ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.underReview ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Escalated</span>
-        <span class="kpi-value">{{ summary.escalated ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.escalated ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Resolved</span>
@@ -40,11 +40,11 @@
         <option value="open">Open</option>
         <option value="under_review">Under Review</option>
         <option value="escalated">Escalated</option>
-        <option value="resolved_approved">Resolved — Approved</option>
-        <option value="resolved_rejected">Resolved — Rejected</option>
+        <option value="resolved_approved">Resolved - Approved</option>
+        <option value="resolved_rejected">Resolved - Rejected</option>
         <option value="withdrawn">Withdrawn</option>
       </BaseSelect>
-      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization or ID…" aria-label="Search disputes" />
+      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization or ID..." aria-label="Search disputes" />
       <ExportToolbar :rows="filteredRows" :columns="exportColumns" title="Disputes Report" filename="beverly-disputes" :disabled="!filteredRows.length" />
     </div>
 
@@ -70,10 +70,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td>{{ disputeTypeLabel(row.disputeType) }}</td>
-            <td>{{ row.organizationId || '—' }}</td>
+            <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatDate(row.createdAt) }}</td>
@@ -92,28 +92,28 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Dispute detail">
       <div class="drawer-head">
         <strong>Dispute {{ shortId(selected.id) }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <dl class="drawer-fields">
         <dt>Type</dt><dd>{{ disputeTypeLabel(selected.disputeType) }}</dd>
         <dt>Status</dt><dd><span :class="['status-pill', statusTone(selected.status)]">{{ statusLabel(selected.status) }}</span></dd>
         <dt>Organization</dt><dd>{{ selected.organizationId }}</dd>
-        <dt>Purchase Order</dt><dd>{{ selected.purchaseOrderId || '—' }}</dd>
+        <dt>Purchase Order</dt><dd>{{ selected.purchaseOrderId || '-' }}</dd>
         <dt>Amount</dt><dd>{{ formatMoney(selected.amountMinor) }}</dd>
-        <dt>Description</dt><dd>{{ selected.description || '—' }}</dd>
-        <dt>Resolution</dt><dd>{{ selected.resolutionNote || '—' }}</dd>
+        <dt>Description</dt><dd>{{ selected.description || '-' }}</dd>
+        <dt>Resolution</dt><dd>{{ selected.resolutionNote || '-' }}</dd>
         <dt>Opened by</dt><dd>{{ selected.actorId }}</dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
       </dl>
       <div class="drawer-note-area">
-        <textarea v-model="noteText" class="ops-textarea" placeholder="Add a note…" rows="3"></textarea>
+        <textarea v-model="noteText" class="ops-textarea" placeholder="Add a note..." rows="3"></textarea>
         <BaseButton size="sm" :disabled="!noteText.trim()" @click="submitNote">Add Note</BaseButton>
       </div>
     </aside>
 
     <!-- Create modal -->
     <div v-if="createOpen" class="ops-modal-bg" @click.self="createOpen = false">
-      <div class="ops-modal" role="dialog" aria-label="Open dispute">
+      <div class="ops-modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="Open dispute">
         <h2>Open Dispute</h2>
         <label>Organization ID<BaseInput v-model="createForm.organizationId" class="ops-input" /></label>
         <label>Purchase Order ID<BaseInput v-model="createForm.purchaseOrderId" class="ops-input" /></label>
@@ -138,7 +138,7 @@
 
     <!-- Resolve modal -->
     <div v-if="resolveModal.open" class="ops-modal-bg" @click.self="resolveModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Resolve dispute">
+      <div class="ops-modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="Resolve dispute">
         <h2>{{ resolveModal.nextStatus === 'resolved_approved' ? 'Approve' : 'Reject' }} Dispute</h2>
         <p>Dispute {{ shortId(resolveModal.row?.id) }}</p>
         <label>Resolution Note<textarea v-model="resolveModal.note" class="ops-textarea" rows="3"></textarea></label>
@@ -282,13 +282,13 @@ export default {
     },
     formatMoney,
     shortId(id) { return String(id || "").slice(0, 8).toUpperCase(); },
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"; },
     disputeTypeLabel(t) {
       const map = { vend_failure: "Vend Failure", token_not_received: "Token Missing", overcharge: "Overcharge", underdelivery: "Underdelivery", double_charge: "Double Charge", other: "Other" };
       return map[t] || t;
     },
     statusLabel(s) {
-      const map = { open: "Open", under_review: "Under Review", resolved_approved: "Resolved ✓", resolved_rejected: "Resolved ✗", escalated: "Escalated", withdrawn: "Withdrawn" };
+      const map = { open: "Open", under_review: "Under Review", resolved_approved: "Resolved OK", resolved_rejected: "Resolved No", escalated: "Escalated", withdrawn: "Withdrawn" };
       return map[s] || s;
     },
     statusTone(s) {

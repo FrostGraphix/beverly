@@ -1,6 +1,6 @@
 <template>
   <div class="mfa-setup-overlay" @click.self="$emit('cancelled')">
-    <div class="mfa-setup-card" role="dialog" aria-label="Enable two-factor authentication">
+    <div class="mfa-setup-card" role="dialog" aria-modal="true" tabindex="-1" aria-label="Enable two-factor authentication">
 
       <!-- Progress bar -->
       <div class="mfa-progress">
@@ -36,7 +36,7 @@
 
         <div v-if="enrolling" class="mfa-loading">
           <div class="mfa-spinner-lg"></div>
-          <p>Generating secure key…</p>
+          <p>Generating secure key...</p>
         </div>
 
         <template v-else>
@@ -52,7 +52,13 @@
               alt="Scan this QR code with your authenticator app"
               @error="qrImgError = true"
             />
-            <div v-else class="mfa-qr-placeholder" v-html="qrSvg"></div>
+            <img
+              v-else-if="qrFallbackUrl"
+              :src="qrFallbackUrl"
+              class="mfa-qr-img"
+              alt="Fallback QR pattern for authenticator setup"
+            />
+            <div v-else class="mfa-qr-placeholder" aria-hidden="true"></div>
           </div>
 
           <div class="mfa-manual-entry">
@@ -108,7 +114,7 @@
           <span v-if="verifying" class="mfa-spinner-sm"></span>
           <span v-else>Verify &amp; Enable</span>
         </button>
-        <button class="mfa-setup-btn mfa-setup-btn--ghost" @click="step = 'qr'">← Back</button>
+        <button class="mfa-setup-btn mfa-setup-btn--ghost" @click="step = 'qr'">Back</button>
       </div>
 
       <!-- Step 4: Recovery Codes -->
@@ -188,7 +194,7 @@ export default {
       verifying: false,
       verifyError: "",
       shaking: false,
-      qrSvg: ""
+      qrFallbackUrl: ""
     };
   },
   computed: {
@@ -196,7 +202,7 @@ export default {
     verifyCode() { return this.verifyDigits.join(""); },
     qrUrl() {
       if (!this.totpUri) return "";
-      // Public QR generation service — produces a real, scannable QR code
+      // Public QR generation service.
       return `https://api.qrserver.com/v1/create-qr-code/?size=176x176&format=svg&ecc=M&data=${encodeURIComponent(this.totpUri)}`;
     }
   },
@@ -220,7 +226,7 @@ export default {
         this.totpUri = result.totpUri || "";
         this.secret = result.secret || "";
         this.recoveryCodes = result.recoveryCodes || [];
-        this.qrSvg = this.generateQRFallback(this.totpUri);
+        this.qrFallbackUrl = this.generateQRFallback(this.totpUri);
       } catch (err) {
         this.qrError = err?.message || "Enrollment failed. Please try again.";
       } finally {
@@ -263,7 +269,8 @@ export default {
         }
       }
 
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${rects}</svg>`;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${rects}</svg>`;
+      return `data:image/svg+xml;base64,${btoa(svg)}`;
     },
     onVerifyInput(index, event) {
       const val = (event.target.value || "").replace(/\D/g, "").slice(-1);
@@ -301,7 +308,7 @@ export default {
         if (result?.verified) {
           this.step = "recovery";
         } else {
-          this.verifyError = "Invalid code — make sure your app's time is synced.";
+          this.verifyError = "Invalid code. Make sure your app's time is synced.";
           this.triggerShake();
           this.clearVerifyDigits();
         }

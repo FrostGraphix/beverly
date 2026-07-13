@@ -24,6 +24,7 @@ const themesCss = readProjectFile("src/styles/themes.css");
 const tokensCss = readProjectFile("src/styles/tokens.css");
 const layoutsCss = readProjectFile("src/styles/layouts.css");
 const vercelShellCss = readProjectFile("src/styles/vercel-shell.css");
+const liquidGlassCss = readProjectFile("src/styles/liquid-glass.css");
 
 for (const theme of ["system", "light", "executive", "contrast"]) {
   assertIncludes(app, `id: "${theme}"`);
@@ -58,6 +59,15 @@ assertIncludes(vercelShellCss, "border-color: var(--sidebar-hover-border)");
 assertIncludes(vercelShellCss, "box-shadow: inset 3px 0 0 var(--sidebar-active-border)");
 assertIncludes(vercelShellCss, ".sidebar-item:focus-visible");
 assertIncludes(vercelShellCss, "background: transparent !important");
+assert(referenceCss.trim().endsWith('@import "./liquid-glass.css";'), "Liquid glass must load last.");
+for (const token of ["--glass-surface", "--glass-surface-strong", "--glass-border", "--glass-shadow", "--glass-blur"]) {
+  assertIncludes(tokensCss, token);
+}
+assertIncludes(liquidGlassCss, "prefers-reduced-transparency");
+assertIncludes(liquidGlassCss, "@supports not");
+assertIncludes(liquidGlassCss, ".auth-page .auth-card");
+assertIncludes(liquidGlassCss, "background: var(--glass-surface-strong)");
+assertIncludes(liquidGlassCss, ".auth-bg-orb");
 assertIncludes(layoutsCss, "justify-content: flex-start");
 assertIncludes(layoutsCss, ".bw-user-menu-item > span");
 assertIncludes(layoutsCss, "env(safe-area-inset-bottom, 0px)");

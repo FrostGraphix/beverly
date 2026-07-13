@@ -53,9 +53,16 @@ describe('§24 Acceptance: Auth plugin SOP compliance', () => {
         const src = readFileSync(rootFile('backend/wallet/src/plugins/auth.ts'), 'utf-8');
         const vendorIdx = src.indexOf("from('vendor_users')");
         const customerIdx = src.indexOf("from('customers')");
-        const staffIdx = src.indexOf('STAFF_ROLES.has(rawRole)');
+        const staffIdx = src.indexOf('STAFF_ROLES.has(staffRole)');
         expect(vendorIdx).toBeLessThan(customerIdx);
         expect(customerIdx).toBeLessThan(staffIdx);
+    });
+
+    it('uses only database role mappings for staff authorization', () => {
+        const src = readFileSync(rootFile('backend/wallet/src/plugins/auth.ts'), 'utf-8');
+        expect(src).toContain("const staffRole = (staffRow as { role_key?: string } | null)?.role_key;");
+        expect(src).not.toMatch(/staffRole\s*=.*rawRole/);
+        expect(src).not.toMatch(/user\.(?:user_metadata|app_metadata).*role/);
     });
 
     it('requireStaff, requireVendor, requireCustomer, requireKycTier are all registered', () => {
@@ -109,6 +116,11 @@ describe('§24 Acceptance: Wallet backend env', () => {
 
     it('SUPABASE_SERVICE_ROLE_KEY is configured', () => {
         expect(process.env.SUPABASE_SERVICE_ROLE_KEY).toBeTruthy();
+    });
+
+    it('requires a dedicated encryption key in production', () => {
+        const src = readFileSync(rootFile('backend/wallet/src/config/env.ts'), 'utf-8');
+        expect(src).toContain("values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY");
     });
 });
 

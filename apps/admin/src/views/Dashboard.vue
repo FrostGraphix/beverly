@@ -252,7 +252,10 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- KPI grid -->
-    <div class="bw-kpi-grid">
+    <div v-if="loading" class="bw-kpi-grid" aria-label="Loading dashboard">
+      <div v-for="n in 6" :key="`kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
+    </div>
+    <div v-else class="bw-kpi-grid">
 
       <!-- Featured: pending funding -->
       <div class="bw-kpi featured">
@@ -376,7 +379,11 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- Queues row -->
-    <div class="bw-row-2">
+    <div v-if="loading" class="bw-row-2">
+      <div class="bw-card bw-skeleton" style="min-height:260px"></div>
+      <div class="bw-card bw-skeleton" style="min-height:260px"></div>
+    </div>
+    <div v-else class="bw-row-2">
 
       <!-- Funding queue -->
       <div class="bw-card flush">
@@ -544,6 +551,9 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             </tr>
           </thead>
           <tbody>
+            <template v-if="loading">
+              <tr v-for="n in 5" :key="`recent-skeleton-${n}`"><td colspan="5"><div class="bw-skeleton"></div></td></tr>
+            </template>
             <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
               <td class="bw-row-id">#{{ p.id.slice(0, 8) }}</td>
               <td class="bw-mono">{{ p.customerMeter || '—' }}</td>

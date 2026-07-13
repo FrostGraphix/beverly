@@ -445,7 +445,7 @@ async function authorizeRequest(request, pathname, requestData) {
   if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
 
   // local-dev-token bypass allowed ONLY in local test environment.
-  let actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
+  let actor = token ? await authUserFromAccessToken(token).catch(() => null) : trustedLiveActor;
   if (!actor && token === "local-dev-token" && getEnv().demoAuthEnabled) {
     actor = {
       userId: "admin",
@@ -707,7 +707,10 @@ function trustedLiveReadActor(pathname, request) {
 }
 
 function canUseSampleFallback(pathname) {
-  return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(String(pathname || ""));
+  const normalizedPath = String(pathname || "");
+  return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
+    || /\/api\/dashboard\/read(?:PanelGroup|LineChart)$/i.test(normalizedPath)
+    || /\/api\/station\/read$/i.test(normalizedPath);
 }
 
 function apiCacheEnabled() {
@@ -1708,8 +1711,8 @@ async function loginResponse(payload) {
     return supabaseResult;
   }
   if (getEnv().demoAuthEnabled) {
-    const demoPassword = process.env.DEMO_AUTH_PASSWORD || "test-demo-password";
-    if (payload.password === demoPassword) {
+    const demoPassword = String(process.env.DEMO_AUTH_PASSWORD || "").trim();
+    if (demoPassword && payload.password === demoPassword) {
       return {
         status: 200,
         body: {
@@ -3090,6 +3093,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.revenueReport(payload.dateRange, payload.filters));
   }
+  if (pathname === "/api/reports/transactions") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.transactionReport(payload.dateRange, payload.filters));
+  }
   if (pathname === "/api/reports/wallet") {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.walletReport(payload.dateRange, payload.filters));
@@ -3105,6 +3112,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/reports/settlement") {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.settlementReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/disputes") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.disputeReport(payload.dateRange, payload.filters));
   }
 
   // ── MFA / 2FA ──
@@ -3919,13 +3930,14 @@ async function handler(request, response) {
     if (!result && canUseSampleFallback(pathname)) {
       const sample = sampleReadResponse(pathname, requestData);
       if (sample) {
+        const source = getEnv().liveProxyEnabled ? "sample-after-live-failure" : "sample";
         result = {
           ...sample,
           body: {
             ...sample.body,
             _proxy: {
               ...(sample.body?._proxy || {}),
-              source: "sample-after-live-failure",
+              source,
               pathname,
               upstreamStatus: 0
             }

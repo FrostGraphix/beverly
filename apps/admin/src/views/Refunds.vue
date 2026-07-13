@@ -11,7 +11,9 @@
       </select>
     </div>
 
-    <div v-if="loading" class="bw-loading">Loadingâ€¦</div>
+    <div v-if="loading" class="bw-card" aria-label="Loading refunds">
+      <div v-for="n in 5" :key="n" class="bw-skeleton" style="margin: var(--s-2)"></div>
+    </div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
     <div v-else>
@@ -85,46 +87,31 @@
       </div>
     </div>
 
-    <!-- Approve modal -->
-    <div v-if="approving" class="bw-modal-backdrop" @click.self="approving = null">
-      <div class="bw-modal">
-        <div class="bw-modal-header">
-          <h2>Approve Refund</h2>
-          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="approving = null">âœ•</button>
-        </div>
-        <div class="bw-modal-body">
-          <p class="bw-text-sm bw-text-muted">Amount: <strong>{{ naira(approving.amount_minor) }}</strong></p>
-          <p class="bw-text-sm bw-text-muted">Reason: {{ approving.reason?.replace(/_/g, ' ') }}</p>
-          <p class="bw-text-sm" style="margin-top:.5rem">Approving will credit this amount to the wallet immediately. This cannot be undone.</p>
-        </div>
-        <div class="bw-modal-footer">
-          <button class="bw-btn bw-btn-ghost" @click="approving = null">Cancel</button>
-          <button class="bw-btn bw-btn-primary" :disabled="saving" @click="submitApprove">
-            {{ saving ? 'Approvingâ€¦' : 'Confirm Approve' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :open="Boolean(approving)"
+      title="Approve refund?"
+      :description="approving ? `Credit ${naira(approving.amount_minor)} immediately? This cannot be undone.` : ''"
+      confirm-label="Approve refund"
+      tone="danger"
+      :loading="saving"
+      @update:open="(open) => { if (!open) approving = null; }"
+      @confirm="submitApprove"
+    />
 
-    <!-- Reject modal -->
-    <div v-if="rejecting" class="bw-modal-backdrop" @click.self="rejecting = null">
-      <div class="bw-modal">
-        <div class="bw-modal-header">
-          <h2>Reject Refund</h2>
-          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="rejecting = null">âœ•</button>
-        </div>
-        <div class="bw-modal-body">
-          <label class="bw-label">Reason *</label>
-          <textarea v-model="rejectReason" class="bw-textarea" rows="3" placeholder="Reason for rejectionâ€¦"></textarea>
-        </div>
-        <div class="bw-modal-footer">
-          <button class="bw-btn bw-btn-ghost" @click="rejecting = null">Cancel</button>
-          <button class="bw-btn bw-btn-danger" :disabled="saving || !rejectReason" @click="submitReject">
-            {{ saving ? 'Rejectingâ€¦' : 'Reject' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      :open="Boolean(rejecting)"
+      title="Reject refund?"
+      description="The request will return rejected."
+      confirm-label="Reject refund"
+      tone="danger"
+      :loading="saving"
+      :disable-confirm="!rejectReason.trim()"
+      @update:open="(open) => { if (!open) rejecting = null; }"
+      @confirm="submitReject"
+    >
+      <label class="bw-label">Reason *</label>
+      <textarea v-model="rejectReason" class="bw-textarea" rows="3" placeholder="Reason for rejection..."></textarea>
+    </ConfirmDialog>
   </AppShell>
 </template>
 
@@ -132,6 +119,7 @@
 import { ref, onMounted } from 'vue';
 import { api, naira } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, refundReceipt, viewReceipt } from '../lib/receipts';

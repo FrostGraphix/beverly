@@ -40,8 +40,8 @@ assert.match(login, /Session timed out after inactivity\. Sign in to continue\./
 assert.match(login, /Session ended\. Sign in to continue\./);
 assert.match(login, /user\?\.user_metadata\?\.role_key/);
 assert.match(login, /user\?\.user_metadata\?\.role/);
-assert.match(walletAuthPlugin, /user\.user_metadata\?\.\['role_key'\]/);
-assert.match(walletAuthPlugin, /user\.user_metadata\?\.\['role'\]/);
+assert.match(walletAuthPlugin, /const staffRole = \(staffRow as \{ role_key\?: string \} \| null\)\?\.role_key/);
+assert.doesNotMatch(walletAuthPlugin, /staffRole\s*=.*rawRole/);
 assert.match(referenceApi, /pathname === "\/api\/v1\/admin\/me"/);
 assert.match(referenceApi, /wallet\.dashboard\.view/);
 assert.match(stationSelect, /onUnmounted/);

@@ -24,6 +24,7 @@ for (const file of [
   "src/components/base/BaseSelect.vue",
   "src/components/base/BaseToggle.vue",
   "src/components/base/BaseBadge.vue",
+  "src/components/base/BaseConfirmDialog.vue",
   "src/components/base/BaseModalShell.vue"
 ]) {
   exists(file);
@@ -31,6 +32,7 @@ for (const file of [
 
 const architecture = read("ARCHITECTURE.md");
 const appVue = read("src/App.vue");
+const routeManifest = read("src/data/route-manifest.js");
 const actionModal = [
   "src/components/ActionModal.vue",
   "src/components/ActionModalGeneric.vue",
@@ -65,6 +67,12 @@ const suspectLedger = read("src/components/consumption/SuspectLedger.vue");
 const temporalLineChart = read("src/components/consumption/TemporalLineChart.vue");
 const toastNotification = read("src/components/ToastNotification.vue");
 const siteSidebar = read("src/components/consumption/SiteSidebar.vue");
+const confirmDialog = read("src/components/base/BaseConfirmDialog.vue");
+const reportsPage = read("src/components/ReportsPage.vue");
+const adminDashboard = read("apps/admin/src/views/Dashboard.vue");
+const adminReports = read("apps/admin/src/views/Reports.vue");
+const adminRefunds = read("apps/admin/src/views/Refunds.vue");
+const adminSupport = read("apps/admin/src/views/Support.vue");
 
 assert(referenceCss.trimStart().startsWith('@import "./tokens.css";'), "tokens.css must load first.");
 assert(referenceCss.includes('@import "./themes.css";'), "themes.css must be imported.");
@@ -110,6 +118,14 @@ assert(taskOutputModal.includes("BaseButton"), "TaskOutputModal should consume B
 assert(taskOutputModal.includes("BaseIconButton"), "TaskOutputModal should consume BaseIconButton.");
 assert(successModal.includes("BaseButton"), "SuccessModal should consume BaseButton.");
 assert(appVue.includes("BaseIconButton"), "App shell should consume BaseIconButton.");
+assert(!appVue.includes('class="theme-swatch"'), "Theme choices must show names only.");
+assert(appVue.includes('class="user-theme-submenu"'), "Theme choices must remain a compact submenu.");
+const routeHashes = [...routeManifest.matchAll(/hash:\s*"([^"]+)"/g)].map((match) => match[1]);
+const routeIconBlock = appVue.match(/const routeIconOverrides = \{([\s\S]*?)\n\};/)?.[1] || "";
+const routeIcons = new Map([...routeIconBlock.matchAll(/"(#[^"]+)":\s*(?:"([^"]+)"|routeIconPaths\.([a-z]+))/g)]
+  .map((match) => [match[1], match[2] || `routeIconPaths.${match[3]}`]));
+assert.deepStrictEqual(routeHashes.filter((hash) => !routeIcons.has(hash)), [], "Every sidebar route needs an explicit icon.");
+assert.strictEqual(new Set(routeIcons.values()).size, routeIcons.size, "Every sidebar route icon must be unique.");
 assert(tablePage.includes("BaseButton"), "TablePage toolbar should consume BaseButton.");
 assert(tablePage.includes("BaseInput"), "TablePage search should consume BaseInput.");
 assert(tablePage.includes("BaseSelect"), "TablePage filters should consume BaseSelect.");
@@ -151,6 +167,15 @@ assert(suspectLedger.includes("BaseIconButton"), "SuspectLedger drill button sho
 assert(temporalLineChart.includes("BaseButton"), "TemporalLineChart toggles should consume BaseButton.");
 assert(toastNotification.includes("BaseIconButton"), "ToastNotification close should consume BaseIconButton.");
 assert(siteSidebar.includes("BaseButton"), "SiteSidebar station pills should consume BaseButton.");
+assert(confirmDialog.includes('role="alertdialog"'), "Destructive confirmation must use alertdialog semantics.");
+assert(tablePage.includes('class="skeleton-row"'), "Table loading must preserve table geometry.");
+assert(tablePage.includes('No records yet'), "Table emptiness must provide one clear message.");
+assert(reportsPage.includes('Use 30 days'), "Report emptiness must provide one recovery action.");
+assert(adminDashboard.includes('kpi-skeleton'), "Admin dashboard loading must use skeletons.");
+assert(adminReports.includes('rp-chart-skeleton'), "Admin report loading must use skeletons.");
+assert(!adminReports.includes('class="bw-loading"'), "Admin reports must not use loading spinners.");
+assert(adminRefunds.includes("ConfirmDialog"), "Refund decisions must use shared confirmations.");
+assert(adminSupport.includes('@click="loadTickets"'), "Support emptiness must provide recovery.");
 assert(combinedCss.includes(".theme-command-menu"), "Expected legacy component CSS through import hub.");
 assert(combinedCss.includes(".batch-task-preview"), "Batch remote-task preview should have shared modal styling.");
 assert(architecture.includes("## Design System"), "Architecture should document design-system ownership.");

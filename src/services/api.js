@@ -232,10 +232,10 @@ function normalizeSessionData(source = {}, fallback = {}) {
 
 function writeSessionCookies(session) {
   const normalized = normalizeSessionData(session);
-  setCookie("userId", normalized.userId);
-  setCookie("userName", normalized.userName);
-  setCookie("roleId", normalized.roleId);
-  setCookie("userRemark", normalized.remark);
+  if (normalized.userId) setCookie("userId", normalized.userId);
+  if (normalized.userName) setCookie("userName", normalized.userName);
+  if (normalized.roleId) setCookie("roleId", normalized.roleId);
+  if (normalized.remark) setCookie("userRemark", normalized.remark);
   if (normalized.email) setCookie("userEmail", normalized.email);
 }
 

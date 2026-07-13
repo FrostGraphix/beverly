@@ -79,6 +79,14 @@ const schema = z.object({
     DEV_CONSOLE_BREAK_GLASS_TOKEN: z.string().min(32).optional(),
     // VAT is inclusive of the customer-paid vending amount. Persisted per order.
     VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(750),
+}).superRefine((values, context) => {
+    if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['APP_ENCRYPTION_KEY'],
+            message: 'Required in production.',
+        });
+    }
 });
 
 const parsed = schema.safeParse(process.env);

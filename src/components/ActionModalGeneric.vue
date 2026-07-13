@@ -1,5 +1,5 @@
 <template>
-  <BaseModalShell tag="form" class="modal" @submit.prevent="submit">
+  <BaseModalShell tag="form" :class="['modal', { 'modal--destructive': action === 'Delete' }]" :role="action === 'Delete' ? 'alertdialog' : 'dialog'" aria-modal="true" @submit.prevent="submit">
     <template #header>
       <div class="modal-header">
         <div class="modal-header-left">
@@ -132,7 +132,7 @@
     <template #footer>
       <div class="modal-actions">
         <BaseButton @click="$emit('close')">Cancel</BaseButton>
-        <BaseButton variant="primary" native-type="submit">Confirm</BaseButton>
+        <BaseButton :variant="action === 'Delete' ? 'danger' : 'primary'" native-type="submit">{{ action === 'Delete' ? 'Delete' : 'Confirm' }}</BaseButton>
       </div>
     </template>
   </BaseModalShell>

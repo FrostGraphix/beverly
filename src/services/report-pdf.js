@@ -84,12 +84,12 @@ class Pdf {
   finish(filename) {
     this.pages.push(this.page);
     const totalPages = this.pages.length;
-    for (let i = 1; i < totalPages; i++) {
+    for (let i = 0; i < totalPages; i++) {
       const page = this.pages[i];
       page.push(
         `${this.stroke(C.line)} 1 w 32 30 m 563 30 l S`,
         `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 32 17 Tm (CONFIDENTIAL  |  Beverly CRM Operations Report) Tj ET`,
-        `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i} / ${totalPages - 1}) Tj ET`
+        `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i + 1} / ${totalPages}) Tj ET`
       );
     }
     const body = this.pages.map((p) => `${p.join("\n")}\n`).join("");
@@ -200,9 +200,9 @@ function overviewPage(pdf, input) {
   pdf.text(32, 202, "All statistics represent verified transaction state.", 9, C.muted);
 }
 
-function tablePage(pdf, input) {
+function tablePage(pdf, input, rows, pageNumber) {
   pdf.newPage();
-  pdf.heading(input.title, "Operational Details");
+  pdf.heading(input.title, `Operational Details ${pageNumber}`);
   pdf.text(32, 716, "Detailed Series Table", 12, C.ink, true);
 
   const headerY = 690;
@@ -212,19 +212,15 @@ function tablePage(pdf, input) {
   cols.forEach((col, i) => pdf.text(xs[i], headerY, col.label.toUpperCase(), 8, C.muted, true));
   pdf.line(32, 680, 563, 680);
 
-  const displayRows = input.rows.slice(0, 15);
-  displayRows.forEach((row, i) => {
+  rows.forEach((row, i) => {
     const y = 658 - i * 25;
     if (i % 2 === 0) pdf.rect(32, y - 6, 531, 21, C.mist);
     cols.forEach((col, j) => {
       const val = typeof col.value === "function" ? col.value(row) : row[col.key];
-      pdf.text(xs[j], y, String(val ?? "—"), 8, C.ink);
+      pdf.text(xs[j], y, String(val ?? "-").slice(0, Math.max(8, Math.floor(72 / cols.length))), 8, C.ink);
     });
   });
 
-  if (input.chartData && input.chartData.length) {
-    lineChart(pdf, input.chartData, "Operational Performance Trend");
-  }
 }
 
 export function downloadReportPdf(input) {
@@ -232,13 +228,17 @@ export function downloadReportPdf(input) {
   coverPage(pdf, input);
   pdf.newPage();
   overviewPage(pdf, input);
-  tablePage(pdf, input);
+  const rows = input.rows || [];
+  const pageCount = Math.max(1, Math.ceil(rows.length / 22));
+  for (let page = 0; page < pageCount; page++) {
+    tablePage(pdf, input, rows.slice(page * 22, (page + 1) * 22), page + 1);
+  }
   pdf.newPage();
   pdf.heading(input.title, "Insights & Controls");
   pdf.text(32, 716, "System Audit & Verification", 12, C.ink, true);
-  pdf.text(32, 690, "This report confirms system metrics comply with audit directives.", 9, C.muted);
+  pdf.text(32, 690, "Statistics reflect records returned by configured report sources.", 9, C.muted);
   pdf.text(32, 670, "Actionable Insights:", 10, C.ink, true);
-  const insights = input.insights || ["No warnings or anomalies detected in the log trail.", "System balance matches the operational ledger."];
+  const insights = input.insights || ["No report insights were supplied."];
   insights.forEach((insight, idx) => {
     const y = 640 - idx * 24;
     pdf.rect(32, y - 2, 6, 6, C.green);
