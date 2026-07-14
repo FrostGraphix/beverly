@@ -29,6 +29,7 @@ function main() {
   const liveWriteControl = readMigration("20260702120000_crm_live_write_control.sql");
   const environmentLiveWriteControl = readMigration("20260702143000_environment_live_write_control.sql");
   const fullRls = readMigration("20260702150000_full_rls_permissions.sql");
+  const staffMultiStation = readMigration("20260714150000_staff_multi_station_scope.sql");
   const liveWriteActivation = readMigration("20260703100000_enable_live_writes.sql");
 
   const requiredTables = [
@@ -194,6 +195,8 @@ function main() {
   assert(fullRls.includes('create policy "Actors read own receipts"'), "missing actor receipt isolation");
   assert(fullRls.includes('create policy "Actors read own support messages"'), "missing support message isolation");
   assert(fullRls.includes("not is_internal"), "internal support messages must stay staff-only");
+  assert(fullRls.includes("from pg_policies"), "full RLS policies must remain rerunnable");
+  assert(staffMultiStation.includes("any(public.current_station_ids())"), "station scope must compare against the station array");
   const catalogSource = adminRoutes.match(/const PERMISSION_CATALOG = \[([\s\S]*?)\n\];/)?.[1] ?? "";
   const catalogKeys = [...catalogSource.matchAll(/\{ key: '([^']+)'/g)].map((match) => match[1]);
   for (const permission of catalogKeys) {
