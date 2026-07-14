@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 node_modules/
+.tools/
 dist/
 backend/data/*.sqlite
 backend/data/*.sqlite-*

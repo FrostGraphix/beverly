@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/reference.js": {
+      "maxDuration": 300,
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
     },
     "api/[...path].js": {

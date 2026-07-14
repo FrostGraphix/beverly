@@ -57,6 +57,7 @@ Keep write safety strict.
 - `backend/wallet/src/contracts/route-policy.ts` owns canonical mutation policy, money-write flags, cache exclusion, and developer-only route classification.
 - `api/wallet-route-contract.cjs` owns the legacy gateway's explicit canonical-money proxy contract.
 - `backend/reference-facade/` owns local facade logic.
+- `backend/src/services/interval-export-service.js` streams large interval CSV exports.
 - `backend/src/services/wallet-ledger-service.js` owns immutable wallet ledger posting and balance derivation.
 - `backend/src/services/wallet-funding-service.js` owns funding requests, proof metadata, and finance approval.
 - `backend/src/services/wallet-hold-service.js` owns wallet holds, capture, release, expiry, and reversal.
@@ -132,7 +133,7 @@ Keep write safety strict.
 - Token generation before remote-send.
 - Customer-direct purchase is deferred.
 - Vendor and staff shells stay separate.
-- Vendor roles are `vendor_user` and `vendor_manager`.
+- Vendor roles are `vendor_user` and `vendor`.
 - Finance approval role is `finance-checker`.
 - Funding approval posts ledger credit only after review.
 - Purchases place holds before vend dispatch.
@@ -161,7 +162,8 @@ Keep write safety strict.
 - Token records are financial truth.
 - `DailyDataMeter.total1` is consumption truth.
 - `usage1` is ignored.
-- `DailyDataMeter` needs `stationId`.
+- `DailyDataMeter` filters dates through `currentDateRange`.
+- `stationId` remains optional for super-admin reads.
 - All-sites consumption fan-outs per station.
 - KPI load is wave 1.
 - Charts load by sales first.
@@ -189,6 +191,7 @@ Keep write safety strict.
 
 - Vercel serves the SPA.
 - Vercel functions serve `/api/*`.
+- Large CSV responses stream directly.
 - Wallet Fastify runs separately.
 - Wallet workers run separately.
 - `WALLET_API_BASE_URL` selects Fastify.

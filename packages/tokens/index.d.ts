@@ -37,6 +37,7 @@ export interface WalletGreeting {
     english: string;
     yoruba: string;
     hausa: string;
+    igbo: string;
     pulse: string;
 }
 

@@ -153,7 +153,7 @@ export default {
         { name: "Admin User", email: "admin@beverlycrm.com", role: "Platform Admin", roleTone: "good", team: "Platform", approvalAuthority: "All", limitAuthority: "All", status: "Active", lastActive: "2 minutes ago", kind: "staff" },
         { name: "Michael Chen", email: "michael.chen@beverlycrm.com", role: "Finance Checker", roleTone: "info", team: "Finance", approvalAuthority: "Up to NGN 250,000", limitAuthority: "Up to NGN 250,000", status: "Active", lastActive: "18 minutes ago", kind: "staff" },
         { name: "Sarah Johnson", email: "sarah.johnson@beverlycrm.com", role: "Support Reviewer", roleTone: "info", team: "Support", approvalAuthority: "Up to NGN 25,000", limitAuthority: "View Only", status: "Active", lastActive: "1 hour ago", kind: "staff" },
-        { name: "Emily Rodriguez", email: "emily@freshstop.com", role: "Vendor Manager", roleTone: "warn", team: "Vendor Ops", approvalAuthority: "Up to NGN 100,000", limitAuthority: "Up to NGN 100,000", status: "Active", lastActive: "35 minutes ago", kind: "vendor" },
+        { name: "Emily Rodriguez", email: "emily@freshstop.com", role: "Vendor", roleTone: "warn", team: "Vendor Ops", approvalAuthority: "Up to NGN 100,000", limitAuthority: "Up to NGN 100,000", status: "Active", lastActive: "35 minutes ago", kind: "vendor" },
         { name: "David Lee", email: "david@vendoplus.com", role: "Vendor User", roleTone: "warn", team: "Vendor Ops", approvalAuthority: "Up to NGN 10,000", limitAuthority: "Up to NGN 10,000", status: "Active", lastActive: "2 hours ago", kind: "vendor" },
         { name: "Tina Patel", email: "tina.patel@beverlycrm.com", role: "Support Reviewer", roleTone: "info", team: "Support", approvalAuthority: "Up to NGN 10,000", limitAuthority: "View Only", status: "Inactive", lastActive: "3 days ago", kind: "staff" }
       ],
@@ -384,7 +384,7 @@ export default {
     onVendorCreated({ draft }) {
       const code = `VND-${String(this.vendors.length + 543).padStart(5, "0")}`;
       this.vendors.unshift({ name: draft.name, code, contact: draft.contact, email: draft.email, kyc: "Under Review", kycTone: "warn", balance: money(0), held: money(0), limit: draft.limit, limitTone: "info", status: "Pending", statusTone: "warn" });
-      this.users.push({ name: draft.contact, email: draft.contactEmail, role: "Vendor Manager", roleTone: "warn", team: "Vendor Ops", approvalAuthority: "Up to NGN 100,000", limitAuthority: "Up to NGN 100,000", status: "Active", lastActive: "invite sent", kind: "vendor" });
+      this.users.push({ name: draft.contact, email: draft.contactEmail, role: "Vendor", roleTone: "warn", team: "Vendor Ops", approvalAuthority: "Up to NGN 100,000", limitAuthority: "Up to NGN 100,000", status: "Active", lastActive: "invite sent", kind: "vendor" });
       this.auditRows.unshift({ time: "13 May 10:35:00", actor: "admin", role: "super-admin", event: "vendor_account_created_temp_password", target: code, ip: "local" });
     }
   }

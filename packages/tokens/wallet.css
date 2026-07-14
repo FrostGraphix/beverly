@@ -249,6 +249,50 @@
   border-top: 1px solid var(--glass-border);
   flex-shrink: 0;
 }
+.sidebar-account { padding: var(--s-3); }
+.sidebar-account-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass-bg);
+}
+.sidebar-avatar {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 50%;
+  background: var(--brand);
+  color: #07110b;
+  font-size: var(--t-sm);
+  font-weight: 800;
+}
+.sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.sidebar-account-meta { min-width: 0; line-height: 1.25; }
+.sidebar-account-meta strong,
+.sidebar-account-meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+.sidebar-account-meta strong { font-size: var(--t-sm); }
+.sidebar-account-meta span { margin-top: 2px; color: var(--text-muted); font-size: var(--t-xs); }
+.sidebar-signout {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: center;
+  color: var(--danger);
+}
+.sidebar-signout svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.sidebar-account .bw-back { margin-bottom: var(--s-2); }
 .bw-back {
   display: flex;
   align-items: center;
@@ -896,6 +940,24 @@
 .bw-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
 .bw-input::placeholder { color: var(--text-muted); }
 textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-height: 1.5; }
+.bw-file-input {
+  height: 48px;
+  padding: 5px 8px;
+  line-height: 36px;
+}
+.bw-file-input::file-selector-button {
+  height: 36px;
+  margin: 0 var(--s-3) 0 0;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  line-height: 34px;
+  cursor: pointer;
+  vertical-align: middle;
+}
 .bw-input-wrap { position: relative; }
 .bw-input-icon {
   position: absolute;
@@ -1715,8 +1777,8 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
     right: -4px;
     width: min(260px, calc(100vw - 24px));
   }
-  .bw-table  { display: table; }
-  .bw-t-cards { display: none; }
+  .bw-t-wrap:has(~ .bw-t-cards) { display: none; }
+  .bw-t-wrap ~ .bw-t-cards { display: block; }
 }
 
 /* ════════════════════════════════════════════════════════════════════

@@ -356,7 +356,7 @@ async function remoteSendGeneratedToken() {
 
 <template>
   <AppShell title="Buy Token">
-    <div style="max-width: 560px; margin: 0 auto">
+    <div class="vend-page">
       <div class="vend-flow" aria-label="Vending progress">
         <div v-for="item in flowSteps" :key="item.label" :class="['vend-flow-step', { active: item.active, done: item.done }]">
           <span></span>
@@ -425,7 +425,7 @@ async function remoteSendGeneratedToken() {
       </div>
 
       <!-- Step: preview / confirm -->
-      <div v-else-if="step === 'preview'" class="bw-card">
+      <div v-else-if="step === 'preview'" class="bw-card vend-preview-card">
         <button class="bw-btn sm" style="margin-bottom: var(--s-4)" @click="step = 'amount'">← Back</button>
         <p class="bw-label">Confirm purchase</p>
         <h2 class="bw-h2 bw-mono" style="font-size: var(--t-3xl); margin: 0">{{ naira(preview?.amountMinor) }}</h2>
@@ -522,6 +522,21 @@ async function remoteSendGeneratedToken() {
 </template>
 
 <style scoped>
+.vend-page {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.vend-preview-card .bw-row { min-width: 0; gap: var(--s-2); }
+.vend-preview-card .bw-row > :last-child {
+  min-width: 0;
+  max-width: 60%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .vend-flow {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -594,6 +609,11 @@ async function remoteSendGeneratedToken() {
 }
 
 @media (max-width: 520px) {
+  .vend-page {
+    max-width: none;
+    margin-inline: 0;
+  }
+
   .vend-flow {
     gap: 6px;
   }

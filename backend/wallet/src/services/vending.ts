@@ -559,14 +559,17 @@ export async function createReceipt(input: CreateReceiptInput) {
     return data as { id: string; receipt_number: string; payload: Record<string, unknown> };
 }
 
-export async function listVendorPurchases(vendorOrganizationId: string, limit = 100) {
-    const { data } = await adminClient
+export async function listVendorPurchases(vendorOrganizationId: string, limit = 100, offset = 0, since?: string) {
+    let query = adminClient
         .from('purchase_orders')
         .select('*')
         .eq('actor_type', 'vendor')
-        .eq('actor_id', vendorOrganizationId)
+        .eq('actor_id', vendorOrganizationId);
+    if (since) query = query.gte('created_at', since);
+    const { data, error } = await query
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + limit - 1);
+    if (error) throw error;
     return (data ?? []) as PurchaseOrder[];
 }
 

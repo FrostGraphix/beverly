@@ -180,7 +180,7 @@ async function uploadProcessedProfilePicture(file: File) {
             </label>
             <label class="profile-field">
               <span>Photo upload</span>
-              <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
+              <input class="bw-input bw-file-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
             </label>
             <small class="bw-muted">JPEG, PNG, WEBP only. Max 2MB. Image is cropped to square and re-exported clean.</small>
             <div class="profile-actions">

@@ -98,6 +98,22 @@ function main() {
   const privacyService = read("backend/wallet/src/services/data-privacy.ts");
   assert.ok(!privacyService.includes("wallet_transactions"), "data export must use wallet_ledger_entries");
 
+  assertIncludes("backend/wallet/src/routes/customer.ts", [
+    "email_change_forbidden",
+    "Registration email cannot be changed.",
+  ]);
+  assertIncludes("apps/customer/src/views/Profile.vue", [
+    "Registration email cannot be changed.",
+    "aria-describedby=\"email-lock-note\"",
+    "bw-input bw-file-input",
+  ]);
+  assertIncludes("apps/vendor/src/views/Profile.vue", ["bw-input bw-file-input"]);
+  assertIncludes("apps/admin/src/views/Profile.vue", ["bw-input bw-file-input"]);
+  assertIncludes("packages/tokens/wallet.css", [
+    ".bw-file-input",
+    ".bw-file-input::file-selector-button",
+  ]);
+
   assertIncludes("backend/wallet/src/routes/vendor.ts", [
     "fastify.patch('/me'",
     "fastify.post('/profile-picture/upload-url'",

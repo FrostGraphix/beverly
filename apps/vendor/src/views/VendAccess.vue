@@ -24,6 +24,7 @@ function safeRedirectTarget(raw: unknown, fallback = '/vend') {
 }
 
 const valid = computed(() => {
+    if (!credential.value || !confirm.value) return false;
     if (credentialProblem.value) return false;
     if (credential.value !== confirm.value) return false;
     return true;
@@ -71,7 +72,7 @@ async function submit() {
 <template>
   <AppShell title="Vendor Authorization">
     <div style="max-width: 640px; margin: 0 auto">
-      <section class="bw-card">
+      <form class="bw-card" @submit.prevent="submit">
         <p class="bw-label">Required before vending</p>
         <h1 class="bw-h1">Create vend authorization</h1>
         <p class="bw-muted">
@@ -80,34 +81,38 @@ async function submit() {
         </p>
 
         <div class="bw-row" style="gap: var(--s-2); margin-top: var(--s-5)">
-          <button class="bw-btn" :class="{ primary: type === 'pin' }" @click="type = 'pin'; credential = ''; confirm = ''">
+          <button type="button" class="bw-btn" :class="{ primary: type === 'pin' }" @click="type = 'pin'; credential = ''; confirm = ''">
             PIN
           </button>
-          <button class="bw-btn" :class="{ primary: type === 'password' }" @click="type = 'password'; credential = ''; confirm = ''">
+          <button type="button" class="bw-btn" :class="{ primary: type === 'password' }" @click="type = 'password'; credential = ''; confirm = ''">
             Password
           </button>
         </div>
 
         <div style="margin-top: var(--s-5)">
-          <label class="bw-label">{{ type === 'pin' ? 'Vend PIN' : 'Vend password' }}</label>
+          <label class="bw-label" for="vend-credential">{{ type === 'pin' ? 'Vend PIN' : 'Vend password' }}</label>
           <input
+            id="vend-credential"
             class="bw-input bw-mono"
             v-model="credential"
             :type="type === 'pin' ? 'password' : 'password'"
             :inputmode="type === 'pin' ? 'numeric' : 'text'"
             :maxlength="type === 'pin' ? 6 : 80"
+            autocomplete="new-password"
             :placeholder="type === 'pin' ? '4 to 6 digits' : 'Letters and numbers'"
           />
         </div>
 
         <div style="margin-top: var(--s-4)">
-          <label class="bw-label">Confirm</label>
+          <label class="bw-label" for="vend-credential-confirm">Confirm</label>
           <input
+            id="vend-credential-confirm"
             class="bw-input bw-mono"
             v-model="confirm"
             type="password"
             :inputmode="type === 'pin' ? 'numeric' : 'text'"
             :maxlength="type === 'pin' ? 6 : 80"
+            autocomplete="new-password"
           />
         </div>
 
@@ -127,14 +132,14 @@ async function submit() {
         </p>
 
         <button
+          type="submit"
           class="bw-btn primary"
           style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 46px"
           :disabled="loading || !valid"
-          @click="submit"
         >
           {{ loading ? 'Saving...' : 'Save authorization' }}
         </button>
-      </section>
+      </form>
     </div>
   </AppShell>
 </template>

@@ -94,8 +94,7 @@ const initials = computed(() => {
 });
 
 const roleLabel = computed(() => {
-    const raw = auth.user?.role || 'vendor';
-    return raw.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    return auth.user?.role === 'vendor_user' ? 'Vendor User' : 'Vendor';
 });
 
 const accountStatusLabel = computed(() => {
@@ -227,7 +226,7 @@ async function uploadProcessedProfilePicture(file: File) {
         <div class="bw-stack">
           <input class="bw-input" v-model="name" placeholder="Full name" />
           <input class="bw-input" v-model="phone" placeholder="Phone" />
-          <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
+          <input class="bw-input bw-file-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
           <small class="bw-muted">JPEG, PNG, WEBP only. Max 2MB.</small>
           <div class="profile-picture-actions">
             <button class="bw-btn primary" :disabled="saving" @click="saveProfile">{{ saving ? 'Saving...' : 'Save profile' }}</button>
@@ -467,7 +466,19 @@ async function uploadProcessedProfilePicture(file: File) {
   }
 
   .profile-hero-meta > div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
     padding: 12px 0;
+  }
+
+  .profile-hero-meta span {
+    margin-bottom: 0;
+  }
+
+  .profile-hero-meta strong {
+    text-align: right;
   }
 
   .profile-hero-meta > div + div {

@@ -20,8 +20,17 @@ global.fetch = async (url, options) => {
           {
             amount: 2500,
             customerId: "customer-1",
-            serialNumber: "meter-1",
+            meterId: "meter-1",
+            serialNumber: "station-serial",
             timestamp: "2026-07-12T08:30:00.000Z",
+            transactionKwh: 7.5
+          },
+          {
+            amount: 2500,
+            customerId: "customer-2",
+            meterId: "meter-2",
+            serialNumber: "station-serial",
+            timestamp: "2026-07-12T09:30:00.000Z",
             transactionKwh: 7.5
           }
         ],
@@ -50,16 +59,24 @@ const { revenueReport, transactionReport } = require("../backend/src/services/re
       ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"]
     );
     assert.equal(revenue.rows.length, 1);
-    assert.equal(revenue.summary.totalRevenue, 1250000);
-    assert.equal(revenue.summary.activeMeters, 5);
-    assert.equal(transactions.rows.length, 5);
-    assert.equal(transactions.summary.totalAmount, 1250000);
-    assert.equal(transactions.summary.uniqueMeters, 5);
+    assert.equal(revenue.summary.totalRevenue, 2500000);
+    assert.equal(revenue.summary.meters, 10);
+    assert.equal(revenue.summary.activeStations, 5);
+    assert.equal(transactions.rows.length, 10);
+    assert.equal(transactions.summary.totalAmount, 2500000);
+    assert.equal(transactions.summary.uniqueMeters, 10);
     assert.deepEqual(
       [...new Set(transactions.rows.map((row) => row.station))].sort(),
       ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"]
     );
     assert.equal(transactions.rows[0].kwh, 7.5);
+
+    const stationRevenue = await revenueReport(dateRange, { stationId: "OGUFA" });
+    assert.equal(requests.length, 11);
+    assert.equal(new URL(requests.at(-1).url).searchParams.get("SITE_ID"), "OGUFA");
+    assert.equal(stationRevenue.summary.meters, 2);
+    assert.equal(stationRevenue.summary.activeStations, 1);
+    assert.equal(stationRevenue.rows[0].station, "OGUFA");
   } finally {
     global.fetch = originalFetch;
     if (originalBaseUrl === undefined) delete process.env.LIVE_API_BASE_URL;

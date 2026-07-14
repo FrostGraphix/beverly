@@ -14,6 +14,10 @@ const greetingComponent = read('packages/tokens/WalletGreeting.vue');
 assert.match(tokenRuntime, /morning:[\s\S]*english: 'Good morning'[\s\S]*yoruba: 'E kaaro'[\s\S]*hausa: 'Ina kwana'/);
 assert.match(tokenRuntime, /afternoon:[\s\S]*english: 'Good afternoon'[\s\S]*yoruba: 'E kaasan'[\s\S]*hausa: 'Ina wuni'/);
 assert.match(tokenRuntime, /night:[\s\S]*english: 'Good night'[\s\S]*yoruba: 'E ku ale'[\s\S]*hausa: 'Barka da dare'/);
+assert.match(tokenRuntime, /morning:[\s\S]*igbo: 'Ụtụtụ ọma'/);
+assert.match(tokenRuntime, /afternoon:[\s\S]*igbo: 'Ehihie ọma'/);
+assert.match(tokenRuntime, /night:[\s\S]*igbo: 'Mgbede ọma'/);
+assert.match(greetingComponent, /greeting\.value\.igbo/);
 
 const handCount =
   (greetingComponent.match(/👋/gu) || []).length +

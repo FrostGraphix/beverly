@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const page = fs.readFileSync(path.join(root, "src", "components", "DailyDataMeterPage.vue"), "utf8");
+const page = fs.readFileSync(path.join(root, "src", "components", "DailyDataMeterPage.vue"), "utf8").replace(/\r\n/g, "\n");
 
 assert(!page.includes("Sort by..."), "Interval Data should not render the Sort by dropdown.");
 assert(!page.includes('aria-label="Sort by"'), "Interval Data should remove the Sort by control.");
@@ -17,5 +17,12 @@ assert(page.includes("normalizeIntervalTableStatus"), "Hourly modal should align
 assert(!page.includes("normalizeIntervalStatus"), "DailyDataMeterPage should avoid the ambiguous interval status normalizer.");
 assert(page.includes("healthText(value) {\n      // Hourly modal uses same polarity users expect in Interval table.\n      return normalizeIntervalTableStatus(value);"), "Hourly text should map status with interval table polarity.");
 assert(page.includes("healthClass(value) {\n      return normalizeIntervalTableStatus(value) === \"Normal\""), "Hourly class should map status with interval table polarity.");
+assert(page.includes('/api/DailyDataMeter/export.csv?'), "Interval export should use the streaming endpoint.");
+assert(page.includes('document.createElement("a")'), "Interval export should use a native browser download.");
+assert(page.includes('exportRange: "all"'), "Interval export should default to complete history.");
+assert(page.includes('{ value: "1d"') && page.includes('{ value: "1y"'), "Interval export should offer requested date ranges.");
+assert(page.includes('search: this.searchTerm.trim()'), "Interval export should send the active search filter.");
+assert(!page.includes('Preparing CSV'), "Interval export must not buffer CSV data in the browser.");
+assert(page.includes('.ddm-toolbar { position: relative; z-index: 100; overflow: visible;'), "Interval export options must render above sticky table columns.");
 
 console.log("interval-page-contract ok");

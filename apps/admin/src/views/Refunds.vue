@@ -1,7 +1,7 @@
 ﻿<template>
   <AppShell title="Refunds">
     <div class="bw-filter-bar">
-      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">CSV</button>
+      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">Export CSV</button>
       <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportPdfDoc">PDF</button>
       <select v-model="statusFilter" class="bw-select bw-select-sm" @change="load">
         <option value="">All statuses</option>

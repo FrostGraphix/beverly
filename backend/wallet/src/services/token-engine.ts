@@ -365,8 +365,7 @@ async function lookupHistoricalLowPurchaseReport(meterId: string): Promise<Meter
 }
 
 function archivedMeterFallbackEnabled() {
-    if (env.NODE_ENV === 'production') return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true;
-    return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK !== false;
+    return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true;
 }
 
 function findRepoFile(relativePath: string) {

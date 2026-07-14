@@ -2,9 +2,12 @@ const fs = require("fs");
 const path = require("path");
 require("module").Module._initPaths();
 const { chromium } = require("playwright");
+const { loadEnvFile } = require("./env-loader.cjs");
+
+loadEnvFile();
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const url = "http://8.208.16.168:9311/";
+const url = String(process.env.SOURCE_SITE_URL || "").replace(/\/+$/, "");
 const outDir = path.resolve("source-crawl/screenshots");
 
 const viewports = [
@@ -14,6 +17,7 @@ const viewports = [
 ];
 
 async function main() {
+  if (!url) throw new Error("Set SOURCE_SITE_URL.");
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({ headless: true, executablePath: edge });
   const report = [];
@@ -36,7 +40,7 @@ async function main() {
     const loginPath = path.join(outDir, `source-login-${viewport.name}-${viewport.width}x${viewport.height}.png`);
     await page.screenshot({ path: loginPath, fullPage: false });
 
-    await page.goto("http://8.208.16.168:9311/#/dashboard", { waitUntil: "networkidle", timeout: 30000 });
+    await page.goto(`${url}/#/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
     const dashboardRedirectPath = path.join(outDir, `source-dashboard-redirect-${viewport.name}-${viewport.width}x${viewport.height}.png`);
     await page.screenshot({ path: dashboardRedirectPath, fullPage: false });
 

@@ -50,6 +50,7 @@ export function getWalletGreeting(date = new Date()) {
             english: 'Good morning',
             yoruba: 'E kaaro',
             hausa: 'Ina kwana',
+            igbo: 'Ụtụtụ ọma',
             pulse: 'Fresh starts',
         },
         afternoon: {
@@ -57,6 +58,7 @@ export function getWalletGreeting(date = new Date()) {
             english: 'Good afternoon',
             yoruba: 'E kaasan',
             hausa: 'Ina wuni',
+            igbo: 'Ehihie ọma',
             pulse: 'Steady flow',
         },
         night: {
@@ -64,6 +66,7 @@ export function getWalletGreeting(date = new Date()) {
             english: 'Good night',
             yoruba: 'E ku ale',
             hausa: 'Barka da dare',
+            igbo: 'Mgbede ọma',
             pulse: 'Calm close',
         },
     };

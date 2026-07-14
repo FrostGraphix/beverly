@@ -39,6 +39,8 @@ const schema = z.object({
 
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
+    UPSTREAM_API_URL: z.string().url().optional(),
+    UPSTREAM_BEARER_TOKEN: z.string().optional(),
     ENERGY_AUTHORIZATION_PASSWORD: z.string().optional(),
     ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
         if (value === undefined || value === '') return undefined;
@@ -97,7 +99,11 @@ if (!parsed.success) {
     process.exit(1);
 }
 
-export const env = parsed.data;
+export const env = {
+    ...parsed.data,
+    ENERGY_BACKEND_URL: parsed.data.UPSTREAM_API_URL || parsed.data.ENERGY_BACKEND_URL,
+    ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
+};
 
 export const corsOrigins = env.CORS_ORIGINS
     .split(',')

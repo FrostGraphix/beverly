@@ -10,7 +10,7 @@ const props = defineProps<{
 
 const greeting = computed(() => getWalletGreeting());
 const activeIndex = ref(0);
-const greetings = computed(() => [greeting.value.english, greeting.value.yoruba, greeting.value.hausa]);
+const greetings = computed(() => [greeting.value.english, greeting.value.yoruba, greeting.value.hausa, greeting.value.igbo]);
 const activeGreeting = computed(() => greetings.value[activeIndex.value % greetings.value.length]);
 let rotateTimer: ReturnType<typeof setInterval> | null = null;
 

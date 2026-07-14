@@ -145,17 +145,8 @@ describe('live token integration payloads', () => {
         expect(payload.isS2).toBe(true);
     });
 
-    it('can resolve archived read-only meter metadata without vending', () => {
-        const meter = lookupArchivedMeterSample('47005373957');
-        expect(meter).toMatchObject({
-            meterId: '47005373957',
-            customerId: '47005373957',
-            customerName: 'JONATHAN AZIGE',
-            stationId: 'KYAKALE',
-            tariffId: 'RESIDENTIAL',
-            resolutionSource: 'archived_contract_sample',
-            liveVerified: false,
-        });
+    it('keeps archived meter samples disabled by default', () => {
+        expect(lookupArchivedMeterSample('47005373957')).toBeNull();
     });
 
     it('builds the upstream CreateTokenTask payload for remote sends', () => {

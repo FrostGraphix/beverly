@@ -9,7 +9,7 @@ loadEnvFile();
 const root = path.resolve(__dirname, "..");
 const contractPath = path.join(root, "contracts", "reference-contract.generated.json");
 const samplesDir = path.join(root, "contracts", "samples");
-const baseUrl = process.env.UPSTREAM_API_URL || process.env.LIVE_API_BASE_URL || "http://8.208.16.168:9310";
+const baseUrl = process.env.UPSTREAM_API_URL || process.env.LIVE_API_BASE_URL || "";
 const bearerToken = process.env.UPSTREAM_BEARER_TOKEN || process.env.LIVE_API_BEARER_TOKEN || "";
 const allowWrites = process.env.ALLOW_LIVE_WRITES === "true";
 
@@ -212,6 +212,10 @@ async function callConsumptionFallback(result) {
 }
 
 async function main() {
+  if (!baseUrl) {
+    console.error("Set UPSTREAM_API_URL or LIVE_API_BASE_URL first.");
+    process.exit(1);
+  }
   if (!bearerToken) {
     console.error("Set UPSTREAM_BEARER_TOKEN first.");
     process.exit(1);

@@ -244,5 +244,5 @@ export function downloadReportPdf(input) {
     pdf.rect(32, y - 2, 6, 6, C.green);
     pdf.text(48, y, insight, 9, C.ink);
   });
-  pdf.finish(`beverly-crm-${input.family}-report-${dateStamp()}.pdf`);
+  pdf.finish(input.filename || `beverly-crm-${input.family}-report-${dateStamp()}.pdf`);
 }

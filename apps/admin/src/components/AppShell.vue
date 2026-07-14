@@ -10,6 +10,7 @@ const auth = useStaffAuthStore();
 const router = useRouter();
 const drawerOpen = ref(false);
 const userMenuOpen = ref(false);
+const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 const navGroups = computed(() => [
     {
@@ -108,6 +109,8 @@ const initials = computed(() => {
 });
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 const isSuperAdmin = computed(() => auth.user?.role === 'super-admin');
+const displayName = computed(() => auth.user?.full_name || auth.user?.email || 'Administrator');
+const roleLabel = computed(() => (auth.user?.role || 'admin').replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
 
 const navIconPath: Record<string, string> = {
     dashboard: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
@@ -184,9 +187,16 @@ function openSecurity() {
 }
 
 async function signOut() {
+    if (signingOut.value) return;
+    signingOut.value = true;
     closeUserMenu();
-    auth.logout();
-    await router.push('/login');
+    closeDrawer();
+    try {
+        auth.logout();
+        await router.push('/login');
+    } finally {
+        signingOut.value = false;
+    }
 }
 
 onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown));
@@ -224,12 +234,30 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </template>
       </nav>
 
-      <div v-if="isSuperAdmin" class="bw-sidebar-foot">
-        <a :href="CRM_URL" class="bw-back">
+      <footer class="bw-sidebar-foot sidebar-account">
+        <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back to CRM
         </a>
-      </div>
+        <div class="sidebar-account-card">
+          <div class="sidebar-avatar" aria-hidden="true">
+            <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="" />
+            <span v-else>{{ initials }}</span>
+          </div>
+          <div class="sidebar-account-meta">
+            <strong>{{ displayName }}</strong>
+            <span>{{ roleLabel }}</span>
+          </div>
+          <button type="button" class="bw-btn sidebar-signout" :disabled="signingOut" @click="signOut">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>{{ signingOut ? 'Signing out...' : 'Sign out' }}</span>
+          </button>
+        </div>
+      </footer>
     </aside>
 
     <!-- Main column -->

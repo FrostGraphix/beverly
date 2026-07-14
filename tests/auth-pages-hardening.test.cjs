@@ -6,7 +6,9 @@ const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 const adminLogin = read('apps/admin/src/views/Login.vue');
+const adminVite = read('apps/admin/vite.config.ts');
 const vendorLogin = read('apps/vendor/src/views/Login.vue');
+const vendorVite = read('apps/vendor/vite.config.ts');
 const vendorSecurity = read('apps/vendor/src/views/Security.vue');
 const vendorVendAccess = read('apps/vendor/src/views/VendAccess.vue');
 const vendorStore = read('apps/vendor/src/stores/auth.ts');
@@ -23,11 +25,17 @@ assert.match(adminLogin, /REMEMBERED_EMAIL_KEY/);
 assert.match(adminLogin, /showPassword/);
 assert.match(adminLogin, /Authentication is not configured/);
 assert.doesNotMatch(adminLogin, /startsWith\('\/'\) \? r :/);
+assert.match(adminVite, /loadEnv\(mode, resolve\(__dirname, '\.\.\/\.\.'\), ''\)/);
+assert.match(adminVite, /env\.VITE_SUPABASE_URL \|\| env\.SUPABASE_URL/);
+assert.match(adminVite, /env\.VITE_SUPABASE_ANON_KEY \|\| env\.SUPABASE_ANON_KEY/);
 
 assert.match(vendorLogin, /safeRedirectTarget/);
 assert.match(vendorLogin, /REMEMBERED_VENDOR_EMAIL_KEY/);
 assert.match(vendorLogin, /showPassword/);
 assert.match(vendorLogin, /Authentication is not configured/);
+assert.match(vendorVite, /loadEnv\(mode, resolve\(__dirname, '\.\.\/\.\.'\), ''\)/);
+assert.match(vendorVite, /env\.VITE_SUPABASE_URL \|\| env\.SUPABASE_URL/);
+assert.match(vendorVite, /env\.VITE_SUPABASE_ANON_KEY \|\| env\.SUPABASE_ANON_KEY/);
 assert.match(vendorLogin, /auth\.setSession\(accessToken, me, rememberEmail\.value, \{/);
 assert.match(vendorLogin, /password-change', query: \{ redirect: redirectTarget\.value \}/);
 assert.match(vendorStore, /storeToken\(token: string, remember = true, options: VendorTokenOptions = \{\}\)/);

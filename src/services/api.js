@@ -342,20 +342,7 @@ export async function currentUserInfo() {
     });
   } catch (error) {
     recordClientError("current-user-fallback", error, { userId: getCookie("userId") || "admin" });
-    const session = normalizeSessionData({
-      userId: getCookie("userId") || "admin",
-      userName: getCookie("userName") || "ACB(admin)",
-      roleId: getCookie("roleId") || null,
-      remark: getCookie("userRemark") || "",
-      email: getCookie("userEmail") || ""
-    });
-    return validateCurrentUserResponse({
-      code: 0,
-      reason: "fallback",
-      data: {
-        ...session
-      }
-    });
+    throw error;
   }
 }
 

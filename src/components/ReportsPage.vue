@@ -28,21 +28,34 @@
 
     <!-- Controls Bar -->
     <div class="report-controls">
-      <div class="report-presets">
-        <BaseButton
-          v-for="p in presets"
-          :key="p.value"
-          variant="quiet"
-          class="report-preset-btn"
-          :class="{ active: activePreset === p.value }"
-          @click="applyPreset(p.value)"
-        >{{ p.label }}</BaseButton>
+      <div class="report-controls-primary">
+        <div class="report-presets">
+          <BaseButton
+            v-for="p in presets"
+            :key="p.value"
+            variant="quiet"
+            class="report-preset-btn"
+            :class="{ active: activePreset === p.value }"
+            @click="applyPreset(p.value)"
+          >{{ p.label }}</BaseButton>
+        </div>
+        <BaseSelect
+          v-if="stationFilterEnabled"
+          v-model="stationId"
+          class="report-station-select"
+          aria-label="Filter reports by station"
+          @change="applyStationFilter"
+        >
+          <option v-for="station in stationOptions" :key="station.value || 'all'" :value="station.value">
+            {{ station.value ? station.label : 'All Stations' }}
+          </option>
+        </BaseSelect>
       </div>
       <ExportToolbar
         :rows="rows"
         :columns="reportColumns"
-        :title="activeReportLabel"
-        :filename="`beverly-${selectedType}-report`"
+        :title="exportTitle"
+        :filename="exportFilename"
         :disabled="loading || !reportData"
         :allowed-formats="['csv', 'excel', 'pdf']"
         :pdfExporter="exportPremiumPdf"
@@ -154,6 +167,7 @@ import BaseTableShell from "./base/BaseTableShell.vue";
 import ExportToolbar from "./base/ExportToolbar.vue";
 import EChartPanel from "./EChartPanel.vue";
 import { pageNumbers, pageSizeOptions as tablePageSizeOptions, paginateRows, totalPages } from "../services/table-helpers.mjs";
+import { tableSiteOptions } from "../services/table-service.js";
 import {
   reportTypes,
   fetcherForType,
@@ -170,7 +184,9 @@ export default {
   data() {
     return {
       reportTypes,
+      stationOptions: tableSiteOptions,
       selectedType: "financial",
+      stationId: "",
       activePreset: "7d",
       rows: [],
       reportData: null,
@@ -197,6 +213,18 @@ export default {
     pageCount() { return totalPages(this.rows.length, this.pageSize); },
     pages() { return pageNumbers(this.currentPage, this.pageCount); },
     pagedRows() { return paginateRows(this.rows, this.currentPage, this.pageSize); },
+    stationFilterEnabled() { return ["financial", "transactions", "general"].includes(this.selectedType); },
+    selectedStationLabel() {
+      return this.stationOptions.find((station) => station.value === this.stationId)?.label || "All Stations";
+    },
+    exportTitle() {
+      return this.stationFilterEnabled ? `${this.activeReportLabel} - ${this.selectedStationLabel}` : this.activeReportLabel;
+    },
+    exportFilename() {
+      if (!this.stationFilterEnabled) return `beverly-${this.selectedType}-report`;
+      const station = this.stationId ? this.stationId.toLowerCase() : "all-stations";
+      return `beverly-${this.selectedType}-${station}-report`;
+    },
     activeReportLabel() {
       return this.reportTypes.find((t) => t.id === this.selectedType)?.label || "Report";
     }
@@ -214,11 +242,15 @@ export default {
   methods: {
     selectType(type) {
       this.selectedType = type;
+      if (!this.stationFilterEnabled) this.stationId = "";
       this.selectedRow = null;
       this.loadReport();
     },
     applyPreset(preset) {
       this.activePreset = preset;
+      this.loadReport();
+    },
+    applyStationFilter() {
       this.loadReport();
     },
     async loadReport() {
@@ -228,7 +260,8 @@ export default {
       try {
         const dateRange = dateRangeFromPreset(this.activePreset);
         const fetcher = fetcherForType(this.selectedType);
-        this.reportData = await fetcher(dateRange);
+        const filters = this.stationFilterEnabled && this.stationId ? { stationId: this.stationId } : {};
+        this.reportData = await fetcher(dateRange, filters);
         this.rows = this.reportData.rows || [];
         this.currentPage = 1;
         this.gotoPageInput = "1";
@@ -276,8 +309,9 @@ export default {
       const dateRange = dateRangeFromPreset(this.activePreset);
       downloadReportPdf({
         family: this.selectedType,
-        title: this.activeReportLabel,
-        period: `${dateRange.start.slice(0, 10)} to ${dateRange.end.slice(0, 10)}`,
+        title: this.exportTitle,
+        filename: `${this.exportFilename}-${new Date().toISOString().slice(0, 10)}.pdf`,
+        period: `${dateRange.start.slice(0, 10)} to ${dateRange.end.slice(0, 10)}${this.stationFilterEnabled ? ` | ${this.selectedStationLabel}` : ""}`,
         generatedBy: "Beverly CRM Admin",
         kpis: this.kpis,
         chartData: this.reportData.chartData || [],
@@ -377,7 +411,9 @@ export default {
 
 /* Controls */
 .report-controls { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.report-controls-primary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .report-presets { display: flex; gap: 4px; }
+.report-station-select { min-width: 148px; }
 .report-preset-btn {
   padding: 7px 14px;
   border: 1px solid var(--border-color, #e2e8f0);

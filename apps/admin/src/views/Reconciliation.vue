@@ -1,7 +1,7 @@
 ﻿<template>
   <AppShell title="Reconciliation">
     <div class="bw-filter-bar">
-      <button class="bw-btn bw-btn-sm" :disabled="!runs.length" @click="exportCsvRows">CSV</button>
+      <button class="bw-btn bw-btn-sm" :disabled="!runs.length" @click="exportCsvRows">Export CSV</button>
       <button class="bw-btn bw-btn-sm" :disabled="!runs.length" @click="exportPdfDoc">PDF</button>
       <button class="bw-btn bw-btn-primary" :disabled="running" @click="runNow">
         {{ running ? 'Running…' : 'Run Now' }}

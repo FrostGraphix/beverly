@@ -29,8 +29,10 @@ export interface Actor {
     userId: string;          // auth.users.id (UUID)
     email: string | null;
     type: ActorType;
-    role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor_manager' | 'customer'
+    role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor' | 'customer'
     actorId: string;         // public.customers.id | public.vendor_users.id | userId for staff
+    stationId?: string;
+    stationIds?: string[];
     vendorOrganizationId?: string;
     customerId?: string;
     mfaVerified: boolean;
@@ -58,6 +60,12 @@ const STAFF_ROLES = new Set([
     'finance-checker',
     'operations-manager',
 ]);
+
+function normalizeVendorRole(role: unknown): 'vendor' | 'vendor_user' {
+    return ['vendor', 'vendor_manager', 'vendor-manager'].includes(String(role ?? '').toLowerCase())
+        ? 'vendor'
+        : 'vendor_user';
+}
 
 function isMissingColumn(message: string, column: string): boolean {
     const normalized = message.toLowerCase();
@@ -97,7 +105,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
             userId,
             email,
             type: 'vendor_user',
-            role: (vu as any).role,
+            role: normalizeVendorRole((vu as any).role),
             actorId: (vu as any).id,
             vendorOrganizationId: (vu as any).vendor_organization_id,
             mfaVerified: mfaVerified || appMfaVerified,
@@ -137,22 +145,36 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 3. Staff fallback — trust user_metadata.role claim
     // Staff lookup. Auth metadata alone is not enough for admin access.
     // Ordering marker for SOP tests: STAFF_ROLES.has(rawRole) stays after customer lookup.
-    const { data: staffRow } = await adminClient
+    let staffResult = await adminClient
         .from('users')
-        .select('id, auth_user_id, user_id, email, role_key')
+        .select('id, auth_user_id, user_id, email, role_key, station_id, station_ids')
         .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
+    if (staffResult.error && isMissingColumn(staffResult.error.message, 'station_ids')) {
+        staffResult = await adminClient
+            .from('users')
+            .select('id, auth_user_id, user_id, email, role_key, station_id')
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
+            .maybeSingle();
+    }
+    const staffRow = staffResult.data;
     const staffRole = (staffRow as { role_key?: string } | null)?.role_key;
 
     if (staffRow && staffRole && (STAFF_ROLES.has(staffRole) || staffRole.startsWith('custom-'))) {
         const mfaEnrolled = await staffMfaEnrolled(userId);
         const appMfaVerified = mfaEnrolled && await staffMfaSessionVerified(userId, token);
+        const stationIds = [...new Set([
+            ...((staffRow as any).station_ids ?? []),
+            (staffRow as any).station_id,
+        ].map((value) => String(value ?? '').trim().toUpperCase()).filter(Boolean))];
         return {
             userId,
             email: (staffRow as any).email ?? email,
             type: 'staff',
             role: staffRole,
             actorId: userId,
+            stationId: stationIds[0],
+            stationIds,
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
         };

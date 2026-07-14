@@ -1,7 +1,7 @@
 ﻿<template>
   <AppShell title="Settlement Batches">
     <div class="bw-filter-bar">
-      <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportCsvRows">CSV</button>
+      <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportCsvRows">Export CSV</button>
       <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportPdfDoc">PDF</button>
       <input v-model="search" class="bw-input bw-input-sm bw-mono" placeholder="Search vendor org…" @keyup.enter="applySearch" />
       <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="applySearch">Search</button>

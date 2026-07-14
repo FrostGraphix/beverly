@@ -56,6 +56,7 @@ const {
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
+const { streamIntervalCsv } = require("../backend/src/services/interval-export-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -411,7 +412,7 @@ function roleAllowsWalletPath(roleId, pathname) {
   const role = String(roleId || "").trim();
   const lowerPath = String(pathname || "").toLowerCase();
   const staffRoles = new Set(["super-admin", "operations-manager", "account", "account-officer", "finance-checker"]);
-  const vendorRoles = new Set(["vendor_user", "vendor_manager"]);
+  const vendorRoles = new Set(["vendor", "vendor_user"]);
   if (lowerPath.startsWith("/api/vendor/")) return vendorRoles.has(role) || staffRoles.has(role);
   if (lowerPath.startsWith("/api/wallet/funding/approve")) return role === "finance-checker" || role === "super-admin";
   if (lowerPath.startsWith("/api/wallet/funding/reject")) return role === "finance-checker" || role === "super-admin";
@@ -683,6 +684,7 @@ function isCacheableRequest(pathname, method) {
 function requiresLiveRead(pathname) {
   const normalizedPath = String(pathname || "");
   return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
+    || /\/api\/DailyDataMeter\/export\.csv$/i.test(normalizedPath)
     || /\/api\/customer\/read$/i.test(normalizedPath)
     || /\/api\/account\/read$/i.test(normalizedPath)
     || /\/api\/RemoteMeterTask\/Get(?:Reading|Control)Task$/i.test(normalizedPath);
@@ -805,6 +807,26 @@ function sanitizeReadPayload(payload, keyMap = {}, options = {}) {
   return sanitized;
 }
 
+function sanitizeDailyMeterReadPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const sanitized = { ...payload };
+  const range = Array.isArray(sanitized.currentDateRange)
+    ? sanitized.currentDateRange
+    : Array.isArray(sanitized.dateRange)
+      ? sanitized.dateRange
+      : [sanitized.FROM ?? sanitized.from, sanitized.TO ?? sanitized.to];
+  if (range[0] && range[1]) sanitized.currentDateRange = [range[0], range[1]];
+  if (!sanitized.stationId && sanitized.SITE_ID) sanitized.stationId = sanitized.SITE_ID;
+  delete sanitized.FROM;
+  delete sanitized.TO;
+  delete sanitized.from;
+  delete sanitized.to;
+  delete sanitized.dateRange;
+  delete sanitized.SITE_ID;
+  delete sanitized.compact;
+  return sanitized;
+}
+
 function sanitizeLiveRequestData(pathname, requestData) {
   const normalizedPath = String(pathname || "");
   const customerKeyMap = {
@@ -824,13 +846,15 @@ function sanitizeLiveRequestData(pathname, requestData) {
     createdate: "createDate",
     updatedate: "updateDate"
   };
-  const payload = /\/api\/customer\/read$/i.test(normalizedPath)
-    ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
-    : /\/api\/account\/read$/i.test(normalizedPath)
-      ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
-      : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
-        ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
-        : requestData?.parsedBody;
+  const payload = /\/api\/DailyDataMeter\/(?:read|readMore|readMonthly)$/i.test(normalizedPath)
+    ? sanitizeDailyMeterReadPayload(requestData?.parsedBody)
+    : /\/api\/customer\/read$/i.test(normalizedPath)
+      ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
+      : /\/api\/account\/read$/i.test(normalizedPath)
+        ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
+        : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
+          ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
+          : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {
@@ -3529,7 +3553,8 @@ async function tryLivePath(request, liveUrl, requestData, token) {
     url: liveUrl,
     headers: buildLiveHeaders(request, requestData, token),
     data: request.method === "GET" ? undefined : requestData.rawBody,
-    responseType: "text" // Get raw text to match previous fetch behavior
+    responseType: "text", // Get raw text to match previous fetch behavior
+    timeout: Math.max(1000, Number(request.__timeoutMs || process.env.LIVE_API_TIMEOUT_MS) || 45000)
   });
 
   let payload;
@@ -3853,6 +3878,53 @@ async function handler(request, response) {
       response.status(result.status).json(result.body);
       return;
     }
+    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/dailydatameter/export.csv") {
+      const query = new URL(request.url, "http://localhost").searchParams;
+      const searchTerm = String(query.get("search") || "").trim().slice(0, 200);
+      const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
+      const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
+      try {
+        const summary = await streamIntervalCsv({
+          response,
+          range: String(query.get("range") || "all").toLowerCase(),
+          searchTerm,
+          sortDirection: String(query.get("sort") || "desc").toLowerCase(),
+          stationId,
+          pageSize: process.env.INTERVAL_EXPORT_PAGE_SIZE || 5000,
+          concurrency: process.env.INTERVAL_EXPORT_CONCURRENCY || 10,
+          retries: process.env.INTERVAL_EXPORT_RETRIES || 3,
+          retryDelayMs: process.env.INTERVAL_EXPORT_RETRY_DELAY_MS || 500,
+          fetchPage: (payload) => {
+            const rawBody = Buffer.from(JSON.stringify(payload));
+            return proxyLive(
+              {
+                method: "POST",
+                url: "/api/DailyDataMeter/read",
+                headers: request.headers || {},
+                __timeoutMs: process.env.INTERVAL_EXPORT_REQUEST_TIMEOUT_MS || 15000,
+              },
+              "/api/DailyDataMeter/read",
+              { parsedBody: payload, rawBody, contentType: jsonContentType },
+            );
+          },
+        });
+        await recordExportJob({
+          routeHash: "#/prepay-report/daily-data-meter",
+          rowCount: summary.exportedRows,
+          format: "csv",
+          status: "completed",
+          details: { ...summary, searchTerm, source: "live-stream" },
+        }).catch((error) => console.error("[interval-export-log]", error instanceof Error ? error.message : String(error)));
+        await auditResult(request, pathname, { status: 200, body: { _proxy: { source: "live-stream" }, ...summary } });
+      } catch (error) {
+        if (error?.code !== "EXPORT_CANCELLED") console.error("[interval-export]", error instanceof Error ? error.message : String(error));
+        if (response.headersSent) {
+          if (typeof response.destroy === "function") response.destroy(error);
+          else response.end();
+        } else response.status(502).json({ code: 502, msg: "Interval export failed", reason: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
     await refreshLiveWriteControl();
     if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
       result = {
@@ -4009,6 +4081,7 @@ async function handler(request, response) {
 module.exports = handler;
 module.exports._test = {
   candidatePaths,
+  sanitizeDailyMeterReadPayload,
   normalizeLivePayload,
   normalizeRequestPath,
   isCanonicalFinancialMutation,

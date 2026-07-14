@@ -304,11 +304,11 @@ function doExport() {
 
 <template>
   <AppShell title="Meter Orders">
-    <template #topbar-end>
+    <div class="bw-page-actions">
       <RouterLink v-if="canManageMeterOrders" to="/meter-orders/new" class="bw-btn primary" style="text-decoration:none">
         New Order
       </RouterLink>
-    </template>
+    </div>
 
     <!-- Banner -->
     <transition name="banner">
@@ -319,29 +319,29 @@ function doExport() {
     </transition>
 
     <!-- KPI row -->
-    <div v-if="stats" class="mo-kpi-row">
+    <div class="mo-kpi-row" aria-label="Meter order summary">
       <div class="mo-kpi">
         <span class="mo-kpi-label">Total orders</span>
-        <span class="mo-kpi-value">{{ stats.total }}</span>
+        <span class="mo-kpi-value">{{ stats?.total ?? '—' }}</span>
       </div>
       <div class="mo-kpi warn">
         <span class="mo-kpi-label">Pending payment</span>
-        <span class="mo-kpi-value">{{ stats.pending_payment }}</span>
+        <span class="mo-kpi-value">{{ stats?.pending_payment ?? '—' }}</span>
       </div>
       <div class="mo-kpi info">
         <span class="mo-kpi-label">In progress</span>
-        <span class="mo-kpi-value">{{ stats.in_progress }}</span>
+        <span class="mo-kpi-value">{{ stats?.in_progress ?? '—' }}</span>
       </div>
       <div class="mo-kpi success">
         <span class="mo-kpi-label">Installed</span>
         <span class="mo-kpi-value">
-          {{ stats.installed }}
-          <span v-if="stats.installed_today" class="mo-kpi-today">+{{ stats.installed_today }} today</span>
+          {{ stats?.installed ?? '—' }}
+          <span v-if="stats?.installed_today" class="mo-kpi-today">+{{ stats.installed_today }} today</span>
         </span>
       </div>
       <div class="mo-kpi danger">
         <span class="mo-kpi-label">Cancelled</span>
-        <span class="mo-kpi-value">{{ stats.cancelled }}</span>
+        <span class="mo-kpi-value">{{ stats?.cancelled ?? '—' }}</span>
       </div>
     </div>
 
@@ -620,6 +620,7 @@ function doExport() {
   margin-bottom: var(--s-3);
 }
 .mo-kpi {
+  min-height: 96px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
@@ -629,7 +630,7 @@ function doExport() {
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
-.mo-kpi-label { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.mo-kpi-label { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0; }
 .mo-kpi-value { font-family: var(--font-mono); font-size: var(--t-xl); font-weight: 700; color: var(--text); display: flex; align-items: baseline; gap: 6px; }
 .mo-kpi-today { font-size: var(--t-xs); font-weight: 500; color: var(--brand); }
 .mo-kpi.success .mo-kpi-value { color: var(--brand); }
@@ -734,6 +735,7 @@ function doExport() {
 }
 @media (max-width: 560px) {
   .mo-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .mo-kpi { min-height: 88px; padding: var(--s-3); }
   .mo-toolbar { flex-direction: column; align-items: stretch; }
   .mo-search-wrap,
   .mo-status-select {

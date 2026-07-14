@@ -10,7 +10,7 @@
         <option>Platform Admin</option>
         <option>Finance Checker</option>
         <option>Support Reviewer</option>
-        <option>Vendor Manager</option>
+        <option>Vendor</option>
         <option>Vendor User</option>
       </BaseSelect>
       <BaseSelect v-model="userStatusFilter" class="mini-select">
@@ -96,7 +96,7 @@ export default {
         { role: "Platform Admin", permissions: { "Route Permissions": full, "API Permissions": full, "Approval Authority": full, "Limits Authority": full, "Impersonation / Testing": full } },
         { role: "Finance Checker", permissions: { "Route Permissions": limited("Limited"), "API Permissions": view, "Approval Authority": limited("Up to NGN 250,000"), "Limits Authority": limited("Up to NGN 250,000"), "Impersonation / Testing": limited("Limited") } },
         { role: "Support Reviewer", permissions: { "Route Permissions": view, "API Permissions": view, "Approval Authority": limited("Up to NGN 25,000"), "Limits Authority": view, "Impersonation / Testing": limited("Limited") } },
-        { role: "Vendor Manager", permissions: { "Route Permissions": limited("Limited"), "API Permissions": limited("Limited"), "Approval Authority": limited("Up to NGN 100,000"), "Limits Authority": limited("Up to NGN 100,000"), "Impersonation / Testing": none } },
+        { role: "Vendor", permissions: { "Route Permissions": limited("Limited"), "API Permissions": limited("Limited"), "Approval Authority": limited("Up to NGN 100,000"), "Limits Authority": limited("Up to NGN 100,000"), "Impersonation / Testing": none } },
         { role: "Vendor User", permissions: { "Route Permissions": view, "API Permissions": none, "Approval Authority": limited("Up to NGN 10,000"), "Limits Authority": limited("Up to NGN 10,000"), "Impersonation / Testing": none } }
       ];
     },

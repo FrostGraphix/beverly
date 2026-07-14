@@ -360,6 +360,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
     'POST /access/users': 'wallet.access.manage',
     'PATCH /access/users/:userId/role': 'wallet.access.manage',
+    'PATCH /access/users/:userId/station': 'wallet.access.manage',
     'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
     'POST /access/users/:userId/reset-password': 'wallet.access.manage',
     'POST /access/users/:userId/revoke-sessions': 'wallet.access.manage',
@@ -555,6 +556,99 @@ function requireAccessManager(req: any, reply: any): boolean {
     return true;
 }
 
+function staffStations(req: FastifyRequest): string[] | null {
+    if (req.actor?.role === 'super-admin') return null;
+    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .filter(Boolean))];
+}
+
+function scopeStations(query: any, stationIds: string[] | null, column = 'station_id') {
+    return stationIds ? query.in(column, stationIds) : query;
+}
+
+function missingColumn(error: { message?: string } | null, column: string) {
+    const message = String(error?.message ?? '').toLowerCase();
+    return message.includes(column.toLowerCase())
+        && (message.includes('schema cache') || message.includes('does not exist'));
+}
+
+async function stationOwnerIds(stationIds: string[]): Promise<{ vendors: Set<string>; customers: Set<string> }> {
+    const [{ data: vendors }, { data: meters }] = await Promise.all([
+        adminClient.from('vendor_organizations').select('id').overlaps('operating_stations', stationIds),
+        adminClient.from('customer_meters').select('customer_id').in('station_id', stationIds),
+    ]);
+    return {
+        vendors: new Set((vendors ?? []).map((row: any) => row.id)),
+        customers: new Set((meters ?? []).map((row: any) => row.customer_id)),
+    };
+}
+
+async function listStoredStations(): Promise<Array<{ stationId: string; name: string; remark: null }>> {
+    const [{ data: readings }, { data: vendors }] = await Promise.all([
+        adminClient.from('daily_meter_readings').select('station_id').not('station_id', 'is', null).limit(5000),
+        adminClient.from('vendor_organizations').select('operating_stations').limit(1000),
+    ]);
+    const ids = new Set<string>();
+    for (const row of readings ?? []) if ((row as any).station_id) ids.add(String((row as any).station_id).trim().toUpperCase());
+    for (const row of vendors ?? []) for (const id of (row as any).operating_stations ?? []) if (id) ids.add(String(id).trim().toUpperCase());
+    return [...ids].filter(Boolean).sort().map((stationId) => ({ stationId, name: stationId, remark: null }));
+}
+
+async function enforceResourceStation(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+    if (OPEN_ADMIN_ROUTES.has(adminRouteKey(req))) return true;
+    const stationIds = staffStations(req);
+    if (stationIds === null) return true;
+    if (!stationIds.length) {
+        reply.code(403).send({ error: 'station_required', message: 'Your staff account needs a station assignment.' });
+        return false;
+    }
+
+    const routeUrl = req.routeOptions?.url ?? '';
+    const id = (req.params as { id?: string })?.id;
+    if (!id) return true;
+
+    if (routeUrl.startsWith('/wallets/:id')) {
+        const [{ data: wallet }, owners] = await Promise.all([
+            adminClient.from('wallets').select('owner_type, owner_id').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        const allowed = wallet?.owner_type === 'vendor' ? owners.vendors.has(wallet.owner_id) : owners.customers.has(wallet?.owner_id);
+        if (allowed) return true;
+        reply.code(404).send({ error: 'not_found', message: 'Wallet not found for your assigned station.' });
+        return false;
+    }
+
+    if (routeUrl.startsWith('/funding/:id')) {
+        const [{ data: funding }, owners] = await Promise.all([
+            adminClient.from('funding_requests').select('vendor_organization_id').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        if (funding && owners.vendors.has(funding.vendor_organization_id)) return true;
+        reply.code(404).send({ error: 'not_found', message: 'Funding request not found for your assigned station.' });
+        return false;
+    }
+
+    let query: any = null;
+    if (routeUrl.startsWith('/vendors/:id')) {
+        query = adminClient.from('vendor_organizations').select('id').eq('id', id).overlaps('operating_stations', stationIds);
+    } else if (routeUrl.startsWith('/customers/:id')) {
+        query = adminClient.from('customer_meters').select('id').eq('customer_id', id).in('station_id', stationIds);
+    } else if (routeUrl.startsWith('/purchases/:id')) {
+        query = adminClient.from('purchase_orders').select('id').eq('id', id).in('station_id', stationIds);
+    } else if (routeUrl.startsWith('/meter-orders/:id')) {
+        query = adminClient.from('meter_purchase_orders').select('id').eq('id', id).in('station_id', stationIds);
+    }
+    if (!query) return true;
+
+    const { data, error } = await query.limit(1).maybeSingle();
+    if (error || !data) {
+        reply.code(404).send({ error: 'not_found', message: 'Record not found for your assigned station.' });
+        return false;
+    }
+    return true;
+}
+
 function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): boolean {
     if (req.actor?.role !== 'super-admin') {
         reply.code(403).send({
@@ -605,6 +699,8 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
         email: staff?.email ?? actor!.email,
         full_name: staff?.user_name ?? null,
         role: staff?.role_key ?? actor!.role,
+        station_id: staff?.station_id ?? actor!.stationId ?? null,
+        station_ids: staff?.station_ids ?? actor!.stationIds ?? [],
         profile_picture_url: staff?.profile_picture_url ?? null,
         updated_at: staff?.updated_at ?? null,
     };
@@ -640,18 +736,26 @@ const route: FastifyPluginAsync = async (fastify) => {
         // ensureAccessDefaults() is called inside requireAdminPermission → permissionsForRole
         // and is cached after the first run — no need to call it again here.
         if (!(await requireAdminPermission(req, reply))) return undefined;
+        if (reply.sent || !(await enforceResourceStation(req, reply))) return undefined;
         return undefined;
     });
 
     fastify.get('/me', async (req) => {
         const permissions = Array.from(await permissionsForRole(req.actor!.role));
-        const { data: staff } = await adminClient
+        let staffResult = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at')
             .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
             .maybeSingle();
+        if (missingColumn(staffResult.error, 'station_ids')) {
+            staffResult = await adminClient
+                .from('users')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at')
+                .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+                .maybeSingle();
+        }
         return {
-            user: shapeStaffProfile(req.actor, staff),
+            user: shapeStaffProfile(req.actor, staffResult.data),
             permissions,
             catalog: PERMISSION_CATALOG,
         };
@@ -774,12 +878,18 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/access', async () => {
         await ensureAccessDefaults();
-        const [{ data: roles }, { data: permissions }, { data: staffRows }, authUsers] = await Promise.all([
+        const [roleResult, permissionResult, initialStaffResult, authUsers] = await Promise.all([
             adminClient.from('roles').select('*').order('role_key', { ascending: true }),
             adminClient.from('permissions').select('*').order('role_key', { ascending: true }),
-            adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
+            adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
             adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 }),
         ]);
+        const staffResult = missingColumn(initialStaffResult.error, 'station_ids')
+            ? await adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, created_at, updated_at').order('updated_at', { ascending: false }).limit(300)
+            : initialStaffResult;
+        const roles = roleResult.data;
+        const permissions = permissionResult.data;
+        const staffRows = staffResult.data;
         const authById = new Map((authUsers.data?.users ?? []).map((user) => [user.id, user]));
         const staff = (staffRows ?? []).map((row: any) => {
             const authUser = authById.get(row.auth_user_id ?? row.user_id);
@@ -907,9 +1017,11 @@ const route: FastifyPluginAsync = async (fastify) => {
             email: z.string().email(),
             fullName: z.string().min(2),
             roleKey: z.string().trim().min(2).max(80),
+            stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100),
             temporaryPassword: z.string().min(12).optional(),
         });
         const body = schema.parse(req.body);
+        const stationIds = [...new Set(body.stationIds.map((value) => value.toUpperCase()))];
         const { data: assignedRole } = await adminClient.from('roles').select('role_key').eq('role_key', body.roleKey).maybeSingle();
         if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const password = body.temporaryPassword ?? `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
@@ -917,7 +1029,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             email: body.email.toLowerCase(),
             password,
             email_confirm: true,
-            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName },
+            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName, station_id: stationIds[0], station_ids: stationIds },
         });
         if (authErr || !authData.user) {
             return reply.code(400).send({ error: 'user_create_failed', message: authErr?.message ?? 'Could not create staff user.' });
@@ -928,6 +1040,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             user_name: body.fullName,
             email: body.email.toLowerCase(),
             role_key: body.roleKey,
+            station_id: stationIds[0],
+            station_ids: stationIds,
         }, { onConflict: 'user_id' });
         if (rowErr) {
             await adminClient.auth.admin.deleteUser(authData.user.id);
@@ -940,7 +1054,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'access.user.create',
             targetType: 'staff_user',
             targetId: authData.user.id,
-            after: { email: body.email.toLowerCase(), roleKey: body.roleKey },
+            after: { email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds },
         });
         return { ok: true, userId: authData.user.id, temporaryPassword: password };
     });
@@ -977,6 +1091,27 @@ const route: FastifyPluginAsync = async (fastify) => {
             after: { roleKey },
         });
         return { ok: true, userId, roleKey };
+    });
+
+    fastify.patch('/access/users/:userId/station', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { stationIds } = z.object({ stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100) }).parse(req.body);
+        const normalized = [...new Set(stationIds.map((value) => value.toUpperCase()))];
+        const { error } = await adminClient.from('users')
+            .update({ station_id: normalized[0], station_ids: normalized, updated_at: new Date().toISOString() })
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+        if (error) return reply.code(400).send({ error: 'station_update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'access.user.station_update',
+            targetType: 'staff_user',
+            targetId: userId,
+            after: { stationIds: normalized },
+        });
+        return { ok: true, userId, stationIds: normalized };
     });
 
     fastify.patch('/access/users/:userId/suspension', async (req, reply) => {
@@ -1030,7 +1165,10 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/stations', async (req, reply) => {
         const force = (req.query as { refresh?: string }).refresh === '1';
         try {
-            const stations = await listStations({ force });
+            const assignedStations = staffStations(req);
+            const stored = await listStoredStations();
+            const source = force || !stored.length ? await listStations({ force }) : stored;
+            const stations = source.filter((station) => !assignedStations || assignedStations.includes(station.stationId.toUpperCase()));
             return { stations, count: stations.length };
         } catch (e: any) {
             if (e instanceof TokenEngineError) {
@@ -1115,11 +1253,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             .limit(200);
         if (status) query = query.eq('status', status);
         if (q) query = query.ilike('legal_name', `%${q}%`);
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
         let { data, error } = await query;
         if (error && String(error.message || '').includes('deleted_at')) {
             let fallback = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
             if (status) fallback = fallback.eq('status', status);
             if (q) fallback = fallback.ilike('legal_name', `%${q}%`);
+            if (assignedStations) fallback = fallback.overlaps('operating_stations', assignedStations);
             const retry = await fallback;
             data = retry.data;
             error = retry.error;
@@ -1304,9 +1445,12 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── funding approval queue ──
-    fastify.get('/funding/pending', async () => {
+    fastify.get('/funding/pending', async (req) => {
         const list = await listPendingFunding(200);
-        return { funding: list };
+        const assignedStations = staffStations(req);
+        if (!assignedStations) return { funding: list };
+        const { vendors } = await stationOwnerIds(assignedStations);
+        return { funding: list.filter((row) => vendors.has(row.vendor_organization_id)) };
     });
 
     // ── funding history (all statuses, filterable) ──
@@ -1315,12 +1459,16 @@ const route: FastifyPluginAsync = async (fastify) => {
             status?: string; channel?: string; from?: string; to?: string;
             limit?: string; cursor?: string;
         };
+        const assignedStations = staffStations(req);
+        const scopedVendors = assignedStations ? (await stationOwnerIds(assignedStations)).vendors : null;
+        if (scopedVendors && !scopedVendors.size) return { funding: [], nextCursor: null, summary: null };
         const pageSize = Math.min(Number(limit ?? 50), 200);
         let query = adminClient
             .from('funding_requests')
             .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
             .order('created_at', { ascending: false })
             .limit(pageSize);
+        if (scopedVendors) query = query.in('vendor_organization_id', [...scopedVendors]);
         if (status === 'pending') query = query.in('status', ['initiated', 'proof_uploaded', 'under_review']);
         else if (status && status !== 'all') query = query.eq('status', status);
         if (channel && channel !== 'all') query = query.eq('channel', channel);
@@ -1335,6 +1483,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let summary: Record<string, number> | null = null;
         if (!cursor) {
             let aggQ = adminClient.from('funding_requests').select('status, amount_minor');
+            if (scopedVendors) aggQ = aggQ.in('vendor_organization_id', [...scopedVendors]);
             if (from)    aggQ = aggQ.gte('created_at', new Date(from).toISOString());
             if (to)      aggQ = aggQ.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
             if (channel && channel !== 'all') aggQ = aggQ.eq('channel', channel);
@@ -1410,9 +1559,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const {
             ownerType, status, q, minBalance, maxBalance, limit, cursor,
         } = req.query as Record<string, string | undefined>;
+        const assignedStations = staffStations(req);
         const hasComputedFilters = !!(q || minBalance || maxBalance);
         const pageSize = Math.min(Number(limit ?? 100), 500);
-        const fetchSize = hasComputedFilters ? 5000 : pageSize;
+        const fetchSize = hasComputedFilters || assignedStations ? 5000 : pageSize;
 
         let query = adminClient
             .from('wallets')
@@ -1424,7 +1574,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (cursor)    query = query.lt('created_at', cursor);
         const { data: wallets, error } = await query;
         if (error) return { wallets: [], error: error.message };
-        const rows = wallets ?? [];
+        let rows = wallets ?? [];
+        if (assignedStations) {
+            const owners = await stationOwnerIds(assignedStations);
+            rows = rows.filter((wallet: any) => wallet.owner_type === 'vendor'
+                ? owners.vendors.has(wallet.owner_id)
+                : owners.customers.has(wallet.owner_id));
+        }
         if (!rows.length) return { wallets: [], nextCursor: null };
 
         // Hydrate owner display name in batch
@@ -1478,9 +1634,16 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary across the entire wallet system.
-    fastify.get('/wallets/summary', async () => {
+    fastify.get('/wallets/summary', async (req) => {
         const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, status');
-        const wallets = walletsRaw ?? [];
+        let wallets = walletsRaw ?? [];
+        const assignedStations = staffStations(req);
+        if (assignedStations) {
+            const owners = await stationOwnerIds(assignedStations);
+            wallets = wallets.filter((wallet: any) => wallet.owner_type === 'vendor'
+                ? owners.vendors.has(wallet.owner_id)
+                : owners.customers.has(wallet.owner_id));
+        }
         const { getBalance } = await import('../services/ledger.js');
         const balances = await Promise.all(wallets.map((w: any) => getBalance(w.id).catch(() => null)));
 
@@ -1688,7 +1851,13 @@ const route: FastifyPluginAsync = async (fastify) => {
             .eq('owner_type', 'customer');
         if (walletErr) return { customers: [], error: walletErr.message };
         const walletByOwner = new Map((walletRows ?? []).map((w: any) => [w.owner_id, w]));
-        const walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        let walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        const assignedStations = staffStations(req);
+        if (assignedStations) {
+            const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
+            const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
+            walletOwnerIds = walletOwnerIds.filter((id) => scopedIds.has(id));
+        }
         if (!walletOwnerIds.length) return { customers: [], nextCursor: null };
 
         let query = adminClient
@@ -1735,9 +1904,15 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // Customer KPI summary.
-    fastify.get('/customers/summary', async () => {
+    fastify.get('/customers/summary', async (req) => {
         const { data: wallets } = await adminClient.from('wallets').select('id, owner_id').eq('owner_type', 'customer');
-        const walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
+        let walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
+        const assignedStations = staffStations(req);
+        if (assignedStations) {
+            const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
+            const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
+            walletOwnerIds = walletOwnerIds.filter((id) => scopedIds.has(id));
+        }
         if (!walletOwnerIds.length) {
             return { total: 0, byTier: {}, byStatus: {}, totalFloatMinor: 0 };
         }
@@ -1751,7 +1926,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         // Total customer float
         const { getBalance } = await import('../services/ledger.js');
-        const balances = await Promise.all((wallets ?? []).map((w: any) => getBalance(w.id).catch(() => null)));
+        const balances = await Promise.all((wallets ?? []).filter((w: any) => walletOwnerIds.includes(w.owner_id)).map((w: any) => getBalance(w.id).catch(() => null)));
         const totalFloat = balances.reduce((s, b) => s + (b?.ledgerBalanceMinor ?? 0), 0);
         return { total: customers.length, byTier, byStatus, totalFloatMinor: totalFloat };
     });
@@ -1976,7 +2151,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 100), 500));
         if (status)    query = query.eq('status', status);
-        if (station)   query = query.eq('station_id', station);
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.in('station_id', assignedStations);
+        else if (station) query = query.eq('station_id', station);
         if (actorType) query = query.eq('actor_type', actorType);
         if (meterType) query = query.eq('meter_type', meterType);
         if (since)     query = query.gte('created_at', since);
@@ -2005,7 +2182,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 200), 500));
         if (status)  query = query.eq('status', status);
-        if (station) query = query.eq('station_id', station);
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.in('station_id', assignedStations);
+        else if (station) query = query.eq('station_id', station);
         if (meterType) query = query.eq('meter_type', meterType);
         if (cursor)  query = query.lt('created_at', cursor);
         if (q) {
@@ -2032,16 +2211,18 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary for purchases dashboard.
-    fastify.get('/purchases/summary', async () => {
+    fastify.get('/purchases/summary', async (req) => {
         const now = new Date();
         const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
         const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
 
+        const assignedStations = staffStations(req);
+        const scope = (query: any) => scopeStations(query, assignedStations);
         const [today, last24h, failed24h, refunded] = await Promise.all([
-            adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', sod),
-            adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo),
-            adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', dayAgo).eq('status', 'failed'),
-            adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded'),
+            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', sod)),
+            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo)),
+            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', dayAgo).eq('status', 'failed')),
+            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded')),
         ]);
 
         const sumMinor = (arr: any[] | null | undefined) =>
@@ -2173,11 +2354,14 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.get('/meter-orders/stats', async () => {
-        const { data } = await adminClient
+    fastify.get('/meter-orders/stats', async (req) => {
+        let query = adminClient
             .from('meter_purchase_orders')
             .select('status, amount_minor, updated_at, created_at, source_channel')
             .limit(10000);
+        const assignedStations = staffStations(req);
+        query = scopeStations(query, assignedStations);
+        const { data } = await query;
         const rows: any[] = data ?? [];
         const count = (status: string) => rows.filter((row) => row.status === status).length;
         const bySource = rows.reduce<Record<string, number>>((acc, row: any) => {
@@ -2210,6 +2394,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(pageSize);
         if (status) query = query.eq('status', status);
+        const assignedStations = staffStations(req);
+        query = scopeStations(query, assignedStations);
         if (q) {
             const safeQ = cleanSearchTerm(q);
             if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%,customer_name_snapshot.ilike.%${safeQ}%`);
@@ -2952,10 +3138,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         return String(iso).slice(0, 10);
     }
 
-    async function gatherReportData(sinceIso: string, untilIso: string) {
+    async function gatherReportData(sinceIso: string, untilIso: string, stationIds?: string[]) {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
+        const purchasesQuery = inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id'));
+        if (stationIds) purchasesQuery.in('station_id', stationIds);
         const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents] = await Promise.all([
-            inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
+            purchasesQuery.limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('funding_requests').select('amount_minor, channel, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
             inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
@@ -3100,13 +3288,13 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/reports/overview', async (req) => {
         const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso);
+        const data = await gatherReportData(sinceIso, untilIso, staffStations(req) ?? undefined);
         return buildReport(sinceIso, untilIso, days, data);
     });
 
     fastify.get('/reports/export.csv', async (req, reply) => {
         const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso);
+        const data = await gatherReportData(sinceIso, untilIso, staffStations(req) ?? undefined);
         const report = buildReport(sinceIso, untilIso, days, data);
         const header = ['date', 'revenue_minor', 'energy_revenue_minor', 'vat_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers'];
         const csv = [
@@ -3212,9 +3400,10 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/consumption', async (req, reply) => {
         const qs = req.query as Record<string, string>;
-        const scope      = qs.scope as 'meter' | 'station' | 'cumulative' ?? 'station';
+        const assignedStations = staffStations(req);
+        const scope      = (assignedStations ? 'station' : qs.scope) as 'meter' | 'station' | 'cumulative' ?? 'station';
         const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
-        const scope_id   = qs.scope_id ?? undefined;
+        const scope_id   = qs.scope_id || undefined;
         const from       = qs.from ?? undefined;
         const to         = qs.to ?? undefined;
         const limit      = Math.min(Number(qs.limit ?? 120), 500);
@@ -3227,12 +3416,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
 
         const { queryConsumption } = await import('../services/consumption.js');
-        const rows = await queryConsumption({ scope, scope_id, period_type: period, from, to, limit });
+        const rows = assignedStations
+            ? (await Promise.all(assignedStations.map((stationId) => queryConsumption({ scope, scope_id: stationId, period_type: period, from, to, limit })))).flat()
+            : await queryConsumption({ scope, scope_id, period_type: period, from, to, limit });
         return { rows, count: rows.length };
     });
 
     fastify.get('/consumption/meters', async (req, reply) => {
         const qs         = req.query as Record<string, string>;
+        const assignedStations = staffStations(req);
         const station_id = qs.station_id;
         const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
         const from       = qs.from ?? undefined;
@@ -3240,6 +3432,9 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         if (!station_id) {
             return reply.code(400).send({ error: 'missing_station_id', message: 'station_id is required' });
+        }
+        if (assignedStations && !assignedStations.includes(station_id.toUpperCase())) {
+            return reply.code(404).send({ error: 'not_found', message: 'Station not found for your assignment.' });
         }
         if (!['day','week','month','year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
@@ -3253,7 +3448,8 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.post('/consumption/refresh', async (req, reply) => {
         try {
             const body = (req.body ?? {}) as { stationId?: string; station_id?: string; stationIds?: string[]; station_ids?: string[] };
-            const stationIds = body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
+            const assignedStations = staffStations(req);
+            const stationIds = assignedStations ?? body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
             const { refreshConsumptionAggregates } = await import('../services/consumption.js');
             const result = await refreshConsumptionAggregates(stationIds);
             return { ...result, ok: true };

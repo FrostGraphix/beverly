@@ -7,6 +7,8 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 
 const migration = read('supabase/migrations/20260520121500_vendor_vend_credential.sql');
 const service = read('backend/wallet/src/services/vendor-vend-credential.ts');
+const tokenEngine = read('backend/wallet/src/services/token-engine.ts');
+const walletEnv = read('backend/wallet/src/config/env.ts');
 const routes = read('backend/wallet/src/routes/vendor.ts');
 const router = read('apps/vendor/src/router/index.ts');
 const authStore = read('apps/vendor/src/stores/auth.ts');
@@ -28,6 +30,7 @@ assert.match(migration, /vend_credential_type in \('pin', 'password'\)/);
 
 for (const marker of [
   'VendorVendCredentialError',
+  'hasVendorVendCredential',
   'validateVendCredential',
   'crypto.scryptSync',
   'crypto.timingSafeEqual',
@@ -49,8 +52,14 @@ assert.match(routes, /authorization: z\.string\(\)\.min\(4\)\.max\(80\)/);
 assert.match(routes, /await verifyVendorVendCredential\(\{/);
 assert.match(routes, /credential: body\.authorization/);
 assert.match(routes, /return sendVendCredentialError\(reply, error\)/);
-assert.match(routes, /error\.code === 'vend_credential_required' \? 428 : 400/);
-assert.match(routes, /vend_credential_configured: Boolean/);
+assert.match(routes, /error\.code === 'vend_credential_required'/);
+assert.match(routes, /error\.code\.endsWith\('_failed'\)/);
+assert.match(routes, /vend_credential_configured: hasVendorVendCredential\(row\)/);
+assert.match(routes, /vend_credential_hash, vend_credential_salt/);
+assert.doesNotMatch(routes, /allowArchivedFallback/);
+assert.doesNotMatch(routes, /allowHistoricalFallback/);
+assert.match(tokenEngine, /return env\.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true/);
+assert.match(walletEnv, /parsed\.data\.UPSTREAM_BEARER_TOKEN \|\| parsed\.data\.ENERGY_BEARER_TOKEN/);
 
 assert.match(router, /\['vend', 'remote-send'\]\.includes\(String\(to\.name\)\)/);
 assert.match(router, /!auth\.user\?\.vend_credential_configured/);

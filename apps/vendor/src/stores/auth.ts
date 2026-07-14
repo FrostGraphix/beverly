@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 export interface VendorUserProfile {
     id: string;
     vendor_organization_id: string;
-    role: 'vendor_user' | 'vendor_manager';
+    role: 'vendor' | 'vendor_user';
     full_name: string | null;
     phone: string | null;
     email: string | null;

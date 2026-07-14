@@ -77,7 +77,7 @@ Important role groups:
 - `account`
 - `finance-checker`
 - `vendor_user`
-- `vendor_manager`
+- `vendor`
 
 Wallet staff roles:
 
@@ -88,7 +88,7 @@ Wallet staff roles:
 Wallet vendor roles:
 
 - `vendor_user`
-- `vendor_manager`
+- `vendor`
 
 Staff users see wallet admin pages.
 

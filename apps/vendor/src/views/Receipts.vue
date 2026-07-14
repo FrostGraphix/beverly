@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
-import { printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
+import { downloadReceipt, printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
 
 interface Receipt {
   id: string;
@@ -79,6 +79,10 @@ function printReceiptDoc(receipt: Receipt) {
   printReceiptWindow(purchaseReceipt(receipt));
 }
 
+function downloadReceiptDoc(receipt: Receipt) {
+  downloadReceipt(purchaseReceipt(receipt));
+}
+
 function meterTypeLabel(type?: string | null) {
   if (type === 'three_phase') return 'Three Phase';
   if (type === 'single_phase') return 'Single Phase';
@@ -103,7 +107,9 @@ onMounted(load);
           <h1>Vending receipts</h1>
           <p>Reprint, copy tokens, and support customers quickly.</p>
         </div>
-        <button class="bw-btn sm" @click="load">Refresh</button>
+        <button class="bw-btn sm" :disabled="loading" @click="load">
+          {{ loading ? 'Refreshing...' : 'Refresh' }}
+        </button>
       </header>
 
       <div class="receipt-stats">
@@ -169,7 +175,14 @@ onMounted(load);
                   <button class="bw-btn sm" @click="viewReceiptDoc(r)">View</button>
                   <button class="bw-btn sm" @click="openReceipt(r)">Details</button>
                   <button class="bw-btn sm" @click="printReceiptDoc(r)">Print</button>
+                  <button class="bw-btn sm" @click="downloadReceiptDoc(r)">Download</button>
                   <button class="bw-btn sm" @click="copy(r.token, 'Token')">Copy</button>
+                </td>
+              </tr>
+              <tr v-if="loading && !filtered.length">
+                <td colspan="7" class="receipt-empty">
+                  <strong>Loading receipts...</strong>
+                  <span>Fetching your latest vending records.</span>
                 </td>
               </tr>
               <tr v-if="!filtered.length && !loading">
@@ -194,12 +207,16 @@ onMounted(load);
             <strong>No receipts yet.</strong>
             <span>Delivered vending receipts will appear here.</span>
           </div>
+          <div v-if="loading && !filtered.length" class="receipt-empty">
+            <strong>Loading receipts...</strong>
+            <span>Fetching your latest vending records.</span>
+          </div>
         </div>
       </div>
     </section>
 
     <div v-if="selected" class="receipt-modal-backdrop" @click.self="selected = null">
-      <section class="receipt-modal" role="dialog" aria-modal="true">
+      <section class="receipt-modal" role="dialog" aria-modal="true" aria-label="Receipt details">
         <header>
           <div>
             <p class="page-kicker">Official receipt</p>
@@ -229,6 +246,7 @@ onMounted(load);
         <footer>
           <button class="bw-btn" @click="copy(selected.receipt_number, 'Receipt reference')">Copy reference</button>
           <button class="bw-btn" @click="viewReceiptDoc(selected)">View</button>
+          <button class="bw-btn" @click="downloadReceiptDoc(selected)">Download</button>
           <button class="bw-btn primary" @click="printReceiptDoc(selected)">Print</button>
         </footer>
       </section>
@@ -390,6 +408,7 @@ onMounted(load);
   justify-content: space-between;
   gap: var(--s-3);
 }
+.receipt-modal footer { flex-wrap: wrap; }
 .receipt-modal h2 {
   margin: 0;
 }
