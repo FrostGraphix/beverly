@@ -46,6 +46,6 @@ create policy "Consumption staff read scoped meters"
     (select private.has_permission('wallet.consumption.view'))
     and (
       (select private.current_staff_role()) = 'super-admin'
-      or upper(station_id) = any((select public.current_station_ids()))
+      or upper(station_id) = any(public.current_station_ids())
     )
   );

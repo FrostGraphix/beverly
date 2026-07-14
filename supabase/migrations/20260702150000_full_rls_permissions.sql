@@ -314,6 +314,40 @@ drop policy if exists "Daily meter readings readable by station scope" on public
 drop policy if exists "Account bindings readable by permitted roles" on public.account_bindings;
 drop policy if exists "Automation deliveries readable by elevated roles" on public.automation_deliveries;
 
+do $$
+declare
+  policy_row record;
+begin
+  for policy_row in
+    select tablename, policyname
+    from pg_policies
+    where schemaname = 'public'
+      and policyname = any (array[
+        'Access managers read roles', 'Access managers read permissions', 'Staff read own profile',
+        'Dashboard readers read snapshots', 'Auditors read audit logs', 'Developers read API cache',
+        'Developers read import jobs', 'Dashboard readers read export jobs', 'Vending staff read print jobs',
+        'Auditors read write confirmations', 'Consumption staff read scoped meters',
+        'Vending staff read account bindings', 'Developers read automation deliveries',
+        'Vendor reviewers read organizations', 'Funding staff read vendor wallets', 'Funding staff read ledger',
+        'Vending staff read holds', 'Funding staff read requests', 'Funding staff read proofs',
+        'Vending staff read purchases', 'Vending staff read deliveries', 'Auditors read wallet events',
+        'Vendor reviewers read onboarding', 'Vendor reviewers read documents', 'Funding approvers read approvals',
+        'Reconciliation staff read runs', 'Fraud reviewers read risk events', 'Customers read own profile',
+        'Vendors read own user records', 'Customers read own meters', 'Customers read own notifications',
+        'Actors read own wallets', 'Actors read own ledger', 'Actors read own purchase orders',
+        'Actors read own receipts', 'Actors read own payments', 'Vendors read own funding requests',
+        'Actors read own meter orders', 'Actors read own disputes', 'Actors read own dispute messages',
+        'Actors read own support tickets', 'Actors read own support messages', 'Actors read own chat sessions',
+        'Actors read own chat messages', 'Authenticated users read published FAQs',
+        'Authenticated users read published FAQ entries', 'Customers read own export requests',
+        'Customers read own deletion requests', 'Vendors read own settlements'
+      ])
+  loop
+    execute format('drop policy if exists %I on public.%I', policy_row.policyname, policy_row.tablename);
+  end loop;
+end
+$$;
+
 create policy "Access managers read roles"
   on public.roles for select to authenticated
   using ((select private.has_permission('wallet.access.manage')));
