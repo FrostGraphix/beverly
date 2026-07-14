@@ -1086,6 +1086,31 @@ assert.strictEqual(managementCustomerTable.serverPaginated, true);
 assert.strictEqual(managementCustomerTable.rows[0].id, "CU-011");
 assert.strictEqual(managementCustomerTable.rows[9].name, "Management Customer 20");
 
+const creditTokenRoute = routeManifest.find((route) => route.hash === "#/token-record/credit-token-record");
+const creditTokenCalls = [];
+const creditTokenTable = await fetchTableData(creditTokenRoute, { pageNumber: 3, pageSize: 10 }, {
+  async postApi(path, payload = {}) {
+    creditTokenCalls.push({ path, payload });
+    return {
+      code: 0,
+      result: {
+        total: 318,
+        data: Array.from({ length: 10 }, (_, index) => ({ receiptId: 21 + index }))
+      }
+    };
+  },
+  async getApi() {
+    throw new Error("Credit token pagination must use POST.");
+  }
+});
+assert.strictEqual(creditTokenCalls.length, 1);
+assert.strictEqual(creditTokenCalls[0].path, "/api/token/creditTokenRecord/read");
+assert.strictEqual(creditTokenCalls[0].payload.pageNumber, 3);
+assert.strictEqual(creditTokenCalls[0].payload.pageSize, 10);
+assert.strictEqual(creditTokenTable.rows.length, 10);
+assert.strictEqual(creditTokenTable.total, 318);
+assert.strictEqual(creditTokenTable.serverPaginated, true);
+
 const remoteReadingTaskRoute = routeManifest.find((route) => route.hash === "#/remote-operation-record/remote-meter-reading-task");
 const remoteReadingTaskTable = await fetchTableData(remoteReadingTaskRoute, { pageSize: 2 }, {
   async postApi(path, payload = {}) {

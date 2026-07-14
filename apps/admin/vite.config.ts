@@ -1,28 +1,36 @@
 import { resolve } from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-export default defineConfig(({ command }) => ({
-    base: process.env.VITE_ADMIN_BASE ?? (command === 'build' ? '/wallet-admin/' : '/'),
-    plugins: [vue()],
-    server: {
-        port: 5175,
-        proxy: { '/api': { target: `http://localhost:${process.env.WALLET_PORT || 4000}`, changeOrigin: true } },
-    },
-    esbuild: {
-        supported: {
-            destructuring: true
-        }
-    },
-    optimizeDeps: {
-        esbuildOptions: {
-            target: 'es2022',
+export default defineConfig(({ command, mode }) => {
+    const env = loadEnv(mode, resolve(__dirname, '../..'), '');
+
+    return {
+        base: process.env.VITE_ADMIN_BASE ?? (command === 'build' ? '/wallet-admin/' : '/'),
+        define: {
+            'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || env.SUPABASE_URL),
+            'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY),
         },
-    },
-    build: {
-        target: 'es2022',
-        sourcemap: false,
-        outDir: resolve(__dirname, '../../dist/wallet-admin'),
-        emptyOutDir: false,
-    },
-}));
+        plugins: [vue()],
+        server: {
+            port: 5175,
+            proxy: { '/api': { target: `http://localhost:${process.env.WALLET_PORT || 4000}`, changeOrigin: true } },
+        },
+        esbuild: {
+            supported: {
+                destructuring: true
+            }
+        },
+        optimizeDeps: {
+            esbuildOptions: {
+                target: 'es2022',
+            },
+        },
+        build: {
+            target: 'es2022',
+            sourcemap: false,
+            outDir: resolve(__dirname, '../../dist/wallet-admin'),
+            emptyOutDir: false,
+        },
+    };
+});

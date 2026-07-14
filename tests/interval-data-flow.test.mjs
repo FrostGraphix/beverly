@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { hourlyCreateTime, intervalRowMatchesSearch, normalizeDailyMeterRow, sliceIntervalRows } from "../src/services/interval-data-flow.mjs";
+import {
+  hourlyCreateTime,
+  intervalRowMatchesSearch,
+  normalizeDailyMeterRow,
+  sliceIntervalRows
+} from "../src/services/interval-data-flow.mjs";
 
 const row = normalizeDailyMeterRow({
   serialNumber: "47005308995",

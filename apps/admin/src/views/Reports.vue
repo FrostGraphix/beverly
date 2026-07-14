@@ -288,7 +288,7 @@ onMounted(() => applyPreset(30, '30d'));
         <input v-model="until" type="date" class="bw-input bw-input-sm" />
         <div class="rp-actions">
           <button class="bw-btn bw-btn-sm bw-btn-ghost" @click="applyCustom">Apply</button>
-          <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportCsv">CSV</button>
+          <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportCsv">Export CSV</button>
           <button class="bw-btn bw-btn-sm rp-generate" :disabled="!report" @click="exportPdf">Generate PDF</button>
         </div>
       </div>

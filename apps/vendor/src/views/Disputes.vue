@@ -1,8 +1,8 @@
 <template>
   <AppShell title="Disputes">
-    <template #topbar-end>
+    <div class="bw-page-actions">
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ Raise Dispute</button>
-    </template>
+    </div>
 
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>

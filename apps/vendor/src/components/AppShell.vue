@@ -13,6 +13,7 @@ const auth = useVendorAuthStore();
 const router = useRouter();
 const drawerOpen = ref(false);
 const userMenuOpen = ref(false);
+const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 const unreadCount = ref(0);
 let bellPoll: ReturnType<typeof setInterval> | null = null;
@@ -22,6 +23,8 @@ const initials = computed(() => {
     return name.slice(0, 2).toUpperCase();
 });
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
+const displayName = computed(() => auth.user?.full_name || auth.user?.organization_name || auth.user?.email || 'Vendor');
+const roleLabel = computed(() => auth.user?.role === 'vendor_user' ? 'Vendor User' : 'Vendor');
 
 function openDrawer()  { drawerOpen.value = true; }
 function closeDrawer() { drawerOpen.value = false; }
@@ -58,9 +61,16 @@ async function fetchUnread() {
 }
 
 async function signOut() {
+    if (signingOut.value) return;
+    signingOut.value = true;
     closeUserMenu();
-    await auth.logout();
-    await router.push('/login');
+    closeDrawer();
+    try {
+        await auth.logout();
+        await router.push('/login');
+    } finally {
+        signingOut.value = false;
+    }
 }
 
 onMounted(() => {
@@ -165,6 +175,27 @@ onBeforeUnmount(() => {
         </RouterLink>
       </nav>
 
+      <footer class="bw-sidebar-foot sidebar-account">
+        <div class="sidebar-account-card">
+          <div class="sidebar-avatar" aria-hidden="true">
+            <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="" />
+            <span v-else>{{ initials }}</span>
+          </div>
+          <div class="sidebar-account-meta">
+            <strong>{{ displayName }}</strong>
+            <span>{{ roleLabel }}</span>
+          </div>
+          <button type="button" class="bw-btn sidebar-signout" :disabled="signingOut" @click="signOut">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>{{ signingOut ? 'Signing out...' : 'Sign out' }}</span>
+          </button>
+        </div>
+      </footer>
+
     </aside>
 
     <!-- Main column -->
@@ -211,7 +242,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="bw-user-meta">
               <strong>{{ auth.user?.organization_name?.split(' ')[0] || auth.user?.full_name?.split(' ')[0] || 'Vendor' }}</strong>
-              <span>{{ auth.user?.role || 'portal' }}</span>
+              <span>{{ roleLabel }}</span>
             </div>
             <svg class="bw-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -301,4 +332,5 @@ onBeforeUnmount(() => {
     line-height: 1;
     padding: 0 4px;
 }
+
 </style>

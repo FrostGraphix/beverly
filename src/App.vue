@@ -449,7 +449,7 @@ export default {
       sidebarOpen: window.innerWidth > 1024,
       collapsed: false,
       width: window.innerWidth,
-      currentRoleId: getCookie("roleId") || null,
+      currentRoleId: null,
       currentUserName: getCookie("userName") || null,
       profilePictureUrl: "",
       expandedGroups: {},
@@ -537,7 +537,6 @@ export default {
         account: "Account Officer",
         vendor: "Vendor",
         vendor_user: "Vendor User",
-        vendor_manager: "Vendor Manager",
         "finance-checker": "Finance Checker"
       };
       const roleId = String(this.currentRoleId || "").trim();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, ApiError } from '../lib/api';
 
@@ -20,6 +20,17 @@ interface MeterOrder {
 const orders = ref<MeterOrder[]>([]);
 const loading = ref(true);
 const error = ref('');
+
+const stats = computed(() => {
+    const count = (status: string) => orders.value.filter((order) => order.status === status).length;
+    return {
+        total: orders.value.length,
+        pending: count('pending_payment'),
+        inProgress: ['paid', 'assigned', 'dispatched'].reduce((total, status) => total + count(status), 0),
+        installed: count('installed'),
+        cancelled: count('cancelled'),
+    };
+});
 
 function amount(minor: number) {
     return `NGN ${(minor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -47,14 +58,32 @@ onMounted(load);
 
 <template>
   <AppShell title="Meter Orders">
-    <template #topbar-end>
-      <RouterLink to="/meter-orders/new" class="bw-btn primary" style="text-decoration:none">New Order</RouterLink>
-    </template>
-
     <div class="bw-stack" style="gap: var(--s-4)">
-      <div class="bw-card">
-        <div class="bw-page-title">Vendor meter orders</div>
-        <p class="bw-page-sub">Orders you placed for wallet customers.</p>
+      <div class="bw-page-actions">
+        <RouterLink to="/meter-orders/new" class="bw-btn primary" style="text-decoration:none">New Order</RouterLink>
+      </div>
+
+      <div class="mo-kpi-row" aria-label="Meter order summary">
+        <div class="mo-kpi">
+          <span class="mo-kpi-label">Total orders</span>
+          <span class="mo-kpi-value">{{ loading ? '—' : stats.total }}</span>
+        </div>
+        <div class="mo-kpi warn">
+          <span class="mo-kpi-label">Pending payment</span>
+          <span class="mo-kpi-value">{{ loading ? '—' : stats.pending }}</span>
+        </div>
+        <div class="mo-kpi info">
+          <span class="mo-kpi-label">In progress</span>
+          <span class="mo-kpi-value">{{ loading ? '—' : stats.inProgress }}</span>
+        </div>
+        <div class="mo-kpi success">
+          <span class="mo-kpi-label">Installed</span>
+          <span class="mo-kpi-value">{{ loading ? '—' : stats.installed }}</span>
+        </div>
+        <div class="mo-kpi danger">
+          <span class="mo-kpi-label">Cancelled</span>
+          <span class="mo-kpi-value">{{ loading ? '—' : stats.cancelled }}</span>
+        </div>
       </div>
 
       <div v-if="error" class="bw-card">
@@ -114,3 +143,53 @@ onMounted(load);
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.mo-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.mo-kpi {
+  min-height: 96px;
+  padding: var(--s-3) var(--s-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-2);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
+}
+
+.mo-kpi-label {
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.mo-kpi-value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--t-xl);
+  font-weight: 700;
+}
+
+.mo-kpi.warn .mo-kpi-value { color: var(--warn, #d97706); }
+.mo-kpi.info .mo-kpi-value { color: var(--info, #0ea5e9); }
+.mo-kpi.success .mo-kpi-value { color: var(--brand); }
+.mo-kpi.danger .mo-kpi-value { color: var(--danger); }
+
+@media (max-width: 900px) {
+  .mo-kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .mo-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mo-kpi { min-height: 88px; padding: var(--s-3); }
+}
+</style>

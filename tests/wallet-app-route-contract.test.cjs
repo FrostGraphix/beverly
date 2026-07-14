@@ -26,6 +26,13 @@ function main() {
   const adminMeterOrders = read("apps/admin/src/views/MeterOrders.vue");
   const adminMeterOrderCreate = read("apps/admin/src/views/MeterOrderCreate.vue");
   const vendorMeterOrders = read("apps/vendor/src/views/MeterOrders.vue");
+  const vendorWallet = read("apps/vendor/src/views/Wallet.vue");
+  const vendorFundingHistory = read("apps/vendor/src/views/FundingHistory.vue");
+  const vendorStatement = read("apps/vendor/src/views/Statement.vue");
+  const vendorTransactions = read("apps/vendor/src/views/Transactions.vue");
+  const vendorShell = read("apps/vendor/src/components/AppShell.vue");
+  const adminShell = read("apps/admin/src/components/AppShell.vue");
+  const vendorExport = read("apps/vendor/src/lib/export.ts");
   const vendorMeterOrderCreate = read("apps/vendor/src/views/MeterOrderCreate.vue");
   const meterOrdersService = read("backend/wallet/src/services/meter-orders.ts");
   const customerMeterOrders = read("backend/wallet/src/routes/customer.ts");
@@ -42,6 +49,7 @@ function main() {
     "fastify.put('/access/roles/:roleKey/permissions'",
     "fastify.post('/access/users'",
     "fastify.patch('/access/users/:userId/role'",
+    "fastify.patch('/access/users/:userId/station'",
     "fastify.patch('/access/users/:userId/suspension'",
     "fastify.post('/access/users/:userId/reset-password'",
     "fastify.post('/access/users/:userId/revoke-sessions'",
@@ -116,6 +124,11 @@ function main() {
     "fastify.get('/consumption'",
     "fastify.get('/consumption/meters'",
     "fastify.post('/consumption/refresh'",
+    "enforceResourceStation(req, reply)",
+    "station_required",
+    "overlaps('operating_stations', stationIds)",
+    "stationIds: z.array",
+    "scopeStations(query, assignedStations)",
   ]);
 
   assertMarkers("backend/wallet/src/routes/staff-mfa.ts", [
@@ -242,11 +255,50 @@ function main() {
   assert.match(adminMeterOrders, /vendor_organizations/);
   assert.match(adminMeterOrders, /sourceLabel/);
   assert.match(adminMeterOrders, /New Order/);
+  assert.match(adminMeterOrders, /aria-label="Meter order summary"/);
+  assert.match(adminMeterOrders, /stats\?\.in_progress/);
   assert.match(adminMeterOrderCreate, /sponsorMode/);
   assert.match(adminMeterOrderCreate, /vendor_wallet/);
   assert.match(adminMeterOrderCreate, /\/api\/v1\/admin\/meter-orders/);
   assert.match(vendorMeterOrders, /\/api\/v1\/vendor\/meter-orders/);
   assert.match(vendorMeterOrders, /sponsor_mode/);
+  assert.match(vendorMeterOrders, /aria-label="Meter order summary"/);
+  assert.match(vendorMeterOrders, /\['paid', 'assigned', 'dispatched'\]/);
+  assert.match(vendorWallet, /aria-label="Wallet summary"/);
+  assert.match(vendorWallet, /wallet-stat-grid/);
+  assert.match(vendorFundingHistory, /Export CSV/);
+  assert.match(vendorFundingHistory, /exportCsv\('beverly-vendor-funding-history', filtered\.value/);
+  assert.match(vendorFundingHistory, /:disabled="!filtered\.length"/);
+  assert.match(vendorStatement, /aria-label="Statement summary"/);
+  assert.match(vendorStatement, /class="bw-t-wrap"/);
+  assert.match(vendorStatement, /class="bw-t-cards"/);
+  assert.match(vendorStatement, /Export CSV/);
+  assert.match(vendorStatement, /exportCsv\('beverly-vendor-statement', batches\.value/);
+  assert.match(vendorTransactions, /Export period/);
+  assert.match(vendorTransactions, /<option value="1d">Last day<\/option>/);
+  assert.match(vendorTransactions, /<option value="7d">Last 7 days<\/option>/);
+  assert.match(vendorTransactions, /<option value="30d">Last 30 days<\/option>/);
+  assert.match(vendorTransactions, /<option value="all">All time<\/option>/);
+  assert.match(vendorTransactions, /has_more/);
+  assert.match(vendorTransactions, /exportCsv\(`beverly-vendor-transactions-\$\{exportRange\.value\}`/);
+  assert.match(vendorShell, /class="bw-sidebar-foot sidebar-account"/);
+  assert.match(vendorShell, /class="sidebar-avatar"/);
+  assert.match(vendorShell, /class="bw-btn sidebar-signout"/);
+  assert.match(vendorShell, /\? 'Vendor User' : 'Vendor'/);
+  assert.match(adminShell, /class="bw-sidebar-foot sidebar-account"/);
+  assert.match(adminShell, /class="sidebar-avatar"/);
+  assert.match(adminShell, /class="bw-btn sidebar-signout"/);
+  assert.match(walletCss, /\.sidebar-account-card/);
+  assert.match(read("backend/wallet/src/routes/vendor.ts"), /period: z\.enum\(\['1d', '7d', '30d', 'all'\]\)/);
+  assert.match(read("backend/wallet/src/services/vending.ts"), /\.range\(offset, offset \+ limit - 1\)/);
+  assert.match(vendorExport, /text\.replace\(\/"\/g, '""'\)/);
+  assert.match(vendorExport, /text\/csv;charset=utf-8/);
+  for (const portal of ['admin', 'vendor', 'customer']) {
+    const views = path.join(root, 'apps', portal, 'src', 'views');
+    for (const file of fs.readdirSync(views).filter((name) => name.endsWith('.vue'))) {
+      assert.doesNotMatch(read(path.join('apps', portal, 'src', 'views', file)), />\s*CSV\s*<\/button>/, `${portal}/${file} uses an inconsistent export label`);
+    }
+  }
   assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/customers/);
   assert.match(vendorMeterOrderCreate, /\/api\/v1\/vendor\/meter-orders/);
   const sponsorMigration = read("supabase/migrations/20260622090000_meter_order_sponsor_mode.sql");
@@ -265,6 +317,8 @@ function main() {
   assert.match(customerMeterOrders, /\.eq\('status', 'pending_payment'\)/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);
   assert.match(walletCss, /\.bw-scrim\.open\s*\{[\s\S]*pointer-events:\s*auto;/);
+  assert.match(walletCss, /\.bw-t-wrap:has\(~ \.bw-t-cards\)\s*\{\s*display:\s*none;/);
+  assert.match(walletCss, /\.bw-t-wrap ~ \.bw-t-cards\s*\{\s*display:\s*block;/);
   assert.match(rootPackage.scripts.build, /@beverly\/admin-app build/);
   assert.match(rootPackage.scripts.build, /@beverly\/vendor-app build/);
   assert.match(rootPackage.scripts.build, /@beverly\/customer-app build/);

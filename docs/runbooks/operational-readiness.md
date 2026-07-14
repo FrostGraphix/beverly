@@ -441,7 +441,7 @@ npm run build
   - Goal: reject unsafe refund.
   - Goal: verify maker-checker.
 
-- [ ] Vendor manager drill.
+- [ ] Vendor role drill.
   - Goal: fund wallet.
   - Goal: vend token.
   - Goal: retrieve receipt.

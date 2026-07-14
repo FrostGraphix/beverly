@@ -383,7 +383,7 @@ watch([fOwnerType, fStatus], () => loadList());
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">CSV</button>
+        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span style="width:6px"></span>
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>

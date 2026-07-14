@@ -21,6 +21,11 @@ function usesShortLiveRange(start, end) {
   return Number.isFinite(duration) && duration >= 0 && duration <= 31 * 86400000;
 }
 
+function reportStationDatabaseId(stationId) {
+  const value = String(stationId || "").trim().toLowerCase();
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : "";
+}
+
 async function liveTokenPayments(start, end, filters = {}) {
   const baseUrl = liveApiBaseUrl();
   if (!baseUrl || !usesShortLiveRange(start, end)) return null;
@@ -90,7 +95,7 @@ function liveRevenueReport(payments, stationId = "") {
       totalRevenue,
       totalTransactions,
       avgTicket: totalTransactions ? Math.round(totalRevenue / totalTransactions) : 0,
-      activeMeters: meters.size,
+      meters: meters.size,
       activeStations: activeStations.size,
       revenueDelta: 0,
       transactionDelta: 0,
@@ -122,10 +127,13 @@ function liveTransactionReport(payments, stationId = "") {
   };
 }
 
-async function supabaseRows(table, dateColumn, start, end, select = "*") {
+async function supabaseRows(table, dateColumn, start, end, select = "*", equals = {}) {
   const filters = [`select=${select}`];
   if (start) filters.push(`${dateColumn}=gte.${encodeURIComponent(start)}`);
   if (end) filters.push(`${dateColumn}=lte.${encodeURIComponent(end)}`);
+  for (const [column, value] of Object.entries(equals)) {
+    if (value) filters.push(`${column}=eq.${encodeURIComponent(value)}`);
+  }
   filters.push(`order=${dateColumn}.asc`);
   const pathname = `/${table}?${filters.join("&")}`;
   const rows = [];
@@ -179,7 +187,7 @@ function tokenSummaryReport(rows, previousRows, meterRows) {
       totalRevenue,
       totalTransactions,
       avgTicket,
-      activeMeters: meters.size,
+      meters: meters.size,
       activeStations: activeStations.size,
       revenueDelta: delta(totalRevenue, previousRevenue),
       transactionDelta: delta(totalTransactions, previousTransactions),
@@ -211,10 +219,11 @@ async function revenueReport(dateRange = {}, filters = {}) {
 
   if (supabase.serviceConfigured()) {
     const select = "site_id,tx_date,tx_count,total_revenue,total_kwh,unique_meters";
+    const stationFilter = filters.stationId ? { site_id: reportStationDatabaseId(filters.stationId) } : {};
     const [currentRows, previousRows, meterRows] = await Promise.all([
-      supabaseRows("mv_token_daily_summary", "tx_date", start.slice(0, 10), end.slice(0, 10), select),
-      supabaseRows("mv_token_daily_summary", "tx_date", prevStart.slice(0, 10), prevEnd.slice(0, 10), select),
-      supabaseRows("token_transactions", "transaction_at", start, end, "site_id,site_code,meter_id,meter_sn")
+      supabaseRows("mv_token_daily_summary", "tx_date", start.slice(0, 10), end.slice(0, 10), select, stationFilter),
+      supabaseRows("mv_token_daily_summary", "tx_date", prevStart.slice(0, 10), prevEnd.slice(0, 10), select, stationFilter),
+      supabaseRows("token_transactions", "transaction_at", start, end, "site_id,site_code,meter_id,meter_sn", stationFilter)
     ]);
     return tokenSummaryReport(currentRows, previousRows, meterRows);
   }
@@ -275,7 +284,7 @@ async function revenueReport(dateRange = {}, filters = {}) {
       totalRevenue,
       totalTransactions,
       avgTicket,
-      activeMeters: meters,
+      meters,
       activeStations: new Set(currentData.map((row) => row.station).filter((station) => station && station !== "All Stations")).size,
       revenueDelta,
       transactionDelta,
@@ -290,12 +299,14 @@ async function transactionReport(dateRange = {}, filters = {}) {
   const livePayments = await liveTokenPayments(start, end, filters);
   if (livePayments) return liveTransactionReport(livePayments, filters.stationId);
   if (!supabase.serviceConfigured()) return revenueReport(dateRange, filters);
+  const stationFilter = filters.stationId ? { site_id: reportStationDatabaseId(filters.stationId) } : {};
   const source = await supabaseRows(
     "token_transactions",
     "transaction_at",
     start,
     end,
-    "id,meter_sn,meter_id,site_id,site_code,customer_name,amount,kwh,transaction_at"
+    "id,meter_sn,meter_id,site_id,site_code,customer_name,amount,kwh,transaction_at",
+    stationFilter
   );
   const rows = source.map((row) => ({
     date: String(row.transaction_at || "").replace("T", " ").slice(0, 16),

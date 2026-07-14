@@ -133,6 +133,7 @@ export function routeSupportsSiteFilter(route) {
 function routeUsesServerPagination(route) {
   const hash = String(route?.hash || "");
   return hash.includes("management/customer")
+    || hash.includes("token-record/credit-token-record")
     || hash.includes("management/account")
     || hash.includes("management/gateway")
     || hash.includes("management/tariff")

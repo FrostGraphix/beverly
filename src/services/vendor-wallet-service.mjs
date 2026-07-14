@@ -140,7 +140,7 @@ export async function submitOnboarding({ organizationId, actorId }) {
     organizationId,
     actorId,
     businessIdentity: { registrationName: "Vendor Portal Account" },
-    primaryContact: { name: "Vendor Manager" },
+    primaryContact: { name: "Vendor" },
     bankDetails: { bankName: "Pending verification" },
     operatingSites: ["TUNGA"]
   });

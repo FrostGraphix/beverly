@@ -45,21 +45,15 @@ function embeddedReferenceApi() {
         }
 
         try {
-          await referenceHandler(request, {
-            setHeader(name, value) {
-              response.setHeader(name, value);
-            },
-            status(statusCode) {
-              return {
-                json(body) {
-                  if (response.writableEnded) return;
-                  response.statusCode = statusCode;
-                  response.setHeader("Content-Type", "application/json; charset=utf-8");
-                  response.end(JSON.stringify(body));
-                }
-              };
+          response.status = (statusCode) => ({
+            json(body) {
+              if (response.writableEnded) return;
+              response.statusCode = statusCode;
+              response.setHeader("Content-Type", "application/json; charset=utf-8");
+              response.end(JSON.stringify(body));
             }
           });
+          await referenceHandler(request, response);
         } catch (error) {
           if (response.writableEnded) return;
           response.statusCode = 500;

@@ -270,10 +270,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
             return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
         }
-        const { full_name, email } = req.body as { full_name?: string; email?: string };
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'email')) {
+            return reply.code(400).send({ error: 'email_change_forbidden', message: 'Registration email cannot be changed.' });
+        }
+        const { full_name } = req.body as { full_name?: string };
         const updates: Record<string, unknown> = {};
         if (full_name !== undefined) updates.full_name = full_name.trim();
-        if (email !== undefined) updates.email = email.trim().toLowerCase() || null;
         if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
 
         const { data, error } = await adminClient

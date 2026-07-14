@@ -110,8 +110,8 @@ export function buildKPIs(reportType, data) {
     return [
       { label: "Total Revenue", value: formatMoney(data.summary?.totalRevenue || 0), delta: data.summary?.revenueDelta, tone: "good" },
       { label: "Transactions", value: Number(data.summary?.totalTransactions || 0).toLocaleString("en-NG"), delta: data.summary?.transactionDelta, tone: "" },
-      { label: "Avg. Ticket", value: formatMoney(data.summary?.avgTicket || 0), delta: data.summary?.avgTicketDelta, tone: "" },
-      { label: "Active Meters", value: Number(data.summary?.activeMeters || 0).toLocaleString("en-NG"), delta: null, tone: "info" }
+      { label: "Meters", value: Number(data.summary?.meters || 0).toLocaleString("en-NG"), delta: null, tone: "" },
+      { label: "Active Stations", value: Number(data.summary?.activeStations || 0).toLocaleString("en-NG"), delta: null, tone: "info" }
     ];
   }
   if (reportType === "transactions") {

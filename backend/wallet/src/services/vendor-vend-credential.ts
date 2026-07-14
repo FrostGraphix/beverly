@@ -13,6 +13,15 @@ export type VendorVendCredentialType = 'pin' | 'password';
 
 const PIN_RE = /^\d{4,6}$/;
 
+export function hasVendorVendCredential(row: any) {
+    return Boolean(
+        row?.vend_credential_set_at
+        && row?.vend_credential_hash
+        && row?.vend_credential_salt
+        && ['pin', 'password'].includes(row?.vend_credential_type),
+    );
+}
+
 function hashCredential(value: string, salt: string) {
     return crypto.scryptSync(value, salt, 64).toString('base64url');
 }
@@ -40,13 +49,14 @@ export function validateVendCredential(type: VendorVendCredentialType, value: st
 }
 
 export async function vendorVendCredentialStatus(vendorUserId: string) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_users')
-        .select('vend_credential_type, vend_credential_set_at')
+        .select('vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at')
         .eq('id', vendorUserId)
         .maybeSingle();
+    if (error) throw new VendorVendCredentialError(error.message, 'vend_credential_status_failed');
     return {
-        configured: Boolean((data as any)?.vend_credential_set_at),
+        configured: hasVendorVendCredential(data),
         type: (data as any)?.vend_credential_type ?? null,
         set_at: (data as any)?.vend_credential_set_at ?? null,
     };
@@ -64,7 +74,7 @@ export async function setVendorVendCredential(input: {
     const salt = crypto.randomBytes(24).toString('base64url');
     const hash = hashCredential(input.credential, salt);
     const setAt = new Date().toISOString();
-    const { error } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_users')
         .update({
             vend_credential_type: input.type,
@@ -72,8 +82,11 @@ export async function setVendorVendCredential(input: {
             vend_credential_salt: salt,
             vend_credential_set_at: setAt,
         })
-        .eq('id', input.vendorUserId);
+        .eq('id', input.vendorUserId)
+        .select('id')
+        .maybeSingle();
     if (error) throw new VendorVendCredentialError(error.message, 'vend_credential_update_failed');
+    if (!data) throw new VendorVendCredentialError('Vendor account was not found.', 'vendor_user_not_found');
     await logSecurityEvent('vend_credential_set', {
         actorUserId: input.authUserId,
         severity: 'info',
@@ -91,11 +104,12 @@ export async function verifyVendorVendCredential(input: {
     ip?: string | null;
     userAgent?: string | null;
 }) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('vendor_users')
         .select('vend_credential_hash, vend_credential_salt, vend_credential_type')
         .eq('id', input.vendorUserId)
         .maybeSingle();
+    if (error) throw new VendorVendCredentialError(error.message, 'vend_credential_status_failed');
     const row = data as any;
     if (!row?.vend_credential_hash || !row?.vend_credential_salt) {
         throw new VendorVendCredentialError('Create a vendor PIN or password before vending.', 'vend_credential_required');

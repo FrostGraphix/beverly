@@ -16,6 +16,15 @@ function writeJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function decorateResponse(response) {
+  response.status = (statusCode) => ({
+    json(body) {
+      writeJson(response, statusCode, body);
+    }
+  });
+  return response;
+}
+
 const apiServer = http.createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
     writeJson(response, 204, {});
@@ -23,15 +32,7 @@ const apiServer = http.createServer(async (request, response) => {
   }
 
   try {
-    await referenceHandler(request, {
-      status(statusCode) {
-        return {
-          json(body) {
-            writeJson(response, statusCode, body);
-          }
-        };
-      }
-    });
+    await referenceHandler(request, decorateResponse(response));
   } catch (error) {
     writeJson(response, 500, {
       code: 500,

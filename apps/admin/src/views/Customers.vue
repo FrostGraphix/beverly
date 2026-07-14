@@ -233,7 +233,7 @@ watch([fStatus, fTier], () => loadList());
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ customers.length }} customers</h2>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">CSV</button>
+        <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
       </div>

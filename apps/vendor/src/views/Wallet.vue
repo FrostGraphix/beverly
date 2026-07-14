@@ -15,28 +15,24 @@ onMounted(async () => {
   <AppShell title="Wallet">
     <div class="bw-stack">
 
-      <!-- Balance card -->
-      <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--surface); border-color: oklch(70% 0.19 145 / 0.22); position:relative; overflow:hidden">
-        <div style="position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg, transparent, var(--brand), transparent)"></div>
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: var(--s-4)">
-          <div>
-            <p class="bw-label" style="color: var(--brand)">Balance</p>
-            <p class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-2xl); margin: 0">{{ naira(wallet.summary?.balance_minor) }}</p>
-          </div>
-          <div>
-            <p class="bw-label">On hold</p>
-            <p class="bw-kpi-value" style="font-size: var(--t-2xl); margin: 0">{{ naira(wallet.summary?.holds_minor) }}</p>
-          </div>
-          <div>
-            <p class="bw-label">Available</p>
-            <p class="bw-kpi-value" style="font-size: var(--t-2xl); margin: 0; color: var(--brand)">{{ naira(wallet.summary?.available_minor) }}</p>
-          </div>
-          <div>
-            <p class="bw-label">Status</p>
-            <span :class="['bw-badge', wallet.summary?.status === 'active' ? 'success' : 'warn']" style="font-size: 11px; margin-top: 4px; display: inline-flex">
-              {{ wallet.summary?.status || '—' }}
-            </span>
-          </div>
+      <div class="bw-kpi-grid wallet-stat-grid" aria-label="Wallet summary">
+        <div class="bw-kpi featured wallet-stat">
+          <span class="bw-kpi-label">Balance</span>
+          <strong class="bw-kpi-value wallet-stat-value brand">{{ naira(wallet.summary?.balance_minor) }}</strong>
+        </div>
+        <div class="bw-kpi wallet-stat">
+          <span class="bw-kpi-label">On hold</span>
+          <strong class="bw-kpi-value wallet-stat-value">{{ naira(wallet.summary?.holds_minor) }}</strong>
+        </div>
+        <div class="bw-kpi featured wallet-stat">
+          <span class="bw-kpi-label">Available</span>
+          <strong class="bw-kpi-value wallet-stat-value brand">{{ naira(wallet.summary?.available_minor) }}</strong>
+        </div>
+        <div class="bw-kpi wallet-stat">
+          <span class="bw-kpi-label">Status</span>
+          <span :class="['bw-badge', wallet.summary?.status === 'active' ? 'success' : 'warn']">
+            {{ wallet.summary?.status || '—' }}
+          </span>
         </div>
       </div>
 
@@ -110,3 +106,52 @@ onMounted(async () => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.wallet-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.wallet-stat {
+  min-height: 112px;
+  padding: var(--s-4);
+  justify-content: space-between;
+}
+
+.wallet-stat .bw-kpi-label {
+  letter-spacing: 0;
+}
+
+.wallet-stat-value {
+  min-width: 0;
+  font-size: var(--t-2xl);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.wallet-stat-value.brand {
+  color: var(--brand);
+}
+
+.wallet-stat .bw-badge {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .wallet-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .wallet-stat {
+    min-height: 96px;
+    padding: var(--s-3);
+  }
+
+  .wallet-stat-value {
+    font-size: var(--t-lg);
+  }
+}
+</style>

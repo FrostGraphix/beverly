@@ -44,6 +44,7 @@ import {
     verifyVendorMfaEnrollment,
 } from '../services/vendor-mfa.js';
 import {
+    hasVendorVendCredential,
     setVendorVendCredential,
     vendorVendCredentialStatus,
     VendorVendCredentialError,
@@ -95,7 +96,13 @@ function sendMfaError(reply: FastifyReply, error: unknown) {
 
 function sendVendCredentialError(reply: FastifyReply, error: unknown) {
     if (error instanceof VendorVendCredentialError) {
-        const status = error.code === 'vend_credential_required' ? 428 : 400;
+        const status = error.code === 'vend_credential_required'
+            ? 428
+            : error.code === 'vendor_user_not_found'
+                ? 404
+                : error.code.endsWith('_failed')
+                    ? 503
+                    : 400;
         return reply.code(status).send({ error: error.code, message: error.message });
     }
     throw error;
@@ -171,7 +178,7 @@ async function shapeVendorProfile(row: any, mfaVerified: boolean | undefined) {
         mfa_enrolled: row?.mfa_enrolled,
         mfa_verified: mfaVerified,
         password_reset_required: row?.password_reset_required,
-        vend_credential_configured: Boolean(row?.vend_credential_set_at),
+        vend_credential_configured: hasVendorVendCredential(row),
         vend_credential_type: row?.vend_credential_type ?? null,
         organization_name: org?.trading_name ?? org?.legal_name,
         organization_status: orgStatus,
@@ -200,7 +207,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor!;
         const { data: vu } = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at)')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_hash, vend_credential_salt, vend_credential_set_at, vendor_organizations(legal_name, trading_name, status, contact_phone, contact_email, operating_stations, cac_number, tin, approved_at)')
             .eq('id', actor.actorId).single();
         return shapeVendorProfile(vu, actor.mfaVerified);
     });
@@ -767,10 +774,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const body = schema.parse(req.body);
         try {
-            const meter = await lookupMeter(body.meterId, {
-                allowArchivedFallback: true,
-                allowHistoricalFallback: true,
-            });
+            const meter = await lookupMeter(body.meterId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             return { meter, preview };
         } catch (e: any) {
@@ -791,10 +795,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const body = schema.parse(req.body);
         try {
-            const meter = await lookupMeter(body.meterId, {
-                allowArchivedFallback: true,
-                allowHistoricalFallback: true,
-            });
+            const meter = await lookupMeter(body.meterId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             const reference = `DRY-RUN-${Date.now()}`;
             const tokenInput = {
@@ -946,22 +947,39 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── purchases history ──
     fastify.get('/transactions', { preHandler: fastify.requireVendor() }, async (req) => {
         const orgId = req.actor!.vendorOrganizationId!;
-        const limit = Math.min(Number((req.query as any).limit ?? 100), 500);
-        const purchases = await listVendorPurchases(orgId, limit);
-        return { purchases };
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(500).default(100),
+            offset: z.coerce.number().int().min(0).default(0),
+            period: z.enum(['1d', '7d', '30d', 'all']).default('all'),
+        }).parse(req.query);
+        const days = query.period === 'all' ? null : Number(query.period.slice(0, -1));
+        const since = days ? new Date(Date.now() - days * 86_400_000).toISOString() : undefined;
+        const purchases = await listVendorPurchases(orgId, query.limit, query.offset, since);
+        return { purchases, has_more: purchases.length === query.limit };
     });
 
     // ── single receipt ──
     fastify.get('/receipts', { preHandler: fastify.requireVendor() }, async (req) => {
         const orgId = req.actor!.vendorOrganizationId!;
-        const limit = Math.min(Number((req.query as any).limit ?? 100), 500);
-        const purchases = await listVendorPurchases(orgId, limit);
-        const withReceipts = purchases.filter((p: any) => p.status === 'delivered' && p.receipt_id);
+        const { limit } = z.object({
+            limit: z.coerce.number().int().min(1).max(500).default(100),
+        }).parse(req.query);
+        const { data: withReceipts, error: purchaseError } = await adminClient
+            .from('purchase_orders')
+            .select('*')
+            .eq('actor_type', 'vendor')
+            .eq('actor_id', orgId)
+            .eq('status', 'delivered')
+            .not('receipt_id', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        if (purchaseError) throw purchaseError;
         if (!withReceipts.length) return { receipts: [] };
-        const { data: receipts } = await adminClient
+        const { data: receipts, error: receiptError } = await adminClient
             .from('receipts')
             .select('id, receipt_number, purchase_order_id, payload, created_at')
             .in('purchase_order_id', withReceipts.map((p: any) => p.id));
+        if (receiptError) throw receiptError;
         const receiptByOrder = new Map((receipts ?? []).map((r: any) => [r.purchase_order_id, r]));
         return {
             receipts: withReceipts.map((purchase: any) => {

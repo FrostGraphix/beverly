@@ -15,7 +15,6 @@ const editMode    = ref(false);
 const exportLoading = ref(false);
 const exportMsg   = ref('');
 const fullName = ref(auth.customer?.full_name ?? '');
-const email    = ref(auth.customer?.email ?? '');
 const profilePictureUrl = ref(auth.customer?.profile_picture_url ?? '');
 const loading  = ref(false);
 const error    = ref<string | null>(null);
@@ -38,7 +37,6 @@ async function saveProfile() {
     try {
         const r = await api.patch<any>('/api/v1/customer/me', {
             full_name: fullName.value.trim(),
-            email: email.value.trim() || undefined,
         });
         if (auth.customer) {
             auth.customer.full_name = r.full_name;
@@ -93,7 +91,6 @@ async function uploadProcessedProfilePicture(file: File) {
         if (!uploadResponse.ok) throw new Error('profile_picture_upload_failed');
         const activated = await api.post<any>('/api/v1/customer/profile-picture/activate', { path: payload.path });
         profilePictureUrl.value = activated.profile_picture_url;
-        await auth.refreshProfile();
         await auth.refreshProfile();
     } catch (e: any) {
         error.value = e?.message ?? 'Picture upload failed.';
@@ -210,11 +207,12 @@ async function doSignOut() {
         </div>
         <div>
           <label class="bw-label">Email</label>
-          <input class="bw-input" v-model="email" type="email" placeholder="Optional" />
+          <input class="bw-input" :value="auth.customer?.email || ''" type="email" disabled aria-describedby="email-lock-note" />
+          <small id="email-lock-note" class="bw-muted locked-field-note">Registration email cannot be changed.</small>
         </div>
         <div>
           <label class="bw-label">Profile picture</label>
-          <input class="bw-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" style="margin-top:8px" />
+          <input class="bw-input bw-file-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" style="margin-top:8px" />
           <p class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">JPEG, PNG, WEBP only. Max 2MB.</p>
           <p v-if="error" class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0; color:var(--danger)">{{ error }}</p>
           <p v-if="uploading" class="bw-muted" style="font-size:var(--t-xs); margin:6px 0 0">Uploading image...</p>
@@ -327,6 +325,12 @@ async function doSignOut() {
   align-items: center;
   gap: var(--s-4);
   margin-bottom: var(--s-3);
+}
+
+.locked-field-note {
+  display: block;
+  margin-top: var(--s-1);
+  font-size: var(--t-xs);
 }
 
 .profile-avatar {

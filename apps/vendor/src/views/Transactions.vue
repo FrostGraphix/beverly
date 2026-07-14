@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
+import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
@@ -17,13 +18,33 @@ interface PurchaseOrder {
 const purchases = ref<PurchaseOrder[]>([]);
 const loading   = ref(false);
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
+const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
+const exporting = ref(false);
+const exportError = ref<string | null>(null);
 
-const filtered = () => {
-    if (filter.value === 'all')       return purchases.value;
-    if (filter.value === 'delivered') return purchases.value.filter(p => p.status === 'delivered');
-    if (filter.value === 'failed')    return purchases.value.filter(p => p.status === 'failed');
-    return purchases.value.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
+const filterPurchases = (rows: PurchaseOrder[]) => {
+    if (filter.value === 'all')       return rows;
+    if (filter.value === 'delivered') return rows.filter(p => p.status === 'delivered');
+    if (filter.value === 'failed')    return rows.filter(p => p.status === 'failed');
+    return rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
 };
+
+const filtered = () => filterPurchases(purchases.value);
+
+const CSV_COLUMNS: Column<PurchaseOrder>[] = [
+    { key: 'created_at', header: 'Date', value: (row) => row.created_at },
+    { key: 'customer', header: 'Customer', value: (row) => row.customer_name ?? '' },
+    { key: 'meter', header: 'Meter', value: (row) => row.meter_id },
+    { key: 'phase', header: 'Phase', value: (row) => meterTypeLabel(row.meter_type) },
+    { key: 'station', header: 'Station', value: (row) => row.station_id ?? '' },
+    { key: 'mode', header: 'Mode', value: (row) => row.purchase_mode },
+    { key: 'paid', header: 'Paid (NGN)', value: (row) => (row.amount_minor / 100).toFixed(2) },
+    { key: 'energy', header: 'Energy (NGN)', value: (row) => ((row.energy_amount_minor ?? row.amount_minor) / 100).toFixed(2) },
+    { key: 'vat', header: 'VAT (NGN)', value: (row) => ((row.vat_amount_minor ?? 0) / 100).toFixed(2) },
+    { key: 'units', header: 'Units (kWh)', value: (row) => row.units_kwh ?? '' },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+    { key: 'token', header: 'Token', value: (row) => row.token ?? '' },
+];
 
 function statusBadge(s: string) {
     if (s === 'delivered')                return 'success';
@@ -52,6 +73,28 @@ function printPurchaseReceipt(p: PurchaseOrder) {
     printReceipt(purchaseReceipt(p));
 }
 
+async function exportTransactions() {
+    exporting.value = true;
+    exportError.value = null;
+    try {
+        const rows: PurchaseOrder[] = [];
+        const pageSize = 500;
+        let hasMore = true;
+        while (hasMore) {
+            const response = await api.get<{ purchases: PurchaseOrder[]; has_more: boolean }>(
+                `/api/v1/vendor/transactions?period=${exportRange.value}&limit=${pageSize}&offset=${rows.length}`,
+            );
+            rows.push(...(response.purchases ?? []));
+            hasMore = response.has_more;
+        }
+        exportCsv(`beverly-vendor-transactions-${exportRange.value}`, filterPurchases(rows), CSV_COLUMNS);
+    } catch (cause: any) {
+        exportError.value = cause?.message ?? 'Export failed';
+    } finally {
+        exporting.value = false;
+    }
+}
+
 onMounted(async () => {
     loading.value = true;
     try {
@@ -69,15 +112,31 @@ onMounted(async () => {
           <div class="bw-card-title">Vending history</div>
           <div class="bw-card-sub">{{ purchases.length }} records loaded</div>
         </div>
-        <div class="bw-segmented">
+        <div class="transaction-status bw-segmented">
           <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
                   :class="['bw-seg', filter === f ? 'active' : '']"
                   @click="filter = f">{{ f }}</button>
         </div>
       </div>
 
+      <div class="transaction-toolbar">
+        <label class="export-range-label">
+          <span>Export period</span>
+          <select v-model="exportRange" class="bw-input export-range">
+            <option value="1d">Last day</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">All time</option>
+          </select>
+        </label>
+        <button class="bw-btn sm" :disabled="exporting" @click="exportTransactions">
+          {{ exporting ? 'Exporting...' : 'Export CSV' }}
+        </button>
+      </div>
+      <div v-if="exportError" class="bw-error-banner transaction-export-error">{{ exportError }}</div>
+
       <!-- Filter pills (mobile) -->
-      <div class="bw-filter-bar" style="display: none">
+      <div class="bw-filter-bar">
         <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
                 :class="['bw-filter-pill', filter === f ? 'active' : '']"
                 @click="filter = f">{{ f }}</button>
@@ -187,3 +246,38 @@ onMounted(async () => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.transaction-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  padding: 0 var(--s-4) var(--s-3);
+}
+
+.bw-filter-bar { display: none; }
+
+.export-range-label {
+  display: grid;
+  gap: var(--s-1);
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
+
+.export-range {
+  min-width: 140px;
+  padding-block: var(--s-2);
+}
+
+.transaction-export-error { margin: 0 var(--s-4) var(--s-3); }
+
+@media (max-width: 640px) {
+  .transaction-status { display: none; }
+  .bw-filter-bar { display: flex; }
+  .transaction-toolbar { align-items: end; justify-content: space-between; }
+  .export-range-label { flex: 1 1 auto; }
+  .export-range { width: 100%; min-width: 0; }
+  .transaction-toolbar .bw-btn { flex: 0 0 auto; }
+}
+</style>

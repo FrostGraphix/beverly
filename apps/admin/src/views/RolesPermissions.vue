@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import StationMultiSelect from '../components/StationMultiSelect.vue';
 import { api, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -19,6 +20,8 @@ interface StaffRow {
     id?: string; auth_user_id: string | null; user_id: string | null;
     user_name: string; email: string | null; role_key: string;
     last_sign_in_at: string | null; confirmed_at: string | null; updated_at?: string | null;
+    station_id?: string | null;
+    station_ids?: string[];
     suspended?: boolean;
 }
 interface AccessResponse {
@@ -43,7 +46,8 @@ const expandedStaff = ref<string[]>([]);
 
 /* invite */
 const inviteOpen = ref(false);
-const draft = ref({ email: '', fullName: '', roleKey: 'account', tempPassword: '' });
+const inviteStep = ref(1);
+const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], tempPassword: '' });
 
 /* custom role editor */
 const roleEditor = ref({ open: false, creating: true, roleKey: '', name: '', description: '', permissions: [] as string[] });
@@ -308,6 +312,33 @@ function viewAuditTrail(user: StaffRow) {
     router.push({ path: '/audit', query: { actor: user.auth_user_id ?? undefined } });
 }
 
+function openInvite() {
+    inviteStep.value = 1;
+    inviteOpen.value = true;
+}
+
+function closeInvite() {
+    inviteOpen.value = false;
+    inviteStep.value = 1;
+}
+
+function continueInvite() {
+    if (inviteStep.value === 1 && (!draft.value.fullName.trim() || !draft.value.email.trim())) return;
+    if (inviteStep.value === 2 && !draft.value.stationIds.length) return;
+    inviteStep.value = Math.min(3, inviteStep.value + 1);
+}
+
+async function updateStaffStations(user: StaffRow, stationIds: string[]) {
+    if (!canManage.value || !user.auth_user_id || !stationIds.length) return;
+    saving.value = true;
+    try {
+        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/station`, { stationIds });
+        toast(`${user.user_name || user.email} assigned to ${stationIds.length} stations.`);
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not update station', 'err'); }
+    finally { saving.value = false; }
+}
+
 /* ─── Create staff ────────────────────────────────────────────────────── */
 async function createStaff() {
     if (!canManage.value) return;
@@ -315,10 +346,11 @@ async function createStaff() {
     try {
         const res = await api.post<{ temporaryPassword: string }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
-            roleKey: draft.value.roleKey, temporaryPassword: draft.value.tempPassword || undefined,
+            roleKey: draft.value.roleKey, stationIds: draft.value.stationIds,
+            temporaryPassword: draft.value.tempPassword || undefined,
         });
-        inviteOpen.value = false;
-        draft.value = { email: '', fullName: '', roleKey: 'account', tempPassword: '' };
+        closeInvite();
+        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], tempPassword: '' };
         await load();
         revealTempPw(res.temporaryPassword);
         toast('Staff user created.');
@@ -349,7 +381,7 @@ async function runConfirm() {
 }
 
 onUnmounted(() => { if (countdown) clearInterval(countdown); });
-onMounted(load);
+onMounted(() => { void load(); });
 </script>
 
 <template>
@@ -467,20 +499,25 @@ onMounted(load);
     <!-- ══ INVITE MODAL ══════════════════════════════════════════════════ -->
     <teleport to="body">
       <transition name="ac-overlay">
-        <div v-if="inviteOpen" class="ac-overlay" @click.self="inviteOpen = false">
+        <div v-if="inviteOpen" class="ac-overlay" @click.self="closeInvite">
           <div class="ac-invite">
             <div class="ac-invite-head">
               <div>
                 <p class="ac-overline">New staff member</p>
                 <h3>Create wallet admin user</h3>
               </div>
-              <button class="bw-icon-btn" @click="inviteOpen = false">
+              <button class="bw-icon-btn" aria-label="Close staff setup" @click="closeInvite">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
 
             <form @submit.prevent="createStaff">
-              <div class="ac-fields">
+              <ol class="ac-steps" aria-label="Staff setup progress">
+                <li v-for="(label, index) in ['Identity', 'Access', 'Review']" :key="label" :class="{ 'is-active': inviteStep === index + 1, 'is-done': inviteStep > index + 1 }">
+                  <span>{{ index + 1 }}</span>{{ label }}
+                </li>
+              </ol>
+              <div v-if="inviteStep === 1" class="ac-fields">
                 <div class="ac-field">
                   <label class="bw-label">Full name</label>
                   <input v-model="draft.fullName" class="bw-input" placeholder="Ada Okonkwo" required />
@@ -491,7 +528,7 @@ onMounted(load);
                 </div>
               </div>
 
-              <div class="ac-invite-grid">
+              <div v-else-if="inviteStep === 2" class="ac-invite-grid">
                 <!-- Role picker -->
                 <div class="ac-field ac-field--full">
                   <label class="bw-label">Assign role</label>
@@ -510,6 +547,14 @@ onMounted(load);
                   </div>
                 </div>
 
+                <div class="ac-field ac-field--full">
+                  <label class="bw-label">Assigned stations</label>
+                  <StationMultiSelect v-model="draft.stationIds" placeholder="Search stations" />
+                  <p class="ac-field-help">This staff member only sees assigned stations.</p>
+                </div>
+              </div>
+
+              <div v-else class="ac-invite-grid">
                 <div class="ac-stack-col">
                   <!-- Permission preview for picked role -->
                   <div class="ac-perm-preview">
@@ -529,11 +574,18 @@ onMounted(load);
                     <input v-model="draft.tempPassword" class="bw-input bw-mono" minlength="12" placeholder="Leave blank to auto-generate" />
                   </div>
                 </div>
+                <dl class="ac-invite-review">
+                  <div><dt>Staff</dt><dd>{{ draft.fullName }}</dd></div>
+                  <div><dt>Email</dt><dd>{{ draft.email }}</dd></div>
+                  <div><dt>Role</dt><dd>{{ roles.find(r => r.role_key === draft.roleKey)?.role_name }}</dd></div>
+                  <div><dt>Stations</dt><dd>{{ draft.stationIds.join(', ') }}</dd></div>
+                </dl>
               </div>
 
               <div class="ac-invite-actions">
-                <button type="button" class="bw-btn ghost" @click="inviteOpen = false">Cancel</button>
-                <button class="bw-btn primary" :disabled="saving || !draft.email || !draft.fullName">
+                <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
+                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName : !draft.stationIds.length" @click="continueInvite">Continue</button>
+                <button v-else class="bw-btn primary" :disabled="saving">
                   {{ saving ? 'Creating…' : 'Create staff user' }}
                 </button>
               </div>
@@ -781,7 +833,7 @@ onMounted(load);
             </button>
           </div>
 
-          <button class="bw-btn primary" :disabled="!canManage" @click="inviteOpen = true">
+          <button class="bw-btn primary" :disabled="!canManage" @click="openInvite">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add staff
           </button>
@@ -800,7 +852,7 @@ onMounted(load);
         <div v-else-if="!filteredStaff.length" class="ac-empty">
           <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="32" cy="22" r="10"/><path d="M10 54c0-12.15 9.85-22 22-22s22 9.85 22 22"/><line x1="50" y1="40" x2="50" y2="54"/><line x1="43" y1="47" x2="57" y2="47"/></svg>
           <p>{{ staffSearch || staffRole ? 'No staff match your filters.' : 'No staff users yet.' }}</p>
-          <button v-if="canManage && !staffSearch && !staffRole" class="bw-btn primary" @click="inviteOpen = true">Add first staff user</button>
+          <button v-if="canManage && !staffSearch && !staffRole" class="bw-btn primary" @click="openInvite">Add first staff user</button>
         </div>
 
         <!-- Grid -->
@@ -838,6 +890,10 @@ onMounted(load);
                 <dt>Permissions</dt>
                 <dd>{{ catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).length }} grants</dd>
               </div>
+              <div>
+                <dt>Stations</dt>
+                <dd>{{ (u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []).join(', ') || 'Unassigned' }}</dd>
+              </div>
             </dl>
 
             <!-- Mini permission badges -->
@@ -866,6 +922,15 @@ onMounted(load);
                   <option v-for="r in roles" :key="r.role_key" :value="r.role_key">{{ r.role_name }}</option>
                 </select>
               </div>
+            </div>
+
+            <div v-if="isStaffExpanded(u)" class="ac-staff-role">
+              <label class="bw-label" style="margin-bottom:5px">Stations</label>
+              <StationMultiSelect
+                :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []"
+                :disabled="saving || !canManage || !u.auth_user_id || u.role_key === 'super-admin'"
+                @update:model-value="updateStaffStations(u, $event)"
+              />
             </div>
 
             <div v-if="isStaffExpanded(u)" class="ac-staff-actions">
@@ -1024,6 +1089,14 @@ onMounted(load);
 .ac-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .ac-field { display: flex; flex-direction: column; gap: 4px; }
 .ac-field--full { grid-column: 1 / -1; }
+.ac-field-help { margin: 4px 0 0; color: var(--text-muted); font-size: var(--t-xs); }
+.ac-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ac-steps li { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: var(--t-xs); font-weight: 700; }
+.ac-steps li::after { content: ''; height: 1px; flex: 1; background: var(--border); }
+.ac-steps li:last-child::after { display: none; }
+.ac-steps span { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; }
+.ac-steps .is-active { color: var(--text); }
+.ac-steps .is-active span, .ac-steps .is-done span { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
 
 .ac-invite-grid {
   display: grid;
@@ -1061,6 +1134,10 @@ onMounted(load);
   text-transform: capitalize;
 }
 .ac-empty-chips { font-size: var(--t-sm); color: var(--text-muted); }
+.ac-invite-review { margin: 0; padding: .75rem; display: grid; gap: .65rem; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); }
+.ac-invite-review div { display: grid; gap: 2px; }
+.ac-invite-review dt { color: var(--text-muted); font-size: var(--t-2xs); font-weight: 700; text-transform: uppercase; }
+.ac-invite-review dd { margin: 0; color: var(--text); font-size: var(--t-sm); overflow-wrap: anywhere; }
 .ac-invite-actions { display: flex; justify-content: flex-end; gap: .6rem; padding-top: .25rem; }
 
 /* ═══════════════════════════════════════════════════════════════════════

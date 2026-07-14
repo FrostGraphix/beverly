@@ -83,7 +83,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         email: input.primaryUserEmail,
         password: tempPwd,
         email_confirm: true,
-        user_metadata: { role: 'vendor_user', full_name: input.primaryUserFullName },
+        user_metadata: { role: 'vendor', full_name: input.primaryUserFullName },
     });
     if (authErr || !authUserData.user) {
         throw new OnboardingError(`auth create failed: ${authErr?.message ?? 'unknown'}`, 'auth_create_failed');
@@ -94,7 +94,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
     const { data: vu, error: vuErr } = await adminClient.from('vendor_users').insert({
         auth_user_id: authUserId,
         vendor_organization_id: organization.id,
-        role: 'vendor_manager',
+        role: 'vendor',
         full_name: input.primaryUserFullName,
         email: input.primaryUserEmail,
         phone: input.primaryUserPhone ?? null,
