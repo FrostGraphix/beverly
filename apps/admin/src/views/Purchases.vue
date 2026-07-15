@@ -80,6 +80,7 @@ const items = ref<Purchase[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const cardView = ref<'list' | 'grid'>('list');
 
 const fStatus    = ref('');
 const fActorType = ref('');
@@ -381,6 +382,23 @@ watch([fStatus, fActorType], () => loadList());
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
       </div>
 
+      <div class="purchase-layout-bar">
+        <span>Purchase results</span>
+        <div class="purchase-view-toggle" aria-label="Purchase layout">
+          <button type="button" :class="{ active: cardView === 'grid' }" :aria-pressed="cardView === 'grid'" aria-label="Grid view" title="Grid view" @click="cardView = 'grid'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button type="button" :class="{ active: cardView === 'list' }" :aria-pressed="cardView === 'list'" aria-label="List view" title="List view" @click="cardView = 'list'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Desktop -->
       <div class="bw-t-wrap">
         <table class="bw-table">
@@ -431,7 +449,7 @@ watch([fStatus, fActorType], () => loadList());
       </div>
 
       <!-- Mobile -->
-      <div class="bw-t-cards p-cards">
+      <div :class="['bw-t-cards', 'p-cards', `p-cards--${cardView}`]">
         <div v-for="p in items" :key="p.id" class="p-card" @click="openDetail(p)">
           <div class="pc-head">
             <div>
@@ -687,6 +705,30 @@ watch([fStatus, fActorType], () => loadList());
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.purchase-layout-bar { display: none; }
+.purchase-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.purchase-view-toggle button {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.purchase-view-toggle button:hover { color: var(--text); }
+.purchase-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.purchase-view-toggle svg { width: 17px; height: 17px; }
 
 .p-cards { padding: var(--s-3); }
 .p-card {
@@ -784,6 +826,36 @@ watch([fStatus, fActorType], () => loadList());
   .drawer { width: 100%; padding: var(--s-4); }
   .dr-dl { grid-template-columns: 1fr; }
   .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }
+
+  .purchase-layout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
+  .p-cards--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+    padding: var(--s-2);
+  }
+  .bw-t-wrap ~ .p-cards--grid { display: grid; }
+  .p-cards--grid .p-card {
+    min-width: 0;
+    margin-bottom: 0;
+    padding: var(--s-3);
+    overflow: hidden;
+  }
+  .p-cards--grid .pc-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-2); }
+  .p-cards--grid .pc-head > .bw-badge { justify-self: start; }
+  .p-cards--grid .pc-meta,
+  .p-cards--grid .pc-row > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  .p-cards--grid .pc-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .p-cards--grid .pc-receipts { white-space: normal; }
 }
 </style>
 

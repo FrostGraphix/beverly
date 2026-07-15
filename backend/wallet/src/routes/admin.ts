@@ -266,10 +266,18 @@ async function insertAnnouncementNotifications(rows: any[]) {
     const inserted: any[] = [];
     const chunkSize = 500;
     for (let i = 0; i < rows.length; i += chunkSize) {
-        const { data, error } = await adminClient
+        const chunk = rows.slice(i, i + chunkSize);
+        let { data, error } = await adminClient
             .from('notifications')
-            .insert(rows.slice(i, i + chunkSize))
+            .insert(chunk)
             .select('id, recipient_type, recipient_id');
+        const errorText = [error?.message, error?.details].filter(Boolean).join(' ');
+        if (error && /notifications/i.test(errorText) && /column "?message"?/i.test(errorText) && /not-null|null value/i.test(errorText)) {
+            ({ data, error } = await adminClient
+                .from('notifications')
+                .insert(chunk.map((row) => ({ ...row, message: row.body })))
+                .select('id, recipient_type, recipient_id'));
+        }
         if (error) throw error;
         inserted.push(...(data ?? []));
     }
@@ -370,6 +378,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'DELETE /vendor-applications/:id': 'wallet.vendors.manage',
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
+    'GET /vendors/summary': 'wallet.vendors.review',
     'DELETE /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
     'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
@@ -1243,6 +1252,38 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── vendor list ──
+    fastify.get('/vendors/summary', async (req) => {
+        const assignedStations = staffStations(req);
+        const countVendors = async (status?: string) => {
+            let query = adminClient
+                .from('vendor_organizations')
+                .select('id', { count: 'exact', head: true })
+                .is('deleted_at', null);
+            if (status) query = query.eq('status', status);
+            if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
+            let result = await query;
+            if (result.error && String(result.error.message || '').includes('deleted_at')) {
+                let fallback = adminClient
+                    .from('vendor_organizations')
+                    .select('id', { count: 'exact', head: true });
+                if (status) fallback = fallback.eq('status', status);
+                if (assignedStations) fallback = fallback.overlaps('operating_stations', assignedStations);
+                result = await fallback;
+            }
+            if (result.error) throw result.error;
+            return result.count ?? 0;
+        };
+        const statuses = ['pending', 'approved', 'suspended', 'frozen', 'closed'] as const;
+        const [total, ...counts] = await Promise.all([
+            countVendors(),
+            ...statuses.map((vendorStatus) => countVendors(vendorStatus)),
+        ]);
+        return {
+            total,
+            byStatus: Object.fromEntries(statuses.map((vendorStatus, index) => [vendorStatus, counts[index]])),
+        };
+    });
+
     fastify.get('/vendors', async (req) => {
         const { status, q } = req.query as { status?: string; q?: string };
         let query = adminClient
@@ -2837,24 +2878,42 @@ const route: FastifyPluginAsync = async (fastify) => {
             metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key },
             read: false,
         }));
-        const notifications = await insertAnnouncementNotifications(notificationRows);
-        const notificationsByRecipient = new Map(
-            (notifications ?? []).map((n: any) => [`${n.recipient_type}:${n.recipient_id}`, n])
-        );
+        try {
+            const notifications = await insertAnnouncementNotifications(notificationRows);
+            const notificationsByRecipient = new Map(
+                (notifications ?? []).map((n: any) => [`${n.recipient_type}:${n.recipient_id}`, n])
+            );
 
-        const deliveryRows = recipients.map((r) => {
-            const notification = notificationsByRecipient.get(r.key);
-            return {
-                announcement_id: announcement.id,
-                recipient_type: r.type,
-                recipient_id: r.id,
-                customer_id: r.type === 'customer' ? r.id : null,
-                vendor_organization_id: r.type === 'vendor' ? r.id : null,
-                notification_id: notification?.id ?? null,
-                status: notification?.id ? 'delivered' : 'queued',
-            };
-        });
-        await insertAnnouncementDeliveries(deliveryRows);
+            const deliveryRows = recipients.map((r) => {
+                const notification = notificationsByRecipient.get(r.key);
+                return {
+                    announcement_id: announcement.id,
+                    recipient_type: r.type,
+                    recipient_id: r.id,
+                    customer_id: r.type === 'customer' ? r.id : null,
+                    vendor_organization_id: r.type === 'vendor' ? r.id : null,
+                    notification_id: notification?.id ?? null,
+                    status: notification?.id ? 'delivered' : 'queued',
+                };
+            });
+            await insertAnnouncementDeliveries(deliveryRows);
+        } catch (deliveryError) {
+            const { error: notificationCleanupError } = await adminClient
+                .from('notifications')
+                .delete()
+                .eq('announcement_id', announcement.id);
+            const { error: announcementCleanupError } = notificationCleanupError
+                ? { error: null }
+                : await adminClient.from('admin_announcements').delete().eq('id', announcement.id);
+            const cleanupFailed = Boolean(notificationCleanupError || announcementCleanupError);
+            req.log.error({ deliveryError, notificationCleanupError, announcementCleanupError }, 'Announcement delivery failed');
+            return reply.code(503).send({
+                error: 'announcement_delivery_failed',
+                message: cleanupFailed
+                    ? 'Announcement delivery failed and needs administrator review.'
+                    : 'Announcement delivery failed. No recipients were notified. Please retry.',
+            });
+        }
 
         await logAction({
             actorUserId: req.actor!.userId,

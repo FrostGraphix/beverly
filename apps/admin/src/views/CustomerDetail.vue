@@ -25,6 +25,7 @@ const id = route.params.id as string;
 
 type Tab = 'overview' | 'wallet' | 'purchases' | 'funding';
 const tab = ref<Tab>('overview');
+const overviewView = ref<'grid' | 'list'>('grid');
 
 const detail = ref<any>(null);
 const loading = ref(true);
@@ -112,6 +113,17 @@ function fundingBadge(s: string) {
 }
 function dirSign(d: string) { return d === 'credit' ? '+' : '−'; }
 
+const overviewFields = computed(() => detail.value ? [
+    { label: 'Customer ID', value: detail.value.customer.id, mono: true },
+    { label: 'Auth user', value: detail.value.customer.auth_user_id || '—', mono: true },
+    { label: 'Phone', value: detail.value.customer.phone || '—', mono: true },
+    { label: 'Email', value: detail.value.customer.email || '—', mono: true },
+    { label: 'KYC tier', value: `Tier ${detail.value.customer.kyc_tier} (${detail.value.customer.kyc_status})` },
+    { label: 'Account status', value: detail.value.customer.status },
+    { label: 'Wallet', value: detail.value.wallet?.id || 'not provisioned', mono: true },
+    { label: 'Joined', value: new Date(detail.value.customer.created_at).toLocaleString() },
+] : []);
+
 onMounted(loadDetail);
 </script>
 
@@ -192,16 +204,28 @@ onMounted(loadDetail);
       </div>
 
       <!-- Overview -->
-      <div v-if="tab === 'overview'" class="bw-card">
-        <dl class="ov-dl">
-          <dt>Customer ID</dt><dd class="bw-mono">{{ detail.customer.id }}</dd>
-          <dt>Auth user</dt><dd class="bw-mono">{{ detail.customer.auth_user_id || '—' }}</dd>
-          <dt>Phone</dt><dd class="bw-mono">{{ detail.customer.phone || '—' }}</dd>
-          <dt>Email</dt><dd class="bw-mono">{{ detail.customer.email || '—' }}</dd>
-          <dt>KYC tier</dt><dd>Tier {{ detail.customer.kyc_tier }} ({{ detail.customer.kyc_status }})</dd>
-          <dt>Account status</dt><dd>{{ detail.customer.status }}</dd>
-          <dt>Wallet</dt><dd class="bw-mono">{{ detail.wallet?.id || 'not provisioned' }}</dd>
-          <dt>Joined</dt><dd>{{ new Date(detail.customer.created_at).toLocaleString() }}</dd>
+      <div v-if="tab === 'overview'" class="bw-card overview-card">
+        <div class="overview-head">
+          <h2>Account details</h2>
+          <div class="overview-view-toggle" aria-label="Account details layout">
+            <button type="button" :class="{ active: overviewView === 'grid' }" :aria-pressed="overviewView === 'grid'" aria-label="Grid view" title="Grid view" @click="overviewView = 'grid'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button type="button" :class="{ active: overviewView === 'list' }" :aria-pressed="overviewView === 'list'" aria-label="List view" title="List view" @click="overviewView = 'list'">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <dl :class="['ov-dl', `ov-dl--${overviewView}`]">
+          <div v-for="field in overviewFields" :key="field.label" class="ov-item">
+            <dt>{{ field.label }}</dt>
+            <dd :class="{ 'bw-mono': field.mono }">{{ field.value }}</dd>
+          </div>
         </dl>
       </div>
 
@@ -326,9 +350,20 @@ onMounted(loadDetail);
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 
-.ov-dl { display: grid; grid-template-columns: 150px 1fr; gap: 8px var(--s-3); margin: 0; font-size: var(--t-sm); }
-.ov-dl dt { color: var(--text-muted); }
-.ov-dl dd { margin: 0; word-break: break-word; }
+.overview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
+.overview-head h2 { margin: 0; font-size: var(--t-lg); }
+.overview-view-toggle { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.overview-view-toggle button { width: 36px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.overview-view-toggle button:hover { color: var(--text); }
+.overview-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.overview-view-toggle svg { width: 17px; height: 17px; }
+.ov-dl { margin: 0; font-size: var(--t-sm); }
+.ov-dl--grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-5); }
+.ov-dl--list .ov-item { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: var(--s-3); }
+.ov-item { min-width: 0; padding: var(--s-3) 0; border-bottom: 1px solid var(--border); }
+.ov-item dt { color: var(--text-muted); }
+.ov-item dd { min-width: 0; margin: 4px 0 0; overflow-wrap: anywhere; }
+.ov-dl--list .ov-item dd { margin-top: 0; }
 
 .wallet-head { display: flex; justify-content: space-between; align-items: start; padding: var(--s-4); border-bottom: 1px solid var(--border); }
 .wallet-bal { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-2xl); color: var(--brand); margin: 4px 0 6px; }
@@ -351,8 +386,7 @@ onMounted(loadDetail);
   .head-card { flex-direction: column; }
   .head-actions { width: 100%; justify-content: flex-end; }
   .head-action-buttons { display: none; }
-  .ov-dl { grid-template-columns: 1fr; }
-  .ov-dl dt { font-weight: 700; margin-top: var(--s-2); }
+  .ov-dl--list .ov-item { grid-template-columns: 1fr; gap: 4px; }
   .ledger-row { grid-template-columns: 1fr auto; }
   .ledger-when, .ledger-bal { grid-column: 1 / -1; opacity: 0.7; }
 }

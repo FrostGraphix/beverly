@@ -14,6 +14,7 @@ const tickets = ref<Ticket[]>([]);
 const ticketStats = ref<Record<string, number>>({});
 const ticketStatus = ref('');
 const ticketSearch = ref('');
+const ticketView = ref<'list' | 'grid'>('list');
 const selTicket = ref<Ticket | null>(null);
 const ticketDetail = ref<any>(null);
 const staffReply = ref('');
@@ -233,6 +234,23 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
         <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadTickets">Search</button>
       </div>
 
+      <div class="ticket-layout-bar">
+        <span>Ticket results</span>
+        <div class="ticket-view-toggle" aria-label="Ticket layout">
+          <button type="button" :class="{ active: ticketView === 'grid' }" :aria-pressed="ticketView === 'grid'" aria-label="Grid view" title="Grid view" @click="ticketView = 'grid'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button type="button" :class="{ active: ticketView === 'list' }" :aria-pressed="ticketView === 'list'" aria-label="List view" title="List view" @click="ticketView = 'list'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <div class="bw-table-wrapper support-table">
         <table class="bw-table">
           <thead><tr><th>Reference</th><th>Subject</th><th>From</th><th>Priority</th><th>Status</th><th>Updated</th><th class="sup-actions-col"></th></tr></thead>
@@ -265,7 +283,7 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
         </table>
       </div>
 
-      <div class="support-mobile-list">
+      <div :class="['support-mobile-list', 'ticket-mobile-list', `ticket-mobile-list--${ticketView}`]">
         <article v-for="t in tickets" :key="`mobile-${t.id}`" class="support-ticket-card" @click="openTicket(t)">
           <div>
             <span class="bw-mono">{{ t.reference }}</span>
@@ -616,6 +634,30 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 .support-table .bw-table {
   min-width: 760px;
 }
+.ticket-layout-bar { display: none; }
+.ticket-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.ticket-view-toggle button {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ticket-view-toggle button:hover { color: var(--text); }
+.ticket-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.ticket-view-toggle svg { width: 17px; height: 17px; }
 .support-mobile-list {
   display: none;
   gap: var(--s-3);
@@ -735,9 +777,35 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
     display: none;
   }
 
+  .ticket-layout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin-bottom: var(--s-3);
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
   .support-mobile-list {
     display: grid;
   }
+
+  .ticket-mobile-list--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+  }
+  .ticket-mobile-list--grid .support-ticket-card {
+    min-width: 0;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    overflow: hidden;
+  }
+  .ticket-mobile-list--grid .support-ticket-card h3,
+  .ticket-mobile-list--grid .support-ticket-card p,
+  .ticket-mobile-list--grid .support-ticket-card span { overflow-wrap: anywhere; }
+  .ticket-mobile-list--grid .support-ticket-card > .bw-btn { width: 100%; justify-content: center; }
 
   .sup-chat {
     grid-template-columns: 1fr;

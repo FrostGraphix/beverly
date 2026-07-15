@@ -57,7 +57,8 @@ Keep write safety strict.
 - `backend/wallet/src/contracts/route-policy.ts` owns canonical mutation policy, money-write flags, cache exclusion, and developer-only route classification.
 - `api/wallet-route-contract.cjs` owns the legacy gateway's explicit canonical-money proxy contract.
 - `backend/reference-facade/` owns local facade logic.
-- `backend/src/services/interval-export-service.js` streams large interval CSV exports.
+- `backend/src/services/interval-export-service.js` streams styled interval XLSX exports.
+- `backend/src/services/gateway-health-service.js` reads live gateway health and persists shared incidents.
 - `backend/src/services/wallet-ledger-service.js` owns immutable wallet ledger posting and balance derivation.
 - `backend/src/services/wallet-funding-service.js` owns funding requests, proof metadata, and finance approval.
 - `backend/src/services/wallet-hold-service.js` owns wallet holds, capture, release, expiry, and reversal.
@@ -116,6 +117,7 @@ Keep write safety strict.
 - No live upstream URL has a code default.
 - Supabase wallet tables live in `supabase/migrations/`.
 - Supabase dev console tables live in `20260601120000_dev_console_access.sql`.
+- Supabase gateway health tables store shared outage state and incidents.
 - Wallet RLS must isolate vendors by organization.
 - Wallet staff reads must follow role claims.
 - RLS identity comes from database mappings.
@@ -191,7 +193,7 @@ Keep write safety strict.
 
 - Vercel serves the SPA.
 - Vercel functions serve `/api/*`.
-- Large CSV responses stream directly.
+- Large XLSX responses stream directly.
 - Wallet Fastify runs separately.
 - Wallet workers run separately.
 - `WALLET_API_BASE_URL` selects Fastify.

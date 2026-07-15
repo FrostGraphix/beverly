@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T19:38:13.111Z",
+  "generatedAt": "2026-07-15T07:54:16.533Z",
   "status": "passed",
   "summary": {
     "total": 11,
@@ -83,10 +83,10 @@
       ]
     },
     {
-      "id": "modal-hover-profile",
-      "area": "modals",
+      "id": "account-profile-surface",
+      "area": "account",
       "passed": true,
-      "detail": "Profile settings use centered hover modal, not circular page.",
+      "detail": "Profile uses an accessible account surface with a clear return control.",
       "files": [
         "src/components/ProfilePage.vue",
         "src/styles/reference.css"

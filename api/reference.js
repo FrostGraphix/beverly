@@ -56,7 +56,8 @@ const {
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
-const { streamIntervalCsv } = require("../backend/src/services/interval-export-service");
+const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
+const { refreshGatewayHealth } = require("../backend/src/services/gateway-health-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -684,7 +685,9 @@ function isCacheableRequest(pathname, method) {
 function requiresLiveRead(pathname) {
   const normalizedPath = String(pathname || "");
   return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
-    || /\/api\/DailyDataMeter\/export\.csv$/i.test(normalizedPath)
+    || /\/api\/DailyDataMeter\/export\.xlsx$/i.test(normalizedPath)
+    || /\/api\/gateway\/read$/i.test(normalizedPath)
+    || /\/api\/notifications\/gateway-health$/i.test(normalizedPath)
     || /\/api\/customer\/read$/i.test(normalizedPath)
     || /\/api\/account\/read$/i.test(normalizedPath)
     || /\/api\/RemoteMeterTask\/Get(?:Reading|Control)Task$/i.test(normalizedPath);
@@ -791,8 +794,9 @@ function buildLiveHeaders(request, requestData, token) {
 function sanitizeReadPayload(payload, keyMap = {}, options = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const sanitized = { ...payload };
+  const maxPageSize = Math.max(1, Number(options.maxPageSize || 20));
   const pageSize = Number(sanitized.pageSize || 20);
-  sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 20) : 20;
+  sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), maxPageSize) : 20;
   if (options.requireLang && !sanitized.Lang && !sanitized.lang) sanitized.Lang = "en";
 
   const rawOrderBy = String(sanitized.orderBy || "").trim();
@@ -851,7 +855,7 @@ function sanitizeLiveRequestData(pathname, requestData) {
     : /\/api\/customer\/read$/i.test(normalizedPath)
       ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
       : /\/api\/account\/read$/i.test(normalizedPath)
-        ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
+        ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap, { maxPageSize: 500 })
         : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
           ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
           : requestData?.parsedBody;
@@ -3878,13 +3882,60 @@ async function handler(request, response) {
       response.status(result.status).json(result.body);
       return;
     }
-    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/dailydatameter/export.csv") {
+    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/notifications/gateway-health") {
+      const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
+      const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
+      try {
+        const summary = await refreshGatewayHealth({
+          stationId,
+          fetchPage: (payload) => {
+            const rawBody = Buffer.from(JSON.stringify(payload));
+            return proxyLive(
+              {
+                method: "POST",
+                url: "/api/gateway/read",
+                headers: request.headers || {},
+                __timeoutMs: 15000,
+              },
+              "/api/gateway/read",
+              { parsedBody: payload, rawBody, contentType: jsonContentType },
+            );
+          },
+        });
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json({
+          code: 0,
+          msg: "success",
+          reason: "success",
+          result: { data: summary.alerts, total: summary.alerts.length },
+          data: { data: summary.alerts, total: summary.alerts.length },
+          meta: {
+            checkedAt: summary.checkedAt,
+            gatewayCount: summary.gatewayCount,
+            eventIds: summary.events.map((event) => event.id),
+            warning: summary.warning,
+          },
+          _proxy: { source: summary.source, pathname },
+        });
+      } catch (error) {
+        console.error("[gateway-health]", error instanceof Error ? error.message : String(error));
+        response.status(502).json({
+          code: 502,
+          msg: "Gateway health unavailable",
+          reason: error instanceof Error ? error.message : String(error),
+          data: null,
+          result: null,
+        });
+      }
+      return;
+    }
+    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/dailydatameter/export.xlsx") {
       const query = new URL(request.url, "http://localhost").searchParams;
       const searchTerm = String(query.get("search") || "").trim().slice(0, 200);
       const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
       const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
       try {
-        const summary = await streamIntervalCsv({
+        const summary = await streamIntervalXlsx({
           response,
           range: String(query.get("range") || "all").toLowerCase(),
           searchTerm,
@@ -3911,7 +3962,7 @@ async function handler(request, response) {
         await recordExportJob({
           routeHash: "#/prepay-report/daily-data-meter",
           rowCount: summary.exportedRows,
-          format: "csv",
+          format: "xlsx",
           status: "completed",
           details: { ...summary, searchTerm, source: "live-stream" },
         }).catch((error) => console.error("[interval-export-log]", error instanceof Error ? error.message : String(error)));

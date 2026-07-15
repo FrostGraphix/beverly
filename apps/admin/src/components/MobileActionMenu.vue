@@ -25,7 +25,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 </script>
 
 <template>
-  <div ref="root" class="mobile-action-menu">
+  <div ref="root" :class="['mobile-action-menu', { 'is-open': open }]">
     <button
       type="button"
       class="bw-btn sm mobile-action-trigger"

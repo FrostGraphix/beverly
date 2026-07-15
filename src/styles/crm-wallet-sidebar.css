@@ -1,11 +1,87 @@
 /* Wallet-inspired navigation treatment for the Beverly CRM shell. */
 .app-page:not(.wallet-admin-host) .sidebar-container {
-  width: 252px;
+  width: var(--layout-sidebar-width);
   background:
     radial-gradient(circle at 18% -8%, rgba(57, 201, 95, 0.15), transparent 32%),
     linear-gradient(180deg, #0a1418 0%, #081115 55%, #060d10 100%) !important;
   color: #9baab0;
   box-shadow: 1px 0 0 rgba(174, 210, 190, 0.11), 18px 0 46px rgba(1, 8, 10, 0.24) !important;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-find {
+  cursor: text;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-find input {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-find input::placeholder {
+  color: #718187;
+  opacity: 1;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-find:focus-within {
+  border-color: rgba(98, 230, 130, 0.55);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 0 0 3px rgba(56, 202, 98, 0.1);
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-search-empty {
+  margin: 20px 12px;
+  color: #718187;
+  font-size: 12px;
+  text-align: center;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  z-index: 4;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 5px;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-resizer:hover::after,
+.app-page:not(.wallet-admin-host) .sidebar-resizer:focus-visible::after,
+.sidebar-is-resizing .app-page:not(.wallet-admin-host) .sidebar-resizer::after {
+  background: rgba(98, 230, 130, 0.7);
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-resizer:focus-visible {
+  outline: 0;
+}
+
+.sidebar-is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.sidebar-is-resizing .sidebar-container,
+.sidebar-is-resizing .main-container,
+.sidebar-is-resizing .fixed-header {
+  transition: none !important;
 }
 
 .app-page:not(.wallet-admin-host) .sidebar-logo {
@@ -185,6 +261,10 @@
   font-size: 16px;
 }
 
+.app-page:not(.wallet-admin-host).hideSidebar .sidebar-find input {
+  display: none;
+}
+
 @media (max-width: 1024px) {
   .app-page:not(.wallet-admin-host).mobile .sidebar-container {
     width: min(308px, calc(100vw - 36px));
@@ -194,6 +274,10 @@
 
   .app-page:not(.wallet-admin-host).mobile.openSidebar .sidebar-container {
     transform: translateX(0);
+  }
+
+  .app-page:not(.wallet-admin-host) .sidebar-resizer {
+    display: none;
   }
 
   .app-page:not(.wallet-admin-host) .sidebar-mobile-close {

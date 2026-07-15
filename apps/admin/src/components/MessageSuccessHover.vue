@@ -1,9 +1,12 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   open: boolean;
   title?: string;
   message: string;
-}>();
+  tone?: 'success' | 'error';
+}>(), {
+  tone: 'success',
+});
 
 defineEmits<{
   close: [];
@@ -13,14 +16,24 @@ defineEmits<{
 <template>
   <Teleport to="body">
     <transition name="msh" appear>
-      <aside v-if="open" class="msh" role="status" aria-live="polite" data-testid="message-success-hover">
+      <aside
+        v-if="open"
+        :class="['msh', `msh--${tone}`]"
+        :role="tone === 'error' ? 'alert' : 'status'"
+        :aria-live="tone === 'error' ? 'assertive' : 'polite'"
+        :data-testid="tone === 'error' ? 'message-error-hover' : 'message-success-hover'"
+      >
         <div class="msh-icon" aria-hidden="true">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-if="tone === 'success'" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M4 10.5l4 4L16 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <svg v-else viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="10" cy="10" r="7" />
+            <path d="M10 6.5v4.5M10 14h.01" stroke-linecap="round" />
           </svg>
         </div>
         <div class="msh-copy">
-          <strong>{{ title || 'Message sent' }}</strong>
+          <strong>{{ title || (tone === 'error' ? 'Action failed' : 'Message sent') }}</strong>
           <span>{{ message }}</span>
         </div>
         <button type="button" class="msh-close" aria-label="Dismiss" @click="$emit('close')">×</button>
@@ -32,6 +45,7 @@ defineEmits<{
 
 <style scoped>
 .msh {
+  --msh-color: var(--brand);
   position: fixed;
   top: calc(var(--s-5, 24px) + 56px);
   right: var(--s-5, 24px);
@@ -42,15 +56,17 @@ defineEmits<{
   gap: var(--s-3, 12px);
   align-items: center;
   padding: var(--s-3, 12px);
-  border: 1px solid color-mix(in oklab, var(--brand), transparent 55%);
+  border: 1px solid color-mix(in oklab, var(--msh-color), transparent 55%);
   border-radius: var(--r-lg, 16px);
   background:
-    linear-gradient(135deg, color-mix(in oklab, var(--brand), transparent 78%), transparent),
+    linear-gradient(135deg, color-mix(in oklab, var(--msh-color), transparent 78%), transparent),
     var(--surface);
   box-shadow: 0 18px 42px color-mix(in oklab, black, transparent 72%);
   overflow: hidden;
   pointer-events: auto;
 }
+
+.msh--error { --msh-color: var(--danger); }
 
 .msh-icon {
   width: 44px;
@@ -58,8 +74,8 @@ defineEmits<{
   display: grid;
   place-items: center;
   border-radius: var(--r-md, 12px);
-  color: var(--brand);
-  background: color-mix(in oklab, var(--brand), transparent 84%);
+  color: var(--msh-color);
+  background: color-mix(in oklab, var(--msh-color), transparent 84%);
 }
 
 .msh-icon svg {
@@ -104,7 +120,7 @@ defineEmits<{
   bottom: 0;
   height: 3px;
   width: 100%;
-  background: var(--brand);
+  background: var(--msh-color);
   animation: msh-life 8s linear forwards;
 }
 

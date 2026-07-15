@@ -363,7 +363,19 @@ export default {
   }
 
   .wallet-profile-meta > div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
     padding: 12px 0;
+  }
+
+  .wallet-profile-meta span {
+    margin-bottom: 0;
+  }
+
+  .wallet-profile-meta strong {
+    text-align: right;
   }
 
   .wallet-profile-meta > div + div {
@@ -372,14 +384,6 @@ export default {
     border-left: 0;
   }
 
-  .wallet-profile-list > div {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .wallet-profile-list dd {
-    text-align: left;
-  }
 }
 
 @media (max-width: 360px) {

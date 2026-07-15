@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import MessageSuccessHover from '../components/MessageSuccessHover.vue';
 import { api, shortDate } from '../lib/api';
@@ -47,10 +47,16 @@ const loadingRecipients = ref(false);
 const loadingHistory = ref(false);
 const sending = ref(false);
 const banner = ref<{ tone: 'success' | 'danger'; text: string } | null>(null);
-const successHover = ref<{ open: boolean; message: string }>({ open: false, message: '' });
+const feedback = ref<{ id: number; open: boolean; tone: 'success' | 'error'; title: string; message: string }>({
+    id: 0,
+    open: false,
+    tone: 'success',
+    title: '',
+    message: '',
+});
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
-let successTimer: ReturnType<typeof setTimeout> | null = null;
+let feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedAudiences = computed<AudienceKey[]>(() => {
     if (systemWide.value) return ['customers', 'vendors'];
@@ -65,8 +71,26 @@ const audienceParam = computed(() => {
 const selectedCount = computed(() => sendToAll.value ? summary.value.total : selectedKeys.value.length);
 const customerCount = computed(() => audienceTotals.value.customers);
 const vendorCount = computed(() => audienceTotals.value.vendors);
-const canSend = computed(() => title.value.trim().length >= 3 && message.value.trim().length >= 5 && selectedAudiences.value.length > 0 && selectedCount.value > 0 && !sending.value);
 const lastSent = computed(() => history.value[0] ? shortDate(history.value[0].created_at) : 'None');
+
+function closeFeedback() {
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedback.value.open = false;
+}
+
+function showFeedback(tone: 'success' | 'error', feedbackTitle: string, feedbackMessage: string) {
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedback.value = {
+        id: feedback.value.id + 1,
+        open: true,
+        tone,
+        title: feedbackTitle,
+        message: feedbackMessage,
+    };
+    feedbackTimer = setTimeout(() => {
+        feedback.value.open = false;
+    }, 8000);
+}
 
 function labelType(type: string) {
     return type === 'vendor' ? 'Vendor' : 'Customer';
@@ -126,10 +150,25 @@ async function loadHistory() {
 }
 
 async function sendAnnouncement() {
-    if (!canSend.value) return;
+    if (sending.value) return;
+    if (title.value.trim().length < 3) {
+        showFeedback('error', 'Title required', 'Enter an announcement title using at least 3 characters.');
+        return;
+    }
+    if (message.value.trim().length < 5) {
+        showFeedback('error', 'Message required', 'Enter an announcement message using at least 5 characters.');
+        return;
+    }
+    if (!selectedAudiences.value.length) {
+        showFeedback('error', 'Audience required', 'Select customers, vendors, or system wide.');
+        return;
+    }
+    if (!selectedCount.value) {
+        showFeedback('error', 'Recipients required', 'No reachable recipients match this announcement.');
+        return;
+    }
     sending.value = true;
     banner.value = null;
-    successHover.value = { open: false, message: '' };
     try {
         const response = await api.post<{ delivered: number }>('/api/v1/admin/announcements', {
             title: title.value.trim(),
@@ -140,18 +179,16 @@ async function sendAnnouncement() {
         });
         const sentMessage = `${response.delivered} notifications sent. Message history refreshed.`;
         banner.value = { tone: 'success', text: sentMessage };
-        successHover.value = { open: true, message: sentMessage };
-        if (successTimer) clearTimeout(successTimer);
-        successTimer = setTimeout(() => {
-            successHover.value = { open: false, message: '' };
-        }, 8000);
+        showFeedback('success', 'Message sent', sentMessage);
         title.value = '';
         message.value = '';
         selectedKeys.value = [];
         await loadHistory();
         await loadRecipients();
     } catch (error: any) {
-        banner.value = { tone: 'danger', text: error?.message ?? 'Announcement failed.' };
+        const errorMessage = error?.message ?? 'Announcement failed.';
+        banner.value = { tone: 'danger', text: errorMessage };
+        showFeedback('error', 'Message not sent', errorMessage);
     } finally {
         sending.value = false;
     }
@@ -169,38 +206,44 @@ watch(search, () => {
 onMounted(() => {
     void Promise.all([loadRecipients(), loadHistory()]);
 });
+onBeforeUnmount(() => {
+    if (searchTimer) clearTimeout(searchTimer);
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+});
 </script>
 
 <template>
   <AppShell title="Announcements">
     <MessageSuccessHover
-      :open="successHover.open"
-      title="Message sent"
-      :message="successHover.message"
-      @close="successHover = { open: false, message: '' }"
+      :key="feedback.id"
+      :open="feedback.open"
+      :tone="feedback.tone"
+      :title="feedback.title"
+      :message="feedback.message"
+      @close="closeFeedback"
     />
 
     <div v-if="banner" :class="['bw-alert', banner.tone]" style="margin-bottom: var(--s-4)">
       {{ banner.text }}
     </div>
 
-    <div class="an-stats">
-      <section class="an-stat">
-        <span>Customers</span>
-        <strong>{{ customerCount }}</strong>
-        <small>reachable recipients</small>
-      </section>
-      <section class="an-stat">
-        <span>Vendors</span>
-        <strong>{{ vendorCount }}</strong>
-        <small>reachable recipients</small>
-      </section>
-      <section class="an-stat">
-        <span>Last sent</span>
-        <strong>{{ lastSent }}</strong>
-        <small>{{ history.length }} recent records</small>
-      </section>
-    </div>
+    <section class="bw-kpi-grid announcements-kpis" aria-label="Announcement summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Customers</span>
+        <strong class="bw-kpi-value">{{ customerCount }}</strong>
+        <span class="bw-kpi-note">reachable recipients</span>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Vendors</span>
+        <strong class="bw-kpi-value">{{ vendorCount }}</strong>
+        <span class="bw-kpi-note">reachable recipients</span>
+      </article>
+      <article class="bw-kpi warn-tone">
+        <span class="bw-kpi-label">Last sent</span>
+        <strong class="bw-kpi-value announcement-last">{{ lastSent }}</strong>
+        <span class="bw-kpi-note">{{ history.length }} recent records</span>
+      </article>
+    </section>
 
     <div class="an-grid">
       <section class="bw-card an-compose">
@@ -262,7 +305,7 @@ onMounted(() => {
           <p v-if="!loadingRecipients && !recipients.length" class="bw-muted">No matching recipients.</p>
         </div>
 
-        <button class="bw-btn primary an-send" :disabled="!canSend" @click="sendAnnouncement">
+        <button class="bw-btn primary an-send" :disabled="sending" @click="sendAnnouncement">
           {{ sending ? 'Sending...' : 'Send announcement' }}
         </button>
       </section>
@@ -306,19 +349,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.an-stats {
-    display: grid;
+.announcements-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--s-3);
     margin-bottom: var(--s-4);
 }
-.an-stat {
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    background: var(--surface);
-    padding: var(--s-4);
+.announcement-last {
+    font-size: clamp(var(--t-xl), 2.6vw, var(--t-3xl));
+    overflow-wrap: anywhere;
 }
-.an-stat span,
 .kicker {
     color: var(--text-muted);
     font-size: var(--t-xs);
@@ -326,15 +364,6 @@ onMounted(() => {
     letter-spacing: .12em;
     margin: 0;
     text-transform: uppercase;
-}
-.an-stat strong {
-    display: block;
-    color: var(--text);
-    font-size: var(--t-2xl);
-    margin-top: var(--s-2);
-}
-.an-stat small {
-    color: var(--text-muted);
 }
 .an-grid {
     display: grid;
@@ -527,10 +556,12 @@ onMounted(() => {
     margin: 0;
 }
 @media (max-width: 760px) {
-    .an-stats,
     .an-grid,
     .an-checks,
     .an-scope {
+        grid-template-columns: 1fr;
+    }
+    .announcements-kpis {
         grid-template-columns: 1fr;
     }
     .an-preview {

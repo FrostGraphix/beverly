@@ -35,6 +35,7 @@ const loading    = ref(false);
 const error      = ref('');
 const nextCursor = ref<string | null>(null);
 const loadingMore = ref(false);
+const cardView = ref<'list' | 'grid'>('list');
 const PAGE = 100;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -167,6 +168,22 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 
     <!-- Table -->
     <div class="bw-card" style="padding:0">
+      <div class="vending-layout-bar">
+        <span>Purchase results</span>
+        <div class="vending-view-toggle" aria-label="Purchase layout">
+          <button type="button" :class="{ active: cardView === 'grid' }" :aria-pressed="cardView === 'grid'" aria-label="Grid view" title="Grid view" @click="cardView = 'grid'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button type="button" :class="{ active: cardView === 'list' }" :aria-pressed="cardView === 'list'" aria-label="List view" title="List view" @click="cardView = 'list'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+            </svg>
+          </button>
+        </div>
+      </div>
       <div class="bw-t-wrap">
         <table class="bw-table">
           <thead>
@@ -223,7 +240,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
       </div>
 
       <!-- Mobile cards -->
-      <div class="bw-t-cards">
+      <div :class="['bw-t-cards', `vending-cards--${cardView}`]">
         <div v-for="p in items" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
@@ -319,6 +336,30 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
   gap: 4px;
   white-space: nowrap;
 }
+.vending-layout-bar { display: none; }
+.vending-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.vending-view-toggle button {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.vending-view-toggle button:hover { color: var(--text); }
+.vending-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.vending-view-toggle svg { width: 17px; height: 17px; }
 
 @media (max-width: 640px) {
   .vm-head {
@@ -331,6 +372,38 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  .vending-layout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
+  .vending-cards--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+    padding: var(--s-2);
+  }
+
+  .bw-t-wrap ~ .vending-cards--grid { display: grid; }
+  .vending-cards--grid .bw-tc {
+    min-width: 0;
+    padding: var(--s-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+  .vending-cards--grid .bw-tc-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .vending-cards--grid .bw-tc-vendor,
+  .vending-cards--grid .bw-tc-id,
+  .vending-cards--grid .bw-tc-pair-val { overflow-wrap: anywhere; }
+  .vending-cards--grid .bw-tc-mid { gap: var(--s-2); }
+  .vending-cards--grid .bw-tc-pair { min-width: 0; }
+  .vending-cards--grid .receipt-actions { white-space: normal; }
 }
 </style>
 

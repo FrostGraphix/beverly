@@ -57,6 +57,9 @@ const repairing = ref(false);
 const busyId = ref<string | null>(null);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const canApproveFunding = computed(() => auth.hasPermission('wallet.funding.approve'));
+const pendingAmountMinor = computed(() => items.value.reduce((total, item) => total + item.amount_minor, 0));
+const pendingVendorCount = computed(() => new Set(items.value.map((item) => item.vendor_organization_id)).size);
+const proofCount = computed(() => items.value.filter((item) => item.proof_view_url || item.proof_file_path).length);
 
 // ─ Approve modal ──────────────────────────────────────────────
 const approveOpen = ref(false);
@@ -208,11 +211,34 @@ onMounted(load);
       </div>
     </transition>
 
+    <section class="bw-kpi-grid funding-kpis" aria-label="Funding approval summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Pending requests</span>
+        <strong class="bw-kpi-value">{{ items.length }}</strong>
+        <span class="bw-kpi-note">awaiting review</span>
+      </article>
+      <article class="bw-kpi">
+        <span class="bw-kpi-label">Pending value</span>
+        <strong class="bw-kpi-value funding-money">{{ naira(pendingAmountMinor) }}</strong>
+        <span class="bw-kpi-note">requested funding</span>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Vendors</span>
+        <strong class="bw-kpi-value">{{ pendingVendorCount }}</strong>
+        <span class="bw-kpi-note">unique organizations</span>
+      </article>
+      <article class="bw-kpi warn-tone">
+        <span class="bw-kpi-label">Proof supplied</span>
+        <strong class="bw-kpi-value">{{ proofCount }}</strong>
+        <span class="bw-kpi-note">requests with evidence</span>
+      </article>
+    </section>
+
     <!-- Queue -->
     <div class="bw-card" style="padding: 0">
       <div class="bw-table-head-bar">
         <div>
-          <h2 class="bw-h2" style="margin: 0">Pending funding · {{ items.length }}</h2>
+          <h2 class="bw-h2" style="margin: 0">Funding queue</h2>
           <p class="bw-muted fund-sub">
             Maker-checker · approver must differ from submitter. Backend enforces this server-side.
           </p>
@@ -362,6 +388,8 @@ onMounted(load);
 </template>
 
 <style scoped>
+.funding-kpis { margin-bottom: var(--s-3); }
+.funding-money { font-size: clamp(var(--t-xl), 2.5vw, var(--t-3xl)); overflow-wrap: anywhere; }
 .fund-sub { font-size: var(--t-xs); margin: 2px 0 0; }
 
 /* Banner */
