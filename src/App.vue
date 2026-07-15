@@ -5,7 +5,11 @@
     <div class="app-role-loading-spinner" aria-hidden="true"></div>
     <p class="app-role-loading-text">Verifying session&hellip;</p>
   </div>
-  <div v-else :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']">
+  <div
+    v-else
+    :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']"
+    :style="{ '--layout-sidebar-width': `${sidebarWidth}px` }"
+  >
 
     <div class="drawer-bg" @click="closeSidebar"></div>
     <aside
@@ -23,13 +27,20 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
       </div>
-      <BaseButton variant="quiet" class="sidebar-find" aria-label="Search pages" title="Search pages" aria-keyshortcuts="Control+K Meta+K" @click="openSidebarSearch">
+      <div class="sidebar-find" @click="focusSidebarFilter">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-        <span>Search</span>
-        <kbd>Ctrl K</kbd>
-      </BaseButton>
+        <input
+          ref="sidebarSearchInput"
+          v-model="sidebarQuery"
+          type="search"
+          aria-label="Filter navigation links"
+          placeholder="Filter pages"
+          @keydown.esc.stop="sidebarQuery = ''"
+        />
+        <kbd>/</kbd>
+      </div>
       <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
-        <template v-for="group in groups" :key="`section-${group.name}`">
+        <template v-for="group in sidebarGroups" :key="`section-${group.name}`">
           <a
             v-if="group.routes.length === 1"
             :class="sidebarClass(group.routes[0], false)"
@@ -58,7 +69,7 @@
               <span class="sidebar-label">{{ group.name }}</span>
               <svg class="sidebar-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
             </BaseButton>
-            <div v-show="expandedGroups[group.name]" class="sidebar-submenu">
+            <div v-show="sidebarQuery || expandedGroups[group.name]" class="sidebar-submenu">
               <a
                 v-for="route in group.routes"
                 :key="route.hash"
@@ -78,6 +89,7 @@
             </div>
           </template>
         </template>
+        <p v-if="sidebarQuery && !sidebarGroups.length" class="sidebar-search-empty">No matching pages</p>
       </nav>
       <div class="sidebar-footer">
         <BaseButton class="sidebar-signout" variant="ghost" title="Sign Out" @click="handleSignOut">
@@ -87,6 +99,20 @@
           <span class="sidebar-label">Sign Out</span>
         </BaseButton>
       </div>
+      <div
+        v-if="width > 1024 && !collapsed"
+        class="sidebar-resizer"
+        role="separator"
+        aria-label="Resize sidebar"
+        aria-orientation="vertical"
+        :aria-valuemin="sidebarMinWidth"
+        :aria-valuemax="sidebarMaxWidth"
+        :aria-valuenow="sidebarWidth"
+        tabindex="0"
+        @pointerdown="startSidebarResize"
+        @keydown="resizeSidebarWithKeyboard"
+        @dblclick="resetSidebarWidth"
+      ></div>
     </aside>
     <section
       :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]"
@@ -108,7 +134,7 @@
           </BaseIconButton>
           <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
           <div class="right-menu">
-            <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openSidebarSearch">
+            <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openGlobalSearch">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
               <span>Search</span>
               <kbd>Ctrl K</kbd>
@@ -328,6 +354,16 @@ import RefundsPage from "./components/wallet/RefundsPage.vue";
 import SettlementPage from "./components/wallet/SettlementPage.vue";
 import ReconciliationPage from "./components/wallet/ReconciliationPage.vue";
 import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
+
+const sidebarDefaultWidth = 252;
+const sidebarMinWidth = 220;
+const sidebarMaxWidth = 420;
+const sidebarWidthKey = "beverly-sidebar-width";
+
+function savedSidebarWidth() {
+  const value = Number(localStorage.getItem(sidebarWidthKey));
+  return Number.isFinite(value) ? Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, value)) : sidebarDefaultWidth;
+}
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import ReportsPage from "./components/ReportsPage.vue";
 import StationAlertsBell from "./components/StationAlertsBell.vue";
@@ -448,6 +484,11 @@ export default {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
       sidebarOpen: window.innerWidth > 1024,
       collapsed: false,
+      sidebarWidth: savedSidebarWidth(),
+      sidebarMinWidth,
+      sidebarMaxWidth,
+      sidebarQuery: "",
+      resizingSidebar: false,
       width: window.innerWidth,
       currentRoleId: null,
       currentUserName: getCookie("userName") || null,
@@ -484,6 +525,16 @@ export default {
     },
     groups() {
       return routeGroups(this.currentRoleId);
+    },
+    sidebarGroups() {
+      const query = this.sidebarQuery.trim().toLowerCase();
+      if (!query) return this.groups;
+      return this.groups
+        .map((group) => ({
+          ...group,
+          routes: group.routes.filter((route) => group.name.toLowerCase().includes(query) || route.title.toLowerCase().includes(query))
+        }))
+        .filter((group) => group.routes.length);
     },
     breadcrumb() {
       return this.route.group === "Dashboard" ? "Dashboard" : `${this.route.group} / ${this.route.title}`;
@@ -589,8 +640,47 @@ export default {
     window.removeEventListener("scroll", this.bumpSessionActivity);
     if (this.mediaQuery) this.mediaQuery.removeEventListener('change', this.applyTheme);
     if (this.sessionTimer) window.clearInterval(this.sessionTimer);
+    this.stopSidebarResize();
   },
   methods: {
+    setSidebarWidth(value) {
+      this.sidebarWidth = Math.min(this.sidebarMaxWidth, Math.max(this.sidebarMinWidth, Math.round(value)));
+    },
+    startSidebarResize(event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      this.resizingSidebar = true;
+      document.body.classList.add("sidebar-is-resizing");
+      window.addEventListener("pointermove", this.resizeSidebar);
+      window.addEventListener("pointerup", this.stopSidebarResize, { once: true });
+    },
+    resizeSidebar(event) {
+      if (this.resizingSidebar) this.setSidebarWidth(event.clientX);
+    },
+    stopSidebarResize() {
+      if (!this.resizingSidebar) return;
+      this.resizingSidebar = false;
+      document.body.classList.remove("sidebar-is-resizing");
+      window.removeEventListener("pointermove", this.resizeSidebar);
+      window.removeEventListener("pointerup", this.stopSidebarResize);
+      localStorage.setItem(sidebarWidthKey, String(this.sidebarWidth));
+    },
+    resizeSidebarWithKeyboard(event) {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "Home") this.setSidebarWidth(this.sidebarMinWidth);
+      else if (event.key === "End") this.setSidebarWidth(this.sidebarMaxWidth);
+      else this.setSidebarWidth(this.sidebarWidth + (event.key === "ArrowRight" ? 8 : -8));
+      localStorage.setItem(sidebarWidthKey, String(this.sidebarWidth));
+    },
+    resetSidebarWidth() {
+      this.setSidebarWidth(sidebarDefaultWidth);
+      localStorage.setItem(sidebarWidthKey, String(this.sidebarWidth));
+    },
+    focusSidebarFilter() {
+      if (this.width > 1024 && this.collapsed) this.collapsed = false;
+      this.$nextTick(() => this.$refs.sidebarSearchInput?.focus());
+    },
     bumpSessionActivity() {
       // readSessionState() is the authoritative "logged in" signal after Phase 7.
       // token is now an HttpOnly cookie — getCookie("token") always returns "".
@@ -858,7 +948,7 @@ export default {
       this.closeUserMenu();
       this.searchOpen = true;
     },
-    openSidebarSearch() {
+    openGlobalSearch() {
       this.closeSidebar();
       this.searchOpen = true;
     },
@@ -868,6 +958,10 @@ export default {
     },
     handleGlobalKeydown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); this.searchOpen = !this.searchOpen; }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !/input|textarea|select/i.test(e.target?.tagName || '')) {
+        e.preventDefault();
+        this.focusSidebarFilter();
+      }
       if (e.key === 'Escape') {
         const restoreUserMenu = this.userDropdownOpen;
         const restoreSidebar = this.width <= 1024 && this.sidebarOpen;

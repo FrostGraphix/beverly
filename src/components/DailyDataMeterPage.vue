@@ -36,54 +36,19 @@
       </div>
       <div class="ddm-toolbar-group ddm-actions-group">
         <BaseButton @click="resetFilters">Reset</BaseButton>
-        <div class="ddm-export-menu">
-          <BaseButton
-            variant="primary"
-            :disabled="!totalRecords"
-            :aria-expanded="exportMenuOpen ? 'true' : 'false'"
-            aria-haspopup="dialog"
-            @click.stop="toggleExportMenu"
-          >Export</BaseButton>
-          <aside v-if="exportMenuOpen" class="ddm-export-panel" role="dialog" aria-label="Export interval data" @click.stop>
-            <header class="ddm-export-head">
-              <div>
-                <strong>Export interval data</strong>
-                <span>CSV includes every matching row.</span>
-              </div>
-              <BaseIconButton aria-label="Close export options" @click="closeExportMenu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </BaseIconButton>
-            </header>
-            <div class="ddm-export-ranges" role="radiogroup" aria-label="Export period">
-              <BaseButton
-                v-for="option in exportRanges"
-                :key="option.value"
-                type="button"
-                class="ddm-export-range"
-                :class="{ active: exportRange === option.value }"
-                role="radio"
-                :aria-checked="exportRange === option.value"
-                @click="exportRange = option.value"
-              >
-                <span>{{ option.label }}</span>
-                <small>{{ option.note }}</small>
-              </BaseButton>
-            </div>
-            <div class="ddm-export-summary">
-              <span>Format</span><strong>CSV</strong>
-              <span>Delivery</span><strong>Streamed download</strong>
-              <span>Current search</span><strong>{{ searchTerm || "None" }}</strong>
-              <span>Sort order</span><strong>{{ sortDir === "desc" ? "Newest first" : "Oldest first" }}</strong>
-            </div>
-            <p v-if="exportState.error" class="ddm-export-error" role="alert">{{ exportState.error }}</p>
-            <BaseButton variant="primary" @click="exportCsv">
-              Download {{ exportRangeLabel }}
-            </BaseButton>
-          </aside>
-        </div>
+        <ExportRangeMenu
+          ref="exportMenu"
+          v-model="exportRange"
+          title="Export interval data"
+          description="XLSX includes every matching row."
+          format="XLSX"
+          delivery="Streamed download"
+          :search-term="searchTerm"
+          :sort-label="sortDir === 'desc' ? 'Newest first' : 'Oldest first'"
+          :error="exportState.error"
+          :disabled="!totalRecords"
+          @download="exportXlsx"
+        />
       </div>
     </div>
 
@@ -340,6 +305,7 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
+import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import { getApi, postApi } from "../services/api.js";
 import { hourlyCreateTime, intervalRowMatchesSearch, normalizeDailyMeterRow, sliceIntervalRows } from "../services/interval-data-flow.mjs";
 import { normalizeIntervalTableStatus } from "../services/interval-status.mjs";
@@ -360,7 +326,7 @@ function normalizeCollection(response) {
 
 export default {
   name: "DailyDataMeterPage",
-  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect },
+  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect, ExportRangeMenu },
   props: {
     route: {
       type: Object,
@@ -395,15 +361,7 @@ export default {
       },
       openRowActionIndex: null,
       sortDirectionMenuOpen: false,
-      exportMenuOpen: false,
       exportRange: "all",
-      exportRanges: [
-        { value: "1d", label: "1D", note: "Last 24 hours" },
-        { value: "7d", label: "7D", note: "Last 7 days" },
-        { value: "30d", label: "30D", note: "Last 30 days" },
-        { value: "1y", label: "1 year", note: "Last 12 months" },
-        { value: "all", label: "All data", note: "Complete history" }
-      ],
       exportState: { error: "" }
     };
   },
@@ -420,9 +378,6 @@ export default {
       const end = Math.min(this.totalPages, start + 2);
       for (let index = start; index <= end; index += 1) pages.push(index);
       return pages;
-    },
-    exportRangeLabel() {
-      return this.exportRanges.find((option) => option.value === this.exportRange)?.label || "CSV";
     }
   },
   watch: {
@@ -646,15 +601,6 @@ export default {
     },
     closeMenus() {
       this.closeSortDirectionMenu();
-      this.closeExportMenu();
-    },
-    toggleExportMenu() {
-      this.exportMenuOpen = !this.exportMenuOpen;
-      this.closeSortDirectionMenu();
-      this.exportState.error = "";
-    },
-    closeExportMenu() {
-      this.exportMenuOpen = false;
     },
     onPageSizeChange() {
       this.page = 1;
@@ -670,21 +616,21 @@ export default {
       const page = Number(this.gotoPage);
       if (Number.isFinite(page)) this.changePage(page);
     },
-    exportCsv() {
+    exportXlsx() {
       const query = new URLSearchParams({
         range: this.exportRange,
         search: this.searchTerm.trim(),
         sort: this.sortDir
       });
       const anchor = document.createElement("a");
-      anchor.href = `/api/DailyDataMeter/export.csv?${query.toString()}`;
-      anchor.download = `interval_data_${this.exportRange}.csv`;
+      anchor.href = `/api/DailyDataMeter/export.xlsx?${query.toString()}`;
+      anchor.download = `interval_data_${this.exportRange}.xlsx`;
       anchor.hidden = true;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       this.exportState = { error: "" };
-      this.exportMenuOpen = false;
+      this.$refs.exportMenu?.close();
     },
     healthText(value) {
       // Hourly modal uses same polarity users expect in Interval table.
@@ -744,48 +690,6 @@ export default {
 .ddm-search-group .search-input { width: 100%; max-width: 100%; }
 .ddm-sort-group .sort-select { min-width: 140px; }
 .sort-direction-menu { position: relative; }
-.ddm-export-menu { position: relative; }
-.ddm-export-panel {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 80;
-  width: min(360px, calc(100vw - 32px));
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-xl);
-  color: var(--text-main);
-}
-.ddm-export-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.ddm-export-head div { display: grid; gap: 3px; }
-.ddm-export-head strong { color: var(--text-strong); font-size: 14px; }
-.ddm-export-head span { color: var(--text-muted); font-size: 11px; }
-.ddm-export-head svg { width: 16px; height: 16px; }
-.ddm-export-ranges { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
-.ddm-export-range {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding: 9px 5px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-page);
-  color: var(--text-main);
-  font: inherit;
-  cursor: pointer;
-}
-.ddm-export-range span { font-size: 11px; font-weight: 800; white-space: nowrap; }
-.ddm-export-range small { display: none; }
-.ddm-export-range:hover { border-color: var(--primary); }
-.ddm-export-range.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-.ddm-export-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-page); font-size: 11px; }
-.ddm-export-summary span { color: var(--text-muted); }
-.ddm-export-summary strong { overflow: hidden; color: var(--text-strong); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.ddm-export-error { margin: 0; color: var(--danger); font-size: 11px; }
 .sort-direction-menu__toggle {
   width: 38px;
   height: 36px;

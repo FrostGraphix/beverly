@@ -1,31 +1,32 @@
 "use strict";
 
-const { once } = require("events");
+const ExcelJS = require("exceljs");
 
 const EXPORT_COLUMNS = [
-  ["Meter Id", "meterId"],
-  ["Gateway Id", "gatewayId"],
-  ["Collection Date", "currentDate"],
-  ["Customer Id", "customerId"],
-  ["Customer Name", "customerName"],
-  ["Station Id", "stationId"],
-  ["Total Energy", "total1"],
-  ["Last Hour Usage", "usage1"],
-  ["Credit Balance", "remain1"],
-  ["Maximum Demand", "intervalDemand"],
-  ["Power", "power"],
-  ["Relay Status", "relayOpen", intervalHealthText],
-  ["Battery Status", "batteryLow", intervalHealthText],
-  ["Magnetic Status", "magneticInterference", intervalHealthText],
-  ["Terminal Cover", "terminalCoverOpen", intervalHealthText],
-  ["Upper Open", "coverOpen", intervalHealthText],
-  ["Current Reverse", "currentReverse", intervalHealthText],
-  ["Current Unbalance", "currentUnbalance", intervalHealthText],
-  ["Update Time", "updateDate"],
+  ["Meter Id", "meterId", null, 18],
+  ["Gateway Id", "gatewayId", null, 24],
+  ["Collection Date", "currentDate", null, 22],
+  ["Customer Id", "customerId", null, 18],
+  ["Customer Name", "customerName", null, 32],
+  ["Station Id", "stationId", null, 16],
+  ["Total Energy", "total1", null, 16],
+  ["Last Hour Usage", "usage1", null, 18],
+  ["Credit Balance", "remain1", null, 18],
+  ["Maximum Demand", "intervalDemand", null, 18],
+  ["Power", "power", null, 14],
+  ["Relay Status", "relayOpen", intervalHealthText, 16],
+  ["Battery Status", "batteryLow", intervalHealthText, 16],
+  ["Magnetic Status", "magneticInterference", intervalHealthText, 18],
+  ["Terminal Cover", "terminalCoverOpen", intervalHealthText, 18],
+  ["Upper Open", "coverOpen", intervalHealthText, 16],
+  ["Current Reverse", "currentReverse", intervalHealthText, 18],
+  ["Current Unbalance", "currentUnbalance", intervalHealthText, 20],
+  ["Update Time", "updateDate", null, 22],
 ];
 
 const NORMAL_VALUES = new Set(["normal", "closed", "false", "0", "no", "ok", "okay", "off", "inactive"]);
 const ALL_TIME_START = "0001-01-01T00:00:00.000Z";
+const MAX_SHEET_DATA_ROWS = 1_048_575;
 
 function positiveInteger(value, fallback) {
   const number = Number(value);
@@ -86,26 +87,14 @@ function rowMatchesSearch(row, searchTerm) {
     .some((value) => String(value ?? "").toLowerCase().includes(query));
 }
 
-function csvCell(value) {
-  const text = String(value ?? "");
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-function csvRows(rows, searchTerm) {
-  return rows
-    .map(normalizeRow)
-    .filter((row) => rowMatchesSearch(row, searchTerm))
-    .map((row) => EXPORT_COLUMNS.map(([, key, format]) => csvCell(format ? format(row[key]) : row[key])).join(","));
-}
-
 function exportDateRange(range, now = new Date()) {
   const end = new Date(now);
   const normalizedRange = ["1d", "7d", "30d", "1y", "all"].includes(range) ? range : "all";
   if (normalizedRange === "all") return { from: ALL_TIME_START, to: end.toISOString() };
-  const start = new Date(end);
-  if (normalizedRange === "1y") start.setUTCFullYear(start.getUTCFullYear() - 1);
-  else start.setUTCDate(start.getUTCDate() - Number(normalizedRange.replace("d", "")));
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  const days = normalizedRange === "1y" ? 365 : Number(normalizedRange.replace("d", ""));
+  // The live API treats currentDateRange's lower boundary as exclusive.
+  start.setUTCDate(start.getUTCDate() - days);
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
@@ -151,13 +140,33 @@ async function fetchPageWithRetry(fetchPage, payload, retries, retryDelayMs) {
   throw lastError || new Error("Interval export page failed");
 }
 
-async function writeChunk(response, content) {
-  if (!content) return;
-  assertExportActive(response);
-  if (!response.write(content)) await once(response, "drain");
+function styleHeader(row) {
+  row.height = 30;
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF166534" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = { bottom: { style: "thin", color: { argb: "FF14532D" } } };
+  });
 }
 
-async function streamIntervalCsv(options) {
+function styleDataRow(row) {
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true, shrinkToFit: true };
+    cell.border = { bottom: { style: "hair", color: { argb: "FFD1D5DB" } } };
+  });
+}
+
+function fitRowHeight(row) {
+  const lines = EXPORT_COLUMNS.reduce((maximum, [, key, , width]) => {
+    const text = String(row.getCell(key).value ?? "");
+    const required = text.split(/\r?\n/).reduce((count, line) => count + Math.max(1, Math.ceil(line.length / Math.max(1, width - 2))), 0);
+    return Math.max(maximum, required);
+  }, 1);
+  row.height = Math.min(409, Math.max(20, lines * 15));
+}
+
+async function streamIntervalXlsx(options) {
   const {
     response,
     fetchPage,
@@ -171,6 +180,7 @@ async function streamIntervalCsv(options) {
   const concurrency = Math.min(10, positiveInteger(options.concurrency, 10));
   const retries = Math.min(5, positiveInteger(options.retries, 3));
   const retryDelayMs = Math.min(5000, positiveInteger(options.retryDelayMs, 500));
+  const maxSheetRows = Math.min(MAX_SHEET_DATA_ROWS, positiveInteger(options.maxSheetRows, MAX_SHEET_DATA_ROWS));
   const normalizedRange = ["1d", "7d", "30d", "1y", "all"].includes(range) ? range : "all";
   const dates = exportDateRange(normalizedRange, now);
   const direction = String(sortDirection).toLowerCase() === "asc" ? "asc" : "desc";
@@ -188,23 +198,52 @@ async function streamIntervalCsv(options) {
   const firstRows = collectionRows(firstPayload);
   const total = collectionTotal(firstPayload, firstRows.length);
   const effectivePageSize = firstRows.length && firstRows.length < pageSize ? firstRows.length : pageSize;
-  const fileName = `interval_data_${normalizedRange}_${dates.to.slice(0, 10)}.csv`;
+  const fileName = `interval_data_${normalizedRange}_${dates.to.slice(0, 10)}.xlsx`;
 
   response.statusCode = 200;
-  response.setHeader("Content-Type", "text/csv; charset=utf-8");
+  response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   response.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   response.setHeader("X-Export-Source-Rows", String(total));
   response.flushHeaders?.();
 
-  await writeChunk(response, `\uFEFF${EXPORT_COLUMNS.map(([label]) => csvCell(label)).join(",")}\r\n`);
+  const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: response, useStyles: true, useSharedStrings: false });
+  workbook.creator = "Beverly";
+  workbook.created = new Date(now);
+  let worksheet = null;
+  let worksheetRows = 0;
+  let sheetCount = 0;
   let exportedRows = 0;
   let sourceRowsFetched = firstRows.length;
+
+  const createWorksheet = () => {
+    if (worksheet) worksheet.commit();
+    sheetCount += 1;
+    worksheetRows = 0;
+    worksheet = workbook.addWorksheet(`Interval Data ${sheetCount}`, {
+      views: [{ state: "frozen", ySplit: 1 }],
+      properties: { defaultRowHeight: 20 },
+    });
+    worksheet.columns = EXPORT_COLUMNS.map(([header, key, , width]) => ({ header, key, width }));
+    styleHeader(worksheet.getRow(1));
+    worksheet.getRow(1).commit();
+  };
+
+  createWorksheet();
   const writeRows = async (rows) => {
-    const lines = csvRows(rows, searchTerm);
-    if (!lines.length) return;
-    exportedRows += lines.length;
-    await writeChunk(response, `${lines.join("\r\n")}\r\n`);
+    for (const sourceRow of rows) {
+      const normalized = normalizeRow(sourceRow);
+      if (!rowMatchesSearch(normalized, searchTerm)) continue;
+      assertExportActive(response);
+      if (worksheetRows >= maxSheetRows) createWorksheet();
+      const values = Object.fromEntries(EXPORT_COLUMNS.map(([, key, format]) => [key, format ? format(normalized[key]) : normalized[key]]));
+      const row = worksheet.addRow(values);
+      styleDataRow(row);
+      fitRowHeight(row);
+      row.commit();
+      worksheetRows += 1;
+      exportedRows += 1;
+    }
   };
   await writeRows(firstRows);
 
@@ -226,17 +265,17 @@ async function streamIntervalCsv(options) {
 
   if (sourceRowsFetched !== total) throw new Error(`Interval export incomplete: received ${sourceRowsFetched} of ${total} rows`);
 
-  response.end();
-  return { exportedRows, sourceRows: total, fileName, from: dates.from, to: dates.to };
+  worksheet.commit();
+  await workbook.commit();
+  return { exportedRows, sourceRows: total, sheetCount, fileName, from: dates.from, to: dates.to };
 }
 
 module.exports = {
   EXPORT_COLUMNS,
-  csvCell,
   exportDateRange,
   exportPageBatches,
   fetchPageWithRetry,
   normalizeRow,
   rowMatchesSearch,
-  streamIntervalCsv,
+  streamIntervalXlsx,
 };

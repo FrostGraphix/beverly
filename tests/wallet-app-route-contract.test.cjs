@@ -61,6 +61,7 @@ function main() {
     "fastify.delete('/vendor-applications/:id'",
     "fastify.post('/vendors'",
     "fastify.get('/vendors'",
+    "fastify.get('/vendors/summary'",
     "fastify.delete('/vendors/:id'",
     "fastify.patch('/vendors/:id/status'",
     "fastify.get('/vendors/:id'",

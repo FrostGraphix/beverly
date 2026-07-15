@@ -24,6 +24,7 @@ interface Vendor {
 }
 
 const vendors = ref<Vendor[]>([]);
+const summary = ref<{ total: number; byStatus: Record<Vendor['status'], number> } | null>(null);
 const q = ref('');
 const status = ref<'' | Vendor['status']>('');
 const loading = ref(false);
@@ -90,7 +91,7 @@ async function doAction() {
             text: `${target.value.legal_name} → ${targetAction.value}.`,
         };
         target.value = null;
-        await load();
+        await Promise.all([load(), loadSummary()]);
     } catch (e: any) {
         const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Update failed.';
         banner.value = { tone: 'error', text: msg };
@@ -110,6 +111,7 @@ async function deleteVendor() {
         });
         banner.value = { tone: 'success', text: `${deleteTarget.value.legal_name} deleted.` };
         vendors.value = vendors.value.filter((v) => v.id !== deleteTarget.value?.id);
+        await loadSummary();
         deleteOpen.value = false;
         deleteTarget.value = null;
     } catch (e: any) {
@@ -134,6 +136,14 @@ async function load() {
     } finally { loading.value = false; }
 }
 
+async function loadSummary() {
+    try {
+        summary.value = await api.get('/api/v1/admin/vendors/summary');
+    } catch (e: any) {
+        banner.value = { tone: 'error', text: e?.message ?? 'Could not load vendor summary.' };
+    }
+}
+
 function statusBadge(s: Vendor['status']) {
     if (s === 'approved') return 'success';
     if (s === 'frozen') return 'danger';
@@ -141,7 +151,10 @@ function statusBadge(s: Vendor['status']) {
     return 'neutral';
 }
 
-onMounted(load);
+onMounted(() => {
+    void load();
+    void loadSummary();
+});
 </script>
 
 <template>
@@ -153,6 +166,29 @@ onMounted(load);
         <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
       </div>
     </transition>
+
+    <section class="bw-kpi-grid vendor-kpis" aria-label="Vendor summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Total vendors</span>
+        <strong class="bw-kpi-value">{{ summary?.total ?? 0 }}</strong>
+        <span class="bw-kpi-note">registered organizations</span>
+      </article>
+      <article class="bw-kpi">
+        <span class="bw-kpi-label">Approved</span>
+        <strong class="bw-kpi-value">{{ summary?.byStatus?.approved ?? 0 }}</strong>
+        <span class="bw-kpi-note">ready to operate</span>
+      </article>
+      <article class="bw-kpi warn-tone">
+        <span class="bw-kpi-label">Pending</span>
+        <strong class="bw-kpi-value">{{ summary?.byStatus?.pending ?? 0 }}</strong>
+        <span class="bw-kpi-note">awaiting approval</span>
+      </article>
+      <article class="bw-kpi danger-tone">
+        <span class="bw-kpi-label">Restricted</span>
+        <strong class="bw-kpi-value">{{ (summary?.byStatus?.suspended ?? 0) + (summary?.byStatus?.frozen ?? 0) }}</strong>
+        <span class="bw-kpi-note">suspended or frozen</span>
+      </article>
+    </section>
 
     <div class="bw-card" style="padding: 0">
       <div class="bw-table-head-bar">
@@ -304,6 +340,8 @@ onMounted(load);
 .banner-enter-active, .banner-leave-active { transition: all 0.20s var(--ease-out); }
 .banner-enter-from { opacity: 0; transform: translateY(-4px); }
 .banner-leave-to { opacity: 0; }
+
+.vendor-kpis { margin-bottom: var(--s-3); }
 
 .v-row { cursor: pointer; }
 .v-row:hover { background: var(--surface-2); }

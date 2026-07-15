@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const http = require("node:http");
+const ExcelJS = require("exceljs");
 
 process.env.SESSION_STORE_MODE = "memory";
 process.env.RATE_LIMIT_ENABLED = "false";
@@ -46,31 +47,22 @@ function request(port, pathname) {
     }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
     });
     req.on("error", reject);
   });
 }
 
 function vercelResponse(res) {
-  return {
-    get headersSent() { return res.headersSent; },
-    get statusCode() { return res.statusCode; },
-    set statusCode(value) { res.statusCode = value; },
-    setHeader: res.setHeader.bind(res),
-    flushHeaders: res.flushHeaders.bind(res),
-    write: res.write.bind(res),
-    end: res.end.bind(res),
-    destroy: res.destroy.bind(res),
-    status(code) {
-      res.statusCode = code;
-      return this;
-    },
-    json(body) {
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.end(JSON.stringify(body));
-    },
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
   };
+  res.json = (body) => {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(body));
+  };
+  return res;
 }
 
 (async () => {
@@ -102,14 +94,15 @@ function vercelResponse(res) {
   });
 
   try {
-    const result = await request(facade.address().port, "/api/reference?__pathname=/api/DailyDataMeter/export.csv&range=7d&search=ada&sort=desc");
+    const result = await request(facade.address().port, "/api/reference?__pathname=/api/DailyDataMeter/export.xlsx&range=7d&search=ada&sort=desc");
     assert.equal(result.status, 200);
-    assert.match(result.headers["content-type"], /text\/csv/);
+    assert.match(result.headers["content-type"], /spreadsheetml/);
     assert.match(result.headers["content-disposition"], /interval_data_7d_/);
     assert.deepEqual(upstreamPages, [1, 2]);
-    assert.match(result.body, /"M-1"/);
-    assert.match(result.body, /"M-3"/);
-    assert.doesNotMatch(result.body, /"M-2"/);
+    const workbook = await new ExcelJS.Workbook().xlsx.load(result.body);
+    const sheet = workbook.worksheets[0];
+    assert.deepEqual([sheet.getCell("A2").value, sheet.getCell("A3").value], ["M-1", "M-3"]);
+    assert.equal(sheet.getCell("A2").alignment.horizontal, "center");
     console.log("interval-export-route ok");
   } finally {
     await close(facade);

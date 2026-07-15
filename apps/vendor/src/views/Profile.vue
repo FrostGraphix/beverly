@@ -208,6 +208,19 @@ async function uploadProcessedProfilePicture(file: File) {
         </div>
       </section>
 
+      <section class="profile-section profile-record bw-card">
+        <div class="profile-section-head">
+          <span>Record</span>
+          <h2>Profile Details</h2>
+        </div>
+        <dl>
+          <div class="profile-row"><dt>Full name</dt><dd>{{ fallback(auth.user?.full_name) }}</dd></div>
+          <div class="profile-row"><dt>Email</dt><dd>{{ fallback(auth.user?.contact_email ?? auth.user?.email) }}</dd></div>
+          <div class="profile-row"><dt>Phone</dt><dd>{{ fallback(auth.user?.primary_phone ?? auth.user?.phone) }}</dd></div>
+          <div class="profile-row"><dt>Role</dt><dd>{{ roleLabel }}</dd></div>
+        </dl>
+      </section>
+
       <section v-for="section in profileSections" :key="section.title" class="profile-section bw-card">
         <h2>{{ section.title }}</h2>
         <dl>
@@ -376,6 +389,25 @@ async function uploadProcessedProfilePicture(file: File) {
   font-size: var(--t-md);
   font-weight: 800;
   border-bottom: 1px solid var(--border);
+}
+
+.profile-section-head {
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-section-head span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--brand);
+  font-size: var(--t-xs);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.profile-section-head h2 {
+  padding: 0;
+  border: 0;
 }
 
 .profile-edit-card h2 {

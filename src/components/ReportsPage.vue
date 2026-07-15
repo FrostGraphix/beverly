@@ -653,14 +653,20 @@ export default {
 @media (max-width: 768px) {
   .reports-page { padding: 16px; }
   .report-type-strip { grid-template-columns: repeat(2, 1fr); }
+  .report-controls,
+  .report-controls-primary { width: 100%; align-items: stretch; }
+  .report-controls-primary { display: grid; grid-template-columns: 1fr; }
+  .report-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  .report-preset-btn,
+  .report-station-select { width: 100%; min-width: 0; }
   .kpi-strip { flex-wrap: wrap; }
   .kpi-cell { flex: 1 1 calc(50% - 1px); }
   .ops-drawer { width: 100vw; }
-  .report-presets { flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {
   .report-type-strip { grid-template-columns: 1fr; }
+  .report-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .reports-page .report-type-card.active {

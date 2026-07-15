@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
     </aside>
 
     <!-- Main column -->
-    <div class="bw-main-col">
+    <div :class="['bw-main-col', { 'bw-main-col--menu-open': userMenuOpen }]">
       <header class="bw-topbar">
         <button class="bw-hamburger" @click="openDrawer" aria-label="Open menu">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -331,6 +331,45 @@ onBeforeUnmount(() => {
     font-weight: 800;
     line-height: 1;
     padding: 0 4px;
+}
+
+.bw-main-col::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    z-index: calc(var(--z-dropdown) - 1);
+    background:
+        radial-gradient(circle at 82% 9%, oklch(from var(--brand-500) l c h / 0.18), transparent 24rem),
+        linear-gradient(135deg, oklch(from var(--surface) l c h / 0.12), oklch(from var(--surface-2) l c h / 0.32));
+    backdrop-filter: blur(0) saturate(100%);
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+    transition:
+        opacity var(--dur-base) var(--ease-out),
+        backdrop-filter var(--dur-base) var(--ease-out);
+}
+
+.bw-main-col--menu-open::before {
+    opacity: 1;
+    backdrop-filter: blur(5px) saturate(120%);
+    -webkit-backdrop-filter: blur(5px) saturate(120%);
+}
+
+.bw-main-col--menu-open .bw-content {
+    filter: blur(3px) saturate(72%) brightness(0.82);
+    transform: scale(0.996);
+    transform-origin: top center;
+}
+
+.bw-content {
+    transition:
+        filter var(--dur-base) var(--ease-out),
+        transform var(--dur-base) var(--ease-out);
+}
+
+.bw-topbar {
+    z-index: var(--z-dropdown);
 }
 
 </style>

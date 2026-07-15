@@ -650,7 +650,8 @@
     "hash": "#/prepay-report/daily-data-meter",
     "apis": [
       "/api/station/read",
-      "/api/DailyDataMeter/read"
+      "/api/DailyDataMeter/read",
+      "/api/DailyDataMeter/export.xlsx"
     ],
     "columns": [
       "meterId",

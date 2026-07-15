@@ -15,6 +15,12 @@ function assertIncludes(file, markers) {
 }
 
 function main() {
+  assertIncludes("src/components/ProfilePage.vue", [
+    "grid-template-columns: 64px minmax(0, 1fr)",
+    ".wallet-profile-meta strong",
+    "text-align: right",
+  ]);
+
   assertIncludes("apps/admin/src/views/Support.vue", [
     "/api/v1/admin/support/tickets",
     "/api/v1/admin/support/tickets/stats",

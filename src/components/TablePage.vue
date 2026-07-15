@@ -9,11 +9,12 @@
     <template #toolbar>
       <div class="filter-toolbar ddm-toolbar" data-testid="table-apply-controls" @click="closeSortDirectionMenu">
         <div class="ddm-toolbar-group ddm-search-group">
-          <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Site filter" @change="load">
+          <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Station ID filter" @change="applySiteFilter">
             <option v-for="option in siteOptions" :key="option.value || 'all-sites'" :value="option.value">{{ option.label }}</option>
           </BaseSelect>
           <BaseSelect v-if="supportsMeterPhaseFilter" v-model="meterPhaseFilter" class="sort-select" aria-label="Meter phase filter" @change="applyControls">
             <option value="all">All phases</option>
+            <option value="single-phase">Single-phase only</option>
             <option value="three-phase">3-phase only</option>
           </BaseSelect>
           <BaseInput v-if="route.actions.includes('Search')" v-model="searchTerm" class="search-input" type="search" placeholder="Search Term" aria-label="Search Term" @keyup.enter="applyControls" />
@@ -64,6 +65,18 @@
             :data-testid="`table-toolbar-action-${actionTestId(action)}`"
             @click="openAction(action, action === 'Add' ? {} : (selectedRow || visibleRows[0] || {}))"
           >{{ action }}</BaseButton>
+          <ExportRangeMenu
+            v-if="route.actions.includes('Export')"
+            ref="exportMenu"
+            v-model="exportRange"
+            :title="`Export ${route.title.toLowerCase()}`"
+            :search-term="searchTerm"
+            :sort-label="sortDirection === 'desc' ? 'Newest first' : 'Oldest first'"
+            :error="exportError"
+            :loading="exportLoading"
+            :disabled="!displayedTotal"
+            @download="downloadExport"
+          />
         </div>
       </div>
     </template>
@@ -271,15 +284,17 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import BaseTableShell from "./base/BaseTableShell.vue";
+import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
-import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { columnKey, createFormSeed, exportRowsForRoute, fetchTableData, fetchTableExportData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { downloadTextFile, exportCsvText } from "../services/import-export.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mjs";
 import { toastWarn } from "../services/toast.js";
 
 export default {
   name: "TablePage",
-  components: { ActionModal, BaseButton, BaseCheckbox, BaseInput, BaseSelect, BaseTableShell, TaskOutputModal },
+  components: { ActionModal, BaseButton, BaseCheckbox, BaseInput, BaseSelect, BaseTableShell, ExportRangeMenu, TaskOutputModal },
   props: {
     route: { type: Object, required: true }
   },
@@ -307,6 +322,9 @@ export default {
       meterPhaseFilter: "all",
       openRowActionIndex: null,
       sortDirectionMenuOpen: false,
+      exportRange: "all",
+      exportLoading: false,
+      exportError: "",
       loadToken: 0
     };
   },
@@ -326,7 +344,7 @@ export default {
     toolbarActions() {
       return this.route.actions.filter((name) => {
         if (name === "Confirm" && String(this.route.hash || "").startsWith("#/remote-operation-record/")) return true;
-        if (["Sort", "Search", "Reset", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
+        if (["Sort", "Search", "Reset", "Export", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
         if (name === "Add Task" && this.route.columns.includes("Actions")) return false;
         return true;
       });
@@ -390,6 +408,8 @@ export default {
         this.sortField = "";
         this.searchTerm = "";
         this.meterPhaseFilter = "all";
+        this.exportRange = "all";
+        this.exportError = "";
         this.currentPage = 1;
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
@@ -398,6 +418,41 @@ export default {
     }
   },
   methods: {
+    exportDates() {
+      const to = new Date();
+      const from = new Date(to);
+      if (this.exportRange === "all") from.setTime(0);
+      else if (this.exportRange === "1d") from.setDate(from.getDate() - 1);
+      else if (this.exportRange === "7d") from.setDate(from.getDate() - 7);
+      else if (this.exportRange === "30d") from.setDate(from.getDate() - 30);
+      else from.setFullYear(from.getFullYear() - 1);
+      return { from: from.toISOString(), to: to.toISOString() };
+    },
+    async downloadExport() {
+      this.exportLoading = true;
+      this.exportError = "";
+      try {
+        const { from, to } = this.exportDates();
+        const table = await fetchTableExportData(this.route, {
+          from,
+          to,
+          siteId: this.supportsSiteFilter ? this.selectedSite : undefined,
+          meterPhaseFilter: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : undefined,
+          searchTerm: this.searchTerm,
+          orderBy: this.route.actions.includes("Sort")
+            ? `${this.sortField || routeSortPolicy(this.route).key} ${this.sortDirection || routeSortDirection(this.route)}`
+            : undefined
+        });
+        const rows = exportRowsForRoute(this.route, table.rows);
+        const filename = `${String(this.route.title || "records").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}_${this.exportRange}.csv`;
+        downloadTextFile(filename, exportCsvText(this.route, rows, columnKey), "text/csv;charset=utf-8");
+        this.$refs.exportMenu?.close();
+      } catch (error) {
+        this.exportError = error?.message || "Export failed. Please retry.";
+      } finally {
+        this.exportLoading = false;
+      }
+    },
     async load() {
       const token = ++this.loadToken;
       this.errorMessage = "";
@@ -459,8 +514,13 @@ export default {
       this.selectedRow = this.visibleRows[0] || null;
     },
     filterRowsByPhase(rows) {
-      if (this.meterPhaseFilter !== "three-phase") return rows;
-      return rows.filter((row) => meterPhaseFromRow(row) === "three-phase");
+      if (this.meterPhaseFilter === "all") return rows;
+      return rows.filter((row) => meterPhaseFromRow(row) === this.meterPhaseFilter);
+    },
+    applySiteFilter() {
+      this.currentPage = 1;
+      this.gotoPageInput = "1";
+      this.load();
     },
     resetControls() {
       this.searchTerm = "";

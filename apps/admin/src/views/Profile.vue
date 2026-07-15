@@ -270,7 +270,7 @@ async function uploadProcessedProfilePicture(file: File) {
 }
 
 .profile-hero-copy h1 {
-  max-width: 11ch;
+  max-width: 12ch;
   margin-bottom: 10px;
   line-height: 0.98;
 }
@@ -286,7 +286,7 @@ async function uploadProcessedProfilePicture(file: File) {
 
 .profile-hero-meta {
   display: grid;
-  grid-template-columns: 0.8fr 1.6fr 0.8fr;
+  grid-template-columns: 0.85fr 1.45fr 0.85fr;
   border-top: 1px solid var(--border);
 }
 
@@ -448,7 +448,19 @@ async function uploadProcessedProfilePicture(file: File) {
   }
 
   .profile-hero-meta > div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
     padding: 12px 0;
+  }
+
+  .profile-hero-meta span {
+    margin-bottom: 0;
+  }
+
+  .profile-hero-meta strong {
+    text-align: right;
   }
 
   .profile-hero-meta > div + div {

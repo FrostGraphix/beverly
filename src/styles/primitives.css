@@ -489,6 +489,12 @@
   border-radius: 0 0 var(--bev-radius-xl) var(--bev-radius-xl);
 }
 
+.base-table-shell__toolbar {
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+}
+
 .base-table-shell__alert {
   padding: var(--bev-space-3) var(--bev-space-4) 0;
 }

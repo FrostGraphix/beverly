@@ -527,7 +527,7 @@ async function main() {
       assert.strictEqual(trustedAccountRead.body._proxy.source, "live-required");
       const sanitizedAccountRequest = upstreamRequests.find((entry) => entry.url === "/api/account/read" && entry.body.includes("customerId asc"));
       assert(sanitizedAccountRequest, "account live proxy must normalize stale id sort keys");
-      assert(sanitizedAccountRequest.body.includes('"pageSize":20'), "account live proxy must cap stale page sizes");
+      assert(sanitizedAccountRequest.body.includes('"pageSize":500'), "account live proxy must preserve supported bulk page sizes");
 
       const mfaFactorsAlias = await request(proxyPort, "GET", "/auth/mfa/factors");
       assert.strictEqual(mfaFactorsAlias.status, 200);

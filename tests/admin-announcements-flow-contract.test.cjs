@@ -24,6 +24,7 @@ function main() {
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
   const notificationService = read("backend/wallet/src/services/notifications.ts");
   const migration = read("supabase/migrations/20260617120000_wallet_admin_announcements.sql");
+  const compatibilityMigration = read("supabase/migrations/20260714120000_notifications_legacy_compatibility.sql");
 
   for (const route of [
     "fastify.get('/announcements/recipients'",
@@ -45,6 +46,10 @@ function main() {
   assert(adminRoutes.includes("listAllAnnouncementRecipients"), "Send-all must page through all recipients.");
   assert(adminRoutes.includes("insertAnnouncementNotifications"), "Notification inserts must be chunked.");
   assert(adminRoutes.includes("insertAnnouncementDeliveries"), "Delivery inserts must be chunked.");
+  assert(adminRoutes.includes("message: row.body"), "Legacy notification schemas must receive message values.");
+  assert(adminRoutes.includes("announcement_delivery_failed"), "Delivery failures need a stable API error.");
+  assert(adminRoutes.includes("notificationCleanupError") && adminRoutes.includes(".eq('announcement_id', announcement.id)"), "Failed sends must remove partial notifications.");
+  assert(adminRoutes.includes(".from('admin_announcements').delete().eq('id', announcement.id)"), "Failed sends must remove orphan announcements.");
   assert(adminRoutes.includes("countAnnouncementRecipients"), "Recipient totals must come from backend counts.");
   assert(adminRoutes.includes(".from('wallets')"), "Customer recipients must come from wallet registration.");
   assert(adminRoutes.includes(".eq('owner_type', 'customer')"), "Announcement customer counts must use customer wallets.");
@@ -72,14 +77,19 @@ function main() {
   assert(adminPage.includes("new URLSearchParams({ audience: 'system', limit: '1' })"), "Announcement stats must load both customer and vendor totals.");
   assert(adminPage.includes("an-history-slider"), "Message history must render as a slider.");
   assert(adminPage.includes("scroll-snap-type: inline mandatory"), "Message history slider must snap cleanly.");
-  assert(adminPage.includes("MessageSuccessHover"), "Successful sends must show hover feedback.");
+  assert(adminPage.includes("MessageSuccessHover"), "Announcement sends must show hover feedback.");
+  assert(adminPage.includes("showFeedback('success'"), "Successful sends must show feedback.");
+  assert(adminPage.includes("showFeedback('error'"), "Validation and delivery failures must show feedback.");
+  assert(adminPage.includes(':disabled="sending"'), "Invalid forms must remain clickable for validation feedback.");
   assert(adminPage.includes("await loadHistory();"), "Message history must refresh immediately after send.");
   assert(adminPage.includes("}, 8000);"), "Success hover must remain visible long enough for review.");
   assert(adminPage.includes("Message history refreshed."), "Success feedback must confirm history refresh.");
   assert(adminPage.includes("Date.now()"), "History refresh must bypass stale cached responses.");
-  assert(successHover.includes('role="status"'), "Success hover must be announced as a status.");
+  assert(successHover.includes(":role=\"tone === 'error' ? 'alert' : 'status'\""), "Feedback semantics must match its tone.");
+  assert(successHover.includes("tone?: 'success' | 'error'"), "Feedback component must support errors.");
+  assert(successHover.includes("message-error-hover"), "Error feedback must be testable.");
   assert(successHover.includes("<Teleport to=\"body\">"), "Success hover must render outside shell clipping.");
-  assert(successHover.includes("data-testid=\"message-success-hover\""), "Success hover must be testable.");
+  assert(successHover.includes("message-success-hover"), "Success hover must be testable.");
   assert(successHover.includes("z-index: 2147483000"), "Success hover must sit above menus and overlays.");
   assert(successHover.includes(".msh-enter-active"), "Success hover must animate in.");
 
@@ -105,6 +115,7 @@ function main() {
   assert(migration.includes("admin_announcement_deliveries"), "Delivery table migration missing.");
   assert(migration.includes("vendor_organization_id uuid"), "Vendor notification column migration missing.");
   assert(migration.includes("recipient_type text"), "Recipient type migration missing.");
+  assert(compatibilityMigration.includes("alter column message drop not null"), "Legacy message constraint normalization missing.");
 
   console.log(JSON.stringify({
     status: "admin announcements flow contract passed",

@@ -6,12 +6,12 @@
     "routeManifest": "reference-route-manifest.json",
     "endpointRegistry": "backend/src/services/endpoint-registry.ts"
   },
-  "generatedAt": "2026-06-30T06:02:38.126Z",
+  "generatedAt": "2026-07-15T07:51:43.608Z",
   "documentedTotal": 144,
-  "endpointCount": 152,
+  "endpointCount": 153,
   "endpointCountNote": "overview count differs from endpoint catalog lines",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 39,
+  "visibleEndpointCount": 40,
   "liveWriteEndpointCount": 83,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
@@ -192,8 +192,8 @@
         "group": "Data Report",
         "title": "Interval Data",
         "hash": "#/prepay-report/daily-data-meter",
-        "apiCount": 2,
-        "coveredApiCount": 2,
+        "apiCount": 3,
+        "coveredApiCount": 3,
         "fullyMapped": true
       },
       {
@@ -4852,6 +4852,43 @@
           "group": "System",
           "title": "Automation Command",
           "hash": "#/system/automation-command"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/DailyDataMeter/export.xlsx",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/DailyDataMeter/export.xlsx",
+        "/API/DailyDataMeter/export.xlsx"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/DailyDataMeter/export.xlsx",
+        "/API/DailyDataMeter/export.xlsx"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter"
         }
       ],
       "writeRiskLevel": "none"

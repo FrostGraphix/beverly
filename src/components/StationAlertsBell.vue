@@ -23,6 +23,7 @@
         </header>
         <div class="station-alert-body">
           <div v-if="loading" class="station-alert-empty">Checking station status...</div>
+          <div v-else-if="errorMessage" class="station-alert-empty station-alert-error">{{ errorMessage }}</div>
           <div v-else-if="!alerts.length" class="station-alert-empty station-alert-healthy">
             <span class="station-alert-healthy-dot"></span>
             <div><strong>All stations operational</strong><p>No service interruptions detected.</p></div>
@@ -30,9 +31,20 @@
           <article v-for="alert in alerts" :key="alert.id" :class="['station-alert-row', alert.kind]">
             <span class="station-alert-dot"></span>
             <div class="station-alert-copy">
-              <div class="station-alert-row-heading"><strong>{{ alert.station }} {{ alert.kind === 'recovered' ? 'restored' : 'is down' }}</strong><span>{{ alert.kind === 'recovered' ? 'Resolved' : 'Action needed' }}</span></div>
-              <p>{{ alert.reason }}</p>
-              <small>{{ alert.detail }}</small>
+              <div class="station-alert-row-heading"><strong>{{ alert.gateway }} {{ alert.kind === 'recovered' ? 'restored' : 'is down' }}</strong><span>{{ alert.station }}</span></div>
+              <p>{{ alertSummary(alert) }}</p>
+              <BaseButton variant="quiet" size="sm" class="station-alert-read-more" :aria-expanded="String(isExpanded(alert.id))" @click="toggleDetails(alert.id)">
+                {{ isExpanded(alert.id) ? 'Show less' : 'Read more' }}
+              </BaseButton>
+              <dl v-if="isExpanded(alert.id)" class="station-alert-details">
+                <div><dt>Station ID</dt><dd>{{ alert.station }}</dd></div>
+                <div><dt>Status</dt><dd>{{ alert.status }}</dd></div>
+                <div><dt>Duration</dt><dd>{{ durationFor(alert) }}</dd></div>
+                <div><dt>Success rate</dt><dd>{{ alert.successRate == null ? 'Unavailable' : `${alert.successRate}%` }}</dd></div>
+                <div><dt>Detected</dt><dd>{{ formatAlertTime(alert.startedAt) }}</dd></div>
+                <div><dt>Gateway update</dt><dd>{{ formatAlertTime(alert.lastReportedAt) }}</dd></div>
+                <div><dt>Source</dt><dd>{{ sourceLabel(alert) }}</dd></div>
+              </dl>
             </div>
           </article>
         </div>
@@ -45,44 +57,53 @@
 <script>
 import BaseIconButton from './base/BaseIconButton.vue';
 import BaseButton from './base/BaseButton.vue';
-import { postApi } from '../services/api.js';
-
-const storageKey = 'beverly.station-health-state';
-const historyKey = 'beverly.station-health-history';
-function readState() { try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { return {}; } }
-function readHistory() { try { return JSON.parse(localStorage.getItem(historyKey) || '[]'); } catch { return []; } }
-function reasonFor(row) {
-  if (String(row.status || '').toLowerCase().includes('offline')) return 'Gateway heartbeat is unavailable.';
-  if (Number(row.successRate) < 70) return 'Gateway success rate dropped below 70%.';
-  return 'Station communication requires review.';
-}
+import { getApi } from '../services/api.js';
+import { formatGatewayDuration } from '../services/gateway-health.mjs';
 
 export default {
   name: 'StationAlertsBell', components: { BaseButton, BaseIconButton },
-  data: () => ({ open: false, loading: false, alerts: [], unread: 0, poller: null }),
+  data: () => ({ open: false, loading: false, errorMessage: '', alerts: [], unread: 0, poller: null, expandedAlertIds: [] }),
   mounted() { this.refresh(); this.poller = window.setInterval(this.refresh, 60000); window.addEventListener('pointerdown', this.closeOutside, true); },
   beforeUnmount() { window.clearInterval(this.poller); window.removeEventListener('pointerdown', this.closeOutside, true); },
   methods: {
     toggle() { this.open = !this.open; if (this.open) this.unread = 0; },
     closePanel() { this.open = false; },
     markRead() { this.unread = 0; },
+    isExpanded(id) { return this.expandedAlertIds.includes(id); },
+    toggleDetails(id) {
+      this.expandedAlertIds = this.isExpanded(id)
+        ? this.expandedAlertIds.filter((value) => value !== id)
+        : [...this.expandedAlertIds, id];
+    },
+    durationFor(alert) {
+      const end = alert.endedAt ? new Date(alert.endedAt).getTime() : Date.now();
+      const start = new Date(alert.startedAt).getTime();
+      return formatGatewayDuration(Number.isFinite(start) ? end - start : 0);
+    },
+    alertSummary(alert) {
+      return alert.kind === 'recovered'
+        ? `Back online after ${this.durationFor(alert)}.`
+        : `Down for ${this.durationFor(alert)}. Action required.`;
+    },
+    formatAlertTime(value) {
+      const date = value ? new Date(value) : null;
+      return date && Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Unavailable';
+    },
+    sourceLabel(alert) {
+      return String(alert.source || '').includes('supabase') ? 'Live gateway / Supabase' : 'Live gateway / temporary cache';
+    },
     closeOutside(event) { if (this.open && this.$refs.root && !this.$refs.root.contains(event.target)) this.open = false; },
     async refresh() {
       this.loading = true;
+      this.errorMessage = '';
       try {
-        const response = await postApi('/api/station/read', { pageNumber: 1, pageSize: 500 });
-        const rows = Array.isArray(response.data) ? response.data : (response.data?.rows || response.data?.records || []);
-        const previous = readState(); const history = readHistory(); const now = new Date(); const next = {}; const events = [];
-        rows.forEach((row) => {
-          const station = row.name || row.stationName || row.stationId || row.id || 'Unknown station';
-          const down = /offline|down|fault|error/i.test(String(row.status || '')) || (row.successRate !== undefined && Number(row.successRate) < 70);
-          next[station] = { down, checkedAt: now.toISOString(), reason: reasonFor(row) };
-          if (down && !previous[station]?.down) events.push({ id: `${station}-down-${now.getTime()}`, station, kind: 'down', reason: reasonFor(row), detail: `Detected ${now.toLocaleString()}` });
-          if (!down && previous[station]?.down) events.push({ id: `${station}-recovered-${now.getTime()}`, station, kind: 'recovered', reason: 'Gateway heartbeat resumed.', detail: `Back online ${now.toLocaleString()}` });
-        });
-        this.unread += events.length;
-        this.alerts = [...events, ...history].slice(0, 25); localStorage.setItem(storageKey, JSON.stringify(next)); localStorage.setItem(historyKey, JSON.stringify(this.alerts));
-      } catch { this.alerts = []; } finally { this.loading = false; }
+        const response = await getApi('/api/notifications/gateway-health');
+        const alerts = response?.result?.data || response?.data?.data || [];
+        this.alerts = Array.isArray(alerts) ? alerts : [];
+        this.unread += Array.isArray(response?.meta?.eventIds) ? response.meta.eventIds.length : 0;
+      } catch {
+        this.errorMessage = 'Live gateway status unavailable.';
+      } finally { this.loading = false; }
     }
   }
 };
@@ -114,6 +135,13 @@ export default {
 .station-alert-copy { min-width:0; }.station-alert-row-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
 .station-alert-row strong { font-size:13px; color:var(--text-strong, #12231d); }.station-alert-row-heading span { flex:0 0 auto; color:var(--text-muted, #5c7066); font-size:10px; }
 .station-alert-row p { margin:4px 0 3px; font-size:12px; line-height:1.45; color:var(--text-main, #17342a); }.station-alert-empty { padding:24px 16px; color:var(--text-muted, #5c7066); font-size:13px; }
+.station-alert-error { color:#b42318; }
+.station-alert-read-more { margin-top:4px; padding:0 !important; color:var(--primary, #146848); font-size:11px !important; font-weight:700 !important; }
+.station-alert-read-more:hover { text-decoration:underline; }
+.station-alert-details { display:grid; gap:6px; margin:10px 0 0; padding:10px; border:1px solid var(--border-color, #cde0d4); border-radius:8px; background:var(--bg-page, #f5f8f6); }
+.station-alert-details div { display:grid; grid-template-columns:minmax(90px, auto) minmax(0, 1fr); gap:10px; }
+.station-alert-details dt { color:var(--text-muted, #5c7066); font-size:10px; }
+.station-alert-details dd { margin:0; overflow-wrap:anywhere; color:var(--text-strong, #12231d); font-size:10px; font-weight:650; text-align:right; }
 .station-alert-healthy { display:flex; align-items:flex-start; gap:10px; }.station-alert-healthy strong { display:block; color:var(--text-strong, #12231d); font-size:13px; }.station-alert-healthy p { margin:4px 0 0; font-size:12px; }.station-alert-healthy-dot { width:8px; height:8px; margin-top:5px; border-radius:50%; background:var(--primary, #146848); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary, #146848) 13%, transparent); }
 .station-alert-popover footer { padding:10px 16px; border-top:1px solid var(--border-color, #cde0d4); background:var(--bg-card, #fff); }.station-alert-popover a { display:inline-flex; align-items:center; gap:7px; min-height:32px; color:var(--text-main, #17342a); font-size:12px; font-weight:650; text-decoration:none; }.station-alert-popover a:hover { color:var(--primary, #146848); }
 .station-alert-popover-enter-active,.station-alert-popover-leave-active { transition:opacity .18s ease, transform .18s ease; }
