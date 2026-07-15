@@ -10,7 +10,9 @@ const accepted = new Map([
   ["vuex", "Vuex 3 remains coupled to Vue 2."],
   ["vite", "Patched fix requires Vite major upgrade."],
   ["esbuild", "Transitive Vite dev-server advisory."],
-  ["echarts", "The affected Lines-series tooltip path is prohibited by the source guard."]
+  ["echarts", "The affected Lines-series tooltip path is prohibited by the source guard."],
+  ["exceljs", "The current upstream release retains a transitive uuid advisory; npm offers only an incompatible downgrade."],
+  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."]
 ]);
 
 function sourceFiles(root) {
