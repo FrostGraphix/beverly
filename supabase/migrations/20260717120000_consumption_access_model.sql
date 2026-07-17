@@ -21,14 +21,15 @@
 -- ── Vendor single-station model ──────────────────────────────────────────────
 
 alter table public.vendor_organizations
-  add column if not exists station_id text;
+  add column if not exists station_id text,
+  add column if not exists station_ids_json jsonb not null default '[]'::jsonb,
+  add column if not exists operating_stations text[] not null default '{}'::text[];
 
--- Backfill from the legacy array; a vendor holds at most one station.
+-- Backfill from whichever legacy station column this environment retained.
 update public.vendor_organizations
-set station_id = upper(nullif(trim(station_ids_json->>0), ''))
+set station_id = upper(nullif(trim(coalesce(station_ids_json->>0, operating_stations[1])), ''))
 where station_id is null
-  and jsonb_typeof(station_ids_json) = 'array'
-  and jsonb_array_length(station_ids_json) > 0;
+  and coalesce(station_ids_json->>0, operating_stations[1], '') <> '';
 
 -- vendor_organizations accumulated three station columns over time:
 --   station_ids_json  jsonb   — original; mirrored by the CRM SQLite schema
@@ -140,7 +141,7 @@ create policy "consumption aggregates staff scope"
     (select private.has_permission('wallet.consumption.view'))
     and (
       (select private.current_staff_role()) = 'super-admin'
-      or upper(station_id) = any (select public.current_station_ids())
+      or upper(station_id) = any(public.current_station_ids())
     )
   );
 
@@ -155,7 +156,7 @@ create policy "consumption aggregates vendor scope"
 drop policy if exists "consumption aggregates customer scope" on public.meter_consumption_aggregates;
 create policy "consumption aggregates customer scope"
   on public.meter_consumption_aggregates for select to authenticated
-  using (meter_id = any (select public.current_customer_meter_ids()));
+  using (meter_id = any(public.current_customer_meter_ids()));
 
 -- ── RLS: daily_meter_deltas ──────────────────────────────────────────────────
 
@@ -175,7 +176,7 @@ create policy "meter deltas staff scope"
     (select private.has_permission('wallet.consumption.view'))
     and (
       (select private.current_staff_role()) = 'super-admin'
-      or upper(station_id) = any (select public.current_station_ids())
+      or upper(station_id) = any(public.current_station_ids())
     )
   );
 
@@ -190,7 +191,7 @@ create policy "meter deltas vendor scope"
 drop policy if exists "meter deltas customer scope" on public.daily_meter_deltas;
 create policy "meter deltas customer scope"
   on public.daily_meter_deltas for select to authenticated
-  using (meter_id = any (select public.current_customer_meter_ids()));
+  using (meter_id = any(public.current_customer_meter_ids()));
 
 -- ── Indexes for the new access paths ─────────────────────────────────────────
 -- Customer reads filter by a meter_id allow-list across period buckets; vendor
