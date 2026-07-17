@@ -47,9 +47,14 @@ async function unlink(id: string) {
         <p class="bw-page-title">My Meters</p>
         <p class="bw-page-sub">{{ meters.length }} linked</p>
       </div>
-      <router-link to="/onboard-meter" class="bw-btn primary" style="text-decoration:none; white-space:nowrap">
-        + Add meter
-      </router-link>
+      <div class="bw-row" style="gap:8px">
+        <router-link to="/consumption" class="bw-btn" style="text-decoration:none; white-space:nowrap">
+          Consumption
+        </router-link>
+        <router-link to="/onboard-meter" class="bw-btn primary" style="text-decoration:none; white-space:nowrap">
+          + Add meter
+        </router-link>
+      </div>
     </div>
 
     <section class="meter-install-card">

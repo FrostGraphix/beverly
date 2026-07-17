@@ -132,20 +132,64 @@ test("meter reset (total1 drops) clamps delta to 0", () => {
   assertClose(deltas[2].delta, 1.5, 0.001, "next day after reset");
 });
 
-test("tamper flag is true when terminalCoverOpen", () => {
+// Boolean interval flags are INVERTED against their field names:
+// `false` means the named condition is active, `true` means healthy.
+test("tamper flag is true when terminalCoverOpen is false (cover actually open)", () => {
   const rows = [
-    { currentDate: "2026-04-01", total1: 10, remain1: 5, terminalCoverOpen: true },
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, terminalCoverOpen: false },
   ];
   const deltas = deriveDailyDeltas(rows);
   assertEqual(deltas[0].tamper, true);
 });
 
-test("relayOpen flag is correctly passed through", () => {
+test("tamper flag is false when every condition flag reads healthy", () => {
+  const rows = [
+    {
+      currentDate: "2026-04-01", total1: 10, remain1: 5,
+      terminalCoverOpen: true, magneticInterference: true, currentReverse: true,
+    },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, false);
+});
+
+test("tamper flag honours the literal string shape", () => {
+  const rows = [
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, currentReverse: "Yes" },
+    { currentDate: "2026-04-02", total1: 12, remain1: 5, currentReverse: "No" },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, true);
+  assertEqual(deltas[1].tamper, false);
+});
+
+test("relayOpen is true only when the relay is actually open", () => {
+  const rows = [
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, relayOpen: false },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].relayOpen, true);
+});
+
+test("relayOpen is false for a connected meter", () => {
   const rows = [
     { currentDate: "2026-04-01", total1: 10, remain1: 5, relayOpen: true },
   ];
   const deltas = deriveDailyDeltas(rows);
-  assertEqual(deltas[0].relayOpen, true);
+  assertEqual(deltas[0].relayOpen, false);
+});
+
+test("no-data sentinel rows report no tamper and no relay alarm", () => {
+  const rows = [
+    {
+      currentDate: "2026-04-01", total1: -1, remain1: -1,
+      terminalCoverOpen: false, magneticInterference: false,
+      currentReverse: false, relayOpen: false,
+    },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, false);
+  assertEqual(deltas[0].relayOpen, false);
 });
 
 test("dates are truncated to YYYY-MM-DD", () => {

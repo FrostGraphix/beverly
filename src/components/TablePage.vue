@@ -1122,7 +1122,17 @@ export default {
     gap: 8px;
   }
   .ddm-sort-group { grid-column: 1; }
-  .ddm-actions-group { grid-column: 2; }
+  .ddm-actions-group {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .ddm-actions-group :deep(.base-button),
+  .ddm-actions-group :deep(.export-range-menu) {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 @media (max-width: 768px) {

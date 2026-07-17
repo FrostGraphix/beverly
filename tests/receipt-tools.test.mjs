@@ -17,6 +17,9 @@ const row = {
   totalUnit: 1.4,
   token: "0021 2636 8628 4408 6688",
   stationId: "TUNGA",
+  tax: 25,
+  meterPhaseMode: "three-phase",
+  requireThreePhase: true,
   time: "2026-04-28 10:29:23",
   operatorNote: "Paid at field desk",
   settlementBatch: "BATCH-42"
@@ -29,16 +32,27 @@ const filename = buildReceiptFilename(model, "pdf");
 
 assert.strictEqual(model.title, "Cancel Receipt");
 assert(model.fields.some((field) => field.label === "Token"));
+assert(model.fields.some((field) => field.label === "Tax" && field.value === "25.00"));
+assert(!model.fields.some((field) => field.label === "Tax / VAT"));
+assert(!model.fields.some((field) => field.label === "Customer Id"));
+assert(!model.fields.some((field) => field.label === "Meter Phase Mode"));
+assert(!model.fields.some((field) => field.label === "Require Three Phase"));
 assert(model.fields.some((field) => field.label === "Operator Note"));
 assert(model.fields.some((field) => field.label === "Settlement Batch"));
 assert(html.includes("<!doctype html>"));
 assert(html.includes("@page { size: A4; margin: 0; }"));
 assert(html.includes(".receipt::before"));
+assert(html.includes('class="receipt-time"><span>Time</span><strong>'));
+assert(!html.includes('class="header-meta"'));
 assert(html.includes(".detail-section"));
 assert(html.includes(".token-box"));
 assert(!html.includes('<div class="summary-grid">'));
 assert(!html.includes("<span>Total Paid</span>"));
 assert(html.includes("--primary: #22c55e;"));
+assert(html.includes("background: #ffffff"));
+assert(html.includes("info@acoblighting.com"));
+assert(html.includes("+234 704 920 2634 / +234 803 290 2825"));
+assert(html.includes("Setraco Gate, Gwarinpa"));
 assert(html.includes("print-color-adjust: exact"));
 assert(!html.includes("fonts.googleapis.com"));
 assert(filename.endsWith(".pdf"));

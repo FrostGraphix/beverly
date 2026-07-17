@@ -61,11 +61,11 @@ Keep write safety strict.
 - `backend/src/services/gateway-health-service.js` reads live gateway health and persists shared incidents.
 - `backend/src/services/wallet-ledger-service.js` owns immutable wallet ledger posting and balance derivation.
 - `backend/src/services/wallet-funding-service.js` owns funding requests, proof metadata, and finance approval.
-- `backend/src/services/wallet-hold-service.js` owns wallet holds, capture, release, expiry, and reversal.
+- `backend/src/services/wallet-ledger-service.js` also owns wallet holds, capture, release, and freeze state.
 - `backend/src/services/wallet-purchase-service.js` owns purchase orders, delivery state, receipts, and idempotent vend orchestration.
 - `backend/src/services/wallet-approval-service.js` owns maker-checker approval contracts.
-- `backend/src/services/wallet-risk-service.js` owns limits, freeze checks, and anomaly events.
-- `backend/src/services/wallet-audit-service.js` owns structured wallet audit events.
+- `backend/wallet/src/services/fraud-engine.ts` owns wallet risk scoring and anomaly signals.
+- `backend/wallet/src/services/audit.ts` owns structured wallet audit events.
 - `backend/wallet/src/services/payment-transactions.ts` owns Paystack success fulfillment and legacy status compatibility.
 - `backend/wallet/src/services/payment-webhooks.ts` owns verified Paystack webhook reconciliation.
 - `backend/wallet/src/services/dev-console.ts` owns admin developer console data contracts.

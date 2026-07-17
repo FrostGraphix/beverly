@@ -415,7 +415,7 @@ export default {
       this.loadingKeyUpdate = true;
       try {
         const res = await postApi("/api/token/meterKey/update", payload, {
-          headers: { "x-route-context": this.route?.hash || "" }
+          headers: { "X-Route-Hash": this.route?.hash || "" }
         });
         const code = Number(res?.code);
         if (Number.isFinite(code) && code !== 0 && code !== 200) {
@@ -437,7 +437,7 @@ export default {
         const res = await postApi(
           "/api/token/changeMeterKeyToken/generate",
           buildChangeMeterKeyTokenPayload({ meterId: this.meter?.meterId }),
-          { headers: { "x-route-context": this.route?.hash || "" } }
+          { headers: { "X-Route-Hash": this.route?.hash || "" } }
         );
         const tokens = extractChangeMeterKeyTokens(res);
         if (tokens.length < 2) throw new Error(res?.reason || res?.msg || "Key-change tokens were not returned.");
@@ -469,7 +469,7 @@ export default {
     async sendOneToken(token, remark) {
       const payload = [this.remoteTokenPayload(token, remark)];
       const createRes = await postApi("/API/RemoteMeterTask/CreateTokenTask", payload, {
-        headers: { "x-route-context": this.route?.hash || "" }
+        headers: { "X-Route-Hash": this.route?.hash || "" }
       });
       let confirm = remoteTaskConfirmPayload(createRes);
       let taskId = Number(confirm[0]?.id);
@@ -480,7 +480,7 @@ export default {
       }
       if (!confirm.length) throw new Error("Token task created but no confirm id was returned.");
       const confirmRes = await postApi("/API/RemoteMeterTask/UpdateTokenTask", confirm, {
-        headers: { "x-route-context": this.route?.hash || "" }
+        headers: { "X-Route-Hash": this.route?.hash || "" }
       });
       const code = Number(confirmRes?.code);
       const reason = String(confirmRes?.reason || confirmRes?.msg || "").toLowerCase();

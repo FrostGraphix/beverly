@@ -72,6 +72,7 @@ assert(echartPanel.includes("createChartBaseline"));
 assert(echartPanel.includes("createChartRiseOption"));
 assert(echartPanel.includes('"bar", "line", "pie"'));
 assert(!echartPanel.includes('"macarons"'));
+assert(!echartPanel.includes("dashboard-avatar-rise"));
 
 console.log(JSON.stringify({
   charts: 3,

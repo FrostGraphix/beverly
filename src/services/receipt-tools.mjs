@@ -107,11 +107,19 @@ function field(label, value, options = {}) {
   };
 }
 
+const excludedReceiptLabels = new Set([
+  "customer id",
+  "meter phase mode",
+  "require three phase",
+  "is three phase"
+]);
+
 function appendField(fields, seenLabels, label, value, options = {}) {
   const normalizedLabel = humanizeKey(label);
   const normalizedValue = stringValue(value);
   if (!normalizedLabel || !normalizedValue) return;
   const key = normalizedLabel.toLowerCase();
+  if (excludedReceiptLabels.has(key)) return;
   if (seenLabels.has(key)) return;
   seenLabels.add(key);
   fields.push(field(normalizedLabel, value, {
@@ -125,22 +133,22 @@ function appendField(fields, seenLabels, label, value, options = {}) {
 const brand = {
   name: "Beverly",
   company: "ACOB Lighting Technology Limited",
-  email: "support@acoblighting.com",
-  phone: "+234 800 BEVERLY",
-  web: "www.acoblighting.com"
+  email: "info@acoblighting.com",
+  phone: "+234 704 920 2634 / +234 803 290 2825",
+  web: "www.acoblighting.com",
+  address: "Plot 2, Block 14 Extension, Setraco Gate, Gwarinpa, FCT, Nigeria"
 };
 
 export const requiredReceiptFields = [
   "Receipt Id",
   "Token",
   "Meter Id",
-  "Customer Id",
   "Customer Name",
   "Total Paid",
   "Total Unit",
   "Tariff Id",
   "Tariff Price",
-  "Tax / VAT",
+  "Tax",
   "Payment Method",
   "Purchase Way",
   "Vend Status",
@@ -210,33 +218,20 @@ export function buildReceiptFilename(model, extension = "pdf") {
 }
 
 export function buildReceiptThemeFromDocument(targetDocument = typeof document !== "undefined" ? document : null) {
-  const root = targetDocument?.documentElement;
-  const view = targetDocument?.defaultView || (typeof window !== "undefined" ? window : null);
-  if (!root || !view?.getComputedStyle) return {};
-  const styles = view.getComputedStyle(root);
-  const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
-  return {
-    primary: resolve("--primary", "#ffd600"),
-    primaryDeep: resolve("--primary-deep", "#b99700"),
-    ink: resolve("--text-strong", "#f8fafc"),
-    textMain: resolve("--text-main", "#d7dee9"),
-    textMuted: resolve("--text-muted", "#8f98a8"),
-    panel: resolve("--bg-page", "#0b0d10"),
-    panelSoft: resolve("--bg-card", "#11151b"),
-    border: resolve("--border-color", "rgba(255, 214, 0, .28)")
-  };
+  void targetDocument;
+  return buildReceiptPdfTheme();
 }
 
 function buildReceiptPdfTheme() {
   return {
-    primary: "#d4a900",
-    primaryDeep: "#8a6a00",
-    ink: "#111827",
-    textMain: "#1f2937",
-    textMuted: "#475569",
+    primary: "#16a34a",
+    primaryDeep: "#166534",
+    ink: "#102a1b",
+    textMain: "#1f3d2b",
+    textMuted: "#5f6f65",
     panel: "#ffffff",
-    panelSoft: "#f8fafc",
-    border: "rgba(212, 169, 0, .38)"
+    panelSoft: "#f3fbf5",
+    border: "rgba(22, 163, 74, .28)"
   };
 }
 
@@ -257,7 +252,6 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
   const fields = [];
   [
     ["Receipt Id", receiptId, { section: "identity", emphasis: true }],
-    ["Customer Id", findRowValue(row, columnKey, ["Customer Id"], ["customerId"]), { section: "customer" }],
     ["Customer Name", findRowValue(row, columnKey, ["Customer Name"], ["customerName", "name"]), { section: "customer", emphasis: true }],
     ["Meter Id", findRowValue(row, columnKey, ["Meter Id"], ["meterId"]), { section: "meter", emphasis: true }],
     ["Meter Type", findRowValue(row, columnKey, ["Meter Type"], ["meterType"]), { section: "meter" }],
@@ -266,7 +260,7 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
     ["Total Paid", totalPaid, { section: "transaction", emphasis: true }],
     ["Total Unit", totalUnit, { section: "transaction" }],
     ["Tariff Price", findRowValue(row, columnKey, ["Tariff Price"], ["tariffPrice", "unitPrice", "price"]), { section: "transaction" }],
-    ["Tax / VAT", findRowValue(row, columnKey, ["VAT Charge"], ["tax"]), { section: "transaction" }],
+    ["Tax", findRowValue(row, columnKey, ["Tax"], ["tax"]), { section: "transaction" }],
     ["Payment Method", findRowValue(row, columnKey, ["Payment Method"], ["paymentMethod"]), { section: "transaction" }],
     ["Purchase Way", findRowValue(row, columnKey, ["Purchase Way"], ["purchaseWay"]), { section: "transaction" }],
     ["Vend Status", findRowValue(row, columnKey, ["Vend"], ["vend"]), { section: "transaction" }],
@@ -329,30 +323,23 @@ export function receiptHtml(model, options = {}) {
   const filename = buildReceiptFilename(model, "pdf");
   const pageTitle = filename.replace(/\.pdf$/i, "");
   const theme = options.theme || {};
-  const lightMode = options.mode === "pdf" || options.light === true;
-  const primary = safeCssValue(theme.primary, "#ffd600");
-  const primaryDeep = safeCssValue(theme.primaryDeep, "#b99700");
-  const ink = safeCssValue(theme.ink, "#f8fafc");
-  const textMain = safeCssValue(theme.textMain, "#d7dee9");
-  const textMuted = safeCssValue(theme.textMuted, "#8f98a8");
-  const panel = safeCssValue(theme.panel, "#0b0d10");
-  const panelSoft = safeCssValue(theme.panelSoft, "#11151b");
-  const border = safeCssValue(theme.border, "rgba(255, 214, 0, .28)");
-  const pageBackground = lightMode ? "#ffffff" : "#050608";
-  const bodyBackground = lightMode
-    ? "#ffffff"
-    : "radial-gradient(circle at top left, rgba(255,214,0,.12), transparent 34%), #050608";
-  const receiptBackground = lightMode
-    ? "linear-gradient(180deg, #ffffff, #f8fafc)"
-    : "linear-gradient(180deg, #101216, #07080a)";
-  const tokenBackground = lightMode ? "#ffffff" : "#030407";
-  const summaryBackground = lightMode ? "rgba(15,23,42,.025)" : "rgba(255,255,255,.035)";
-  const detailBackground = lightMode ? "rgba(15,23,42,.02)" : "rgba(255,255,255,.025)";
-  const summaryBorder = lightMode ? "rgba(212,169,0,.30)" : "rgba(255,214,0,.18)";
-  const detailBorder = lightMode ? "rgba(212,169,0,.24)" : "rgba(255,214,0,.14)";
-  const receiptShadow = lightMode
-    ? "0 18px 46px rgba(15, 23, 42, .10), 0 0 0 6px rgba(212,169,0,.045)"
-    : "0 24px 70px rgba(0, 0, 0, .38), 0 0 0 6px rgba(255,214,0,.04)";
+  const primary = safeCssValue(theme.primary, "#16a34a");
+  const primaryDeep = safeCssValue(theme.primaryDeep, "#166534");
+  const ink = safeCssValue(theme.ink, "#102a1b");
+  const textMain = safeCssValue(theme.textMain, "#1f3d2b");
+  const textMuted = safeCssValue(theme.textMuted, "#5f6f65");
+  const panel = safeCssValue(theme.panel, "#ffffff");
+  const panelSoft = safeCssValue(theme.panelSoft, "#f3fbf5");
+  const border = safeCssValue(theme.border, "rgba(22, 163, 74, .28)");
+  const pageBackground = "#ffffff";
+  const bodyBackground = "#ffffff";
+  const receiptBackground = "linear-gradient(180deg, #ffffff, #f8fdf9)";
+  const tokenBackground = "#ffffff";
+  const summaryBackground = "rgba(22,163,74,.035)";
+  const detailBackground = "rgba(22,163,74,.025)";
+  const summaryBorder = "rgba(22,163,74,.24)";
+  const detailBorder = "rgba(22,163,74,.18)";
+  const receiptShadow = "0 18px 46px rgba(16, 42, 27, .10), 0 0 0 6px rgba(22,163,74,.035)";
 
   return `<!doctype html>
 <html>
@@ -369,7 +356,7 @@ export function receiptHtml(model, options = {}) {
       --text-muted: ${textMuted};
       --panel: ${panel};
       --panel-soft: ${panelSoft};
-      --panel-glow: rgba(255, 214, 0, .12);
+      --panel-glow: rgba(22, 163, 74, .10);
       --border: ${border};
     }
     * { box-sizing: border-box; }
@@ -424,13 +411,9 @@ export function receiptHtml(model, options = {}) {
       position: absolute;
       top: 0; left: 0; right: 0;
       height: 5px;
-      background: linear-gradient(90deg, var(--primary-deep), var(--primary), #fff2a6);
+      background: linear-gradient(90deg, var(--primary-deep), var(--primary), #bbf7d0);
     }
     .header {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 14px;
-      align-items: center;
       margin-bottom: 18px;
     }
     .brand {
@@ -440,37 +423,53 @@ export function receiptHtml(model, options = {}) {
       margin-bottom: 10px;
     }
     .brand-mark {
-      width: 34px;
-      height: 34px;
-      background: linear-gradient(135deg, var(--primary), #fff2a6);
-      color: #111;
-      border-radius: 12px;
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      color: #ffffff;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 18px;
+      font-size: 15px;
     }
     .brand-name {
       font-size: 20px;
       font-weight: 800;
       color: var(--ink);
     }
-    .header-meta {
-      min-width: 150px;
-      padding: 11px 12px;
+    .receipt-time {
+      min-width: 0;
+      min-height: 40px;
+      padding: 7px 10px;
       border: 1px solid var(--border);
-      border-radius: 16px;
-      background: var(--panel-soft);
-      text-align: right;
+      border-radius: 999px;
+      background: rgba(22,163,74,.08);
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
-      color: var(--text-muted);
+      color: var(--ink);
+      font-weight: 750;
+      white-space: nowrap;
+      overflow: hidden;
+      width: fit-content;
+      margin-top: 10px;
     }
-    .header-meta strong {
-      display: block;
+    .receipt-time span {
       color: var(--primary);
-      font-size: 13px;
-      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 9px;
+      flex: 0 0 auto;
+    }
+    .receipt-time strong {
+      min-width: 0;
+      color: var(--ink);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .title {
       font-size: 21px;
@@ -483,25 +482,6 @@ export function receiptHtml(model, options = {}) {
       color: var(--text-muted);
       margin: 3px 0 0;
     }
-    .receipt-time {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 10px;
-      padding: 7px 10px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: rgba(255,214,0,.08);
-      color: var(--ink);
-      font-size: 11px;
-      font-weight: 750;
-    }
-    .receipt-time span {
-      color: var(--primary);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-size: 9px;
-    }
     .hero {
       display: grid;
       grid-template-columns: 1fr;
@@ -510,7 +490,7 @@ export function receiptHtml(model, options = {}) {
     }
     .amount-display {
       padding: 18px;
-      background: linear-gradient(135deg, var(--panel-glow), rgba(255,214,0,.04));
+      background: linear-gradient(135deg, var(--panel-glow), rgba(22,163,74,.03));
       border-radius: 18px;
       border: 1px solid var(--border);
       text-align: center;
@@ -634,27 +614,20 @@ export function receiptHtml(model, options = {}) {
     }
     @media (max-width: 720px) {
       .receipt { width: 100%; padding: 20px; min-height: 100vh; }
-      .header, .summary-grid { grid-template-columns: 1fr; }
-      .header-meta { text-align: left; }
+      .summary-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
     <div class="header">
-      <div>
-        <div class="brand">
-          <div class="brand-mark">B</div>
-          <div class="brand-name">${escapeHtml(model.brand.name)}</div>
-        </div>
-        <h1 class="title">${escapeHtml(model.title)}</h1>
-        <p class="subtitle">${escapeHtml(model.subtitle)}</p>
-        <div class="receipt-time"><span>Time</span>${escapeHtml(displayTime)}</div>
+      <div class="brand">
+        <div class="brand-mark">B</div>
+        <div class="brand-name">${escapeHtml(model.brand.name)}</div>
       </div>
-      <div class="header-meta">
-        <strong>#${escapeHtml(model.receiptId || receiptId || "Pending")}</strong>
-        <span>Receipt ID</span>
-      </div>
+      <h1 class="title">${escapeHtml(model.title)}</h1>
+      <p class="subtitle">${escapeHtml(model.subtitle)}</p>
+      <div class="receipt-time"><span>Time</span><strong>${escapeHtml(displayTime)}</strong></div>
     </div>
 
     <div class="hero">
@@ -687,7 +660,8 @@ export function receiptHtml(model, options = {}) {
       <span class="company-name">${escapeHtml(model.brand.company)}</span>
       <div class="contact-info">
         ${escapeHtml(model.brand.email)} &bull; ${escapeHtml(model.brand.phone)}<br>
-        ${escapeHtml(model.brand.web)}
+        ${escapeHtml(model.brand.web)}<br>
+        ${escapeHtml(model.brand.address)}
       </div>
     </div>
   </div>
@@ -731,7 +705,8 @@ export function buildReceiptPdfBytes(model) {
     "----------------------------------------",
     model.brand.email,
     model.brand.phone,
-    model.brand.web
+    model.brand.web,
+    model.brand.address
   ].filter(Boolean);
   const printableLines = textLines.flatMap((line) => {
     const text = stringValue(line);

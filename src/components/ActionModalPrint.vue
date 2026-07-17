@@ -4,7 +4,7 @@
       <div class="modal-header">
         <div class="modal-header-left">
           <div class="modal-action-badge badge-primary">
-            <span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg></span>
           </div>
           <h2 class="modal-title">{{ title }}</h2>
         </div>
@@ -13,12 +13,8 @@
         </BaseIconButton>
       </div>
     </template>
-    <div class="modal-body">
-      <div class="receipt-preview receipt-preview-standard">
-        <iframe class="receipt-preview-frame" title="Receipt preview" :srcdoc="receiptPreviewHtml"></iframe>
-      </div>
-      <div v-if="result" class="modal-result">{{ result }}</div>
-    </div>
+    <iframe class="receipt-preview-frame" title="Receipt preview" :srcdoc="receiptPreviewHtml"></iframe>
+    <p v-if="result" class="modal-result">{{ result }}</p>
     <template #footer>
       <div class="modal-actions">
         <BaseButton @click="downloadPdf">
@@ -61,7 +57,7 @@ export default {
     };
   },
   computed: {
-    title() { return `${this.action} ${this.route.title}`; },
+    title() { return `${this.action} ${this.receiptModel.title}`; },
     receiptModel() { return printModelForRoute(this.route, this.row); },
     receiptPreviewHtml() { return receiptHtml(this.receiptModel, { theme: this.receiptTheme }); }
   },

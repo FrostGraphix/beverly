@@ -724,6 +724,46 @@ function recordAuditLog(entry) {
   );
 }
 
+function listAuditLogs(options = {}) {
+  const db = ensureDatabase();
+  const limit = Math.max(1, Math.min(Number(options.limit || 100), 500));
+  const proxySource = String(options.proxySource || "");
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.audit_logs
+      .filter((row) => !proxySource || String(row.proxySource || "") === proxySource)
+      .slice(-limit)
+      .reverse()
+      .map((row) => ({
+        id: row.id || null,
+        method: String(row.method || "GET").toUpperCase(),
+        path: String(row.path || "/"),
+        outcome: String(row.outcome || "success"),
+        statusCode: Number(row.statusCode || 200),
+        proxySource: String(row.proxySource || "unknown"),
+        details: sanitizeValue(row.details || {}),
+        createdAt: row.createdAt || null
+      }));
+  }
+  const columns = "id, method, path, outcome, status_code, proxy_source, detail_json, created_at";
+  const rows = proxySource
+    ? db.prepare(`
+        SELECT ${columns} FROM audit_logs WHERE proxy_source = ? ORDER BY created_at DESC LIMIT ?
+      `).all(proxySource, limit)
+    : db.prepare(`
+        SELECT ${columns} FROM audit_logs ORDER BY created_at DESC LIMIT ?
+      `).all(limit);
+  return rows.map((row) => ({
+    id: row.id,
+    method: row.method,
+    path: row.path,
+    outcome: row.outcome,
+    statusCode: row.status_code,
+    proxySource: row.proxy_source,
+    details: parseJson(row.detail_json, {}),
+    createdAt: row.created_at
+  }));
+}
+
 function recordImportJob(entry) {
   const db = ensureDatabase();
   if (isMemoryDatabase(db)) {
@@ -1382,6 +1422,7 @@ module.exports = {
   getSgcTokenRule,
   getSmsNotification,
   listAccountBindings,
+  listAuditLogs,
   listMeterTokenOverrides,
   listSgcTokenRules,
   listImportJobs,

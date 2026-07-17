@@ -80,7 +80,7 @@ const items = ref<Purchase[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
-const cardView = ref<'list' | 'grid'>('list');
+const cardView = ref<'table' | 'grid'>('table');
 
 const fStatus    = ref('');
 const fActorType = ref('');
@@ -391,16 +391,16 @@ watch([fStatus, fActorType], () => loadList());
               <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </button>
-          <button type="button" :class="{ active: cardView === 'list' }" :aria-pressed="cardView === 'list'" aria-label="List view" title="List view" @click="cardView = 'list'">
+          <button type="button" :class="{ active: cardView === 'table' }" :aria-pressed="cardView === 'table'" aria-label="Table view" title="Table view" @click="cardView = 'table'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
             </svg>
           </button>
         </div>
       </div>
 
       <!-- Desktop -->
-      <div class="bw-t-wrap">
+      <div :class="['bw-t-wrap', 'purchase-table-wrap', { 'mobile-table-active': cardView === 'table' }]">
         <table class="bw-table">
           <thead>
             <tr>
@@ -844,6 +844,8 @@ watch([fStatus, fActorType], () => loadList());
     padding: var(--s-2);
   }
   .bw-t-wrap ~ .p-cards--grid { display: grid; }
+  .purchase-table-wrap.mobile-table-active { display: block; overflow-x: auto; }
+  .p-cards--table { display: none !important; }
   .p-cards--grid .p-card {
     min-width: 0;
     margin-bottom: 0;

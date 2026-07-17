@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { actionEndpoint, submitRouteAction } from "../src/services/action-service.mjs";
 import { aggregateConsumptionRows, buildConsumptionChartOption, buildConsumptionInsights, buildConsumptionStatisticsPayload, decorateConsumptionRows, fetchConsumptionStatistics, normalizeConsumptionDateKey, normalizeConsumptionStatisticsResponse, summarizeConsumptionRows } from "../src/services/consumption-statistics-service.mjs";
-import { fetchDashboardData } from "../src/services/dashboard-service.mjs";
+import { fetchDashboardData, filterDashboardSeriesToWindow, isSyntheticDashboardResponse } from "../src/services/dashboard-service.mjs";
 import { mapActionResponse } from "../src/services/mappers/action-mapper.mjs";
 import { mapTableCollection } from "../src/services/mappers/table-mapper.mjs";
 import { routeManifest } from "../src/data/route-manifest.js";
@@ -1423,6 +1423,7 @@ const monthlyDashboard = await fetchDashboardData({
   activeType: 2,
   consumptionType: 5,
   pageSize: 50,
+  now: new Date("2026-07-16T12:00:00.000Z"),
   api: {
     postApi(path, payload = {}) {
       dashboardCalls.push({ method: "POST", path, payload });
@@ -1436,7 +1437,50 @@ const monthlyDashboard = await fetchDashboardData({
 });
 
 assert.strictEqual(monthlyDashboard.consumption.title, "Monthly Consumption");
-assert.deepStrictEqual(monthlyDashboard.consumption.labels, ["2026-03", "2026-04"]);
+assert.deepStrictEqual(monthlyDashboard.consumption.labels, []);
+
+assert.strictEqual(isSyntheticDashboardResponse({ _proxy: { source: "sample" } }), true);
+assert.strictEqual(isSyntheticDashboardResponse({ _proxy: { source: "sample-after-live-failure" } }), true);
+assert.strictEqual(isSyntheticDashboardResponse({ _proxy: { source: "live" } }), false);
+assert.deepStrictEqual(
+  filterDashboardSeriesToWindow(
+    { labels: ["2026-04-03", "2026-07-15"], values: [1580, 2600] },
+    "2026-06-17T00:00:00.000Z",
+    "2026-07-16T12:00:00.000Z"
+  ),
+  { labels: ["2026-07-15"], values: [2600] }
+);
+
+const truthfulDashboard = await fetchDashboardData({
+  now: new Date("2026-07-16T12:00:00.000Z"),
+  api: {
+    postApi(path, payload = {}) {
+      if (path === "/api/dashboard/readLineChart" && payload.type === 4) {
+        return Promise.resolve({
+          code: 0,
+          result: { xData: ["2026-04-03"], yData: [1580] },
+          _proxy: { source: "sample-after-live-failure" }
+        });
+      }
+      return Promise.resolve({ code: 0, result: { xData: [], yData: [] }, _proxy: { source: "live" } });
+    },
+    getApi(path) {
+      if (path === "/api/dashboard/hourly") {
+        return Promise.resolve({
+          code: 0,
+          result: { data: [{ freezeDate: "2026-04-03", positiveActiveTotalPower: 1580 }] },
+          _proxy: { source: "sample-after-live-failure" }
+        });
+      }
+      return Promise.resolve({ code: 0, result: { data: [] }, _proxy: { source: "live" } });
+    }
+  }
+});
+
+assert.deepStrictEqual(truthfulDashboard.consumption.labels, []);
+assert.deepStrictEqual(truthfulDashboard.consumption.values, []);
+assert.strictEqual(truthfulDashboard.meta.consumptionSource, "sample-after-live-failure");
+assert.strictEqual(truthfulDashboard.meta.hourlySource, "sample-after-live-failure");
 
 assert.deepStrictEqual(
   dashboardCalls.filter((call) => call.method === "POST" && call.path === "/api/dashboard/readLineChart"),
@@ -1444,22 +1488,22 @@ assert.deepStrictEqual(
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 2, days: 30 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 2, days: 30 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 5, days: 30 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 5, days: 30 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 6, days: 48 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 6, days: 48 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", type: 7, days: 1 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 7, days: 1 }
     }
   ]
 );
@@ -1472,19 +1516,19 @@ assert.deepStrictEqual(
   [
     {
       path: "/api/dashboard/hourly",
-      params: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 50 }
+      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 50 }
     },
     {
       path: "/api/dashboard/gprs",
-      params: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 48 }
+      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 48 }
     },
     {
       path: "/api/dashboard/events",
-      params: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 20 }
+      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 20 }
     },
     {
       path: "/api/token/creditTokenRecord/readMore",
-      params: { from: "2026-03-29T00:00:00.000Z", to: "2026-04-27T23:59:59.999Z", siteId: "KYAKALE" }
+      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE" }
     }
   ]
 );

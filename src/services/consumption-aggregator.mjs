@@ -46,6 +46,45 @@ export function toPeriodKey(dateStr, granularity) {
   }
 }
 
+/** Interval fields whose active state indicates meter tampering. */
+const TAMPER_FIELDS = ["terminalCoverOpen", "magneticInterference", "currentReverse"];
+
+/** total1 sentinel used by the upstream for "meter did not report this day". */
+const NO_DATA_TOTAL = -1;
+
+/**
+ * Interval condition flags arrive in two different conventions:
+ *
+ *   • boolean shape (/api/DailyDataMeter/read) — INVERTED against the field
+ *     name: `true` means the condition is absent (healthy), `false` means the
+ *     named condition IS active. Confirmed against live data: every meter
+ *     reporting `relayOpen: false` draws zero energy, while `relayOpen: true`
+ *     meters consume normally (an open relay cannot pass energy).
+ *   • string shape (/api/DailyDataMeter/readHourly) — literal: "Open"/"Yes"/
+ *     "Low"/"Abnormal" mean active; "Closed"/"No"/"Normal" mean healthy.
+ *
+ * Returns true only when the named condition is genuinely active.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function conditionActive(value) {
+  if (value === true) return false;
+  if (value === false) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return false;
+  return ["yes", "open", "low", "abnormal", "reverse", "unbalance"].includes(text);
+}
+
+/**
+ * A row with the no-data sentinel carries no meaningful flags — every flag
+ * reads false there, which would otherwise register as "all conditions active".
+ * @param {Object} row
+ * @returns {boolean}
+ */
+function hasInterval(row) {
+  return Number(row?.total1) !== NO_DATA_TOTAL;
+}
+
 /**
  * @param {Array<Object>} rows
  * @returns {Array<Object>}
@@ -56,13 +95,14 @@ export function deriveDailyDeltas(rows) {
     const previousTotal = index === 0 ? currentTotal : (Number(rows[index - 1].total1) || 0);
     const delta = Math.max(0, currentTotal - previousTotal);
     const hasReading = row.total1 != null && row.total1 !== "";
+    const reported = hasInterval(row);
     return {
       date: String(row.currentDate || "").substring(0, 10),
       delta: parseFloat(delta.toFixed(3)),
       total1: currentTotal,
       remain1: Number(row.remain1) || 0,
-      tamper: !!(row.terminalCoverOpen || row.magneticInterference || row.currentReverse),
-      relayOpen: !!row.relayOpen,
+      tamper: reported && TAMPER_FIELDS.some((field) => conditionActive(row[field])),
+      relayOpen: reported && conditionActive(row.relayOpen),
       hasReading,
     };
   });

@@ -433,6 +433,7 @@ const managementForms = {
   }
 };
 
+/** @param {{ hash?: string } | null} [route] */
 export function isManagementRoute(route) {
   const hash = String(route?.hash || "");
   return hash.startsWith("#/management/")

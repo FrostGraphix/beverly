@@ -55,6 +55,7 @@
         </BaseButton>
       </div>
       <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+      <div v-else-if="!consumption.values.length" class="dashboard-chart-empty">No current consumption data.</div>
       <EChartPanel v-else :option="consumptionChartOption" />
     </section>
   </div>
@@ -86,26 +87,6 @@ const consumptionModes = [
   { id: "monthly", label: "Monthly", type: 5 }
 ];
 
-const referenceConsumption = {
-  labels: [
-    "2026-03-29", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04",
-    "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10",
-    "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16",
-    "2026-04-17", "2026-04-18", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22",
-    "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27"
-  ],
-  values: [
-    0, 4200, 2900, 1200, 0, 2050, 1650, 1450, 950, 0,
-    1580, 0, 3080, 0, 2050, 0, 5450, 80, 850, 0,
-    1980, 3480, 1380, 0, 0, 1200, 6150, 580, 1980
-  ]
-};
-
-const referenceMonthlyConsumption = {
-  labels: ["2026-03", "2026-04"],
-  values: [4200, 40020]
-};
-
 export default {
   name: "DashboardPage",
   components: { BaseButton, EChartPanel },
@@ -134,6 +115,8 @@ export default {
       chartTheme: null,
       themeObserver: null,
       countFrame: null,
+      refreshTimer: null,
+      visibilityHandler: null,
       dashboardLoadId: 0
     };
   },
@@ -184,10 +167,17 @@ export default {
   mounted() {
     this.syncThemePalette();
     this.observeThemeChanges();
+    this.refreshTimer = window.setInterval(() => this.loadDataset(this.activeType, false), 300000);
+    this.visibilityHandler = () => {
+      if (document.visibilityState === "visible") this.loadDataset(this.activeType, false);
+    };
+    document.addEventListener("visibilitychange", this.visibilityHandler);
   },
   beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
     if (this.countFrame) cancelAnimationFrame(this.countFrame);
+    if (this.refreshTimer) window.clearInterval(this.refreshTimer);
+    if (this.visibilityHandler) document.removeEventListener("visibilitychange", this.visibilityHandler);
   },
   methods: {
     async refreshDashboard() {
@@ -204,37 +194,25 @@ export default {
         ? this.toMonthlyConsumption(this.dailyConsumption)
         : this.dailyConsumption;
     },
-    async loadDataset(activeType) {
+    async loadDataset(activeType, showLoading = true) {
+      if (!showLoading && this.loading) return;
       const loadId = ++this.dashboardLoadId;
-      this.loading = true;
+      if (showLoading) this.loading = true;
       try {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
         if (loadId !== this.dashboardLoadId) return;
         this.panel = dataset.panel;
         this.animatePanel(dataset.panel);
         this.top = dataset.top;
-        this.dailyConsumption = this.resolveConsumptionDataset(dataset.consumption, 4);
+        this.dailyConsumption = dataset.consumption;
         this.consumption = this.consumptionMode === "monthly"
           ? this.toMonthlyConsumption(this.dailyConsumption)
           : this.dailyConsumption;
         this.success = dataset.success;
         this.alarms = dataset.alarms;
       } finally {
-        if (loadId === this.dashboardLoadId) this.loading = false;
+        if (showLoading && loadId === this.dashboardLoadId) this.loading = false;
       }
-    },
-    resolveConsumptionDataset(consumption, type = this.consumptionType) {
-      const hasVisibleValues = consumption.values.some((value) => Number(value) > 0);
-      const hasExpectedData = type === 5
-        ? consumption.labels.length > 0 && hasVisibleValues
-        : consumption.labels.length > 5 && hasVisibleValues;
-      if (hasExpectedData) return consumption;
-      const fallback = type === 5 ? referenceMonthlyConsumption : referenceConsumption;
-      return {
-        title: dashboardChartTitles[type] || "Daily Consumption",
-        labels: fallback.labels,
-        values: fallback.values
-      };
     },
     toMonthlyConsumption(daily) {
       const totals = new Map();
@@ -244,11 +222,11 @@ export default {
       });
       const labels = [...totals.keys()];
       const values = labels.map((label) => Number((totals.get(label) || 0).toFixed(2)));
-      return this.resolveConsumptionDataset({
+      return {
         title: "Monthly Consumption",
         labels,
         values
-      }, 5);
+      };
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {

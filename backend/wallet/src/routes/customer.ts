@@ -1219,6 +1219,60 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return { ok: true, preferences: merged };
     });
+
+    // ── Consumption ─────────────────────────────────────────────────────────
+    // A customer sees only their own meters. "Own" is the union of meters they
+    // registered and meters they have actually bought tokens for — a customer
+    // who paid for a meter but never registered it still sees its usage.
+
+    /** Meter ids this customer is entitled to. Empty array means "no meters". */
+    async function customerMeterIds(customerId: string): Promise<string[]> {
+        const [registered, purchased] = await Promise.all([
+            adminClient
+                .from('customer_meters')
+                .select('meter_id')
+                .eq('customer_id', customerId),
+            adminClient
+                .from('purchase_orders')
+                .select('meter_id')
+                .eq('actor_type', 'customer')
+                .eq('actor_id', customerId),
+        ]);
+        if (registered.error) throw registered.error;
+        if (purchased.error) throw purchased.error;
+
+        return [...new Set([...(registered.data ?? []), ...(purchased.data ?? [])]
+            .map((row: any) => String(row.meter_id ?? '').trim())
+            .filter(Boolean))];
+    }
+
+    fastify.get('/consumption', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const qs = req.query as Record<string, string>;
+        const period = (qs.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
+        if (!['day', 'week', 'month', 'year'].includes(period)) {
+            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        }
+
+        const customerId = req.actor!.customerId!;
+        const meterIds = await customerMeterIds(customerId);
+
+        const { queryConsumption, metersAuthority } = await import('../services/consumption.js');
+        // metersAuthority([]) resolves to "see nothing", so a customer with no
+        // meters gets an empty series rather than the whole estate.
+        const rows = await queryConsumption(
+            {
+                scope: 'meter',
+                scope_id: qs.meter_id || undefined,
+                period_type: period,
+                from: qs.from ?? undefined,
+                to: qs.to ?? undefined,
+                limit: Math.min(Number(qs.limit ?? 120), 500),
+                withSpend: qs.spend !== 'false',
+            },
+            metersAuthority(meterIds),
+        );
+        return { rows, count: rows.length, meters: meterIds };
+    });
 };
 
 export default customer;

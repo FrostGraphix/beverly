@@ -85,6 +85,7 @@ const walletVendingMonitor = require("../backend/src/services/wallet-vending-mon
 const walletFeatureFlags = require("../backend/src/services/wallet-feature-flags-service");
 const walletPrivacy = require("../backend/src/services/wallet-privacy-service");
 const smsNotifications = require("../backend/src/services/sms-notification-service");
+const { ingestClientErrors, listClientErrors } = require("../backend/src/services/client-error-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -1976,6 +1977,32 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-audit") {
     return localJobResponse(await buildConsumptionAudit());
+  }
+  if (pathname === "/api/system/client-errors") {
+    const method = String(request.method || "GET").toUpperCase();
+    const actor = request.__auth || {};
+    if (method === "POST") {
+      const body = requestData?.parsedBody || {};
+      const entries = Array.isArray(body.errors) ? body.errors : Array.isArray(body) ? body : [];
+      const result = await ingestClientErrors(entries, {
+        userId: actor.userId || "",
+        roleId: actor.roleId || ""
+      });
+      return localJobResponse(result);
+    }
+    if (method === "GET") {
+      // Reads expose operational telemetry — staff roles only when auth is active.
+      if (actor.roleId) {
+        const access = await getAccessControlModule();
+        const normalizedRole = access.normalizeRoleId(actor.roleId);
+        if (!["super-admin", "operations-manager"].includes(normalizedRole)) {
+          return authFailure(403, pathname, "Client error telemetry requires staff role");
+        }
+      }
+      const query = new URLSearchParams(String(request.url || "").split("?")[1] || "");
+      const limit = Number(query.get("limit") || 100);
+      return localJobResponse(await listClientErrors({ limit }));
+    }
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/hourly") {
     return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname);

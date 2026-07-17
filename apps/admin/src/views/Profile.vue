@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useStaffAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
@@ -14,6 +15,12 @@ const uploading = ref(false);
 const cropOpen = ref(false);
 const cropFile = ref<File | null>(null);
 const error = ref<string | null>(null);
+const feedback = ref<string | null>(null);
+const editingName = ref(false);
+const avatarMenuOpen = ref(false);
+const removePictureOpen = ref(false);
+const avatarMenu = ref<HTMLElement | null>(null);
+const photoInput = ref<HTMLInputElement | null>(null);
 
 const initials = computed(() => {
     const source = auth.user?.full_name?.trim() || auth.user?.email?.trim() || 'ST';
@@ -33,12 +40,17 @@ async function syncAuthFromApi(response?: { user?: any }) {
 }
 
 async function saveProfile() {
+    if (!fullName.value.trim()) return;
+    error.value = null;
+    feedback.value = null;
     saving.value = true;
     try {
         const response = await api.patch<{ user: any; permissions: string[] }>('/api/v1/admin/me', {
             full_name: fullName.value.trim(),
         });
         await syncAuthFromApi(response);
+        editingName.value = false;
+        feedback.value = 'Name updated.';
     } catch (e: any) {
         error.value = e?.message ?? 'Profile update failed.';
     } finally {
@@ -47,11 +59,15 @@ async function saveProfile() {
 }
 
 async function removeProfilePicture() {
+    error.value = null;
+    feedback.value = null;
     saving.value = true;
     try {
         await api.del('/api/v1/admin/profile-picture');
         profilePictureUrl.value = '';
         await syncAuthFromApi();
+        removePictureOpen.value = false;
+        feedback.value = 'Picture removed.';
     } catch (e: any) {
         error.value = e?.message ?? 'Picture removal failed.';
     } finally {
@@ -68,6 +84,8 @@ async function uploadProfilePicture(event: Event) {
 }
 
 async function uploadProcessedProfilePicture(file: File) {
+    error.value = null;
+    feedback.value = null;
     uploading.value = true;
     try {
         const buf = await file.arrayBuffer();
@@ -94,12 +112,53 @@ async function uploadProcessedProfilePicture(file: File) {
         const activated = await api.post<any>('/api/v1/admin/profile-picture/activate', { path: payload.path });
         profilePictureUrl.value = activated.profile_picture_url;
         await syncAuthFromApi();
+        feedback.value = 'Picture updated.';
     } catch (e: any) {
         error.value = e?.message ?? 'Picture upload failed.';
     } finally {
         uploading.value = false;
     }
 }
+
+function beginNameEdit() {
+    fullName.value = auth.user?.full_name ?? '';
+    error.value = null;
+    feedback.value = null;
+    editingName.value = true;
+}
+
+function cancelNameEdit() {
+    fullName.value = auth.user?.full_name ?? '';
+    editingName.value = false;
+}
+
+function chooseProfilePicture() {
+    avatarMenuOpen.value = false;
+    photoInput.value?.click();
+}
+
+function requestPictureRemoval() {
+    avatarMenuOpen.value = false;
+    removePictureOpen.value = true;
+}
+
+function closeAvatarMenu(event: PointerEvent) {
+    if (!avatarMenu.value?.contains(event.target as Node)) avatarMenuOpen.value = false;
+}
+
+function closeAvatarMenuOnEscape(event: KeyboardEvent) {
+    if (event.key === 'Escape') avatarMenuOpen.value = false;
+}
+
+onMounted(() => {
+    document.addEventListener('pointerdown', closeAvatarMenu);
+    document.addEventListener('keydown', closeAvatarMenuOnEscape);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', closeAvatarMenu);
+    document.removeEventListener('keydown', closeAvatarMenuOnEscape);
+});
 </script>
 
 <template>
@@ -110,14 +169,70 @@ async function uploadProcessedProfilePicture(file: File) {
       @close="cropOpen = false"
       @done="(file) => { cropOpen = false; uploadProcessedProfilePicture(file); }"
     />
+    <ConfirmDialog
+      v-model:open="removePictureOpen"
+      title="Remove profile picture?"
+      description="Your initials will replace the current picture."
+      confirm-label="Remove picture"
+      tone="danger"
+      :loading="saving"
+      @confirm="removeProfilePicture"
+    />
 
     <div class="profile-shell">
       <section class="profile-hero bw-card">
         <div class="profile-hero-top">
-          <div class="profile-avatar-wrap">
+          <div ref="avatarMenu" class="profile-avatar-wrap">
             <div class="profile-avatar">
-              <img v-if="auth.user?.profile_picture_url" :src="auth.user.profile_picture_url" alt="Staff profile" />
+              <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" />
               <template v-else>{{ initials }}</template>
+            </div>
+            <button
+              type="button"
+              class="profile-avatar-edit"
+              aria-label="Edit profile picture"
+              title="Edit profile picture"
+              :aria-expanded="avatarMenuOpen"
+              :disabled="uploading"
+              @click="avatarMenuOpen = !avatarMenuOpen"
+            >
+              <svg v-if="!uploading" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+              </svg>
+              <span v-else class="profile-spinner" aria-hidden="true" />
+            </button>
+            <input
+              ref="photoInput"
+              class="bw-input bw-file-input profile-photo-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              tabindex="-1"
+              @change="uploadProfilePicture"
+            />
+            <div v-if="avatarMenuOpen" class="profile-avatar-menu" role="menu">
+              <button type="button" role="menuitem" @click="chooseProfilePicture">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="8.5" cy="10.5" r="1.5" />
+                  <path d="m21 15-5-5L5 19" />
+                </svg>
+                {{ profilePictureUrl ? 'Change picture' : 'Add picture' }}
+              </button>
+              <button
+                v-if="profilePictureUrl"
+                type="button"
+                class="danger"
+                role="menuitem"
+                @click="requestPictureRemoval"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="m19 6-1 14H6L5 6" />
+                </svg>
+                Remove picture
+              </button>
             </div>
           </div>
           <div class="profile-hero-copy">
@@ -151,7 +266,32 @@ async function uploadProcessedProfilePicture(file: File) {
           <dl class="profile-list">
             <div class="profile-row">
               <dt>Full name</dt>
-              <dd>{{ auth.user?.full_name || '-' }}</dd>
+              <dd v-if="!editingName" class="profile-value-editable">
+                <span>{{ auth.user?.full_name || '-' }}</span>
+                <button type="button" class="profile-icon-btn" aria-label="Edit full name" title="Edit full name" @click="beginNameEdit">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                  </svg>
+                </button>
+              </dd>
+              <dd v-else class="profile-name-editor">
+                <input
+                  v-model="fullName"
+                  class="bw-input"
+                  aria-label="Full name"
+                  maxlength="120"
+                  autofocus
+                  @keydown.enter.prevent="saveProfile"
+                  @keydown.esc.prevent="cancelNameEdit"
+                />
+                <button type="button" class="profile-icon-btn save" aria-label="Save full name" title="Save full name" :disabled="saving || !fullName.trim()" @click="saveProfile">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6" /></svg>
+                </button>
+                <button type="button" class="profile-icon-btn" aria-label="Cancel editing" title="Cancel editing" :disabled="saving" @click="cancelNameEdit">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              </dd>
             </div>
             <div class="profile-row">
               <dt>Email</dt>
@@ -166,30 +306,9 @@ async function uploadProcessedProfilePicture(file: File) {
               <dd class="profile-mono">{{ auth.user?.id || '-' }}</dd>
             </div>
           </dl>
-        </article>
-
-        <article class="bw-card profile-panel">
-          <div class="profile-panel-head">
-            <span class="profile-panel-kicker">Avatar</span>
-            <h2>Profile Picture</h2>
-          </div>
-          <div class="profile-form">
-            <label class="profile-field">
-              <span>Display name</span>
-              <input v-model="fullName" class="bw-input" placeholder="Full name" />
-            </label>
-            <label class="profile-field">
-              <span>Photo upload</span>
-              <input class="bw-input bw-file-input" type="file" accept="image/png,image/jpeg,image/webp" @change="uploadProfilePicture" />
-            </label>
-            <small class="bw-muted">JPEG, PNG, WEBP only. Max 2MB. Image is cropped to square and re-exported clean.</small>
-            <div class="profile-actions">
-              <button class="bw-btn primary" :disabled="saving || uploading" @click="saveProfile">{{ saving ? 'Saving...' : 'Save profile' }}</button>
-              <button class="bw-btn" :disabled="saving || uploading || !auth.user?.profile_picture_url" @click="removeProfilePicture">Remove picture</button>
-            </div>
-            <small v-if="uploading" class="bw-muted">Uploading image...</small>
-            <small v-if="error" class="bw-muted" style="color:var(--danger)">{{ error }}</small>
-          </div>
+          <p v-if="error" class="profile-feedback" role="alert">{{ error }}</p>
+          <p v-else-if="uploading" class="profile-feedback" role="status">Uploading picture...</p>
+          <p v-else-if="feedback" class="profile-feedback success" role="status">{{ feedback }}</p>
         </article>
       </section>
     </div>
@@ -204,7 +323,7 @@ async function uploadProcessedProfilePicture(file: File) {
 
 .profile-hero {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: grid;
   gap: 22px;
   padding: 28px;
@@ -237,11 +356,117 @@ async function uploadProcessedProfilePicture(file: File) {
 }
 
 .profile-avatar-wrap {
+  position: relative;
   width: max-content;
   padding: 7px;
   border: 1px solid oklch(from var(--brand) l c h / 0.35);
   border-radius: 28px;
   background: oklch(from var(--brand) l c h / 0.09);
+}
+
+.profile-avatar-edit,
+.profile-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.profile-avatar-edit {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  z-index: 2;
+  color: oklch(8% 0.04 145);
+  background: var(--brand);
+  border-color: var(--brand);
+  box-shadow: var(--shadow-2);
+}
+
+.profile-avatar-edit svg,
+.profile-icon-btn svg,
+.profile-avatar-menu svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-avatar-edit:focus-visible,
+.profile-icon-btn:focus-visible,
+.profile-avatar-menu button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.profile-avatar-edit:disabled,
+.profile-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.profile-photo-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.profile-avatar-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-3);
+}
+
+.profile-avatar-menu button {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-avatar-menu button:hover {
+  background: var(--surface-2);
+}
+
+.profile-avatar-menu button.danger {
+  color: var(--danger);
+}
+
+.profile-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: profile-spin 0.7s linear infinite;
+}
+
+@keyframes profile-spin {
+  to { transform: rotate(360deg); }
 }
 
 .profile-avatar {
@@ -320,8 +545,56 @@ async function uploadProcessedProfilePicture(file: File) {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+}
+
+.profile-value-editable {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.profile-value-editable span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-icon-btn {
+  flex: 0 0 auto;
+}
+
+.profile-icon-btn.save {
+  color: oklch(8% 0.04 145);
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.profile-name-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-name-editor .bw-input {
+  min-width: 0;
+  height: 40px;
+}
+
+.profile-feedback {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--t-sm);
+}
+
+.profile-feedback[role="status"] {
+  color: var(--muted);
+}
+
+.profile-feedback.success {
+  color: var(--brand);
 }
 
 .profile-panel {
@@ -355,7 +628,7 @@ async function uploadProcessedProfilePicture(file: File) {
 .profile-row {
   display: grid;
   grid-template-columns: minmax(95px, 0.6fr) minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 16px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
@@ -470,17 +743,17 @@ async function uploadProcessedProfilePicture(file: File) {
   }
 
   .profile-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
+    grid-template-columns: 95px minmax(0, 1fr);
+    gap: 16px;
   }
 
   .profile-row dd {
-    text-align: left;
+    text-align: right;
   }
 
-  .profile-actions {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 10px;
+  .profile-name-editor {
+    grid-column: 1 / -1;
+    margin-top: 2px;
   }
 }
 

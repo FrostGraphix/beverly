@@ -60,7 +60,10 @@ function main() {
     "profile_picture_upload_unavailable",
     "Picture upload failed.",
     "Staff Identity",
-    "Profile Picture",
+    "aria-label=\"Edit profile picture\"",
+    "aria-label=\"Edit full name\"",
+    "Remove profile picture?",
+    "Name updated.",
   ]);
 
   assertIncludes("apps/customer/src/views/Profile.vue", [

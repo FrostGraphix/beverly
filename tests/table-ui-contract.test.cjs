@@ -59,6 +59,8 @@ assertIncludes(tablePage, ":data-testid=\"`table-toolbar-action-${actionTestId(a
 assertIncludes(tablePage, ":data-testid=\"`table-row-action-${actionTestId(action)}-${rowIndex + 1}`\"");
 assertIncludes(tablePage, ".table-scroll th:not(.action-column)");
 assertIncludes(tablePage, ".table-scroll th.action-column");
+assertIncludes(tablePage, "grid-template-columns: repeat(3, minmax(0, 1fr))");
+assertIncludes(tablePage, ".ddm-actions-group :deep(.export-range-menu)");
 
 assertIncludes(loginPage, "data-testid=\"login-user-id\"");
 assertIncludes(loginPage, "data-testid=\"login-password\"");

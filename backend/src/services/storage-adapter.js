@@ -182,6 +182,31 @@ async function recordAuditLog(entry) {
   );
 }
 
+async function listAuditLogs(options = {}) {
+  return runWithFallback(
+    () => localDatabase.listAuditLogs(options),
+    async () => {
+      const limit = Math.max(1, Math.min(Number(options.limit || 100), 500));
+      const proxySource = String(options.proxySource || "");
+      const sourceFilter = proxySource ? `&source=eq.${encodeURIComponent(proxySource)}` : "";
+      const rows = await supabase.restRequest(`/audit_logs?select=*${sourceFilter}&order=created_at.desc&limit=${limit}`);
+      return (Array.isArray(rows) ? rows : []).map((row) => {
+        const details = row.detail_json || row.detail || row.metadata || {};
+        return {
+          id: row.id || null,
+          method: String(row.method || details.method || "GET").toUpperCase(),
+          path: String(row.path || row.resource || "/"),
+          outcome: String(row.outcome || details.outcome || "success"),
+          statusCode: Number(row.status_code || details.statusCode || 200),
+          proxySource: String(row.proxy_source || row.source || details.proxySource || "unknown"),
+          details,
+          createdAt: row.created_at || null
+        };
+      });
+    }
+  );
+}
+
 async function recordImportJob(entry) {
   return runWithFallback(
     () => localDatabase.recordImportJob(entry),
@@ -553,6 +578,7 @@ module.exports = {
   mapAuditRow,
   listAutomationDeliveries,
   listAccountBindings,
+  listAuditLogs,
   listImportJobs,
   readCachedApiResponse,
   deleteAccountBinding,

@@ -27,19 +27,12 @@ export const DAILY_METER_MAX_ROWS = 0;
 let tariffCache = null;
 let tariffCacheExpiry = 0;
 
-function readCookie(name) {
-  if (typeof document === "undefined") return "";
-  return document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${encodeURIComponent(name)}=`))
-    ?.split("=")[1] || "";
-}
-
 export function authenticatedHeaders() {
-  const token = readCookie("token");
+  // Auth rides on the HttpOnly bev_token cookie (same-origin fetch sends it
+  // automatically). The token cookie is not JS-readable after Phase 7, so no
+  // Authorization header can or should be built here.
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${decodeURIComponent(token)}` } : {}),
   };
 }
 

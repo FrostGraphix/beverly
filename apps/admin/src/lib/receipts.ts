@@ -189,7 +189,21 @@ function receiptHtml(model: ReceiptModel): string {
       font-size: 10px;
       line-height: 1.6;
     }
-    footer strong { display: block; color: #f8fafc; font-size: 12px; margin-bottom: 6px; }
+    footer strong { display: block; color: #10281a; font-size: 12px; margin-bottom: 6px; }
+    body { background: #eef7f0; color: #183126; }
+    .receipt { background: #fff; border-color: rgba(22,163,74,.24); box-shadow: 0 24px 70px rgba(22,70,40,.14), 0 0 0 6px rgba(22,163,74,.04); }
+    .receipt::before { background: linear-gradient(90deg, #15803d, #22c55e, #86efac); }
+    .mark { background: linear-gradient(135deg, #16a34a, #86efac); color: #071d0f; }
+    .brand-name, h1 { color: #10281a; }
+    .sub, .meta, .item span, footer { color: #64756b; }
+    .meta { border-color: rgba(22,163,74,.24); background: #f4faf6; }
+    .meta strong, .time span, .amount span, .amount strong, .status, .token span, .token strong { color: #16a34a; }
+    .time, .amount, .status, .token { border-color: rgba(22,163,74,.24); }
+    .time { background: rgba(22,163,74,.08); color: #183126; }
+    .amount { background: linear-gradient(135deg, rgba(22,163,74,.12), rgba(22,163,74,.04)); }
+    .token { background: #f2fbf5; }
+    .item { border-color: rgba(22,163,74,.14); background: #f8fcf9; }
+    .item strong { color: #183126; }
     @media print {
       body { width: 210mm; min-height: 297mm; padding: 0; background: #fff; }
       .receipt { width: 148mm; box-shadow: none; border-radius: 18px; }
@@ -263,7 +277,8 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
         .brm-icon:hover,.brm-btn:hover{background:rgba(255,214,0,.12)}
         .brm-frame{width:100%;height:100%;border:0;background:#050608}
         .brm-btn{border:1px solid var(--border,rgba(255,214,0,.28));border-radius:10px;background:transparent;color:var(--text-main,#d7dee9);padding:9px 14px;font-weight:800;cursor:pointer}
-        .brm-btn.primary{background:var(--brand,#ffd600);border-color:var(--brand,#ffd600);color:#111}
+        .brm-btn.primary{background:#16a34a;border-color:#16a34a;color:#fff}
+        .brm-sheet{background:#fff;border-color:rgba(22,163,74,.24)}.brm-head,.brm-actions{background:#fff;border-color:rgba(22,163,74,.18)}.brm-head span{color:#64756b}.brm-head strong,.brm-icon,.brm-btn{color:#183126}.brm-icon:hover,.brm-btn:hover{background:rgba(22,163,74,.08)}.brm-frame{background:#eef7f0}.brm-btn{border-color:rgba(22,163,74,.28)}
         @media(max-width:720px){.brm-backdrop{padding:0}.brm-sheet{width:100%;height:100%;border-radius:0}}
       </style>`;
     document.body.appendChild(host);
