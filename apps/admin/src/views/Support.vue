@@ -14,7 +14,7 @@ const tickets = ref<Ticket[]>([]);
 const ticketStats = ref<Record<string, number>>({});
 const ticketStatus = ref('');
 const ticketSearch = ref('');
-const ticketView = ref<'list' | 'grid'>('list');
+const ticketView = ref<'table' | 'grid'>('table');
 const selTicket = ref<Ticket | null>(null);
 const ticketDetail = ref<any>(null);
 const staffReply = ref('');
@@ -243,15 +243,15 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </button>
-          <button type="button" :class="{ active: ticketView === 'list' }" :aria-pressed="ticketView === 'list'" aria-label="List view" title="List view" @click="ticketView = 'list'">
+          <button type="button" :class="{ active: ticketView === 'table' }" :aria-pressed="ticketView === 'table'" aria-label="Table view" title="Table view" @click="ticketView = 'table'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
             </svg>
           </button>
         </div>
       </div>
 
-      <div class="bw-table-wrapper support-table">
+      <div :class="['bw-table-wrapper', 'support-table', { 'ticket-table-active': ticketView === 'table' }]">
         <table class="bw-table">
           <thead><tr><th>Reference</th><th>Subject</th><th>From</th><th>Priority</th><th>Status</th><th>Updated</th><th class="sup-actions-col"></th></tr></thead>
           <tbody>
@@ -777,6 +777,11 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
     display: none;
   }
 
+  .support-table.ticket-table-active {
+    display: block;
+    overflow-x: auto;
+  }
+
   .ticket-layout-bar {
     display: flex;
     align-items: center;
@@ -790,6 +795,10 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 
   .support-mobile-list {
     display: grid;
+  }
+
+  .ticket-mobile-list--table {
+    display: none;
   }
 
   .ticket-mobile-list--grid {

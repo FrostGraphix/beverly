@@ -1,7 +1,7 @@
 /* Beverly liquid glass: one surface contract across the CRM. */
 .app-page:not(.wallet-admin-host) .content-page {
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--primary) 4%, var(--bg-page)), var(--bg-page) 42%, color-mix(in srgb, var(--color-info) 3%, var(--bg-page)));
+  padding: 0;
+  background: var(--bg-page);
 }
 
 .app-page:not(.wallet-admin-host) .fixed-header,

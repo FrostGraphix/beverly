@@ -1,5 +1,28 @@
 ﻿<template>
   <AppShell title="Refunds">
+    <section class="bw-kpi-grid refund-kpis" aria-label="Refund summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Total requests</span>
+        <strong class="bw-kpi-value">{{ summary.total }}</strong>
+        <span class="bw-kpi-note">all refund requests</span>
+      </article>
+      <article class="bw-kpi warn-tone">
+        <span class="bw-kpi-label">Pending</span>
+        <strong class="bw-kpi-value">{{ summary.pending }}</strong>
+        <span class="bw-kpi-note">awaiting approval</span>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Approved</span>
+        <strong class="bw-kpi-value">{{ summary.approved }}</strong>
+        <span class="bw-kpi-note">credited requests</span>
+      </article>
+      <article class="bw-kpi danger-tone">
+        <span class="bw-kpi-label">Rejected</span>
+        <strong class="bw-kpi-value">{{ summary.rejected }}</strong>
+        <span class="bw-kpi-note">declined requests</span>
+      </article>
+    </section>
+
     <div class="bw-filter-bar">
       <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">Export CSV</button>
       <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportPdfDoc">PDF</button>
@@ -129,6 +152,7 @@ const loading      = ref(false);
 const error        = ref('');
 const statusFilter = ref('pending');
 const saving       = ref(false);
+const summary      = ref({ total: 0, pending: 0, approved: 0, rejected: 0 });
 
 const approving    = ref<any>(null);
 const rejecting    = ref<any>(null);
@@ -139,8 +163,12 @@ async function load() {
   error.value   = '';
   try {
     const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
-    const res = await api.get<{ refunds?: any[] }>(`/api/v1/admin/refunds${params}`);
+    const [res, summaryRes] = await Promise.all([
+      api.get<{ refunds?: any[] }>(`/api/v1/admin/refunds${params}`),
+      api.get<{ summary?: typeof summary.value }>('/api/v1/admin/refunds/summary'),
+    ]);
     refunds.value = res.refunds ?? [];
+    summary.value = summaryRes.summary ?? summary.value;
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load refunds';
   } finally {
@@ -233,6 +261,7 @@ onMounted(load);
 
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.refund-kpis { margin-bottom: var(--s-4); }
 .bw-tc-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 .refund-row-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 .refund-actions-col { min-width: 150px; }

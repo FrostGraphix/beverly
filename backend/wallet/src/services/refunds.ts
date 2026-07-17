@@ -108,3 +108,22 @@ export async function listRefundRequests(opts: { status?: string; limit?: number
     const { data } = await query;
     return data ?? [];
 }
+
+export async function getRefundSummary() {
+    const statuses = ['pending', 'approved', 'rejected'] as const;
+    const [total, ...statusCounts] = await Promise.all([
+        adminClient.from('refund_requests').select('id', { count: 'exact', head: true }),
+        ...statuses.map((status) => adminClient
+            .from('refund_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', status)),
+    ]);
+    const failed = [total, ...statusCounts].find((result) => result.error);
+    if (failed?.error) throw new RefundError('Could not load refund summary', 'db_error');
+    return {
+        total: total.count ?? 0,
+        pending: statusCounts[0].count ?? 0,
+        approved: statusCounts[1].count ?? 0,
+        rejected: statusCounts[2].count ?? 0,
+    };
+}

@@ -259,17 +259,22 @@ export function mapDashboardDataset({
         };
 
   const derivedConsumptionRows = buildConsumptionRowsFromReadings(hourlyRows);
-  const normalizedConsumptionChart = mapDashboardSeries(
-    consumptionType === 5 ? consumptionChart : { data: { rows: derivedConsumptionRows } },
-    {
-      type: consumptionType,
-      fallbackTitle: dashboardChartTitles[consumptionType] || "Daily Consumption",
-      labelKeys: ["collectionDate", "date", "label", "name"],
-      valueKeys: ["consumption", "usage", "value", "amount", "total"]
-    }
+  const consumptionSeriesOptions = {
+    type: consumptionType,
+    fallbackTitle: dashboardChartTitles[consumptionType] || "Daily Consumption",
+    labelKeys: ["collectionDate", "date", "label", "name"],
+    valueKeys: ["consumption", "usage", "value", "amount", "total"]
+  };
+  const normalizedConsumptionChart = mapDashboardSeries(consumptionChart, consumptionSeriesOptions);
+  const derivedConsumptionChart = mapDashboardSeries(
+    { data: { rows: derivedConsumptionRows } },
+    { ...consumptionSeriesOptions, type: 4, fallbackTitle: dashboardChartTitles[4] }
   );
-  const fallbackConsumptionLabels = consumptionType === 5 ? referenceMonthlyConsumptionLabels : referenceLabels;
-  const fallbackConsumptionValues = consumptionType === 5 ? referenceMonthlyConsumption : referenceDailyConsumption;
+  const consumptionSeries = normalizedConsumptionChart.values.length
+    ? normalizedConsumptionChart
+    : consumptionType === 4
+      ? derivedConsumptionChart
+      : normalizedConsumptionChart;
 
   const normalizedSuccessChart = mapDashboardSeries(successChart, {
     type: 6,
@@ -309,9 +314,9 @@ export function mapDashboardDataset({
     },
     consumption: {
       title: consumptionType === 4 ? "Daily Consumption" : "Monthly Consumption",
-      labels: normalizedConsumptionChart.labels.length ? normalizedConsumptionChart.labels : fallbackConsumptionLabels,
-      values: normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : fallbackConsumptionValues,
-      axis: axisLabels(Math.max(1, ...(normalizedConsumptionChart.values.length ? normalizedConsumptionChart.values : fallbackConsumptionValues)))
+      labels: consumptionSeries.labels,
+      values: consumptionSeries.values,
+      axis: axisLabels(Math.max(1, ...consumptionSeries.values))
     },
     success: {
       labels: successRows.length ? successRows.map((row) => row.label) : referenceSuccess.map((row) => row[0]),

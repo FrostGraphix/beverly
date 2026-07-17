@@ -1,3 +1,4 @@
+// @ts-check
 import { isManagementRoute } from "./management-forms.mjs";
 
 const crudPattern = /\/(?:create|update|delete|import)\w*\b/i;
@@ -11,6 +12,10 @@ export function usesArrayPayload(endpoint = "") {
   return crudPattern.test(endpoint);
 }
 
+/**
+ * @param {string} [action]
+ * @param {{ hash?: string } | null} [route]
+ */
 export function needsAuthorizationPassword(action = "", route = null) {
   if (isManagementRoute(route)) return false;
   return ["Add", "Edit", "Delete", "Import", "Recharge", "Generate Token", "Cancel"].includes(action);
@@ -29,6 +34,18 @@ export function confirmationMessage(action = "", routeTitle = "") {
   return `Confirm ${action.toLowerCase()} for ${routeTitle}`;
 }
 
+/**
+ * @typedef {{ name: string, required?: boolean }} WriteField
+ * @typedef {Record<string, unknown>} WriteForm
+ */
+
+/**
+ * @param {string} action
+ * @param {{ hash?: string } | null} route
+ * @param {WriteForm} form
+ * @param {WriteField[]} [fields]
+ * @returns {string} empty string when valid, otherwise the validation error
+ */
 export function validateWriteForm(action, route, form, fields) {
   const values = form || {};
   const requiredFieldNames = (fields || [])
@@ -52,7 +69,9 @@ export function validateWriteForm(action, route, form, fields) {
   return "";
 }
 
+/** @param {WriteForm} [form] */
 export function stripWriteMeta(form = {}) {
+  /** @type {WriteForm} */
   const payload = { ...form };
   delete payload.authorizationPassword;
   delete payload.confirmDelete;
@@ -66,11 +85,17 @@ export function stripWriteMeta(form = {}) {
   return payload;
 }
 
+/** @param {unknown} value */
 function pruneEmpty(value) {
   if (Array.isArray(value)) return value;
   return value;
 }
 
+/**
+ * @param {string} endpoint
+ * @param {string} key
+ * @param {unknown} value
+ */
 function normalizeWriteValue(endpoint, key, value) {
   if (key === "status" && /\/api\/user\/(?:create|update)\b/i.test(endpoint)) {
     const normalized = String(value).trim().toLowerCase();
@@ -80,6 +105,11 @@ function normalizeWriteValue(endpoint, key, value) {
   return value;
 }
 
+/**
+ * @param {string} endpoint
+ * @param {WriteForm} [form]
+ * @param {WriteField[]} [fields]
+ */
 export function buildWritePayload(endpoint, form = {}, fields = []) {
   const payload = stripWriteMeta(form);
   const fieldNames = new Set((fields || []).map((field) => field.name));

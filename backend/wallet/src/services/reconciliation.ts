@@ -45,19 +45,32 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         const dbTotal = (dbTxns ?? []).reduce((s: number, r: any) => s + Number(r.amount_minor), 0);
         const dbCount = (dbTxns ?? []).length;
 
-        // Paystack: list transactions for date (paginated, max 200 for daily)
+        // Paystack: list transactions for the date, following pagination so
+        // high-volume days (> perPage transactions) never report a false delta.
         let gatewayTotal: number | null = null;
         try {
             const paystackKey = process.env.PAYSTACK_SECRET_KEY;
             if (paystackKey) {
-                const res = await fetch(
-                    `https://api.paystack.co/transaction?status=success&from=${since}&to=${until}&perPage=200`,
-                    { headers: { Authorization: `Bearer ${paystackKey}` } },
-                );
-                const ps: any = await res.json();
-                if (ps.status && ps.data) {
-                    gatewayTotal = (ps.data as any[]).reduce((s, t) => s + Number(t.amount), 0);
+                const perPage = 200;
+                const maxPages = 50; // hard stop: 10k transactions/day
+                let page = 1;
+                let sum = 0;
+                let complete = false;
+                while (page <= maxPages) {
+                    const res = await fetch(
+                        `https://api.paystack.co/transaction?status=success&from=${since}&to=${until}&perPage=${perPage}&page=${page}`,
+                        { headers: { Authorization: `Bearer ${paystackKey}` } },
+                    );
+                    const ps: any = await res.json();
+                    if (!ps.status || !Array.isArray(ps.data)) break;
+                    sum += (ps.data as any[]).reduce((s, t) => s + Number(t.amount), 0);
+                    if (ps.data.length < perPage) {
+                        complete = true;
+                        break;
+                    }
+                    page += 1;
                 }
+                if (complete) gatewayTotal = sum;
             }
         } catch {
             // Gateway query failure — record null, don't fail the run
@@ -72,6 +85,9 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         if (status === 'mismatch' && mismatch !== null) {
             notes = `DB total: ₦${(dbTotal / 100).toFixed(2)}, Gateway total: ₦${(gatewayTotal! / 100).toFixed(2)}, Delta: ₦${(mismatch / 100).toFixed(2)}`;
             console.error(`[RECONCILIATION] MISMATCH on ${date}: ${notes}`);
+        } else if (gatewayTotal === null) {
+            // "ok" here only means "nothing proven wrong" — make the gap visible.
+            notes = 'gateway unverified: PAYSTACK_SECRET_KEY missing, query failed, or pagination incomplete';
         }
 
         await adminClient.from('reconciliation_runs').update({

@@ -92,7 +92,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 1. Vendor user lookup
     const { data: vu } = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, vendor_organizations(status)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, vendor_organizations(status, station_id)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
@@ -101,6 +101,9 @@ async function resolveActor(token: string): Promise<Actor | null> {
         if (organization?.status !== 'approved') return null;
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
         const appMfaVerified = mfaEnrolled && await vendorMfaSessionVerified(userId, token);
+        // A vendor holds exactly one station. Carry it on the actor so
+        // consumption reads scope without a second lookup per request.
+        const vendorStationId = String(organization?.station_id ?? '').trim().toUpperCase();
         return {
             userId,
             email,
@@ -108,6 +111,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
             role: normalizeVendorRole((vu as any).role),
             actorId: (vu as any).id,
             vendorOrganizationId: (vu as any).vendor_organization_id,
+            ...(vendorStationId ? { stationId: vendorStationId, stationIds: [vendorStationId] } : {}),
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
             passwordResetRequired: (vu as any).password_reset_required,

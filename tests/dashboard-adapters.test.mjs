@@ -128,6 +128,9 @@ const dashboardAlarmFallback = mapDashboardDataset({
   }
 });
 
+assert.deepStrictEqual(dashboardAlarmFallback.consumption.labels, []);
+assert.deepStrictEqual(dashboardAlarmFallback.consumption.values, []);
+
 assert.deepStrictEqual(dashboardAlarmFallback.alarms, [
   { label: "No Data Report", color: "#2ec7c9", value: 10 },
   { label: "Current Unbalance", color: "#b6a2de", value: 14 },

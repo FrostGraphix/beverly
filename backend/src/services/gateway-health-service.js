@@ -5,6 +5,13 @@ const supabase = require("./supabase-service");
 
 const memoryStates = new Map();
 const memoryIncidents = new Map();
+const knownStationIds = ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA"];
+
+function gatewayStationId(stationId, gatewayName) {
+  const reported = String(stationId || "").trim();
+  const inferred = knownStationIds.find((candidate) => String(gatewayName || "").toUpperCase().includes(candidate));
+  return inferred && (!reported || reported.toLowerCase() === "admin") ? inferred : reported || "UNASSIGNED";
+}
 
 function gatewayIsDown(row = {}) {
   if (typeof row.status === "boolean") return !row.status;
@@ -39,10 +46,11 @@ function outageId(gateway, checkedAt) {
 function normalizeGateway(row = {}) {
   const gatewayId = String(row.gatewayId || row.id || "").trim();
   if (!gatewayId) return null;
-  const stationId = String(row.stationId || row.station || "UNASSIGNED").trim() || "UNASSIGNED";
+  const gatewayName = String(row.gatewayName || row.name || gatewayId).trim() || gatewayId;
+  const stationId = gatewayStationId(row.stationId || row.siteId || row.station, gatewayName);
   return {
     gatewayId,
-    gatewayName: String(row.gatewayName || row.name || gatewayId).trim() || gatewayId,
+    gatewayName,
     stationId,
     isDown: gatewayIsDown(row),
     status: String(row.status ?? "Unknown"),
@@ -55,7 +63,7 @@ function mapStateRow(row) {
   return {
     gatewayId: row.gateway_id,
     gatewayName: row.gateway_name,
-    stationId: row.station_id,
+    stationId: gatewayStationId(row.station_id, row.gateway_name),
     isDown: row.is_down === true,
     status: row.last_status,
     successRate: row.success_rate == null ? null : Number(row.success_rate),
@@ -71,7 +79,7 @@ function mapIncidentRow(row) {
     id: row.id,
     gatewayId: row.gateway_id,
     gatewayName: row.gateway_name,
-    stationId: row.station_id,
+    stationId: gatewayStationId(row.station_id, row.gateway_name),
     status: row.status,
     startedAt: row.started_at,
     endedAt: row.ended_at,
@@ -241,6 +249,30 @@ async function refreshGatewayHealth(options = {}) {
     }
 
     states.push({ ...gateway, changedAt, checkedAt, openIncidentId });
+  }
+
+  // Route every state transition through the automation alert pipeline so
+  // outages and recoveries reach configured webhooks, not just the database.
+  if (changedIncidents.length && options.dispatchIncidents !== false) {
+    const { handleAutomationIncident } = require("./automation-control");
+    for (const incident of changedIncidents) {
+      try {
+        await handleAutomationIncident({
+          id: `gateway-${incident.id}-${incident.status}`,
+          kind: incident.status === "open" ? "gateway-down" : "gateway-recovered",
+          severity: incident.status === "open" ? "critical" : "info",
+          title: incident.status === "open"
+            ? `Gateway ${incident.gatewayName || incident.gatewayId} is down`
+            : `Gateway ${incident.gatewayName || incident.gatewayId} recovered`,
+          message: `Station ${incident.stationId} — status ${incident.lastStatus}, success rate ${incident.successRate ?? "n/a"}.`,
+          source: "gateway-health",
+          createdAt: incident.updatedAt,
+          details: incident,
+        });
+      } catch (error) {
+        console.error("[gateway-health-alert]", error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   const scope = String(options.stationId || "");

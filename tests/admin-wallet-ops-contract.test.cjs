@@ -32,6 +32,7 @@ function main() {
     "fastify.get('/disputes'",
     "fastify.patch('/disputes/:id'",
     "fastify.get('/refunds'",
+    "fastify.get('/refunds/summary'",
     "fastify.post('/refunds/:id/approve'",
     "fastify.post('/refunds/:id/reject'",
     "fastify.get('/settlement'",
@@ -54,6 +55,9 @@ function main() {
   assert(disputesService.includes("listAllDisputes"), "Dispute list service contract missing.");
 
   assert(refundsPage.includes("statusFilter = ref('pending')"), "Refunds page must use backend pending status.");
+  assert(refundsPage.includes('/api/v1/admin/refunds/summary'), "Refunds page must load server summary cards.");
+  assert(refundsPage.includes('class="bw-kpi-grid refund-kpis"'), "Refunds page must render summary cards.");
+  assert(refundsService.includes("count: 'exact', head: true"), "Refund summary must use exact server counts.");
   assert(!refundsPage.includes('value="requested"'), "Refunds page must not use unsupported requested status.");
   assert(refundsService.includes("fn_approve_refund_request"), "Refund approvals must use the atomic RPC.");
   assert(refundApprovalRpc.includes("for update"), "Refund approval RPC must lock the request row.");

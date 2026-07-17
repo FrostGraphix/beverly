@@ -25,7 +25,7 @@ const id = route.params.id as string;
 
 type Tab = 'overview' | 'wallet' | 'purchases' | 'funding';
 const tab = ref<Tab>('overview');
-const overviewView = ref<'grid' | 'list'>('grid');
+const overviewView = ref<'grid' | 'table'>('grid');
 
 const detail = ref<any>(null);
 const loading = ref(true);
@@ -214,9 +214,9 @@ onMounted(loadDetail);
                 <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
             </button>
-            <button type="button" :class="{ active: overviewView === 'list' }" :aria-pressed="overviewView === 'list'" aria-label="List view" title="List view" @click="overviewView = 'list'">
+            <button type="button" :class="{ active: overviewView === 'table' }" :aria-pressed="overviewView === 'table'" aria-label="Table view" title="Table view" @click="overviewView = 'table'">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+                <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
               </svg>
             </button>
           </div>
@@ -359,11 +359,11 @@ onMounted(loadDetail);
 .overview-view-toggle svg { width: 17px; height: 17px; }
 .ov-dl { margin: 0; font-size: var(--t-sm); }
 .ov-dl--grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-5); }
-.ov-dl--list .ov-item { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: var(--s-3); }
+.ov-dl--table .ov-item { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: var(--s-3); }
 .ov-item { min-width: 0; padding: var(--s-3) 0; border-bottom: 1px solid var(--border); }
 .ov-item dt { color: var(--text-muted); }
 .ov-item dd { min-width: 0; margin: 4px 0 0; overflow-wrap: anywhere; }
-.ov-dl--list .ov-item dd { margin-top: 0; }
+.ov-dl--table .ov-item dd { margin-top: 0; }
 
 .wallet-head { display: flex; justify-content: space-between; align-items: start; padding: var(--s-4); border-bottom: 1px solid var(--border); }
 .wallet-bal { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-2xl); color: var(--brand); margin: 4px 0 6px; }
@@ -386,7 +386,7 @@ onMounted(loadDetail);
   .head-card { flex-direction: column; }
   .head-actions { width: 100%; justify-content: flex-end; }
   .head-action-buttons { display: none; }
-  .ov-dl--list .ov-item { grid-template-columns: 1fr; gap: 4px; }
+  .ov-dl--table .ov-item { grid-template-columns: 110px minmax(0, 1fr); gap: var(--s-3); }
   .ledger-row { grid-template-columns: 1fr auto; }
   .ledger-when, .ledger-bal { grid-column: 1 / -1; opacity: 0.7; }
 }

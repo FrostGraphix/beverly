@@ -22,6 +22,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/transactions',    name: 'transactions',   component: () => import('../views/Transactions.vue'),  meta: { auth: true } },
     { path: '/receipts',        name: 'receipts',       component: () => import('../views/Receipts.vue'),      meta: { auth: true } },
     { path: '/statement',       name: 'statement',      component: () => import('../views/Statement.vue'),     meta: { auth: true } },
+    { path: '/consumption',     name: 'consumption',    component: () => import('../views/Consumption.vue'),   meta: { auth: true } },
     { path: '/notifications',   name: 'notifications',  component: () => import('../views/Notifications.vue'), meta: { auth: true } },
     { path: '/profile',         name: 'profile',        component: () => import('../views/Profile.vue'),       meta: { auth: true } },
     { path: '/security',        name: 'security',       component: () => import('../views/Security.vue'),      meta: { auth: true } },

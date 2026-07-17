@@ -35,8 +35,9 @@ const loading    = ref(false);
 const error      = ref('');
 const nextCursor = ref<string | null>(null);
 const loadingMore = ref(false);
-const cardView = ref<'list' | 'grid'>('list');
+const cardView = ref<'table' | 'grid'>('table');
 const PAGE = 100;
+const POLL_INTERVAL_MS = 5_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function statusBadge(s: string) {
@@ -110,7 +111,7 @@ watch([status, station, meterType], () => load());
 
 onMounted(async () => {
     await Promise.all([load(), loadStations()]);
-    pollTimer = setInterval(load, 30_000);
+    pollTimer = setInterval(() => { if (!loading.value) void load(); }, POLL_INTERVAL_MS);
 });
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 </script>
@@ -127,12 +128,8 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
             <span class="bw-live-dot" />LIVE
           </span>
         </p>
-        <p class="bw-page-sub vm-sub">{{ items.length }} most-recent purchases · refreshes every 30 s</p>
+        <p class="bw-page-sub vm-sub">{{ items.length }} most-recent purchases · updates automatically</p>
       </div>
-      <button class="bw-btn sm vm-refresh" :disabled="loading" @click="load">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="loading ? 'animation: spin .7s linear infinite' : ''"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-        Refresh
-      </button>
     </div>
 
     <!-- Filters -->
@@ -177,14 +174,14 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </button>
-          <button type="button" :class="{ active: cardView === 'list' }" :aria-pressed="cardView === 'list'" aria-label="List view" title="List view" @click="cardView = 'list'">
+          <button type="button" :class="{ active: cardView === 'table' }" :aria-pressed="cardView === 'table'" aria-label="Table view" title="Table view" @click="cardView = 'table'">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
             </svg>
           </button>
         </div>
       </div>
-      <div class="bw-t-wrap">
+      <div :class="['bw-t-wrap', 'vending-table-wrap', { 'mobile-table-active': cardView === 'table' }]">
         <table class="bw-table">
           <thead>
             <tr>
@@ -327,10 +324,6 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
   line-height: 1.35;
 }
 
-.vm-refresh {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
 .receipt-actions {
   display: inline-flex;
   gap: 4px;
@@ -390,6 +383,8 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
   }
 
   .bw-t-wrap ~ .vending-cards--grid { display: grid; }
+  .vending-table-wrap.mobile-table-active { display: block; overflow-x: auto; }
+  .vending-cards--table { display: none !important; }
   .vending-cards--grid .bw-tc {
     min-width: 0;
     padding: var(--s-3);

@@ -5,7 +5,10 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-const admin = read("backend/wallet/src/routes/admin.ts");
+// Dev console handlers were extracted to admin-dev.ts; the permission map
+// stays in admin.ts. Assert across the combined admin route sources.
+const admin = read("backend/wallet/src/routes/admin.ts")
+  + read("backend/wallet/src/routes/admin-dev.ts");
 const service = read("backend/wallet/src/services/dev-console.ts");
 const router = read("apps/admin/src/router/index.ts");
 const migration = read("supabase/migrations/20260601120000_dev_console_access.sql");

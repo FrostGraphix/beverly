@@ -1,3 +1,4 @@
+// @ts-check
 export const allowedUploadExtensions = [".bin", ".csv", ".txt", ".xml", ".xls", ".xlsx"];
 export const allowedUploadMimeTypes = [
   "application/octet-stream",
@@ -10,6 +11,11 @@ export const allowedUploadMimeTypes = [
 ];
 export const maxUploadBytes = 4 * 1024 * 1024;
 
+/**
+ * @typedef {{ name?: string, type?: string, size?: number }} UploadFileLike
+ */
+
+/** @param {{ hash?: string } | null} [route] */
 export function isFileUploadRoute(route) {
   return Boolean(route?.hash?.includes("file-upload"));
 }
@@ -18,6 +24,10 @@ export function uploadAcceptValue() {
   return allowedUploadExtensions.join(",");
 }
 
+/**
+ * @param {UploadFileLike | null} [file]
+ * @returns {string} empty string when valid, otherwise the validation error
+ */
 export function validateUploadFile(file) {
   if (!file) return "Upload file is required";
   const lowerName = String(file.name || "").toLowerCase();
@@ -28,6 +38,7 @@ export function validateUploadFile(file) {
   return "";
 }
 
+/** @param {UploadFileLike | null} [file] */
 export function uploadSummary(file) {
   if (!file) return "";
   const sizeKb = Math.ceil(Number(file.size || 0) / 1024);

@@ -9,6 +9,7 @@ delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 delete process.env.SUPABASE_SECRET_KEY;
 
 const {
+  normalizeGateway,
   refreshGatewayHealth,
   resetGatewayHealthMemory,
 } = require("../backend/src/services/gateway-health-service");
@@ -34,6 +35,7 @@ function gatewayResponse(status, updateDate) {
 }
 
 (async () => {
+  assert.equal(normalizeGateway({ gatewayId: "GW-2", gatewayName: "UMAISHA_2", stationId: "admin" }).stationId, "UMAISHA");
   resetGatewayHealthMemory();
   const down = await refreshGatewayHealth({
     now: new Date("2026-07-14T08:00:00.000Z"),
@@ -64,6 +66,12 @@ function gatewayResponse(status, updateDate) {
   assert.match(migration, /create table if not exists public\.gateway_health_state/);
   assert.match(migration, /create table if not exists public\.gateway_health_incidents/);
   assert.match(migration, /enable row level security/g);
+
+  // Incident transitions must flow into the automation alert pipeline.
+  const serviceSource = fs.readFileSync(path.join(__dirname, "../backend/src/services/gateway-health-service.js"), "utf8");
+  assert.match(serviceSource, /handleAutomationIncident/);
+  assert.match(serviceSource, /gateway-down/);
+  assert.match(serviceSource, /gateway-recovered/);
   console.log("gateway-health-service ok");
 })().catch((error) => {
   console.error(error);

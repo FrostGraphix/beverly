@@ -128,7 +128,8 @@ assert(crmSidebarCss.includes("cursor: col-resize"), "Sidebar resize handle must
 assert(!appVue.includes('class="theme-swatch"'), "Theme choices must show names only.");
 assert(appVue.includes('class="user-theme-submenu"'), "Theme choices must remain a compact submenu.");
 const routeHashes = [...routeManifest.matchAll(/hash:\s*"([^"]+)"/g)].map((match) => match[1]);
-const routeIconBlock = appVue.match(/const routeIconOverrides = \{([\s\S]*?)\n\};/)?.[1] || "";
+const shellChrome = read("src/data/shell-chrome.mjs");
+const routeIconBlock = shellChrome.match(/const routeIconOverrides = \{([\s\S]*?)\n\};/)?.[1] || "";
 const routeIcons = new Map([...routeIconBlock.matchAll(/"(#[^"]+)":\s*(?:"([^"]+)"|routeIconPaths\.([a-z]+))/g)]
   .map((match) => [match[1], match[2] || `routeIconPaths.${match[3]}`]));
 assert.deepStrictEqual(routeHashes.filter((hash) => !routeIcons.has(hash)), [], "Every sidebar route needs an explicit icon.");

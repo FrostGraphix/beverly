@@ -1,16 +1,6 @@
 <template>
   <div class="echart-panel dashboard-svg-chart">
     <div ref="chart" class="echart-canvas" role="img" :aria-label="title"></div>
-    <div v-if="showRisingAvatars" class="dashboard-avatar-rise" aria-hidden="true">
-      <span
-        v-for="avatar in risingAvatars"
-        :key="avatar.label"
-        class="dashboard-rise-avatar"
-        :style="avatar.style"
-      >
-        {{ avatar.label }}
-      </span>
-    </div>
   </div>
 </template>
 
@@ -26,16 +16,6 @@ export default {
   computed: {
     title() {
       return this.option?.title?.text || this.option?.series?.[0]?.name || "Chart";
-    },
-    showRisingAvatars() {
-      return /purchase money/i.test(this.title);
-    },
-    risingAvatars() {
-      return [
-        { label: "AA", style: { "--rise-left": "12%", "--rise-delay": "0s", "--rise-size": "30px" } },
-        { label: "BE", style: { "--rise-left": "44%", "--rise-delay": "1.15s", "--rise-size": "36px" } },
-        { label: "AC", style: { "--rise-left": "78%", "--rise-delay": "2.3s", "--rise-size": "28px" } }
-      ];
     }
   },
   watch: {

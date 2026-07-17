@@ -3,11 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const actionModal = fs.readFileSync(path.join(root, "src/components/ActionModal.vue"), "utf8");
+const actionModal = fs.readFileSync(path.join(root, "src/components/ActionModalPrint.vue"), "utf8");
 const modalStyles = fs.readFileSync(path.join(root, "src/styles/legacy-modals.css"), "utf8");
 
 assert(
     actionModal.includes('class="receipt-preview-frame"') &&
+    !actionModal.includes('class="receipt-preview receipt-preview-standard"') &&
+    !actionModal.includes('<div class="modal-body">') &&
     actionModal.includes(':srcdoc="receiptPreviewHtml"') &&
     actionModal.includes("receiptPreviewHtml()") &&
     actionModal.includes("return receiptHtml(this.receiptModel, { theme: this.receiptTheme });"),
@@ -23,9 +25,9 @@ assert(
 );
 
 assert(
-  modalStyles.includes(".receipt-preview-standard") &&
-    modalStyles.includes(".receipt-preview-frame") &&
-    modalStyles.includes("height: min(78vh, 860px);"),
+  !modalStyles.includes(".receipt-preview-standard") &&
+    modalStyles.includes(".modal-print-receipt .receipt-preview-frame") &&
+    modalStyles.includes("height: min(72vh, 700px);"),
   "Receipt preview iframe should have a stable modal viewport."
 );
 

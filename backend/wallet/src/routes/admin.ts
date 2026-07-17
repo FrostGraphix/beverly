@@ -27,7 +27,7 @@ import {
     listTickets, getTicket, addTicketMessage, updateTicket, ticketStats,
     listChatSessions, getChatSession, getChatMessages, sendChatMessage, endChatSession, assignChatSession,
 } from '../services/support.js';
-import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } from '../services/refunds.js';
+import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, getRefundSummary } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
@@ -37,47 +37,14 @@ import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
+import adminDevRoutes from './admin-dev.js';
 import {
-    createDevApiKey,
-    createDevWebhook,
-    deleteDevJob,
-    deleteDevWebhook,
-    dryRunDevMigration,
-    inspectDevEih,
-    inspectLedgerEntry,
-    listDevApiKeys,
-    listDevApiLog,
-    listDevDeployLog,
-    listDevErrors,
-    listDevHealth,
-    listDevIncidents,
-    listDevJobs,
-    listDevMigrations,
-    listDevNotificationTemplates,
-    listDevQueues,
-    listDevSchema,
-    listDevSlowQueries,
-    listDevSysConfig,
-    listDevWebhookDeliveries,
-    listDevWebhooks,
-    listRoleMatrix,
-    listSandboxActivity,
-    getSandboxStatus,
-    replayDevWebhookDelivery,
-    resolveDevError,
-    retryAllFailedDevJobs,
-    retryDevJob,
-    revokeDevApiKey,
-    rotateDevApiKey,
-    runMockVend,
-    seedSandboxWallet,
-    setSandboxMode,
-    simulateDevVend,
-    testDevNotificationTemplate,
-    updateDevNotificationTemplate,
-    updateDevSysConfig,
-    updateDevWebhook,
-} from '../services/dev-console.js';
+    DEFAULT_ROLE_PERMISSIONS,
+    PERMISSION_CATALOG,
+    ROLE_LABELS,
+    ROLE_LEGACY_NAMES,
+    SYSTEM_ROLE_KEYS,
+} from './admin-access-constants.js';
 
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -294,63 +261,6 @@ async function insertAnnouncementDeliveries(rows: any[]) {
     }
 }
 
-const PERMISSION_CATALOG = [
-    { key: 'wallet.dashboard.view', label: 'View operations dashboard', group: 'Overview', risk: 'low' },
-    { key: 'wallet.vendors.review', label: 'Review vendor applications', group: 'Vendors', risk: 'medium' },
-    { key: 'wallet.vendors.manage', label: 'Create and manage vendors', group: 'Vendors', risk: 'high' },
-    { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
-    { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
-    { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
-    { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
-    { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
-    { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.support.manage', label: 'Manage support (FAQ, tickets, chat)', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.announcements.manage', label: 'Send wallet announcements', group: 'Operations', risk: 'high' },
-    { key: 'wallet.settlement.view', label: 'View settlement batches', group: 'Operations', risk: 'medium' },
-    { key: 'wallet.reconciliation.run', label: 'Run reconciliation', group: 'Operations', risk: 'high' },
-    { key: 'wallet.fraud.review', label: 'Resolve fraud reviews', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.privacy.review', label: 'Review privacy requests', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.audit.view', label: 'View audit and security events', group: 'Compliance', risk: 'high' },
-    { key: 'wallet.flags.manage', label: 'Manage feature flags', group: 'Launch', risk: 'critical' },
-    { key: 'wallet.vat.manage', label: 'Govern VAT policies', group: 'Money', risk: 'critical' },
-    { key: 'wallet.access.manage', label: 'Manage roles and permissions', group: 'Access', risk: 'critical' },
-    { key: 'dev.console', label: 'Access developer console', group: 'Developer', risk: 'critical' },
-    { key: 'wallet.consumption.view', label: 'View consumption analytics', group: 'Analytics', risk: 'low' },
-];
-
-const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-    'super-admin': PERMISSION_CATALOG.map((p) => p.key),
-    'operations-manager': [
-        'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
-        'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
-    ],
-    'finance-checker': [
-        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
-        'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
-        'wallet.audit.view', 'wallet.vat.manage',
-    ],
-    account: [
-        'wallet.dashboard.view', 'wallet.funding.view', 'wallet.customers.view', 'wallet.vending.monitor',
-        'wallet.settlement.view', 'wallet.reconciliation.run',
-    ],
-};
-
-const ROLE_LABELS: Record<string, string> = {
-    'super-admin': 'Super Admin',
-    'operations-manager': 'Operations Manager',
-    'finance-checker': 'Finance Checker',
-    account: 'Account Officer',
-};
-
-const ROLE_LEGACY_NAMES: Record<string, string> = {
-    'super-admin': 'admin',
-    'operations-manager': 'ops',
-    'finance-checker': 'analyst',
-    account: 'finance',
-};
-
-const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));
 
 const OPEN_ADMIN_ROUTES = new Set([
     'GET /me',
@@ -381,6 +291,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vendors/summary': 'wallet.vendors.review',
     'DELETE /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
+    'PATCH /vendors/:id/station': 'wallet.vendors.manage',
     'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
     'GET /vendors/:id': 'wallet.vendors.review',
     'GET /vendors/:id/wallet': 'wallet.vendors.review',
@@ -446,6 +357,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
     'POST /announcements': 'wallet.announcements.manage',
     'GET /refunds': 'wallet.refunds.manage',
+    'GET /refunds/summary': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
     'POST /refunds/:id/approve': 'wallet.refunds.manage',
     'POST /refunds/:id/reject': 'wallet.refunds.manage',
@@ -1361,6 +1273,63 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'update_failed', message: e.message });
         }
+    });
+
+    // ── vendor station assignment ──
+    // A vendor holds exactly one station; this is the only way to change it.
+    // The trigger on vendor_organizations keeps the legacy station_ids_json
+    // array mirrored, so CRM-side readers stay consistent.
+    fastify.patch('/vendors/:id/station', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            // null clears the assignment; the vendor then sees no consumption.
+            stationId: z.string().trim().min(1).max(64).nullable(),
+            reason: z.string().max(500).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const stationId = body.stationId ? body.stationId.toUpperCase() : null;
+
+        const { data: vendor } = await adminClient
+            .from('vendor_organizations')
+            .select('id, station_id')
+            .eq('id', id)
+            .maybeSingle();
+        if (!vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+
+        // Reject unknown stations rather than silently assigning a vendor to a
+        // site that does not exist and showing them an empty dashboard.
+        if (stationId) {
+            const { listStations: listKnownStations } = await import('../services/token-engine.js');
+            const known = await listKnownStations();
+            const match = (known as any[]).some((station) =>
+                String(station.stationId ?? station.id ?? station).toUpperCase() === stationId);
+            if (!match) {
+                return reply.code(400).send({ error: 'unknown_station', message: `Station ${stationId} does not exist.` });
+            }
+        }
+
+        const previous = (vendor as any).station_id ?? null;
+        const { error } = await adminClient
+            .from('vendor_organizations')
+            .update({ station_id: stationId, updated_at: new Date().toISOString() })
+            .eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vendor.station_reassigned',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before: { station_id: previous },
+            after: { station_id: stationId, reason: body.reason ?? null },
+        });
+
+        return { ok: true, stationId, previousStationId: previous };
     });
 
     // ── vendor detail ──
@@ -2929,6 +2898,8 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── refunds ──
+    fastify.get('/refunds/summary', async () => ({ summary: await getRefundSummary() }));
+
     fastify.get('/refunds', async (req) => {
         const { status } = req.query as { status?: string };
         const normalizedStatus = status === 'requested' || status === 'under_review'
@@ -3474,10 +3445,15 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
 
-        const { queryConsumption } = await import('../services/consumption.js');
-        const rows = assignedStations
-            ? (await Promise.all(assignedStations.map((stationId) => queryConsumption({ scope, scope_id: stationId, period_type: period, from, to, limit })))).flat()
-            : await queryConsumption({ scope, scope_id, period_type: period, from, to, limit });
+        // super-admin -> every station; any other staff role -> only their
+        // assignment. staffStations() returns [] for an unassigned staffer,
+        // which stationsAuthority treats as "see nothing".
+        const { queryConsumption, allStations, stationsAuthority } = await import('../services/consumption.js');
+        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
+        const rows = await queryConsumption(
+            { scope, scope_id, period_type: period, from, to, limit, withSpend: qs.spend === 'true' },
+            authority,
+        );
         return { rows, count: rows.length };
     });
 
@@ -3499,8 +3475,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
 
-        const { queryMeterBreakdown } = await import('../services/consumption.js');
-        const rows = await queryMeterBreakdown(station_id, period, from, to);
+        const { queryMeterBreakdown, allStations, stationsAuthority } = await import('../services/consumption.js');
+        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
+        const rows = await queryMeterBreakdown(station_id, period, authority, from, to);
         return { rows, count: rows.length };
     });
 
@@ -3576,218 +3553,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-    // Developer console: all routes require dev.console via ADMIN_ROUTE_PERMISSIONS.
-    fastify.get('/dev/api-keys', async () => ({ keys: await listDevApiKeys() }));
-
-    fastify.post('/dev/api-keys', async (req) => {
-        const schema = z.object({
-            name: z.string().trim().min(2).max(120),
-            org_id: z.string().trim().min(1).nullable().optional(),
-            org_type: z.enum(['vendor', 'customer', 'system']).nullable().optional(),
-            scopes: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
-        });
-        const body = schema.parse(req.body);
-        return createDevApiKey({
-            name: body.name,
-            orgId: body.org_id ?? null,
-            orgType: body.org_type ?? (body.org_id ? 'vendor' : null),
-            scopes: body.scopes,
-            actorUserId: req.actor!.userId,
-        });
-    });
-
-    fastify.delete('/dev/api-keys/:id', async (req) => {
-        await revokeDevApiKey((req.params as { id: string }).id, req.actor!.userId);
-        return { ok: true };
-    });
-
-    fastify.post('/dev/api-keys/:id/rotate', async (req) => (
-        rotateDevApiKey((req.params as { id: string }).id, req.actor!.userId)
-    ));
-
-    fastify.get('/dev/webhooks', async () => ({ webhooks: await listDevWebhooks() }));
-
-    fastify.get('/dev/webhooks/deliveries', async (req) => {
-        const query = req.query as { limit?: string };
-        return { deliveries: await listDevWebhookDeliveries(Math.min(Number(query.limit ?? 100), 250)) };
-    });
-
-    fastify.post('/dev/webhooks', async (req) => {
-        const schema = z.object({
-            url: z.string().trim().url().max(1000),
-            events: z.array(z.string().trim().min(1).max(120)).min(1).max(50),
-            secret: z.string().trim().min(10).max(300).optional(),
-        });
-        const body = schema.parse(req.body);
-        await createDevWebhook({ ...body, actorUserId: req.actor!.userId });
-        return { ok: true };
-    });
-
-    fastify.patch('/dev/webhooks/:id', async (req) => {
-        const schema = z.object({
-            url: z.string().trim().url().max(1000),
-            events: z.array(z.string().trim().min(1).max(120)).min(1).max(50),
-            enabled: z.boolean(),
-        });
-        await updateDevWebhook((req.params as { id: string }).id, schema.parse(req.body));
-        return { ok: true };
-    });
-
-    fastify.delete('/dev/webhooks/:id', async (req) => {
-        await deleteDevWebhook((req.params as { id: string }).id);
-        return { ok: true };
-    });
-
-    fastify.post('/dev/webhooks/deliveries/:id/replay', async (req) => {
-        await replayDevWebhookDelivery((req.params as { id: string }).id, req.actor!.userId);
-        return { ok: true };
-    });
-
-    fastify.get('/dev/api-log', async (req) => {
-        const query = req.query as { limit?: string; cursor?: string; from?: string };
-        return listDevApiLog({
-            limit: Math.min(Number(query.limit ?? 50), 200),
-            cursor: query.cursor,
-            from: query.from,
-        });
-    });
-
-    fastify.get('/dev/sandbox/status', async () => getSandboxStatus());
-    fastify.get('/dev/sandbox/activity', async () => ({ activity: await listSandboxActivity() }));
-
-    fastify.post('/dev/sandbox/mode', async (req) => {
-        const body = z.object({ mode: z.literal('test') }).parse(req.body);
-        await setSandboxMode(body.mode, req.actor!.userId);
-        return { ok: true };
-    });
-
-    fastify.post('/dev/sandbox/seed-wallet', async (req) => {
-        const body = z.object({
-            org_id: z.string().trim().min(1),
-            org_type: z.enum(['vendor', 'customer']),
-            amount_kobo: z.number().int().positive().max(1_000_000_000),
-        }).parse(req.body);
-        return seedSandboxWallet({
-            orgId: body.org_id,
-            orgType: body.org_type,
-            amountMinor: body.amount_kobo,
-            actorUserId: req.actor!.userId,
-        });
-    });
-
-    fastify.post('/dev/sandbox/mock-vend', async (req) => {
-        const body = z.object({
-            meter_number: z.string().trim().min(4).max(80),
-            amount_kobo: z.number().int().positive().max(100_000_000),
-            mock_response: z.enum(['success', 'disco_error', 'timeout', 'invalid_meter']),
-        }).parse(req.body);
-        return runMockVend({
-            meterNumber: body.meter_number,
-            amountMinor: body.amount_kobo,
-            mockResponse: body.mock_response,
-            actorUserId: req.actor!.userId,
-        });
-    });
-
-    fastify.get('/dev/health', async () => ({ services: await listDevHealth() }));
-    fastify.get('/dev/health/incidents', async () => ({ incidents: await listDevIncidents() }));
-    fastify.get('/dev/queues', async () => ({ queues: await listDevQueues() }));
-
-    fastify.get('/dev/queues/jobs', async (req) => {
-        const query = req.query as { queue?: string; status?: 'pending' | 'processing' | 'failed' | 'completed'; limit?: string };
-        return { jobs: await listDevJobs({ queue: query.queue, status: query.status, limit: Math.min(Number(query.limit ?? 100), 250) }) };
-    });
-
-    fastify.post('/dev/queues/jobs/:id/retry', async (req) => {
-        await retryDevJob((req.params as { id: string }).id);
-        return { ok: true };
-    });
-
-    fastify.delete('/dev/queues/jobs/:id', async (req) => {
-        await deleteDevJob((req.params as { id: string }).id);
-        return { ok: true };
-    });
-
-    fastify.post('/dev/queues/retry-all-failed', async () => {
-        await retryAllFailedDevJobs();
-        return { ok: true };
-    });
-
-    fastify.get('/dev/errors', async () => ({ groups: await listDevErrors() }));
-
-    fastify.post('/dev/errors/:fingerprint/resolve', async (req) => {
-        await resolveDevError((req.params as { fingerprint: string }).fingerprint, req.actor!.userId);
-        return { ok: true };
-    });
-
-    fastify.get('/dev/slow-queries', async (req) => {
-        const query = req.query as { threshold_ms?: string };
-        return { queries: await listDevSlowQueries(Math.max(Number(query.threshold_ms ?? 500), 0)) };
-    });
-
-    fastify.post('/dev/toolkit/simulate-vend', async (req) => {
-        const body = z.object({
-            meter_number: z.string().trim().min(4).max(80),
-            amount_kobo: z.number().int().positive().max(100_000_000),
-            environment: z.enum(['test', 'live']),
-        }).parse(req.body);
-        return simulateDevVend({
-            meterNumber: body.meter_number,
-            amountMinor: body.amount_kobo,
-            environment: body.environment,
-            actorUserId: req.actor!.userId,
-        });
-    });
-
-    fastify.post('/dev/toolkit/eih-inspect', async (req) => {
-        const body = z.object({ transaction_id: z.string().trim().min(1).max(120) }).parse(req.body);
-        return inspectDevEih(body.transaction_id);
-    });
-
-    fastify.get('/dev/toolkit/ledger/:id', async (req) => inspectLedgerEntry((req.params as { id: string }).id));
-    fastify.get('/dev/migrations', async () => ({ migrations: await listDevMigrations() }));
-
-    fastify.post('/dev/migrations/dry-run', async (req) => {
-        const body = z.object({ version: z.string().trim().regex(/^\d{14}$/) }).parse(req.body);
-        return dryRunDevMigration(body.version);
-    });
-
-    fastify.get('/dev/sys-config', async (req) => ({ configs: await listDevSysConfig(req.actor!.userId) }));
-
-    fastify.put('/dev/sys-config/:key', async (req) => {
-        const body = z.object({ value: z.string().max(20_000) }).parse(req.body);
-        await updateDevSysConfig((req.params as { key: string }).key, body.value, req.actor!.userId);
-        return { ok: true };
-    });
-
-    fastify.get('/dev/notif-templates', async (req) => ({ templates: await listDevNotificationTemplates(req.actor!.userId) }));
-
-    fastify.put('/dev/notif-templates/:id', async (req) => {
-        const body = z.object({ subject: z.string().max(300).nullable(), body: z.string().min(1).max(20_000) }).parse(req.body);
-        await updateDevNotificationTemplate((req.params as { id: string }).id, body);
-        return { ok: true };
-    });
-
-    fastify.post('/dev/notif-templates/:id/test-send', async (req) => {
-        const body = z.object({
-            target: z.string().trim().min(3).max(300),
-            variables: z.record(z.string()).default({}),
-        }).parse(req.body);
-        await testDevNotificationTemplate((req.params as { id: string }).id, {
-            target: body.target,
-            variables: body.variables,
-            actorUserId: req.actor!.userId,
-        });
-        return { ok: true };
-    });
-
-    fastify.get('/dev/schema', async () => ({ tables: await listDevSchema() }));
-    fastify.get('/dev/role-matrix', async () => listRoleMatrix({
-        catalog: PERMISSION_CATALOG,
-        roleLabels: ROLE_LABELS,
-        defaultRolePermissions: DEFAULT_ROLE_PERMISSIONS,
-    }));
-    fastify.get('/dev/deploy-log', async () => ({ deploys: await listDevDeployLog() }));
+    // Developer console routes live in admin-dev.ts; they inherit this
+    // plugin's preHandler chain (dev.console permission, MFA, break-glass).
+    await fastify.register(adminDevRoutes);
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;

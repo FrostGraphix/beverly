@@ -1243,6 +1243,50 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!vu) return { batches: [] };
         return { batches: await listSettlementBatches({ vendorOrganizationId: (vu as any).vendor_organization_id, limit: 100 }) };
     });
+
+    // ── Consumption ─────────────────────────────────────────────────────────
+    // A vendor sees their single assigned station, including meter-level detail
+    // for the customers at that site. Authority comes from the actor's station,
+    // never from the query string, so a vendor cannot ask for another site.
+
+    fastify.get('/consumption', async (req, reply) => {
+        const actor = vendorActorOrReply(req, reply);
+        if (!actor) return undefined;
+
+        const qs = req.query as Record<string, string>;
+        const scope  = (qs.scope ?? 'station') as 'meter' | 'station' | 'cumulative';
+        const period = (qs.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
+
+        if (!['meter', 'station', 'cumulative'].includes(scope)) {
+            return reply.code(400).send({ error: 'bad_scope', message: 'scope must be meter | station | cumulative' });
+        }
+        if (!['day', 'week', 'month', 'year'].includes(period)) {
+            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        }
+        if (!actor.stationId) {
+            return reply.code(409).send({
+                error: 'no_station_assigned',
+                message: 'No station is assigned to your vendor account. Contact Beverly operations.',
+            });
+        }
+
+        const { queryConsumption, stationsAuthority } = await import('../services/consumption.js');
+        const rows = await queryConsumption(
+            {
+                scope,
+                // Meter drill-down stays inside the vendor's own station because
+                // the authority below is ANDed with any scope_id supplied here.
+                scope_id: scope === 'meter' ? (qs.meter_id || undefined) : actor.stationId,
+                period_type: period,
+                from: qs.from ?? undefined,
+                to: qs.to ?? undefined,
+                limit: Math.min(Number(qs.limit ?? 120), 500),
+                withSpend: qs.spend === 'true',
+            },
+            stationsAuthority([actor.stationId]),
+        );
+        return { rows, count: rows.length, stationId: actor.stationId };
+    });
 };
 
 export default route;
