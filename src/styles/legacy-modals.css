@@ -354,7 +354,7 @@
     @media (max-width: 768px) {
       .login-page { justify-content: flex-start; padding: 0; }
       .login-card { width: 100%; max-width: 400px; margin: 0 20px; padding: 35px 25px; }
-      .auth-page { min-height: 100vh; height: auto; grid-template-columns: 1fr; gap: 18px; padding: 18px; overflow: auto; align-content: center; }
+      .auth-page { min-height: 100vh; height: auto; grid-template-columns: 1fr; gap: 18px; padding: 0; overflow: auto; align-content: center; }
       .auth-intro { display: block; }
       .auth-brand { margin-bottom: 14px; font-size: 18px; }
       .auth-brand-mark { width: 40px; height: 40px; border-radius: 12px; font-size: 22px; }

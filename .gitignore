@@ -8,6 +8,12 @@ backend/data/*.sqlite
 backend/data/*.sqlite-*
 tmp/*.sqlite
 tmp/
+browser_logs.txt
+check_swagger.js
+test_api.js
+test_err.js
+token.txt
+beverly-reveal.html
 .claude/
 tmp-*.log
 tmp-*.err.log
