@@ -32,9 +32,17 @@ export default {
       if (this.chart) this.chart.resize();
     };
     window.addEventListener("resize", this.resizeHandler, { passive: true });
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(this.resizeHandler);
+      this.resizeObserver.observe(this.$refs.chart);
+    }
   },
   beforeUnmount() {
     window.removeEventListener("resize", this.resizeHandler);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
     if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
     if (this.animationTimer) clearTimeout(this.animationTimer);
     if (this.chart) {
