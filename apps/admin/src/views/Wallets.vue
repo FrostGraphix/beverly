@@ -465,35 +465,35 @@ watch([fOwnerType, fStatus], () => loadList());
         <table class="bw-table">
           <thead>
             <tr>
-              <th style=”width:36px”><input type=”checkbox” :checked=”allSelected” @change=”toggleAll” /></th>
+              <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
               <th>Owner</th>
               <th>Type</th>
-              <th style=”text-align: right”>Balance</th>
-              <th style=”text-align: right”>Available</th>
-              <th style=”text-align: right”>Daily cap</th>
+              <th style="text-align: right">Balance</th>
+              <th style="text-align: right">Available</th>
+              <th style="text-align: right">Daily cap</th>
               <th>Status</th>
               <th>Receipt</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for=”w in wallets” :key=”w.id” class=”w-row” :class=”{ ‘w-row-selected’: selectedIds.has(w.id) }”>
-              <td @click.stop><input type=”checkbox” :checked=”selectedIds.has(w.id)” @change=”toggleOne(w.id)” /></td>
-              <td @click=”openDetail(w)”>
-                <div class=”bw-truncate” style=”max-width: 220px”>{{ w.owner_name || ‘—‘ }}</div>
-                <div class=”bw-mono row-sub”>{{ w.id.slice(0, 8) }}</div>
+            <tr v-for="w in wallets" :key="w.id" class="w-row" :class="{ 'w-row-selected': selectedIds.has(w.id) }">
+              <td @click.stop><input type="checkbox" :checked="selectedIds.has(w.id)" @change="toggleOne(w.id)" /></td>
+              <td @click="openDetail(w)">
+                <div class="bw-truncate" style="max-width: 220px">{{ w.owner_name || '—' }}</div>
+                <div class="bw-mono row-sub">{{ w.id.slice(0, 8) }}</div>
               </td>
-              <td @click=”openDetail(w)”><span :class=”[‘bw-badge’, ownerBadge(w.owner_type)]”>{{ w.owner_type }}</span></td>
-              <td class=”bw-money” style=”text-align: right” @click=”openDetail(w)”>{{ naira(w.balance_minor) }}</td>
-              <td class=”bw-money” style=”text-align: right; color: var(--brand)” @click=”openDetail(w)”>{{ naira(w.available_minor) }}</td>
-              <td class=”bw-money bw-muted” style=”text-align: right; font-size: var(--t-xs)” @click=”openDetail(w)”>
-                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : ‘—‘ }}
+              <td @click="openDetail(w)"><span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span></td>
+              <td class="bw-money" style="text-align: right" @click="openDetail(w)">{{ naira(w.balance_minor) }}</td>
+              <td class="bw-money" style="text-align: right; color: var(--brand)" @click="openDetail(w)">{{ naira(w.available_minor) }}</td>
+              <td class="bw-money bw-muted" style="text-align: right; font-size: var(--t-xs)" @click="openDetail(w)">
+                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : '—' }}
               </td>
-              <td @click=”openDetail(w)”><span :class=”[‘bw-badge’, statusBadge(w.status)]”>{{ w.status }}</span></td>
-              <td class=”row-arrow” @click=”openDetail(w)”>→</td>
+              <td @click="openDetail(w)"><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
+              <td class="row-arrow" @click="openDetail(w)">→</td>
             </tr>
-            <tr v-if=”!wallets.length && !loading”>
-              <td colspan=”8” class=”bw-muted empty”>No wallets match the filters.</td>
+            <tr v-if="!wallets.length && !loading">
+              <td colspan="8" class="bw-muted empty">No wallets match the filters.</td>
             </tr>
           </tbody>
         </table>
