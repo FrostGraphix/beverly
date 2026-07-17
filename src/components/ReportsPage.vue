@@ -73,7 +73,7 @@
         <span class="kpi-label">{{ kpi.label }}</span>
         <span class="kpi-value">{{ kpi.value }}</span>
         <span v-if="kpi.delta != null" class="kpi-delta" :class="kpi.delta >= 0 ? 'delta-up' : 'delta-down'">
-          {{ kpi.delta >= 0 ? '↑' : '↓' }} {{ Math.abs(kpi.delta) }}%
+          {{ kpi.delta >= 0 ? 'â†‘' : 'â†“' }} {{ Math.abs(kpi.delta) }}%
         </span>
       </div>
     </div>
@@ -113,7 +113,7 @@
           <tr v-for="(row, ri) in pagedRows" :key="ri" @click="selectedRow = row" :class="{ 'row-selected': selectedRow === row }">
             <td v-for="col in reportColumns" :key="col.key">
               <template v-if="typeof col.value === 'function'">{{ col.value(row) }}</template>
-              <template v-else>{{ row[col.key] ?? '—' }}</template>
+              <template v-else>{{ row[col.key] ?? 'â€”' }}</template>
             </td>
           </tr>
         </tbody>
@@ -149,7 +149,7 @@
           <dt>{{ col.label }}</dt>
           <dd>
             <template v-if="typeof col.value === 'function'">{{ col.value(selectedRow) }}</template>
-            <template v-else>{{ selectedRow[col.key] ?? '—' }}</template>
+            <template v-else>{{ selectedRow[col.key] ?? 'â€”' }}</template>
           </dd>
         </template>
       </dl>
@@ -493,160 +493,160 @@ export default {
   box-shadow: none;
 }
 
-:global([data-theme="light"]) .reports-page { gap: 16px; }
-:global([data-theme="light"]) .report-type-strip { gap: 8px; }
-:global([data-theme="light"]) .report-type-card,
-:global([data-theme="light"]) .report-chart-container,
-:global([data-theme="light"]) .ops-table-wrap {
+:global([data-theme="light"] .reports-page) { gap: 16px; }
+:global([data-theme="light"] .report-type-strip) { gap: 8px; }
+:global([data-theme="light"] .report-type-card),
+:global([data-theme="light"] .report-chart-container),
+:global([data-theme="light"] .ops-table-wrap) {
   border-color: #eaeaea;
   border-radius: 8px;
   box-shadow: none;
 }
-:global([data-theme="light"]) .report-type-card { border-width: 1px; }
-:global([data-theme="light"]) .report-type-card:hover {
+:global([data-theme="light"] .report-type-card) { border-width: 1px; }
+:global([data-theme="light"] .report-type-card:hover) {
   border-color: #a3a3a3;
   transform: none;
   box-shadow: none;
 }
-:global([data-theme="light"]) .report-type-card.active {
+:global([data-theme="light"] .report-type-card.active) {
   border-color: #111;
   background: #fff;
   box-shadow: inset 0 0 0 1px #111;
 }
-:global([data-theme="light"]) .report-type-icon { color: #111; }
-:global([data-theme="light"]) .report-preset-btn {
+:global([data-theme="light"] .report-type-icon) { color: #111; }
+:global([data-theme="light"] .report-preset-btn) {
   border-color: #eaeaea;
   border-radius: 6px;
   color: #666;
 }
-:global([data-theme="light"]) .report-preset-btn:hover {
+:global([data-theme="light"] .report-preset-btn:hover) {
   border-color: #a3a3a3;
   color: #111;
 }
-:global([data-theme="light"]) .report-preset-btn.active {
+:global([data-theme="light"] .report-preset-btn.active) {
   background: #111;
   border-color: #111;
   color: #fff;
 }
-:global([data-theme="light"]) .kpi-strip { background: #eaeaea; border-radius: 8px; }
-:global([data-theme="light"]) .report-chart-container { padding: 18px; }
-:global([data-theme="light"]) .ops-table thead th { background: #fafafa; border-color: #eaeaea; }
-:global([data-theme="light"]) .ops-table tbody tr { border-color: #eaeaea; }
-:global([data-theme="light"]) .ops-table tbody tr:hover,
-:global([data-theme="light"]) .ops-table tbody tr.row-selected { background: #fafafa; }
+:global([data-theme="light"] .kpi-strip) { background: #eaeaea; border-radius: 8px; }
+:global([data-theme="light"] .report-chart-container) { padding: 18px; }
+:global([data-theme="light"] .ops-table thead th) { background: #fafafa; border-color: #eaeaea; }
+:global([data-theme="light"] .ops-table tbody tr) { border-color: #eaeaea; }
+:global([data-theme="light"] .ops-table tbody tr:hover),
+:global([data-theme="light"] .ops-table tbody tr.row-selected) { background: #fafafa; }
 
-:global([data-theme="executive"]) .reports-page,
-:global([data-theme="contrast"]) .reports-page { gap: 16px; }
-:global([data-theme="executive"]) .report-type-strip,
-:global([data-theme="contrast"]) .report-type-strip { gap: 8px; }
-:global([data-theme="executive"]) .report-type-card,
-:global([data-theme="contrast"]) .report-type-card,
-:global([data-theme="executive"]) .report-chart-container,
-:global([data-theme="contrast"]) .report-chart-container,
-:global([data-theme="executive"]) .ops-table-wrap,
-:global([data-theme="contrast"]) .ops-table-wrap {
+:global([data-theme="executive"] .reports-page),
+:global([data-theme="contrast"] .reports-page) { gap: 16px; }
+:global([data-theme="executive"] .report-type-strip),
+:global([data-theme="contrast"] .report-type-strip) { gap: 8px; }
+:global([data-theme="executive"] .report-type-card),
+:global([data-theme="contrast"] .report-type-card),
+:global([data-theme="executive"] .report-chart-container),
+:global([data-theme="contrast"] .report-chart-container),
+:global([data-theme="executive"] .ops-table-wrap),
+:global([data-theme="contrast"] .ops-table-wrap) {
   border-color: #262626;
   border-radius: 8px;
   box-shadow: none;
 }
-:global([data-theme="executive"]) .report-type-card,
-:global([data-theme="contrast"]) .report-type-card { border-width: 1px; }
-:global([data-theme="executive"]) .report-type-card:hover,
-:global([data-theme="contrast"]) .report-type-card:hover {
+:global([data-theme="executive"] .report-type-card),
+:global([data-theme="contrast"] .report-type-card) { border-width: 1px; }
+:global([data-theme="executive"] .report-type-card:hover),
+:global([data-theme="contrast"] .report-type-card:hover) {
   border-color: #737373;
   transform: none;
   box-shadow: none;
 }
-:global([data-theme="executive"]) .report-type-card.active,
-:global([data-theme="contrast"]) .report-type-card.active {
+:global([data-theme="executive"] .report-type-card.active),
+:global([data-theme="contrast"] .report-type-card.active) {
   border-color: #fff;
   background: #111;
   box-shadow: inset 0 0 0 1px #fff;
 }
-:global([data-theme="executive"]) .report-type-icon,
-:global([data-theme="contrast"]) .report-type-icon { color: #fff; }
-:global([data-theme="executive"]) .report-preset-btn,
-:global([data-theme="contrast"]) .report-preset-btn {
+:global([data-theme="executive"] .report-type-icon),
+:global([data-theme="contrast"] .report-type-icon) { color: #fff; }
+:global([data-theme="executive"] .report-preset-btn),
+:global([data-theme="contrast"] .report-preset-btn) {
   background: #111;
   border-color: #262626;
   border-radius: 6px;
   color: #a3a3a3;
 }
-:global([data-theme="executive"]) .report-preset-btn:hover,
-:global([data-theme="contrast"]) .report-preset-btn:hover { border-color: #737373; color: #fff; }
-:global([data-theme="executive"]) .report-preset-btn.active,
-:global([data-theme="contrast"]) .report-preset-btn.active {
+:global([data-theme="executive"] .report-preset-btn:hover),
+:global([data-theme="contrast"] .report-preset-btn:hover) { border-color: #737373; color: #fff; }
+:global([data-theme="executive"] .report-preset-btn.active),
+:global([data-theme="contrast"] .report-preset-btn.active) {
   background: #fff;
   border-color: #fff;
   color: #111;
 }
-:global([data-theme="executive"]) .kpi-strip,
-:global([data-theme="contrast"]) .kpi-strip { background: #262626; border-radius: 8px; }
-:global([data-theme="executive"]) .ops-table thead th,
-:global([data-theme="contrast"]) .ops-table thead th { background: #111; border-color: #262626; }
-:global([data-theme="executive"]) .ops-table tbody tr,
-:global([data-theme="contrast"]) .ops-table tbody tr { border-color: #262626; }
-:global([data-theme="executive"]) .ops-table tbody tr:hover,
-:global([data-theme="executive"]) .ops-table tbody tr.row-selected,
-:global([data-theme="contrast"]) .ops-table tbody tr:hover,
-:global([data-theme="contrast"]) .ops-table tbody tr.row-selected { background: #171717; }
-:global([data-theme="executive"]) .reports-page :deep(.base-button--primary),
-:global([data-theme="contrast"]) .reports-page :deep(.base-button--primary) {
+:global([data-theme="executive"] .kpi-strip),
+:global([data-theme="contrast"] .kpi-strip) { background: #262626; border-radius: 8px; }
+:global([data-theme="executive"] .ops-table thead th),
+:global([data-theme="contrast"] .ops-table thead th) { background: #111; border-color: #262626; }
+:global([data-theme="executive"] .ops-table tbody tr),
+:global([data-theme="contrast"] .ops-table tbody tr) { border-color: #262626; }
+:global([data-theme="executive"] .ops-table tbody tr:hover),
+:global([data-theme="executive"] .ops-table tbody tr.row-selected),
+:global([data-theme="contrast"] .ops-table tbody tr:hover),
+:global([data-theme="contrast"] .ops-table tbody tr.row-selected) { background: #171717; }
+:global([data-theme="executive"] .reports-page .base-button--primary),
+:global([data-theme="contrast"] .reports-page .base-button--primary) {
   background: #fff;
   border-color: #fff;
   color: #111;
 }
-:global([data-theme="executive"]) .reports-page :deep(.base-button--primary:hover),
-:global([data-theme="contrast"]) .reports-page :deep(.base-button--primary:hover) {
+:global([data-theme="executive"] .reports-page .base-button--primary:hover),
+:global([data-theme="contrast"] .reports-page .base-button--primary:hover) {
   background: #e5e5e5;
   border-color: #e5e5e5;
 }
 
 /* Theme-safe report interactions. */
-:global([data-theme="light"]) .report-type-card:hover,
-:global([data-theme="light"]) .report-type-card.active,
-:global([data-theme="light"]) .report-preset-btn:hover {
+:global([data-theme="light"] .report-type-card:hover),
+:global([data-theme="light"] .report-type-card.active),
+:global([data-theme="light"] .report-preset-btn:hover) {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary-light) 70%, var(--glass-surface-strong));
   color: var(--text-strong);
 }
 
-:global([data-theme="executive"]) .report-type-card:hover,
-:global([data-theme="executive"]) .report-type-card.active,
-:global([data-theme="executive"]) .report-preset-btn:hover {
+:global([data-theme="executive"] .report-type-card:hover),
+:global([data-theme="executive"] .report-type-card.active),
+:global([data-theme="executive"] .report-preset-btn:hover) {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary-light) 72%, var(--glass-surface-strong));
   color: var(--text-strong);
 }
 
-:global([data-theme="contrast"]) .report-type-card:hover,
-:global([data-theme="contrast"]) .report-type-card.active,
-:global([data-theme="contrast"]) .report-preset-btn:hover {
+:global([data-theme="contrast"] .report-type-card:hover),
+:global([data-theme="contrast"] .report-type-card.active),
+:global([data-theme="contrast"] .report-preset-btn:hover) {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary-light) 72%, var(--glass-surface-strong));
   color: var(--text-strong);
 }
 
-:global([data-theme]) .report-type-icon {
+:global([data-theme] .report-type-icon) {
   color: var(--primary);
 }
 
-:global([data-theme]) .report-preset-btn.active,
-:global([data-theme]) .reports-page :deep(.base-button--primary) {
+:global([data-theme] .report-preset-btn.active),
+:global([data-theme] .reports-page .base-button--primary) {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--text-inverse);
   box-shadow: none;
 }
 
-:global([data-theme]) .reports-page :deep(.base-button--primary:hover) {
+:global([data-theme] .reports-page .base-button--primary:hover) {
   border-color: var(--primary-hover);
   background: var(--primary-hover);
   color: var(--text-inverse);
 }
 
-:global([data-theme]) .ops-table tbody tr:hover,
-:global([data-theme]) .ops-table tbody tr.row-selected {
+:global([data-theme] .ops-table tbody tr:hover),
+:global([data-theme] .ops-table tbody tr.row-selected) {
   background: var(--primary-light);
 }
 
