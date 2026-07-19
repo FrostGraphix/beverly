@@ -52,7 +52,7 @@
       <div class="alarm-severity">
         <span>Severity</span>
         <div class="alarm-segments" role="group" aria-label="Severity">
-          <button v-for="option in severityOptions" :key="option.value" type="button" :class="{ active: severity === option.value }" @click="setSeverity(option.value)">{{ option.label }}</button>
+          <BaseButton v-for="option in severityOptions" :key="option.value" size="sm" :class="{ active: severity === option.value }" @click="setSeverity(option.value)">{{ option.label }}</BaseButton>
         </div>
       </div>
       <label>
@@ -85,8 +85,8 @@
         </div>
         <div class="alarm-ledger-tools">
           <div class="alarm-view-switch" role="group" aria-label="Alarm result view">
-            <button type="button" :class="{ active: viewMode === 'cards' }" :aria-pressed="viewMode === 'cards'" @click="setViewMode('cards')">Cards</button>
-            <button type="button" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="setViewMode('table')">Table</button>
+            <BaseButton size="sm" :class="{ active: viewMode === 'cards' }" :aria-pressed="viewMode === 'cards'" @click="setViewMode('cards')">Cards</BaseButton>
+            <BaseButton size="sm" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="setViewMode('table')">Table</BaseButton>
           </div>
           <div class="alarm-source">
             <span>Source</span>
@@ -154,7 +154,7 @@
 
     <div v-if="selected" class="alarm-detail-backdrop" @click.self="selected = null">
       <aside class="alarm-detail" role="dialog" aria-modal="true" aria-labelledby="alarm-detail-title">
-        <header><div><span :class="['alarm-pill', selected.severity]">{{ selected.severity }}</span><h2 id="alarm-detail-title">{{ selected.alarmLabel }}</h2></div><button type="button" aria-label="Close alarm details" @click="selected = null">&times;</button></header>
+        <header><div><span :class="['alarm-pill', selected.severity]">{{ selected.severity }}</span><h2 id="alarm-detail-title">{{ selected.alarmLabel }}</h2></div><BaseButton variant="ghost" size="sm" aria-label="Close alarm details" @click="selected = null">&times;</BaseButton></header>
         <p>{{ selected.description }}</p>
         <section><h3>Meter identity</h3><dl class="alarm-detail-grid"><div><dt>Meter</dt><dd>{{ selected.meterId || "-" }}</dd></div><div><dt>Customer</dt><dd>{{ selected.customerName || selected.customerId || "-" }}</dd></div><div><dt>Station</dt><dd>{{ selected.stationId || "-" }}</dd></div><div><dt>Gateway</dt><dd>{{ selected.gatewayId || "-" }}</dd></div></dl></section>
         <section><h3>Interval evidence</h3><dl class="alarm-detail-grid"><div><dt>Power</dt><dd>{{ valueOrDash(selected.power) }}</dd></div><div><dt>Demand</dt><dd>{{ valueOrDash(selected.intervalDemand) }}</dd></div><div><dt>Usage</dt><dd>{{ valueOrDash(selected.usage1) }}</dd></div><div><dt>Credit</dt><dd>{{ valueOrDash(selected.remain1) }}</dd></div><div><dt>Currents A/B/C</dt><dd>{{ joinedValues(selected.currentA, selected.currentB, selected.currentC) }}</dd></div><div><dt>Voltages A/B/C</dt><dd>{{ joinedValues(selected.voltageA, selected.voltageB, selected.voltageC) }}</dd></div></dl></section>

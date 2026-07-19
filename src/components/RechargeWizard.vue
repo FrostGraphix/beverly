@@ -13,16 +13,15 @@
           <h2 id="recharge-wizard-title" class="rw-title">Recharge meter</h2>
           <div class="rw-header-actions">
             <span class="rw-step-counter">Step {{ currentStep }} of 4</span>
-            <button
+            <BaseButton
               class="rw-close"
-              type="button"
               aria-label="Close recharge wizard"
               @click="$emit('close')"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6 6 18M6 6l12 12"/>
               </svg>
-            </button>
+            </BaseButton>
           </div>
         </div>
 
@@ -132,23 +131,21 @@
 
             <!-- By amount / By units toggle -->
             <div class="rw-mode-toggle" role="group" aria-label="Purchase mode">
-              <button
+              <BaseButton
                 class="rw-mode-btn"
                 :class="{ active: purchaseMode === 'paid' }"
-                type="button"
                 @click="purchaseMode = 'paid'"
-              >By amount</button>
-              <button
+              >By amount</BaseButton>
+              <BaseButton
                 class="rw-mode-btn"
                 :class="{ active: purchaseMode === 'unit' }"
-                type="button"
                 @click="purchaseMode = 'unit'"
-              >By units</button>
+              >By units</BaseButton>
             </div>
 
             <!-- Amount / units input -->
             <div class="rw-amount-input-wrap" :class="{ focused: amountFocused }">
-              <input
+              <BaseInput
                 v-if="purchaseMode === 'paid'"
                 v-model="form.amount"
                 class="rw-amount-input"
@@ -161,7 +158,7 @@
                 @focus="amountFocused = true"
                 @blur="amountFocused = false"
               />
-              <input
+              <BaseInput
                 v-else
                 v-model="form.totalUnit"
                 class="rw-amount-input"
@@ -179,14 +176,13 @@
 
             <!-- Quick-pick chips (only in paid mode) -->
             <div v-if="purchaseMode === 'paid'" class="rw-quick-chips" aria-label="Quick amounts">
-              <button
+              <BaseButton
                 v-for="amt in quickAmounts"
                 :key="amt"
                 class="rw-chip"
                 :class="{ active: form.amount === String(amt) }"
-                type="button"
                 @click="form.amount = String(amt)"
-              >₦{{ amt.toLocaleString() }}</button>
+              >₦{{ amt.toLocaleString() }}</BaseButton>
             </div>
 
             <!-- VAT breakdown card -->
@@ -243,9 +239,9 @@
             <label class="rw-field-label">
               <span class="rw-field-caption">Payment method</span>
               <div class="rw-select-wrap">
-                <select v-model="form.paymentMethod" class="rw-select">
+                <BaseSelect v-model="form.paymentMethod" class="rw-select">
                   <option v-for="m in paymentMethods" :key="m" :value="m">{{ m }}</option>
-                </select>
+                </BaseSelect>
                 <svg class="rw-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
@@ -255,7 +251,7 @@
             <!-- Auth password -->
             <label class="rw-field-label">
               <span class="rw-field-caption">Authorization password</span>
-              <input
+              <BaseInput
                 v-model="form.authorizationPassword"
                 class="rw-text-input"
                 type="password"
@@ -279,9 +275,8 @@
 
             <!-- Copy + Send to meter -->
             <div class="rw-token-actions">
-              <button
+              <BaseButton
                 class="rw-action-btn"
-                type="button"
                 :class="{ 'rw-action-btn--success': tokenCopied }"
                 @click="copyToken"
               >
@@ -289,10 +284,9 @@
                   <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                 </svg>
                 {{ tokenCopied ? 'Copied!' : 'Copy' }}
-              </button>
-              <button
+              </BaseButton>
+              <BaseButton
                 class="rw-action-btn"
-                type="button"
                 :disabled="tokenSendLoading || tokenSentStatus === 'success'"
                 :class="{
                   'rw-action-btn--loading': tokenSendLoading,
@@ -311,16 +305,16 @@
                   <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
                 </svg>
                 {{ sendBtnLabel }}
-              </button>
+              </BaseButton>
             </div>
 
             <!-- Download receipt -->
-            <button class="rw-download-btn" type="button" @click="downloadReceipt">
+            <BaseButton class="rw-download-btn" @click="downloadReceipt">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
               Download Receipt
-            </button>
+            </BaseButton>
           </div>
 
         </transition>
@@ -329,28 +323,25 @@
       <!-- ── FOOTER ──────────────────────────────────────────── -->
       <footer class="rw-footer">
         <!-- Back: hidden on step 2 when meter was preselected, and on step 1 / step 4 -->
-        <button
+        <BaseButton
           v-if="showBackButton"
           class="rw-btn rw-btn--ghost"
-          type="button"
           @click="goBack"
-        >Back</button>
+        >Back</BaseButton>
         <span v-else/>
 
         <!-- Continue (steps 1–2) -->
-        <button
+        <BaseButton
           v-if="currentStep < 3"
           class="rw-btn rw-btn--primary"
-          type="button"
           :disabled="isNextDisabled"
           @click="goNext"
-        >Continue</button>
+        >Continue</BaseButton>
 
         <!-- Confirm & generate (step 3) -->
-        <button
+        <BaseButton
           v-else-if="currentStep === 3"
           class="rw-btn rw-btn--primary"
-          type="button"
           :disabled="tokenLoading || isStep3Invalid"
           @click="confirmAndGenerate"
         >
@@ -358,15 +349,14 @@
             <circle cx="12" cy="12" r="10" stroke-dasharray="30" stroke-dashoffset="10"/>
           </svg>
           {{ tokenLoading ? 'Generating…' : 'Confirm and generate' }}
-        </button>
+        </BaseButton>
 
         <!-- Done (step 4) -->
-        <button
+        <BaseButton
           v-else-if="currentStep === 4"
           class="rw-btn rw-btn--primary"
-          type="button"
           @click="$emit('done')"
-        >Done</button>
+        >Done</BaseButton>
       </footer>
     </div>
 
@@ -394,17 +384,20 @@
           <strong>{{ popup.title }}</strong>
           <span>{{ popup.message }}</span>
         </div>
-        <button class="rw-popup-close" type="button" aria-label="Dismiss" @click="popup.visible = false">
+        <BaseButton class="rw-popup-close" aria-label="Dismiss" @click="popup.visible = false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
-        </button>
+        </BaseButton>
       </div>
     </transition>
   </div>
 </template>
 
 <script>
+import BaseButton from './base/BaseButton.vue';
+import BaseInput from './base/BaseInput.vue';
+import BaseSelect from './base/BaseSelect.vue';
 import { calculateVendingVatBreakdown, VENDING_VAT_BASIS_POINTS } from '../../packages/tokens/index.js';
 import { postApi, liveWritesAllowed, getCookie } from '../services/api.js';
 import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf } from '../services/receipt-tools.mjs';
@@ -419,6 +412,7 @@ const QUICK_AMOUNTS = [1000, 2000, 5000, 10000];
 
 export default {
   name: 'RechargeWizard',
+  components: { BaseButton, BaseInput, BaseSelect },
 
   props: {
     route: { type: Object, required: true },

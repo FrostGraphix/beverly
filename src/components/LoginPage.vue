@@ -228,7 +228,9 @@ export default {
       const transportFailure = ["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT"].includes(String(error?.code || ""))
         || /network error|timeout/i.test(String(error?.message || ""));
       if (transportFailure) return "Beverly is unreachable. Check your connection, then retry.";
-      if (status === 401 || status === 403) return "Email or password is incorrect.";
+      if (status === 401 || status === 403 || (status === 400 && /invalid.*credentials/i.test(String(error?.message || "")))) {
+        return "Email or password is incorrect.";
+      }
       if (status === 429) return "Too many attempts. Wait briefly, then retry.";
       if (status >= 500) return "The sign-in service is unavailable. Try again shortly.";
       return error?.message || "Check your details, then retry.";
