@@ -31,6 +31,10 @@ for (const file of [
   assert(source.includes("background:#fff") || source.includes("background: #fff"), `${file} must use white receipts.`);
   assert(source.includes("#16a34a"), `${file} must use Beverly green accents.`);
   assert(source.includes("#eef7f0"), `${file} must use the shared preview canvas.`);
+  assert(source.includes("canonicalReceiptHtml(canonicalReceipt(model))"), `${file} must use the CRM receipt renderer.`);
+  assert(source.includes("data-pdf>PDF Export"), `${file} must expose PDF export.`);
+  assert(source.includes('class="brm-btn danger" data-close>Cancel'), `${file} must use the red cancel action.`);
+  assert(!source.includes("data-print>Print"), `${file} must not expose browser print.`);
 }
 
 console.log("admin-table-receipt-contract ok");

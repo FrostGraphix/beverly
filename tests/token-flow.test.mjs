@@ -6,6 +6,7 @@ import {
   buildMeterKeyUpdatePayload,
   calculateTokenAmount,
   calculateTokenUnits,
+  calculateVendingVatBreakdown,
   extractChangeMeterKeyTokens,
   findTariff,
   guardedPreviewError,
@@ -34,10 +35,13 @@ assert.equal(parseTariffUnitPrice("0~999999~0"), 0);
 assert.deepEqual(findTariff([tariff], "t1"), tariff);
 assert.equal(findTariff([tariff], "missing"), null);
 
-assert.equal(calculateTokenUnits(350, tariff), "1.0");
-assert.equal(calculateTokenUnits(500, bandTariff), "1.4");
-assert.equal(calculateTokenUnits(2000, tariff), "5.7");
-assert.equal(calculateTokenAmount(1.4, tariff), "490");
+// VAT-inclusive: customer pays 2000 total; VAT is extracted in minor units.
+assert.deepEqual(calculateVendingVatBreakdown(2000), { grossAmount: 2000, energyAmount: 1860.47, vatAmount: 139.53, vatRateBasisPoints: 750 });
+assert.equal(calculateTokenUnits(350, tariff), "0.9302");
+assert.equal(calculateTokenUnits(500, bandTariff), "1.3289");
+assert.equal(calculateTokenUnits(1000, tariff), "2.6578");
+assert.equal(calculateTokenUnits(2000, tariff), "5.3156");
+assert.equal(calculateTokenAmount(1.4, tariff), "526.75");
 
 const form = {
   customerId: "123",

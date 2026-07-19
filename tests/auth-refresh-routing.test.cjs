@@ -69,6 +69,9 @@ async function main() {
         this.statusCode = code;
         return this;
       },
+      setHeader(name, value) {
+        res.setHeader(name, value);
+      },
       json(body) {
         res.statusCode = this.statusCode;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -93,8 +96,7 @@ async function main() {
       for (const path of ["/api/auth/refresh", "/API/auth/refresh", "/api/API/auth/refresh", "/api/reference.js?__pathname=/api/auth/refresh"]) {
         const res = await request(server.address().port, path);
         assert.strictEqual(res.status, 400, `${path} must fail locally`);
-        assert.strictEqual(res.body._proxy.source, "auth-refresh", `${path} must not proxy live`);
-        assert.strictEqual(res.body._proxy.pathname, "/api/auth/refresh");
+        assert.strictEqual(res.body.reason, "refreshToken required", `${path} must not proxy live`);
       }
     });
   } finally {

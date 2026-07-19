@@ -20,7 +20,7 @@ export function timeOnly(iso: string | null | undefined): string {
 
 export function kwh(units: number | null | undefined): string {
     if (units === null || units === undefined) return '—';
-    return `${units.toFixed(2)} kWh`;
+    return `${units.toFixed(4)} kWh`;
 }
 
 export function shortId(id: string | null | undefined, prefix = ''): string {

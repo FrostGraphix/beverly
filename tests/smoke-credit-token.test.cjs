@@ -17,7 +17,7 @@ const payload = buildSmokeCreditTokenPayload(account, {
 });
 
 assert.equal(payload.isVendByTotalPaid, true);
-assert.equal(payload.amount, 35);
+assert.equal(payload.amount, 37.63);
 assert.equal(payload.totalUnit, 0.1);
 assert.equal(payload.customerId, "47005377107");
 assert.equal(payload.meterId, "47005377107");

@@ -12,8 +12,9 @@ const vending = read('backend/wallet/src/services/vending.ts');
 const pkg = JSON.parse(read('package.json'));
 
 assert.match(receipts, /export function downloadReceipt\(model: ReceiptModel\): void/);
-assert.match(receipts, /new Blob\(\[receiptHtml\(model\)\]/);
-assert.match(receipts, /anchor\.download = `Beverly_\$\{safeId\}\.html`/);
+assert.match(receipts, /downloadCanonicalReceiptPdf\(canonicalReceipt\(model\)\)/);
+assert.match(receipts, /data-pdf>PDF Export/);
+assert.match(receipts, /class="brm-btn danger" data-close>Cancel/);
 
 assert.match(vendView, /downloadReceipt, printReceipt, purchaseReceipt, viewReceipt/);
 assert.match(vendView, /function downloadResultReceipt\(\)/);
@@ -25,6 +26,7 @@ assert.match(vendView, /remoteState\.replace\(/);
 assert.match(vendView, /\/api\/v1\/vendor\/vend\/\$\{orderId\}\/remote-send/);
 assert.match(vendView, /Token generated successfully/);
 assert.match(vendView, /Download receipt/);
+assert.match(vendView, /bw-recharge-summary/);
 assert.match(vendView, /Remote send/);
 assert.match(vendView, /Remote send delivered/);
 assert.match(vendView, /Remote send needs manual entry/);

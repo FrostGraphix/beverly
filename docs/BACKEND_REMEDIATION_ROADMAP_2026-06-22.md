@@ -833,7 +833,7 @@ Scenarios:
 5. Customer direct payment.
 6. Remote-send delivery.
 7. Three-phase meter vending.
-8. VAT-inclusive receipt generation.
+8. Net-plus-VAT receipt generation.
 9. Failed vend hold release.
 10. Unknown delivery reconciliation.
 11. Refund approval and reversal.

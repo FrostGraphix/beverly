@@ -392,31 +392,40 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
   if (station) filters.splice(1, 0, `station_id=eq.${encodeURIComponent(station)}`);
   const query = `/daily_meter_readings?${filters.join("&")}`;
 
-  async function fetchRange(offset) {
+  async function fetchRange(offset, withCount = false) {
     const rangeEnd = offset + pageSize - 1;
     const { response, body } = await supabase.restRequestWithResponse(query, {
       headers: {
-        Prefer: "count=exact",
+        ...(withCount ? { Prefer: "count=planned" } : {}),
         Range: `${offset}-${rangeEnd}`,
       },
     });
     const pageRows = Array.isArray(body) ? body : [];
     return {
       rows: pageRows,
-      total: totalFromContentRange(response.headers.get("content-range"), offset + pageRows.length),
+      total: withCount ? totalFromContentRange(response.headers.get("content-range"), null) : null,
     };
   }
 
-  const firstPage = await fetchRange(0);
+  const firstPage = await fetchRange(0, true);
   const rows = [...firstPage.rows];
   const total = firstPage.total;
   const offsets = [];
-  for (let offset = pageSize; offset < total; offset += pageSize) offsets.push(offset);
+  for (let offset = pageSize; offset < (total ?? pageSize); offset += pageSize) offsets.push(offset);
 
   const concurrency = 6;
+  let lastPage = firstPage;
   for (let index = 0; index < offsets.length; index += concurrency) {
     const pageResults = await Promise.all(offsets.slice(index, index + concurrency).map((offset) => fetchRange(offset)));
     for (const result of pageResults) rows.push(...result.rows);
+    lastPage = pageResults[pageResults.length - 1] || lastPage;
+  }
+
+  let nextOffset = offsets.length ? offsets[offsets.length - 1] + pageSize : pageSize;
+  while (lastPage.rows.length === pageSize) {
+    lastPage = await fetchRange(nextOffset);
+    rows.push(...lastPage.rows);
+    nextOffset += pageSize;
   }
 
   return rows.map((row) => ({
@@ -540,15 +549,15 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
   ];
   const query = `/meter_consumption_aggregates?${filters.join("&")}`;
 
-  // count=exact runs a full COUNT over the filtered set — only worth paying once
-  // (on the first page) to learn how many pages to fetch. Subsequent pages skip it.
+  // Planner counts avoid full-table count timeouts. Pagination still continues
+  // through a short page, so stale estimates cannot omit rows.
   async function fetchRange(offset, withCount) {
     const headers = { Range: `${offset}-${offset + pageSize - 1}` };
-    if (withCount) headers.Prefer = "count=exact";
+    if (withCount) headers.Prefer = "count=planned";
     const { response, body } = await supabase.restRequestWithResponse(query, { headers });
     const rows = Array.isArray(body) ? body : [];
     const total = withCount
-      ? totalFromContentRange(response.headers.get("content-range"), offset + rows.length)
+      ? totalFromContentRange(response.headers.get("content-range"), null)
       : null;
     return { rows, total: Number.isFinite(total) ? total : null };
   }
@@ -557,6 +566,8 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
   const rows = [...first.rows];
   const total = first.total;
 
+  let lastPage = first;
+  let nextOffset = pageSize;
   if (total !== null && total > pageSize) {
     const offsets = [];
     for (let o = pageSize; o < total; o += pageSize) offsets.push(o);
@@ -564,16 +575,25 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
     for (let i = 0; i < offsets.length; i += concurrency) {
       const pages = await Promise.all(offsets.slice(i, i + concurrency).map((o) => fetchRange(o, false)));
       for (const p of pages) rows.push(...p.rows);
+      lastPage = pages[pages.length - 1] || lastPage;
     }
+    nextOffset = offsets[offsets.length - 1] + pageSize;
   } else if (total === null && first.rows.length === pageSize) {
     let o = pageSize;
     while (true) {
       const page = await fetchRange(o, false);
       if (!page.rows.length) break;
       rows.push(...page.rows);
+      lastPage = page;
       o += pageSize;
       if (page.rows.length < pageSize) break;
     }
+    nextOffset = o;
+  }
+  while (lastPage.rows.length === pageSize) {
+    lastPage = await fetchRange(nextOffset, false);
+    rows.push(...lastPage.rows);
+    nextOffset += pageSize;
   }
   return rows;
 }
@@ -1011,6 +1031,117 @@ function buildAnalyticsFromAggregates({
   };
 }
 
+async function readStationAnalyticsSummary(params) {
+  try {
+    const { body } = await supabase.restRequestWithResponse("/rpc/get_station_consumption_analytics", {
+      method: "POST",
+      body: params,
+    });
+    return body && Array.isArray(body.stations) && Array.isArray(body.temporal) ? body : null;
+  } catch (err) {
+    const message = String(err?.message || err || "");
+    if (/get_station_consumption_analytics|schema cache|does not exist/i.test(message)) return null;
+    throw err;
+  }
+}
+
+function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, granularity, requestedGranularity, windowDays }) {
+  const growth = (current, prior) => prior > 0 ? round3(((current - prior) / prior) * 100) : (current > 0 ? null : 0);
+  const rollups = new Map((summary.rollups || []).map((row) => [normalizeStation(row.station_id), row]));
+  const stationRows = summary.stations || [];
+  const consumedKwh = round3(stationRows.reduce((sum, row) => sum + Number(row.total_kwh || 0), 0));
+  const priorKwh = round3(stationRows.reduce((sum, row) => sum + Number(row.prior_kwh || 0), 0));
+  let latestOdometerKwh = 0;
+  let metersWithLatest = 0;
+
+  const stations = stationRows.map((row) => {
+    const station = normalizeStation(row.station_id);
+    const totalKwh = round3(row.total_kwh);
+    const stationPrior = round3(row.prior_kwh);
+    const meterCount = Number(row.meter_count) || 0;
+    const readingCount = Number(row.reading_count) || 0;
+    const rollup = rollups.get(station) || {};
+    const stationMeterRead = round3(rollup.latest_odometer_kwh);
+    const stationLatestMeters = Number(rollup.meters_with_latest) || 0;
+    latestOdometerKwh += stationMeterRead;
+    metersWithLatest += stationLatestMeters;
+    return {
+      station,
+      totalKwh,
+      priorKwh: stationPrior,
+      growthPct: growth(totalKwh, stationPrior),
+      meterCount,
+      activeMeterCount: Number(row.active_meter_count) || 0,
+      avgPerMeter: meterCount ? round3(totalKwh / meterCount) : 0,
+      avgDailyKwh: readingCount ? round3(totalKwh / readingCount) : 0,
+      readingDays: readingCount,
+      peakDay: { date: null, kwh: 0 },
+      share: consumedKwh > 0 ? round3((totalKwh / consumedKwh) * 100) : 0,
+      latestOdometerKwh: stationMeterRead,
+      metersWithLatest: stationLatestMeters,
+      latestReading: normalizeDate(rollup.latest_reading),
+    };
+  });
+
+  const byPeriod = new Map();
+  const byPeriodStation = new Map();
+  for (const row of summary.temporal || []) {
+    const label = aggPeriodKey(row.period_start, granularity);
+    const station = normalizeStation(row.station_id);
+    const value = Number(row.kwh_total) || 0;
+    byPeriod.set(label, (byPeriod.get(label) || 0) + value);
+    if (!byPeriodStation.has(label)) byPeriodStation.set(label, new Map());
+    byPeriodStation.get(label).set(station, value);
+  }
+  const labels = Array.from(byPeriod.keys()).sort((left, right) => left.localeCompare(right));
+  const seriesByStation = Object.fromEntries(stations.map((station) => [
+    station.station,
+    labels.map((label) => round3(byPeriodStation.get(label)?.get(station.station) || 0)),
+  ]));
+  const topMeters = (summary.topMeters || []).map((row) => ({
+    meterId: row.meter_id,
+    station: normalizeStation(row.station_id),
+    customerId: row.customer_id || "",
+    customerName: row.customer_name || "",
+    totalKwh: round3(row.total_kwh),
+    activeDays: Number(row.active_periods) || 0,
+    avgDailyKwh: Number(row.active_periods) ? round3(Number(row.total_kwh) / Number(row.active_periods)) : 0,
+  }));
+  const readingDays = labels.filter((label) => Number(byPeriod.get(label)) > 0).length;
+
+  return {
+    status: 200,
+    body: {
+      code: 0, msg: "success", reason: "success",
+      data: {
+        range: {
+          from, to, priorFrom, priorTo, periodDays: windowDays, granularity,
+          requestedGranularity,
+          granularityCoarsened: granularity !== requestedGranularity,
+        },
+        totals: {
+          consumedKwh, priorKwh, growthPct: growth(consumedKwh, priorKwh),
+          meterCount: stations.reduce((sum, row) => sum + row.meterCount, 0),
+          activeMeterCount: stations.reduce((sum, row) => sum + row.activeMeterCount, 0),
+          avgPerMeter: stations.reduce((sum, row) => sum + row.meterCount, 0)
+            ? round3(consumedKwh / stations.reduce((sum, row) => sum + row.meterCount, 0)) : 0,
+          avgDailyKwh: readingDays ? round3(consumedKwh / readingDays) : 0,
+          readingDays, stationCount: stations.length,
+          sourceRows: Number(summary.sourceRows) || 0,
+          source: "aggregated",
+          latestOdometerKwh: round3(latestOdometerKwh),
+          metersWithLatest,
+        },
+        stations,
+        temporal: { labels, kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)), seriesByStation },
+        seasonality: { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) },
+        topMeters,
+      },
+      _proxy: { source: "supabase-station-analytics-rpc", pathname: "/api/local/consumption/station-analytics" },
+    },
+  };
+}
+
 /**
  * Rich station-consumption analytics for the Station Consumption report.
  * Computes (server-side, from pre-aggregated meter_consumption_aggregates or
@@ -1045,6 +1176,24 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   // them for partial custom ranges would over-count outside the user's filter.
   const queryGranularity = supportsExactAggregateRange(chartGranularity, from, to) ? chartGranularity : "daily";
   const granularityCoarsened = chartGranularity !== granularity;
+
+  const summary = await readStationAnalyticsSummary({
+    p_from: from,
+    p_to: to,
+    p_prior_from: priorFrom,
+    p_prior_to: priorTo,
+    p_station_id: stationId || null,
+    p_period_type: aggPeriodType(queryGranularity),
+    p_top_limit: topLimit,
+  });
+  if (summary) {
+    return buildAnalyticsFromSummary({
+      summary, from, to, priorFrom, priorTo,
+      granularity: chartGranularity,
+      requestedGranularity: granularity,
+      windowDays,
+    });
+  }
 
   // ── Try aggregate table path ──────────────────────────────────────────────
   const DEFAULT_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];

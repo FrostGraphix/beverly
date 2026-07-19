@@ -139,7 +139,7 @@ export function buildSuspectLedger({ accounts, deltaMap, tokenRecords, tariffMap
 
     const totalConsumed = parseFloat(deltas.reduce((sum, delta) => sum + (Number(delta.delta) || 0), 0).toFixed(3));
     const totalPaid = parseFloat(recharges.reduce((sum, record) => sum + (Number(record.totalPaid) || 0), 0).toFixed(2));
-    const totalUnits = parseFloat(recharges.reduce((sum, record) => sum + (Number(record.totalUnit) || 0), 0).toFixed(3));
+    const totalUnits = parseFloat(recharges.reduce((sum, record) => sum + (Number(record.totalUnit) || 0), 0).toFixed(4));
     const expectedPaid = parseFloat((totalConsumed * effectivePrice).toFixed(2));
     const { netGap, shortfallGap, creditGap } = splitRevenueGap(expectedPaid - totalPaid);
 

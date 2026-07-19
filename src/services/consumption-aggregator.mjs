@@ -220,7 +220,7 @@ export function groupRevenueByStation(records, granularity = "monthly") {
     }
     grouped[key].count++;
     grouped[key].totalPaid = parseFloat((grouped[key].totalPaid + (Number(record.totalPaid) || 0)).toFixed(2));
-    grouped[key].totalUnits = parseFloat((grouped[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(3));
+    grouped[key].totalUnits = parseFloat((grouped[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(4));
   }
   return grouped;
 }
@@ -239,7 +239,7 @@ export function buildCustomerRechargeHistory(records, granularity = "monthly") {
     }
     result[key].count++;
     result[key].totalPaid = parseFloat((result[key].totalPaid + (Number(record.totalPaid) || 0)).toFixed(2));
-    result[key].totalUnits = parseFloat((result[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(3));
+    result[key].totalUnits = parseFloat((result[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(4));
     result[key].tariffs.add(record.tariffId || "");
   }
 
@@ -326,10 +326,10 @@ export function computeSiteKpis(records, stationId = null) {
   }
 
   return {
-    totalKwh: parseFloat(totalUnits.toFixed(3)),
+    totalKwh: parseFloat(totalUnits.toFixed(4)),
     totalRevenue: parseFloat(totalRevenue.toFixed(2)),
     rechargeCount,
-    avgKwhPerRecharge: rechargeCount > 0 ? parseFloat((totalUnits / rechargeCount).toFixed(3)) : 0,
+    avgKwhPerRecharge: rechargeCount > 0 ? parseFloat((totalUnits / rechargeCount).toFixed(4)) : 0,
   };
 }
 
@@ -351,7 +351,7 @@ export function buildStationComparison(records) {
       };
     }
     const station = byStation[stationId];
-    station.totalKwh = parseFloat((station.totalKwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    station.totalKwh = parseFloat((station.totalKwh + (Number(record.totalUnit) || 0)).toFixed(4));
     station.totalRevenue = parseFloat((station.totalRevenue + (Number(record.totalPaid) || 0)).toFixed(2));
     station.rechargeCount++;
 
@@ -359,7 +359,7 @@ export function buildStationComparison(records) {
     if (!station.byTariff[tariffId]) {
       station.byTariff[tariffId] = { tariff: tariffId, totalKwh: 0, totalRevenue: 0, count: 0 };
     }
-    station.byTariff[tariffId].totalKwh = parseFloat((station.byTariff[tariffId].totalKwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    station.byTariff[tariffId].totalKwh = parseFloat((station.byTariff[tariffId].totalKwh + (Number(record.totalUnit) || 0)).toFixed(4));
     station.byTariff[tariffId].totalRevenue = parseFloat((station.byTariff[tariffId].totalRevenue + (Number(record.totalPaid) || 0)).toFixed(2));
     station.byTariff[tariffId].count++;
   }
@@ -416,7 +416,7 @@ export function buildTemporalSeries(records, granularity = "monthly", stationId 
   for (const record of filteredRecords) {
     const key = toPeriodKey(record.createDate, granularity);
     if (!grouped[key]) grouped[key] = { kwh: 0, revenue: 0, count: 0 };
-    grouped[key].kwh = parseFloat((grouped[key].kwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    grouped[key].kwh = parseFloat((grouped[key].kwh + (Number(record.totalUnit) || 0)).toFixed(4));
     grouped[key].revenue = parseFloat((grouped[key].revenue + (Number(record.totalPaid) || 0)).toFixed(2));
     grouped[key].count++;
   }

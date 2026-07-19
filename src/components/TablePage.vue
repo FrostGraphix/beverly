@@ -5,6 +5,12 @@
         <span>{{ errorMessage }}</span>
         <BaseButton variant="primary" @click="load">Refresh</BaseButton>
       </div>
+      <section v-if="managementStatCards.length" class="management-stat-grid" aria-label="Management summary">
+        <article v-for="card in managementStatCards" :key="card.label" class="management-stat-card" :class="`tone-${card.tone}`">
+          <span>{{ card.label }}</span>
+          <strong>{{ card.value }}</strong>
+        </article>
+      </section>
     </template>
     <template #toolbar>
       <div class="filter-toolbar ddm-toolbar" data-testid="table-apply-controls" @click="closeSortDirectionMenu">
@@ -56,8 +62,11 @@
           </template>
         </div>
 
-        <div class="ddm-toolbar-group ddm-actions-group">
+        <div class="ddm-toolbar-group ddm-reset-group">
           <BaseButton v-if="showResetButton" data-testid="table-reset-controls" @click="resetControls">Reset</BaseButton>
+        </div>
+
+        <div class="ddm-toolbar-group ddm-actions-group">
           <BaseButton
             v-for="action in toolbarActions"
             :key="action"
@@ -325,7 +334,9 @@ export default {
       exportRange: "all",
       exportLoading: false,
       exportError: "",
-      loadToken: 0
+      loadToken: 0,
+      managementStats: null,
+      managementStatsKey: ""
     };
   },
   computed: {
@@ -363,6 +374,20 @@ export default {
     },
     supportsMeterPhaseFilter() {
       return isCreditTokenRoute(this.route);
+    },
+    managementStatCards() {
+      const hash = String(this.route.hash || "");
+      if (hash === "#/management/customer") return [
+        { label: "Total Customers", value: this.managementStats?.totalCustomers ?? this.total, tone: "primary" },
+        { label: "Stations", value: this.managementStats?.stations ?? "-", tone: "neutral" }
+      ];
+      if (hash === "#/management/account") return [
+        { label: "Total Meters", value: this.managementStats?.totalMeters ?? this.total, tone: "primary" },
+        { label: "Active Meters", value: this.managementStats?.activeMeters ?? "-", tone: "success" },
+        { label: "Inactive Meters", value: this.managementStats?.inactiveMeters ?? "-", tone: "danger" },
+        { label: "Stations", value: this.managementStats?.stations ?? "-", tone: "neutral" }
+      ];
+      return [];
     },
     serverPaginated() {
       return routeUsesServerPagination(this.route);
@@ -476,6 +501,7 @@ export default {
         this.allRows = table.rows;
         this.total = table.total;
         this.applyControls({ reloadServer: false });
+        this.loadManagementStats();
       } catch (error) {
         if (token !== this.loadToken) return;
         this.allRows = [];
@@ -512,6 +538,41 @@ export default {
       this.currentPage = Math.min(this.currentPage, totalPages(this.displayedTotal, this.pageSize));
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
+    },
+    async loadManagementStats() {
+      const hash = String(this.route.hash || "");
+      if (!["#/management/customer", "#/management/account"].includes(hash)) return;
+      const key = `${hash}|${this.selectedSite}`;
+      if (this.managementStatsKey === key) return;
+      this.managementStatsKey = key;
+      this.managementStats = null;
+      const stationRoute = { hash: "#/admin/station", title: "Station", apis: ["/api/station/read"], columns: ["id"] };
+      try {
+        const stationTable = await fetchTableData(stationRoute, { exportAll: true });
+        if (key !== this.managementStatsKey) return;
+        if (hash === "#/management/customer") {
+          this.managementStats = { totalCustomers: this.total, stations: stationTable.total };
+          return;
+        }
+        const meterRoute = { hash: "#/admin/meter", title: "Meter", apis: ["/api/meter/read"], columns: ["meterId", "status", "stationId"] };
+        const meterTable = await fetchTableData(meterRoute, { exportAll: true, bulkRead: true, siteId: this.selectedSite });
+        if (key !== this.managementStatsKey) return;
+        const activeValues = new Set(["true", "1", "active", "online", "enabled", "success"]);
+        const inactiveValues = new Set(["false", "0", "inactive", "offline", "disabled", "failed", "failure"]);
+        const statuses = meterTable.rows.map((row) => String(row.status ?? row.isActive ?? row.active ?? row.isOnline ?? "").toLowerCase());
+        this.managementStats = {
+          totalMeters: meterTable.total,
+          activeMeters: statuses.filter((status) => activeValues.has(status)).length,
+          inactiveMeters: statuses.filter((status) => inactiveValues.has(status)).length,
+          stations: stationTable.total
+        };
+      } catch {
+        if (key === this.managementStatsKey) {
+          this.managementStats = hash === "#/management/customer"
+            ? { totalCustomers: this.total, stations: "-" }
+            : { totalMeters: this.total, activeMeters: "-", inactiveMeters: "-", stations: "-" };
+        }
+      }
     },
     filterRowsByPhase(rows) {
       if (this.meterPhaseFilter === "all") return rows;
@@ -748,6 +809,42 @@ export default {
 </script>
 
 <style scoped>
+.management-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.management-stat-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.management-stat-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-stat-card strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 24px;
+}
+
+.management-stat-card.tone-primary { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-color)); }
+.management-stat-card.tone-primary strong,
+.management-stat-card.tone-success strong { color: var(--success); }
+.management-stat-card.tone-danger strong { color: var(--danger); }
+
 .table-scroll table {
   table-layout: auto;
   width: max-content;
@@ -901,7 +998,7 @@ export default {
 /* Custom Toolbar Grid Layout */
 .ddm-toolbar {
   display: grid !important;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 20px;
   align-items: center;
   flex-wrap: nowrap;
@@ -1090,7 +1187,7 @@ export default {
 }
 
 @media(max-width:900px){
-  .ddm-toolbar { grid-template-columns: auto 1fr; gap: 10px; }
+  .ddm-toolbar { grid-template-columns: auto auto 1fr; gap: 10px; }
   .ddm-search-group {
     grid-column: 1 / -1;
     display: grid;
@@ -1108,8 +1205,9 @@ export default {
     flex-wrap: nowrap;
     justify-content: flex-start;
   }
+  .ddm-reset-group { grid-column: 2; }
   .ddm-actions-group {
-    grid-column: 2;
+    grid-column: 3;
     justify-content: flex-end;
     width: auto;
     flex-wrap: nowrap;
@@ -1117,22 +1215,74 @@ export default {
 }
 
 @media (max-width: 560px) {
-  .ddm-search-group {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  .management-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 16px 14px;
+  }
+
+  .management-stat-card { padding: 12px; }
+  .management-stat-card strong { font-size: 20px; }
+  .ddm-toolbar {
+    grid-template-columns: minmax(0, 1fr) 52px minmax(92px, auto);
     gap: 8px;
   }
-  .ddm-sort-group { grid-column: 1; }
+  .ddm-search-group {
+    display: contents;
+  }
+  .ddm-search-group .sort-select:first-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .ddm-search-group:has(.sort-select + .sort-select) .sort-select:first-child {
+    grid-column: 1 / 2;
+  }
+  .ddm-search-group .sort-select + .sort-select {
+    grid-column: 2 / -1;
+    grid-row: 1;
+  }
+  .ddm-search-group .search-input {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+  .ddm-search-group:not(:has(.sort-select)) .search-input { grid-row: 1; }
+  .ddm-sort-group {
+    grid-column: 2;
+    grid-row: 2;
+    width: 52px;
+  }
+  .ddm-sort-group:has(.sort-select) {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    width: auto;
+  }
+  .ddm-search-group:not(:has(.sort-select)) + .ddm-sort-group { grid-row: 1; }
+  .ddm-reset-group {
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 92px;
+  }
+  .ddm-search-group:not(:has(.sort-select)) ~ .ddm-reset-group { grid-row: 1; }
+  .ddm-reset-group :deep(.base-button),
+  .ddm-sort-group :deep(.base-button) {
+    width: 100%;
+    min-width: 0;
+  }
   .ddm-actions-group {
+    grid-row: 3;
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
+  .ddm-sort-group:has(.sort-select) ~ .ddm-actions-group { grid-row: 4; }
   .ddm-actions-group :deep(.base-button),
   .ddm-actions-group :deep(.export-range-menu) {
     min-width: 0;
     width: 100%;
   }
+  .ddm-actions-group:empty { display: none; }
 }
 
 @media (max-width: 768px) {

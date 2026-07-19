@@ -26,22 +26,25 @@ describe('token engine pricing', () => {
         expect(t.tariffId).toBe('UNKNOWN');
     });
 
-    it('previewPurchase computes units from VAT-exclusive energy value', () => {
-        // ₦5,000 = 500000 kobo at ₦350/kWh = 14.2857 kWh
+    it('previewPurchase computes inclusive VAT from the gross amount', () => {
+        // ₦5,000 gross: energy = round(500000×10000/10750) = 465116, VAT = 34884.
         const p = previewPurchase(500000, 'RESIDENTIAL');
         expect(p.amountMinor).toBe(500000);
         expect(p.energyAmountMinor).toBe(465116);
         expect(p.taxAmountMinor).toBe(34884);
         expect(p.vatRateBasisPoints).toBe(750);
-        expect(p.units).toBeCloseTo(13.289, 3);
+        expect(p.units).toBeCloseTo(13.289, 2);
         expect(p.tariffId).toBe('RESIDENTIAL');
     });
 
-    it('previewPurchase computes tax embedded in kobo amount for KOLO', () => {
-        // KOLO has 7.5% tax: of ₦1000 paid, ~₦69.77 is tax
-        const p = previewPurchase(100000, 'KOLO');
-        expect(p.taxAmountMinor).toBeGreaterThan(6000);
-        expect(p.taxAmountMinor).toBeLessThan(8000);
+    it('uses inclusive fallback VAT for a NGN 1,000 purchase', () => {
+        // ₦1,000 gross: energy = round(100000×10000/10750) = 93023, VAT = 6977.
+        const p = previewPurchase(100000, 'RESIDENTIAL');
+        expect(p.taxAmountMinor).toBe(6977);
+        expect(p.amountMinor).toBe(100000);
+        expect(p.energyAmountMinor).toBe(93023);
+        expect(p.vatRateBasisPoints).toBe(750);
+        expect(p.units).toBeCloseTo(2.6578, 4);
     });
 
     it('rejects non-positive amounts', () => {

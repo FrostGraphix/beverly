@@ -1,3 +1,5 @@
+import { downloadReceiptPdf as downloadCanonicalReceiptPdf, receiptHtml as canonicalReceiptHtml } from '../../../../src/services/receipt-tools.mjs';
+
 type ReceiptField = { label: string; value: unknown; wide?: boolean; token?: boolean };
 
 export type ReceiptModel = {
@@ -45,7 +47,7 @@ function field(label: string, value: unknown, options: Pick<ReceiptField, 'wide'
   return { label, value: clean(value), ...options };
 }
 
-function receiptHtml(model: ReceiptModel): string {
+function legacyReceiptHtml(model: ReceiptModel): string {
   const token = model.fields.find((item) => item.token);
   const fields = model.fields.filter((item) => !item.token);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(model.title)} ${escapeHtml(model.receiptId)}</title>
@@ -70,6 +72,26 @@ function receiptHtml(model: ReceiptModel): string {
   </style></head><body><main class="receipt"><header><div><div class="brand"><div class="mark">B</div><div class="brand-name">Beverly</div></div><h1>${escapeHtml(model.title)}</h1><p class="sub">${escapeHtml(model.subtitle || 'Wallet operations receipt')}</p><div class="time"><span>Time</span>${escapeHtml(model.issuedAt || date(new Date().toISOString()))}</div></div><div class="meta"><strong>#${escapeHtml(model.receiptId)}</strong><span>Receipt ID</span></div></header>${model.amount ? `<section class="amount"><span>${escapeHtml(model.subject || 'Amount')}</span><strong>${escapeHtml(model.amount)}</strong></section>` : ''}${model.status ? `<div class="status">${escapeHtml(model.status)}</div>` : ''}${token ? `<section class="token"><span>${escapeHtml(token.label)}</span><strong>${escapeHtml(token.value)}</strong></section>` : ''}<section class="grid">${fields.map((item) => `<div class="item ${item.wide ? 'wide' : ''}"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value)}</strong></div>`).join('')}</section><footer><strong>ACOB Lighting Technology Limited</strong>support@acoblighting.com &bull; +234 800 BEVERLY<br>www.acoblighting.com</footer></main></body></html>`;
 }
 
+function canonicalReceipt(model: ReceiptModel) {
+  return {
+    ...model,
+    subtitle: model.subtitle || 'Energy Operations & Management System',
+    generatedAt: model.issuedAt || date(new Date().toISOString()),
+    brand: {
+      name: 'Beverly', company: 'ACOB Lighting Technology Limited', email: 'info@acoblighting.com',
+      phone: '+234 704 920 2634 / +234 803 290 2825', web: 'www.acoblighting.com',
+      address: 'Plot 2, Block 14 Extension, Setraco Gate, Gwarinpa, FCT, Nigeria',
+    },
+    fields: [field('Receipt Id', model.receiptId), ...model.fields].map((item) => ({
+      label: item.label, value: clean(item.value), isToken: Boolean(item.token), emphasis: Boolean(item.token), section: 'transaction',
+    })),
+  };
+}
+
+function receiptHtml(model: ReceiptModel): string {
+  return canonicalReceiptHtml(canonicalReceipt(model));
+}
+
 function removeReceiptModal(): void {
   document.getElementById('beverly-receipt-modal')?.remove();
 }
@@ -82,31 +104,30 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
     <div class="brm-backdrop">
       <section class="brm-sheet" role="dialog" aria-modal="true" aria-label="Receipt preview">
         <header class="brm-head">
-          <div><span>Receipt Preview</span><strong>${escapeHtml(model.receiptId)}</strong></div>
+          <div class="brm-title"><span class="brm-print-icon">&#128438;</span><strong>Print ${escapeHtml(model.title)}</strong></div>
           <button class="brm-icon" data-close aria-label="Close">X</button>
         </header>
         <iframe class="brm-frame" title="Receipt preview"></iframe>
         <footer class="brm-actions">
-          <button class="brm-btn" data-close>Close</button>
-          <button class="brm-btn primary" data-print>Print</button>
+          <button class="brm-btn primary" data-pdf>PDF Export</button>
+          <button class="brm-btn danger" data-close>Cancel</button>
         </footer>
       </section>
     </div>
     <style>
       #beverly-receipt-modal{position:fixed;inset:0;z-index:9999}
       .brm-backdrop{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.62);backdrop-filter:blur(10px)}
-      .brm-sheet{width:min(920px,100%);height:min(92vh,980px);display:grid;grid-template-rows:auto 1fr auto;background:var(--glass-bg-strong,#101216);border:1px solid var(--glass-border-strong,rgba(255,214,0,.28));border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.45);overflow:hidden}
+      .brm-sheet{width:min(840px,calc(100vw - 32px));height:min(92dvh,900px);display:grid;grid-template-rows:auto 1fr auto;background:#fff;border:1px solid rgba(22,163,74,.34);border-radius:18px;box-shadow:0 24px 70px rgba(16,42,27,.20);overflow:hidden}
       .brm-head,.brm-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border,rgba(255,214,0,.18))}
       .brm-actions{border-top:1px solid var(--border,rgba(255,214,0,.18));border-bottom:0;justify-content:flex-end}
-      .brm-head span{display:block;color:var(--text-muted,#8f98a8);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-      .brm-head strong{display:block;color:var(--text-strong,#f8fafc);font-family:var(--font-mono,monospace);font-size:14px;margin-top:3px}
+      .brm-title{display:flex;align-items:center;gap:12px;min-width:0}.brm-print-icon{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(22,163,74,.24);border-radius:10px;background:#f3fbf5;color:#166534;font-size:20px}.brm-head strong{display:block;color:#102a1b;font-size:18px;overflow-wrap:anywhere}
       .brm-icon{width:34px;height:34px;border:0;border-radius:10px;background:transparent;color:var(--text-main,#d7dee9);font-size:24px;cursor:pointer}
       .brm-icon:hover,.brm-btn:hover{background:rgba(255,214,0,.12)}
       .brm-frame{width:100%;height:100%;border:0;background:#050608}
       .brm-btn{border:1px solid var(--border,rgba(255,214,0,.28));border-radius:10px;background:transparent;color:var(--text-main,#d7dee9);padding:9px 14px;font-weight:800;cursor:pointer}
-      .brm-btn.primary{background:#16a34a;border-color:#16a34a;color:#fff}
+      .brm-btn.primary{background:#072e19;border-color:#16a34a;color:#fff}.brm-btn.danger{background:#dc2626;border-color:#dc2626;color:#fff}
       .brm-sheet{background:#fff;border-color:rgba(22,163,74,.24)}.brm-head,.brm-actions{background:#fff;border-color:rgba(22,163,74,.18)}.brm-head span{color:#64756b}.brm-head strong,.brm-icon,.brm-btn{color:#183126}.brm-icon:hover,.brm-btn:hover{background:rgba(22,163,74,.08)}.brm-frame{background:#eef7f0}.brm-btn{border-color:rgba(22,163,74,.28)}
-      @media(max-width:720px){.brm-backdrop{padding:0}.brm-sheet{width:100%;height:100%;border-radius:0}}
+      @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-print-icon{width:38px;height:38px}}
     </style>`;
   document.body.appendChild(host);
   const frame = host.querySelector<HTMLIFrameElement>('.brm-frame');
@@ -132,7 +153,7 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
     frame.srcdoc = html;
   }
   host.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', cleanup));
-  host.querySelector('[data-print]')?.addEventListener('click', printFrame);
+  host.querySelector('[data-pdf]')?.addEventListener('click', () => { void downloadCanonicalReceiptPdf(canonicalReceipt(model)); });
   host.querySelector('.brm-backdrop')?.addEventListener('click', (event) => {
     if (event.target === event.currentTarget) cleanup();
   });
@@ -144,17 +165,7 @@ export function viewReceipt(model: ReceiptModel): void { openReceipt(model, fals
 export function printReceipt(model: ReceiptModel): void { openReceipt(model, true); }
 
 export function downloadReceipt(model: ReceiptModel): void {
-  const safeId = model.receiptId.replace(/[^a-z0-9-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'receipt';
-  const blob = new Blob([receiptHtml(model)], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `Beverly_${safeId}.html`;
-  anchor.rel = 'noopener';
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  void downloadCanonicalReceiptPdf(canonicalReceipt(model));
 }
 
 export function purchaseReceipt(row: any): ReceiptModel {
@@ -172,8 +183,8 @@ export function purchaseReceipt(row: any): ReceiptModel {
       field('Meter ID', row.meter_id),
       field('Meter Type', row.meter_type),
       field('Energy Value', row.energy_amount_minor != null ? money(row.energy_amount_minor) : ''),
-      field('VAT (7.5%)', row.vat_amount_minor != null ? money(row.vat_amount_minor) : ''),
-      field('Units', row.units_kwh != null ? `${Number(row.units_kwh).toFixed(3)} kWh` : ''),
+      field(`VAT (${Number(row.vat_rate_basis_points ?? 0) / 100}%)`, row.vat_amount_minor != null ? money(row.vat_amount_minor) : ''),
+      field('Units', row.units_kwh != null ? `${Number(row.units_kwh).toFixed(4)} kWh` : ''),
       field('Order', row.purchase_order_id),
       field('Created', date(row.created_at)),
     ],

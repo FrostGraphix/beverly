@@ -275,19 +275,23 @@ async function fulfillCustomerTokenPurchase(
         const wallet = await findWalletByOwner('customer', (po as any).customer_id ?? tx.actor_id);
         if (wallet) assertWalletCanTransact(wallet, 'buy tokens');
 
-        const { generateCreditToken, lookupMeter, previewPurchaseWithPolicy } = await import('./token-engine.js');
+        const { generateCreditToken, lookupMeter } = await import('./token-engine.js');
         const { createReceipt } = await import('./vending.js');
         const { declaredMeterType, effectiveThreePhase } = await import('./customer-purchase.js');
         const meter = await lookupMeter((po as any).meter_id);
-        const preview = await previewPurchaseWithPolicy((po as any).amount_minor, meter.tariffId);
+        const energyAmountMinor = Number((po as any).energy_amount_minor);
+        const vatAmountMinor = Number((po as any).vat_amount_minor);
+        const vatRateBasisPoints = Number((po as any).vat_rate_basis_points);
+        const grossAmountMinor = Number((po as any).amount_minor);
+        const units = Number((po as any).units_kwh);
         const declared = await declaredMeterType((po as any).customer_id, meter.meterId);
         const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
         const meterType = isThreePhase ? 'three_phase' : 'single_phase';
         const tokenRes = await generateCreditToken({
             meterId: meter.meterId,
             customerId: meter.customerId,
-            amountMinor: preview.energyAmountMinor,
-            units: preview.units,
+            amountMinor: energyAmountMinor,
+            units,
             tariffId: meter.tariffId,
             isThreePhase,
             sgc: meter.sgc,
@@ -302,11 +306,11 @@ async function fulfillCustomerTokenPurchase(
                 meterId: meter.meterId,
                 meterType,
                 amountMinor: (po as any).amount_minor,
-                grossAmountMinor: preview.grossAmountMinor,
-                energyAmountMinor: preview.energyAmountMinor,
-                vatAmountMinor: preview.taxAmountMinor,
-                vatRateBasisPoints: preview.vatRateBasisPoints,
-                units: preview.units,
+                grossAmountMinor,
+                energyAmountMinor,
+                vatAmountMinor,
+                vatRateBasisPoints,
+                units,
                 token: tokenRes.token,
                 generatedAt: tokenRes.generatedAt,
                 purchaseMode: 'direct_pay',
@@ -329,7 +333,7 @@ async function fulfillCustomerTokenPurchase(
                 token: tokenRes.token,
                 meterId: meter.meterId,
                 amountMinor: (po as any).amount_minor,
-                units: preview.units,
+                units,
                 receiptId: receipt.id,
             });
         } catch (smsError: any) {
@@ -345,7 +349,7 @@ async function fulfillCustomerTokenPurchase(
 
         notifyTokenPurchased((po as any).customer_id, {
             meterId: meter.meterId,
-            units: preview.units,
+            units,
             amountMinor: (po as any).amount_minor,
             token: tokenRes.token,
         }).catch(() => undefined);

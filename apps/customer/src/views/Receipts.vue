@@ -197,7 +197,7 @@ onMounted(load);
           <div><dt>Phase</dt><dd>{{ meterTypeLabel(selected.meter_type) }}</dd></div>
           <div><dt>Amount</dt><dd>{{ naira(selected.amount_minor) }}</dd></div>
           <div><dt>Energy value</dt><dd>{{ naira(selected.energy_amount_minor) }}</dd></div>
-          <div><dt>VAT (7.5%)</dt><dd>{{ naira(selected.vat_amount_minor) }}</dd></div>
+          <div><dt>VAT ({{ Number(selected.vat_rate_basis_points ?? 0) / 100 }}%)</dt><dd>{{ naira(selected.vat_amount_minor) }}</dd></div>
           <div><dt>Units</dt><dd>{{ kwh(selected.units_kwh) }}</dd></div>
           <div><dt>Date</dt><dd>{{ shortDate(selected.created_at) }}</dd></div>
           <div><dt>Order</dt><dd class="bw-mono">{{ disputeOrderId(selected) || '-' }}</dd></div>

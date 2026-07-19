@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { VENDING_VAT_BASIS_POINTS } from '@beverly/tokens';
 import { z } from 'zod';
 
 function loadEnvFile(filePath: string) {
@@ -79,8 +80,8 @@ const schema = z.object({
     MONEY_WRITES_ENABLED: z.coerce.boolean().default(false),
     DEV_CONSOLE_ENABLED: z.coerce.boolean().default(false),
     DEV_CONSOLE_BREAK_GLASS_TOKEN: z.string().min(32).optional(),
-    // VAT is inclusive of the customer-paid vending amount. Persisted per order.
-    VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(750),
+    // Approved database policies own the rate. This value is the outage fallback.
+    VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(VENDING_VAT_BASIS_POINTS),
 }).superRefine((values, context) => {
     if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY) {
         context.addIssue({

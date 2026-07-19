@@ -42,7 +42,7 @@ assert.strictEqual(paginateRows(rows, 2, 2).length, 1);
 assert.strictEqual(totalPages(21, 10), 3);
 assert.deepStrictEqual(pageNumbers(2, 5), [1, 2, 3]);
 assert.deepStrictEqual(rowActionButtons(accountRoute), ["Edit", "Delete"]);
-assert.deepStrictEqual(rowActionButtons(tokenRoute), ["Cancel", "Print"]);
+assert.deepStrictEqual(rowActionButtons(tokenRoute), ["Print", "Cancel"]);
 assert.deepStrictEqual(rowActionButtons(dlmsRoute), ["Edit", "Delete"]);
 assert.deepStrictEqual(rowActionButtons(remoteSupportReadRoute), []);
 assert.deepStrictEqual(rowActionButtons(remoteSupportToolbarTaskRoute), []);

@@ -76,8 +76,26 @@ const adminDashboard = read("apps/admin/src/views/Dashboard.vue");
 const adminReports = read("apps/admin/src/views/Reports.vue");
 const adminRefunds = read("apps/admin/src/views/Refunds.vue");
 const adminSupport = read("apps/admin/src/views/Support.vue");
+const sharedTokensCss = read("packages/tokens/tokens.css");
+const walletCss = read("packages/tokens/wallet.css");
 
 assert(referenceCss.trimStart().startsWith('@import "./tokens.css";'), "tokens.css must load first.");
+assert(tokensCss.trimStart().startsWith('@import "../../packages/tokens/tokens.css";'), "CRM tokens must inherit shared Beverly primitives.");
+assert(tokensCss.includes('@import "../../packages/tokens/theme.css";'), "CRM tokens must inherit shared Beverly themes.");
+for (const alias of [
+  "--bev-font-sans: var(--font-sans)",
+  "--bev-space-4: var(--s-4)",
+  "--bev-radius-md: var(--r-md)",
+  "--bev-shadow-md: var(--shadow-2)"
+]) {
+  assert(tokensCss.includes(alias), `Expected shared token alias ${alias}`);
+}
+for (const status of ["active", "approved", "pending", "reversed", "frozen", "failed", "offline", "suspended"]) {
+  assert(sharedTokensCss.includes(`--status-${status}:`), `Expected shared status token ${status}`);
+  assert(sharedTokensCss.includes(`--status-${status}-soft:`), `Expected shared soft status token ${status}`);
+}
+assert(walletCss.includes(".bw-badge.reversed"), "Wallet badges must expose named status utilities.");
+assert(walletCss.includes("var(--semantic-negative-soft)"), "Wallet feedback must consume semantic status colors.");
 assert(referenceCss.includes('@import "./themes.css";'), "themes.css must be imported.");
 assert(referenceCss.includes('@import "./primitives.css";'), "primitives.css must be imported.");
 assert(referenceCss.includes('@import "./layouts.css";'), "layouts.css must be imported.");
@@ -165,6 +183,8 @@ assert(loginPage.includes("BaseButton"), "LoginPage actions should consume BaseB
 assert(loginPage.includes("BaseInput"), "LoginPage fields should consume BaseInput.");
 assert(loginPage.includes("BaseIconButton"), "LoginPage icon controls should consume BaseIconButton.");
 assert(loginPage.includes("BaseCheckbox"), "LoginPage checkbox should consume BaseCheckbox.");
+assert(loginPage.includes("Beverly is unreachable. Check your connection, then retry."), "Login transport errors need actionable recovery copy.");
+assert(loginPage.includes('aria-label="Dismiss error"'), "Login errors need a dismiss control.");
 assert(customerDrawer.includes("BaseButton"), "CustomerDrawer actions should consume BaseButton.");
 assert(customerDrawer.includes("BaseIconButton"), "CustomerDrawer close should consume BaseIconButton.");
 assert(stationSummaryGrid.includes("BaseButton"), "StationSummaryGrid actions should consume BaseButton.");
@@ -174,6 +194,8 @@ assert(suspectLedger.includes("BaseSelect"), "SuspectLedger filters should consu
 assert(suspectLedger.includes("BaseIconButton"), "SuspectLedger drill button should consume BaseIconButton.");
 assert(temporalLineChart.includes("BaseButton"), "TemporalLineChart toggles should consume BaseButton.");
 assert(toastNotification.includes("BaseIconButton"), "ToastNotification close should consume BaseIconButton.");
+assert(toastNotification.includes("this.toasts.length >= 3"), "Toast stacks must remain bounded.");
+assert(toastNotification.includes("prefers-reduced-motion"), "Toast motion must respect user preferences.");
 assert(siteSidebar.includes("BaseButton"), "SiteSidebar station pills should consume BaseButton.");
 assert(confirmDialog.includes('role="alertdialog"'), "Destructive confirmation must use alertdialog semantics.");
 assert(exportToolbar.includes("export-menu--up"), "Export menus must flip above cramped viewports.");

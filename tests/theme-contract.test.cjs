@@ -68,6 +68,8 @@ assertIncludes(liquidGlassCss, "@supports not");
 assertIncludes(liquidGlassCss, ".auth-page .auth-card");
 assertIncludes(liquidGlassCss, "background: var(--glass-surface-strong)");
 assertIncludes(liquidGlassCss, ".auth-bg-orb");
+assertIncludes(liquidGlassCss, "padding: var(--bev-space-7)");
+assertIncludes(liquidGlassCss, "padding: var(--bev-space-5)");
 assertIncludes(layoutsCss, "justify-content: flex-start");
 assertIncludes(layoutsCss, ".bw-user-menu-item > span");
 assertIncludes(layoutsCss, "env(safe-area-inset-bottom, 0px)");

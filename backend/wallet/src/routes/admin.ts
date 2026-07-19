@@ -37,6 +37,7 @@ import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
+import { revokePortalSession } from '../services/portal-session.js';
 import adminDevRoutes from './admin-dev.js';
 import {
     DEFAULT_ROLE_PERMISSIONS,
@@ -265,6 +266,7 @@ async function insertAnnouncementDeliveries(rows: any[]) {
 const OPEN_ADMIN_ROUTES = new Set([
     'GET /me',
     'PATCH /me',
+    'POST /logout',
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
     'DELETE /profile-picture',
@@ -680,6 +682,11 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions,
             catalog: PERMISSION_CATALOG,
         };
+    });
+
+    fastify.post('/logout', async (req) => {
+        await revokePortalSession(req.portalSessionKey);
+        return { ok: true };
     });
 
     fastify.patch('/me', async (req, reply) => {

@@ -282,6 +282,7 @@
           <OnboardingStudioPage v-else-if="route.customComponent === 'OnboardingStudioPage'" :route="route" />
           <AutomationCommandPage v-else-if="route.customComponent === 'AutomationCommandPage'" />
           <ConsumptionStatisticsPage v-else-if="route.customComponent === 'ConsumptionStatisticsPage'" :route="route" />
+          <AbnormalAlarmPage v-else-if="route.customComponent === 'AbnormalAlarmPage'" />
           <MeterKeyChangePage v-else-if="route.customComponent === 'MeterKeyChangePage'" :route="route" />
           <DisputesPage v-else-if="route.customComponent === 'DisputesPage'" :route="route" />
           <RefundsPage v-else-if="route.customComponent === 'RefundsPage'" :route="route" />
@@ -339,6 +340,7 @@ import DashboardPage from "./components/DashboardPage.vue";
 import LoginPage from "./components/LoginPage.vue";
 import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
+import AbnormalAlarmPage from "./components/AbnormalAlarmPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
 import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
 import StationConsumptionPage from "./components/StationConsumptionPage.vue";
@@ -382,7 +384,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -1003,7 +1005,7 @@ export default {
   }
 }
 
-
+/* ── Recharge wizard backdrop — mirrors account-menu-open blur effect ── */
 /* Security loading screen — shown while server-side role is being confirmed */
 .app-role-loading {
   position: fixed;

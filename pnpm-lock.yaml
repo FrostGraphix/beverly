@@ -170,6 +170,9 @@ importers:
 
   backend/wallet:
     dependencies:
+      '@beverly/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1

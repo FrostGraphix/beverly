@@ -14,7 +14,7 @@ export function shortDate(iso: string | null | undefined): string {
 
 export function kwh(units: number | null | undefined): string {
     if (units === null || units === undefined) return '—';
-    return `${Number(units).toFixed(2)} kWh`;
+    return `${Number(units).toFixed(4)} kWh`;
 }
 
 export function shortId(id: string | null | undefined, prefix = ''): string {

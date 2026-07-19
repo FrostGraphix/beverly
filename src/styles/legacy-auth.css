@@ -224,18 +224,51 @@
 }
 
 .auth-alert {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 8px;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
-.auth-alert small {
+.auth-alert-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.auth-alert-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auth-alert-copy strong {
+  font-size: 12px;
+}
+
+.auth-alert-copy small {
   font-size: 10px;
   opacity: 0.78;
+  overflow-wrap: anywhere;
+}
+
+.auth-alert-close {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  color: currentColor;
+}
+
+.auth-alert-close svg {
+  width: 16px;
+  height: 16px;
 }
 
 .auth-alert--error {

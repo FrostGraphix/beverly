@@ -1,7 +1,13 @@
 /* Beverly liquid glass: one surface contract across the CRM. */
 .app-page:not(.wallet-admin-host) .content-page {
-  padding: 0;
+  padding: var(--bev-space-7);
   background: var(--bg-page);
+}
+
+@media (max-width: 1200px) {
+  .app-page:not(.wallet-admin-host) .content-page {
+    padding: var(--bev-space-5);
+  }
 }
 
 .app-page:not(.wallet-admin-host) .fixed-header,

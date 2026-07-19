@@ -10,6 +10,8 @@ const supabase = require("../backend/src/services/supabase-service");
 const store = require("../backend/src/services/consumption-store");
 
 const requests = [];
+let forceRawAnalytics = false;
+let forceRpcAnalytics = false;
 const originalRestRequest = supabase.restRequest;
 const originalRestRequestWithResponse = supabase.restRequestWithResponse;
 
@@ -21,6 +23,18 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
 
   supabase.restRequestWithResponse = async (pathname, options = {}) => {
     requests.push({ kind: "read", pathname, options });
+    if (forceRpcAnalytics && pathname === "/rpc/get_station_consumption_analytics") {
+      return {
+        response: { headers: { get: () => "" } },
+        body: {
+          sourceRows: 2,
+          stations: [{ station_id: "TUNGA", total_kwh: 20, prior_kwh: 10, meter_count: 1, active_meter_count: 1, reading_count: 2 }],
+          temporal: [{ station_id: "TUNGA", period_start: "2026-05-07", kwh_total: 20 }],
+          topMeters: [{ station_id: "TUNGA", meter_id: "M-1", customer_id: "C-1", customer_name: "Ada", total_kwh: 20, active_periods: 2 }],
+          rollups: [{ station_id: "TUNGA", latest_odometer_kwh: 115, meters_with_latest: 1, latest_reading: "2026-05-07" }]
+        }
+      };
+    }
     if (pathname.includes("select=id")) {
       return {
         response: {
@@ -50,6 +64,12 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
       };
     }
     if (pathname.startsWith("/meter_consumption_aggregates")) {
+      if (forceRawAnalytics) {
+        return {
+          response: { headers: { get: () => "*/0" } },
+          body: []
+        };
+      }
       if (pathname.includes("period_start=gte.2026-05-25")) {
         return {
           response: {
@@ -307,6 +327,37 @@ assert.strictEqual(exactMonthlyAnalytics.body.data.totals.consumedKwh, 1700);
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-05-01")));
 assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-03-31")));
+
+requests.length = 0;
+forceRawAnalytics = true;
+const rawAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-06",
+    TO: "2026-05-07",
+    granularity: "daily"
+  }
+});
+assert.strictEqual(rawAnalytics.status, 200);
+assert(requests.some((request) => request.options?.headers?.Prefer === "count=planned"));
+assert(!requests.some((request) => request.options?.headers?.Prefer === "count=exact"));
+
+requests.length = 0;
+forceRawAnalytics = false;
+forceRpcAnalytics = true;
+const rpcAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-06",
+    TO: "2026-05-07",
+    granularity: "daily"
+  }
+});
+assert.strictEqual(rpcAnalytics.status, 200);
+assert.strictEqual(rpcAnalytics.body._proxy.source, "supabase-station-analytics-rpc");
+assert.strictEqual(rpcAnalytics.body.data.totals.consumedKwh, 20);
+assert.deepStrictEqual(rpcAnalytics.body.data.temporal.labels, ["2026-05-07"]);
+assert(requests.some((request) => request.pathname === "/rpc/get_station_consumption_analytics"));
 
 supabase.restRequest = originalRestRequest;
 supabase.restRequestWithResponse = originalRestRequestWithResponse;

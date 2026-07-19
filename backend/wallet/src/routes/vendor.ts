@@ -54,6 +54,7 @@ import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET
 import { runMalwareScan } from '../services/file-scan.js';
 import { createVendorSponsoredMeterOrder } from '../services/meter-orders.js';
 import { assertClientIdempotencyKey } from '../services/idempotency.js';
+import { revokePortalSession } from '../services/portal-session.js';
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -1024,6 +1025,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // ── logout ──
     fastify.post('/logout', { preHandler: fastify.requireAuth() }, async (req) => {
+        await revokePortalSession(req.portalSessionKey);
         await logSecurityEvent('logout', {
             actorUserId: req.actor!.userId,
             ip: req.ip,

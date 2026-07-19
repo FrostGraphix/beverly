@@ -1,7 +1,21 @@
 <template>
-  <div class="modal-backdrop show" role="dialog" aria-modal="true" @click.self="$emit('close')">
+  <div
+    class="modal-backdrop show"
+    :class="{ 'modal-backdrop--recharge': action === 'Recharge' }"
+    role="dialog"
+    aria-modal="true"
+    @click.self="$emit('close')"
+  >
+    <RechargeWizard
+      v-if="action === 'Recharge'"
+      :route="route"
+      :row="row"
+      :rows="rows"
+      @close="$emit('close')"
+      @done="$emit('done', $event)"
+    />
     <ActionModalTokenFlow
-      v-if="isTokenFlow"
+      v-else-if="isTokenFlow"
       :action="action"
       :route="route"
       :row="row"
@@ -49,6 +63,7 @@
 </template>
 
 <script>
+import RechargeWizard from "./RechargeWizard.vue";
 import ActionModalTokenFlow from "./ActionModalTokenFlow.vue";
 import ActionModalSopFlow from "./ActionModalSopFlow.vue";
 import ActionModalRemoteTask from "./ActionModalRemoteTask.vue";
@@ -59,7 +74,7 @@ import { isRemoteTaskAction } from "../services/remote-task-flow.mjs";
 
 export default {
   name: "ActionModal",
-  components: { ActionModalTokenFlow, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric },
+  components: { RechargeWizard, ActionModalTokenFlow, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric },
   props: {
     action: { type: String, required: true },
     route: { type: Object, required: true },
@@ -68,7 +83,8 @@ export default {
   },
   emits: ["close", "done"],
   computed: {
-    isTokenFlow() { return isTokenGenerateAction(this.route, this.action); },
+    // Recharge uses RechargeWizard; other token actions use ActionModalTokenFlow
+    isTokenFlow() { return isTokenGenerateAction(this.route, this.action) && this.action !== 'Recharge'; },
     isSopFlow() {
       const h = this.route?.hash || "";
       return (h.includes("admin/user") || h.includes("admin/role")) && (this.action === "Add" || this.action === "Edit");
@@ -77,3 +93,14 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.modal-backdrop.show.modal-backdrop--recharge {
+  padding: 0;
+  background:
+    radial-gradient(circle at 88% 7%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 17rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-page) 18%, transparent), color-mix(in srgb, var(--bg-page) 34%, transparent)) !important;
+  backdrop-filter: blur(4px) saturate(108%);
+  -webkit-backdrop-filter: blur(4px) saturate(108%);
+}
+</style>

@@ -12,8 +12,9 @@ const purchases = read('backend/wallet/src/services/customer-purchase.ts');
 const pkg = JSON.parse(read('package.json'));
 
 assert.match(receipts, /export function downloadReceipt\(model: ReceiptModel\): void/);
-assert.match(receipts, /new Blob\(\[receiptHtml\(model\)\]/);
-assert.match(receipts, /anchor\.download = `Beverly_\$\{safeId\}\.html`/);
+assert.match(receipts, /downloadCanonicalReceiptPdf\(canonicalReceipt\(model\)\)/);
+assert.match(receipts, /data-pdf>PDF Export/);
+assert.match(receipts, /class="brm-btn danger" data-close>Cancel/);
 
 assert.match(buyToken, /downloadReceipt, printReceipt, purchaseReceipt, viewReceipt/);
 assert.match(buyToken, /function downloadResultReceipt\(\)/);
@@ -23,6 +24,7 @@ assert.match(buyToken, /purchase_order_id: result\.value\.purchaseOrder\?\.id/);
 assert.match(buyToken, /\/api\/v1\/customer\/purchase\/\$\{orderId\}\/remote-send/);
 assert.match(buyToken, /Token generated successfully/);
 assert.match(buyToken, /Download receipt/);
+assert.match(buyToken, /bw-recharge-summary/);
 assert.match(buyToken, /Check remote status/);
 assert.match(buyToken, /Remote send delivered/);
 assert.match(buyToken, /Remote send needs manual entry/);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { VENDING_VAT_BASIS_POINTS } from '@beverly/tokens';
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
@@ -50,7 +51,7 @@ function vatAmountMinor() {
 }
 
 function vatRateLabel() {
-    const percent = Number(receipt.value?.vat_rate_basis_points ?? 750) / 100;
+    const percent = Number(receipt.value?.vat_rate_basis_points ?? VENDING_VAT_BASIS_POINTS) / 100;
     return Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
@@ -114,7 +115,7 @@ onMounted(load);
             <div class="rcpt-row"><span>Amount paid</span><span>{{ fmtAmount(receipt.amount_minor) }}</span></div>
             <div class="rcpt-row"><span>Energy value</span><span>{{ fmtAmount(energyAmountMinor()) }}</span></div>
             <div class="rcpt-row"><span>VAT ({{ vatRateLabel() }}%)</span><span>{{ fmtAmount(vatAmountMinor()) }}</span></div>
-            <div class="rcpt-row"><span>Units</span><span>{{ receipt.units_kwh?.toFixed(2) }} kWh</span></div>
+            <div class="rcpt-row"><span>Units</span><span>{{ receipt.units_kwh?.toFixed(4) }} kWh</span></div>
             <div class="rcpt-row"><span>Tariff</span><span>{{ receipt.tariff_id }}</span></div>
             <div class="rcpt-row"><span>Reference</span><span class="bw-mono rcpt-ref">{{ receipt.reference }}</span></div>
             <div class="rcpt-row"><span>Date</span><span>{{ fmtDate(receipt.created_at) }}</span></div>

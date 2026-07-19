@@ -1,8 +1,10 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { pathToFileURL } = require("url");
 const { isCanonicalMoneyMutation } = require("./wallet-route-contract.cjs");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
+const tokenPolicyPromise = import("../packages/tokens/index.js");
 const {
   ensureDatabase,
   cacheApiResponse,
@@ -86,6 +88,7 @@ const walletFeatureFlags = require("../backend/src/services/wallet-feature-flags
 const walletPrivacy = require("../backend/src/services/wallet-privacy-service");
 const smsNotifications = require("../backend/src/services/sms-notification-service");
 const { ingestClientErrors, listClientErrors } = require("../backend/src/services/client-error-service");
+const { ALARM_SIGNALS, deriveAbnormalAlarms, summarizeAbnormalAlarms } = require("../backend/src/services/abnormal-alarm-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -101,8 +104,128 @@ const defaultCorsOrigins = [
   "http://127.0.0.1:5174"
 ];
 const rateLimitBuckets = new Map();
+const crmSessionCookieName = "bev_session";
+const defaultCrmIdleTimeoutMs = 30 * 60 * 1000;
+const defaultCrmAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 
 loadEnvFile();
+
+function positiveDuration(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function crmSessionLimits() {
+  return {
+    idleMs: positiveDuration(process.env.SESSION_IDLE_TIMEOUT_MS || process.env.VITE_SESSION_TIMEOUT_MS, defaultCrmIdleTimeoutMs),
+    absoluteMs: positiveDuration(process.env.SESSION_ABSOLUTE_TIMEOUT_MS, defaultCrmAbsoluteTimeoutMs)
+  };
+}
+
+function crmSessionSecret() {
+  const secret = String(process.env.JWT_SECRET || "").trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV) {
+    throw new Error("JWT_SECRET is required for server session enforcement");
+  }
+  return "beverly-local-session-signing-only";
+}
+
+function cookieValue(request, name) {
+  const cookieHeader = String(request?.headers?.cookie || "");
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1].trim()) : "";
+}
+
+function crmTokenFingerprint(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("base64url");
+}
+
+function signCrmSession(payload) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", crmSessionSecret()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function readCrmSession(value) {
+  const [encoded, signature, extra] = String(value || "").split(".");
+  if (!encoded || !signature || extra) return null;
+  const expected = crypto.createHmac("sha256", crmSessionSecret()).update(encoded).digest();
+  let received;
+  try {
+    received = Buffer.from(signature, "base64url");
+  } catch {
+    return null;
+  }
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    const startedAt = Number(payload.startedAt);
+    const lastActiveAt = Number(payload.lastActiveAt);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(lastActiveAt) || startedAt > lastActiveAt) return null;
+    return { startedAt, lastActiveAt, tokenFingerprint: String(payload.tokenFingerprint || "") };
+  } catch {
+    return null;
+  }
+}
+
+function crmSessionStatus(session, token, now = Date.now()) {
+  if (!session || session.tokenFingerprint !== crmTokenFingerprint(token)) return { valid: false, reason: "Invalid session" };
+  const limits = crmSessionLimits();
+  if (now - session.startedAt >= limits.absoluteMs) return { valid: false, reason: "Session absolute timeout" };
+  if (now - session.lastActiveAt >= limits.idleMs) return { valid: false, reason: "Session idle timeout" };
+  return {
+    valid: true,
+    remainingMs: Math.min(limits.idleMs, limits.absoluteMs - (now - session.startedAt))
+  };
+}
+
+function secureCookiePart() {
+  return process.env.VERCEL_ENV || process.env.NODE_ENV === "production" ? "; Secure" : "";
+}
+
+function crmCookie(name, value, maxAge) {
+  return `${name}=${encodeURIComponent(value)}; HttpOnly${secureCookiePart()}; SameSite=Strict; Path=/; Max-Age=${Math.max(0, Math.floor(maxAge))}`;
+}
+
+function clearCrmSessionCookies(response) {
+  response.setHeader("Set-Cookie", [
+    crmCookie("bev_token", "", 0),
+    crmCookie("bev_refresh", "", 0),
+    crmCookie(crmSessionCookieName, "", 0)
+  ]);
+}
+
+function establishCrmSession(response, token, refreshToken, existingSession = null, now = Date.now()) {
+  const startedAt = existingSession?.startedAt || now;
+  const limits = crmSessionLimits();
+  const remainingAbsoluteMs = limits.absoluteMs - (now - startedAt);
+  if (remainingAbsoluteMs <= 0) return false;
+  const maxAge = Math.ceil(remainingAbsoluteMs / 1000);
+  const session = { startedAt, lastActiveAt: now, tokenFingerprint: crmTokenFingerprint(token) };
+  response.setHeader("Set-Cookie", [
+    crmCookie("bev_token", token, maxAge),
+    refreshToken ? crmCookie("bev_refresh", refreshToken, maxAge) : crmCookie("bev_refresh", "", 0),
+    crmCookie(crmSessionCookieName, signCrmSession(session), maxAge)
+  ]);
+  return session;
+}
+
+function enforceCrmSession(request, response, now = Date.now(), required = false) {
+  const token = cookieValue(request, "bev_token");
+  const sessionValue = cookieValue(request, crmSessionCookieName);
+  if (!token && !sessionValue) return required ? authFailure(401, normalizeRequestPath(request.url), "Server session required") : null;
+  const session = readCrmSession(sessionValue);
+  const status = crmSessionStatus(session, token, now);
+  if (!status.valid) {
+    clearCrmSessionCookies(response);
+    return authFailure(401, normalizeRequestPath(request.url), status.reason);
+  }
+  const touched = { ...session, lastActiveAt: now };
+  response.setHeader("Set-Cookie", crmCookie(crmSessionCookieName, signCrmSession(touched), Math.ceil(status.remainingMs / 1000)));
+  request.__crmSession = touched;
+  return null;
+}
 
 let contractAliasMap = null;
 let accessControlModulePromise = null;
@@ -2565,6 +2688,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const qp = adminQueryParams(request.url);
     const body = requestData.parsedBody || {};
     const alarm = String(qp.get("alarm") || body.alarm || "").trim();
+    const severity = String(qp.get("severity") || body.severity || "").trim().toLowerCase();
+    const bypassRisk = String(qp.get("bypassRisk") || body.bypassRisk || "").trim().toLowerCase();
     const stationId = String(qp.get("station_id") || qp.get("stationId") || body.station_id || body.stationId || "").trim();
     const now = new Date();
     const defaultFrom = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
@@ -2572,72 +2697,43 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const from = String(qp.get("from") || qp.get("FROM") || body.from || body.FROM || defaultFrom).trim();
     const to = String(qp.get("to") || qp.get("TO") || body.to || body.TO || defaultTo).trim();
     const searchTerm = String(qp.get("searchTerm") || qp.get("search") || body.searchTerm || body.search || "").trim().toLowerCase();
-    const sortBy = String(qp.get("sortBy") || body.sortBy || "").trim();
-    const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "asc").trim().toLowerCase() === "desc" ? "desc" : "asc";
+    const sortBy = String(qp.get("sortBy") || body.sortBy || "currentDate").trim();
+    const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "desc").trim().toLowerCase() === "desc" ? "desc" : "asc";
     const offset = Math.max(0, Number(qp.get("offset") || body.offset || 0));
     const pageLimit = Math.min(1000, Math.max(10, Number(qp.get("limit") || qp.get("pageLimit") || body.pageLimit || body.limit || 200)));
-    let base = null;
-    let warning = "";
-    try {
-      base = await readDailyMeterRows({
-        pathname: "/api/DailyDataMeter/read",
-        requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from, TO: to }
-      });
-    } catch (error) {
-      warning = error instanceof Error ? error.message : String(error);
-      console.error("[abnormal-alarms]", warning);
-    }
-    let list = base?.body?.result?.data || base?.body?.data?.data || [];
-    if ((!Array.isArray(list) || !list.length)) {
+    const stationScope = stationId ? [stationId] : ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+    const warnings = [];
+    const sources = await Promise.all(stationScope.map(async (station) => {
       try {
-        const upstream = await proxyLive(
+        const stored = await readDailyMeterRows({
+          pathname: "/api/DailyDataMeter/read",
+          requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
+        });
+        if (stored) return stored;
+        return await proxyLive(
           { ...request, method: "POST", url: "/api/DailyDataMeter/read" },
           "/api/DailyDataMeter/read",
           {
             ...requestData,
-            parsedBody: { lang: "en", pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from, TO: to }
+            parsedBody: { lang: "en", pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
           }
         );
-        const liveRows = upstream?.body?.result?.data || upstream?.body?.data?.data || [];
-        if (Array.isArray(liveRows) && liveRows.length) list = liveRows;
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        warning = warning ? `${warning}; ${msg}` : msg;
+        warnings.push(`${station}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
       }
-    }
-    const rows = [];
-    const flagValue = (record, keys) => keys.some((key) => {
-      const value = record?.[key];
-      const text = String(value ?? "").trim().toLowerCase();
-      return Number(value) > 0 || ["yes", "true", "open", "low", "abnormal", "reverse", "unbalance"].includes(text);
-    });
-    const readingUsage = (record) => Number(record.usage1 ?? record.energyConsumptionKwh ?? record.consumption ?? 0);
-    for (const r of list) {
-      const stationValue = r.stationId || r.station_id || r.SITE_ID || stationId;
-      const normalizedRow = {
-        ...r,
-        stationId: stationValue,
-        meterId: r.meterId || r.meter_id || r.METER_ID || "",
-        customerId: r.customerId || r.customer_id || r.CUSTOMER_ID || "",
-        customerName: r.customerName || r.customer_name || r.CUSTOMER_NAME || "",
-        gatewayId: r.gatewayId || r.gateway_id || r.GATEWAY_ID || "",
-        currentDate: r.currentDate || r.readingDate || r.reading_date || r.CURRENT_DATE || ""
-      };
-      const pushes = [
-        ["noData", "No Data Report", readingUsage(r) === 0],
-        ["magneticInterference", "Magnetic Interference", flagValue(r, ["magneticInterference", "magneticStatus", "magnetismStatus"])],
-        ["batteryLow", "Battery Low", flagValue(r, ["batteryLow", "batteryStatus", "batteryVoltageStatus"])],
-        ["terminalCoverOpen", "Terminal Cover Open", flagValue(r, ["terminalCoverOpen", "terminalStatus", "terminalCoverStatus"])],
-        ["coverOpen", "Upper Open", flagValue(r, ["coverOpen", "upperCoverOpen", "upperCoverStatus"])],
-        ["currentReverse", "Current Reverse", flagValue(r, ["currentReverse", "reverseCurrent", "currentReverseStatus"])],
-        ["currentUnbalance", "Current Unbalance", flagValue(r, ["currentUnbalance", "currentUnbalanceStatus", "unbalanceStatus"])]
-      ];
-      for (const [key, label, hit] of pushes) if (hit) rows.push({ ...normalizedRow, alarmKey: key, alarmLabel: label });
-    }
+    }));
+    const list = sources.flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const sourceTotal = sources.reduce((total, source) => total + Number(source?.body?.result?.total || source?.body?.data?.total || 0), 0);
+    const base = sources.find(Boolean);
+    const warning = warnings.join("; ");
+    if (warning) console.error("[abnormal-alarms]", warning);    const rows = deriveAbnormalAlarms(list, stationId);
     const alarmRows = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
+    const severityRows = severity ? alarmRows.filter((row) => row.severity === severity) : alarmRows;
+    const riskRows = bypassRisk ? severityRows.filter((row) => row.bypassRisk === bypassRisk) : severityRows;
     const searched = searchTerm
-      ? alarmRows.filter((row) => Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(searchTerm)))
-      : alarmRows;
+      ? riskRows.filter((row) => Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(searchTerm)))
+      : riskRows;
     const filtered = sortBy
       ? [...searched].sort((a, b) => {
         const left = a?.[sortBy];
@@ -2656,12 +2752,17 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       rows: paged,
       data: paged,
       result: { total: filtered.length, data: paged },
+      summary: summarizeAbnormalAlarms(filtered),
       meta: {
-        source: base?.body?._proxy?.source || "local-abnormal-alarm",
+        source: base?.body?._proxy?.source || "/api/DailyDataMeter/read",
+        sourceTotal,
+        scannedRows: Array.isArray(list) ? list.length : 0,
+        truncated: sourceTotal > (Array.isArray(list) ? list.length : 0),
         from,
         to,
         stationId,
-        warning
+        warning,
+        alarmTypes: ALARM_SIGNALS.map(({ key, label, severity: signalSeverity, category }) => ({ key, label, severity: signalSeverity, category }))
       }
     });
   }
@@ -3044,10 +3145,13 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const meterId = String(payload.meterId || "").trim();
     const amtMinor = Number(payload.amountMinor || 200000);
     if (!meterId) return { status: 400, body: { code: 400, msg: "meterId is required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
-    const unitsKwh = parseFloat((amtMinor / 100 / 55).toFixed(2));
+    const { calculateVendingVatBreakdown } = await tokenPolicyPromise;
+    const tariffNairaPerKwh = 55;
+    const vat = calculateVendingVatBreakdown(amtMinor);
+    const unitsKwh = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
     return localJobResponse({
       meter: { meterId, customerId: `CUST-${meterId.slice(-4)}`, customerName: "Customer " + meterId.slice(-4), stationId: "TUNGA", tariffId: "TARIFF-01" },
-      preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: 5500, tariffId: "TARIFF-01" }
+      preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: tariffNairaPerKwh, tariffId: "TARIFF-01" }
     });
   }
 
@@ -3066,7 +3170,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       }
       const ikey = `vend:${orgId}:${meterId}:${amtMinor}:${Date.now()}`;
       const order = walletPurchase.createPurchaseOrder({ organizationId: orgId, targetMeter: meterId, amountMinor: amtMinor, mode: "token", actorId, idempotencyKey: ikey });
-      const units = parseFloat((amtMinor / 100 / 55).toFixed(2));
+      const { calculateVendingVatBreakdown } = await tokenPolicyPromise;
+      const tariffNairaPerKwh = 55;
+      const vat = calculateVendingVatBreakdown(amtMinor);
+      const units = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
       const token = Array.from({ length: 20 }, () => Math.floor(Math.random() * 10)).join("").replace(/(.{4})/g, "$1-").slice(0, -1);
       try { walletPurchase.completeTokenPurchase({ purchaseOrderId: order.id, token, unitsKwh: units, actorId: "system", idempotencyKey: `complete:${ikey}` }); } catch {}
       return localJobResponse({ token, units, receiptId: order.receiptNumber, purchaseOrder: order });
@@ -3556,14 +3663,18 @@ function fallbackRemoteTask(pathname, requestData) {
   };
 }
 async function auditResult(request, pathname, result) {
-  await recordAuditLog({
-    method: request.method || "GET",
-    path: pathname,
-    outcome: result.status < 400 ? "success" : "error",
-    statusCode: result.status,
-    proxySource: result.body?._proxy?.source || "unknown",
-    details: result.body
-  });
+  try {
+    await recordAuditLog({
+      method: request.method || "GET",
+      path: pathname,
+      outcome: result.status < 400 ? "success" : "error",
+      statusCode: result.status,
+      proxySource: result.body?._proxy?.source || "unknown",
+      details: result.body
+    });
+  } catch (error) {
+    console.error("[audit-log]", error instanceof Error ? error.message : String(error));
+  }
 }
 
 async function tryLivePath(request, liveUrl, requestData, token) {
@@ -3813,6 +3924,11 @@ async function handler(request, response) {
     }
     const pathname = normalizeRequestPath(request.url);
     if (isCanonicalWalletRequest(pathname)) {
+      const sessionFailure = enforceCrmSession(request, response, Date.now(), true);
+      if (sessionFailure) {
+        response.status(sessionFailure.status).json(sessionFailure.body);
+        return;
+      }
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
       response.status(canonicalResult.status).json(canonicalResult.body);
@@ -3834,30 +3950,47 @@ async function handler(request, response) {
       // Establish HttpOnly session after successful login.
       const payload = requestData.parsedBody || {};
       const token = String(payload.token || "").trim();
-      const refreshToken = String(payload.refreshToken || "").trim();
+      const refreshToken = String(payload.refreshToken || "").trim() || cookieValue(request, "bev_refresh");
       if (!token) {
         response.status(400).json({ code: 400, msg: "token required", reason: "token required", data: null, result: null });
         return;
       }
-      const isProd = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
-      const securePart = isProd ? "; Secure" : "";
-      const maxAge = 60 * 60 * 24; // 24 h
-      const refreshMaxAge = 60 * 60 * 24 * 7; // 7 days
-      response.setHeader("Set-Cookie", [
-        `bev_token=${encodeURIComponent(token)}; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=${maxAge}`,
-        refreshToken
-          ? `bev_refresh=${encodeURIComponent(refreshToken)}; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=${refreshMaxAge}`
-          : `bev_refresh=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`
-      ]);
+      const actor = await authUserFromAccessToken(token).catch(() => null);
+      const localActor = token === "local-dev-token" && getEnv().demoAuthEnabled;
+      if (!actor && !localActor) {
+        response.status(401).json({ code: 401, msg: "Invalid session", reason: "Invalid session", data: null, result: null });
+        return;
+      }
+      const previousToken = cookieValue(request, "bev_token");
+      const previousSession = readCrmSession(cookieValue(request, crmSessionCookieName));
+      const previousStatus = previousToken && previousSession ? crmSessionStatus(previousSession, previousToken) : null;
+      if (previousStatus && !previousStatus.valid) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: previousStatus.reason, reason: previousStatus.reason, data: null, result: null });
+        return;
+      }
+      if (!previousStatus?.valid) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: "Reauthentication required", reason: "Reauthentication required", data: null, result: null });
+        return;
+      }
+      const session = establishCrmSession(response, token, refreshToken, previousStatus?.valid ? previousSession : null);
+      if (!session) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: "Session absolute timeout", reason: "Session absolute timeout", data: null, result: null });
+        return;
+      }
       response.status(200).json({
         code: 0,
         msg: "session established",
         data: {
-          userId: payload.userId || null,
-          userName: payload.userName || null,
-          roleId: payload.roleId || null,
-          remark: payload.remark || null,
-          email: payload.email || null
+          userId: actor?.userId || payload.userId || null,
+          userName: actor?.userName || payload.userName || null,
+          roleId: actor?.roleId || payload.roleId || null,
+          remark: actor?.remark || payload.remark || null,
+          email: actor?.email || payload.email || null,
+          startedAt: session.startedAt,
+          absoluteExpiresAt: session.startedAt + crmSessionLimits().absoluteMs
         }
       });
       return;
@@ -3865,15 +3998,19 @@ async function handler(request, response) {
 
     if (lowerPathForSession === "/api/auth/me" && String(request.method || "GET").toUpperCase() === "GET") {
       // Return server-validated identity from the HttpOnly bev_token cookie.
-      const cookieHeader = String(request.headers.cookie || "");
-      const bevMatch = cookieHeader.match(/(?:^|;\s*)bev_token=([^;]+)/);
-      const cookieToken = bevMatch ? decodeURIComponent(bevMatch[1].trim()) : "";
+      const cookieToken = cookieValue(request, "bev_token");
       if (!cookieToken) {
         response.status(401).json({ code: 401, msg: "No session", reason: "No session cookie", data: null, result: null });
         return;
       }
+      const sessionFailure = enforceCrmSession(request, response, Date.now(), true);
+      if (sessionFailure) {
+        response.status(sessionFailure.status).json(sessionFailure.body);
+        return;
+      }
       const actor = await authUserFromAccessToken(cookieToken).catch(() => null);
       if (!actor) {
+        clearCrmSessionCookies(response);
         response.status(401).json({ code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null });
         return;
       }
@@ -3892,16 +4029,20 @@ async function handler(request, response) {
 
     if (lowerPathForSession === "/api/auth/logout" && String(request.method || "GET").toUpperCase() === "POST") {
       // Clear HttpOnly cookies server-side (JS cannot clear HttpOnly cookies).
-      const isProd = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
-      const securePart = isProd ? "; Secure" : "";
-      response.setHeader("Set-Cookie", [
-        `bev_token=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`,
-        `bev_refresh=; HttpOnly${securePart}; SameSite=Strict; Path=/; Max-Age=0`
-      ]);
+      clearCrmSessionCookies(response);
       response.status(200).json({ code: 0, msg: "logged out", data: null });
       return;
     }
     // --- end HttpOnly session endpoints ---
+
+    if (lowerPathForSession !== "/api/user/login") {
+      result = enforceCrmSession(request, response, Date.now(), protectedPath(pathname));
+      if (result) {
+        await auditResult(request, pathname, result);
+        response.status(result.status).json(result.body);
+        return;
+      }
+    }
 
     result = await authorizeRequest(request, pathname, requestData);
     if (result) {
@@ -4127,6 +4268,23 @@ async function handler(request, response) {
       };
     }
 
+    if (pathname.toLowerCase() === "/api/user/login" && result.status === 200) {
+      const token = result.body?.data?.token || result.body?.result?.token;
+      const refreshToken = result.body?.data?.refreshToken || result.body?.result?.refreshToken || "";
+      const session = token ? establishCrmSession(response, token, refreshToken) : null;
+      if (!session) {
+        clearCrmSessionCookies(response);
+        result = authFailure(401, pathname, "Session establishment failed");
+      } else {
+        for (const key of ["data", "result"]) {
+          if (result.body?.[key]) {
+            result.body[key].startedAt = session.startedAt;
+            result.body[key].absoluteExpiresAt = session.startedAt + crmSessionLimits().absoluteMs;
+          }
+        }
+      }
+    }
+
     await cacheResponseIfNeeded(request, pathname, requestData, result);
     await writeSnapshot({
       pathname,
@@ -4168,6 +4326,11 @@ module.exports._test = {
   readRequest,
   rateLimitResult,
   validateLiveWriteChange,
+  crmSessionLimits,
+  crmTokenFingerprint,
+  signCrmSession,
+  readCrmSession,
+  crmSessionStatus,
   refreshTargets,
   runRefreshJob,
   resetContractCache() {

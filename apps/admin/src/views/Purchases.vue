@@ -509,7 +509,7 @@ watch([fStatus, fActorType], () => loadList());
               <span :class="['bw-badge', detail.purchase.meter_type === 'three_phase' ? 'info' : 'neutral']">
                 {{ meterTypeLabel(detail.purchase.meter_type) }}
               </span>
-              <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(2) }} kWh</span>
+              <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(4) }} kWh</span>
               <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || 'â€”' }}</span>
             </div>
 
@@ -552,7 +552,7 @@ watch([fStatus, fActorType], () => loadList());
                 <dt>Mode</dt><dd>{{ detail.purchase.purchase_mode }}</dd>
                 <dt>Amount paid</dt><dd>{{ naira(detail.purchase.amount_minor) }}</dd>
                 <dt>Energy value</dt><dd>{{ naira(detail.purchase.energy_amount_minor ?? 0) }}</dd>
-                <dt>VAT (7.5%)</dt><dd>{{ naira(detail.purchase.vat_amount_minor ?? 0) }}</dd>
+                <dt>VAT ({{ Number(detail.purchase.vat_rate_basis_points ?? 0) / 100 }}%)</dt><dd>{{ naira(detail.purchase.vat_amount_minor ?? 0) }}</dd>
                 <dt>Receipt</dt>
                 <dd>
                   <span v-if="detail.receipt" class="bw-mono">#{{ String(detail.receipt.id).slice(0, 8) }}</span>

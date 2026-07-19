@@ -111,21 +111,52 @@
     .modal-token-flow { width: min(760px, calc(100vw - 36px)); border: 1px solid var(--border-mid); box-shadow: var(--shadow-xl), var(--shadow-glow-sm); overflow: hidden; }
     .modal-token-flow .base-modal-shell__header { padding: 12px 22px !important; border-bottom-color: var(--border-mid) !important; }
     .modal-token-flow .modal-header { min-height: 44px; padding: 0 !important; background: transparent !important; border: 0 !important; border-radius: 0 !important; }
-    .modal-token-flow .modal-header-left { flex: 1 1 auto; min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
+    .modal-token-flow .modal-header-left { flex: 1 1 auto; min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; align-items: center; }
+    .modal-token-flow .modal-header-copy { display: grid; gap: 2px; min-width: 0; }
     .modal-token-flow .modal-title { padding: 0 !important; border: 0 !important; background: transparent !important; }
+    .modal-token-flow .modal-subtitle { margin: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
     .modal-token-flow .modal-close { margin-left: auto; flex: 0 0 auto; }
     .modal-token-flow .modal-body { background: linear-gradient(180deg, var(--bg-card), var(--bg-page)); }
     .modal-token-flow .modal-actions { background: var(--bg-card); border-top-color: var(--border-color); }
     .token-stepper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--border-color); background: var(--bg-page); }
-    .token-step { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; background: var(--bg-card); }
+    .token-stepper.token-stepper-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .token-step { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; background: var(--bg-card); transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast); }
+    .token-step:not(:last-child)::after { content: ""; position: absolute; top: 50%; left: 100%; width: 8px; height: 2px; margin-top: -1px; background: var(--border-color); z-index: 1; }
+    .token-step.done:not(:last-child)::after { background: var(--success); }
     .token-step.active { border-color: var(--primary); color: var(--primary); background: var(--primary-light); box-shadow: var(--shadow-glow-sm); }
     .token-step.done { border-color: var(--success); color: var(--success); background: var(--success-bg); }
-    .token-step-dot { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: currentColor; color: var(--bg-card); font-size: 10px; }
+    .token-step-dot { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: currentColor; color: var(--bg-card); font-size: 10px; flex: 0 0 auto; }
     .token-step-dot span { color: var(--bg-card); }
+    .token-step-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .token-customer-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px; border: 1px solid var(--border-mid); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--primary-light), var(--bg-card)); }
     .token-customer-card div { min-width: 0; }
     .token-customer-card span, .token-rate-card span, .token-review-card span, .token-review-title span, .token-review-amount span, .token-final-row span, .token-vault span { display: block; color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
     .token-customer-card strong { display: block; margin-top: 4px; color: var(--text-strong); font-size: 13px; overflow-wrap: anywhere; }
+    .token-meter-stage, .token-amount-stage, .enterprise-confirmation, .token-final-panel { width: min(100%, 560px); margin-inline: auto; }
+    .token-meter-stage, .token-amount-stage { display: grid; gap: 14px; }
+    .token-meter-card { padding: 18px; border: 1px solid var(--border-mid); border-radius: var(--radius-md); background: var(--bg-card); }
+    .token-meter-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+    .token-meter-heading span, .token-meter-details dt, .token-calculation-card span { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .token-meter-heading strong { display: block; margin-top: 6px; color: var(--text-strong); font-family: var(--font-mono); font-size: 24px; overflow-wrap: anywhere; flex-basis: 100%; }
+    .token-meter-heading .token-format-chip { display: inline-flex; align-items: center; margin-top: 0; padding: 3px 10px; border: 1px solid var(--border-mid); border-radius: 999px; color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: none; letter-spacing: 0; background: var(--bg-page); cursor: help; }
+    .token-format-chip--warn { border-color: var(--warning); color: var(--warning); background: var(--warning-bg); }
+    .token-meter-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 16px 0 0; border-top: 1px solid var(--border-color); }
+    .token-meter-details div { min-width: 0; padding: 12px 0; border-bottom: 1px solid var(--border-color); }
+    .token-meter-details div:nth-child(odd) { padding-right: 12px; }
+    .token-meter-details div:nth-child(even) { padding-left: 12px; border-left: 1px solid var(--border-color); }
+    .token-meter-details dd { margin: 5px 0 0; color: var(--text-strong); font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
+    .token-stage-note { display: grid; gap: 3px; padding: 12px 14px; border-left: 3px solid var(--primary); background: var(--primary-light); }
+    .token-stage-note strong { color: var(--text-strong); font-size: 13px; }
+    .token-stage-note span { color: var(--text-muted); font-size: 12px; }
+    .token-customer-card-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .token-amount-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .token-amount-field input { min-height: 54px; font-family: var(--font-mono); font-size: 22px; font-weight: 800; }
+    .token-quick-amounts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .token-quick-amounts .base-button { min-width: 0; padding-inline: 6px; }
+    .token-calculation-card { display: grid; gap: 0; padding: 0 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); }
+    .token-calculation-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; border-bottom: 1px solid var(--border-color); }
+    .token-calculation-row:last-child { border-bottom: 0; }
+    .token-calculation-card strong { color: var(--primary); font-family: var(--font-mono); font-size: 16px; text-align: right; }
     .token-rate-card { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); }
     .token-rate-card strong { color: var(--primary); font-size: 12px; }
     .token-review-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .42fr); gap: 14px; padding: 18px; border: 1px solid var(--border-mid); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--primary-light), var(--bg-card)); }
@@ -214,15 +245,18 @@
     .token-vault span, .token-vault strong { color: var(--text-inverse); }
     .token-vault strong { font-family: var(--font-mono); font-size: 20px; letter-spacing: .08em; overflow-wrap: anywhere; }
     .token-vault-content { display: grid; gap: 6px; }
-    .token-send-action { margin-top: 6px; display: flex; align-items: center; justify-content: flex-end; }
+    .token-delivery-purpose { margin: 0; color: rgba(255, 255, 255, 0.78); font-size: 12px; line-height: 1.5; }
+    .token-delivery-note { margin: 2px 0 0; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.18); color: rgba(255, 255, 255, 0.9); font-size: 11.5px; line-height: 1.5; }
+    .token-send-action { margin-top: 6px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
     .token-send-action .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; font-weight: 700; border-radius: 999px; background: rgba(255, 255, 255, 0.2); color: #fff; border: none; transition: all var(--transition-fast); }
     .token-send-action .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.3); transform: translateY(-1px); }
     .token-send-action .btn svg { width: 14px; height: 14px; }
     .token-sent-success { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.15); color: #fff; font-size: 12px; font-weight: 700; }
     .token-sent-success svg { width: 14px; height: 14px; }
-    .token-sent-error { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: rgba(239, 68, 68, 0.2); color: #fff; font-size: 12px; font-weight: 700; }
-    .token-sent-error svg { width: 14px; height: 14px; }
-    .token-sent-error .btn { background: transparent; padding: 0; height: auto; text-decoration: underline; }
+    .token-sent-error { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: rgba(239, 68, 68, 0.2); color: #fff; font-size: 12px; font-weight: 700; max-width: 100%; }
+    .token-sent-error svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .token-sent-error .btn { background: transparent; padding: 0; height: auto; text-decoration: underline; flex: 0 0 auto; }
+    .token-sent-error .token-sent-error-text { text-transform: none; letter-spacing: normal; font-size: 12px; font-weight: 700; color: inherit; overflow-wrap: anywhere; }
     .token-final-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .token-final-row { padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); }
     .token-final-row strong { display: block; margin-top: 4px; color: var(--text-strong); overflow-wrap: anywhere; }
@@ -232,7 +266,7 @@
     .receipt-preview-frame { display: block; width: 100%; min-height: 0; border: 0; background: #fff; }
     .modal-print-receipt.base-modal-shell {
       width: min(840px, calc(100vw - 32px));
-      max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
       border-color: rgba(22, 163, 74, .34);
       background: #fff;
       box-shadow: 0 24px 70px rgba(16, 42, 27, .20);
@@ -279,9 +313,16 @@
       height: min(72vh, 700px);
     }
     .modal-print-receipt .modal-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: min(100%, 360px);
       align-items: center;
-      justify-content: flex-end;
+      margin-left: auto;
       gap: 12px;
+    }
+    .modal-print-receipt .modal-actions .base-button {
+      width: 100%;
+      min-width: 0;
     }
     @media (max-width: 560px) {
       .modal-print-receipt.base-modal-shell {
@@ -290,14 +331,19 @@
       }
       .modal-print-receipt.base-modal-shell > .base-modal-shell__header,
       .modal-print-receipt.base-modal-shell > .base-modal-shell__footer { padding-inline: 12px !important; }
-      .modal-print-receipt .receipt-preview-frame { height: calc(100dvh - 210px); }
+      .modal-print-receipt.base-modal-shell > .base-modal-shell__header { padding-block: 10px 6px !important; }
+      .modal-print-receipt.base-modal-shell > .base-modal-shell__footer { padding-block: 8px 10px !important; }
+      .modal-print-receipt .receipt-preview-frame { height: clamp(280px, calc(100dvh - 152px), 700px); }
       .modal-print-receipt .modal-actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
         width: 100%;
         gap: 8px;
       }
-      .modal-print-receipt .modal-actions > :last-child { grid-column: 1 / -1; }
+      .modal-print-receipt .modal-header-left { min-width: 0; }
+      .modal-print-receipt .modal-title { overflow-wrap: anywhere; }
+    }
+    @media (max-width: 340px) {
+      .modal-print-receipt .modal-actions { grid-template-columns: 1fr; }
+      .modal-print-receipt .receipt-preview-frame { height: calc(100dvh - 196px); }
     }
     .receipt-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; background: #f8fafc; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-color); }
     .toolbar-group { display: flex; align-items: center; gap: 10px; }
@@ -444,6 +490,17 @@
         width: 100%;
         min-width: 0;
       }
+      .token-stepper { gap: 5px; padding: 10px 12px; }
+      .token-step { gap: 4px; min-height: 38px; padding: 4px; font-size: 9px; }
+      .token-step:not(:last-child)::after { width: 5px; }
+      .token-step-dot { width: 16px; height: 16px; font-size: 8px; }
+      .token-meter-card { padding: 14px; }
+      .token-meter-heading strong { font-size: 20px; }
+      .token-amount-grid { grid-template-columns: 1fr; }
+      .token-amount-grid .modal-span-two { grid-column: auto; }
+      .token-quick-amounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .token-customer-card-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .token-customer-card-compact div:first-child { grid-column: 1 / -1; }
       .modal-error,
       .modal-result {
         word-break: break-word;

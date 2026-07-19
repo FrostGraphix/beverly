@@ -5,12 +5,15 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
+const sharedVat = read('packages/tokens/index.js');
+assert.match(sharedVat, /VENDING_VAT_BASIS_POINTS\s*=\s*750/);
+assert.match(sharedVat, /energyAmountMinor\s*=\s*Math\.round\(\(grossAmountMinor \* 10000\) \/ \(10000 \+ vatRateBasisPoints\)\)/);
+assert.match(sharedVat, /vatAmountMinor\s*=\s*grossAmountMinor - energyAmountMinor/);
+
 const vat = read('backend/wallet/src/services/vending-vat.ts');
-assert.match(vat, /VENDING_VAT_BASIS_POINTS\s*=\s*750/);
+assert.match(vat, /from '@beverly\/tokens'/);
 assert.match(vat, /calculateVendingVatBreakdown/);
-assert.match(vat, /grossAmountMinor/);
-assert.match(vat, /energyAmountMinor/);
-assert.match(vat, /vatAmountMinor/);
+assert.doesNotMatch(vat, /Math\.round/);
 
 const tokenEngine = read('backend/wallet/src/services/token-engine.ts');
 assert.match(tokenEngine, /calculateVendingVatBreakdown/);
@@ -20,6 +23,7 @@ assert.match(tokenEngine, /previewPurchaseWithPolicy/);
 assert.match(tokenEngine, /const units = naira \/ t\.basePricePerKwh/);
 assert.match(tokenEngine, /energyAmountMinor: vat\.energyAmountMinor/);
 assert.match(tokenEngine, /taxAmountMinor: vat\.vatAmountMinor/);
+assert.match(tokenEngine, /units: Number\(units\.toFixed\(4\)\)/);
 
 const migration = read('supabase/migrations/20260619120000_vending_vat_inclusive_breakdown.sql');
 assert.match(migration, /energy_amount_minor bigint/);
@@ -48,16 +52,18 @@ assert.match(customerPurchase, /vat_amount_minor: preview\.taxAmountMinor/);
 assert.match(customerPurchase, /netMinor: preview\.energyAmountMinor/);
 
 const paymentTransactions = read('backend/wallet/src/services/payment-transactions.ts');
-assert.match(paymentTransactions, /amountMinor: preview\.energyAmountMinor/);
-assert.match(paymentTransactions, /vatAmountMinor: preview\.taxAmountMinor/);
+assert.match(paymentTransactions, /amountMinor: energyAmountMinor/);
+assert.match(paymentTransactions, /vatAmountMinor/);
+assert.match(paymentTransactions, /vatRateBasisPoints/);
+assert.doesNotMatch(paymentTransactions, /previewPurchaseWithPolicy/);
 
 const vendorVend = read('apps/vendor/src/views/Vend.vue');
 assert.match(vendorVend, /Energy value/);
-assert.match(vendorVend, /VAT \(7\.5%\)/);
+assert.match(vendorVend, /vatRateBasisPoints/);
 
 const customerBuy = read('apps/customer/src/views/BuyToken.vue');
 assert.match(customerBuy, /Energy value/);
-assert.match(customerBuy, /VAT \(7\.5%\)/);
+assert.match(customerBuy, /vatRateBasisPoints/);
 
 const receipts = [
   read('apps/vendor/src/lib/receipts.ts'),
@@ -65,10 +71,28 @@ const receipts = [
   read('apps/admin/src/lib/receipts.ts'),
 ].join('\n');
 assert.match(receipts, /Energy Value/);
-assert.match(receipts, /VAT \(7\.5%\)/);
+assert.match(receipts, /vat_rate_basis_points/);
+assert.doesNotMatch(receipts, /units_kwh\)\.toFixed\([123]\)/);
+
+const unitDisplays = [
+  read('apps/vendor/src/lib/format.ts'),
+  read('apps/customer/src/lib/format.ts'),
+  read('apps/customer/src/views/ReceiptDetail.vue'),
+  read('apps/admin/src/views/Purchases.vue'),
+  read('backend/wallet/src/services/customer-purchase.ts'),
+  read('backend/wallet/src/services/notifications.ts'),
+].join('\n');
+assert.doesNotMatch(unitDisplays, /units(?:_kwh)?[^\n]*toFixed\([123]\)/);
 
 const reports = read('apps/admin/src/views/Reports.vue');
 assert.match(reports, /VAT collected/);
+
+const referenceApi = read('api/reference.js');
+assert.match(referenceApi, /calculateVendingVatBreakdown\(amtMinor\)/);
+assert.match(referenceApi, /unitsKwh = Number\(\(\(vat\.energyAmountMinor \/ 100\) \/ tariffNairaPerKwh\)\.toFixed\(4\)\)/);
+
+const smokeToken = read('tools/smoke-credit-token.cjs');
+assert.match(smokeToken, /energyAmountMinor \* \(10000 \+ vatRateBasisPoints\)/);
 assert.match(reports, /energyRevenueMinor/);
 
 const reportRoute = read('backend/wallet/src/routes/admin.ts');

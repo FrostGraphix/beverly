@@ -100,17 +100,17 @@ export interface PurchasePreview {
 }
 
 export function previewPurchase(
-    amountMinor: number,
+    energyAmountMinor: number,
     tariffId: string,
     vatRateBasisPoints = env.VENDING_VAT_BASIS_POINTS,
 ): PurchasePreview {
-    if (amountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
+    if (energyAmountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
     const t = resolveTariffPricing(tariffId);
-    const vat = calculateVendingVatBreakdown(amountMinor, vatRateBasisPoints);
+    const vat = calculateVendingVatBreakdown(energyAmountMinor, vatRateBasisPoints);
     const naira = vat.energyAmountMinor / 100;
     const units = naira / t.basePricePerKwh;
     return {
-        amountMinor,
+        amountMinor: vat.grossAmountMinor,
         units: Number(units.toFixed(4)),
         effectivePricePerKwh: t.effectivePricePerKwh,
         taxAmountMinor: vat.vatAmountMinor,
