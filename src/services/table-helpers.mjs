@@ -239,10 +239,10 @@ export function rowActionButtons(route) {
   const buttons = [];
   if (route.actions.includes("Recharge")) buttons.push("Recharge");
   if (route.actions.includes("Generate Token")) buttons.push("Generate Token");
+  if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("credit-token-record") && !String(route.hash || "").includes("clear-credit")) buttons.push("Cancel");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("clear-tamper-token-record")) buttons.push("Cancel");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("set-maximum-power-limit-token-record")) buttons.push("Cancel");
-  if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Edit")) buttons.push("Edit");
   if (route.actions.includes("Delete")) buttons.push("Delete");
   if (route.actions.includes("Add Task") && Array.isArray(route.columns) && route.columns.includes("Actions")) buttons.push("Add Task");

@@ -185,7 +185,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
-        amount_minor: input.amountMinor,
+        amount_minor: preview.grossAmountMinor,
         energy_amount_minor: preview.energyAmountMinor,
         vat_amount_minor: preview.taxAmountMinor,
         vat_rate_basis_points: preview.vatRateBasisPoints,
@@ -203,7 +203,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
     try {
         hold = await createHold({
             walletId: wallet.id,
-            amountMinor: input.amountMinor,
+            amountMinor: preview.grossAmountMinor,
             referenceType: 'purchase_order',
             referenceId: po.id,
             idempotencyKey: ledgerKey('purchase', 'debit', po.id, 'hold'),
@@ -264,7 +264,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
                     meterType,
                     stationId: meter.stationId,
                     tariffId: meter.tariffId,
-                    amountMinor: input.amountMinor,
+                    amountMinor: preview.grossAmountMinor,
                     grossAmountMinor: preview.grossAmountMinor,
                     energyAmountMinor: preview.energyAmountMinor,
                     vatAmountMinor: preview.taxAmountMinor,
@@ -307,7 +307,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         targetId: po.id,
         after: {
             meterId: meter.meterId,
-            amountMinor: input.amountMinor,
+            amountMinor: preview.grossAmountMinor,
             units: preview.units,
             status: po.status,
         },

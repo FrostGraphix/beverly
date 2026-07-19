@@ -1,6 +1,10 @@
+@import "../../packages/tokens/tokens.css";
+@import "../../packages/tokens/theme.css";
+
 /*
  * Beverly design tokens.
- * Layer order: primitive -> semantic -> component.
+ * Shared primitives come first.
+ * CRM aliases preserve compatibility.
  */
 
 :root {
@@ -34,39 +38,39 @@
   --bev-color-white: #ffffff;
 
   /* Primitive type tokens */
-  --bev-font-sans: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
-  --bev-font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; /* display face for H1 / eyebrow */
-  --bev-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  --bev-font-size-2xs: 10px;
-  --bev-font-size-xs: 11px;
-  --bev-font-size-sm: 12px;
-  --bev-font-size-md: 13px;
-  --bev-font-size-lg: 14px;
-  --bev-font-size-xl: 16px;
-  --bev-font-size-2xl: 18px;
-  --bev-font-size-3xl: 20px;
+  --bev-font-sans: var(--font-sans);
+  --bev-font-display: var(--font-display);
+  --bev-font-mono: var(--font-mono);
+  --bev-font-size-2xs: var(--t-2xs);
+  --bev-font-size-xs: var(--t-xs);
+  --bev-font-size-sm: var(--t-sm);
+  --bev-font-size-md: var(--t-base);
+  --bev-font-size-lg: var(--t-md);
+  --bev-font-size-xl: var(--t-lg);
+  --bev-font-size-2xl: var(--t-xl);
+  --bev-font-size-3xl: var(--t-2xl);
   --bev-line-tight: 1.2;
   --bev-line-normal: 1.5;
 
   /* Primitive space tokens */
-  --bev-space-0: 0;
-  --bev-space-1: 4px;
-  --bev-space-2: 8px;
-  --bev-space-3: 12px;
-  --bev-space-4: 16px;
-  --bev-space-5: 20px;
-  --bev-space-6: 24px;
-  --bev-space-7: 28px;
-  --bev-space-8: 32px;
+  --bev-space-0: var(--s-0);
+  --bev-space-1: var(--s-1);
+  --bev-space-2: var(--s-2);
+  --bev-space-3: var(--s-3);
+  --bev-space-4: var(--s-4);
+  --bev-space-5: var(--s-5);
+  --bev-space-6: var(--s-6);
+  --bev-space-7: var(--s-7);
+  --bev-space-8: var(--s-8);
   --bev-touch-target-min: 44px;
 
   /* Primitive shape tokens */
-  --bev-radius-xs: 4px;
-  --bev-radius-sm: 6px;
-  --bev-radius-md: 8px;
-  --bev-radius-lg: 12px;
-  --bev-radius-xl: 16px;
-  --bev-radius-pill: 999px;
+  --bev-radius-xs: var(--r-xs);
+  --bev-radius-sm: var(--r-sm);
+  --bev-radius-md: var(--r-md);
+  --bev-radius-lg: var(--r-lg);
+  --bev-radius-xl: var(--r-xl);
+  --bev-radius-pill: var(--r-full);
 
   /* Primitive motion tokens */
   --bev-motion-fast: 0.12s cubic-bezier(0.4, 0, 0.2, 1);
@@ -74,11 +78,11 @@
   --bev-motion-layout: 0.38s cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Primitive elevation tokens */
-  --bev-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --bev-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --bev-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
-  --bev-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
-  --bev-shadow-xl: 0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -8px rgba(0, 0, 0, 0.08);
+  --bev-shadow-xs: var(--shadow-1);
+  --bev-shadow-sm: var(--shadow-1);
+  --bev-shadow-md: var(--shadow-2);
+  --bev-shadow-lg: var(--shadow-3);
+  --bev-shadow-xl: var(--shadow-4);
   --bev-shadow-glow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 0 16px rgba(16, 185, 129, 0.3);
   --bev-shadow-glow-sm: 0 0 8px rgba(16, 185, 129, 0.25);
 
@@ -105,40 +109,40 @@
   --glass-blur-soft:       14px;
   --color-border:        oklch(20% 0.020 240 / 0.08);
   --color-border-strong: oklch(20% 0.020 240 / 0.14);
-  --color-success:         oklch(70% 0.19 145);
-  --color-success-soft:    oklch(70% 0.19 145 / 0.14);
-  --color-danger:          oklch(68% 0.20 25);
-  --color-danger-soft:     oklch(68% 0.20 25 / 0.10);
-  --color-warning:         oklch(78% 0.16 75);
-  --color-warning-soft:    oklch(78% 0.16 75 / 0.10);
-  --color-info:            oklch(72% 0.13 220);
-  --color-info-soft:       oklch(72% 0.13 220 / 0.10);
-  --color-neutral:         oklch(58% 0.015 240);
-  --color-neutral-soft:    oklch(97% 0.005 240);
+  --color-success:         var(--semantic-positive);
+  --color-success-soft:    var(--semantic-positive-soft);
+  --color-danger:          var(--semantic-negative);
+  --color-danger-soft:     var(--semantic-negative-soft);
+  --color-warning:         var(--semantic-warning);
+  --color-warning-soft:    var(--semantic-warning-soft);
+  --color-info:            var(--semantic-info);
+  --color-info-soft:       var(--semantic-info-soft);
+  --color-neutral:         var(--semantic-neutral);
+  --color-neutral-soft:    var(--semantic-neutral-soft);
   --color-source-live:        oklch(70% 0.19 145);
   --color-source-live-soft:   oklch(70% 0.19 145 / 0.14);
   --color-source-cached:      oklch(78% 0.16 75);
   --color-source-cached-soft: oklch(78% 0.16 75 / 0.10);
   --color-source-demo:        oklch(58% 0.015 240);
   --color-source-demo-soft:   oklch(97% 0.005 240);
-  --wallet-status-available: var(--color-success);
-  --wallet-status-available-soft: var(--color-success-soft);
-  --wallet-status-held: var(--color-warning);
-  --wallet-status-held-soft: var(--color-warning-soft);
-  --wallet-status-pending: var(--color-warning);
-  --wallet-status-pending-soft: var(--color-warning-soft);
-  --wallet-status-approved: var(--color-success);
-  --wallet-status-approved-soft: var(--color-success-soft);
-  --wallet-status-rejected: var(--color-danger);
-  --wallet-status-rejected-soft: var(--color-danger-soft);
-  --wallet-status-frozen: var(--color-info);
-  --wallet-status-frozen-soft: var(--color-info-soft);
-  --wallet-status-failed: var(--color-danger);
-  --wallet-status-failed-soft: var(--color-danger-soft);
-  --wallet-status-reversed: var(--color-info);
-  --wallet-status-reversed-soft: var(--color-info-soft);
-  --wallet-status-disputed: var(--color-warning);
-  --wallet-status-disputed-soft: var(--color-warning-soft);
+  --wallet-status-available: var(--status-available);
+  --wallet-status-available-soft: var(--status-available-soft);
+  --wallet-status-held: var(--status-held);
+  --wallet-status-held-soft: var(--status-held-soft);
+  --wallet-status-pending: var(--status-pending);
+  --wallet-status-pending-soft: var(--status-pending-soft);
+  --wallet-status-approved: var(--status-approved);
+  --wallet-status-approved-soft: var(--status-approved-soft);
+  --wallet-status-rejected: var(--status-rejected);
+  --wallet-status-rejected-soft: var(--status-rejected-soft);
+  --wallet-status-frozen: var(--status-frozen);
+  --wallet-status-frozen-soft: var(--status-frozen-soft);
+  --wallet-status-failed: var(--status-failed);
+  --wallet-status-failed-soft: var(--status-failed-soft);
+  --wallet-status-reversed: var(--status-reversed);
+  --wallet-status-reversed-soft: var(--status-reversed-soft);
+  --wallet-status-disputed: var(--status-disputed);
+  --wallet-status-disputed-soft: var(--status-disputed-soft);
 
   /* Component tokens */
   --button-height-sm: 28px;

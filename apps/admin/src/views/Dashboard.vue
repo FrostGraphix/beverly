@@ -80,7 +80,7 @@ const recentActivityRows = computed(() => {
             customerMeter: [p.customer_name, p.meter_id].filter(Boolean).join(' - ') || 'Unknown meter',
             station: p.station_id || '',
             amountMinor: p.amount_minor,
-            units: p.units_kwh ? `${p.units_kwh.toLocaleString('en-NG', { maximumFractionDigits: 1 })} kWh` : '',
+            units: p.units_kwh ? `${p.units_kwh.toLocaleString('en-NG', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} kWh` : '',
             status: p.status.replace(/_/g, ' '),
             statusTone: statusTone(p.status),
             createdAt: p.created_at,

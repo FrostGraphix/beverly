@@ -88,9 +88,56 @@
   --brand-glow: oklch(70% 0.19 145 / 0.18);
 
   /* ── Semantic accents ── */
+  --semantic-positive:      var(--brand-500);
+  --semantic-positive-soft: oklch(70% 0.19 145 / 0.14);
+  --semantic-warning:       oklch(78% 0.16 75);
+  --semantic-warning-soft:  oklch(78% 0.16 75 / 0.12);
+  --semantic-negative:      oklch(68% 0.20 25);
+  --semantic-negative-soft: oklch(68% 0.20 25 / 0.12);
+  --semantic-info:          oklch(72% 0.13 220);
+  --semantic-info-soft:     oklch(72% 0.13 220 / 0.12);
+  --semantic-neutral:       oklch(58% 0.015 240);
+  --semantic-neutral-soft:  oklch(58% 0.015 240 / 0.12);
+
   --accent:  oklch(65% 0.18 270);
-  --info:    oklch(72% 0.13 220);
-  --warn:    oklch(78% 0.16 75);
-  --danger:  oklch(68% 0.20 25);
-  --success: var(--brand);
+  --info:    var(--semantic-info);
+  --warn:    var(--semantic-warning);
+  --danger:  var(--semantic-negative);
+  --success: var(--semantic-positive);
+
+  /* Product status contract */
+  --status-active: var(--semantic-positive);
+  --status-active-soft: var(--semantic-positive-soft);
+  --status-approved: var(--semantic-positive);
+  --status-approved-soft: var(--semantic-positive-soft);
+  --status-delivered: var(--semantic-positive);
+  --status-delivered-soft: var(--semantic-positive-soft);
+  --status-online: var(--semantic-positive);
+  --status-online-soft: var(--semantic-positive-soft);
+  --status-settled: var(--semantic-positive);
+  --status-settled-soft: var(--semantic-positive-soft);
+  --status-available: var(--semantic-positive);
+  --status-available-soft: var(--semantic-positive-soft);
+  --status-pending: var(--semantic-warning);
+  --status-pending-soft: var(--semantic-warning-soft);
+  --status-held: var(--semantic-warning);
+  --status-held-soft: var(--semantic-warning-soft);
+  --status-disputed: var(--semantic-warning);
+  --status-disputed-soft: var(--semantic-warning-soft);
+  --status-reversed: var(--semantic-warning);
+  --status-reversed-soft: var(--semantic-warning-soft);
+  --status-frozen: var(--semantic-info);
+  --status-frozen-soft: var(--semantic-info-soft);
+  --status-failed: var(--semantic-negative);
+  --status-failed-soft: var(--semantic-negative-soft);
+  --status-rejected: var(--semantic-negative);
+  --status-rejected-soft: var(--semantic-negative-soft);
+  --status-offline: var(--semantic-negative);
+  --status-offline-soft: var(--semantic-negative-soft);
+  --status-suspended: var(--semantic-negative);
+  --status-suspended-soft: var(--semantic-negative-soft);
+  --status-closed: var(--semantic-negative);
+  --status-closed-soft: var(--semantic-negative-soft);
+  --status-neutral: var(--semantic-neutral);
+  --status-neutral-soft: var(--semantic-neutral-soft);
 }

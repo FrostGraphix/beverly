@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import StatusPopup from '../components/StatusPopup.vue';
 import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -17,6 +18,11 @@ const error = ref<{ title: string; message: string; action?: string; code?: stri
 const notice = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const remoteSending = ref(false);
 const copied = ref(false);
+const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
+
+function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
+    resultPopup.value = { tone, title, message };
+}
 const authOpen = ref(false);
 const authorization = ref('');
 const authError = ref('');
@@ -333,13 +339,17 @@ async function remoteSendGeneratedToken() {
         };
         if (response.status === 'success') {
             notice.value = { tone: 'success', title: 'Remote send delivered', message: 'The meter accepted the generated token.' };
+            showResultPopup('success', 'Remote send delivered', 'The meter accepted the generated token.');
             return;
         }
+        const followUpTitle = response.status === 'failed' ? 'Remote send needs manual entry' : response.status === 'unknown' ? 'Remote status unknown' : 'Remote delivery needs review';
+        const followUpMessage = response.remark || 'The token remains visible for manual entry if needed.';
         notice.value = {
             tone: response.status === 'failed' ? 'danger' : 'info',
-            title: response.status === 'failed' ? 'Remote send needs manual entry' : response.status === 'unknown' ? 'Remote status unknown' : 'Remote delivery needs review',
-            message: response.remark || 'The token remains visible for manual entry if needed.',
+            title: followUpTitle,
+            message: followUpMessage,
         };
+        showResultPopup(response.status === 'failed' ? 'danger' : 'info', followUpTitle, followUpMessage);
     } catch (e: any) {
         const details = describeApiError(e, e?.message ?? 'Remote send failed');
         notice.value = {
@@ -348,6 +358,7 @@ async function remoteSendGeneratedToken() {
             message: `${details.message}${details.action ? ` ${details.action}` : ''}`,
             code: details.code,
         };
+        showResultPopup('danger', details.title, `${details.message}${details.action ? ` ${details.action}` : ''}`);
     } finally {
         remoteSending.value = false;
     }
@@ -364,8 +375,9 @@ async function remoteSendGeneratedToken() {
         </div>
       </div>
 
+      <Transition name="step-anim" mode="out-in">
       <!-- Step: meter lookup -->
-      <div v-if="step === 'meter'" class="bw-card">
+      <div v-if="step === 'meter'" key="meter" class="bw-card">
         <h1 class="bw-h1">Vend electricity</h1>
         <p class="bw-muted" style="margin: 0 0 var(--s-5)">Enter the customer's meter number to begin.</p>
         <label class="bw-label">Meter number</label>
@@ -385,17 +397,15 @@ async function remoteSendGeneratedToken() {
       </div>
 
       <!-- Step: amount -->
-      <div v-else-if="step === 'amount'" class="bw-card">
+      <div v-else-if="step === 'amount'" key="amount" class="bw-card">
         <button class="bw-btn sm" style="margin-bottom: var(--s-4)" @click="step = 'meter'">← Back</button>
-        <p class="bw-label">Customer</p>
-        <h2 class="bw-h2" style="margin: 0">{{ meter?.customerName }}</h2>
-        <p class="bw-muted bw-mono" style="font-size: var(--t-sm); margin-top: 4px">
-          {{ meter?.meterId }} · {{ meter?.stationId }} · {{ meter?.tariffId }}
-        </p>
-
-        <span :class="['bw-badge', meter?.isThreePhase ? 'info' : 'neutral']">
-          {{ meterTypeLabel(meter?.isThreePhase) }}
-        </span>
+        <section class="bw-recharge-summary" aria-label="Selected meter">
+          <div><span>Customer</span><strong>{{ meter?.customerName }}</strong></div>
+          <div><span>Meter</span><strong class="bw-mono">{{ meter?.meterId }}</strong></div>
+          <div><span>Tariff</span><strong>{{ meter?.tariffId }}</strong></div>
+          <div><span>Station</span><strong>{{ meter?.stationId }}</strong></div>
+          <div><span>Phase</span><strong>{{ meterTypeLabel(meter?.isThreePhase) }}</strong></div>
+        </section>
 
         <div v-if="!canVend" class="bw-alert" style="margin-top: var(--s-3); display: grid; gap: 6px">
           <strong>Preview-only meter metadata</strong>
@@ -404,9 +414,9 @@ async function remoteSendGeneratedToken() {
         </div>
 
         <div style="margin-top: var(--s-5)">
-          <label class="bw-label">Amount (₦)</label>
+          <label class="bw-label">Energy amount (₦)</label>
           <input class="bw-input bw-mono" type="number" min="100" step="100" v-model.number="amountNaira" style="font-size: var(--t-xl)" />
-          <div class="bw-row" style="margin-top: var(--s-3); gap: var(--s-2); flex-wrap: wrap">
+          <div class="bw-recharge-quick-grid" style="margin-top: var(--s-3)">
             <button v-for="n in [1000, 2000, 5000, 10000, 25000]" :key="n"
                     class="bw-btn sm" @click="amountNaira = n">₦{{ n.toLocaleString() }}</button>
           </div>
@@ -425,7 +435,7 @@ async function remoteSendGeneratedToken() {
       </div>
 
       <!-- Step: preview / confirm -->
-      <div v-else-if="step === 'preview'" class="bw-card vend-preview-card">
+      <div v-else-if="step === 'preview'" key="preview" class="bw-card vend-preview-card">
         <button class="bw-btn sm" style="margin-bottom: var(--s-4)" @click="step = 'amount'">← Back</button>
         <p class="bw-label">Confirm purchase</p>
         <h2 class="bw-h2 bw-mono" style="font-size: var(--t-3xl); margin: 0">{{ naira(preview?.amountMinor) }}</h2>
@@ -434,7 +444,7 @@ async function remoteSendGeneratedToken() {
         <div style="border-top: 1px solid var(--border); margin-top: var(--s-4); padding-top: var(--s-4); display: grid; gap: var(--s-2)">
           <div class="bw-row"><span class="bw-muted">Amount paid</span><span class="bw-spacer"></span><strong>{{ naira(preview?.amountMinor) }}</strong></div>
           <div class="bw-row"><span class="bw-muted">Energy value</span><span class="bw-spacer"></span><strong>{{ naira(preview?.energyAmountMinor) }}</strong></div>
-          <div class="bw-row"><span class="bw-muted">VAT (7.5%)</span><span class="bw-spacer"></span><strong>{{ naira(preview?.taxAmountMinor) }}</strong></div>
+          <div class="bw-row"><span class="bw-muted">VAT ({{ Number(preview?.vatRateBasisPoints ?? 0) / 100 }}%)</span><span class="bw-spacer"></span><strong>{{ naira(preview?.taxAmountMinor) }}</strong></div>
           <div class="bw-row"><span class="bw-muted">Customer</span><span class="bw-spacer"></span><strong>{{ meter?.customerName }}</strong></div>
           <div class="bw-row"><span class="bw-muted">Meter</span><span class="bw-spacer"></span><span class="bw-mono">{{ meter?.meterId }}</span></div>
           <div class="bw-row"><span class="bw-muted">Phase</span><span class="bw-spacer"></span><span>{{ meterTypeLabel(meter?.isThreePhase) }}</span></div>
@@ -459,7 +469,7 @@ async function remoteSendGeneratedToken() {
       </div>
 
       <!-- Step: success / receipt -->
-      <div v-else-if="step === 'success'" class="bw-stack">
+      <div v-else-if="step === 'success'" key="success" class="bw-stack">
         <div v-if="notice" :class="['bw-alert', notice.tone === 'danger' ? 'danger' : '']" style="display: grid; gap: 6px">
           <strong>{{ notice.title }}</strong>
           <span>{{ notice.message }}</span>
@@ -479,7 +489,7 @@ async function remoteSendGeneratedToken() {
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Remote state</span><span class="bw-spacer"></span><strong>{{ remoteState.replace(/_/g, ' ') }}</strong></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Order</span><span class="bw-spacer"></span><span class="bw-mono">#{{ String(result?.purchaseOrder?.id).slice(0, 8) }}</span></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Energy value</span><span class="bw-spacer"></span><strong>{{ naira(result?.purchaseOrder?.energy_amount_minor ?? preview?.energyAmountMinor) }}</strong></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">VAT (7.5%)</span><span class="bw-spacer"></span><strong>{{ naira(result?.purchaseOrder?.vat_amount_minor ?? preview?.taxAmountMinor) }}</strong></div>
+          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">VAT ({{ Number(result?.purchaseOrder?.vat_rate_basis_points ?? preview?.vatRateBasisPoints ?? 0) / 100 }}%)</span><span class="bw-spacer"></span><strong>{{ naira(result?.purchaseOrder?.vat_amount_minor ?? preview?.taxAmountMinor) }}</strong></div>
         </div>
         <div class="vend-actions">
           <button class="bw-btn primary" @click="remoteSendGeneratedToken" :disabled="!canRemoteSendToken">
@@ -491,7 +501,16 @@ async function remoteSendGeneratedToken() {
         </div>
         <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New vend</button>
       </div>
+      </Transition>
     </div>
+
+    <StatusPopup
+      :open="Boolean(resultPopup)"
+      :tone="resultPopup?.tone ?? 'info'"
+      :title="resultPopup?.title ?? ''"
+      :message="resultPopup?.message ?? ''"
+      @update:open="(v) => { if (!v) resultPopup = null; }"
+    />
 
     <ConfirmDialog
       v-model:open="authOpen"
@@ -527,6 +546,7 @@ async function remoteSendGeneratedToken() {
   max-width: 560px;
   min-width: 0;
   margin-inline: auto;
+  position: relative;
 }
 
 .vend-preview-card .bw-row { min-width: 0; gap: var(--s-2); }
@@ -555,6 +575,9 @@ async function remoteSendGeneratedToken() {
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--surface) 78%, transparent);
   color: var(--text-muted);
+  transition: color var(--dur-base, 0.22s) var(--ease-out, ease),
+              border-color var(--dur-base, 0.22s) var(--ease-out, ease),
+              background var(--dur-base, 0.22s) var(--ease-out, ease);
 }
 
 .vend-flow-step span {
@@ -562,6 +585,11 @@ async function remoteSendGeneratedToken() {
   height: 9px;
   border-radius: 999px;
   background: currentColor;
+  transition: transform var(--dur-fast, 0.14s) var(--ease-spring, ease), background var(--dur-base, 0.22s) var(--ease-out, ease);
+}
+
+.vend-flow-step.active span {
+  transform: scale(1.3);
 }
 
 .vend-flow-step strong {
@@ -606,6 +634,32 @@ async function remoteSendGeneratedToken() {
   inset: 0 0 auto;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--brand), transparent);
+}
+
+.step-anim-enter-active {
+  transition: opacity 0.26s var(--ease-out, ease), transform 0.26s var(--ease-out, ease);
+}
+.step-anim-leave-active {
+  transition: opacity 0.16s var(--ease-out, ease), transform 0.16s var(--ease-out, ease);
+  position: absolute;
+  inset-inline: 0;
+}
+.step-anim-enter-from {
+  opacity: 0;
+  transform: translateX(18px);
+}
+.step-anim-leave-to {
+  opacity: 0;
+  transform: translateX(-18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-anim-enter-active,
+  .step-anim-leave-active,
+  .vend-flow-step,
+  .vend-flow-step span {
+    transition: none !important;
+  }
 }
 
 @media (max-width: 520px) {

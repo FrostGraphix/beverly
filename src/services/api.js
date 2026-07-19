@@ -12,6 +12,7 @@ export const apiClient = axios.create({
 
 const sessionStorageKey = "beverly.session";
 const defaultIdleTimeoutMs = 30 * 60 * 1000;
+const defaultAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 
 // Session cookie keys written by JS (display values only).
 // token and refreshToken are intentionally excluded — they are HttpOnly
@@ -45,6 +46,11 @@ export function sessionTimeoutMs() {
   return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : defaultIdleTimeoutMs;
 }
 
+export function sessionAbsoluteTimeoutMs() {
+  const rawValue = Number(import.meta.env?.VITE_SESSION_ABSOLUTE_TIMEOUT_MS || defaultAbsoluteTimeoutMs);
+  return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : defaultAbsoluteTimeoutMs;
+}
+
 export function readSessionState() {
   try {
     const rawValue = localStorage.getItem(sessionStorageKey);
@@ -53,18 +59,23 @@ export function readSessionState() {
     if (!parsed || typeof parsed !== "object") return null;
     const lastActiveAt = Number(parsed.lastActiveAt);
     const expiresAt = Number(parsed.expiresAt);
-    if (!Number.isFinite(lastActiveAt) || !Number.isFinite(expiresAt)) return null;
-    return { lastActiveAt, expiresAt };
+    const startedAt = Number(parsed.startedAt || lastActiveAt);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(lastActiveAt) || !Number.isFinite(expiresAt)) return null;
+    return { startedAt, lastActiveAt, expiresAt };
   } catch {
     return null;
   }
 }
 
-export function writeSessionState(lastActiveAt = currentTimestamp()) {
-  const expiresAt = lastActiveAt + sessionTimeoutMs();
-  const nextState = { lastActiveAt, expiresAt };
+export function writeSessionState(lastActiveAt = currentTimestamp(), startedAt = readSessionState()?.startedAt || lastActiveAt) {
+  const expiresAt = Math.min(lastActiveAt + sessionTimeoutMs(), startedAt + sessionAbsoluteTimeoutMs());
+  const nextState = { startedAt, lastActiveAt, expiresAt };
   localStorage.setItem(sessionStorageKey, JSON.stringify(nextState));
   return nextState;
+}
+
+export function startSession(startedAt = currentTimestamp()) {
+  return writeSessionState(startedAt, startedAt);
 }
 
 export function touchSession() {
@@ -187,7 +198,7 @@ export async function refreshSession() {
       const newToken = data.token || "";
       if (!newToken) return "";
       // Upgrade the new token to an HttpOnly cookie via /api/auth/session.
-      await fetch("/api/auth/session", {
+      const sessionRes = await fetch("/api/auth/session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -195,8 +206,11 @@ export async function refreshSession() {
           token: newToken,
           refreshToken: data.refreshToken || ""
         })
-      }).catch(() => { /* best-effort */ });
-      touchSession();
+      });
+      if (!sessionRes.ok) return "";
+      const sessionJson = await sessionRes.json().catch(() => null);
+      const startedAt = Number(sessionJson?.data?.startedAt);
+      writeSessionState(currentTimestamp(), Number.isFinite(startedAt) ? startedAt : undefined);
       return newToken;
     } catch {
       return "";
@@ -242,7 +256,8 @@ function writeSessionCookies(session) {
 export async function postApi(path, payload = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, payload, {
-    headers: options.headers || {}
+    headers: options.headers || {},
+    ...(options.timeout ? { timeout: options.timeout } : {})
   });
   return validateApiEnvelope(response.data, cleanPath || "postApi");
 }
@@ -271,29 +286,13 @@ export async function uploadApi(path, formData, options = {}) {
 }
 
 export async function login(payload) {
-  const response = validateLoginResponse(await postApi("/api/user/login", payload));
+  const response = validateLoginResponse(await postApi("/api/user/login", payload, { timeout: 15000 }));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
 
-  // Write token + refreshToken as HttpOnly cookies via the server.
-  // This removes them from document.cookie entirely.
-  await fetch("/api/auth/session", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      token,
-      refreshToken: response.data?.refreshToken || "",
-      userId: response.data?.userId || payload.userId,
-      userName: response.data?.userName || payload.userId,
-      roleId: response.data?.roleId || null,
-      remark: response.data?.remark || response.data?.roleContent || "",
-      email: response.data?.email || ""
-    })
-  }).catch(() => { /* if session endpoint fails, we still have a valid token from login */ });
-
-  // Write only display values to JS-readable cookies.
-  writeSessionState();
+  // Authentication establishes HttpOnly cookies server-side.
+  const serverStartedAt = Number(response.data?.startedAt);
+  startSession(Number.isFinite(serverStartedAt) ? serverStartedAt : currentTimestamp());
   setCookie("SiteManager", payload.userId);
   setCookie("SiteCom", "ACB");
   writeSessionCookies({

@@ -303,8 +303,10 @@ async function runFlow(browserName, page) {
   });
   await page.waitForSelector("text=Recharge", { timeout: 10000 });
   await page.click('[data-testid="table-row-action-recharge-1"]');
-  await page.waitForSelector("text=Total Paid(MMK)", { timeout: 10000 });
-  await page.locator(".modal-field", { hasText: "Total Paid(MMK)" }).locator("input").fill("350");
+  await page.waitForSelector(".token-meter-stage", { timeout: 10000 });
+  await page.locator(".modal-actions .base-button--primary").click();
+  await page.waitForSelector("text=Amount (NGN)", { timeout: 10000 });
+  await page.locator(".modal-field", { hasText: "Amount (NGN)" }).locator("input").fill("350");
   await page.evaluate(() => {
     document.querySelector(".modal-actions .base-button--primary")?.click();
   });

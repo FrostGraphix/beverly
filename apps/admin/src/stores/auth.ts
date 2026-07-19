@@ -89,6 +89,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             localStorage.setItem('beverly.staff.permissions', JSON.stringify(permissions));
         },
         logout() {
+            if (this.accessToken) void api.post('/api/v1/admin/logout', {}).catch(() => undefined);
             this.accessToken = null;
             this.user = null;
             this.permissions = [];

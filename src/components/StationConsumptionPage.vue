@@ -14,7 +14,7 @@
           <div>
             <div class="scc-hero-eyebrow">Energy Intelligence</div>
             <h1 class="scc-hero-title">Station Consumption</h1>
-            <p class="scc-hero-sub">Meter odometer deltas · pre-aggregated every 6 h · instant queries</p>
+            <p class="scc-hero-sub">Compare station demand, meter activity, and load trends.</p>
           </div>
         </div>
         <div class="scc-hero-badges">
@@ -65,9 +65,9 @@
         <div class="scc-ctrl-body">
           <div class="scc-daterange">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-cal-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <input v-model="from" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="from" type="date" class="scc-date" aria-label="Start date" @change="onCustomDate" />
             <span class="scc-date-sep" aria-hidden="true">&rarr;</span>
-            <input v-model="to" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="to" type="date" class="scc-date" aria-label="End date" @change="onCustomDate" />
           </div>
         </div>
       </div>
@@ -88,7 +88,7 @@
           <!-- Station filter -->
           <div class="scc-select-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-select-icon"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-            <select v-model="stationFilter" class="scc-select" @change="load">
+            <select v-model="stationFilter" class="scc-select" aria-label="Station" @change="load">
               <option value="">All stations</option>
               <option v-for="s in STATIONS" :key="s" :value="s">{{ s }}</option>
             </select>
@@ -101,7 +101,8 @@
     <!-- Alerts -->
     <div v-if="error" class="scc-alert scc-alert--err">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      {{ error }}
+      <span>{{ error }}</span>
+      <button type="button" :disabled="loading" @click="load">Retry</button>
     </div>
     <div v-else-if="rangeNote" class="scc-alert scc-alert--info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -680,7 +681,7 @@ export default {
       const deltaData = series.map((r) => parseFloat((r.delta || 0).toFixed(3)));
       const balanceData = series.map((r) => r.remain1 == null ? null : parseFloat(r.remain1.toFixed(3)));
       const rechargeByDate = this.rechargeData.byDate || {};
-      const rechargeData = labels.map((d) => (rechargeByDate[d] ? parseFloat(rechargeByDate[d].units.toFixed(2)) : null));
+      const rechargeData = labels.map((d) => (rechargeByDate[d] ? parseFloat(rechargeByDate[d].units.toFixed(4)) : null));
       const hasBalance = balanceData.some((v) => v != null);
       const hasRecharges = rechargeData.some((v) => v != null);
       return {
@@ -813,7 +814,10 @@ export default {
         }
       } catch (err) {
         if (myReq !== this.reqId) return;
-        this.error = err && err.message ? err.message : "Failed to load station consumption analytics.";
+        const message = err && err.message ? err.message : "";
+        this.error = /fetch failed|statement timeout|timed out/i.test(message)
+          ? "Station analytics is temporarily unavailable."
+          : message || "Failed to load station consumption analytics.";
         this.data = null;
       } finally {
         if (myReq === this.reqId) this.loading = false;
@@ -1195,6 +1199,17 @@ export default {
   line-height: 1.4;
 }
 .scc-alert svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+.scc-alert span { flex: 1; min-width: 0; }
+.scc-alert button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.scc-alert button:disabled { opacity: .5; cursor: default; }
 .scc-alert--err  { background: var(--danger-bg, #fef2f2); border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 30%, transparent); color: var(--danger, #dc2626); }
 .scc-alert--info { background: color-mix(in srgb, var(--primary) 9%, var(--bg-card)); border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); color: var(--primary); }
 
@@ -1598,7 +1613,9 @@ export default {
   }
 }
 @media (max-width: 400px) {
-  .scc-kpis { grid-template-columns: 1fr; }
+  .scc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scc-kpi { min-width: 0; }
+  .scc-kpi-value { font-size: 14px; overflow-wrap: anywhere; }
   .scc-hero-actions .scc-hbtn:not(.scc-hbtn--primary) { display: none; }
   .scc-daterange { gap: 4px; }
   .scc-date-sep { font-size: 10px; }

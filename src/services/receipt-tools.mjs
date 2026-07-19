@@ -369,7 +369,7 @@ export function receiptHtml(model, options = {}) {
     body { 
       font-family: Inter, "Segoe UI", Arial, sans-serif;
       margin: 0; 
-      padding: 24px;
+      padding: 0;
       background: ${bodyBackground};
       color: var(--text-main);
     }
@@ -829,11 +829,11 @@ export async function downloadReceiptPdf(model) {
     const capturePage = document.createElement("div");
     capturePage.style.width = "794px";
     capturePage.style.minHeight = "1123px";
-    capturePage.style.padding = "24px 0";
+    capturePage.style.padding = "0";
     capturePage.style.background = "#ffffff";
-    capturePage.style.display = "flex";
-    capturePage.style.justifyContent = "center";
-    capturePage.style.alignItems = "flex-start";
+    capturePage.style.display = "block";
+    capturePage.style.textAlign = "center";
+    receiptElement.style.display = "inline-flex";
     capturePage.appendChild(receiptElement);
     wrapper.replaceChildren(capturePage);
     const opt = {

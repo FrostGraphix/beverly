@@ -22,6 +22,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHa
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
+import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
 
 export type ActorType = 'staff' | 'vendor_user' | 'customer';
 
@@ -44,6 +45,7 @@ export interface Actor {
 declare module 'fastify' {
     interface FastifyRequest {
         actor?: Actor;
+        portalSessionKey?: string;
     }
     interface FastifyInstance {
         requireAuth: () => preHandlerHookHandler;
@@ -197,6 +199,15 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             const actor = await resolveActor(token);
             if (!actor) {
                 return reply.code(401).send({ error: 'unauthorized', message: 'Invalid or expired session.' });
+            }
+            try {
+                req.portalSessionKey = await enforcePortalSession(actor, token);
+            } catch (error) {
+                if (error instanceof PortalSessionError) {
+                    if (error.unavailable) req.log.error({ err: error }, 'portal session validation failed');
+                    return reply.code(error.unavailable ? 503 : 401).send({ error: error.code, message: error.message });
+                }
+                throw error;
             }
             req.actor = actor;
             return undefined;

@@ -83,13 +83,20 @@ function findTariff(tariffs, tariffId) {
 function buildSmokeCreditTokenPayload(account, options = {}) {
   const targetUnit = Number(options.unitToVend ?? unitToVend);
   const unitPrice = Number(options.unitPrice);
+  const vatRateBasisPoints = Number(options.vatRateBasisPoints ?? 750);
   if (!Number.isFinite(targetUnit) || targetUnit <= 0) {
     throw new Error("unitToVend must be greater than 0");
   }
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     throw new Error("unitPrice must be greater than 0");
   }
-  const amount = Math.round(targetUnit * unitPrice * 100) / 100;
+  if (!Number.isInteger(vatRateBasisPoints) || vatRateBasisPoints < 0 || vatRateBasisPoints > 10000) {
+    throw new Error("vatRateBasisPoints must be an integer between 0 and 10000");
+  }
+  const energyAmountMinor = Math.round(targetUnit * unitPrice * 100);
+  const amount = Math.round(
+    (energyAmountMinor * (10000 + vatRateBasisPoints)) / 10000
+  ) / 100;
   const payload = {
     customerId: account.customerId,
     meterId: account.meterId || meterId,

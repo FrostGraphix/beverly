@@ -63,6 +63,7 @@ import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET
 import { runMalwareScan } from '../services/file-scan.js';
 import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
 import { assertClientIdempotencyKey } from '../services/idempotency.js';
+import { revokePortalSession } from '../services/portal-session.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' ? 429
@@ -334,6 +335,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {
+        await revokePortalSession(req.portalSessionKey);
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'customer',

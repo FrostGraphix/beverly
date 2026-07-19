@@ -127,7 +127,7 @@ function tokenSmsBody(input: {
         `Token: ${input.token}`,
         `Meter: ${input.meterId}`,
         `Amount: ${amount}`,
-        `Units: ${input.units.toFixed(2)} kWh`,
+        `Units: ${input.units.toFixed(4)} kWh`,
         input.receiptId ? `Receipt: ${input.receiptId}` : '',
         'Keep this token safe. Beverly will never ask for your verification code.',
     ].filter(Boolean).join('\n');
@@ -257,7 +257,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
-        amount_minor: input.amountMinor,
+        amount_minor: preview.grossAmountMinor,
         energy_amount_minor: preview.energyAmountMinor,
         vat_amount_minor: preview.taxAmountMinor,
         vat_rate_basis_points: preview.vatRateBasisPoints,
@@ -283,7 +283,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         try {
             hold = await createHold({
                 walletId: wallet.id,
-                amountMinor: input.amountMinor,
+                amountMinor: preview.grossAmountMinor,
                 referenceType: 'purchase_order',
                 referenceId: po.id,
                 idempotencyKey: ledgerKey('purchase', 'debit', po.id, 'hold'),
@@ -335,7 +335,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                     meterType,
                     stationId: meter.stationId,
                     tariffId: meter.tariffId,
-                    amountMinor: input.amountMinor,
+                    amountMinor: preview.grossAmountMinor,
                     grossAmountMinor: preview.grossAmountMinor,
                     energyAmountMinor: preview.energyAmountMinor,
                     vatAmountMinor: preview.taxAmountMinor,
@@ -361,7 +361,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 action: 'customer.purchase.wallet',
                 targetType: 'purchase_order',
                 targetId: po.id,
-                after: { meterId: meter.meterId, amountMinor: input.amountMinor, status: 'delivered' },
+                after: { meterId: meter.meterId, amountMinor: preview.grossAmountMinor, status: 'delivered' },
             });
 
             try {
@@ -369,7 +369,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                     customerId: input.customerId,
                     token: tokenRes.token,
                     meterId: meter.meterId,
-                    amountMinor: input.amountMinor,
+                    amountMinor: preview.grossAmountMinor,
                     units: preview.units,
                     receiptId: receipt.id,
                 });
@@ -398,7 +398,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             notifyTokenPurchased(input.customerId, {
                 meterId: meter.meterId,
                 units: preview.units,
-                amountMinor: input.amountMinor,
+                amountMinor: preview.grossAmountMinor,
                 token: tokenRes.token,
             }).catch(() => undefined);
 
@@ -438,7 +438,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             actor_type: 'customer',
             actor_id: input.customerId,
             purpose: 'token_purchase',
-            amount_minor: input.amountMinor,
+            amount_minor: preview.grossAmountMinor,
             status: PAYMENT_STATUS.INITIATED,
             idempotency_key: `customer_purchase.${po.id}`,
             metadata: { purchase_order_id: po.id },
@@ -455,7 +455,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         try {
             initRes = await initializeTransaction({
                 email,
-                amountMinor: input.amountMinor,
+                amountMinor: preview.grossAmountMinor,
                 reference,
                 callbackUrl: input.callbackUrl,
                 metadata: { purchase_order_id: po.id, customer_id: input.customerId },
@@ -486,7 +486,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
                 action: 'customer.purchase.direct_pay_failed',
                 targetType: 'purchase_order',
                 targetId: po.id,
-                after: { meterId: meter.meterId, amountMinor: input.amountMinor, reference, reason: message },
+                after: { meterId: meter.meterId, amountMinor: preview.grossAmountMinor, reference, reason: message },
             }).catch(() => undefined);
             throw new CustomerPurchaseError(message, 'payment_init_failed');
         }
@@ -504,7 +504,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             action: 'customer.purchase.direct_pay.init',
             targetType: 'purchase_order',
             targetId: po.id,
-        after: { meterId: meter.meterId, amountMinor: input.amountMinor, reference },
+        after: { meterId: meter.meterId, amountMinor: preview.grossAmountMinor, reference },
         });
 
         return {
@@ -654,7 +654,7 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         customerName: meter.customerName,
         stationId: meter.stationId,
         tariffId: meter.tariffId,
-        amountMinor,
+        amountMinor: preview.grossAmountMinor,
         units: preview.units,
         tariffRate: preview.effectivePricePerKwh,
         vatMinor: preview.taxAmountMinor,

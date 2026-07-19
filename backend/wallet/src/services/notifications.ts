@@ -199,7 +199,7 @@ async function sendEmailNotification(cu: CustomerRow, payload: NotificationPaylo
 export function notifyTokenPurchased(customerId: string, opts: {
     meterId: string; units?: number | null; amountMinor: number; token: string;
 }): Promise<void> {
-    const units = opts.units ? ` · ${opts.units.toFixed(2)} kWh` : '';
+    const units = opts.units ? ` · ${opts.units.toFixed(4)} kWh` : '';
     const amount = `₦${(opts.amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
     return sendNotification(customerId, {
         type:  'token_purchased',

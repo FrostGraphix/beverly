@@ -107,7 +107,7 @@ async function goToPreview() {
             meter_id: selMeter.value.meter_id,
             amount_minor: amountMinor.value,
         });
-        mode.value = walletBal.value >= amountMinor.value ? 'wallet' : 'direct_pay';
+        mode.value = walletBal.value >= Number(preview.value.amountMinor ?? 0) ? 'wallet' : 'direct_pay';
         step.value = 3;
     } catch (e: any) {
         error.value = describeApiError(e, e?.message ?? 'Could not load preview.');
@@ -352,17 +352,17 @@ async function remoteSendGeneratedToken() {
     <template v-if="step === 2">
       <div class="bw-card">
         <p class="bw-page-title" style="margin-bottom: var(--s-1)">How much?</p>
-        <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-4)">
-          Meter: <span class="bw-mono">{{ selMeter?.meter_id }}</span>
-          <span :class="['bw-badge', selMeter?.meter_type === 'three_phase' ? 'info' : 'neutral']" style="margin-left:6px">
-            {{ meterTypeLabel(selMeter?.meter_type) }}
-          </span>
-        </p>
-        <label class="bw-label">Amount (₦)</label>
+        <section class="bw-recharge-summary" aria-label="Selected meter">
+          <div><span>Meter</span><strong class="bw-mono">{{ selMeter?.meter_id }}</strong></div>
+          <div><span>Phase</span><strong>{{ meterTypeLabel(selMeter?.meter_type) }}</strong></div>
+          <div><span>Tariff</span><strong>{{ selMeter?.tariff_id || '-' }}</strong></div>
+          <div><span>Station</span><strong>{{ selMeter?.station_id || '-' }}</strong></div>
+        </section>
+        <label class="bw-label">Energy amount (₦)</label>
         <input class="bw-input bw-mono" v-model="amountRaw" type="number" min="500"
                inputmode="numeric" placeholder="0.00"
                style="font-size: var(--t-2xl); font-weight:700; text-align:right" />
-        <div class="bw-quick-amounts" style="margin-top: var(--s-3)">
+        <div class="bw-quick-amounts bw-recharge-quick-grid" style="margin-top: var(--s-3)">
           <button v-for="a in quickAmts" :key="a"
                   :class="['bw-quick-amt', amountMinor === a ? 'active' : '']"
                   @click="setQuick(a)">
@@ -413,7 +413,7 @@ async function remoteSendGeneratedToken() {
             <span class="bw-money" style="font-weight:700">{{ naira(preview.energyAmountMinor) }}</span>
           </div>
           <div class="bw-row" style="justify-content:space-between">
-            <span class="bw-muted" style="font-size: var(--t-sm)">VAT (7.5%)</span>
+            <span class="bw-muted" style="font-size: var(--t-sm)">VAT ({{ Number(preview.vatRateBasisPoints ?? 0) / 100 }}%)</span>
             <span class="bw-money" style="font-weight:700">{{ naira(preview.vatMinor) }}</span>
           </div>
           <hr style="border:none; border-top:1px solid var(--border)">
@@ -422,14 +422,14 @@ async function remoteSendGeneratedToken() {
             <div class="bw-row" style="gap: var(--s-2)">
               <button :class="['bw-badge', mode === 'wallet' ? 'success' : 'neutral']"
                       style="cursor:pointer; border:none"
-                      :disabled="walletBal < amountMinor"
+                      :disabled="walletBal < preview.amountMinor"
                       @click="mode = 'wallet'">Wallet ({{ naira(walletBal) }})</button>
               <button :class="['bw-badge', mode === 'direct_pay' ? 'info' : 'neutral']"
                       style="cursor:pointer; border:none"
                       @click="mode = 'direct_pay'">Card</button>
             </div>
           </div>
-          <div v-if="mode === 'wallet' && walletBal < amountMinor" class="bw-alert warn" style="font-size: var(--t-xs)">
+          <div v-if="mode === 'wallet' && walletBal < preview.amountMinor" class="bw-alert warn" style="font-size: var(--t-xs)">
             Insufficient wallet balance.
             <router-link to="/wallet/fund" style="color:var(--brand); font-weight:600">Top up →</router-link>
           </div>
@@ -444,7 +444,7 @@ async function remoteSendGeneratedToken() {
       <div class="bw-row" style="gap: var(--s-3)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="step = 2">Back</button>
         <button class="bw-btn primary" style="flex:2; justify-content:center"
-                :disabled="loading || (mode === 'wallet' && walletBal < amountMinor)"
+                :disabled="loading || (mode === 'wallet' && walletBal < preview.amountMinor)"
                 @click="purchase">
           {{ loading ? 'Processing…' : mode === 'direct_pay' ? 'Pay with Card →' : 'Buy Token' }}
         </button>
@@ -498,7 +498,7 @@ async function remoteSendGeneratedToken() {
           <div class="bw-row" style="justify-content:space-between"><span class="bw-muted">Meter</span><strong class="bw-mono">{{ result.purchaseOrder?.meter_id }}</strong></div>
           <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Amount paid</span><strong>{{ naira(result.purchaseOrder?.amount_minor ?? preview?.amountMinor) }}</strong></div>
           <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Energy value</span><strong>{{ naira(result.purchaseOrder?.energy_amount_minor ?? preview?.energyAmountMinor) }}</strong></div>
-          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">VAT (7.5%)</span><strong>{{ naira(result.purchaseOrder?.vat_amount_minor ?? preview?.vatMinor) }}</strong></div>
+          <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">VAT ({{ Number(result.purchaseOrder?.vat_rate_basis_points ?? preview?.vatRateBasisPoints ?? 0) / 100 }}%)</span><strong>{{ naira(result.purchaseOrder?.vat_amount_minor ?? preview?.vatMinor) }}</strong></div>
           <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Remote state</span><strong>{{ remoteState.replace(/_/g, ' ') }}</strong></div>
           <div class="bw-row" style="justify-content:space-between; margin-top: var(--s-2)"><span class="bw-muted">Order</span><strong class="bw-mono">#{{ String(result.purchaseOrder?.id ?? '').slice(0, 8) }}</strong></div>
         </div>

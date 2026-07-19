@@ -37,6 +37,7 @@ export function validateLoginResponse(value) {
   return {
     ...envelope,
     data: {
+      ...envelope.data,
       token: optionalString(envelope.data.token),
       userId: optionalString(envelope.data.userId),
       userName: optionalString(envelope.data.userName || envelope.data.name),
