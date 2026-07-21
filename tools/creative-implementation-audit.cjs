@@ -157,7 +157,7 @@ function runAudit(options = {}) {
         profile.includes("wallet-profile-shell") &&
         profile.includes("wallet-profile-card") &&
         profile.includes("BaseIconButton") &&
-        profile.includes('aria-label="Return to dashboard"')
+        profile.includes('aria-label="Close profile"')
       ) || (
         profile.includes("profile-overlay") &&
         profile.includes("profile-panel") &&

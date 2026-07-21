@@ -30,11 +30,8 @@ import {
 import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, getRefundSummary } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
-import { listFlags, setFlag, createFlag, isFlagEnabled } from '../services/feature-flags.js';
-import { sendEmail, sendBatch } from '../adapters/resend.js';
-import {
-    staffInvitationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
-} from '../emails/templates.js';
+import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
+import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyAdminAnnouncement } from '../services/admin-notifications.js';
 import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
@@ -988,22 +985,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetId: authData.user.id,
             after: { email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds },
         });
-
-        try {
-            let flagOn = false;
-            try { flagOn = await isFlagEnabled('notifications.email.staff_invitation'); } catch { /* flag missing = disabled */ }
-            if (flagOn) {
-                const roleLabel = (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey;
-                const content = staffInvitationEmail({
-                    fullName: body.fullName,
-                    loginEmail: body.email.toLowerCase(),
-                    temporaryPassword: password,
-                    roleLabel,
-                    loginUrl: env.STAFF_PORTAL_URL,
-                });
-                await sendEmail({ to: body.email.toLowerCase(), subject: content.subject, html: content.html, text: content.text, tag: 'staff-invitation' });
-            }
-        } catch { /* non-fatal */ }
+        await notifyStaffInvitation({ email: body.email.toLowerCase(), fullName: body.fullName, temporaryPassword: password, roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey });
 
         return { ok: true, userId: authData.user.id, temporaryPassword: password };
     });
@@ -1040,19 +1022,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             after: { roleKey },
         });
 
-        try {
-            let flagOn = false;
-            try { flagOn = await isFlagEnabled('notifications.email.role_assignment'); } catch { /* flag missing = disabled */ }
-            const { data: staffRow } = await adminClient.from('users')
-                .select('email, user_name')
-                .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
-                .maybeSingle();
-            if (flagOn && (staffRow as any)?.email) {
-                const roleLabel = (assignedRole as any).label ?? (assignedRole as any).role_name ?? roleKey;
-                const content = roleAssignmentEmail({ fullName: (staffRow as any).user_name ?? 'there', roleLabel });
-                await sendEmail({ to: (staffRow as any).email, subject: content.subject, html: content.html, text: content.text, tag: 'role-assignment' });
-            }
-        } catch { /* non-fatal */ }
+        await notifyRoleAssignment(userId, (assignedRole as any).label ?? (assignedRole as any).role_name ?? roleKey);
 
         return { ok: true, userId, roleKey };
     });
@@ -1062,10 +1032,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const userId = (req.params as { userId: string }).userId;
         const { stationIds } = z.object({ stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100) }).parse(req.body);
         const normalized = [...new Set(stationIds.map((value) => value.toUpperCase()))];
-        const { data: before } = await adminClient.from('users')
-            .select('email, user_name, station_ids')
-            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
-            .maybeSingle();
+        const { data: before } = await adminClient.from('users').select('email, user_name, station_ids').or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
         const { error } = await adminClient.from('users')
             .update({ station_id: normalized[0], station_ids: normalized, updated_at: new Date().toISOString() })
             .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
@@ -1080,19 +1047,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             after: { stationIds: normalized },
         });
 
-        try {
-            let flagOn = false;
-            try { flagOn = await isFlagEnabled('notifications.email.station_assignment'); } catch { /* flag missing = disabled */ }
-            if (flagOn && (before as any)?.email) {
-                const previous = ((before as any).station_ids as string[] | null)?.join(', ') || null;
-                const content = stationAssignmentEmail({
-                    name: (before as any).user_name ?? 'there',
-                    stationLabel: normalized.join(', '),
-                    previousStationLabel: previous,
-                });
-                await sendEmail({ to: (before as any).email, subject: content.subject, html: content.html, text: content.text, tag: 'station-assignment' });
-            }
-        } catch { /* non-fatal */ }
+        await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
 
         return { ok: true, userId, stationIds: normalized };
     });
@@ -1391,19 +1346,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             after: { station_id: stationId, reason: body.reason ?? null },
         });
 
-        try {
-            let flagOn = false;
-            try { flagOn = await isFlagEnabled('notifications.email.station_assignment'); } catch { /* flag missing = disabled */ }
-            if (flagOn && stationId && (vendor as any).contact_email) {
-                const content = stationAssignmentEmail({
-                    name: (vendor as any).trading_name ?? (vendor as any).legal_name ?? 'there',
-                    stationLabel: stationId,
-                    previousStationLabel: previous,
-                });
-                await sendEmail({ to: (vendor as any).contact_email, subject: content.subject, html: content.html, text: content.text, tag: 'station-assignment' });
-            }
-        } catch { /* non-fatal */ }
-
+        if (stationId) await notifyStationAssignment({ email: (vendor as any).contact_email, name: (vendor as any).trading_name ?? (vendor as any).legal_name, stationLabel: stationId, previousStationLabel: previous });
         return { ok: true, stationId, previousStationId: previous };
     });
 
@@ -2942,20 +2885,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
             await insertAnnouncementDeliveries(deliveryRows);
 
-            try {
-                let flagOn = false;
-                try { flagOn = await isFlagEnabled('notifications.email.admin_announcement'); } catch { /* flag missing = disabled */ }
-                if (flagOn) {
-                    const emailable = recipients.filter((r) => r.email);
-                    const messages = emailable.map((r) => {
-                        const content = adminAnnouncementEmail({ name: r.name, title: body.title, body: body.body });
-                        return { to: r.email as string, subject: content.subject, html: content.html, text: content.text, tag: 'admin-announcement' };
-                    });
-                    await sendBatch(messages);
-                }
-            } catch (emailError) {
-                req.log.error({ emailError }, 'Announcement email fan-out failed');
-            }
+            await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, (emailError) => req.log.error({ emailError }, 'Announcement email fan-out failed'));
         } catch (deliveryError) {
             const { error: notificationCleanupError } = await adminClient
                 .from('notifications')
