@@ -130,7 +130,7 @@ function appendField(fields, seenLabels, label, value, options = {}) {
   }));
 }
 
-const brand = {
+export const brand = {
   name: "Beverly",
   company: "ACOB Lighting Technology Limited",
   email: "info@acoblighting.com",
@@ -816,9 +816,41 @@ function waitForDocumentReady(targetWindow) {
   });
 }
 
+async function downloadServerReceiptPdf(model, filename) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch("/api/receipt-pdf", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`receipt-pdf endpoint returned ${response.status}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function downloadReceiptPdf(model) {
   const theme = buildReceiptPdfTheme();
   const filename = buildReceiptFilename(model, "pdf");
+
+  try {
+    await downloadServerReceiptPdf(model, filename);
+    return { ok: true, mode: "server", filename };
+  } catch (error) {
+    console.warn("Server receipt PDF render failed. Falling back to client render.", error);
+  }
 
   let wrapper = null;
   try {
@@ -826,23 +858,44 @@ export async function downloadReceiptPdf(model) {
     wrapper = await mountReceiptNode(model, { theme, mode: "pdf" });
     const receiptElement = wrapper.querySelector(".receipt");
     if (!receiptElement) throw new Error("Receipt renderer did not mount");
+
+    // Collect all <style> and <link> nodes injected by mountReceiptNode's innerHTML
+    // BEFORE restructuring the DOM. replaceChildren() would otherwise destroy them,
+    // leaving html2canvas with an unstyled element (no gradients, colours, or fonts).
+    const styleNodes = Array.from(wrapper.querySelectorAll("style, link[rel='stylesheet']"));
+
     const capturePage = document.createElement("div");
-    capturePage.style.width = "794px";
-    capturePage.style.minHeight = "1123px";
-    capturePage.style.padding = "0";
-    capturePage.style.background = "#ffffff";
-    capturePage.style.display = "block";
-    capturePage.style.textAlign = "center";
+    capturePage.style.cssText = [
+      "width:794px",
+      "min-height:1123px",
+      "padding:0",
+      "margin:0",
+      "background:#ffffff",
+      "display:block",
+      "text-align:center",
+      "box-sizing:border-box"
+    ].join(";");
+
+    // Move the style nodes into capturePage first so they survive replaceChildren()
+    styleNodes.forEach((node) => capturePage.insertBefore(node, capturePage.firstChild));
+
     receiptElement.style.display = "inline-flex";
     capturePage.appendChild(receiptElement);
+
+    // Now safe to restructure — styles are in capturePage, not in wrapper
     wrapper.replaceChildren(capturePage);
+
+    // Give the browser another frame to recompute styles with the CSS variables in place
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
     const opt = {
       margin: 0,
-      filename: filename,
+      filename,
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: {
-        scale: 3,
+        scale: 2,
         useCORS: true,
+        allowTaint: true,
         backgroundColor: "#ffffff",
         windowWidth: 794,
         windowHeight: 1123,

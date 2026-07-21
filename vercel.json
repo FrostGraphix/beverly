@@ -8,6 +8,11 @@
       "maxDuration": 300,
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
     },
+    "api/receipt-pdf.js": {
+      "maxDuration": 60,
+      "memory": 2048,
+      "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
+    },
     "api/[...path].js": {
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
     }
@@ -61,6 +66,7 @@
   ],
   "rewrites": [
     { "source": "/api/wallet-service/:path*", "destination": "/api/wallet-service" },
+    { "source": "/api/receipt-pdf", "destination": "/api/receipt-pdf" },
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/wallet", "destination": "/wallet/index.html" },
     { "source": "/wallet/:path*", "destination": "/wallet/index.html" },
