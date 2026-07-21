@@ -130,6 +130,10 @@ export function routeSupportsSiteFilter(route) {
 }
 
 function routeUsesServerPagination(route) {
+  // Manifest override wins when present (lets a new OEM's route opt into server
+  // pagination declaratively). Falls back to the legacy hash whitelist so every
+  // existing Calinmeter route behaves byte-identically.
+  if (typeof route?.serverPagination === "boolean") return route.serverPagination;
   const hash = String(route?.hash || "");
   return hash.includes("management/customer")
     || hash.includes("token-record/credit-token-record")
@@ -405,6 +409,14 @@ export function tableRequest(route, options = {}) {
   const req = buildTableRequest(route, requestOptions);
   if (requestOptions.orderBy && req.payload && typeof req.payload === 'object') {
     const lowerPath = req.path.toLowerCase();
+    // Only forward orderBy to upstream paths proven to accept it. Every other
+    // read is re-sorted client-side by sortRows() after fetch regardless (see
+    // applyControls() in TablePage.vue), so orderBy serves no purpose there —
+    // and for /api/station/read specifically, sending it makes the live
+    // upstream reject the whole request (code 99, "Value does not fall
+    // within the expected range."), which used to be silently masked by the
+    // now-removed sample fallback and surfaced as "Live API unavailable"
+    // once that masking was correctly removed.
     const orderBy = lowerPath === "/api/customer/read"
       ? normalizeLiveReadOrderBy(requestOptions.orderBy, customerOrderByKeys)
       : lowerPath === "/api/account/read"
@@ -417,7 +429,7 @@ export function tableRequest(route, options = {}) {
               ? normalizeLiveReadOrderBy(requestOptions.orderBy, meterOrderByKeys)
               : lowerPath === "/api/log/read"
                 ? normalizeLiveReadOrderBy(requestOptions.orderBy, logOrderByKeys)
-                : requestOptions.orderBy;
+                : undefined;
     if (orderBy) req.payload.orderBy = orderBy;
   }
   return req;

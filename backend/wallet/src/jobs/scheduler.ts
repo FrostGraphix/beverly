@@ -87,6 +87,13 @@ export async function sweepPendingPayments(): Promise<void> {
                         updated_at: now,
                     })
                     .eq('id', txn.id);
+                if (txn.actor_type === 'customer' && txn.actor_id) {
+                    const { notifyPaymentFailed } = await import('../services/notifications.js');
+                    notifyPaymentFailed(txn.actor_id, {
+                        amountMinor: Number(txn.amount_minor ?? 0),
+                        reason: verified.status === 'abandoned' ? 'The payment was not completed.' : undefined,
+                    }).catch(() => undefined);
+                }
             }
         } catch (error) {
             const attempts = Number(txn.fulfillment_attempts ?? 0) + 1;
@@ -102,6 +109,10 @@ export async function sweepPendingPayments(): Promise<void> {
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', txn.id);
+            if (terminal && txn.actor_type === 'customer' && txn.actor_id) {
+                const { notifyPaymentFailed } = await import('../services/notifications.js');
+                notifyPaymentFailed(txn.actor_id, { amountMinor: Number(txn.amount_minor ?? 0) }).catch(() => undefined);
+            }
         }
     }
     console.info(`[JOB:payments] swept ${stuck.length} stale payment transactions`);

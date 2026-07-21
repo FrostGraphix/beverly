@@ -1,7 +1,7 @@
 <template>
   <div
     class="modal-backdrop show"
-    :class="{ 'modal-backdrop--recharge': action === 'Recharge' }"
+    :class="{ 'modal-backdrop--recharge': action === 'Recharge' || isTokenFlow }"
     role="dialog"
     aria-modal="true"
     @click.self="$emit('close')"
@@ -14,9 +14,8 @@
       @close="$emit('close')"
       @done="$emit('done', $event)"
     />
-    <ActionModalTokenFlow
+    <GenerateTokenWizard
       v-else-if="isTokenFlow"
-      :action="action"
       :route="route"
       :row="row"
       :rows="rows"
@@ -64,7 +63,7 @@
 
 <script>
 import RechargeWizard from "./RechargeWizard.vue";
-import ActionModalTokenFlow from "./ActionModalTokenFlow.vue";
+import GenerateTokenWizard from "./GenerateTokenWizard.vue";
 import ActionModalSopFlow from "./ActionModalSopFlow.vue";
 import ActionModalRemoteTask from "./ActionModalRemoteTask.vue";
 import ActionModalPrint from "./ActionModalPrint.vue";
@@ -74,7 +73,7 @@ import { isRemoteTaskAction } from "../services/remote-task-flow.mjs";
 
 export default {
   name: "ActionModal",
-  components: { RechargeWizard, ActionModalTokenFlow, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric },
+  components: { RechargeWizard, GenerateTokenWizard, ActionModalSopFlow, ActionModalRemoteTask, ActionModalPrint, ActionModalGeneric },
   props: {
     action: { type: String, required: true },
     route: { type: Object, required: true },
@@ -83,7 +82,7 @@ export default {
   },
   emits: ["close", "done"],
   computed: {
-    // Recharge uses RechargeWizard; other token actions use ActionModalTokenFlow
+    // Recharge uses RechargeWizard; other token-generate actions use GenerateTokenWizard
     isTokenFlow() { return isTokenGenerateAction(this.route, this.action) && this.action !== 'Recharge'; },
     isSopFlow() {
       const h = this.route?.hash || "";

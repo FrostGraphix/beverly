@@ -92,7 +92,7 @@ onMounted(load);
         <div class="rcpt-card">
           <!-- Brand header -->
           <div class="rcpt-brand">
-            <div class="bw-mark" style="width:40px;height:40px;font-size:18px">B</div>
+            <div class="bw-mark" style="width:40px;height:40px" aria-hidden="true"></div>
             <div>
               <div class="rcpt-brand-name">Beverly Energy</div>
               <div class="rcpt-brand-sub">Official Receipt</div>

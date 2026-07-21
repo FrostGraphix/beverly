@@ -76,6 +76,22 @@ export default {
     receiptHtmlFor(model) { return receiptHtml(model, { theme: this.receiptTheme }); },
     receiptFilename(model, extension = "html") { return buildReceiptFilename(model, extension); },
     async printReceipt() {
+      // Automatically generate a named PDF and trigger a direct browser download.
+      const result = await downloadReceiptPdf(this.receiptModel);
+      await logPrintJob(this.route, this.receiptModel, "pdf", "credit", {
+        fileName: this.receiptFilename(this.receiptModel, "pdf"),
+        content: this.receiptHtmlFor(this.receiptModel),
+        contentType: "text/html;charset=utf-8",
+        format: "pdf"
+      });
+      if (result?.mode === "fallback") {
+        this.result = `PDF saved: ${result.filename} (basic format — browser blocked the rich export).`;
+      } else {
+        this.result = `✓ PDF saved automatically: ${result.filename}`;
+      }
+    },
+    async downloadPdf() {
+      // Secondary export: open browser print dialog as a fallback / alternative.
       const opened = openBrowserPrint(this.receiptModel);
       await logPrintJob(this.route, this.receiptModel, "browser-print", "credit", {
         fileName: this.receiptFilename(this.receiptModel, "html"),
@@ -83,17 +99,9 @@ export default {
         contentType: "text/html;charset=utf-8",
         format: "html"
       });
-      this.result = opened ? "Print dialog opened — choose \"Save as PDF\" as the destination to download." : "Popup blocked. Use PDF Export instead, or allow popups for this site.";
-    },
-    async downloadPdf() {
-      const result = await downloadReceiptPdf(this.receiptModel);
-      await logPrintJob(this.route, this.receiptModel, "pdf", "credit", {
-        fileName: this.receiptFilename(this.receiptModel, "html"),
-        content: this.receiptHtmlFor(this.receiptModel),
-        contentType: "text/html;charset=utf-8",
-        format: "html"
-      });
-      this.result = result?.mode === "fallback" ? `PDF fallback downloaded: ${result.filename}` : `PDF receipt downloaded: ${result.filename}`;
+      this.result = opened
+        ? "Print dialog opened — choose \"Save as PDF\" as the destination to save manually."
+        : "Popup blocked. Allow popups for this site and try again."
     }
   }
 };

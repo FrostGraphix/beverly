@@ -24,10 +24,10 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: var(--theme-color) !important;
+  background: var(--brand-mark-url, url("/brand/beverly-mark.png")) center / contain no-repeat !important;
   box-shadow: none;
-  color: var(--text-inverse);
-  font-size: 15px;
+  color: transparent;
+  font-size: 0;
 }
 
 [data-theme="light"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy {
@@ -247,10 +247,10 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: var(--theme-color) !important;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat !important;
   box-shadow: none;
-  color: var(--text-inverse);
-  font-size: 15px;
+  color: transparent;
+  font-size: 0;
 }
 
 [data-theme="executive"] .app-page:not(.wallet-admin-host) .sidebar-brand-copy,

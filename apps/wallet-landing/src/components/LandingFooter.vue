@@ -31,7 +31,7 @@ const year = new Date().getFullYear();
           <span class="lp-brand-mark"><IconSvg name="bolt" /></span>
           <span class="lp-brand-text">Beverly<em>Wallet</em></span>
         </a>
-        <p>Electricity, instantly. Buy prepaid tokens or run a vending business — all in one place.</p>
+        <p>Your Smart Power Partner.</p>
         <p class="lp-footer-by">An <strong>ACOB Lighting Technology Limited</strong> product.</p>
       </div>
 

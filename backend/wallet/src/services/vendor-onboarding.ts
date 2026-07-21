@@ -9,6 +9,10 @@
 import { adminClient } from '../db/supabase.js';
 import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
 import { logAction, logSecurityEvent } from './audit.js';
+import { sendEmail } from '../adapters/resend.js';
+import { vendorOnboardingEmail } from '../emails/templates.js';
+import { isFlagEnabled } from './feature-flags.js';
+import { env } from '../config/env.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
@@ -142,6 +146,21 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             vendor_organization_id: organization.id,
         },
     });
+
+    try {
+        let flagOn = false;
+        try { flagOn = await isFlagEnabled('notifications.email.vendor_onboarding'); } catch { /* flag missing = disabled */ }
+        if (flagOn) {
+            const content = vendorOnboardingEmail({
+                contactName: input.primaryUserFullName,
+                legalName: input.legalName,
+                loginEmail: input.primaryUserEmail,
+                temporaryPassword: tempPwd,
+                loginUrl: env.VENDOR_PORTAL_URL,
+            });
+            await sendEmail({ to: input.primaryUserEmail, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding' });
+        }
+    } catch { /* non-fatal */ }
 
     return {
         organizationId: organization.id,

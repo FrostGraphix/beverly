@@ -31,7 +31,7 @@ function main() {
   assert(signup.includes('/api/v1/customer/auth/email/signup'));
   assert(signup.includes("accountMode"));
   assert(signup.includes("Password must be at least 8 characters"));
-  assert(signup.includes('Buy electricity tokens in seconds'));
+  assert(signup.includes('Your Smart Power Partner.'));
   assert(signup.includes('CustomerAuthShell'));
 
   assert(login.includes('Welcome back'));

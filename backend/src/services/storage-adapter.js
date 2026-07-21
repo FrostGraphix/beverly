@@ -566,6 +566,320 @@ async function listSgcTokenRules() {
   );
 }
 
+// ── OEM manufacturer registry ───────────────────────────────────────────────
+// Top-level tenant entity for the multi-OEM proxy. Supabase column is `capabilities`
+// (jsonb); the local SQLite mirror stores the same shape as `capabilities_json` text.
+function mapOemManufacturerRow(row) {
+  if (!row) return null;
+  let capabilities = row.capabilities ?? row.capabilities_json ?? {};
+  if (typeof capabilities === "string") {
+    try {
+      capabilities = JSON.parse(capabilities);
+    } catch {
+      capabilities = {};
+    }
+  }
+  return {
+    id: row.id,
+    slug: row.slug,
+    displayName: row.display_name,
+    logoStoragePath: row.logo_storage_path || "",
+    status: row.status,
+    isSeedDefault: row.is_seed_default === true || row.is_seed_default === 1,
+    capabilities: capabilities && typeof capabilities === "object" ? capabilities : {},
+    vendingStrategy: row.vending_strategy || "sts_token",
+    rateLimitWindowMs: row.rate_limit_window_ms || null,
+    rateLimitMaxRequests: row.rate_limit_max_requests || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getOemManufacturer(idOrSlug) {
+  return runWithFallback(
+    () => localDatabase.getOemManufacturer(idOrSlug),
+    async () => {
+      const key = encodeURIComponent(String(idOrSlug || ""));
+      const rows = await supabase.restRequest(`/oem_manufacturers?or=(id.eq.${key},slug.eq.${key})&limit=1`);
+      return mapOemManufacturerRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listOemManufacturers() {
+  return runWithFallback(
+    () => localDatabase.listOemManufacturers(),
+    async () => {
+      const rows = await supabase.restRequest("/oem_manufacturers?select=*&order=created_at.asc");
+      return (Array.isArray(rows) ? rows : []).map(mapOemManufacturerRow);
+    }
+  );
+}
+
+async function upsertOemManufacturer(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemManufacturer(entry),
+    async () => {
+      const slug = String(entry.slug || "").trim().toLowerCase();
+      const body = {
+        slug,
+        display_name: String(entry.displayName || slug),
+        logo_storage_path: String(entry.logoStoragePath || ""),
+        status: String(entry.status || "draft"),
+        is_seed_default: Boolean(entry.isSeedDefault),
+        capabilities: entry.capabilities && typeof entry.capabilities === "object" ? entry.capabilities : {},
+        vending_strategy: String(entry.vendingStrategy || "sts_token"),
+        rate_limit_window_ms: entry.rateLimitWindowMs != null ? Number(entry.rateLimitWindowMs) : null,
+        rate_limit_max_requests: entry.rateLimitMaxRequests != null ? Number(entry.rateLimitMaxRequests) : null,
+        updated_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_manufacturers?on_conflict=slug", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemManufacturerRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemManufacturer(idOrSlug) {
+  return runWithFallback(
+    () => localDatabase.deleteOemManufacturer(idOrSlug),
+    async () => {
+      const key = encodeURIComponent(String(idOrSlug || ""));
+      await supabase.restRequest(`/oem_manufacturers?or=(id.eq.${key},slug.eq.${key})`, { method: "DELETE", prefer: "return=minimal" });
+      return { deleted: true };
+    }
+  );
+}
+
+// ── OEM endpoint configuration ──────────────────────────────────────────────
+// One row per (oemId, logicalKey) — the declarative path/method/casing/field-map
+// a new manufacturer needs instead of hardcoded per-OEM proxy branches.
+function mapOemEndpointConfigRow(row) {
+  if (!row) return null;
+  const parseMaybeJson = (value) => {
+    if (value && typeof value === "object") return value;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
+  return {
+    oemId: row.oem_id,
+    logicalKey: row.logical_key,
+    upstreamPath: row.upstream_path,
+    method: row.method,
+    casingVariant: row.casing_variant || "",
+    requestFieldMap: parseMaybeJson(row.request_field_map),
+    responseFieldMap: parseMaybeJson(row.response_field_map),
+    payloadShape: parseMaybeJson(row.payload_shape),
+    paginationStyle: row.pagination_style || "none",
+    requiresLiveRead: row.requires_live_read === true || row.requires_live_read === 1,
+    isWriteOverride: row.is_write_override === null || row.is_write_override === undefined ? null : (row.is_write_override === true || row.is_write_override === 1),
+    adapterFnName: row.adapter_fn_name || "",
+    enabled: row.enabled === true || row.enabled === 1,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getOemEndpointConfig(oemId, logicalKey) {
+  return runWithFallback(
+    () => localDatabase.getOemEndpointConfig(oemId, logicalKey),
+    async () => {
+      const rows = await supabase.restRequest(
+        `/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&logical_key=eq.${encodeURIComponent(logicalKey)}&limit=1`
+      );
+      return mapOemEndpointConfigRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listOemEndpointConfigs(oemId) {
+  return runWithFallback(
+    () => localDatabase.listOemEndpointConfigs(oemId),
+    async () => {
+      const rows = await supabase.restRequest(`/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&order=logical_key.asc`);
+      return (Array.isArray(rows) ? rows : []).map(mapOemEndpointConfigRow);
+    }
+  );
+}
+
+async function upsertOemEndpointConfig(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemEndpointConfig(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        logical_key: String(entry.logicalKey || ""),
+        upstream_path: String(entry.upstreamPath || ""),
+        method: String(entry.method || "GET").toUpperCase(),
+        casing_variant: String(entry.casingVariant || ""),
+        request_field_map: entry.requestFieldMap && typeof entry.requestFieldMap === "object" ? entry.requestFieldMap : {},
+        response_field_map: entry.responseFieldMap && typeof entry.responseFieldMap === "object" ? entry.responseFieldMap : {},
+        payload_shape: entry.payloadShape && typeof entry.payloadShape === "object" ? entry.payloadShape : {},
+        pagination_style: String(entry.paginationStyle || "none"),
+        requires_live_read: Boolean(entry.requiresLiveRead),
+        is_write_override: entry.isWriteOverride === null || entry.isWriteOverride === undefined ? null : Boolean(entry.isWriteOverride),
+        adapter_fn_name: String(entry.adapterFnName || ""),
+        enabled: entry.enabled !== false,
+        updated_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_endpoint_configs?on_conflict=oem_id,logical_key", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemEndpointConfigRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemEndpointConfig(oemId, logicalKey) {
+  return runWithFallback(
+    () => localDatabase.deleteOemEndpointConfig(oemId, logicalKey),
+    async () => {
+      await supabase.restRequest(
+        `/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&logical_key=eq.${encodeURIComponent(logicalKey)}`,
+        { method: "DELETE", prefer: "return=minimal" }
+      );
+      return { deleted: true };
+    }
+  );
+}
+
+// ── OEM credentials ──────────────────────────────────────────────────────────
+// Values here are already AES-256-GCM encrypted by the caller (see
+// oem-credential-crypto.js) — this layer only persists/retrieves ciphertext.
+function mapOemCredentialsRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    authStrategy: row.auth_strategy,
+    baseUrl: row.base_url || "",
+    encryptedBearerToken: row.encrypted_bearer_token || "",
+    encryptedClientSecret: row.encrypted_client_secret || "",
+    encryptedUsername: row.encrypted_username || "",
+    encryptedPassword: row.encrypted_password || "",
+    tokenEndpointPath: row.token_endpoint_path || "",
+    apiKeyHeaderName: row.api_key_header_name || "",
+    encryptionKeyVersion: row.encryption_key_version || 1,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by || ""
+  };
+}
+
+async function getOemCredentials(oemId) {
+  return runWithFallback(
+    () => localDatabase.getOemCredentials(oemId),
+    async () => {
+      const rows = await supabase.restRequest(`/oem_credentials?oem_id=eq.${encodeURIComponent(oemId)}&limit=1`);
+      return mapOemCredentialsRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function upsertOemCredentials(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemCredentials(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        auth_strategy: String(entry.authStrategy || "bearer_static"),
+        base_url: String(entry.baseUrl || ""),
+        encrypted_bearer_token: String(entry.encryptedBearerToken || ""),
+        encrypted_client_secret: String(entry.encryptedClientSecret || ""),
+        encrypted_username: String(entry.encryptedUsername || ""),
+        encrypted_password: String(entry.encryptedPassword || ""),
+        token_endpoint_path: String(entry.tokenEndpointPath || ""),
+        api_key_header_name: String(entry.apiKeyHeaderName || ""),
+        encryption_key_version: Number(entry.encryptionKeyVersion || 1),
+        updated_at: nowIso(),
+        updated_by: String(entry.updatedBy || "")
+      };
+      const rows = await supabase.restRequest("/oem_credentials?on_conflict=oem_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemCredentialsRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+// ── OEM station/community mappings — drives each card's install count ──────
+function mapOemStationMappingRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    stationId: row.station_id,
+    communityLabel: row.community_label || "",
+    createdAt: row.created_at
+  };
+}
+
+async function listOemStationMappings(oemId) {
+  return runWithFallback(
+    () => localDatabase.listOemStationMappings(oemId),
+    async () => {
+      const rows = await supabase.restRequest(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&order=station_id.asc`);
+      return (Array.isArray(rows) ? rows : []).map(mapOemStationMappingRow);
+    }
+  );
+}
+
+async function countOemStationMappings(oemId) {
+  return runWithFallback(
+    () => localDatabase.countOemStationMappings(oemId),
+    async () => {
+      const result = await supabase.restRequestWithResponse(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&select=station_id`, {
+        headers: { Prefer: "count=exact", Range: "0-0" }
+      });
+      const contentRange = String(result.response.headers.get("content-range") || "");
+      const total = Number(contentRange.split("/")[1]);
+      return Number.isFinite(total) ? total : (Array.isArray(result.body) ? result.body.length : 0);
+    }
+  );
+}
+
+async function upsertOemStationMapping(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemStationMapping(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        station_id: String(entry.stationId || ""),
+        community_label: String(entry.communityLabel || ""),
+        created_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_station_mappings?on_conflict=oem_id,station_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemStationMappingRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemStationMapping(oemId, stationId) {
+  return runWithFallback(
+    () => localDatabase.deleteOemStationMapping(oemId, stationId),
+    async () => {
+      await supabase.restRequest(
+        `/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&station_id=eq.${encodeURIComponent(stationId)}`,
+        { method: "DELETE", prefer: "return=minimal" }
+      );
+      return { deleted: true };
+    }
+  );
+}
+
 module.exports = {
   cacheApiResponse,
   ensureDatabase,
@@ -575,6 +889,20 @@ module.exports = {
   getSgcTokenRule,
   setSgcTokenRule,
   listSgcTokenRules,
+  getOemManufacturer,
+  listOemManufacturers,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemEndpointConfig,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemStationMappings,
+  countOemStationMappings,
+  upsertOemStationMapping,
+  deleteOemStationMapping,
   mapAuditRow,
   listAutomationDeliveries,
   listAccountBindings,

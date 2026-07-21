@@ -5,6 +5,11 @@
         <span>{{ errorMessage }}</span>
         <BaseButton variant="primary" @click="load">Refresh</BaseButton>
       </div>
+      <div v-if="isStaleFallback" class="table-stale-banner" role="alert" aria-live="polite">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        <span>Showing cached / offline data — live connection unavailable.</span>
+        <BaseButton variant="ghost" size="sm" class="stale-refresh-link" @click="load">Refresh</BaseButton>
+      </div>
       <section v-if="managementStatCards.length" class="management-stat-grid" aria-label="Management summary">
         <article v-for="card in managementStatCards" :key="card.label" class="management-stat-card" :class="`tone-${card.tone}`">
           <span>{{ card.label }}</span>
@@ -336,7 +341,8 @@ export default {
       exportError: "",
       loadToken: 0,
       managementStats: null,
-      managementStatsKey: ""
+      managementStatsKey: "",
+      dataSource: ""
     };
   },
   computed: {
@@ -422,6 +428,11 @@ export default {
         return this.filteredRows.filter((row) => row.meterId && ids.has(String(row.meterId)));
       }
       return this.filteredRows;
+    },
+    isStaleFallback() {
+      const src = String(this.dataSource || "").toLowerCase();
+      // Show banner for any source that isn't confirmed live data
+      return !this.loading && !this.errorMessage && src !== "" && src !== "live" && src !== "verified-live-total" && src !== "mapped";
     }
   },
   watch: {
@@ -500,6 +511,7 @@ export default {
         if (token !== this.loadToken) return;
         this.allRows = table.rows;
         this.total = table.total;
+        this.dataSource = table.meta?.source || "";
         this.applyControls({ reloadServer: false });
         this.loadManagementStats();
       } catch (error) {
@@ -809,6 +821,30 @@ export default {
 </script>
 
 <style scoped>
+.table-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 45%, transparent);
+  color: var(--warning, #92400e);
+  font-size: 13px;
+  font-weight: 500;
+}
+.table-stale-banner svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: currentColor;
+  opacity: 0.85;
+}
+.stale-refresh-link {
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .management-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

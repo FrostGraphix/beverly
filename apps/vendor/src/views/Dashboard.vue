@@ -12,8 +12,10 @@ const wallet = useWalletStore();
 const vendorName = computed(() => auth.user?.organization_name?.split(' ')[0] || auth.user?.full_name?.split(' ')[0] || 'vendor');
 
 onMounted(async () => {
-    await wallet.fetchSummary();
-    await wallet.fetchLedger(10);
+    await Promise.allSettled([
+        wallet.fetchSummary(),
+        wallet.fetchLedger(10)
+    ]);
 });
 
 function isToday(iso: string) {

@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
     <!-- Sidebar -->
     <aside :class="['bw-sidebar', { open: drawerOpen }]">
       <div class="bw-brand">
-        <div class="bw-mark">B</div>
+        <div class="bw-mark" aria-hidden="true"></div>
         <div class="bw-brand-text">
           <strong>Beverly</strong>
           <span>Vendor</span>
@@ -256,7 +256,7 @@ onBeforeUnmount(() => {
           <transition name="bw-menu">
             <div v-show="userMenuOpen" class="bw-user-dropdown" role="menu" aria-label="Vendor account menu">
               <div class="bw-user-dropdown-brand">
-                <span class="bw-user-dropdown-logo">B</span>
+                <span class="bw-user-dropdown-logo" aria-hidden="true"></span>
                 <span>
                   <strong>{{ auth.user?.organization_name || 'Beverly Vendor' }}</strong>
                   <small>{{ auth.user?.email || auth.user?.role || 'vendor portal' }}</small>

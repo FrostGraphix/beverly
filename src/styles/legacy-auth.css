@@ -186,13 +186,11 @@
 .auth-card-mark {
   width: 28px;
   height: 28px;
-  display: grid;
-  place-items: center;
+  display: block;
   border-radius: 8px;
-  background: linear-gradient(135deg, oklch(80% 0.16 145) 0%, oklch(70% 0.19 145) 50%, oklch(62% 0.17 145) 100%);
-  color: oklch(8% 0.04 145);
-  font-size: 14px;
-  font-weight: 900;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
   box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.30), 0 4px 14px oklch(70% 0.19 145 / 0.22);
 }
 

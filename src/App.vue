@@ -1,10 +1,7 @@
 <template>
   <div id="app-root">
   <LoginPage v-if="isLogin" @logged-in="goDashboard" />
-  <div v-else-if="!isRoleReady" class="app-role-loading" role="status" aria-label="Authenticating">
-    <div class="app-role-loading-spinner" aria-hidden="true"></div>
-    <p class="app-role-loading-text">Verifying session&hellip;</p>
-  </div>
+  <BeverlyLoader v-else-if="!isRoleReady" label="Verifying session" />
   <div
     v-else
     :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']"
@@ -15,13 +12,12 @@
     <aside
       class="sidebar-container"
       aria-label="Primary navigation"
-      :aria-hidden="width <= 1024 && !sidebarOpen ? 'true' : 'false'"
       :inert="width <= 1024 && !sidebarOpen ? '' : null"
     >
       <div class="sidebar-logo">
-        <span class="sidebar-logo-icon">B</span>
+        <span class="sidebar-logo-icon" aria-hidden="true"></span>
         <span class="sidebar-logo-text sidebar-brand-copy">
-          <strong>Beverly</strong>
+          <span class="sidebar-logo-wordmark" role="img" aria-label="Beverly"></span>
         </span>
         <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -176,7 +172,6 @@
                   <div class="bw-user-dropdown-brand">
                     <span class="bw-user-dropdown-logo bw-user-dropdown-logo--avatar">
                       <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
-                      <template v-else>B</template>
                     </span>
                     <span>
                       <strong>Beverly</strong>
@@ -196,6 +191,15 @@
                       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z"></path>
                     </svg>
                     <span>Settings</span>
+                  </BaseButton>
+                  <BaseButton v-if="currentRoleId === 'super-admin'" variant="quiet" class="bw-user-menu-item" role="menuitem" @click="switchOem">
+                    <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                      <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                      <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                      <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+                      <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                    </svg>
+                    <span>Switch OEM</span>
                   </BaseButton>
                   <div class="user-theme-submenu">
                     <BaseButton
@@ -275,7 +279,9 @@
             :role-id="currentRoleId"
             :initial-tab="settingsInitialTab"
             @theme-change="setTheme"
+            @close="settingsOpen = false"
           />
+          <OemHubPage v-else-if="showOemHub" @oem-selected="handleOemSelected" />
           <DashboardPage v-else-if="route.hash === '#/dashboard'" />
           <ReportsPage v-else-if="route.customComponent === 'ReportsPage'" />
           <DailyDataMeterPage v-else-if="route.hash === '#/prepay-report/daily-data-meter'" :route="route" />
@@ -369,10 +375,15 @@ function savedSidebarWidth() {
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import ReportsPage from "./components/ReportsPage.vue";
 import StationAlertsBell from "./components/StationAlertsBell.vue";
+import OemHubPage from "./components/oem-hub/OemHubPage.vue";
+import BeverlyLoader from "@beverly/tokens/BeverlyLoader.vue";
+import { useOemStore } from "./stores/oem-store";
+import { warmAllOems } from "./services/oem-prefetch.mjs";
 import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 import { groupIcons, routeIconOverrides, routeIconPaths, sidebarSectionLabels } from "./data/shell-chrome.mjs";
+import { playLoginVoice } from "./utils/voice.js";
 
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
 
@@ -384,7 +395,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -415,22 +426,36 @@ export default {
     };
   },
   computed: {
+    oemStore() {
+      return useOemStore();
+    },
+    showOemHub() {
+      return this.currentRoleId === "super-admin" && !this.oemStore.currentOemId;
+    },
     isLogin() {
       return this.hash.startsWith("#/login") || !this.hash;
     },
     isRoleReady() {
       return !["", "null", "undefined"].includes(String(this.currentRoleId || "").trim().toLowerCase());
     },
+    currentOemCapabilities() {
+      // Only gate the sidebar/routes when a super-admin has entered a specific OEM's
+      // workspace. Returns null otherwise → visibleRoutes/routeGroups/findRoute apply
+      // no capability filtering, preserving the full single-tenant manifest exactly.
+      const oem = this.oemStore.currentOem;
+      return oem ? (oem.capabilities || {}) : null;
+    },
     route() {
-      return findRoute(this.hash, this.currentRoleId);
+      return findRoute(this.hash, this.currentRoleId, this.currentOemCapabilities);
     },
     activePageTitle() {
       if (this.profileOpen) return "Profile";
       if (this.settingsOpen) return "Settings";
+      if (this.showOemHub) return "OEM Hub";
       return this.route.title;
     },
     groups() {
-      return routeGroups(this.currentRoleId);
+      return routeGroups(this.currentRoleId, this.currentOemCapabilities);
     },
     sidebarGroups() {
       const query = this.sidebarQuery.trim().toLowerCase();
@@ -501,7 +526,7 @@ export default {
       return labels[roleId] || roleId.replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
     },
     primaryCreateTarget() {
-      const routes = visibleRoutes(this.currentRoleId);
+      const routes = visibleRoutes(this.currentRoleId, this.currentOemCapabilities);
       return routes.find((route) => route.actions?.includes("Add Task"))
         || routes.find((route) => route.actions?.includes("Recharge"))
         || routes.find((route) => route.actions?.includes("Add"))
@@ -629,11 +654,11 @@ export default {
       localStorage.setItem('acob-theme', this.currentTheme);
     },
     nextRoute(hash) {
-      return findRoute(hash, this.currentRoleId);
+      return findRoute(hash, this.currentRoleId, this.currentOemCapabilities);
     },
     routeExists(hash) {
       const normalizedHash = normalizeHash(hash);
-      return visibleRoutes(this.currentRoleId).some((route) => route.hash === normalizedHash);
+      return visibleRoutes(this.currentRoleId, this.currentOemCapabilities).some((route) => route.hash === normalizedHash);
     },
     async loadUser() {
       if (this.isLogin) return;
@@ -677,6 +702,16 @@ export default {
           setRuntimeLiveWritesAllowed(false);
         }
         this.syncProfileIdentity();
+        this.oemStore.restoreSelection();
+        // Super-admins work inside an OEM-scoped workspace; load the registry so the
+        // sidebar can gate routes by the current OEM's capabilities (and so the Hub
+        // is warm). Non-super-admin roles never pick an OEM and keep the full manifest.
+        if (this.currentRoleId === "super-admin") {
+          if (!this.oemStore.hasOems) this.oemStore.loadOems().catch(() => {});
+          // Fire-and-forget: warm every active OEM's dashboard in the background so
+          // clicking a Hub card is instant. Never awaited, never blocks login.
+          warmAllOems(this.oemStore).catch(() => {});
+        }
         this.syncHash();
       } catch (error) {
         // On any auth failure, fail closed — do not keep a stale super-admin role.
@@ -725,6 +760,15 @@ export default {
       this.hash = "#/dashboard";
       window.location.hash = "#/dashboard";
       await this.loadUser();
+    },
+    handleOemSelected() {
+      playLoginVoice();
+      this.hash = "#/dashboard";
+      window.location.hash = "#/dashboard";
+    },
+    switchOem() {
+      this.userDropdownOpen = false;
+      this.oemStore.clearSelection();
     },
     syncProfileIdentity() {
       const profile = loadProfileState(this.currentUserName);
@@ -1006,35 +1050,4 @@ export default {
 }
 
 /* ── Recharge wizard backdrop — mirrors account-menu-open blur effect ── */
-/* Security loading screen — shown while server-side role is being confirmed */
-.app-role-loading {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  background: var(--color-bg, #0a0f0a);
-  z-index: 9999;
-}
-
-.app-role-loading-spinner {
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: var(--color-accent, #22c55e);
-  border-radius: 50%;
-  animation: app-spin 0.75s linear infinite;
-}
-
-.app-role-loading-text {
-  font-size: 0.875rem;
-  color: var(--color-text-muted, rgba(255, 255, 255, 0.45));
-  letter-spacing: 0.02em;
-}
-
-@keyframes app-spin {
-  to { transform: rotate(360deg); }
-}
 </style>

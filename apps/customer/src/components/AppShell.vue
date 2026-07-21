@@ -100,7 +100,7 @@ async function signOut() {
     <!-- App bar -->
     <header class="bw-appbar">
       <RouterLink to="/" class="bw-appbar-brand">
-        <div class="bw-mark" style="width:28px; height:28px; font-size:13px; border-radius: var(--r-md)">B</div>
+        <div class="bw-mark" style="width:28px; height:28px; border-radius: var(--r-md)" aria-hidden="true"></div>
         <span>Beverly</span>
       </RouterLink>
       <span class="bw-appbar-spacer"></span>
@@ -148,7 +148,7 @@ async function signOut() {
         <transition name="bw-menu">
           <div v-show="userMenuOpen" class="bw-user-dropdown" role="menu" aria-label="Customer account menu">
             <div class="bw-user-dropdown-brand">
-              <span class="bw-user-dropdown-logo">B</span>
+              <span class="bw-user-dropdown-logo" aria-hidden="true"></span>
               <span>
                 <strong>{{ auth.customer?.full_name || 'Beverly Customer' }}</strong>
                 <small>{{ auth.customer?.email || auth.customer?.phone || 'customer wallet' }}</small>

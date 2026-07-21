@@ -132,9 +132,13 @@ async function main() {
 
         assert.strictEqual(chart.status, 200);
         assert.strictEqual(chart.body._proxy.source, "sample-after-live-failure");
-        assert.strictEqual(stations.status, 200);
-        assert.strictEqual(stations.body._proxy.source, "sample-after-live-failure");
-        assert(Array.isArray(stations.body.result.data));
+        // station/read is a mutable admin CRUD table (see api/reference.js
+        // canUseSampleFallback): on a live outage it must fail loudly with a
+        // real 502, never mask the outage behind a frozen fixture presented
+        // as success. See tests/station-live-fallback-contract.test.cjs.
+        assert.strictEqual(stations.status, 502);
+        assert.strictEqual(stations.body._proxy.source, "live-required");
+        assert.strictEqual(stations.body.result, null);
       });
     } finally {
       await closeServer(upstream);

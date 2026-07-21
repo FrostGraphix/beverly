@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import { API_BASE } from '../lib/api';
 import { PORTAL_URLS } from '../lib/portals';
+import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const REMEMBERED_VENDOR_EMAIL_KEY = 'beverly.vendor.remembered_email';
 const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
@@ -30,6 +31,7 @@ function safeRedirectTarget(raw: unknown, fallback = '/') {
 }
 
 async function submit() {
+    unlockLoginVoice();
     const normalizedEmail = email.value.trim().toLowerCase();
     if (!normalizedEmail || !password.value) {
         error.value = 'Email and password are required.';
@@ -80,6 +82,7 @@ async function submit() {
         });
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, normalizedEmail);
         else localStorage.removeItem(REMEMBERED_VENDOR_EMAIL_KEY);
+        playLoginVoice();
         await router.push(me.password_reset_required ? { path: '/password-change', query: { redirect: redirectTarget.value } } : redirectTarget.value);
     } catch {
         error.value = 'Network error. Please try again.';
@@ -98,7 +101,7 @@ rememberEmail.value = Boolean(rememberedEmail);
     <div class="bw-card login-card">
       <div class="login-head">
         <a :href="PORTAL_URLS.landing" class="vendor-brand-link" aria-label="Beverly home">
-          <div class="bw-mark login-mark">B</div>
+          <div class="bw-mark login-mark" aria-hidden="true"></div>
         </a>
         <div class="bw-h1 login-title">Vendor Portal</div>
         <p class="bw-muted login-subtitle">Sign in to start vending</p>

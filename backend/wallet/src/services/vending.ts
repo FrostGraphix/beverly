@@ -67,6 +67,8 @@ export interface PurchaseOrder {
     failure_reason: string | null;
     created_by: string;
     created_at: string;
+    /** Phase 6: which OEM this meter/vend belongs to (station/meter identity namespacing). */
+    oem_id?: string | null;
 }
 
 export type MeterType = 'single_phase' | 'three_phase';
@@ -185,6 +187,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
+        oem_id: meter.oemId ?? null,
         amount_minor: preview.grossAmountMinor,
         energy_amount_minor: preview.energyAmountMinor,
         vat_amount_minor: preview.taxAmountMinor,
@@ -238,6 +241,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
                 tariffId: meter.tariffId,
                 isThreePhase: meter.isThreePhase,
                 sgc: meter.sgc,
+                oemId: meter.oemId,
                 reference: po.id,
             });
             token = tokenRes.token;
@@ -354,6 +358,7 @@ export async function dispatchGeneratedVendorToken(
         const status = await pollRemoteSendStatus(po.remote_task_id, {
             meterId: po.meter_id,
             token: po.token,
+            oemId: po.oem_id,
         }).catch(() => ({ taskId: po.remote_task_id!, status: 'pending' as const, remark: null }));
         const deliveryState = status.status === 'success'
             ? 'remote_send_delivered'
@@ -382,6 +387,7 @@ export async function dispatchGeneratedVendorToken(
         meter = await lookupMeter(po.meter_id, {
             allowArchivedFallback: true,
             allowHistoricalFallback: true,
+            oemId: po.oem_id,
         });
     } catch {
         meter = null;
@@ -400,6 +406,7 @@ export async function dispatchGeneratedVendorToken(
             protocolVersion: meter?.protocolVersion,
             token: po.token,
             reference: po.id,
+            oemId: po.oem_id ?? meter?.oemId,
         });
         const deliveryState = task.status === 'success'
             ? 'remote_send_delivered'
@@ -478,6 +485,7 @@ export async function reconcileRemoteSendOrders(limit = 25) {
             const status = await pollRemoteSendStatus(row.remote_task_id!, {
                 meterId: row.meter_id,
                 token: row.token ?? undefined,
+                oemId: row.oem_id,
             });
             if (status.status === 'pending' || status.status === 'unknown') continue;
             if (status.status === 'failed') {

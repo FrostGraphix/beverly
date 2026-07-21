@@ -11,7 +11,7 @@
       <aside class="wallet-auth-story" aria-label="Wallet access overview">
         <a class="wallet-auth-backlink" href="https://acob-beverly.vercel.app/#/login">Back to Beverly CRM</a>
         <div class="wallet-auth-badge">
-          <span class="wallet-auth-badge-mark">B</span>
+          <span class="wallet-auth-badge-mark" aria-hidden="true"></span>
           <strong>Beverly Wallet Access</strong>
         </div>
         <h1 class="wallet-auth-title">Designed for fast wallet entry, safe recovery, and traceable power sales.</h1>
@@ -274,6 +274,7 @@ import {
   validateWalletAuthForm
 } from "../../services/vendor-auth-service.mjs";
 import { login } from "../../services/api.js";
+import { playLoginVoice, unlockLoginVoice } from "../../utils/voice.js";
 
 export default {
   name: "VendorAuthPage",
@@ -379,6 +380,7 @@ export default {
       this.setMode(this.modes.login);
     },
     async submit() {
+      unlockLoginVoice();
       this.error = "";
       this.notice = "";
       this.fieldErrors = validateWalletAuthForm(this.mode, this.form);
@@ -393,6 +395,7 @@ export default {
         if (this.mode === this.modes.login) {
           // Real Supabase-backed login via /api/user/login
           await login({ userId: this.form.identity, password: this.form.password });
+          playLoginVoice();
           this.$emit("vendor-authenticated");
           return;
         }
@@ -471,12 +474,11 @@ export default {
 .wallet-auth-badge-mark {
   width: 28px;
   height: 28px;
-  display: grid;
-  place-items: center;
+  display: block;
   border-radius: 50%;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--color-brand) 38%, transparent), color-mix(in srgb, var(--color-brand-strong) 52%, transparent));
-  color: var(--color-text-inverse);
-  font-weight: 900;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
 }
 
 .wallet-auth-title {

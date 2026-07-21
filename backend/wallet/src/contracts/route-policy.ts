@@ -31,7 +31,7 @@ const del = (path: string, options?: Omit<RoutePolicy, 'method' | 'path' | 'muta
 export const mutationRoutePolicies: readonly RoutePolicy[] = [
     post('/api/v1/webhook/paystack', { money: true }),
     post('/api/v1/public/faqs/:id/view'), post('/api/v1/public/faqs/:id/vote'), post('/api/v1/public/vendor-application'),
-    ...['signup', 'email/signup', 'email/login', 'login', 'recover', 'verify'].map((path) => post(`/api/v1/customer/auth/${path}`)),
+    ...['signup', 'email/signup', 'email/login', 'login', 'recover', 'verify', 'email/recover', 'email/reset-password', 'email/verify/send', 'email/verify/confirm'].map((path) => post(`/api/v1/customer/auth/${path}`)),
     patch('/api/v1/customer/me'), post('/api/v1/customer/profile-picture/upload-url'), post('/api/v1/customer/profile-picture/scan'), post('/api/v1/customer/profile-picture/activate'), del('/api/v1/customer/profile-picture'), post('/api/v1/customer/logout'),
     post('/api/v1/customer/kyc/tier1'), post('/api/v1/customer/kyc/tier2/nin'), post('/api/v1/customer/meters'), del('/api/v1/customer/meters/:id'),
     post('/api/v1/customer/wallet/fund', { money: true }), post('/api/v1/customer/purchase/preview'), post('/api/v1/customer/purchase', { money: true }), post('/api/v1/customer/purchase/step-up-verify'), post('/api/v1/customer/purchase/:purchaseOrderId/remote-send'),

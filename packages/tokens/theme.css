@@ -3,7 +3,17 @@
    Switch with: <html data-theme="dark"> or "light"
    ════════════════════════════════════════════════════════════ */
 
-:root[data-theme="dark"] {
+/* "executive" and "contrast" are the Beverly CRM's own dark-family theme names
+   (color-scheme: dark) — matched here too so CRM pages that adopt these shared
+   tokens (e.g. the OEM Hub) resolve correctly under the CRM's theme system,
+   not just the wallet apps' plain dark/light toggle. Purely additive: the
+   wallet apps never set data-theme to these values, so this is a no-op there. */
+:root,
+:root[data-theme="dark"],
+:root[data-theme="executive"],
+:root[data-theme="contrast"] {
+  --brand-mark-url:   url("/brand/beverly-mark-light.png");
+  --brand-lockup-url: url("/brand/beverly-lockup-light.png");
   --canvas:    oklch(13% 0.014 240);
   --bg:        oklch(15% 0.016 240);
   --bg-elev:   oklch(18% 0.018 240);
@@ -49,6 +59,8 @@
 }
 
 :root[data-theme="light"] {
+  --brand-mark-url:   url("/brand/beverly-mark.png");
+  --brand-lockup-url: url("/brand/beverly-lockup.png");
   --canvas:    oklch(97% 0.006 240);
   --bg:        oklch(99% 0.003 240);
   --bg-elev:   oklch(100% 0 0);

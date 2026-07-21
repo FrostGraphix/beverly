@@ -25,8 +25,19 @@ const {
   listMeterTokenOverrides,
   getSgcTokenRule,
   setSgcTokenRule,
-  listSgcTokenRules
+  listSgcTokenRules,
+  listOemManufacturers,
+  countOemStationMappings,
+  getOemManufacturer,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig
 } = require("../backend/src/services/storage-adapter");
+const oemRegistry = require("../backend/src/services/oem-registry-service");
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
@@ -386,7 +397,7 @@ function applyCorsHeaders(request, response) {
   if (allowedOrigin) setResponseHeader(response, "Access-Control-Allow-Origin", allowedOrigin);
   setResponseHeader(response, "Vary", "Origin");
   setResponseHeader(response, "Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password,X-Route-Hash,X-Route-Action");
+  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password,X-Route-Hash,X-Route-Action,X-Oem-Id");
   setResponseHeader(response, "Access-Control-Max-Age", "86400");
 }
 
@@ -399,10 +410,18 @@ function clientAddress(request) {
 function rateLimitResult(request) {
   const env = getEnv();
   if (!env.rateLimitEnabled || String(request.method || "GET").toUpperCase() === "OPTIONS") return null;
-  const windowMs = Number.isFinite(env.rateLimitWindowMs) && env.rateLimitWindowMs > 0 ? env.rateLimitWindowMs : 60000;
-  const maxRequests = Number.isFinite(env.rateLimitMaxRequests) && env.rateLimitMaxRequests > 0 ? env.rateLimitMaxRequests : 300;
+  // Per-OEM rate limiting: bucket by (client, OEM) so one manufacturer's traffic
+  // can't throttle another's, and honor per-OEM window/max overrides when the OEM's
+  // config is already cached (peekOemRateLimit never hits the DB — falls back to the
+  // global env defaults otherwise, i.e. today's behavior for the default OEM).
+  const oemId = oemRegistry.requestedOemId(request);
+  const oemLimit = oemRegistry.peekOemRateLimit(oemId) || {};
+  const windowSource = oemLimit.windowMs || env.rateLimitWindowMs;
+  const maxSource = oemLimit.maxRequests || env.rateLimitMaxRequests;
+  const windowMs = Number.isFinite(windowSource) && windowSource > 0 ? windowSource : 60000;
+  const maxRequests = Number.isFinite(maxSource) && maxSource > 0 ? maxSource : 300;
   const now = Date.now();
-  const key = `${clientAddress(request)}:${Math.floor(now / windowMs)}`;
+  const key = `${clientAddress(request)}:${oemId}:${Math.floor(now / windowMs)}`;
   const current = rateLimitBuckets.get(key) || 0;
   rateLimitBuckets.set(key, current + 1);
   for (const bucketKey of rateLimitBuckets.keys()) {
@@ -498,6 +517,7 @@ function protectedPath(pathname) {
   if (isAuthRefreshPath(lowerPath)) return false;
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
+  if (lowerPath === "/api/system/oem/list") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
@@ -837,9 +857,12 @@ function trustedLiveReadActor(pathname, request) {
 
 function canUseSampleFallback(pathname) {
   const normalizedPath = String(pathname || "");
+  // NOTE: /api/station/read is intentionally excluded. It is an admin CRUD
+  // table whose rows are actively edited (add/delete/rename). Serving a
+  // frozen fixture when the live call fails would silently hide real data,
+  // making the admin unable to trust what they see. A real error is safer.
   return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
-    || /\/api\/dashboard\/read(?:PanelGroup|LineChart)$/i.test(normalizedPath)
-    || /\/api\/station\/read$/i.test(normalizedPath);
+    || /\/api\/dashboard\/read(?:PanelGroup|LineChart)$/i.test(normalizedPath);
 }
 
 function apiCacheEnabled() {
@@ -906,10 +929,10 @@ function logWriteEvent(kind, details) {
   console.info(`[write-${kind}]`, JSON.stringify(details));
 }
 
-function buildLiveHeaders(request, requestData, token) {
+function buildLiveHeaders(request, requestData, token, authHeaderName) {
   const headers = {
     Accept: request.headers.accept || jsonContentType,
-    Authorization: token
+    [authHeaderName || "Authorization"]: token
   };
   if (requestData.contentType) headers["Content-Type"] = requestData.contentType;
   return headers;
@@ -1909,6 +1932,219 @@ async function loginResponse(payload) {
   };
 }
 
+function oemErrorResponse(status, message) {
+  return {
+    status,
+    body: { code: status, msg: message, reason: message, data: null, result: null }
+  };
+}
+
+function slugifyOemName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+const allowedLogoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+const maxLogoUploadBytes = 2 * 1024 * 1024;
+
+// Handles every /api/system/oem[...] path except the read-only "/list" summary
+// (handled earlier, above the call site). Returns null only for the reserved
+// "/list" pathname so the caller's earlier branch remains authoritative; every
+// other path either returns a real result or a 404.
+async function handleOemManagementRequest(request, pathname, requestData) {
+  if (pathname === "/api/system/oem/list") return null;
+  const method = String(request.method || "GET").toUpperCase();
+  const rest = pathname.slice("/api/system/oem".length).replace(/^\/+/, "");
+  const segments = rest ? rest.split("/").filter(Boolean) : [];
+  const payload = requestData.parsedBody && typeof requestData.parsedBody === "object" ? requestData.parsedBody : {};
+
+  // POST /api/system/oem — create a new (draft) OEM.
+  if (segments.length === 0 && method === "POST") {
+    const displayName = String(payload.displayName || "").trim();
+    if (!displayName) return oemErrorResponse(400, "displayName is required");
+    const slug = slugifyOemName(payload.slug || displayName);
+    if (!slug) return oemErrorResponse(400, "Could not derive a slug from displayName");
+    const existing = await getOemManufacturer(slug);
+    if (existing) return oemErrorResponse(409, `An OEM with slug "${slug}" already exists`);
+    const manufacturer = await upsertOemManufacturer({
+      slug,
+      displayName,
+      status: "draft",
+      isSeedDefault: false,
+      capabilities: payload.capabilities && typeof payload.capabilities === "object" ? payload.capabilities : {},
+      vendingStrategy: payload.vendingStrategy === "direct_credit" ? "direct_credit" : "sts_token"
+    });
+    return localJobResponse({ oem: manufacturer });
+  }
+
+  const oemId = segments[0];
+  if (!oemId) return oemErrorResponse(404, "OEM not found");
+  const manufacturer = await getOemManufacturer(oemId);
+  if (!manufacturer) return oemErrorResponse(404, "OEM not found");
+
+  // GET /api/system/oem/:id — detail, never includes secret material.
+  if (segments.length === 1 && method === "GET") {
+    const credentials = await getOemCredentials(manufacturer.id);
+    const endpoints = await listOemEndpointConfigs(manufacturer.id);
+    return localJobResponse({
+      oem: manufacturer,
+      credentials: credentials ? {
+        authStrategy: credentials.authStrategy,
+        baseUrl: credentials.baseUrl,
+        tokenEndpointPath: credentials.tokenEndpointPath,
+        apiKeyHeaderName: credentials.apiKeyHeaderName,
+        hasBearerToken: Boolean(credentials.encryptedBearerToken),
+        hasClientSecret: Boolean(credentials.encryptedClientSecret),
+        hasUsername: Boolean(credentials.encryptedUsername),
+        hasPassword: Boolean(credentials.encryptedPassword)
+      } : null,
+      endpointCount: endpoints.length
+    });
+  }
+
+  // PUT /api/system/oem/:id — edit name/details/capabilities/vending strategy.
+  if (segments.length === 1 && method === "PUT") {
+    const updated = await upsertOemManufacturer({
+      id: manufacturer.id,
+      slug: payload.slug ? slugifyOemName(payload.slug) : manufacturer.slug,
+      displayName: payload.displayName !== undefined ? String(payload.displayName).trim() || manufacturer.displayName : manufacturer.displayName,
+      logoStoragePath: payload.logoStoragePath !== undefined ? payload.logoStoragePath : manufacturer.logoStoragePath,
+      status: payload.status !== undefined ? payload.status : manufacturer.status,
+      isSeedDefault: manufacturer.isSeedDefault,
+      capabilities: payload.capabilities && typeof payload.capabilities === "object" ? payload.capabilities : manufacturer.capabilities,
+      vendingStrategy: payload.vendingStrategy !== undefined ? payload.vendingStrategy : manufacturer.vendingStrategy,
+      rateLimitWindowMs: payload.rateLimitWindowMs !== undefined ? payload.rateLimitWindowMs : manufacturer.rateLimitWindowMs,
+      rateLimitMaxRequests: payload.rateLimitMaxRequests !== undefined ? payload.rateLimitMaxRequests : manufacturer.rateLimitMaxRequests
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ oem: updated });
+  }
+
+  // DELETE /api/system/oem/:id — refuse to delete the seeded Calinmeter row.
+  if (segments.length === 1 && method === "DELETE") {
+    if (manufacturer.isSeedDefault) return oemErrorResponse(409, "Cannot delete the default seeded OEM");
+    await deleteOemManufacturer(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ deleted: true });
+  }
+
+  // PUT /api/system/oem/:id/credentials — upsert upstream credentials. Secrets
+  // are encrypted server-side; omitted secret fields keep their existing value
+  // (so changing just the base URL doesn't force re-entering the bearer token).
+  if (segments.length === 2 && segments[1] === "credentials" && method === "PUT") {
+    const existingCredentials = await getOemCredentials(manufacturer.id);
+    const authStrategy = String(payload.authStrategy || existingCredentials?.authStrategy || "bearer_static");
+    const updated = await upsertOemCredentials({
+      oemId: manufacturer.id,
+      authStrategy,
+      baseUrl: payload.baseUrl !== undefined ? String(payload.baseUrl).trim().replace(/\/+$/, "") : (existingCredentials?.baseUrl || ""),
+      encryptedBearerToken: payload.bearerToken ? oemRegistry.encryptSecret(payload.bearerToken) : (existingCredentials?.encryptedBearerToken || ""),
+      encryptedClientSecret: payload.clientSecret ? oemRegistry.encryptSecret(payload.clientSecret) : (existingCredentials?.encryptedClientSecret || ""),
+      encryptedUsername: payload.username ? oemRegistry.encryptSecret(payload.username) : (existingCredentials?.encryptedUsername || ""),
+      encryptedPassword: payload.password ? oemRegistry.encryptSecret(payload.password) : (existingCredentials?.encryptedPassword || ""),
+      tokenEndpointPath: payload.tokenEndpointPath !== undefined ? payload.tokenEndpointPath : (existingCredentials?.tokenEndpointPath || ""),
+      apiKeyHeaderName: payload.apiKeyHeaderName !== undefined ? payload.apiKeyHeaderName : (existingCredentials?.apiKeyHeaderName || ""),
+      updatedBy: request.__auth?.userId || ""
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({
+      authStrategy: updated.authStrategy,
+      baseUrl: updated.baseUrl,
+      tokenEndpointPath: updated.tokenEndpointPath,
+      apiKeyHeaderName: updated.apiKeyHeaderName,
+      hasBearerToken: Boolean(updated.encryptedBearerToken),
+      hasClientSecret: Boolean(updated.encryptedClientSecret),
+      hasUsername: Boolean(updated.encryptedUsername),
+      hasPassword: Boolean(updated.encryptedPassword)
+    });
+  }
+
+  // POST /api/system/oem/:id/cache-bust — make an edit visible immediately
+  // instead of waiting out the registry's cache TTL.
+  if (segments.length === 2 && segments[1] === "cache-bust" && method === "POST") {
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ ok: true });
+  }
+
+  // POST /api/system/oem/:id/test-connection — resolves auth (fetching/caching a
+  // token for login/OAuth2 strategies) and, if an enabled GET endpoint exists,
+  // makes one real call. Safe to call the moment credentials are pasted in,
+  // before any endpoint paths are configured.
+  if (segments.length === 2 && segments[1] === "test-connection" && method === "POST") {
+    const result = await oemRegistry.testOemConnection(manufacturer.id);
+    return localJobResponse(result);
+  }
+
+  // POST /api/system/oem/:id/logo — multipart image upload to the oem-logos bucket.
+  if (segments.length === 2 && segments[1] === "logo" && method === "POST") {
+    const file = payload._file || null;
+    if (!file) return oemErrorResponse(400, "Logo file is required");
+    if (!allowedLogoMimeTypes.includes(file.contentType)) return oemErrorResponse(400, `Allowed logo types: ${allowedLogoMimeTypes.join(", ")}`);
+    if (!file.buffer || file.buffer.length > maxLogoUploadBytes) return oemErrorResponse(400, `Logo must be ${Math.floor(maxLogoUploadBytes / 1024 / 1024)}MB or smaller`);
+    const artifact = await saveArtifact({
+      bucket: "oem-logos",
+      routeHash: "oem-logo",
+      filename: file.name || `${manufacturer.slug}.png`,
+      content: file.buffer,
+      contentType: file.contentType
+    });
+    if (!artifact) return oemErrorResponse(503, "Logo storage requires Supabase to be configured for this environment");
+    const supabaseUrlBase = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+    const logoStoragePath = `${supabaseUrlBase}/storage/v1/object/public/oem-logos/${artifact.path}`;
+    await upsertOemManufacturer({ ...manufacturer, logoStoragePath });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ logoStoragePath });
+  }
+
+  // GET /api/system/oem/:id/endpoints — list every endpoint config for this OEM.
+  if (segments.length === 2 && segments[1] === "endpoints" && method === "GET") {
+    return localJobResponse({ endpoints: await listOemEndpointConfigs(manufacturer.id) });
+  }
+
+  // PUT /api/system/oem/:id/endpoints/:logicalKey — upsert one endpoint config.
+  if (segments.length === 3 && segments[1] === "endpoints" && method === "PUT") {
+    const logicalKey = decodeURIComponent(segments[2]);
+    const updated = await upsertOemEndpointConfig({
+      oemId: manufacturer.id,
+      logicalKey,
+      upstreamPath: payload.upstreamPath,
+      method: payload.method,
+      casingVariant: payload.casingVariant,
+      requestFieldMap: payload.requestFieldMap,
+      responseFieldMap: payload.responseFieldMap,
+      payloadShape: payload.payloadShape,
+      paginationStyle: payload.paginationStyle,
+      requiresLiveRead: payload.requiresLiveRead,
+      isWriteOverride: payload.isWriteOverride,
+      adapterFnName: payload.adapterFnName,
+      enabled: payload.enabled
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ endpoint: updated });
+  }
+
+  // DELETE /api/system/oem/:id/endpoints/:logicalKey
+  if (segments.length === 3 && segments[1] === "endpoints" && method === "DELETE") {
+    const logicalKey = decodeURIComponent(segments[2]);
+    await deleteOemEndpointConfig(manufacturer.id, logicalKey);
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ deleted: true });
+  }
+
+  return oemErrorResponse(404, "Unknown OEM management route");
+}
+
 async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() === "GET" && pathname.startsWith("/api/cron/refresh")) {
     if (!cronAuthorized(request)) {
@@ -2088,6 +2324,27 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       enabled: process.env.SNAPSHOT_STORE_ENABLED === "true" || process.env.SESSION_STORE_MODE === "supabase",
       schedule: snapshotSchedule()
     });
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/oem/list") {
+    const manufacturers = await listOemManufacturers();
+    const oems = await Promise.all(manufacturers.map(async (oem) => ({
+      id: oem.id,
+      slug: oem.slug,
+      displayName: oem.displayName,
+      logoStoragePath: oem.logoStoragePath,
+      status: oem.status,
+      isSeedDefault: oem.isSeedDefault,
+      capabilities: oem.capabilities,
+      vendingStrategy: oem.vendingStrategy,
+      communityCount: await countOemStationMappings(oem.id),
+      createdAt: oem.createdAt,
+      updatedAt: oem.updatedAt
+    })));
+    return localJobResponse({ oems });
+  }
+  if (pathname === "/api/system/oem" || pathname.startsWith("/api/system/oem/")) {
+    const oemResult = await handleOemManagementRequest(request, pathname, requestData);
+    if (oemResult) return oemResult;
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/storage-report") {
     return localJobResponse(await storageReport());
@@ -3677,11 +3934,11 @@ async function auditResult(request, pathname, result) {
   }
 }
 
-async function tryLivePath(request, liveUrl, requestData, token) {
+async function tryLivePath(request, liveUrl, requestData, token, authHeaderName) {
   const axios = require("axios");
   const http = require("http");
   const https = require("https");
-  
+
   if (!global.liveAxios) {
     global.liveAxios = axios.create({
       httpAgent: new http.Agent({ keepAlive: true, maxSockets: 10 }),
@@ -3693,7 +3950,7 @@ async function tryLivePath(request, liveUrl, requestData, token) {
   const response = await global.liveAxios({
     method: request.method || "GET",
     url: liveUrl,
-    headers: buildLiveHeaders(request, requestData, token),
+    headers: buildLiveHeaders(request, requestData, token, authHeaderName),
     data: request.method === "GET" ? undefined : requestData.rawBody,
     responseType: "text", // Get raw text to match previous fetch behavior
     timeout: Math.max(1000, Number(request.__timeoutMs || process.env.LIVE_API_TIMEOUT_MS) || 45000)
@@ -3741,15 +3998,44 @@ async function proxyLive(request, pathname, requestData) {
     };
   }
 
-  const token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
-  const candidates = candidatePaths(pathname);
+  // Multi-OEM resolution: the global readMode/LIVE_API_PROXY_ENABLED/allowLiveWrites
+  // gates above are unchanged and remain fully authoritative over whether live calls
+  // happen at all. The OEM registry only substitutes WHICH base URL/token to use for
+  // this request. A null result (registry disabled, OEM not found/configured yet)
+  // falls back to the legacy env.liveBaseUrl/env.liveBearerToken exactly as before —
+  // this keeps today's Calinmeter behavior byte-identical whether or not the OEM has
+  // been seeded yet.
+  const requestedOemId = oemRegistry.requestedOemId(request);
+  const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId);
+  const liveBaseUrl = oemConfig ? oemConfig.liveBaseUrl : env.liveBaseUrl;
+
+  // Translate the CRM-canonical (Calinmeter-shaped) path to this OEM's actual path
+  // via the shared logical key. Identity for Calinmeter/default → zero regression.
+  const resolvedPath = oemConfig ? await oemRegistry.translateEndpointPathForOem(oemConfig, pathname) : pathname;
+
+  // Auth resolution is strategy-aware for a configured OEM (static bearer, API-key
+  // header, or a login/OAuth2 flow that fetches+caches a token — see
+  // oem-registry-service.js's resolveAuthHeader). Falls back to the legacy env-var
+  // bearer token when no OEM config is resolvable, exactly as before.
+  let token = "";
+  let authHeaderName = "Authorization";
+  if (oemConfig) {
+    const resolvedAuth = await oemRegistry.resolveAuthHeader(oemConfig);
+    if (resolvedAuth) {
+      token = resolvedAuth.value;
+      authHeaderName = resolvedAuth.name;
+    }
+  } else {
+    token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
+  }
+  const candidates = candidatePaths(resolvedPath);
   const query = querySuffix(request.url);
   let lastFailure = null;
 
   for (const candidate of candidates) {
-    const liveUrl = `${env.liveBaseUrl}${candidate}${query}`;
+    const liveUrl = `${liveBaseUrl}${candidate}${query}`;
     try {
-      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token);
+      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token, authHeaderName);
       if (liveResult.status === 401 || liveResult.status === 403) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
         await handleAutomationIncident({
@@ -4035,7 +4321,13 @@ async function handler(request, response) {
     }
     // --- end HttpOnly session endpoints ---
 
-    if (lowerPathForSession !== "/api/user/login") {
+    // Server-to-server live reads (cron/automation) authenticate with a Bearer
+    // token via trustedLiveReadActor, not a browser cookie. The CRM cookie-session
+    // gate must not run ahead of that path, or it 401s every trusted live read
+    // before authorizeRequest can honour the Bearer credential. trustedLiveReadActor
+    // itself enforces cronAuthorized + LIVE_API_BEARER_TOKEN, so this is not a bypass.
+    const trustedLiveRead = trustedLiveReadActor(pathname, request);
+    if (lowerPathForSession !== "/api/user/login" && !trustedLiveRead) {
       result = enforceCrmSession(request, response, Date.now(), protectedPath(pathname));
       if (result) {
         await auditResult(request, pathname, result);
@@ -4200,7 +4492,7 @@ async function handler(request, response) {
       }
     }
 
-    if (result?.status >= 500 && canUseSampleFallback(pathname)) {
+    if (result?.status >= 400 && canUseSampleFallback(pathname)) {
       const sample = sampleReadResponse(pathname, requestData);
       if (sample) {
         result = {

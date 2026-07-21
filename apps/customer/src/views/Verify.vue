@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
 import { safeAuthRedirect } from '../lib/auth-flow';
+import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const route = useRoute();
 const router = useRouter();
@@ -115,6 +116,7 @@ function clearDigits() {
 }
 
 async function submit() {
+    unlockLoginVoice();
     if (loading.value || success.value) return;
     const otp = digits.value.join('');
     if (otp.length !== 6) return;
@@ -127,6 +129,7 @@ async function submit() {
         );
         success.value = true;
         auth.setSession(r.access_token, r.customer, rememberSession);
+        playLoginVoice();
         await new Promise((res) => setTimeout(res, 600)); // brief success pause
         await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
     } catch (e: any) {

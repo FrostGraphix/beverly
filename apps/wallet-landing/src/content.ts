@@ -35,7 +35,7 @@ export const PORTAL_CARDS: PortalDef[] = [
         key: 'customer',
         eyebrow: 'For households & businesses',
         title: 'I want to buy electricity',
-        tagline: 'Top up any prepaid meter in seconds. Track usage, store receipts, never run out at night.',
+        tagline: 'Your Smart Power Partner.',
         bullets: [
             { icon: 'bolt', text: 'Instant token delivery — paste into any meter' },
             { icon: 'wallet', text: 'Fund a wallet once, buy in one tap' },
@@ -51,7 +51,7 @@ export const PORTAL_CARDS: PortalDef[] = [
         key: 'vendor',
         eyebrow: 'For agents & resellers',
         title: 'I want to sell electricity',
-        tagline: 'Run a vending business with real-time float, instant settlement, and remote token delivery.',
+        tagline: 'Your Smart Power Partner.',
         bullets: [
             { icon: 'store', text: 'Vend to any customer, any disco, instantly' },
             { icon: 'chart', text: 'Live float balance & daily statements' },

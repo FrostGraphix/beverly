@@ -19,7 +19,7 @@
             <span class="auth-card-name">Beverly</span>
           </div>
           <h2 class="auth-card-title">Sign in</h2>
-          <p class="auth-card-sub">Beverly Operations</p>
+          <p class="auth-card-sub">Your Smart Power Partner.</p>
         </header>
 
         <transition name="auth-alert-fade">
@@ -136,6 +136,7 @@
 import { login } from "../services/api";
 import { recordClientError } from "../services/error-logger.mjs";
 import { getMFAStatus } from "../services/mfa-service.mjs";
+import { playLoginVoice, unlockLoginVoice } from "../utils/voice";
 import BaseButton from "./base/BaseButton.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
@@ -178,6 +179,7 @@ export default {
   },
   methods: {
     async submit() {
+      unlockLoginVoice();
       this.error = "";
       this.errorReference = "";
       this.fieldErrors = this.validateFields();
@@ -207,6 +209,7 @@ export default {
           }
         } catch { /* MFA unavailable — proceed without */ }
 
+        playLoginVoice();
         this.$emit("logged-in");
       } catch (err) {
         this.error = this.loginErrorMessage(err);
@@ -254,6 +257,7 @@ export default {
     onMfaVerified() {
       this.mfaRequired = false;
       this.mfaFactorId = null;
+      playLoginVoice();
       this.$emit("logged-in");
     },
     onMfaCancelled() {

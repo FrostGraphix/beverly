@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue';
+import { onMounted, computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import { useAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
 import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
+
+// The initial route (including auth-hydration guards in router/index.ts)
+// resolves asynchronously — router-view renders nothing until then. Gate
+// on router.isReady() so that gap shows the loader instead of a blank screen.
+const routeReady = ref(false);
+router.isReady().then(() => { routeReady.value = true; });
 
 onMounted(() => { void auth.hydrate(); });
 
@@ -25,7 +32,8 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
 </script>
 
 <template>
-  <router-view />
+  <BeverlyLoader v-if="!routeReady" label="Verifying session" />
+  <router-view v-else />
   <SessionTimeoutWarning
     v-if="isAuthed"
     :visible="warningVisible"

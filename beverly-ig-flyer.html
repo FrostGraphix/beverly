@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beverly — IG Flyer Supercharged</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700;800&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --beverly-green: #2FC34A;
+  --beverly-green-glow: rgba(47, 195, 74, 0.6);
+  --near-black: #050806;
+  --clean-white: #FFFFFF;
+  --neutral-grey: #8a9992;
+  
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: #000; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+/* 4:5 Aspect Ratio Container (1080x1350) */
+#flyer {
+  position: relative;
+  width: 1080px;
+  height: 1350px;
+  background: var(--near-black);
+  overflow: hidden;
+  transform-origin: center;
+  max-height: 95vh;
+  aspect-ratio: 4/5;
+  width: auto;
+  box-shadow: 0 0 100px rgba(47,195,74,0.1);
+}
+
+/* Film Grain Texture Overlay */
+.film-grain {
+  position: absolute; inset: 0; z-index: 999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.05; pointer-events: none; mix-blend-mode: overlay;
+}
+
+/* Deep Volumetric Lighting */
+.volumetric-light-1 {
+  position: absolute; top: -200px; left: -200px; width: 1000px; height: 1000px;
+  background: radial-gradient(circle, rgba(47,195,74,0.15) 0%, transparent 60%);
+  z-index: 1; pointer-events: none;
+  animation: pulse-light 8s infinite alternate ease-in-out;
+}
+.volumetric-light-2 {
+  position: absolute; bottom: -300px; right: -200px; width: 1200px; height: 1200px;
+  background: radial-gradient(circle, rgba(47,195,74,0.1) 0%, transparent 70%);
+  z-index: 1; pointer-events: none;
+}
+
+@keyframes pulse-light { 0% { opacity: 0.7; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1.1); } }
+
+/* Scale wrapper */
+.flyer-inner {
+  position: absolute; top: 0; left: 0; width: 1080px; height: 1350px;
+  transform: scale(calc(var(--scale, 1))); transform-origin: top left;
+}
+
+/* 3D Tilted Card Background */
+.card-wrapper {
+  position: absolute; top: 120px; left: 60px; width: 960px;
+  perspective: 2500px; z-index: 5;
+}
+
+.card-3d {
+  background: rgba(10, 15, 12, 0.85);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 32px;
+  padding: 60px;
+  transform: rotateX(20deg) rotateY(-12deg) rotateZ(-2deg) scale(0.92);
+  transform-style: preserve-3d;
+  box-shadow: -40px 60px 120px rgba(0,0,0,0.9), inset 0 2px 20px rgba(255,255,255,0.05);
+  backdrop-filter: blur(20px);
+}
+
+.card-greeting {
+  font-family: var(--font-display); font-size: 38px; font-weight: 800;
+  color: var(--clean-white); margin-bottom: 50px;
+  text-shadow: 0 4px 20px rgba(0,0,0,0.8); letter-spacing: -0.5px;
+}
+
+.card-panel {
+  background: linear-gradient(135deg, rgba(47,195,74,0.12) 0%, rgba(10,15,12,0.9) 100%);
+  border: 2px solid rgba(47,195,74,0.5);
+  border-radius: 24px; padding: 50px; position: relative;
+  box-shadow: inset 0 0 60px rgba(47,195,74,0.1), 0 20px 40px rgba(0,0,0,0.5);
+}
+
+.panel-title {
+  font-size: 15px; color: var(--neutral-grey); letter-spacing: 3px;
+  text-transform: uppercase; font-weight: 800; margin-bottom: 15px;
+}
+
+.panel-value {
+  font-family: var(--font-mono); font-size: 90px; font-weight: 800;
+  color: var(--beverly-green);
+  text-shadow: 0 0 30px rgba(47,195,74,0.6), 0 0 60px rgba(47,195,74,0.2);
+  margin-bottom: 40px; letter-spacing: -2px;
+}
+
+.panel-btn {
+  background: linear-gradient(180deg, #3be25a 0%, var(--beverly-green) 100%);
+  color: #000; font-family: var(--font-display); font-weight: 900; font-size: 22px;
+  padding: 18px 48px; border-radius: 16px; display: inline-block;
+  box-shadow: 0 15px 30px rgba(47,195,74,0.3), inset 0 2px 0 rgba(255,255,255,0.4);
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+/* --- NEW FLOATING UI ELEMENTS --- */
+/* Consumption Analytics Glass Card */
+.analytics-card {
+  position: absolute;
+  top: 90px;
+  right: 40px;
+  width: 320px;
+  background: rgba(17, 23, 22, 0.7);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 24px;
+  padding: 30px;
+  z-index: 20;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.8);
+  transform: rotateZ(3deg) rotateY(-10deg);
+}
+
+.analytics-card .title { font-size: 12px; color: var(--neutral-grey); font-weight: 700; letter-spacing: 2px; margin-bottom: 15px; }
+.analytics-card .stat { font-family: var(--font-mono); font-size: 32px; color: var(--clean-white); font-weight: 800; margin-bottom: 20px; }
+.analytics-card .stat span { color: var(--beverly-green); font-size: 16px; }
+.chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 60px; margin-top: 10px; }
+.bar { flex: 1; background: var(--neutral-grey); border-radius: 4px; opacity: 0.5; }
+.bar.active { background: var(--beverly-green); opacity: 1; box-shadow: 0 0 15px var(--beverly-green); }
+
+/* Token Success Notification Card */
+.token-card {
+  position: absolute;
+  top: 500px;
+  right: 60px;
+  width: 400px;
+  background: linear-gradient(180deg, rgba(47,195,74,0.15) 0%, rgba(10,15,12,0.9) 100%);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(47,195,74,0.4);
+  border-top: 4px solid var(--beverly-green);
+  border-radius: 20px;
+  padding: 30px;
+  z-index: 21;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.9), 0 0 40px rgba(47,195,74,0.2);
+  transform: rotateZ(-5deg) rotateY(15deg) translateZ(50px);
+}
+
+.token-card .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+.token-card .icon { width: 32px; height: 32px; background: var(--beverly-green); border-radius: 50%; display: grid; place-items: center; color: #000; font-weight: 900; }
+.token-card .status { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--clean-white); }
+.token-card .token-code { font-family: var(--font-mono); font-size: 28px; font-weight: 800; color: var(--beverly-green); letter-spacing: 2px; text-shadow: 0 0 15px rgba(47,195,74,0.5); }
+.token-card .meta { font-size: 12px; color: var(--neutral-grey); margin-top: 15px; display: flex; justify-content: space-between; }
+
+
+/* Supercharged Glowing Bolt */
+.giant-bolt {
+  position: absolute; top: 400px; left: 50%; transform: translateX(-50%);
+  width: 420px; height: 420px;
+  fill: none; stroke: var(--beverly-green); stroke-width: 4;
+  filter: drop-shadow(0 0 30px var(--beverly-green)) drop-shadow(0 0 80px rgba(47,195,74,0.8)) drop-shadow(0 0 150px rgba(47,195,74,0.4));
+  z-index: 11;
+  animation: pulse-bolt 4s infinite alternate ease-in-out;
+}
+@keyframes pulse-bolt { 0% { filter: drop-shadow(0 0 30px var(--beverly-green)) drop-shadow(0 0 60px rgba(47,195,74,0.6)); } 100% { filter: drop-shadow(0 0 40px #4fff64) drop-shadow(0 0 100px rgba(47,195,74,0.9)) drop-shadow(0 0 180px rgba(47,195,74,0.5)); stroke: #4fff64; } }
+
+/* The Heavy Horizontal Blur Effect (Fixed for Canvas Export) */
+.blur-band {
+  position: absolute; top: 620px; left: -100px; width: 1280px; height: 320px;
+  background: linear-gradient(to right, transparent 5%, rgba(5,8,6,0.95) 25%, rgba(5,8,6,0.95) 75%, transparent 95%);
+  z-index: 12;
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.8), 0 20px 60px rgba(0,0,0,0.8);
+}
+
+/* Foreground Text Overlay */
+.text-overlay {
+  position: absolute; top: 680px; width: 100%; text-align: center; z-index: 15;
+}
+
+.main-text {
+  font-family: var(--font-display); font-size: 80px; font-weight: 900;
+  letter-spacing: -3px; margin-bottom: 20px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #d1d5d3 50%, #9ca39f 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 15px 40px rgba(0,0,0,0.9));
+}
+
+.sub-text {
+  font-family: var(--font-sans); font-size: 28px; color: var(--neutral-grey);
+  font-weight: 500; letter-spacing: 1px;
+}
+
+/* Ambient Particles */
+.particle {
+  position: absolute; background: var(--beverly-green); border-radius: 50%;
+  box-shadow: 0 0 20px var(--beverly-green); z-index: 10;
+  animation: float-up linear infinite; opacity: 0;
+}
+@keyframes float-up { 0% { transform: translateY(100px) scale(0); opacity: 0; } 20% { opacity: 0.8; } 80% { opacity: 0.8; } 100% { transform: translateY(-200px) scale(1.5); opacity: 0; } }
+
+/* Edge Vignette */
+.edge-light { position: absolute; inset: 0; box-shadow: inset 0 0 150px rgba(0,0,0,1); pointer-events: none; z-index: 100; }
+
+/* Download Button */
+.download-btn {
+  position: fixed; bottom: 30px; right: 30px; z-index: 9999;
+  background: var(--beverly-green); color: #000;
+  border: none; padding: 12px 24px; border-radius: 8px;
+  font-family: var(--font-display); font-weight: 800; font-size: 16px;
+  cursor: pointer; box-shadow: 0 10px 20px rgba(47,195,74,0.3);
+  transition: transform 0.2s, background 0.2s;
+}
+.download-btn:hover { transform: scale(1.05); background: #3be25a; }
+.download-btn:active { transform: scale(0.95); }
+</style>
+
+<!-- DOM to Image Library (Better CSS Filter Support) -->
+<script src="https://unpkg.com/dom-to-image-more@2.8.0/dist/dom-to-image-more.min.js"></script>
+</head>
+<body>
+
+<button class="download-btn" onclick="downloadPNG()">DOWNLOAD PNG</button>
+<div id="flyer">
+  <div class="film-grain"></div>
+  <div class="volumetric-light-1"></div>
+  <div class="volumetric-light-2"></div>
+  
+  <div class="flyer-inner">
+    
+    <!-- Tilted Dashboard Card -->
+    <div class="card-wrapper">
+      <div class="card-3d">
+        <div class="card-greeting">Good Morning, Abdulsamad 👋</div>
+        <div class="card-panel">
+          <div class="panel-title">WALLET FLOAT</div>
+          <div class="panel-value">₦50,000.00</div>
+          <div class="panel-btn">Buy Token</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW: Meter Analytics Card -->
+    <div class="analytics-card">
+      <div class="title">LIVE METER ANALYSIS</div>
+      <div class="stat">14.2 <span>kWh / Avg</span></div>
+      <div class="chart-bars">
+        <div class="bar" style="height: 30%;"></div>
+        <div class="bar" style="height: 50%;"></div>
+        <div class="bar" style="height: 40%;"></div>
+        <div class="bar" style="height: 70%;"></div>
+        <div class="bar" style="height: 60%;"></div>
+        <div class="bar active" style="height: 90%;"></div>
+        <div class="bar" style="height: 50%;"></div>
+      </div>
+    </div>
+
+    <!-- NEW: Token Success Card -->
+    <div class="token-card">
+      <div class="header">
+        <div class="icon">✓</div>
+        <div class="status">TOKEN GENERATED</div>
+      </div>
+      <div class="token-code">4509-8812-3901</div>
+      <div class="meta">
+        <span>Units: 145.2 kWh</span>
+        <span style="color:var(--clean-white);">Paid: ₦15,000</span>
+      </div>
+    </div>
+
+    <!-- Glowing Bolt -->
+    <svg class="giant-bolt" viewBox="0 0 24 24">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+
+    <!-- Horizontal Blur Band -->
+    <div class="blur-band"></div>
+
+    <!-- Foreground Text Overlay -->
+    <div class="text-overlay">
+      <div class="main-text">One Unified System.</div>
+      <div class="sub-text">Your Smart Power Partner.</div>
+    </div>
+
+    <!-- Particles injected via JS -->
+    <div id="particles"></div>
+
+    <div class="edge-light"></div>
+  </div>
+</div>
+
+<script>
+  // Auto-scale to fit window
+  function resizeFlyer() {
+    const flyer = document.getElementById('flyer');
+    const containerHeight = flyer.clientHeight;
+    const scale = containerHeight / 1350;
+    document.documentElement.style.setProperty('--scale', scale);
+  }
+  window.addEventListener('resize', resizeFlyer);
+  resizeFlyer();
+
+  // Generate ambient particles
+  const particleContainer = document.getElementById('particles');
+  for(let i=0; i<20; i++) {
+    let p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random() * 1080 + 'px';
+    p.style.top = (600 + Math.random() * 600) + 'px';
+    p.style.width = p.style.height = (2 + Math.random() * 4) + 'px';
+    p.style.animationDuration = (4 + Math.random() * 6) + 's';
+    p.style.animationDelay = (Math.random() * 5) + 's';
+    particleContainer.appendChild(p);
+  }
+
+  // PNG Export Logic
+  function downloadPNG() {
+    const btn = document.querySelector('.download-btn');
+    btn.innerText = "RENDERING...";
+    
+    domtoimage.toPng(document.getElementById('flyer'), {
+      quality: 1,
+      scale: window.devicePixelRatio > 1 ? window.devicePixelRatio : 2
+    })
+    .then(function (dataUrl) {
+      const a = document.createElement('a');
+      a.download = `Beverly-IG-Flyer-${Date.now()}.png`;
+      a.href = dataUrl;
+      a.click();
+      btn.innerText = "DOWNLOAD PNG";
+    })
+    .catch(function (error) {
+      console.error('oops, something went wrong!', error);
+      btn.innerText = "ERROR - TRY AGAIN";
+      setTimeout(() => btn.innerText = "DOWNLOAD PNG", 2000);
+    });
+  }
+</script>
+
+</body>
+</html>

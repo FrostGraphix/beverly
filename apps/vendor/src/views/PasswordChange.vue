@@ -120,7 +120,7 @@ function logout() {
       <!-- Form state -->
       <template v-else>
         <header class="pc-head">
-          <div class="bw-mark pc-mark">B</div>
+          <div class="bw-mark pc-mark" aria-hidden="true"></div>
           <p class="pc-eyebrow">First-time setup · step 1 of 1</p>
           <h1 class="bw-h1 pc-title">Set your new password</h1>
           <p class="pc-sub">

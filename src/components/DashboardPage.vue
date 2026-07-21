@@ -20,7 +20,11 @@
           <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
           <span class="dashboard-stat-copy">
             <span class="dashboard-stat-label">{{ card.label }}</span>
-            <span class="dashboard-stat-value">{{ formatNumber(animatedPanel[card.key]) }}</span>
+            <span class="dashboard-stat-value">
+              <span v-if="card.key === 'totalPurchaseMoney'" class="dashboard-stat-symbol" aria-label="Naira">₦</span>
+              <span>{{ formatStatValue(card, animatedPanel[card.key]) }}</span>
+              <span v-if="card.key === 'totalPurchaseUnit'" class="dashboard-stat-unit">kWh</span>
+            </span>
           </span>
         </BaseButton>
       </template>
@@ -67,6 +71,7 @@ import BaseButton from "./base/BaseButton.vue";
 import { fetchDashboardData } from "../services/dashboard-service.mjs";
 import { createBarOption, createLineOption, createPieOption, dashboardSeries } from "../services/dashboard-chart-options.mjs";
 import { dashboardChartTitles } from "../services/mappers/dashboard-mapper.mjs";
+import { useOemStore } from "../stores/oem-store";
 
 const iconMarkup = {
   account: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M512 512c113.1 0 204.8-91.7 204.8-204.8S625.1 102.4 512 102.4 307.2 194.1 307.2 307.2 398.9 512 512 512zm0 102.4c-136.5 0-409.6 68.5-409.6 204.8v102.4h819.2V819.2c0-136.3-273.1-204.8-409.6-204.8z"/></svg>',
@@ -117,10 +122,14 @@ export default {
       countFrame: null,
       refreshTimer: null,
       visibilityHandler: null,
-      dashboardLoadId: 0
+      dashboardLoadId: 0,
+      warmApplied: false
     };
   },
   computed: {
+    oemStore() {
+      return useOemStore();
+    },
     cards() {
       const theme = this.chartTheme || {};
       return dashboardCards.map((card) => ({
@@ -194,22 +203,36 @@ export default {
         ? this.toMonthlyConsumption(this.dailyConsumption)
         : this.dailyConsumption;
     },
+    applyDataset(dataset) {
+      this.panel = dataset.panel;
+      this.animatePanel(dataset.panel);
+      this.top = dataset.top;
+      this.dailyConsumption = dataset.consumption;
+      this.consumption = this.consumptionMode === "monthly"
+        ? this.toMonthlyConsumption(this.dailyConsumption)
+        : this.dailyConsumption;
+      this.success = dataset.success;
+      this.alarms = dataset.alarms;
+    },
     async loadDataset(activeType, showLoading = true) {
       if (!showLoading && this.loading) return;
       const loadId = ++this.dashboardLoadId;
+      // Paint the background-warmed dataset instantly (no spinner) if the OEM Hub
+      // prefetched this OEM's dashboard, then refresh silently in the background.
+      if (showLoading && !this.warmApplied) {
+        const warm = this.oemStore.warmCache[this.oemStore.currentOemId];
+        if (warm && warm.status === "ready" && warm.dataset) {
+          this.applyDataset(warm.dataset);
+          this.warmApplied = true;
+          this.loadDataset(activeType, false);
+          return;
+        }
+      }
       if (showLoading) this.loading = true;
       try {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
         if (loadId !== this.dashboardLoadId) return;
-        this.panel = dataset.panel;
-        this.animatePanel(dataset.panel);
-        this.top = dataset.top;
-        this.dailyConsumption = dataset.consumption;
-        this.consumption = this.consumptionMode === "monthly"
-          ? this.toMonthlyConsumption(this.dailyConsumption)
-          : this.dailyConsumption;
-        this.success = dataset.success;
-        this.alarms = dataset.alarms;
+        this.applyDataset(dataset);
       } finally {
         if (showLoading && loadId === this.dashboardLoadId) this.loading = false;
       }
@@ -227,6 +250,21 @@ export default {
         labels,
         values
       };
+    },
+    formatStatValue(card, value) {
+      const num = Number(value || 0);
+      if (card && card.key === "totalPurchaseMoney") {
+        return num.toLocaleString("en-NG", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+      if (card && (card.key === "totalAccountCount" || card.key === "totalPurchaseTimes")) {
+        return Math.round(num).toLocaleString();
+      }
+      return num.toLocaleString(undefined, {
+        maximumFractionDigits: 1
+      });
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {

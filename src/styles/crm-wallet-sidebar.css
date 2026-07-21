@@ -97,10 +97,9 @@
   height: 54px;
   margin-right: 0;
   border-radius: 15px;
-  background: linear-gradient(145deg, #55db70, #20a747) !important;
-  color: #03140a;
-  font-size: 25px;
-  font-weight: 800;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat !important;
+  color: transparent;
+  font-size: 0;
   box-shadow: 0 10px 24px rgba(41, 190, 80, 0.22), inset 0 1px rgba(255, 255, 255, 0.42);
 }
 
@@ -121,6 +120,21 @@
   font-size: 21px;
   font-weight: 750;
   letter-spacing: -0.035em;
+}
+
+.app-page:not(.wallet-admin-host) .sidebar-logo-wordmark {
+  display: block;
+  height: 22px;
+  aspect-ratio: 1552 / 520;
+  background-color: var(--sidebar-text-hover);
+  -webkit-mask-image: url("/brand/beverly-wordmark.png");
+  mask-image: url("/brand/beverly-wordmark.png");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
 }
 
 .app-page:not(.wallet-admin-host) .sidebar-brand-copy small {
@@ -401,8 +415,7 @@
 }
 
 [data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-logo-icon {
-  background: linear-gradient(145deg, #ffe45c, #d4a900) !important;
-  color: #171300;
+  box-shadow: 0 0 0 2px #ffe45c, 0 10px 24px rgba(255, 214, 10, 0.3);
 }
 
 [data-theme="contrast"] .app-page:not(.wallet-admin-host) .sidebar-item.active {

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { api, ApiError } from '../lib/api';
+import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const REMEMBERED_EMAIL_KEY = 'beverly.staff.remembered_email';
 
@@ -80,10 +81,12 @@ async function afterAuthenticated() {
     } catch {
         // status is best-effort; if it fails, continue and let route guards apply
     }
+    playLoginVoice();
     await router.push(redirectTarget.value);
 }
 
 async function signIn() {
+    unlockLoginVoice();
     const normalizedEmail = email.value.trim().toLowerCase();
     if (!normalizedEmail || !password.value) {
         error.value = 'Email and password are required.';
@@ -154,6 +157,7 @@ async function verifyChallenge() {
         await api.post('/api/v1/admin/mfa/challenge/verify', { code: challengeCode.value.trim() });
         challengeCode.value = '';
         await auth.refreshSession();
+        playLoginVoice();
         await router.push(redirectTarget.value);
     } catch (err) {
         error.value = readableError(err, 'Security code rejected.');
@@ -189,9 +193,9 @@ onMounted(async () => {
     <div class="login-aura" />
     <div class="bw-card login-card">
       <div class="login-head">
-        <div class="bw-mark login-mark">B</div>
+        <div class="bw-mark login-mark" aria-hidden="true"></div>
         <div class="bw-h1 login-title">Wallet Admin</div>
-        <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Staff access only' }}</p>
+        <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Your Smart Power Partner.' }}</p>
       </div>
 
       <div v-if="showSessionEnded" class="login-flash warn" role="status" aria-live="polite">

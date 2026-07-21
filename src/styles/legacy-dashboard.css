@@ -155,6 +155,24 @@
   font-size: clamp(18px, 1.56vw, 24px);
   letter-spacing: 0;
 }
+.dashboard-stat-symbol {
+  display: inline-block;
+  margin-right: 3px;
+  font-weight: 700;
+  font-size: 0.94em;
+  opacity: 0.92;
+  vertical-align: baseline;
+}
+.dashboard-stat-unit {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.58em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  vertical-align: baseline;
+}
 
 .dashboard-chart-card {
   background: var(--bg-card);

@@ -2,7 +2,7 @@
   <section :class="['wallet-admin-shell', `wallet-admin-shell--${activePage}`]" aria-label="Wallet admin workspace">
     <aside class="wallet-admin-sidebar" aria-label="Wallet admin navigation">
       <div class="wallet-brand-block">
-        <span class="wallet-brand-mark">B</span>
+        <span class="wallet-brand-mark" aria-hidden="true">B</span>
         <span><strong>Beverly</strong><small>Wallet Admin</small></span>
       </div>
       <label class="wallet-quick-search">
@@ -431,16 +431,14 @@ export default {
   gap: 14px;
 }
 .wallet-brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 54px;
   height: 54px;
   border-radius: 14px;
-  color: var(--text-inverse);
-  background: linear-gradient(135deg, var(--success), color-mix(in srgb, var(--success) 65%, var(--info)));
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat;
   box-shadow: 0 16px 42px color-mix(in srgb, var(--success) 26%, transparent);
-  font-size: 24px;
-  font-weight: 950;
+  color: transparent;
+  font-size: 0;
 }
 .wallet-brand-block strong {
   display: block;

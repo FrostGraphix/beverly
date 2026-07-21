@@ -4,13 +4,18 @@
  * sendNotification() fires all enabled channels for a customer event:
  *   • in-app  — always written (inbox row) when in_app pref is on
  *   • SMS     — sent via Twilio when sms pref is on and flag is live
- *   • email   — sent via Postmark when email pref is on and flag is live
+ *   • email   — sent via Resend when email pref is on and flag is live
  *
  * All channels are best-effort: failures are logged but never thrown.
  */
 import { adminClient } from '../db/supabase.js';
 import { sendSms }   from '../adapters/twilio.js';
-import { sendEmail } from '../adapters/postmark.js';
+import { sendEmail } from '../adapters/resend.js';
+import {
+    walletFundedEmail, paymentFailedEmail, kycUpdateEmail,
+    disputeUpdateEmail, meterOrderUpdateEmail, genericEmail,
+    type EmailContent,
+} from '../emails/templates.js';
 import { logAction } from './audit.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env }       from '../config/env.js';
@@ -59,7 +64,7 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     // (sendTokenSmsToCustomer) already delivers the actual token code via SMS.
     // The notification service handles in-app + email for this event.
     sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
-    email:  { token_purchased: false, wallet_funded: false, promotions: false, admin_announcement: false },
+    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, meter_order_update: true },
     in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 };
 
@@ -164,6 +169,39 @@ async function sendSmsNotification(cu: CustomerRow, payload: NotificationPayload
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 
+function formatNaira(amountMinor: number): string {
+    return `₦${(amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+}
+
+function buildEmailContent(cu: CustomerRow, payload: NotificationPayload): EmailContent {
+    const fullName = cu.full_name ?? cu.email ?? 'there';
+    const md = payload.metadata ?? {};
+    switch (payload.type) {
+        case 'wallet_funded':
+            return walletFundedEmail({
+                fullName,
+                amountLabel: formatNaira(Number(md.amountMinor ?? 0)),
+                reference: String(md.reference ?? ''),
+            });
+        case 'payment_failed':
+            return paymentFailedEmail({
+                fullName,
+                amountLabel: formatNaira(Number(md.amountMinor ?? 0)),
+                reason: typeof md.reason === 'string' ? md.reason : undefined,
+            });
+        case 'kyc_update': {
+            const tier = Number(md.tier ?? 0);
+            return kycUpdateEmail({ fullName, tierLabel: tier === 1 ? 'Tier 1 (₦50k/day)' : 'Tier 2 (₦200k/day)' });
+        }
+        case 'dispute_update':
+            return disputeUpdateEmail({ fullName, message: payload.body });
+        case 'meter_order_update':
+            return meterOrderUpdateEmail({ fullName, message: payload.body });
+        default:
+            return genericEmail({ fullName, title: payload.subject ?? payload.title, body: payload.body });
+    }
+}
+
 async function sendEmailNotification(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
     if (!prefEnabled(prefs, 'email', payload.type)) return;
     if (!cu.email) return;
@@ -174,11 +212,12 @@ async function sendEmailNotification(cu: CustomerRow, payload: NotificationPaylo
     if (!flagOn) return;
 
     try {
-        const firstName = (cu.full_name ?? cu.email).split(' ')[0];
+        const content = buildEmailContent(cu, payload);
         await sendEmail({
             to:      cu.email,
-            subject: payload.subject ?? payload.title,
-            text:    `Hi ${firstName},\n\n${payload.body}\n\n— Beverly`,
+            subject: content.subject,
+            html:    content.html,
+            text:    content.text,
             tag:     payload.type,
         });
         await logAction({

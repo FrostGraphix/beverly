@@ -48,6 +48,28 @@ for (const primitive of [".base-button", ".base-input", ".base-select", ".base-c
   assert(primitivesCss.includes(primitive), `Expected primitive ${primitive}.`);
 }
 
+for (const brandAsset of [
+  "public/brand/beverly-mark.png",
+  "public/brand/beverly-mark-light.png",
+  "public/brand/beverly-wordmark.png",
+  "public/brand/beverly-lockup.png",
+  "public/brand/beverly-lockup-light.png",
+  "apps/admin/public/brand/beverly-mark.png",
+  "apps/admin/public/brand/beverly-mark-light.png",
+  "apps/admin/public/brand/beverly-lockup-light.png",
+  "apps/vendor/public/brand/beverly-mark.png",
+  "apps/vendor/public/brand/beverly-mark-light.png",
+  "apps/vendor/public/brand/beverly-lockup-light.png",
+  "apps/customer/public/brand/beverly-mark.png",
+  "apps/customer/public/brand/beverly-mark-light.png",
+  "apps/customer/public/brand/beverly-lockup-light.png",
+  "apps/wallet-landing/public/brand/beverly-mark.png",
+  "apps/wallet-landing/public/brand/beverly-mark-light.png",
+  "apps/wallet-landing/public/brand/beverly-lockup-light.png",
+]) {
+  assert(fs.existsSync(path.join(root, brandAsset)), `Expected Beverly brand asset ${brandAsset}.`);
+}
+
 const rawControlViolations = [];
 const rawControlAllowlist = new Set([
   "src/components/ConsumptionStatisticsPage.vue",
@@ -55,6 +77,14 @@ const rawControlAllowlist = new Set([
   "src/components/MfaSetupFlow.vue",
   "src/components/ReportsPage.vue",
   "src/components/StationConsumptionPage.vue",
+  // OEM Hub deliberately uses the wallet design system (@beverly/tokens'
+  // .bw-* classes), not src/components/base/* primitives — an explicit,
+  // approved architecture decision, not an oversight.
+  "src/components/oem-hub/OemCard.vue",
+  "src/components/oem-hub/OemHubPage.vue",
+  "src/components/oem-hub/OemFormModal.vue",
+  "src/components/oem-hub/OemSettingsPage.vue",
+  "src/components/oem-hub/OemEndpointEditModal.vue",
 ]);
 for (const filePath of walkVueFiles(path.join(root, "src", "components"))) {
   const relativePath = path.relative(root, filePath).replace(/\\/g, "/");
