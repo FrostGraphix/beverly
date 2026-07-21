@@ -71,6 +71,11 @@ const schema = z.object({
 
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM: z.string().default('Beverly <noreply@acoblighting.com>'),
+    // Absolute base URL this backend is deployed at, used to build the
+    // /assets/beverly-logo.png link embedded in transactional emails
+    // (see emails/templates.ts logoUrl()). Email clients can't resolve
+    // the SPA's relative /brand/* paths, so this must be an absolute URL.
+    EMAIL_ASSET_BASE_URL: z.string().optional(),
     CUSTOMER_APP_URL: z.string().default('https://beverly.acoblighting.com'),
     VENDOR_PORTAL_URL: z.string().default('https://vendor.beverly.acoblighting.com'),
     STAFF_PORTAL_URL: z.string().default('https://beverly.acoblighting.com/wallet-admin'),
