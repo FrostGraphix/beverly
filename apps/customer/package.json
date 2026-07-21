@@ -2,7 +2,7 @@
   "name": "@beverly/customer-app",
   "version": "0.1.0",
   "private": true,
-  "description": "Beverly Customer App — public self-service (PWA)",
+  "description": "Beverly Customer App - Your Smart Power Partner.",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import LandingNav from './components/LandingNav.vue';
 import HeroSection from './components/HeroSection.vue';
 import PortalChooser from './components/PortalChooser.vue';
@@ -13,6 +14,10 @@ import LaunchModal from './components/LaunchModal.vue';
 import LegalPage from './components/LegalPage.vue';
 import CompanyPage from './components/CompanyPage.vue';
 
+// Brief branded entry screen: waits for the real window load event so it
+// never outlasts actual asset loading, but holds a minimum display time so
+// it never just flickers on a fast connection either.
+const ready = ref(false);
 const launchOpen = ref(false);
 const currentHash = ref(typeof window === 'undefined' ? '#top' : window.location.hash || '#top');
 let hashPoll: number | undefined;
@@ -35,6 +40,12 @@ function syncHash() {
 onMounted(() => {
     window.addEventListener('hashchange', syncHash);
     hashPoll = window.setInterval(syncHash, 250);
+
+    const minDelay = new Promise<void>((resolve) => setTimeout(resolve, 700));
+    const pageLoad = document.readyState === 'complete'
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => window.addEventListener('load', () => resolve(), { once: true }));
+    Promise.all([minDelay, pageLoad]).then(() => { ready.value = true; });
 });
 onBeforeUnmount(() => {
     window.removeEventListener('hashchange', syncHash);
@@ -49,7 +60,8 @@ watch(launchOpen, (v) => {
 </script>
 
 <template>
-  <div class="lp-app">
+  <BeverlyLoader v-if="!ready" label="Loading" />
+  <div v-else class="lp-app lp-app--enter">
     <LandingNav @launch="launchOpen = true" />
     <LegalPage v-if="legalKind" :key="legalKind" :kind="legalKind" />
     <CompanyPage v-else-if="companyKind" :key="companyKind" :kind="companyKind" />
@@ -66,3 +78,18 @@ watch(launchOpen, (v) => {
     <LaunchModal :open="launchOpen" @close="launchOpen = false" />
   </div>
 </template>
+
+<style scoped>
+.lp-app--enter {
+  animation: lp-app-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes lp-app-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-app--enter { animation: none; }
+}
+</style>

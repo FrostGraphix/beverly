@@ -91,8 +91,6 @@ onBeforeUnmount(() => {
         >
           <IconSvg :name="isDark ? 'sun' : 'moon'" />
         </button>
-        <a class="lp-btn lp-btn--ghost lp-nav-signin" :href="PORTALS.customer.login">Customer sign in</a>
-        <a class="lp-btn lp-btn--ghost lp-nav-signin" :href="PORTALS.vendor.login">Vendor sign in</a>
         <button class="lp-btn lp-btn--primary lp-nav-cta" type="button" @click="emit('launch')">
           Get started <IconSvg name="arrow" />
         </button>

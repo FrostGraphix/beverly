@@ -21,9 +21,12 @@
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { checkVerification, sendSms, sendVerification } from '../adapters/twilio.js';
-import { sendEmail } from '../adapters/postmark.js';
+import { sendEmail } from '../adapters/resend.js';
+import { welcomeEmail } from '../emails/templates.js';
+import { sendEmailVerification } from './customer-email-otp.js';
 import { getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
+import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import {
     assertCustomerOtpTrafficAllowed,
@@ -497,7 +500,6 @@ export async function signupWithEmail(
             phone,
             fullName,
             authProvider: 'email_password',
-            emailVerifiedAt: new Date().toISOString(),
         });
 
         await getOrCreateWallet('customer', customer.id, {
@@ -506,13 +508,15 @@ export async function signupWithEmail(
         });
 
         try {
-            await sendEmail({
-                to: email,
-                subject: 'Welcome to Beverly',
-                text: `Hi ${fullName},\n\nYour Beverly account is active.\n\nThe Beverly Team`,
-                tag: 'customer-welcome',
-            });
+            let welcomeFlagOn = false;
+            try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing = disabled */ }
+            if (welcomeFlagOn) {
+                const content = welcomeEmail({ fullName });
+                await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+            }
         } catch { /* non-fatal */ }
+
+        sendEmailVerification(email, fullName).catch(() => undefined);
 
         await logAction({
             actorUserId: authData.user.id,
@@ -736,13 +740,14 @@ async function signUpCustomer(
 
     if (email) {
         try {
-            await sendEmail({
-                to: email,
-                subject: 'Welcome to Beverly',
-                text: `Hi ${meta.full_name ?? 'there'},\n\nYour Beverly account is active. Download the app to buy electricity tokens instantly.\n\n— The Beverly Team`,
-                tag: 'customer-welcome',
-            });
+            let welcomeFlagOn = false;
+            try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing = disabled */ }
+            if (welcomeFlagOn) {
+                const content = welcomeEmail({ fullName: meta.full_name ?? 'there' });
+                await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+            }
         } catch { /* non-fatal */ }
+        sendEmailVerification(email, meta.full_name ?? 'there').catch(() => undefined);
     }
 
     await logAction({

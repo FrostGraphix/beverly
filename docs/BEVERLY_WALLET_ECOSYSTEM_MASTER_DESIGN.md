@@ -69,7 +69,7 @@ How staff transitions:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                  Beverly Operations Platform                  │
+│              Beverly - Your Smart Power Partner               │
 │                                                                │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐  │
 │  │  CRM Admin   │   │ Vendor Retail│   │  Customer App    │  │

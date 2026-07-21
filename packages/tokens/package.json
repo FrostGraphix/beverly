@@ -12,6 +12,8 @@
     "wallet.css",
     "WalletGreeting.vue",
     "WalletGreeting.vue.d.ts",
+    "BeverlyLoader.vue",
+    "BeverlyLoader.vue.d.ts",
     "index.js",
     "index.d.ts"
   ],
@@ -23,6 +25,10 @@
     "./WalletGreeting.vue": {
       "types": "./WalletGreeting.vue.d.ts",
       "import": "./WalletGreeting.vue"
+    },
+    "./BeverlyLoader.vue": {
+      "types": "./BeverlyLoader.vue.d.ts",
+      "import": "./BeverlyLoader.vue"
     }
   }
 }

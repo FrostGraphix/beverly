@@ -33,7 +33,7 @@ export const routeManifest = [
   { group: "Administration", title: "Item", hash: "#/admin/item", apis: ["/api/item/read"], columns: ["id", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Meter", hash: "#/admin/meter", apis: ["/api/meter/read"], columns: ["meterId", "meterType", "communicationWay", "protocolVersion", "status", "stationId", "remark", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Administration", title: "Debt", hash: "#/admin/debt", apis: ["/api/debt/read"], columns: ["customerId", "meterId", "totalPaid", "totalUnit", "remark", "createDate", "updateDate", "stationId", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
-  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "/wallet-admin/", roles: ["super-admin"] },
+  { group: "Wallet", title: "Wallet", hash: "#/wallet", apis: [], columns: [], actions: [], external: true, externalUrl: "/wallet-admin/", devExternalUrl: "http://localhost:5175/", roles: ["super-admin"] },
   { group: "Protocol", title: "DLMS", hash: "#/protocol/dlms", apis: ["/api/dlms/read"], columns: ["id", "version", "type", "classId", "obis", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Add", "Import", "Export", "Delete", "Edit", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Protocol", title: "DLT645", hash: "#/protocol/dlt645", apis: ["/api/dlt645/read"], columns: ["id", "version", "type", "name", "remark", "createDate", "updateDate", "Actions"], actions: ["Sort", "Search", "Reset", "Export", "Close", "Cancel", "Confirm"], roles: ["super-admin"] },
   { group: "Remote Support", title: "GPRS Tasks", hash: "#/remote-support/gprs-tasks", apis: ["/API/GPRSMeterTask/GPRSGetReadingTask", "/API/GPRSMeterTask/GPRSGetSettingTask", "/API/GPRSMeterTask/GPRSGetControlTask", "/API/GPRSMeterTask/GPRSGetTokenTask"], columns: ["id", "customerId", "customerName", "meterId", "name", "data", "status", "remark", "createDate", "updateDate", "stationId"], actions: ["Sort", "Search", "Reset", "Add Task", "Export"], roles: ["super-admin", "operations-manager"] },
@@ -169,8 +169,45 @@ function getRouteCookie(name) {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
 }
 
-export function visibleRoutes(roleId = "super-admin") {
-  return routeManifest.filter((route) => routeAllowed(route, roleId));
+// Maps a route to the OEM capability that must be enabled for it to appear in an
+// OEM-scoped workspace. Routes not listed here are always shown (Dashboard, Data
+// Report, Management, Administration, System, File Upload) — they represent the
+// baseline every meter manufacturer supports. Keys mirror oem_manufacturers.capabilities
+// and the CAPABILITY_DEFINITIONS in src/components/oem-hub/oem-capabilities.mjs.
+export const routeCapabilityByHashPrefix = [
+  ["#/token-generate/", "remote_meter_task"],
+  ["#/token-record/", "remote_meter_task"],
+  ["#/remote-operation/", "remote_meter_task"],
+  ["#/remote-operation-record/", "remote_meter_task"],
+  ["#/management/tariff", "tariff_management"],
+  ["#/remote-support/gprs-tasks", "gprs_support"],
+  ["#/remote-support/gprs-online-status", "gprs_support"],
+  ["#/remote-support/event-notification", "event_notification"],
+  ["#/remote-support/load-profile", "load_profile"],
+  ["#/remote-support/firmware-update", "firmware_update"],
+  ["#/protocol/dlms", "dlms_protocol"],
+  ["#/protocol/dlt645", "dlt645_protocol"],
+  ["#/wallet", "wallet_vending"]
+];
+
+export function routeCapabilityKey(route) {
+  const hash = String(route?.hash || "");
+  const match = routeCapabilityByHashPrefix.find(([prefix]) => hash === prefix || hash.startsWith(prefix));
+  return match ? match[1] : "";
+}
+
+// A route passes the capability gate when either (a) no capability map is supplied
+// (capabilities === null → legacy single-tenant behavior, nothing hidden), or
+// (b) the route has no governing capability, or (c) the current OEM enables it.
+export function routeCapabilityAllowed(route, capabilities = null) {
+  if (!capabilities) return true;
+  const key = routeCapabilityKey(route);
+  if (!key) return true;
+  return Boolean(capabilities[key]);
+}
+
+export function visibleRoutes(roleId = "super-admin", capabilities = null) {
+  return routeManifest.filter((route) => routeAllowed(route, roleId) && routeCapabilityAllowed(route, capabilities));
 }
 
 export function referenceVisibleRoutes() {
@@ -188,13 +225,14 @@ export function findReferenceVisibleRoute(hash) {
   return referenceVisibleRoutes().find((route) => route.hash === normalizedHash) || referenceVisibleRoutes()[0] || routeManifest[0];
 }
 
-export function findRoute(hash, roleId = "super-admin") {
+export function findRoute(hash, roleId = "super-admin", capabilities = null) {
   const normalizedHash = normalizeHash(hash);
-  return visibleRoutes(roleId).find((route) => route.hash === normalizedHash) || visibleRoutes(roleId)[0] || routeManifest[0];
+  const routes = visibleRoutes(roleId, capabilities);
+  return routes.find((route) => route.hash === normalizedHash) || routes[0] || routeManifest[0];
 }
 
-export function routeGroups(roleId = "super-admin") {
-  return visibleRoutes(roleId).reduce((groups, route) => {
+export function routeGroups(roleId = "super-admin", capabilities = null) {
+  return visibleRoutes(roleId, capabilities).reduce((groups, route) => {
     let group = groups.find((item) => item.name === route.group);
     if (!group) groups.push(group = { name: route.group, routes: [] });
     group.routes.push(route);

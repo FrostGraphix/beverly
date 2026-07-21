@@ -69,10 +69,18 @@ const schema = z.object({
     SMS_TOKEN_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
     SMS_TOKEN_RESEND_DAILY_MAX: z.coerce.number().int().min(1).max(10).default(3),
 
-    POSTMARK_SERVER_TOKEN: z.string().optional(),
-    POSTMARK_FROM: z.string().default('Beverly <no-reply@beverly.acoblighting.com>'),
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM: z.string().default('Beverly <noreply@acoblighting.com>'),
+    CUSTOMER_APP_URL: z.string().default('https://beverly.acoblighting.com'),
+    VENDOR_PORTAL_URL: z.string().default('https://vendor.beverly.acoblighting.com'),
+    STAFF_PORTAL_URL: z.string().default('https://beverly.acoblighting.com/wallet-admin'),
 
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
+    // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
+    // services decrypt oem_credentials rows written by the CRM's Settings UI).
+    OEM_CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
+    OEM_REGISTRY_DISABLED: z.coerce.boolean().default(false),
+    OEM_CONFIG_CACHE_TTL_MS: z.coerce.number().int().min(1000).default(30000),
 
     FEATURE_CUSTOMER_WALLET: z.coerce.boolean().default(true),
     FEATURE_METER_PURCHASE: z.coerce.boolean().default(true),

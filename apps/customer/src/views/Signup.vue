@@ -111,7 +111,7 @@ async function submit() {
 <template>
   <CustomerAuthShell
     title="Create account"
-    subtitle="Buy electricity tokens in seconds. No queues."
+    subtitle="Your Smart Power Partner."
     back="/login"
   >
     <form class="auth-form" @submit.prevent="submit" novalidate>

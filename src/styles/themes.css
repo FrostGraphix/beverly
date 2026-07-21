@@ -5,6 +5,8 @@
 
 [data-theme="light"] {
   color-scheme: light;
+  --brand-mark-url:   url("/brand/beverly-mark.png");
+  --brand-lockup-url: url("/brand/beverly-lockup.png");
 
   /* ── Brand — wallet oklch green palette ── */
   --color-brand:        oklch(70% 0.19 145);
@@ -86,6 +88,8 @@
 
 [data-theme="executive"] {
   color-scheme: dark;
+  --brand-mark-url:   url("/brand/beverly-mark-light.png");
+  --brand-lockup-url: url("/brand/beverly-lockup-light.png");
   --color-brand: #22c55e;
   --color-brand-hover: #4ade80;
   --color-brand-strong: #166534;

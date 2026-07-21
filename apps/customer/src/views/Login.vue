@@ -11,6 +11,7 @@ import {
     safeAuthRedirect,
     writeRememberedLogin,
 } from '../lib/auth-flow';
+import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const router = useRouter();
 const route = useRoute();
@@ -28,6 +29,7 @@ const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
 
 const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
+const passwordReset = computed(() => route.query.reason === 'password_reset');
 const redirectTarget = computed(() => safeAuthRedirect(route.query.redirect));
 const submitLabel = computed(() => loginMode.value === 'email' ? 'Sign in' : 'Send code');
 const loadingLabel = computed(() => loginMode.value === 'email' ? 'Signing in...' : 'Sending code...');
@@ -42,6 +44,7 @@ onMounted(() => {
 });
 
 async function submit() {
+    unlockLoginVoice();
     if (loginMode.value === 'email') {
         if (!email.value || !password.value) {
             error.value = 'Enter your email and password.';
@@ -68,6 +71,7 @@ async function submit() {
                 expiresIn: r.expires_in,
             });
             writeRememberedLogin(email.value.trim().toLowerCase(), rememberLogin.value);
+            playLoginVoice();
             await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
             return;
         }
@@ -122,6 +126,14 @@ async function submit() {
         <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
       Your session timed out for security. Please sign in again.
+    </div>
+
+    <div v-if="passwordReset" class="success-banner" role="status">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+        <path d="M4.5 7l1.8 1.8L9.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Password updated. Sign in with your new password.
     </div>
 
     <form class="auth-form" @submit.prevent="submit" novalidate>
@@ -231,6 +243,19 @@ async function submit() {
   background: oklch(from var(--warn) l c h / 0.10);
   border: 1px solid oklch(from var(--warn) l c h / 0.30);
   color: var(--warn);
+  border-radius: var(--r-md);
+  font-size: var(--t-sm);
+}
+
+.success-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  margin-bottom: var(--s-4);
+  background: oklch(70% 0.19 145 / 0.10);
+  border: 1px solid oklch(70% 0.19 145 / 0.30);
+  color: var(--brand);
   border-radius: var(--r-md);
   font-size: var(--t-sm);
 }

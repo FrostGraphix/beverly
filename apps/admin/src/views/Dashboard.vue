@@ -208,10 +208,26 @@ function adminAutoRefreshEnabled() {
 
 async function fetchAll() {
     const errors: string[] = [];
-    try { funding.value = (await api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending')).funding; } catch { errors.push('Funding queue unavailable'); }
-    try { apps.value    = (await api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications')).applications; } catch { errors.push('Applications feed unavailable'); }
-    try { vending.value = (await api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending')).purchases; } catch { errors.push('Vending feed unavailable'); }
-    try { walletSummary.value = await api.get<WalletSummary>('/api/v1/admin/wallets/summary'); } catch { errors.push('Wallet summary unavailable'); }
+    
+    const [fundingRes, appsRes, vendingRes, walletRes] = await Promise.allSettled([
+        api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending'),
+        api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications'),
+        api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending'),
+        api.get<WalletSummary>('/api/v1/admin/wallets/summary')
+    ]);
+
+    if (fundingRes.status === 'fulfilled') funding.value = fundingRes.value.funding;
+    else errors.push('Funding queue unavailable');
+
+    if (appsRes.status === 'fulfilled') apps.value = appsRes.value.applications;
+    else errors.push('Applications feed unavailable');
+
+    if (vendingRes.status === 'fulfilled') vending.value = vendingRes.value.purchases;
+    else errors.push('Vending feed unavailable');
+
+    if (walletRes.status === 'fulfilled') walletSummary.value = walletRes.value;
+    else errors.push('Wallet summary unavailable');
+
     feedErrors.value = errors;
     syncAnimatedStats();
 }

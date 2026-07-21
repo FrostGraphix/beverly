@@ -10,6 +10,35 @@ export const apiClient = axios.create({
   withCredentials: true
 });
 
+// Storage key the OEM store (src/stores/oem-store.js) persists the selected OEM to.
+// Read directly from localStorage here to keep this framework-free service module
+// decoupled from Pinia (no circular import, no active-pinia requirement).
+const currentOemStorageKey = "beverly.currentOem";
+
+// Stamp every outgoing request with the currently-selected OEM so the proxy's
+// per-request resolution (api/reference.js proxyLive → oem-registry-service) knows
+// which manufacturer's base URL / credentials / endpoint config to use. When no OEM
+// is selected (e.g. on the OEM Hub itself, or for non-super-admin roles that never
+// pick one), no header is sent and the proxy falls back to the seeded default —
+// preserving today's single-tenant Calinmeter behavior byte-for-byte.
+// A per-call override (options.headers["X-Oem-Id"]) always wins, which is how the
+// background prefetch warms a specific OEM regardless of the current selection.
+apiClient.interceptors.request.use((config) => {
+  const headers = config.headers || {};
+  const alreadySet = headers["X-Oem-Id"] || headers["x-oem-id"];
+  if (!alreadySet) {
+    let selectedOem = "";
+    try {
+      selectedOem = localStorage.getItem(currentOemStorageKey) || "";
+    } catch {
+      selectedOem = "";
+    }
+    if (selectedOem) headers["X-Oem-Id"] = selectedOem;
+  }
+  config.headers = headers;
+  return config;
+});
+
 const sessionStorageKey = "beverly.session";
 const defaultIdleTimeoutMs = 30 * 60 * 1000;
 const defaultAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
@@ -262,9 +291,12 @@ export async function postApi(path, payload = {}, options = {}) {
   return validateApiEnvelope(response.data, cleanPath || "postApi");
 }
 
-export async function getApi(path, params = {}) {
+export async function getApi(path, params = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
-  const response = await apiClient.get(cleanPath, { params });
+  const response = await apiClient.get(cleanPath, {
+    params,
+    ...(options.headers ? { headers: options.headers } : {})
+  });
   return validateApiEnvelope(response.data, cleanPath || "getApi");
 }
 
@@ -274,13 +306,22 @@ export async function putApi(path, payload = {}) {
   return validateApiEnvelope(response.data, cleanPath || "putApi");
 }
 
+export async function deleteApi(path) {
+  const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  const response = await apiClient.delete(cleanPath);
+  return validateApiEnvelope(response.data, cleanPath || "deleteApi");
+}
+
 export async function uploadApi(path, formData, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  // Do NOT set Content-Type manually here. When the body is a FormData instance,
+  // the browser generates the multipart boundary itself and sets the header
+  // (e.g. "multipart/form-data; boundary=----WebKitFormBoundaryXXXX"). Setting a
+  // bare "multipart/form-data" (no boundary) overrides that and produces a body
+  // the server's multipart parser can't split into parts — the upload silently
+  // fails with "file is required" since no boundary means no _file gets parsed.
   const response = await apiClient.post(cleanPath, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-      ...(options.headers || {})
-    }
+    headers: { ...(options.headers || {}) }
   });
   return validateApiEnvelope(response.data, cleanPath || "uploadApi");
 }
@@ -289,6 +330,17 @@ export async function login(payload) {
   const response = validateLoginResponse(await postApi("/api/user/login", payload, { timeout: 15000 }));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
+
+  // A fresh login always lands on the OEM Hub (per design: "shown as a new
+  // first screen right after login") — clear any OEM picked in a previous
+  // session so showOemHub isn't skipped. Selection still persists across a
+  // plain page refresh within the same session (restoreSelection() in
+  // App.vue's loadUser), since that path never calls login() again.
+  try {
+    localStorage.removeItem(currentOemStorageKey);
+  } catch {
+    // localStorage unavailable — nothing to clear.
+  }
 
   // Authentication establishes HttpOnly cookies server-side.
   const serverStartedAt = Number(response.data?.startedAt);

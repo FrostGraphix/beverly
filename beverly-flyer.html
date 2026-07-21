@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beverly System Launch — Official Poster Flyer</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-card: rgba(15, 23, 42, 0.65);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.25);
+      --accent-amber: #f59e0b;
+      --accent-amber-glow: rgba(245, 158, 11, 0.25);
+      --accent-cyan: #06b6d4;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.12) 0%, transparent 60%),
+        radial-gradient(circle at 85% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 50%),
+        linear-gradient(to bottom, #07090e, #0b111e);
+      background-attachment: fixed;
+    }
+
+    /* Print & Container Settings */
+    .flyer-container {
+      width: 100%;
+      max-width: 900px;
+      background: rgba(10, 15, 26, 0.85);
+      border: 1px solid var(--border-card);
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.7),
+        0 0 80px rgba(16, 185, 129, 0.08);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Background Grid Pattern */
+    .flyer-container::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .flyer-content {
+      position: relative;
+      z-index: 1;
+      padding: 3rem 3.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
+    }
+
+    /* Header Bar */
+    .flyer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 1.5rem;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-emerald);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .launch-date {
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* Hero Section */
+    .hero-section {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+    }
+
+    .hero-title span {
+      background: linear-gradient(135deg, var(--accent-emerald) 0%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: block;
+    }
+
+    .hero-subtitle {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 650px;
+      line-height: 1.6;
+      font-weight: 400;
+    }
+
+    /* Artwork Canvas Box */
+    .artwork-frame {
+      width: 100%;
+      height: 280px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      position: relative;
+      background: #090e17;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .artwork-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: brightness(1.05) contrast(1.05);
+    }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.25rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(16, 185, 129, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .feature-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.125rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .feature-title {
+      font-family: var(--font-heading);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.01em;
+    }
+
+    .feature-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Stations Bar */
+    .stations-strip {
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .stations-title {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .station-tags {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .station-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+    }
+
+    /* CTA Section */
+    .cta-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: 16px;
+      padding: 1.5rem 2rem;
+    }
+
+    .cta-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .cta-heading {
+      font-family: var(--font-heading);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .cta-subtext {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .cta-btn {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #07090e;
+      background: var(--accent-emerald);
+      padding: 0.85rem 1.75rem;
+      border-radius: 10px;
+      text-decoration: none;
+      box-shadow: 0 0 25px var(--accent-emerald-glow);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .cta-btn:hover {
+      background: #34d399;
+      box-shadow: 0 0 35px rgba(52, 211, 153, 0.4);
+      transform: scale(1.02);
+    }
+
+    /* Print Control Buttons */
+    .print-bar {
+      margin-top: 1.5rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    .action-btn {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    @media print {
+      body {
+        background: #000;
+        padding: 0;
+      }
+      .print-bar {
+        display: none;
+      }
+      .flyer-container {
+        border: none;
+        box-shadow: none;
+        max-width: 100%;
+        border-radius: 0;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .flyer-content {
+        padding: 2rem 1.5rem;
+      }
+      .hero-title {
+        font-size: 2.25rem;
+      }
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+      .cta-banner {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.25rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="flyer-container">
+    <div class="flyer-content">
+      
+      <!-- Header -->
+      <header class="flyer-header">
+        <div class="brand-badge">
+          <span class="status-dot"></span>
+          BEVERLY SYSTEM // RELEASE 1.0
+        </div>
+        <div class="launch-date">SYSTEM STATUS: LIVE</div>
+      </header>
+
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <h1 class="hero-title">
+          POWER PRECISE.
+          <span>CONTROL ABSOLUTE.</span>
+        </h1>
+        <p class="hero-subtitle">
+          The next-generation prepaid energy CRM and wallet operations platform. Synchronizing real-time telemetry, automated vending queues, and fraud defense into a single unified surface.
+        </p>
+      </section>
+
+      <!-- Visual Artwork Container -->
+      <div class="artwork-frame">
+        <svg width="100%" height="100%" viewBox="0 0 900 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="900" height="280" fill="#090E17"/>
+          <!-- Grid graphics -->
+          <path d="M0 70H900M0 140H900M0 210H900" stroke="#1E293B" stroke-width="1" stroke-dasharray="4 4"/>
+          <path d="M150 0V280M300 0V280M450 0V280M600 0V280M750 0V280" stroke="#1E293B" stroke-width="1" stroke-dasharray="4 4"/>
+          
+          <!-- Nodes & Connecting Rays -->
+          <path d="M150 140 L300 90 L450 180 L600 110 L750 140" stroke="url(#cyan-gradient)" stroke-width="3" fill="none"/>
+          <path d="M150 140 L300 210 L600 110" stroke="url(#emerald-gradient)" stroke-width="2" stroke-dasharray="8 8" fill="none"/>
+
+          <!-- Station Glowing Nodes -->
+          <circle cx="150" cy="140" r="8" fill="#10B981" filter="url(#glow)"/>
+          <circle cx="300" cy="90" r="8" fill="#06B6D4" filter="url(#glow)"/>
+          <circle cx="450" cy="180" r="8" fill="#F59E0B" filter="url(#glow)"/>
+          <circle cx="600" cy="110" r="8" fill="#10B981" filter="url(#glow)"/>
+          <circle cx="750" cy="140" r="8" fill="#06B6D4" filter="url(#glow)"/>
+
+          <!-- Node Labels -->
+          <text x="150" y="170" fill="#10B981" font-family="JetBrains Mono" font-size="12" text-anchor="middle" font-weight="bold">TUNGA</text>
+          <text x="300" y="70" fill="#06B6D4" font-family="JetBrains Mono" font-size="12" text-anchor="middle" font-weight="bold">UMAISHA</text>
+          <text x="450" y="210" fill="#F59E0B" font-family="JetBrains Mono" font-size="12" text-anchor="middle" font-weight="bold">OGUFA</text>
+          <text x="600" y="90" fill="#10B981" font-family="JetBrains Mono" font-size="12" text-anchor="middle" font-weight="bold">KYAKALE</text>
+          <text x="750" y="170" fill="#06B6D4" font-family="JetBrains Mono" font-size="12" text-anchor="middle" font-weight="bold">MUSHA</text>
+
+          <!-- SVG Filters -->
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="6" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient id="cyan-gradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#10B981"/>
+              <stop offset="50%" stop-color="#06B6D4"/>
+              <stop offset="100%" stop-color="#3B82F6"/>
+            </linearGradient>
+            <linearGradient id="emerald-gradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#F59E0B"/>
+              <stop offset="100%" stop-color="#10B981"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- Feature Grid -->
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-header">
+            <div class="feature-icon">⚡</div>
+            <h3 class="feature-title">Live Grid Telemetry</h3>
+          </div>
+          <p class="feature-desc">
+            Microsecond grid telemetry tracking active consumption, load metrics, and power balance across stations in real time.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-header">
+            <div class="feature-icon">🔒</div>
+            <h3 class="feature-title">Fraud Engine Defense</h3>
+          </div>
+          <p class="feature-desc">
+            Algorithmic risk-tiering and anomaly detection safeguard every transaction and token release instantly.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-header">
+            <div class="feature-icon">💳</div>
+            <h3 class="feature-title">Automated Wallet Queues</h3>
+          </div>
+          <p class="feature-desc">
+            Zero-latency funding, automated queue processing, and instant token generation for field and vendor teams.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-header">
+            <div class="feature-icon">📊</div>
+            <h3 class="feature-title">Audited Reconciliation</h3>
+          </div>
+          <p class="feature-desc">
+            Uncompromising data integrity. Complete end-to-end ledger auditability from customer meter to revenue accounts.
+          </p>
+        </div>
+      </div>
+
+      <!-- Active Stations Bar -->
+      <div class="stations-strip">
+        <div class="stations-title">Active Station Nodes:</div>
+        <div class="station-tags">
+          <span class="station-pill">● TUNGA</span>
+          <span class="station-pill">● UMAISHA</span>
+          <span class="station-pill">● OGUFA</span>
+          <span class="station-pill">● KYAKALE</span>
+          <span class="station-pill">● MUSHA</span>
+        </div>
+      </div>
+
+      <!-- CTA Section -->
+      <div class="cta-banner">
+        <div class="cta-text">
+          <div class="cta-heading">Ready to Initialize Command Surface?</div>
+          <div class="cta-subtext">Access live telemetry, wallet ops, and operational check tools.</div>
+        </div>
+        <a href="#" class="cta-btn" onclick="alert('Initializing Beverly Command Surface...'); return false;">
+          LAUNCH SYSTEM →
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Print & Export Controls -->
+  <div class="print-bar">
+    <button class="action-btn" onclick="window.print()">🖨️ Print / Save as PDF Flyer</button>
+  </div>
+
+</body>
+</html>

@@ -272,7 +272,7 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
         <!-- Header -->
         <header class="cw-head">
           <div class="cw-head-id">
-            <div class="cw-avatar" aria-hidden="true">B</div>
+            <div class="cw-avatar" aria-hidden="true"></div>
             <div>
               <strong>Beverly Support</strong>
               <span class="cw-status">
@@ -506,8 +506,8 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 .cw-head-actions { display: flex; align-items: center; gap: 4px; }
 .cw-avatar {
   width: 36px; height: 36px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand-300), var(--brand-600));
-  color: #04140b; display: grid; place-items: center; font-weight: 800; font-size: 15px;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat, linear-gradient(135deg, var(--brand-300), var(--brand-600));
+  display: block;
 }
 .cw-head-id strong { display: block; font-size: var(--t-md); color: var(--text); }
 .cw-status { font-size: var(--t-2xs); color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; }

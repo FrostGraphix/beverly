@@ -405,7 +405,8 @@
         </section>`;
     }
     function panelCard(label, value, iconId, colorClass, chartType) {
-      return `<article class="card-panel" data-panel="${chartType}"><div class="card-panel-icon-wrapper ${colorClass}">${icon(iconId, "svg-icon card-panel-icon")}</div><div class="card-panel-description"><div class="card-panel-text">${label}</div><div class="card-panel-num">${Number(value).toLocaleString()}</div></div></article>`;
+      const formattedVal = label === "Purchase Money" ? `<span class="dashboard-stat-symbol" style="display:inline-block;margin-right:3px;font-weight:700;font-size:0.94em;opacity:0.92">₦</span>${Number(value).toLocaleString()}` : Number(value).toLocaleString();
+      return `<article class="card-panel" data-panel="${chartType}"><div class="card-panel-icon-wrapper ${colorClass}">${icon(iconId, "svg-icon card-panel-icon")}</div><div class="card-panel-description"><div class="card-panel-text">${label}</div><div class="card-panel-num">${formattedVal}</div></div></article>`;
     }
     function barChart() {
       const labels = ["700,000", "600,000", "500,000", "400,000", "300,000", "200,000"];

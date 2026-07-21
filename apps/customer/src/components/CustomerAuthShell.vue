@@ -15,10 +15,10 @@ defineProps<{
     <div class="auth-card">
       <!-- Brand header → back to Beverly landing -->
       <a class="auth-brand" :href="PORTAL_URLS.landing" aria-label="Beverly home">
-        <div class="bw-mark auth-mark">B</div>
+        <div class="bw-mark auth-mark" aria-hidden="true"></div>
         <div class="auth-wordmark">
           <strong>Beverly</strong>
-          <span>Electricity · Wallet</span>
+          <span>Your Smart Power Partner.</span>
         </div>
       </a>
 

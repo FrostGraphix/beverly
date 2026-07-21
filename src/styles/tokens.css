@@ -1,5 +1,10 @@
 @import "../../packages/tokens/tokens.css";
 @import "../../packages/tokens/theme.css";
+/* .bw-* component classes (cards, buttons, badges, modals, dropdowns) — used by
+   the OEM Hub screens per the approved design (wallet visual system, CRM auth/
+   nav). Not used elsewhere in the CRM; existing pages keep using src/components
+   /base/* primitives untouched. */
+@import "../../packages/tokens/wallet.css";
 
 /*
  * Beverly design tokens.

@@ -211,7 +211,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
     <!-- Sidebar -->
     <aside :class="['bw-sidebar', { open: drawerOpen }]">
       <div class="bw-brand">
-        <div class="bw-mark">B</div>
+        <div class="bw-mark" aria-hidden="true"></div>
         <div class="bw-brand-text">
           <strong>Beverly</strong>
           <span>Wallet Admin</span>
@@ -306,7 +306,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
           <transition name="bw-menu">
             <div v-show="userMenuOpen" class="bw-user-dropdown" role="menu" aria-label="Beverly admin account menu">
               <div class="bw-user-dropdown-brand">
-                <span class="bw-user-dropdown-logo">B</span>
+                <span class="bw-user-dropdown-logo" aria-hidden="true"></span>
                 <span>
                   <strong>Beverly</strong>
                   <small>{{ auth.user?.full_name || auth.user?.email || 'Staff user' }} - {{ auth.user?.role || 'admin' }}</small>

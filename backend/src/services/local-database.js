@@ -45,7 +45,11 @@ function createMemoryStore() {
     wallet_risk_events: [],
     sms_notifications: [],
     meter_token_overrides: new Map(),
-    sgc_token_rules: new Map()
+    sgc_token_rules: new Map(),
+    oem_manufacturers: new Map(),
+    oem_endpoint_configs: new Map(),
+    oem_credentials: new Map(),
+    oem_station_mappings: new Map()
   };
 }
 
@@ -486,10 +490,81 @@ function ensureDatabase() {
       updated_by TEXT,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS oem_manufacturers (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      logo_storage_path TEXT,
+      status TEXT NOT NULL,
+      is_seed_default INTEGER NOT NULL DEFAULT 0,
+      capabilities_json TEXT NOT NULL DEFAULT '{}',
+      vending_strategy TEXT NOT NULL DEFAULT 'sts_token',
+      rate_limit_window_ms INTEGER,
+      rate_limit_max_requests INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_endpoint_configs (
+      oem_id TEXT NOT NULL,
+      logical_key TEXT NOT NULL,
+      upstream_path TEXT NOT NULL,
+      method TEXT NOT NULL,
+      casing_variant TEXT,
+      request_field_map TEXT NOT NULL DEFAULT '{}',
+      response_field_map TEXT NOT NULL DEFAULT '{}',
+      payload_shape TEXT NOT NULL DEFAULT '{}',
+      pagination_style TEXT,
+      requires_live_read INTEGER NOT NULL DEFAULT 0,
+      is_write_override INTEGER,
+      adapter_fn_name TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (oem_id, logical_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_credentials (
+      oem_id TEXT PRIMARY KEY,
+      auth_strategy TEXT NOT NULL,
+      base_url TEXT,
+      encrypted_bearer_token TEXT,
+      encrypted_client_secret TEXT,
+      encrypted_username TEXT,
+      encrypted_password TEXT,
+      token_endpoint_path TEXT,
+      api_key_header_name TEXT,
+      encryption_key_version INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_station_mappings (
+      oem_id TEXT NOT NULL,
+      station_id TEXT NOT NULL,
+      community_label TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (oem_id, station_id)
+    );
   `);
+
+  // Lightweight ADD COLUMN migration for existing local dev SQLite files created
+  // before a column existed — CREATE TABLE IF NOT EXISTS above only helps fresh
+  // databases. SQLite has no "ADD COLUMN IF NOT EXISTS"; swallow the duplicate-
+  // column error instead. Safe to run on every start.
+  ensureColumnExists(database, "oem_credentials", "api_key_header_name", "TEXT");
 
   seedSecurityTables(database);
   return database;
+}
+
+function ensureColumnExists(db, table, column, definition) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/duplicate column name/i.test(message)) throw error;
+  }
 }
 
 // ── Meter token-format (STS S1/S2) per-meter overrides ──────────────────────
@@ -633,6 +708,391 @@ function listSgcTokenRules() {
     updatedBy: row.updated_by || "",
     updatedAt: row.updated_at
   }));
+}
+
+// ── OEM manufacturer registry ───────────────────────────────────────────────
+// One row per meter manufacturer (Calinmeter, Sparkmeter, Ihemeter, ...). This is
+// the top-level tenant entity the multi-OEM proxy resolves per request.
+function mapOemManufacturerRow(row) {
+  if (!row) return null;
+  let capabilities = {};
+  try {
+    capabilities = JSON.parse(row.capabilities_json || "{}");
+  } catch {
+    capabilities = {};
+  }
+  return {
+    id: row.id,
+    slug: row.slug,
+    displayName: row.display_name,
+    logoStoragePath: row.logo_storage_path || "",
+    status: row.status,
+    isSeedDefault: row.is_seed_default === 1,
+    capabilities,
+    vendingStrategy: row.vending_strategy || "sts_token",
+    rateLimitWindowMs: row.rate_limit_window_ms || null,
+    rateLimitMaxRequests: row.rate_limit_max_requests || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function getOemManufacturer(idOrSlug) {
+  const key = String(idOrSlug || "").trim();
+  if (!key) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    const byId = db.memoryStore.oem_manufacturers.get(key);
+    if (byId) return byId;
+    for (const record of db.memoryStore.oem_manufacturers.values()) {
+      if (record.slug === key) return record;
+    }
+    return null;
+  }
+  const row = db.prepare(
+    "SELECT * FROM oem_manufacturers WHERE id = ? OR slug = ? LIMIT 1"
+  ).get(key, key);
+  return mapOemManufacturerRow(row);
+}
+
+function listOemManufacturers() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_manufacturers.values());
+  }
+  return db.prepare("SELECT * FROM oem_manufacturers ORDER BY created_at ASC").all().map(mapOemManufacturerRow);
+}
+
+function upsertOemManufacturer(entry = {}) {
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const slug = String(entry.slug || "").trim().toLowerCase();
+  if (!slug) throw new Error("slug is required");
+  const existing = getOemManufacturer(entry.id || slug);
+  const id = existing?.id || entry.id || crypto.randomUUID();
+  const record = {
+    id,
+    slug,
+    displayName: String(entry.displayName || slug),
+    logoStoragePath: String(entry.logoStoragePath || ""),
+    status: String(entry.status || "draft"),
+    isSeedDefault: Boolean(entry.isSeedDefault),
+    capabilities: entry.capabilities && typeof entry.capabilities === "object" ? entry.capabilities : {},
+    vendingStrategy: String(entry.vendingStrategy || "sts_token"),
+    rateLimitWindowMs: entry.rateLimitWindowMs != null ? Number(entry.rateLimitWindowMs) : null,
+    rateLimitMaxRequests: entry.rateLimitMaxRequests != null ? Number(entry.rateLimitMaxRequests) : null,
+    createdAt: existing?.createdAt || timestamp,
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_manufacturers.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_manufacturers (
+      id, slug, display_name, logo_storage_path, status, is_seed_default,
+      capabilities_json, vending_strategy, rate_limit_window_ms, rate_limit_max_requests,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      slug = excluded.slug,
+      display_name = excluded.display_name,
+      logo_storage_path = excluded.logo_storage_path,
+      status = excluded.status,
+      is_seed_default = excluded.is_seed_default,
+      capabilities_json = excluded.capabilities_json,
+      vending_strategy = excluded.vending_strategy,
+      rate_limit_window_ms = excluded.rate_limit_window_ms,
+      rate_limit_max_requests = excluded.rate_limit_max_requests,
+      updated_at = excluded.updated_at
+  `).run(
+    id, record.slug, record.displayName, record.logoStoragePath, record.status,
+    record.isSeedDefault ? 1 : 0, JSON.stringify(record.capabilities), record.vendingStrategy,
+    record.rateLimitWindowMs, record.rateLimitMaxRequests, record.createdAt, timestamp
+  );
+  return record;
+}
+
+function deleteOemManufacturer(idOrSlug) {
+  const existing = getOemManufacturer(idOrSlug);
+  if (!existing) return { deleted: false };
+  const db = ensureDatabase();
+  const oemId = existing.id;
+  if (isMemoryDatabase(db)) {
+    // Mirror Supabase's ON DELETE CASCADE — remove dependent rows locally too,
+    // otherwise deleting an OEM would orphan its credentials/endpoints/mappings.
+    db.memoryStore.oem_manufacturers.delete(oemId);
+    db.memoryStore.oem_credentials.delete(oemId);
+    for (const key of Array.from(db.memoryStore.oem_endpoint_configs.keys())) {
+      if (key.startsWith(`${oemId}::`)) db.memoryStore.oem_endpoint_configs.delete(key);
+    }
+    for (const key of Array.from(db.memoryStore.oem_station_mappings.keys())) {
+      if (key.startsWith(`${oemId}::`)) db.memoryStore.oem_station_mappings.delete(key);
+    }
+  } else {
+    db.prepare("DELETE FROM oem_endpoint_configs WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_credentials WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_station_mappings WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_manufacturers WHERE id = ?").run(oemId);
+  }
+  return { deleted: true, id: oemId };
+}
+
+// ── OEM endpoint configuration ──────────────────────────────────────────────
+// One row per (oemId, logicalKey) — the declarative mapping from a stable internal
+// operation name to that OEM's real upstream path/method/casing/field shape.
+function mapOemEndpointConfigRow(row) {
+  if (!row) return null;
+  const parseJson = (value) => {
+    try {
+      return JSON.parse(value || "{}");
+    } catch {
+      return {};
+    }
+  };
+  return {
+    oemId: row.oem_id,
+    logicalKey: row.logical_key,
+    upstreamPath: row.upstream_path,
+    method: row.method,
+    casingVariant: row.casing_variant || "",
+    requestFieldMap: parseJson(row.request_field_map),
+    responseFieldMap: parseJson(row.response_field_map),
+    payloadShape: parseJson(row.payload_shape),
+    paginationStyle: row.pagination_style || "none",
+    requiresLiveRead: row.requires_live_read === 1,
+    isWriteOverride: row.is_write_override === null || row.is_write_override === undefined ? null : row.is_write_override === 1,
+    adapterFnName: row.adapter_fn_name || "",
+    enabled: row.enabled === 1,
+    updatedAt: row.updated_at
+  };
+}
+
+function endpointConfigKey(oemId, logicalKey) {
+  return `${String(oemId || "").trim()}::${String(logicalKey || "").trim()}`;
+}
+
+function getOemEndpointConfig(oemId, logicalKey) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.oem_endpoint_configs.get(endpointConfigKey(oemId, logicalKey)) || null;
+  }
+  const row = db.prepare(
+    "SELECT * FROM oem_endpoint_configs WHERE oem_id = ? AND logical_key = ?"
+  ).get(String(oemId || ""), String(logicalKey || ""));
+  return mapOemEndpointConfigRow(row);
+}
+
+function listOemEndpointConfigs(oemId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_endpoint_configs.values()).filter((row) => row.oemId === oemId);
+  }
+  return db.prepare(
+    "SELECT * FROM oem_endpoint_configs WHERE oem_id = ? ORDER BY logical_key ASC"
+  ).all(String(oemId || "")).map(mapOemEndpointConfigRow);
+}
+
+function upsertOemEndpointConfig(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  const logicalKey = String(entry.logicalKey || "").trim();
+  if (!oemId || !logicalKey) throw new Error("oemId and logicalKey are required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = {
+    oemId,
+    logicalKey,
+    upstreamPath: String(entry.upstreamPath || ""),
+    method: String(entry.method || "GET").toUpperCase(),
+    casingVariant: String(entry.casingVariant || ""),
+    requestFieldMap: entry.requestFieldMap && typeof entry.requestFieldMap === "object" ? entry.requestFieldMap : {},
+    responseFieldMap: entry.responseFieldMap && typeof entry.responseFieldMap === "object" ? entry.responseFieldMap : {},
+    payloadShape: entry.payloadShape && typeof entry.payloadShape === "object" ? entry.payloadShape : {},
+    paginationStyle: String(entry.paginationStyle || "none"),
+    requiresLiveRead: Boolean(entry.requiresLiveRead),
+    isWriteOverride: entry.isWriteOverride === null || entry.isWriteOverride === undefined ? null : Boolean(entry.isWriteOverride),
+    adapterFnName: String(entry.adapterFnName || ""),
+    enabled: entry.enabled !== false,
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_endpoint_configs.set(endpointConfigKey(oemId, logicalKey), record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_endpoint_configs (
+      oem_id, logical_key, upstream_path, method, casing_variant,
+      request_field_map, response_field_map, payload_shape, pagination_style,
+      requires_live_read, is_write_override, adapter_fn_name, enabled, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(oem_id, logical_key) DO UPDATE SET
+      upstream_path = excluded.upstream_path,
+      method = excluded.method,
+      casing_variant = excluded.casing_variant,
+      request_field_map = excluded.request_field_map,
+      response_field_map = excluded.response_field_map,
+      payload_shape = excluded.payload_shape,
+      pagination_style = excluded.pagination_style,
+      requires_live_read = excluded.requires_live_read,
+      is_write_override = excluded.is_write_override,
+      adapter_fn_name = excluded.adapter_fn_name,
+      enabled = excluded.enabled,
+      updated_at = excluded.updated_at
+  `).run(
+    oemId, logicalKey, record.upstreamPath, record.method, record.casingVariant,
+    JSON.stringify(record.requestFieldMap), JSON.stringify(record.responseFieldMap), JSON.stringify(record.payloadShape),
+    record.paginationStyle, record.requiresLiveRead ? 1 : 0,
+    record.isWriteOverride === null ? null : (record.isWriteOverride ? 1 : 0),
+    record.adapterFnName, record.enabled ? 1 : 0, timestamp
+  );
+  return record;
+}
+
+function deleteOemEndpointConfig(oemId, logicalKey) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return { deleted: db.memoryStore.oem_endpoint_configs.delete(endpointConfigKey(oemId, logicalKey)) };
+  }
+  const result = db.prepare("DELETE FROM oem_endpoint_configs WHERE oem_id = ? AND logical_key = ?").run(String(oemId || ""), String(logicalKey || ""));
+  return { deleted: (result.changes || 0) > 0 };
+}
+
+// ── OEM credentials (encrypted at rest by the caller — this layer is storage-only) ──
+function mapOemCredentialsRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    authStrategy: row.auth_strategy,
+    baseUrl: row.base_url || "",
+    encryptedBearerToken: row.encrypted_bearer_token || "",
+    encryptedClientSecret: row.encrypted_client_secret || "",
+    encryptedUsername: row.encrypted_username || "",
+    encryptedPassword: row.encrypted_password || "",
+    tokenEndpointPath: row.token_endpoint_path || "",
+    apiKeyHeaderName: row.api_key_header_name || "",
+    encryptionKeyVersion: row.encryption_key_version || 1,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by || ""
+  };
+}
+
+function getOemCredentials(oemId) {
+  const id = String(oemId || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.oem_credentials.get(id) || null;
+  }
+  return mapOemCredentialsRow(db.prepare("SELECT * FROM oem_credentials WHERE oem_id = ?").get(id));
+}
+
+function upsertOemCredentials(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  if (!oemId) throw new Error("oemId is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = {
+    oemId,
+    authStrategy: String(entry.authStrategy || "bearer_static"),
+    baseUrl: String(entry.baseUrl || ""),
+    encryptedBearerToken: String(entry.encryptedBearerToken || ""),
+    encryptedClientSecret: String(entry.encryptedClientSecret || ""),
+    encryptedUsername: String(entry.encryptedUsername || ""),
+    encryptedPassword: String(entry.encryptedPassword || ""),
+    tokenEndpointPath: String(entry.tokenEndpointPath || ""),
+    apiKeyHeaderName: String(entry.apiKeyHeaderName || ""),
+    encryptionKeyVersion: Number(entry.encryptionKeyVersion || 1),
+    updatedAt: timestamp,
+    updatedBy: String(entry.updatedBy || "")
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_credentials.set(oemId, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_credentials (
+      oem_id, auth_strategy, base_url, encrypted_bearer_token, encrypted_client_secret,
+      encrypted_username, encrypted_password, token_endpoint_path, api_key_header_name, encryption_key_version,
+      updated_at, updated_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(oem_id) DO UPDATE SET
+      auth_strategy = excluded.auth_strategy,
+      base_url = excluded.base_url,
+      encrypted_bearer_token = excluded.encrypted_bearer_token,
+      encrypted_client_secret = excluded.encrypted_client_secret,
+      encrypted_username = excluded.encrypted_username,
+      encrypted_password = excluded.encrypted_password,
+      token_endpoint_path = excluded.token_endpoint_path,
+      api_key_header_name = excluded.api_key_header_name,
+      encryption_key_version = excluded.encryption_key_version,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `).run(
+    oemId, record.authStrategy, record.baseUrl, record.encryptedBearerToken, record.encryptedClientSecret,
+    record.encryptedUsername, record.encryptedPassword, record.tokenEndpointPath, record.apiKeyHeaderName, record.encryptionKeyVersion,
+    timestamp, record.updatedBy
+  );
+  return record;
+}
+
+// ── OEM station/community mappings (drives the "installed in N communities" count) ──
+function stationMappingKey(oemId, stationId) {
+  return `${String(oemId || "").trim()}::${String(stationId || "").trim().toUpperCase()}`;
+}
+
+function listOemStationMappings(oemId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId);
+  }
+  return db.prepare(
+    "SELECT * FROM oem_station_mappings WHERE oem_id = ? ORDER BY station_id ASC"
+  ).all(String(oemId || "")).map((row) => ({
+    oemId: row.oem_id,
+    stationId: row.station_id,
+    communityLabel: row.community_label || "",
+    createdAt: row.created_at
+  }));
+}
+
+function countOemStationMappings(oemId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId).length;
+  }
+  return db.prepare("SELECT COUNT(*) AS count FROM oem_station_mappings WHERE oem_id = ?").get(String(oemId || "")).count;
+}
+
+function upsertOemStationMapping(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  const stationId = String(entry.stationId || "").trim();
+  if (!oemId || !stationId) throw new Error("oemId and stationId are required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = { oemId, stationId, communityLabel: String(entry.communityLabel || ""), createdAt: timestamp };
+  if (isMemoryDatabase(db)) {
+    const key = stationMappingKey(oemId, stationId);
+    const existing = db.memoryStore.oem_station_mappings.get(key);
+    if (existing) record.createdAt = existing.createdAt;
+    db.memoryStore.oem_station_mappings.set(key, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_station_mappings (oem_id, station_id, community_label, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(oem_id, station_id) DO UPDATE SET
+      community_label = excluded.community_label
+  `).run(oemId, stationId, record.communityLabel, timestamp);
+  return record;
+}
+
+function deleteOemStationMapping(oemId, stationId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return { deleted: db.memoryStore.oem_station_mappings.delete(stationMappingKey(oemId, stationId)) };
+  }
+  const result = db.prepare("DELETE FROM oem_station_mappings WHERE oem_id = ? AND station_id = ?").run(String(oemId || ""), String(stationId || ""));
+  return { deleted: (result.changes || 0) > 0 };
 }
 
 function cacheApiResponse(entry) {
@@ -1442,5 +1902,19 @@ module.exports = {
   setSgcTokenRule,
   tableCounts,
   updateSmsNotificationStatus,
-  writableRoot
+  writableRoot,
+  getOemManufacturer,
+  listOemManufacturers,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemEndpointConfig,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemStationMappings,
+  countOemStationMappings,
+  upsertOemStationMapping,
+  deleteOemStationMapping
 };

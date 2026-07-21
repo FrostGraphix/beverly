@@ -5,11 +5,15 @@
  *   POST /auth/signup   — send OTP for new account
  *   POST /auth/login    — send OTP for existing account
  *   POST /auth/verify   — verify OTP, get access_token
+ *   POST /auth/email/recover        — send password reset code (email/password accounts)
+ *   POST /auth/email/reset-password — confirm code + set new password
  *
  * Authenticated (requireCustomer):
  *   GET    /me
  *   PATCH  /me
  *   POST   /logout
+ *   POST   /auth/email/verify/send    — (re)send email verification code
+ *   POST   /auth/email/verify/confirm — confirm email verification code
  *
  *   POST   /kyc/tier1
  *   POST   /kyc/tier2/nin
@@ -64,6 +68,11 @@ import { runMalwareScan } from '../services/file-scan.js';
 import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
 import { assertClientIdempotencyKey } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
+import {
+    sendEmailVerification, confirmEmailVerification,
+    sendPasswordRecoveryEmail, confirmPasswordReset,
+    EmailOtpError,
+} from '../services/customer-email-otp.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' ? 429
@@ -77,6 +86,14 @@ function customerAuthStatus(code: string): number {
         : 400;
 }
 
+function emailOtpStatus(code: string): number {
+    return code === 'otp_rate_limited' ? 429
+        : code === 'otp_storage_missing' ? 503
+        : code === 'customer_not_found' ? 404
+        : code === 'otp_not_found' || code === 'otp_expired' || code === 'otp_locked' || code === 'otp_incorrect' ? 401
+        : 400;
+}
+
 function customerAuthPayload(result: { challengeId: string; expiresAt: string; retryAfterSeconds: number }) {
     return {
         challenge_id: result.challengeId,
@@ -87,7 +104,7 @@ function customerAuthPayload(result: { challengeId: string; expiresAt: string; r
 
 const NOTIFICATION_PREF_DEFAULTS = {
     sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false, admin_announcement: false },
-    email: { token_purchased: false, wallet_funded: false, promotions: false, kyc_update: false, dispute_update: false, payment_failed: false, admin_announcement: false },
+    email: { token_purchased: false, wallet_funded: true, promotions: false, kyc_update: true, dispute_update: true, payment_failed: true, admin_announcement: false },
     in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 };
 
@@ -255,12 +272,71 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    // ── EMAIL VERIFICATION (email/password accounts) ────────────────────────────
+
+    fastify.post('/auth/email/verify/send', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { data } = await adminClient.from('customers').select('email, full_name').eq('id', req.actor!.customerId!).maybeSingle();
+        const email = (data as any)?.email;
+        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
+        try {
+            await sendEmailVerification(email, (data as any)?.full_name ?? 'there');
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/email/verify/confirm', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { code } = z.object({ code: z.string().trim().length(6) }).parse(req.body);
+        const { data } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).maybeSingle();
+        const email = (data as any)?.email;
+        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
+        try {
+            await confirmEmailVerification(email, code);
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    // ── PASSWORD RECOVERY (email/password accounts) ──────────────────────────────
+
+    fastify.post('/auth/email/recover', async (req, reply) => {
+        const { email } = z.object({ email: z.string().email() }).parse(req.body);
+        try {
+            await sendPasswordRecoveryEmail(email);
+        } catch (e: any) {
+            if (e instanceof EmailOtpError && e.code === 'otp_rate_limited') {
+                return reply.code(429).send({ error: e.code, message: e.message });
+            }
+            // Never leak account existence on unexpected errors either.
+        }
+        return { ok: true };
+    });
+
+    fastify.post('/auth/email/reset-password', async (req, reply) => {
+        const { email, code, new_password } = z.object({
+            email: z.string().email(),
+            code: z.string().trim().length(6),
+            new_password: z.string().min(8),
+        }).parse(req.body);
+        try {
+            await confirmPasswordReset(email, code, new_password);
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
     // ── PROFILE ───────────────────────────────────────────────────────────────
 
     fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
@@ -283,7 +359,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .from('customers')
             .update(updates)
             .eq('id', req.actor!.customerId!)
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
         return shapeCustomerProfile(data);

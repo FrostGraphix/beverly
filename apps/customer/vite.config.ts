@@ -13,11 +13,11 @@ export default defineConfig(({ command }) => {
             vue(),
             VitePWA({
             registerType: 'autoUpdate',
-            includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+            includeAssets: ['brand/beverly-mark.png', 'apple-touch-icon.png'],
             manifest: {
                 name: 'Beverly',
                 short_name: 'Beverly',
-                description: 'Beverly — electricity tokens, anywhere',
+                description: 'Beverly - Your Smart Power Partner.',
                 theme_color: '#22c55e',
                 background_color: '#0a0e14',
                 display: 'standalone',

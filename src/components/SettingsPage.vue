@@ -1,9 +1,22 @@
 <template>
   <div class="wallet-settings-shell">
     <section class="wallet-settings-hero">
-      <p>Workspace Control</p>
-      <h1>Settings</h1>
-      <span>{{ userName }} - {{ roleName }}</span>
+      <div class="wallet-settings-top">
+        <div class="wallet-settings-copy">
+          <p class="wallet-settings-eyebrow">Workspace Control</p>
+          <h1 class="wallet-settings-title">Settings</h1>
+          <div class="wallet-settings-meta">
+            <strong>{{ userName }}</strong>
+            <span class="meta-sep">•</span>
+            <span>{{ roleName }}</span>
+          </div>
+        </div>
+        <BaseIconButton class="wallet-settings-close" aria-label="Close settings" @click="$emit('close')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </BaseIconButton>
+      </div>
     </section>
 
     <section class="wallet-settings-card">
@@ -69,7 +82,7 @@
             {{ passwordMessage }}
           </div>
 
-          <div class="profile-section-title" style="margin-top:32px">Two-Factor Authentication</div>
+          <div class="profile-section-title" style="margin-top:28px">Two-Factor Authentication</div>
           <div class="mfa-section-body">
             <div v-if="mfaLoading" class="mfa-loading">Loading…</div>
             <div v-else-if="mfaStatus.enrolled" class="mfa-status">
@@ -114,7 +127,7 @@
             </div>
           </div>
 
-          <div class="profile-section-title" style="margin-top:28px">Notifications</div>
+          <div class="profile-section-title" style="margin-top:24px">Notifications</div>
           <div class="profile-pref-group">
             <div class="profile-pref-row" v-for="option in notifOptions" :key="option.id">
               <div class="profile-pref-label">
@@ -212,6 +225,7 @@ function normalizeThemeChoice(theme) {
 export default {
   name: "SettingsPage",
   components: { BaseButton, BaseIconButton, BaseInput, BaseToggle, MfaSetupFlow },
+  emits: ["close", "theme-change"],
   props: {
     userName: { type: String, default: "ACB(admin)" },
     roleId: { type: String, default: null },
@@ -376,13 +390,123 @@ export default {
 </script>
 
 <style scoped>
+.wallet-settings-shell {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 1050px);
+  margin: 0 auto;
+}
+
+.wallet-settings-hero,
+.wallet-settings-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.05));
+  overflow: hidden;
+}
+
+.wallet-settings-hero {
+  padding: 20px 24px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent), transparent 44%),
+    linear-gradient(160deg, color-mix(in srgb, var(--bg-card) 90%, var(--primary) 10%), var(--bg-card));
+}
+
+.wallet-settings-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wallet-settings-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.wallet-settings-eyebrow {
+  margin: 0;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wallet-settings-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(24px, 3.2vw, 36px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.wallet-settings-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.wallet-settings-meta strong {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.meta-sep {
+  opacity: 0.4;
+}
+
+.wallet-settings-close {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  color: var(--text-muted);
+  background: var(--bg-card);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wallet-settings-close:hover {
+  color: var(--text-strong);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
+}
+
+.wallet-settings-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--primary) 4%);
+}
+
+.profile-body {
+  padding: 24px;
+}
+
 .live-control-card {
   display: grid;
   gap: 14px;
   max-width: 680px;
   padding: 20px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 12px);
   background: var(--bg-card);
 }
 
@@ -399,10 +523,11 @@ export default {
 }
 
 .live-control-badge {
-  padding: 6px 10px;
+  padding: 4px 10px;
   border: 1px solid var(--danger);
   border-radius: 999px;
   color: var(--danger);
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -415,7 +540,8 @@ export default {
 .live-control-error {
   margin: 0;
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .live-control-warning {
@@ -429,7 +555,7 @@ export default {
 }
 
 .live-control-reason {
-  min-height: 92px;
+  min-height: 84px;
   resize: vertical;
 }
 
@@ -438,6 +564,10 @@ export default {
 }
 
 @media (max-width: 640px) {
+  .wallet-settings-hero {
+    padding: 16px;
+  }
+
   .live-control-card {
     padding: 14px;
   }
