@@ -1159,6 +1159,20 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    // ── PWA INSTALL TELEMETRY ────────────────────────────────────────────────
+    // Fired once by the customer app's `appinstalled` event. Best-effort —
+    // reuses the existing audit log rather than a dedicated table.
+    fastify.post('/pwa-installed', { preHandler: fastify.requireCustomer() }, async (req) => {
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'customer',
+            action: 'pwa.installed',
+            targetType: 'customer',
+            targetId: req.actor!.customerId!,
+        });
+        return { ok: true };
+    });
+
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
 
     // ── Notifications inbox ───────────────────────────────────────────────────

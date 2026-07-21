@@ -5,6 +5,7 @@ defineProps<{
   title: string;
   subtitle?: string;
   back?: string | null;
+  compact?: boolean;
 }>();
 </script>
 
@@ -12,7 +13,7 @@ defineProps<{
   <main class="auth-page">
     <div class="auth-bg-glow" aria-hidden="true" />
 
-    <div class="auth-card">
+    <div class="auth-card" :class="{ 'auth-card--compact': compact }">
       <!-- Brand header → back to Beverly landing -->
       <a class="auth-brand" :href="PORTAL_URLS.landing" aria-label="Beverly home">
         <div class="bw-mark auth-mark" aria-hidden="true"></div>
@@ -22,13 +23,15 @@ defineProps<{
         </div>
       </a>
 
-      <!-- Back link -->
-      <router-link v-if="back" :to="back" class="auth-back">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Back
-      </router-link>
+      <div v-if="back || $slots['header-accessory']" class="auth-back-row">
+        <router-link v-if="back" :to="back" class="auth-back">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Back
+        </router-link>
+        <slot name="header-accessory" />
+      </div>
 
       <!-- Title block -->
       <div class="auth-heading">
@@ -134,9 +137,16 @@ defineProps<{
 .auth-wordmark span {
   font-size: var(--t-2xs);
   color: var(--text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.01em;
   font-weight: 600;
+}
+
+.auth-back-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
 }
 
 .auth-back {
@@ -147,7 +157,6 @@ defineProps<{
   font-weight: 600;
   color: var(--text-2);
   text-decoration: none;
-  margin-bottom: var(--s-4);
   transition: color var(--dur-fast);
 }
 .auth-back:hover { color: var(--text); }
@@ -206,6 +215,12 @@ defineProps<{
   text-underline-offset: 2px;
 }
 .auth-link:hover { color: var(--brand); }
+
+.auth-card--compact { padding: var(--s-5); }
+.auth-card--compact .auth-brand { margin-bottom: var(--s-5); }
+.auth-card--compact .auth-back-row { margin-bottom: var(--s-3); }
+.auth-card--compact .auth-heading { margin-bottom: var(--s-4); }
+.auth-card--compact .auth-body { gap: var(--s-3); }
 
 /* Breakpoint: very narrow (small phones) */
 @media (max-width: 360px) {

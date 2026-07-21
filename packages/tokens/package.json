@@ -15,7 +15,8 @@
     "BeverlyLoader.vue",
     "BeverlyLoader.vue.d.ts",
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "pwaInstall.js"
   ],
   "exports": {
     ".": "./index.js",

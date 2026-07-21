@@ -86,7 +86,7 @@ export async function fetchDashboardData(options = {}) {
   const requestOptions = dashboardOptions(options);
   const api = options.api || { getApi, postApi };
   const scope = rangeParams(requestOptions);
-  const [panelGroup, topChart, consumptionChart, successChart, alarmChart, hourly, gprs, events, payments] = await Promise.all([
+  const [panelGroup, topChart, consumptionChart, successChart, alarmChart] = await Promise.all([
     safeRequest(() => api.postApi("/api/dashboard/readPanelGroup")),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
       ...scope,
@@ -107,30 +107,30 @@ export async function fetchDashboardData(options = {}) {
       ...scope,
       type: 7,
       days: 1
-    })),
-    safeRequest(() => api.getApi("/api/dashboard/hourly", {
-      ...scope,
-      pageNumber: requestOptions.pageNumber,
-      pageSize: requestOptions.pageSize
-    })),
-    safeRequest(() => api.getApi("/api/dashboard/gprs", {
-      ...scope,
-      pageNumber: requestOptions.pageNumber,
-      pageSize: 48
-    })),
-    safeRequest(() => api.getApi("/api/dashboard/events", {
-      ...scope,
-      pageNumber: requestOptions.pageNumber,
-      pageSize: 20
-    })),
-    safeRequest(() => api.getApi("/api/token/creditTokenRecord/readMore", {
-      from: requestOptions.from,
-      to: requestOptions.to,
-      siteId: requestOptions.siteId
     }))
   ]);
 
   const liveConsumptionChart = isSyntheticDashboardResponse(consumptionChart) ? null : consumptionChart;
+  const needsFallbackData = !topChart || !liveConsumptionChart || !successChart;
+  const [hourly, gprs, payments] = needsFallbackData
+    ? await Promise.all([
+        safeRequest(() => api.getApi("/api/dashboard/hourly", {
+          ...scope,
+          pageNumber: requestOptions.pageNumber,
+          pageSize: 120
+        })),
+        safeRequest(() => api.getApi("/api/dashboard/gprs", {
+          ...scope,
+          pageNumber: requestOptions.pageNumber,
+          pageSize: 48
+        })),
+        safeRequest(() => api.getApi("/api/token/creditTokenRecord/readMore", {
+          from: requestOptions.from,
+          to: requestOptions.to,
+          siteId: requestOptions.siteId
+        }))
+      ])
+    : [null, null, null];
   const liveHourly = isSyntheticDashboardResponse(hourly) ? null : hourly;
   const dataset = mapDashboardDataset({
     panelGroup,
@@ -140,7 +140,6 @@ export async function fetchDashboardData(options = {}) {
     alarmChart,
     hourly: liveHourly,
     gprs,
-    events,
     payments,
     activeType: requestOptions.activeType,
     consumptionType: requestOptions.consumptionType

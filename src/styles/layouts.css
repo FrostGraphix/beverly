@@ -170,6 +170,17 @@ a {
   transition: transform var(--transition-snappy);
 }
 
+.sidebar-logo-lockup {
+  display: block;
+  width: min(156px, calc(100% - 44px));
+  height: 36px;
+  object-fit: contain;
+  object-position: left center;
+}
+.sidebar-logo-lockup--light { display: none; }
+[data-theme="light"] .sidebar-logo-lockup--light { display: block; }
+[data-theme="light"] .sidebar-logo-lockup--dark { display: none; }
+
 .sidebar-mobile-close {
   display: flex;
   align-items: center;
@@ -325,6 +336,13 @@ a {
   width: 0;
   overflow: hidden;
   opacity: 0;
+}
+
+.hideSidebar:not(.mobile) .sidebar-logo-lockup {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  object-position: left center;
 }
 
 .mobile .sidebar-logo-text,

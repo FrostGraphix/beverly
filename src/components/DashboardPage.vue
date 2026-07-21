@@ -2,11 +2,11 @@
   <div class="dashboard-live-page">
     <section class="dashboard-card-grid" aria-label="Dashboard summary">
       <template v-if="loading">
-        <div v-for="i in 4" :key="'skel-card-'+i" class="dashboard-stat-card skeleton">
-          <div class="skeleton-avatar" style="margin-right: 16px;"></div>
-          <div style="flex: 1;">
-            <div class="skeleton-text" style="width: 60%;"></div>
-            <div class="skeleton-text" style="width: 40%;"></div>
+        <div v-for="i in 4" :key="'skel-card-'+i" class="dashboard-stat-card dashboard-stat-skeleton" aria-hidden="true">
+          <span class="dashboard-skeleton-icon"></span>
+          <div class="dashboard-skeleton-copy">
+            <span class="dashboard-skeleton-line dashboard-skeleton-line--label"></span>
+            <span class="dashboard-skeleton-line dashboard-skeleton-line--value"></span>
           </div>
         </div>
       </template>
@@ -31,17 +31,32 @@
     </section>
 
     <section class="dashboard-chart-card dashboard-chart-wide" aria-label="Top dashboard chart">
-      <div v-if="loading" class="skeleton skeleton-card" style="height: 350px;"></div>
+      <div v-if="loading" class="dashboard-chart-skeleton" role="status" aria-label="Loading purchase chart">
+        <span class="dashboard-chart-skeleton-title"></span>
+        <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+          <span v-for="height in [36, 56, 44, 72, 48, 62, 40, 78, 52, 66, 46, 70]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+        </div>
+      </div>
       <EChartPanel v-else :option="topChartOption" />
     </section>
 
     <section class="dashboard-chart-pair">
       <article class="dashboard-chart-card">
-        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading success chart">
+          <span class="dashboard-chart-skeleton-title"></span>
+          <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+            <span v-for="height in [42, 58, 48, 68, 54, 76, 64, 82]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+          </div>
+        </div>
         <EChartPanel v-else :option="successChartOption" />
       </article>
       <article class="dashboard-chart-card">
-        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading alarm chart">
+          <span class="dashboard-chart-skeleton-title"></span>
+          <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+            <span v-for="height in [58, 46, 70, 52, 80, 64, 42, 72]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+          </div>
+        </div>
         <EChartPanel v-else :option="alarmChartOption" @chart-click="openAbnormalAlarmPage" />
       </article>
     </section>
@@ -58,7 +73,12 @@
           {{ mode.label }}
         </BaseButton>
       </div>
-      <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+      <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading consumption chart">
+        <span class="dashboard-chart-skeleton-title"></span>
+        <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+          <span v-for="height in [34, 62, 46, 72, 54, 42, 68, 58]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+        </div>
+      </div>
       <div v-else-if="!consumption.values.length" class="dashboard-chart-empty">No current consumption data.</div>
       <EChartPanel v-else :option="consumptionChartOption" />
     </section>
