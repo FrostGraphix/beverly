@@ -1,15 +1,41 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useAuthStore } from '../stores/auth';
-import { toggleTheme } from '@beverly/tokens';
+import {
+    toggleTheme, isStandalone, isIosInstallable,
+    getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt,
+} from '@beverly/tokens';
 import { api, ApiError } from '../lib/api';
 
 const auth   = useAuthStore();
 const router = useRouter();
+
+// Manual "Install app" entry point — the auto banner may have been dismissed,
+// so this stays available for users who want to install later. Reads from the
+// shared singleton (see @beverly/tokens/pwaInstall) rather than listening for
+// beforeinstallprompt locally, since that event fires at most once per tab and
+// this component may well mount long after it already fired on another page.
+const installPrompt = ref<any>(getDeferredInstallPrompt());
+const installMsg     = ref('');
+const canInstall     = computed(() => !isStandalone() && (installPrompt.value || isIosInstallable()));
+let unsubscribeInstallPrompt: (() => void) | null = null;
+async function installApp() {
+    if (installPrompt.value) {
+        await triggerInstallPrompt();
+        return;
+    }
+    if (isIosInstallable()) {
+        installMsg.value = 'To install: tap the Share icon, then "Add to Home Screen".';
+    }
+}
+onMounted(() => {
+    unsubscribeInstallPrompt = onInstallPromptChange((e) => { installPrompt.value = e; });
+});
+onUnmounted(() => unsubscribeInstallPrompt?.());
 
 const editMode    = ref(false);
 const exportLoading = ref(false);
@@ -245,6 +271,11 @@ async function doSignOut() {
     <!-- Actions -->
     <div class="bw-card">
       <div class="bw-stack" style="gap: var(--s-2)">
+        <button v-if="canInstall" class="bw-btn" style="justify-content:flex-start" @click="installApp">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Install app
+        </button>
+        <p v-if="installMsg" style="font-size:var(--t-xs); color:var(--bw-text-muted); margin:0 0 4px; padding: 0 2px">{{ installMsg }}</p>
         <button class="bw-btn" style="justify-content:flex-start" @click="toggleTheme">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
           Toggle theme

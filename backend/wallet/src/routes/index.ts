@@ -4,6 +4,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import healthRoutes from './health.js';
+import assetRoutes from './assets.js';
 import publicRoutes from './public.js';
 import vendorRoutes from './vendor.js';
 import adminRoutes from './admin.js';
@@ -13,6 +14,7 @@ import customerRoutes from './customer.js';
 
 const routes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(healthRoutes);
+    await fastify.register(assetRoutes);
 
     await fastify.register(publicRoutes,   { prefix: '/api/v1/public'   });
     await fastify.register(vendorRoutes,   { prefix: '/api/v1/vendor'   });

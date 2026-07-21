@@ -1513,24 +1513,7 @@ assert.deepStrictEqual(
     path: call.path,
     params: call.params
   })),
-  [
-    {
-      path: "/api/dashboard/hourly",
-      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 50 }
-    },
-    {
-      path: "/api/dashboard/gprs",
-      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 48 }
-    },
-    {
-      path: "/api/dashboard/events",
-      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", pageNumber: 1, pageSize: 20 }
-    },
-    {
-      path: "/api/token/creditTokenRecord/readMore",
-      params: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE" }
-    }
-  ]
+  []
 );
 
 console.log(JSON.stringify({

@@ -3,7 +3,10 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
-import { toggleTheme } from '@beverly/tokens';
+import {
+    toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
+    getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt,
+} from '@beverly/tokens';
 import ChatWidget from './ChatWidget.vue';
 
 defineProps<{ title?: string; hideTabbar?: boolean }>();
@@ -14,7 +17,8 @@ const accountMenuWrap = ref<HTMLElement | null>(null);
 
 // PWA install prompt
 const installPrompt    = ref<any>(null);
-const installDismissed = ref(false);
+const installDismissed = ref(isInstallDismissed());
+const showIosInstall   = ref(false);
 
 // Notification bell
 const unreadCount = ref(0);
@@ -35,26 +39,42 @@ async function fetchUnread() {
     } catch { /* best-effort */ }
 }
 
+let unsubscribeInstallPrompt: (() => void) | null = null;
+
+function handleAppInstalled() {
+    showIosInstall.value = false;
+    dismissInstallPrompt(365); // installed — don't ask again
+    if (auth.isAuthenticated) {
+        api.post('/api/v1/customer/pwa-installed', {}).catch(() => { /* best-effort */ });
+    }
+}
+
 onMounted(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
+    installPrompt.value = getDeferredInstallPrompt();
+    unsubscribeInstallPrompt = onInstallPromptChange((e) => {
         installPrompt.value = e;
+        if (!e) handleAppInstalled();
     });
+    showIosInstall.value = isIosInstallable() && !isStandalone();
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     void fetchUnread();
     bellPoll = setInterval(fetchUnread, 60_000); // poll every minute
 });
 
 onUnmounted(() => {
+    unsubscribeInstallPrompt?.();
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     if (bellPoll) clearInterval(bellPoll);
 });
 
 async function promptInstall() {
-    if (!installPrompt.value) return;
-    installPrompt.value.prompt();
-    const { outcome } = await installPrompt.value.userChoice;
-    if (outcome === 'accepted') installPrompt.value = null;
+    await triggerInstallPrompt();
+}
+
+function dismissInstall() {
+    installDismissed.value = true;
+    showIosInstall.value = false;
+    dismissInstallPrompt();
 }
 
 function toggleUserMenu() { userMenuOpen.value = !userMenuOpen.value; }
@@ -90,9 +110,15 @@ async function signOut() {
   <div class="bw-mobile-shell">
     <!-- PWA install banner -->
     <div v-if="installPrompt && !installDismissed" class="bw-install-banner">
-      <span>Add Beverly to your home screen for the best experience</span>
+      <span>Add Beverly to your home screen. You may need to sign in again after installing.</span>
       <button class="bw-btn small" @click="promptInstall">Install</button>
-      <button class="bw-icon-btn" @click="installDismissed = true" aria-label="Dismiss">
+      <button class="bw-icon-btn" @click="dismissInstall" aria-label="Dismiss">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div v-else-if="showIosInstall && !installDismissed" class="bw-install-banner">
+      <span>Add Beverly to your home screen: tap Share, then "Add to Home Screen".</span>
+      <button class="bw-icon-btn" @click="dismissInstall" aria-label="Dismiss">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>

@@ -15,10 +15,8 @@
       :inert="width <= 1024 && !sidebarOpen ? '' : null"
     >
       <div class="sidebar-logo">
-        <span class="sidebar-logo-icon" aria-hidden="true"></span>
-        <span class="sidebar-logo-text sidebar-brand-copy">
-          <span class="sidebar-logo-wordmark" role="img" aria-label="Beverly"></span>
-        </span>
+        <img class="sidebar-logo-lockup sidebar-logo-lockup--light" src="/brand/beverly-lockup.png" alt="Beverly" />
+        <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-light.png" alt="" aria-hidden="true" />
         <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>

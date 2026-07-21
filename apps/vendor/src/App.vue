@@ -5,6 +5,7 @@ import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import { useVendorAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
 import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
+import UpdateAvailableToast from './components/UpdateAvailableToast.vue';
 
 const auth = useVendorAuthStore();
 const router = useRouter();
@@ -41,4 +42,5 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
     @stay="stayActive"
     @logout="auth.logout(); $router.push({ name: 'login' })"
   />
+  <UpdateAvailableToast />
 </template>

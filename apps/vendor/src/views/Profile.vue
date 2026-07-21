@@ -1,10 +1,36 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ProfilePictureCropModal from '../components/ProfilePictureCropModal.vue';
 import { useVendorAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
-import { toggleTheme } from '@beverly/tokens';
+import {
+    toggleTheme, isStandalone, isIosInstallable,
+    getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt,
+} from '@beverly/tokens';
+
+// Manual "Install app" entry point — the auto banner may have been dismissed,
+// so this stays available for users who want to install later. Reads from the
+// shared singleton (see @beverly/tokens/pwaInstall) rather than listening for
+// beforeinstallprompt locally, since that event fires at most once per tab and
+// this component may well mount long after it already fired on another page.
+const installPrompt = ref<any>(getDeferredInstallPrompt());
+const installMsg     = ref('');
+const canInstall      = computed(() => !isStandalone() && (installPrompt.value || isIosInstallable()));
+let unsubscribeInstallPrompt: (() => void) | null = null;
+async function installApp() {
+    if (installPrompt.value) {
+        await triggerInstallPrompt();
+        return;
+    }
+    if (isIosInstallable()) {
+        installMsg.value = 'To install: tap the Share icon, then "Add to Home Screen".';
+    }
+}
+onMounted(() => {
+    unsubscribeInstallPrompt = onInstallPromptChange((e) => { installPrompt.value = e; });
+});
+onUnmounted(() => unsubscribeInstallPrompt?.());
 
 type ProfileRow = {
     label: string;
@@ -250,6 +276,10 @@ async function uploadProcessedProfilePicture(file: File) {
         </div>
       </div>
 
+      <div v-if="canInstall" class="bw-card">
+        <button class="bw-btn" @click="installApp">Install app</button>
+        <small v-if="installMsg" class="bw-muted" style="display:block; margin-top:6px">{{ installMsg }}</small>
+      </div>
       <div class="bw-card">
         <button class="bw-btn" @click="toggleTheme">Toggle theme</button>
       </div>
