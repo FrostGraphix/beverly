@@ -755,47 +755,6 @@ function downloadPdfFallback(model, filename) {
   URL.revokeObjectURL(url);
 }
 
-function loadHtml2Pdf() {
-  if (window.html2pdf) return Promise.resolve(window.html2pdf);
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector("script[data-receipt-pdf-loader='html2pdf']");
-    if (existing) {
-      existing.addEventListener("load", () => resolve(window.html2pdf), { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    script.async = true;
-    script.dataset.receiptPdfLoader = "html2pdf";
-    script.onload = () => resolve(window.html2pdf);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-
-async function mountReceiptNode(model, options = {}) {
-  const wrapper = document.createElement("div");
-  wrapper.setAttribute("aria-hidden", "true");
-  wrapper.style.position = "fixed";
-  wrapper.style.left = "-10000px";
-  wrapper.style.top = "0";
-  wrapper.style.width = "794px";
-  wrapper.style.minHeight = "1123px";
-  wrapper.style.padding = "0";
-  wrapper.style.display = "grid";
-  wrapper.style.placeItems = "start center";
-  wrapper.style.zIndex = "0";
-  wrapper.style.pointerEvents = "none";
-  wrapper.style.background = options.mode === "pdf" || options.light === true ? "#ffffff" : "#050608";
-  wrapper.innerHTML = receiptHtml(model, options);
-  document.body.appendChild(wrapper);
-
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
-  return wrapper;
-}
-
 function waitForDocumentReady(targetWindow) {
   const targetDocument = targetWindow?.document;
   if (!targetDocument) return Promise.resolve();
@@ -842,78 +801,15 @@ async function downloadServerReceiptPdf(model, filename) {
 }
 
 export async function downloadReceiptPdf(model) {
-  const theme = buildReceiptPdfTheme();
   const filename = buildReceiptFilename(model, "pdf");
 
   try {
     await downloadServerReceiptPdf(model, filename);
     return { ok: true, mode: "server", filename };
   } catch (error) {
-    console.warn("Server receipt PDF render failed. Falling back to client render.", error);
-  }
-
-  let wrapper = null;
-  try {
-    const html2pdf = await loadHtml2Pdf();
-    wrapper = await mountReceiptNode(model, { theme, mode: "pdf" });
-    const receiptElement = wrapper.querySelector(".receipt");
-    if (!receiptElement) throw new Error("Receipt renderer did not mount");
-
-    // Collect all <style> and <link> nodes injected by mountReceiptNode's innerHTML
-    // BEFORE restructuring the DOM. replaceChildren() would otherwise destroy them,
-    // leaving html2canvas with an unstyled element (no gradients, colours, or fonts).
-    const styleNodes = Array.from(wrapper.querySelectorAll("style, link[rel='stylesheet']"));
-
-    const capturePage = document.createElement("div");
-    capturePage.style.cssText = [
-      "width:794px",
-      "min-height:1123px",
-      "padding:0",
-      "margin:0",
-      "background:#ffffff",
-      "display:block",
-      "text-align:center",
-      "box-sizing:border-box"
-    ].join(";");
-
-    // Move the style nodes into capturePage first so they survive replaceChildren()
-    styleNodes.forEach((node) => capturePage.insertBefore(node, capturePage.firstChild));
-
-    receiptElement.style.display = "inline-flex";
-    capturePage.appendChild(receiptElement);
-
-    // Now safe to restructure — styles are in capturePage, not in wrapper
-    wrapper.replaceChildren(capturePage);
-
-    // Give the browser another frame to recompute styles with the CSS variables in place
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-    const opt = {
-      margin: 0,
-      filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-        windowHeight: 1123,
-        scrollX: 0,
-        scrollY: 0
-      },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ["avoid-all", "css", "legacy"] }
-    };
-
-    await html2pdf().set(opt).from(capturePage).save();
-    return { ok: true, mode: "html2pdf", filename };
-  } catch (error) {
-    console.error("Receipt PDF export failed. Using fallback PDF.", error);
+    console.warn("Server receipt PDF render failed. Using fallback PDF.", error);
     downloadPdfFallback(model, filename);
     return { ok: false, mode: "fallback", filename, error };
-  } finally {
-    if (wrapper?.parentNode) wrapper.parentNode.removeChild(wrapper);
   }
 }
 

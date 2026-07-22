@@ -9,6 +9,8 @@
  *  - Token totalPaid is revenue collected.
  */
 
+import { parseTariffUnitPrice } from "./tariff-pricing.mjs";
+
 /**
  * Returns ISO week key "YYYY-Www".
  *
@@ -260,7 +262,7 @@ export function buildTariffMap(tariffRows) {
   for (const tariff of tariffRows) {
     const tariffId = String(tariff.tariffId || "").toUpperCase();
     if (!tariffId) continue;
-    const price = Number(tariff.price) || 0;
+    const price = parseTariffUnitPrice(tariff.price);
     const tax = Number(tariff.tax) || 0;
     tariffMap.set(tariffId, {
       price,
@@ -278,6 +280,39 @@ export function buildTariffMap(tariffRows) {
  */
 export function resolveEffectivePrice(tariffId, tariffMap) {
   return tariffMap.get(String(tariffId || "").toUpperCase())?.effectivePrice ?? 350;
+}
+
+/**
+ * Prices tariff-segmented consumption without inventing a rate for uncovered kWh.
+ * @param {Array<{ tariffId?: string, tariff_id?: string, totalKwh?: number, total_kwh?: number }>} breakdown
+ * @param {Map<string, { effectivePrice: number }>} tariffMap
+ * @returns {{ valueNgn: number, pricedKwh: number, totalKwh: number, coveragePct: number, complete: boolean }}
+ */
+export function calculateConsumptionValue(breakdown, tariffMap) {
+  let valueNgn = 0;
+  let pricedKwh = 0;
+  let totalKwh = 0;
+
+  for (const row of breakdown || []) {
+    const kwh = Number(row.totalKwh ?? row.total_kwh) || 0;
+    if (kwh <= 0) continue;
+    totalKwh += kwh;
+    const tariff = tariffMap.get(String(row.tariffId ?? row.tariff_id ?? "").toUpperCase());
+    if (!tariff || !Number.isFinite(Number(tariff.effectivePrice)) || Number(tariff.effectivePrice) <= 0) continue;
+    pricedKwh += kwh;
+    valueNgn += kwh * Number(tariff.effectivePrice);
+  }
+
+  const unpricedKwh = Math.max(0, totalKwh - pricedKwh);
+  const coveragePct = totalKwh > 0 ? (pricedKwh / totalKwh) * 100 : 100;
+  return {
+    valueNgn: parseFloat(valueNgn.toFixed(2)),
+    pricedKwh: parseFloat(pricedKwh.toFixed(3)),
+    unpricedKwh: parseFloat(unpricedKwh.toFixed(3)),
+    totalKwh: parseFloat(totalKwh.toFixed(3)),
+    coveragePct: parseFloat(coveragePct.toFixed(2)),
+    complete: unpricedKwh <= 0.0005,
+  };
 }
 
 /**

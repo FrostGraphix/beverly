@@ -17,6 +17,7 @@ beverly-reveal.html
 .claude/
 tmp-*.log
 tmp-*.err.log
+.codex-*.log
 replica-screenshots/diffs/
 
 .vercel

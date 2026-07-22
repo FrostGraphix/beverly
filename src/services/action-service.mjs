@@ -10,8 +10,6 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/api/File/Upload";
   if (action === "Recharge") return "/api/token/creditToken/generate";
   if (action === "Cancel" && route.hash.includes("credit-token-record") && !route.hash.includes("clear-credit")) return "/api/token/creditTokenRecord/cancel";
-  if (action === "Cancel" && route.hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/cancel";
-  if (action === "Cancel" && route.hash.includes("set-maximum-power-limit-token-record")) return "/api/token/setMaximumPowerLimitTokenRecord/cancel";
   if (action === "Generate Token" && route.hash.includes("clear-credit")) return "/api/token/clearCreditToken/generate";
   if (action === "Generate Token" && route.hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
   if (action === "Generate Token" && route.hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
@@ -57,44 +55,6 @@ function requestHeaders(route, action) {
     "X-Route-Hash": String(route?.hash || ""),
     "X-Route-Action": String(action || "")
   };
-}
-
-const mirrorUserWriteOrigin = String(import.meta.env?.VITE_USER_MIRROR_ORIGIN || "").replace(/\/+$/, "");
-const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "false").toLowerCase() === "true";
-
-function shouldMirrorUserWrite(route, action, endpoint) {
-  if (!mirrorUserWriteEnabled) return false;
-  const hash = String(route?.hash || "");
-  const roleOrUserRoute = hash.includes("admin/user") || hash.includes("admin/role");
-  if (!roleOrUserRoute) return false;
-  if (!["Add", "Edit", "Delete"].includes(action)) return false;
-  return Boolean(endpoint && (endpoint.startsWith("/api/user/") || endpoint.startsWith("/api/role/")));
-}
-
-async function mirrorUserWrite(route, action, endpoint, payload) {
-  // NOTE: After Phase 7, bev_token is HttpOnly and SameSite=Strict.
-  // Cross-origin fetch() cannot carry HttpOnly cookies — this is by design.
-  // The mirror is disabled via VITE_USER_MIRROR_ENABLED=false and should
-  // not execute in any deployed environment. This code path is a dead branch.
-  const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...requestHeaders(route, action),
-    },
-    credentials: "include",
-    body: JSON.stringify(payload || {}),
-  });
-
-  let json = null;
-  try { json = await response.json(); } catch { json = null; }
-
-  const responseCode = Number(json?.code);
-  const failedByCode = Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200;
-  if (!response.ok || failedByCode) {
-    const reason = json?.reason || json?.msg || json?.message || `HTTP ${response.status}`;
-    throw new Error(`Remote user sync failed: ${reason}`);
-  }
 }
 
 function formDataPayload(route, action, form, selectedFile) {
@@ -223,10 +183,6 @@ export async function submitRouteAction(route, action, form, options = {}) {
     throw new Error("task id is required");
   }
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
-  if (!uploadMode && shouldMirrorUserWrite(route, action, endpoint)) {
-    await mirrorUserWrite(route, action, endpoint, payload);
-  }
-
   const response = uploadMode
     ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint

@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-const migration = read('supabase/migrations/20260714120000_rename_vendor_manager_role.sql');
+const migration = read('supabase/migrations/20260717140000_rename_vendor_manager_role.sql');
 const onboarding = read('backend/wallet/src/services/vendor-onboarding.ts');
 const auth = read('backend/wallet/src/plugins/auth.ts');
 const store = read('apps/vendor/src/stores/auth.ts');

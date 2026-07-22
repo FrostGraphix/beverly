@@ -46,17 +46,10 @@
 
           <div class="mfa-qr-area">
             <img
-              v-if="qrUrl && !qrImgError"
+              v-if="qrUrl"
               :src="qrUrl"
               class="mfa-qr-img"
               alt="Scan this QR code with your authenticator app"
-              @error="qrImgError = true"
-            />
-            <img
-              v-else-if="qrFallbackUrl"
-              :src="qrFallbackUrl"
-              class="mfa-qr-img"
-              alt="Fallback QR pattern for authenticator setup"
             />
             <div v-else class="mfa-qr-placeholder" aria-hidden="true"></div>
           </div>
@@ -171,6 +164,7 @@
 
 <script>
 import { enrollMFA, verifyEnrollment, generateRecoveryCodesText } from "../services/mfa-service.mjs";
+import qrcode from "qrcode-generator";
 
 export default {
   name: "MfaSetupFlow",
@@ -185,7 +179,6 @@ export default {
       recoveryCodes: [],
       enrolling: false,
       qrError: "",
-      qrImgError: false,
       secretCopied: false,
       codesCopied: false,
       codesConfirmed: false,
@@ -193,8 +186,7 @@ export default {
       verifyRefs: [],
       verifying: false,
       verifyError: "",
-      shaking: false,
-      qrFallbackUrl: ""
+      shaking: false
     };
   },
   computed: {
@@ -202,8 +194,10 @@ export default {
     verifyCode() { return this.verifyDigits.join(""); },
     qrUrl() {
       if (!this.totpUri) return "";
-      // Public QR generation service.
-      return `https://api.qrserver.com/v1/create-qr-code/?size=176x176&format=svg&ecc=M&data=${encodeURIComponent(this.totpUri)}`;
+      const model = qrcode(0, "M");
+      model.addData(this.totpUri);
+      model.make();
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(model.createSvgTag({ cellSize: 6, margin: 4, scalable: true }))}`;
     }
   },
   watch: {
@@ -219,58 +213,17 @@ export default {
       this.step = "qr";
       this.enrolling = true;
       this.qrError = "";
-      this.qrImgError = false;
       try {
         const result = await enrollMFA();
         this.factorId = result.factorId;
         this.totpUri = result.totpUri || "";
         this.secret = result.secret || "";
         this.recoveryCodes = result.recoveryCodes || [];
-        this.qrFallbackUrl = this.generateQRFallback(this.totpUri);
       } catch (err) {
         this.qrError = err?.message || "Enrollment failed. Please try again.";
       } finally {
         this.enrolling = false;
       }
-    },
-    generateQRFallback(uri) {
-      // Fallback SVG shown if the QR image service is unavailable.
-      // Uses an explicit dark fill so it's visible on any background.
-      const size = 176;
-      const cells = 25;
-      const cellSize = size / cells;
-      let rects = "";
-
-      let hash = 0;
-      for (let i = 0; i < uri.length; i++) {
-        hash = ((hash << 5) - hash + uri.charCodeAt(i)) | 0;
-      }
-
-      for (let y = 0; y < cells; y++) {
-        for (let x = 0; x < cells; x++) {
-          const isFinderTL = x < 7 && y < 7;
-          const isFinderTR = x >= cells - 7 && y < 7;
-          const isFinderBL = x < 7 && y >= cells - 7;
-          const isFinder = isFinderTL || isFinderTR || isFinderBL;
-          let fill = false;
-
-          if (isFinder) {
-            const fx = isFinderTL ? x : isFinderTR ? x - (cells - 7) : x;
-            const fy = (isFinderTL || isFinderTR) ? y : y - (cells - 7);
-            fill = (fx === 0 || fx === 6 || fy === 0 || fy === 6) || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
-          } else {
-            const seed = (hash * (x + 1) * (y + 1)) ^ (hash >> (x % 16));
-            fill = (seed & (1 << (y % 8))) !== 0 && Math.abs(seed % 3) < 2;
-          }
-
-          if (fill) {
-            rects += `<rect x="${x * cellSize}" y="${y * cellSize}" width="${cellSize}" height="${cellSize}" fill="#111827"/>`;
-          }
-        }
-      }
-
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${rects}</svg>`;
-      return `data:image/svg+xml;base64,${btoa(svg)}`;
     },
     onVerifyInput(index, event) {
       const val = (event.target.value || "").replace(/\D/g, "").slice(-1);

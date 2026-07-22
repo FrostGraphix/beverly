@@ -19,6 +19,7 @@ const customerVerify = read('apps/customer/src/views/Verify.vue');
 const customerStore = read('apps/customer/src/stores/auth.ts');
 const customerApi = read('apps/customer/src/lib/api.ts');
 const customerFlow = read('apps/customer/src/lib/auth-flow.ts');
+const crmMfaSetup = read('src/components/MfaSetupFlow.vue');
 
 assert.match(adminLogin, /safeRedirectTarget/);
 assert.match(adminLogin, /REMEMBERED_EMAIL_KEY/);
@@ -58,5 +59,9 @@ assert.match(customerVerify, /rememberSession/);
 assert.match(customerSignup, /showPassword/);
 assert.match(customerStore, /setSession\(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = \{\}\)/);
 assert.match(customerApi, /sessionStorage\.getItem\(TOKEN_KEY\)/);
+
+assert.match(crmMfaSetup, /from "qrcode-generator"/);
+assert.doesNotMatch(crmMfaSetup, /qrserver\.com/);
+assert.doesNotMatch(crmMfaSetup, /generateQRFallback/);
 
 console.log('auth-pages-hardening: ok');

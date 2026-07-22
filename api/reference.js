@@ -71,6 +71,7 @@ const {
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
 const { refreshGatewayHealth } = require("../backend/src/services/gateway-health-service");
+const { syncReferenceRead } = require("../backend/src/services/tariff-snapshot-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -2481,52 +2482,6 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
   }
-  if (pathname === "/api/local/consumption/live-probe") {
-    const { runLiveProbe } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runLiveProbe();
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-  if (pathname === "/api/local/consumption/trigger-sync") {
-    const { runSync } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runSync(requestData.parsedBody?.stationId);
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-
-
   // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
   const methodUpper = (request.method || "GET").toUpperCase();
 
@@ -4150,9 +4105,15 @@ async function proxyLive(request, pathname, requestData) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
           logWriteEvent("response", { pathname: candidate, payload: liveResult.payload, status: liveResult.status });
         }
+        const normalizedBody = normalizeLivePayload(liveResult.payload, liveResult.status, candidate);
+        if (!isWriteRequest(candidate, request.method)) {
+          await syncReferenceRead(pathname, normalizedBody).catch((error) => {
+            console.error("[tariff-snapshot-sync]", error instanceof Error ? error.message : String(error));
+          });
+        }
         return {
           status: liveResult.status,
-          body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
+          body: normalizedBody
         };
       }
       lastFailure = {
