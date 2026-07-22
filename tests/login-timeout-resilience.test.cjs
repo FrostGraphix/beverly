@@ -11,6 +11,7 @@ const supabase = fs.readFileSync(path.join(__dirname, "../backend/src/services/s
 
 assert.match(app, /if \(pathname === "\/api\/user\/login"\) \{[\s\S]*?dispatchLocalDatabaseAction[\s\S]*?\} else \{\s*await refreshLiveWriteControl\(\)/, "Login must bypass the optional live-write flag refresh.");
 assert.match(supabase, /AbortSignal\.timeout\(supabaseRequestTimeoutMs\(\)\)/, "Supabase calls must have a bounded timeout.");
+assert.match(app, /if \(pathname\.toLowerCase\(\) === "\/api\/user\/login"\) \{\s*\/\/ Login responses contain session material and must not wait on optional persistence\.\s*void auditResult\(request, pathname, result\);\s*response\.status\(result\.status\)\.json\(result\.body\);\s*return;/, "Login must respond before optional persistence work.");
 
 const originalFetch = global.fetch;
 const previousEnv = {

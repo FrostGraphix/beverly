@@ -3943,7 +3943,9 @@ async function auditResult(request, pathname, result) {
       outcome: result.status < 400 ? "success" : "error",
       statusCode: result.status,
       proxySource: result.body?._proxy?.source || "unknown",
-      details: result.body
+      details: pathname === "/api/user/login"
+        ? { code: result.body?.code, msg: result.body?.msg, reason: result.body?.reason, _proxy: result.body?._proxy }
+        : result.body
     });
   } catch (error) {
     console.error("[audit-log]", error instanceof Error ? error.message : String(error));
@@ -4597,6 +4599,13 @@ async function handler(request, response) {
           }
         }
       }
+    }
+
+    if (pathname.toLowerCase() === "/api/user/login") {
+      // Login responses contain session material and must not wait on optional persistence.
+      void auditResult(request, pathname, result);
+      response.status(result.status).json(result.body);
+      return;
     }
 
     await cacheResponseIfNeeded(request, pathname, requestData, result);
