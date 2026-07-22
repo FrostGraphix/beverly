@@ -2,6 +2,7 @@
 
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
 const defaultLoginDomain = "org.acoblighting.com";
+const defaultRequestTimeoutMs = 5000;
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -45,9 +46,21 @@ function restHeaders(prefer) {
   return headers;
 }
 
+function supabaseRequestTimeoutMs() {
+  const value = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
+  return Number.isFinite(value) ? Math.min(15000, Math.max(1000, value)) : defaultRequestTimeoutMs;
+}
+
+function supabaseFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs())
+  });
+}
+
 async function restRequest(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/rest/v1${pathname}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
     method: options.method || "GET",
     headers: {
       ...restHeaders(options.prefer),
@@ -63,7 +76,7 @@ async function restRequest(pathname, options = {}) {
 
 async function restRequestWithResponse(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
-  const result = await readJsonResponse(await fetch(`${supabaseUrl()}/rest/v1${pathname}`, {
+  const result = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
     method: options.method || "GET",
     headers: {
       ...restHeaders(options.prefer),
@@ -153,7 +166,7 @@ async function staffActorFromAuthUser(user = {}, fallback = {}) {
 async function listAuthUsers() {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return [];
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "GET",
     headers: jsonHeaders(key)
   }));
@@ -190,7 +203,7 @@ async function signInWithPassword({ userId, password }) {
   let body;
   try {
     email = await resolveAuthEmail(userId);
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+    ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({
@@ -279,7 +292,7 @@ async function refreshAccessToken(refreshToken) {
   let response;
   let body;
   try {
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
+    ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({ refresh_token: token })
@@ -307,7 +320,7 @@ async function authUserFromAccessToken(accessToken) {
   const token = String(accessToken || "").trim();
   const key = anonKey() || serviceRoleKey();
   if (!authEnabled() || !configured() || !token || !key) return null;
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/user`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/user`, {
     method: "GET",
     headers: {
       apikey: key,
@@ -331,7 +344,7 @@ function adminEmailsFallback() {
 async function createAdminUser({ email, password }) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) throw new Error("Supabase service role is not configured");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "POST",
     headers: jsonHeaders(key),
     body: JSON.stringify({
@@ -384,7 +397,7 @@ async function createAuthUser(payload) {
       data: null
     };
   }
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "POST",
     headers: jsonHeaders(key),
     body: JSON.stringify({
@@ -447,7 +460,7 @@ async function updateAuthUser(userId, payload) {
     updateBody.password = payload.password;
   }
   
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
     method: "PUT",
     headers: jsonHeaders(key),
     body: JSON.stringify(updateBody)
@@ -462,7 +475,7 @@ async function deleteAuthUser(userId) {
   const user = await getAuthUserByUserId(userId);
   if (!user) return null; 
   
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
     method: "DELETE",
     headers: jsonHeaders(key)
   }));
@@ -475,7 +488,7 @@ async function ensureStorageBuckets(bucketNames = defaultBuckets) {
   if (!storageEnabled() || !supabaseUrl() || !key) return [];
   const results = [];
   for (const name of bucketNames) {
-    const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/bucket`, {
+    const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/bucket`, {
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({
@@ -503,7 +516,7 @@ async function storageReport() {
       buckets: []
     };
   }
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/bucket`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/bucket`, {
     method: "GET",
     headers: jsonHeaders(key)
   }));
@@ -519,7 +532,7 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   const payload = Buffer.isBuffer(content) || content instanceof Uint8Array
     ? content
     : Buffer.from(String(content || ""), "utf8");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, {
     method: "POST",
     headers: {
       apikey: key,
