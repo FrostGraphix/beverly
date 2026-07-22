@@ -186,7 +186,7 @@ export function clearSessionCookies() {
   // Fire-and-forget server call to clear HttpOnly bev_token / bev_refresh.
   // JS cannot clear HttpOnly cookies — only the server can via Set-Cookie: Max-Age=0.
   // This never throws so it does not block the local logout flow.
-  fetch("/api/auth/logout", {
+  fetchWithTimeout("/api/auth/logout", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" }
@@ -194,6 +194,24 @@ export function clearSessionCookies() {
   // Clear JS-readable display cookies synchronously.
   sessionCookieKeys.forEach(clearCookie);
   clearSessionState();
+}
+
+// Auth calls use raw fetch (not apiClient) to avoid interceptor recursion,
+// so they don't inherit apiClient's timeout. A flaky backend that accepts the
+// connection but never responds would otherwise hang refreshSession() forever,
+// which stalls the awaiting 401 interceptor and every request behind it (e.g.
+// the dashboard's Promise.all never settles → skeleton never clears). Bound them
+// so a hung refresh fails fast and the normal login redirect runs instead.
+const authFetchTimeoutMs = 12000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = authFetchTimeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Single-flight refresh: concurrent 401s share one refresh request.
@@ -215,7 +233,7 @@ export async function refreshSession() {
       // Also include the JS-readable refreshToken in the body for backward compat
       // during the cutover window before all clients have upgraded.
       const legacyRefreshToken = getCookie("refreshToken") || "";
-      const res = await fetch("/api/auth/refresh", {
+      const res = await fetchWithTimeout("/api/auth/refresh", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -227,7 +245,7 @@ export async function refreshSession() {
       const newToken = data.token || "";
       if (!newToken) return "";
       // Upgrade the new token to an HttpOnly cookie via /api/auth/session.
-      const sessionRes = await fetch("/api/auth/session", {
+      const sessionRes = await fetchWithTimeout("/api/auth/session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -295,7 +313,8 @@ export async function getApi(path, params = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.get(cleanPath, {
     params,
-    ...(options.headers ? { headers: options.headers } : {})
+    ...(options.headers ? { headers: options.headers } : {}),
+    ...(options.timeout ? { timeout: options.timeout } : {})
   });
   return validateApiEnvelope(response.data, cleanPath || "getApi");
 }
