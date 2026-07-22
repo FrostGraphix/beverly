@@ -694,6 +694,11 @@ export default {
           this.currentRoleId = response.data?.roleId || null;
           this.currentUserName = response.data?.name || response.data?.userName || null;
         }
+        this.expandedGroups = Object.fromEntries(
+          routeGroups(this.currentRoleId)
+            .filter((group) => group.routes.length > 1)
+            .map((group) => [group.name, true])
+        );
         try {
           await refreshLiveWriteStatus();
         } catch {
