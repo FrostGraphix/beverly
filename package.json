@@ -56,7 +56,7 @@
   "dependencies": {
     "@beverly/tokens": "workspace:*",
     "@sparticuz/chromium-min": "^149.0.0",
-    "axios": "^1.16.1",
+    "axios": "^1.18.1",
     "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
     "pg": "^8.16.3",
