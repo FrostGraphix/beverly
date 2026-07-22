@@ -47,6 +47,10 @@ function runAudit(writeArtifact = true) {
   const profilePage = read("src/components/ProfilePage.vue");
   const apiService = read("src/services/api.js");
   const supabaseService = read("backend/src/services/supabase-service.js");
+  const seedMeterAggregates = read("tools/seed-meter-aggregates.mjs");
+  const receiptTools = read("src/services/receipt-tools.mjs");
+  const receiptPdf = read("api/receipt-pdf.js");
+  const mfaSetup = read("src/components/MfaSetupFlow.vue");
 
   const checks = [
     check(
@@ -119,6 +123,34 @@ function runAudit(writeArtifact = true) {
         architecture.includes("Offline demo mode is default"),
       "Live upstream defaults are env-only and local mode is default.",
       ["api/reference.js", "ARCHITECTURE.md"]
+    ),
+    check(
+      "service-credentials-env-only",
+      seedMeterAggregates.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
+        !/eyJ[A-Za-z0-9_-]{20,}\./.test(seedMeterAggregates),
+      "Service credentials are loaded from environment variables.",
+      ["tools/seed-meter-aggregates.mjs", ".env.example"]
+    ),
+    check(
+      "receipt-export-self-contained",
+      !receiptTools.includes("cdnjs.cloudflare.com") &&
+        !receiptTools.includes("script.src"),
+      "Receipt export does not load executable code from third parties.",
+      ["src/services/receipt-tools.mjs", "vercel.json"]
+    ),
+    check(
+      "receipt-chromium-env-only",
+      receiptPdf.includes("process.env.RECEIPT_PDF_CHROMIUM_PACK_URL") &&
+        !receiptPdf.includes("github.com/Sparticuz/chromium/releases"),
+      "Receipt Chromium assets are configured outside code.",
+      ["api/receipt-pdf.js", ".env.example"]
+    ),
+    check(
+      "mfa-qr-generated-locally",
+      mfaSetup.includes('from "qrcode-generator"') &&
+        !mfaSetup.includes("qrserver.com"),
+      "MFA enrollment secrets never reach a third-party QR service.",
+      ["src/components/MfaSetupFlow.vue", "package.json"]
     ),
     check(
       "persistence-strategy",

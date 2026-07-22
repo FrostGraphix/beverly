@@ -15,8 +15,7 @@ const { authUserFromAccessToken } = require("../backend/src/services/supabase-se
 
 const MAX_FIELDS = 60;
 const MAX_STRING = 500;
-const CHROMIUM_PACK_URL = process.env.RECEIPT_PDF_CHROMIUM_PACK_URL
-  || "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
+const CHROMIUM_PACK_URL = String(process.env.RECEIPT_PDF_CHROMIUM_PACK_URL || "").trim();
 
 function cookieValue(request, name) {
   const cookieHeader = String(request?.headers?.cookie || "");
@@ -75,6 +74,7 @@ async function readJsonBody(request) {
 }
 
 async function renderReceiptPdf(html) {
+  if (!CHROMIUM_PACK_URL) throw new Error("RECEIPT_PDF_CHROMIUM_PACK_URL is required");
   const puppeteer = require("puppeteer-core");
   const chromium = require("@sparticuz/chromium-min");
 

@@ -15,9 +15,16 @@
  */
 
 import https from "https";
+import { createRequire } from "node:module";
 
-const SUPABASE_URL  = "https://qpoipyqgrjsjdvfqmxok.supabase.co";
-const SERVICE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2lweXFncmpzamR2ZnFteG9rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODczMDQ5MCwiZXhwIjoyMDg0MzA2NDkwfQ.IFafEGSJw6CV39f14Wpuoc2dnl5a0UV1qVAfJRu8NO8";
+const require = createRequire(import.meta.url);
+require("./env-loader.cjs").loadEnvFile();
+
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+const SERVICE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+}
 const STATIONS      = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
 const PAGE_SIZE     = 1000;
 const UPSERT_BATCH  = 500;
