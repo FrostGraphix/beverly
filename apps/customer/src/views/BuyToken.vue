@@ -90,8 +90,23 @@ onMounted(async () => {
     meters.value = m.meters;
     walletBal.value = w?.available_minor ?? 0;
     if (meters.value.length === 1) selMeter.value = meters.value[0];
-    if (new URLSearchParams(window.location.search).get('paid') === '1') {
-        notice.value = { tone: 'info', title: 'Payment received', message: 'Token delivery will complete after Paystack confirmation.' };
+    const query = new URLSearchParams(window.location.search);
+    const reference = query.get('reference') ?? query.get('trxref');
+    if (reference) {
+        try {
+            const payment = await api.post<{ status: string; fulfillmentStatus: string }>(
+                `/api/v1/customer/payments/${encodeURIComponent(reference)}/verify`,
+            );
+            if (payment.status === 'succeeded' && ['fulfilled', 'already_fulfilled'].includes(payment.fulfillmentStatus)) {
+                notice.value = { tone: 'success', title: 'Payment confirmed', message: 'Your token is ready in Transactions and Receipts.' };
+            } else if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
+                notice.value = { tone: 'danger', title: 'Delivery needs review', message: 'Payment was confirmed, but token delivery needs support review. Do not pay again.' };
+            } else {
+                notice.value = { tone: 'info', title: 'Payment processing', message: 'Your token will be delivered automatically after confirmation.' };
+            }
+        } catch (e: any) {
+            notice.value = { tone: 'danger', title: 'Verification delayed', message: e?.message ?? 'Automatic reconciliation is still running.' };
+        }
     }
 });
 
@@ -123,7 +138,6 @@ async function purchase() {
         amount_minor:    amountMinor.value,
         mode:            mode.value as 'wallet' | 'direct_pay',
         idempotency_key: crypto.randomUUID(),
-        callback_url:    `${window.location.origin}/buy-token?paid=1`,
     };
     try {
         const r = await api.post<any>('/api/v1/customer/purchase', params);

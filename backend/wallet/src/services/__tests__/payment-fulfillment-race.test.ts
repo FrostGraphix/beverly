@@ -78,7 +78,9 @@ vi.mock('../../db/supabase.js', () => ({
 vi.mock('../../adapters/paystack.js', () => ({
     verifyTransaction: async (reference: string) => ({
         status: reference.includes('pending') ? 'pending' : 'success',
+        reference: reference.includes('wrong-reference') ? 'different-reference' : reference,
         amount: 500_00,
+        currency: reference.includes('wrong-currency') ? 'USD' : 'NGN',
         channel: 'card',
         paid_at: '2026-07-15T10:00:00.000Z',
         authorization: null,
@@ -179,6 +181,22 @@ describe('paystack fulfillment race safety', () => {
         expect(result.status).toBe('blocked');
         expect(result.reason).toBe('payment_amount_mismatch');
         expect(store.ledgerKeys.size).toBe(0);
+        expect(store.txs['tx-1'].status).toBe('requires_review');
+        expect(store.txs['tx-1'].metadata?.fulfillment_completed_at).toBeUndefined();
+    });
+
+    it('blocks on reference mismatch without touching the ledger', async () => {
+        store.txs['tx-1'].gateway_reference = 'ref-wrong-reference';
+        const result = await processPaystackChargeSuccess('ref-wrong-reference', 'webhook');
+        expect(result).toEqual({ status: 'blocked', reason: 'payment_reference_mismatch' });
+        expect(store.ledgerKeys.size).toBe(0);
+    });
+
+    it('blocks non-NGN payments without touching the ledger', async () => {
+        store.txs['tx-1'].gateway_reference = 'ref-wrong-currency';
+        const result = await processPaystackChargeSuccess('ref-wrong-currency', 'webhook');
+        expect(result).toEqual({ status: 'blocked', reason: 'payment_currency_mismatch' });
+        expect(store.ledgerKeys.size).toBe(0);
     });
 
     it('ignores webhooks whose gateway verification is not success', async () => {
@@ -195,5 +213,30 @@ describe('paystack fulfillment race safety', () => {
         expect(result.reason).toBe('wallet_inactive');
         expect(store.ledgerKeys.size).toBe(0);
         expect(store.txs['tx-1'].metadata?.fulfillment_blocked).toBe(true);
+        expect(store.txs['tx-1'].status).toBe('requires_review');
+    });
+
+    it('blocks when the customer funding target is missing', async () => {
+        delete store.txs['tx-1'].metadata.wallet_id;
+        const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
+        expect(result).toEqual({ status: 'blocked', reason: 'wallet_target_missing' });
+        expect(store.ledgerKeys.size).toBe(0);
+        expect(store.txs['tx-1'].status).toBe('requires_review');
+    });
+
+    it('blocks when the target wallet belongs to another customer', async () => {
+        store.wallets['wallet-1'].owner_id = 'cust-other';
+        const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
+        expect(result).toEqual({ status: 'blocked', reason: 'wallet_owner_mismatch' });
+        expect(store.ledgerKeys.size).toBe(0);
+        expect(store.txs['tx-1'].status).toBe('requires_review');
+    });
+
+    it('blocks unsupported payment targets instead of silently succeeding', async () => {
+        store.txs['tx-1'].purpose = 'unknown';
+        const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
+        expect(result).toEqual({ status: 'blocked', reason: 'unsupported_payment_target' });
+        expect(store.ledgerKeys.size).toBe(0);
+        expect(store.txs['tx-1'].status).toBe('requires_review');
     });
 });

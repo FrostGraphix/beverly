@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 
 const BASE = 'https://api.paystack.co';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 interface PaystackOk<T> { status: true; message: string; data: T; }
 interface PaystackErr { status: false; message: string; }
@@ -24,15 +25,16 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
     }
     const res = await fetch(`${BASE}${path}`, {
         ...init,
+        signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: {
             Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}`,
             'Content-Type': 'application/json',
             ...(init.headers ?? {}),
         },
     });
-    const json = (await res.json()) as PaystackResp<T>;
-    if (!json.status) {
-        throw new Error(`paystack: ${json.message}`);
+    const json = (await res.json().catch(() => null)) as PaystackResp<T> | null;
+    if (!res.ok || !json?.status) {
+        throw new Error(`paystack: ${json?.message ?? `HTTP ${res.status}`}`);
     }
     return json.data;
 }
@@ -53,6 +55,9 @@ export interface InitResult {
 }
 
 export async function initializeTransaction(opts: InitOptions): Promise<InitResult> {
+    if (!Number.isSafeInteger(opts.amountMinor) || opts.amountMinor <= 0) {
+        throw new Error('paystack: amount must be a positive integer in kobo');
+    }
     return call<InitResult>('/transaction/initialize', {
         method: 'POST',
         body: JSON.stringify({
@@ -91,9 +96,9 @@ export async function verifyTransaction(reference: string): Promise<VerifyResult
 }
 
 export function verifyWebhookSignature(rawBody: Buffer | string, signature: string | undefined): boolean {
-    if (!signature || !env.PAYSTACK_WEBHOOK_SECRET) return false;
+    if (!signature || !env.PAYSTACK_SECRET_KEY) return false;
     const computed = crypto
-        .createHmac('sha512', env.PAYSTACK_WEBHOOK_SECRET)
+        .createHmac('sha512', env.PAYSTACK_SECRET_KEY)
         .update(typeof rawBody === 'string' ? rawBody : rawBody)
         .digest('hex');
     const expected = Buffer.from(computed, 'utf8');

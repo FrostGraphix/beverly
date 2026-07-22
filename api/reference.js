@@ -892,6 +892,43 @@ function cronQuery(urlValue) {
   }
 }
 
+const walletMaintenanceTasks = new Set([
+  "holds",
+  "payments",
+  "stuck-purchases",
+  "remote-send",
+  "reconciliation",
+  "settlement",
+  "fraud-baseline",
+  "refund-expiry",
+  "webhook-retention"
+]);
+
+async function runWalletMaintenance(task) {
+  const scheduler = await import("../backend/wallet/dist/jobs/scheduler.js");
+  switch (task) {
+    case "holds": return scheduler.sweepExpiredHolds();
+    case "payments": return scheduler.sweepPendingPayments();
+    case "stuck-purchases": return scheduler.scanStuckPurchases();
+    case "remote-send": return scheduler.reconcileRemoteSends();
+    case "fraud-baseline": return scheduler.recomputeFraudBaselines();
+    case "refund-expiry": return scheduler.processRefundExpiry();
+    case "reconciliation": {
+      const service = await import("../backend/wallet/dist/services/reconciliation.js");
+      return service.runDailyReconciliation();
+    }
+    case "settlement": {
+      const service = await import("../backend/wallet/dist/services/settlement.js");
+      return service.runDailySettlement();
+    }
+    case "webhook-retention": {
+      const service = await import("../backend/wallet/dist/services/webhook-retention.js");
+      return service.purgeExpiredWebhookPayloads();
+    }
+    default: throw new Error("Unknown wallet maintenance task");
+  }
+}
+
 function refreshScopeFromPath(pathname) {
   if (pathname.endsWith("/refresh-hourly")) return "hourly";
   if (pathname.endsWith("/refresh-daily")) return "daily";
@@ -2146,6 +2183,30 @@ async function handleOemManagementRequest(request, pathname, requestData) {
 }
 
 async function dispatchLocalDatabaseAction(request, pathname, requestData) {
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/wallet-maintenance") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const task = String(cronQuery(request.url).task || "");
+    if (!walletMaintenanceTasks.has(task)) {
+      return {
+        status: 400,
+        body: { error: "invalid_wallet_maintenance_task", message: "Unknown wallet maintenance task." }
+      };
+    }
+    await runWalletMaintenance(task);
+    return localJobResponse({ ok: true, task });
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname.startsWith("/api/cron/refresh")) {
     if (!cronAuthorized(request)) {
       return {
@@ -4142,7 +4203,7 @@ async function proxyCanonicalWallet(request, pathname, requestData) {
 
   const axios = require("axios");
   const headers = {};
-  for (const name of ["authorization", "content-type", "idempotency-key", "x-correlation-id", "user-agent"]) {
+  for (const name of ["authorization", "content-type", "idempotency-key", "x-correlation-id", "x-paystack-signature", "user-agent"]) {
     const value = request.headers[name];
     if (typeof value === "string" && value) headers[name] = value;
   }
@@ -4210,11 +4271,6 @@ async function handler(request, response) {
     }
     const pathname = normalizeRequestPath(request.url);
     if (isCanonicalWalletRequest(pathname)) {
-      const sessionFailure = enforceCrmSession(request, response, Date.now(), true);
-      if (sessionFailure) {
-        response.status(sessionFailure.status).json(sessionFailure.body);
-        return;
-      }
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
       response.status(canonicalResult.status).json(canonicalResult.body);

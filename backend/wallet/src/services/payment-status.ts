@@ -3,6 +3,7 @@ export const PAYMENT_STATUS = {
     PENDING: 'pending',
     SUCCEEDED: 'succeeded',
     LEGACY_SUCCESS: 'success',
+    REQUIRES_REVIEW: 'requires_review',
     FAILED: 'failed',
 } as const;
 

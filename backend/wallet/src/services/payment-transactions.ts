@@ -5,12 +5,12 @@ import { postEntry } from './ledger.js';
 import { logAction } from './audit.js';
 import { sendTokenSmsToCustomer } from './customer-purchase.js';
 import { notifyTokenPurchased, notifyWalletFunded } from './notifications.js';
-import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
+import { assertWalletCanTransact, findWalletByOwner, type Wallet } from './wallets.js';
 import { PAYMENT_STATUS, PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
 
 type PaymentTransaction = Record<string, any>;
 
-export type PaystackFulfillmentSource = 'webhook' | 'scheduler';
+export type PaystackFulfillmentSource = 'webhook' | 'scheduler' | 'callback';
 
 export interface PaystackFulfillmentResult {
     status: 'fulfilled' | 'already_fulfilled' | 'blocked';
@@ -26,22 +26,23 @@ function sourceActor(source: PaystackFulfillmentSource) {
     return source === 'webhook' ? 'webhook' : 'system';
 }
 
-async function findWalletById(walletId: string) {
+async function findWalletById(walletId: string): Promise<Wallet | null> {
     const { data, error } = await adminClient
         .from('wallets')
         .select('id, owner_type, owner_id, currency, status, daily_debit_cap_minor, monthly_debit_cap_minor, created_at')
         .eq('id', walletId)
         .maybeSingle();
     if (error) throw error;
-    return data as any;
+    return (data as Wallet | null) ?? null;
 }
 
 async function ledgerEntryExists(idempotencyKey: string): Promise<boolean> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('wallet_ledger_entries')
         .select('id')
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
+    if (error) throw error;
     return Boolean(data);
 }
 
@@ -91,18 +92,20 @@ async function blockSuccessfulPaymentFulfillment(
     tx: PaymentTransaction,
     verified: VerifyResult,
     source: PaystackFulfillmentSource,
-    error: any,
+    error: { code?: string },
 ): Promise<PaystackFulfillmentResult> {
     const code = error?.code ?? 'wallet_inactive';
     const prefix = code === 'payment_amount_mismatch'
         ? 'paystack_amount_mismatch'
-        : 'wallet_inactive_on_paystack_success';
+        : code.startsWith('payment_')
+            ? 'paystack_verification_mismatch'
+            : 'wallet_inactive_on_paystack_success';
     const blockedAt = new Date().toISOString();
 
     if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
         const purchaseOrderId = tx.metadata?.purchase_order_id;
         if (purchaseOrderId) {
-            await adminClient
+            const { error: purchaseUpdateError } = await adminClient
                 .from('purchase_orders')
                 .update({
                     status: 'delivery_pending_review',
@@ -110,13 +113,14 @@ async function blockSuccessfulPaymentFulfillment(
                     delivery_state: 'wallet_state_blocked_needs_review',
                 })
                 .eq('id', purchaseOrderId);
+            if (purchaseUpdateError) throw purchaseUpdateError;
         }
     }
 
     if (tx.purpose === 'wallet_funding' && tx.actor_type === 'vendor') {
         const fundingRequestId = tx.metadata?.funding_request_id;
         if (fundingRequestId) {
-            await adminClient
+            const { error: fundingUpdateError } = await adminClient
                 .from('funding_requests')
                 .update({
                     status: 'under_review',
@@ -124,15 +128,30 @@ async function blockSuccessfulPaymentFulfillment(
                 })
                 .eq('id', fundingRequestId)
                 .in('status', ['initiated', 'proof_uploaded']);
+            if (fundingUpdateError) throw fundingUpdateError;
         }
     }
 
-    await markPaymentSucceeded(tx, verified, source, {
-        fulfillment_blocked: true,
-        fulfillment_blocked_reason: code,
-        fulfillment_blocked_at: blockedAt,
-        requires_ops_review: true,
-    });
+    const { error: paymentUpdateError } = await adminClient
+        .from('payment_transactions')
+        .update({
+            status: PAYMENT_STATUS.REQUIRES_REVIEW,
+            completed_at: verified.paid_at ?? blockedAt,
+            channel: verified.channel,
+            metadata: verifiedMetadata(tx, verified, source, {
+                fulfillment_blocked: true,
+                fulfillment_blocked_reason: code,
+                fulfillment_blocked_at: blockedAt,
+                requires_ops_review: true,
+            }),
+            updated_at: blockedAt,
+            fulfillment_claimed_at: null,
+            fulfillment_lease_token: null,
+            fulfillment_last_error: code,
+            fulfillment_next_retry_at: null,
+        })
+        .eq('id', tx.id);
+    if (paymentUpdateError) throw paymentUpdateError;
     await logAction({
         actorUserId: null,
         actorType: sourceActor(source),
@@ -150,14 +169,19 @@ async function fulfillVendorFunding(
     source: PaystackFulfillmentSource,
 ): Promise<FulfillmentStepResult> {
     const fundingId = tx.metadata?.funding_request_id as string | undefined;
-    if (!fundingId) return {};
+    if (!fundingId) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'funding_request_missing' }) };
+    }
 
-    const { data: fr } = await adminClient
+    const { data: fr, error: fundingLookupError } = await adminClient
         .from('funding_requests')
         .select('*')
         .eq('id', fundingId)
         .maybeSingle();
-    if (!fr) return {};
+    if (fundingLookupError) throw fundingLookupError;
+    if (!fr) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'funding_request_missing' }) };
+    }
     if (Number((fr as any).amount_minor) !== Number(tx.amount_minor)) {
         return {
             blocked: await blockSuccessfulPaymentFulfillment(
@@ -177,10 +201,11 @@ async function fulfillVendorFunding(
     }
 
     if (wallet.id !== (fr as any).wallet_id) {
-        await adminClient
+        const { error: walletUpdateError } = await adminClient
             .from('funding_requests')
             .update({ wallet_id: wallet.id })
             .eq('id', (fr as any).id);
+        if (walletUpdateError) throw walletUpdateError;
     }
 
     await postEntry({
@@ -195,13 +220,14 @@ async function fulfillVendorFunding(
         createdBy: (fr as any).submitted_by,
         audit: { actorType: sourceActor(source) },
     });
-    await adminClient
+    const { error: fundingApprovalError } = await adminClient
         .from('funding_requests')
         .update({
             status: 'approved',
             approved_at: new Date().toISOString(),
         })
         .eq('id', (fr as any).id);
+    if (fundingApprovalError) throw fundingApprovalError;
     return {};
 }
 
@@ -211,13 +237,18 @@ async function fulfillCustomerWalletFunding(
     source: PaystackFulfillmentSource,
 ): Promise<FulfillmentStepResult> {
     const walletId = tx.metadata?.wallet_id as string | undefined;
-    if (!walletId) return {};
+    if (!walletId) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'wallet_target_missing' }) };
+    }
 
     const wallet = await findWalletById(walletId);
     try {
         assertWalletCanTransact(wallet, 'receive funding');
     } catch (error: any) {
         return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, error) };
+    }
+    if (wallet.owner_type !== 'customer' || wallet.owner_id !== tx.actor_id) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'wallet_owner_mismatch' }) };
     }
 
     const idempotencyKey = `customer_fund.${tx.id}.paystack.credit`;
@@ -251,14 +282,23 @@ async function fulfillCustomerTokenPurchase(
     source: PaystackFulfillmentSource,
 ): Promise<FulfillmentStepResult> {
     const purchaseOrderId = tx.metadata?.purchase_order_id as string | undefined;
-    if (!purchaseOrderId) return {};
+    if (!purchaseOrderId) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'purchase_order_missing' }) };
+    }
 
-    const { data: po } = await adminClient
+    const { data: po, error: purchaseLookupError } = await adminClient
         .from('purchase_orders')
         .select('*')
         .eq('id', purchaseOrderId)
         .maybeSingle();
-    if (!po || ['delivered', 'failed'].includes((po as any).status)) return {};
+    if (purchaseLookupError) throw purchaseLookupError;
+    if (!po) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'purchase_order_missing' }) };
+    }
+    if ((po as any).status === 'failed') {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'purchase_order_failed' }) };
+    }
+    if ((po as any).status === 'delivered') return {};
     if (Number((po as any).amount_minor) !== Number(tx.amount_minor)) {
         return {
             blocked: await blockSuccessfulPaymentFulfillment(
@@ -316,7 +356,7 @@ async function fulfillCustomerTokenPurchase(
                 purchaseMode: 'direct_pay',
             },
         });
-        await adminClient
+        const { error: deliveryUpdateError } = await adminClient
             .from('purchase_orders')
             .update({
                 token: tokenRes.token,
@@ -326,6 +366,7 @@ async function fulfillCustomerTokenPurchase(
                 delivery_state: 'token_generated',
             })
             .eq('id', purchaseOrderId);
+        if (deliveryUpdateError) throw deliveryUpdateError;
 
         try {
             await sendTokenSmsToCustomer({
@@ -354,8 +395,7 @@ async function fulfillCustomerTokenPurchase(
             token: tokenRes.token,
         }).catch(() => undefined);
     } catch (error: any) {
-        const now = new Date().toISOString();
-        await adminClient
+        const { error: reviewUpdateError } = await adminClient
             .from('purchase_orders')
             .update({
                 token: issuedToken ?? undefined,
@@ -363,12 +403,11 @@ async function fulfillCustomerTokenPurchase(
                 failure_reason: `direct_pay_token_failed: ${error.message}`.slice(0, 500),
             })
             .eq('id', purchaseOrderId);
+        if (reviewUpdateError) throw reviewUpdateError;
         return {
-            metadata: {
-                requires_ops_review: true,
-                token_delivery_pending_review_at: now,
-                token_delivery_error: (error?.message ?? 'direct_pay_token_failed').slice(0, 500),
-            },
+            blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, {
+                code: issuedToken ? 'token_delivery_record_failed' : 'token_delivery_failed',
+            }),
         };
     }
     return {};
@@ -420,6 +459,12 @@ async function fulfillClaimedPaystackTransaction(input: {
             { code: 'payment_amount_mismatch' },
         );
     }
+    if (verified.reference !== tx.gateway_reference) {
+        return blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'payment_reference_mismatch' });
+    }
+    if (String(verified.currency ?? '').toUpperCase() !== 'NGN') {
+        return blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'payment_currency_mismatch' });
+    }
 
     let extraMetadata: Record<string, unknown> = {};
     if (tx.purpose === 'wallet_funding' && tx.actor_type === 'vendor') {
@@ -434,6 +479,8 @@ async function fulfillClaimedPaystackTransaction(input: {
         const result = await fulfillCustomerTokenPurchase(tx, verified, source);
         if (result.blocked) return result.blocked;
         extraMetadata = result.metadata ?? {};
+    } else {
+        return blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'unsupported_payment_target' });
     }
 
     await markPaymentSucceeded(tx, verified, source, extraMetadata);

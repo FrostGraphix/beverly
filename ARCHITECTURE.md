@@ -68,6 +68,7 @@ Keep write safety strict.
 - `backend/wallet/src/services/audit.ts` owns structured wallet audit events.
 - `backend/wallet/src/services/payment-transactions.ts` owns Paystack success fulfillment and legacy status compatibility.
 - `backend/wallet/src/services/payment-webhooks.ts` owns verified Paystack webhook reconciliation.
+- Authenticated customer/vendor Paystack callback verification reuses the same idempotent fulfillment service as webhooks and reconciliation.
 - `backend/wallet/src/services/dev-console.ts` owns admin developer console data contracts.
 - `LIVE_BEARER_TOKEN` has priority over client auth.
 - `CORS_ORIGINS` controls CORS.
@@ -181,6 +182,8 @@ Keep write safety strict.
 - Wallet endpoints use lowercase `/api/wallet/*`.
 - Vendor endpoints use lowercase `/api/vendor/*`.
 - Material wallet writes accept idempotency keys.
+- Paystack callbacks are built from trusted server-side portal URLs; browser-supplied callback URLs are ignored.
+- Paystack value delivery requires verified success, local ownership, exact reference, exact amount, and NGN currency.
 - Wallet responses include stable status fields.
 
 ## Roles
@@ -194,9 +197,9 @@ Keep write safety strict.
 - Vercel serves the SPA.
 - Vercel functions serve `/api/*`.
 - Large XLSX responses stream directly.
-- Wallet Fastify runs separately.
-- Wallet workers run separately.
-- `WALLET_API_BASE_URL` selects Fastify.
+- Vercel hosts the bundled wallet Fastify service with `WALLET_API_BASE_URL=internal`.
+- Supabase Cron invokes `/api/cron/wallet-maintenance` with the shared `CRON_SECRET` for payment recovery and scheduled wallet maintenance.
+- Supabase Vault stores the maintenance endpoint URL and bearer secret; production does not require an always-on worker or Redis.
 - `DEV_CONSOLE_ENABLED` is disabled by default; production developer routes always return `404`.
 - Vercel preview never enables money writes.
 - `npm run build` is the build gate.

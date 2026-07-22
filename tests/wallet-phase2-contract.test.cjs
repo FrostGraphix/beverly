@@ -23,6 +23,6 @@ assert(!vendorRoutes.includes("Date.now()}-${Math.random()}"), "vendor vending m
 assert(adminRoutes.includes("requireIdempotencyKey(req, reply)"), "staff meter orders must require request keys");
 assert(webhookRoutes.includes("payload_digest"), "webhooks must persist a payload digest");
 assert(webhookRoutes.includes("duplicate: true"), "duplicate webhooks must acknowledge safely");
-assert(worker.includes("new Worker('maintenance'"), "maintenance must run in a durable worker");
+assert(fs.readFileSync(path.join(root, "api", "reference.js"), "utf8").includes("/api/cron/wallet-maintenance"), "maintenance must expose the secured serverless scheduler endpoint");
 
 console.log(JSON.stringify({ status: "wallet phase 2 contracts passed" }, null, 2));

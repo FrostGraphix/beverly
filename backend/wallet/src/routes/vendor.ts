@@ -6,6 +6,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
+import { env } from '../config/env.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries } from '../services/ledger.js';
 import {
@@ -27,6 +28,7 @@ import {
 } from '../services/token-engine.js';
 import { logSecurityEvent } from '../services/audit.js';
 import { logAction } from '../services/audit.js';
+import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
 import {
     createTicket, listTickets, getTicket, addTicketMessage,
@@ -53,7 +55,13 @@ import {
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { createVendorSponsoredMeterOrder } from '../services/meter-orders.js';
-import { assertClientIdempotencyKey } from '../services/idempotency.js';
+import {
+    abandonWalletIdempotency,
+    assertClientIdempotencyKey,
+    claimWalletIdempotency,
+    completeWalletIdempotency,
+    hashIdempotency,
+} from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
 
 function bearerToken(req: FastifyRequest): string {
@@ -714,21 +722,43 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── funding: initiate Paystack ──
     fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const orgId = req.actor!.vendorOrganizationId!;
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return;
         const schema = z.object({
-            amountMinor: z.number().int().min(50000),
-            callbackUrl: z.string().url().optional(),
+            amountMinor: z.number().int().min(50_000).max(1_000_000_000),
         });
         const body = schema.parse(req.body);
+        const scope = `vendor.funding.paystack.${orgId}`;
+        const fingerprint = hashIdempotency([orgId, body.amountMinor]);
+        let claim;
+        try {
+            claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Could not claim idempotency key.';
+            if (/idempotency key payload mismatch/i.test(message)) {
+                return reply.code(409).send({ error: 'idempotency_payload_mismatch', message });
+            }
+            throw error;
+        }
+        if (claim.state === 'replay') return claim.responsePayload;
+        if (claim.state === 'pending') {
+            return reply.code(409).send({ error: 'idempotency_in_progress', message: 'This payment request is still initializing.' });
+        }
         try {
             const email = req.actor!.email?.trim() ?? '';
-            return await initiatePaystackFunding({
+            const result = await initiatePaystackFunding({
                 vendorOrganizationId: orgId,
                 amountMinor: body.amountMinor,
                 submittedBy: req.actor!.userId,
                 email,
-                callbackUrl: body.callbackUrl,
+                callbackUrl: `${env.VENDOR_PORTAL_URL.replace(/\/+$/, '')}/wallet/fund?payment=return`,
             });
+            await completeWalletIdempotency(scope, idempotencyKey, result).catch((error) => {
+                req.log.error({ error, scope }, 'Paystack initialization idempotency completion failed');
+            });
+            return result;
         } catch (e: any) {
+            await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
             if (e instanceof FundingError) {
                 return reply.code(['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(e.code) ? 403 : 422)
                     .send({ error: e.code, message: e.message });
@@ -738,6 +768,19 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── funding: bank transfer proof ──
+    fastify.post('/payments/:reference/verify', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const { reference } = z.object({
+            reference: z.string().min(1).max(100).regex(/^[A-Za-z0-9.=-]+$/),
+        }).parse(req.params);
+        const result = await verifyOwnedPaystackPayment({
+            reference,
+            actorType: 'vendor',
+            actorId: req.actor!.vendorOrganizationId!,
+        });
+        if (!result) return reply.code(404).send({ error: 'payment_not_found', message: 'Payment was not found.' });
+        return result;
+    });
+
     fastify.post('/funding/bank-transfer', {
         preHandler: fastify.requireVendor(),
         bodyLimit: 12 * 1024 * 1024,
