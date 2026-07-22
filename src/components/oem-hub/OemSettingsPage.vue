@@ -62,7 +62,7 @@
         </div>
         <div class="oem-settings__field">
           <label class="bw-label" for="cred-baseurl">Base URL</label>
-          <input id="cred-baseurl" v-model="credForm.baseUrl" class="bw-input" type="text" placeholder="http://8.208.16.168:9310" />
+          <input id="cred-baseurl" v-model="credForm.baseUrl" class="bw-input" type="text" placeholder="Enter API base URL" />
         </div>
         <div class="oem-settings__field">
           <label class="bw-label" for="cred-token">{{ credForm.authStrategy === "api_key_header" ? "API key" : "Bearer token" }}</label>

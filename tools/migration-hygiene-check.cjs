@@ -17,7 +17,6 @@ const grandfathered = new Set([
   "20260708_vapt_security_remediation.sql",
   "20260709_vapt_phase2_hardening.sql",
   "20260714120000_notifications_legacy_compatibility.sql",
-  "20260714120000_rename_vendor_manager_role.sql",
   "20260518100000_meter_purchase_orders.sql",
   "20260518110000_fraud_risk_engine.sql",
   "20260518120000_operations_hardening.sql",

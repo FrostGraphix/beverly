@@ -2482,52 +2482,6 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
   }
-  if (pathname === "/api/local/consumption/live-probe") {
-    const { runLiveProbe } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runLiveProbe();
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-  if (pathname === "/api/local/consumption/trigger-sync") {
-    const { runSync } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runSync(requestData.parsedBody?.stationId);
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-
-
   // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
   const methodUpper = (request.method || "GET").toUpperCase();
 

@@ -41,9 +41,9 @@ assert.match(
 assert.match(adminApi, /function unwrapEnvelope<T>\(json: any\): T/, "admin API client must unwrap Vercel facade envelopes");
 assert.match(adminApi, /function adminBasePath\(\): string/, "admin API redirects must be base-path aware");
 assert.match(adminApi, /appUrl\('\/login'\)/, "admin auth redirects must stay inside the mounted admin app");
-assert.match(adminShell, /https:\/\/acob-beverly\.vercel\.app/, "admin CRM backlinks must use the hosted Beverly CRM domain");
-assert.match(vendorCreate, /https:\/\/acob-beverly\.vercel\.app\/wallet-vendor\//, "vendor onboarding next-step link must use hosted vendor wallet");
-assert.match(legacyVendorAuth, /https:\/\/acob-beverly\.vercel\.app\/#\/login/, "legacy wallet auth backlink must use hosted CRM login");
+assert.match(adminShell, /import\.meta\.env\.VITE_CRM_URL \?\? defaultCrmBaseUrl/, "admin CRM backlinks must be configurable");
+assert.match(vendorCreate, /import\.meta\.env\.VITE_CRM_URL \|\| window\.location\.origin/, "vendor onboarding links must use the current deployment by default");
+assert.match(legacyVendorAuth, /href="\/#\/login"/, "legacy wallet auth backlinks must stay same-origin");
 
 console.log(JSON.stringify({
   status: "admin app cors contract passed",

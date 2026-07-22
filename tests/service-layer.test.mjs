@@ -80,8 +80,14 @@ const creditTokenRecordRoute = {
   columns: ["Receipt Id", "Customer Id", "Meter Id", "Actions"]
 };
 const creditTokenGenerateRoute = routeManifest.find((route) => route.hash === "#/token-generate/credit-token");
+const clearTamperRecordRoute = routeManifest.find((route) => route.hash === "#/token-record/clear-tamper-token-record");
+const maximumPowerRecordRoute = routeManifest.find((route) => route.hash === "#/token-record/set-maximum-power-limit-token-record");
 
 assert.strictEqual(actionEndpoint(creditTokenRecordRoute, "Cancel"), "/api/token/creditTokenRecord/cancel");
+assert.strictEqual(clearTamperRecordRoute.actions.includes("Cancel"), false);
+assert.strictEqual(maximumPowerRecordRoute.actions.includes("Cancel"), false);
+assert.strictEqual(actionEndpoint(clearTamperRecordRoute, "Cancel"), "");
+assert.strictEqual(actionEndpoint(maximumPowerRecordRoute, "Cancel"), "");
 assert(managementFields(manifestUserRoute, "Add").some((field) => field.name === "status" && field.type === "select"));
 assert.strictEqual(managementFormSeed(manifestUserRoute, "Add", {}).status, "true");
 assert.strictEqual(managementFormSeed(manifestUserRoute, "Edit", { status: false }).status, "false");

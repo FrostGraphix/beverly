@@ -153,7 +153,7 @@ const navIconPath: Record<string, string> = {
 
 const defaultCrmBaseUrl = import.meta.env.DEV
     ? `${window.location.protocol}//${window.location.hostname}:9311`
-    : 'https://acob-beverly.vercel.app';
+    : window.location.origin;
 
 function toCrmUrl(baseUrl: string) {
     const [urlWithoutHash] = baseUrl.split('#');
