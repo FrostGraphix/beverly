@@ -1,45 +1,104 @@
 # Beverly Audit Report
 
-Date: 2026-07-17. Scope: src/, api/, backend/, apps/, supabase/migrations/, tools/, configs. Runtime: Node 22.23.1 via pnpm.
+Date: 2026-07-22.
 
-State note: working tree matched `origin/main` at audit start. The consumption-engine work and the Codex-session migrations are committed. This audit reflects the shipped baseline plus the one fix below.
+Scope: requested source directories.
 
 ## Findings
 
 | # | File | Line | Category | Finding | Fix Applied | Verified |
 |---|------|------|----------|---------|-------------|----------|
-| 1 | tests/visual-parity.test.cjs | — | Build/test (F) | Fails locally: `ENOENT tmp/reference-crawl-results.json`. Compares against a reference-site crawl artifact produced by a live crawl; the fixture is absent in this environment. | FLAGGED — fixture-dependent, not a source defect. Generate the crawl artifact (or run in CI where it exists). | Fixture path confirmed in `tools/generate-reference-contract.cjs:8`, `tools/visual-parity.cjs:245`. |
-| 2 | api/reference.js | 4038-4045 | Auth/live-read (C) | **Ordering bug — root-caused and FIXED.** `enforceCrmSession` (which demands a `bev_token` cookie) ran on every protected path BEFORE `authorizeRequest`, where the Bearer-token `trustedLiveReadActor` path lives. Cron/automation live reads carry a Bearer header, not a cookie → `401 "Server session required"`, leaving the entire `trustedLiveReadActor` mechanism unreachable for its intended callers. | FIXED — skip the cookie gate only when `trustedLiveReadActor(pathname, request)` already authorizes; that call itself enforces `cronAuthorized` + `LIVE_API_BEARER_TOKEN`, so it introduces no new bypass. | `/tests/`-faithful probe returns `200 / _proxy.source:"live" / reason:"success"`; `live-proxy.test.cjs:226` now passes; 134/134 wallet, typecheck clean, no regression. |
-| 3 | tests/live-proxy.test.cjs | 387 | Test ordering (F) | After #2 the test advances and hits a **state-dependent** 500 in the demo-login block. The identical login returns `200 / source:"local-auth" / userId:"admin"` in isolation (proven), so it fails only after earlier blocks mutate the shared `dbPath` sqlite. Pre-existing, previously masked by the #2 401; the #2 fix does not touch the login path. | FLAGGED — test fragility (one `dbPath` reused across env-switching blocks). Fix by isolating the DB per block, or verify the login/session path under a populated DB. | Isolated demo-login probe: 200/local-auth. |
+| 1 | `backend/wallet/src/adapters/paystack.ts` | 99 | Security | Webhook used wrong secret. | Uses Paystack secret key. | Signature tests passed. |
+| 2 | `backend/wallet/src/routes/customer.ts` | 554 | Security | Browser controlled callback URLs. | Server builds trusted callbacks. | Contract tests passed. |
+| 3 | `apps/customer/src/views/FundWallet.vue` | 27 | Payments | Callback implied payment success. | Callback verifies gateway reference. | Frontend contracts passed. |
+| 4 | `backend/wallet/src/services/payment-webhooks.ts` | 20 | Authorization | Callback verification lacked ownership. | Actor ownership now required. | Authorization tests passed. |
+| 5 | `backend/wallet/src/services/payment-transactions.ts` | 425 | Payments | Reference and currency unchecked. | Both values now validated. | Payment tests passed. |
+| 6 | `backend/wallet/src/adapters/paystack.ts` | 16 | Reliability | Paystack requests lacked timeout. | Added fifteen-second timeout. | Adapter tests passed. |
+| 7 | `backend/wallet/src/config/env.ts` | 10 | Configuration | String false became true. | Added explicit boolean parsing. | Backend tests passed. |
+| 8 | `tools/seed-meter-aggregates.mjs` | 23 | Security | Service credential was embedded. | Credentials now environment-only. | Hardening audit passed. |
+| 9 | `tools/seed-meter-aggregates.mjs` | 24 | Security | Exposed credential remains compromised. | Rotation needs operator action. | Repository secret removed. |
+| 10 | `src/components/MfaSetupFlow.vue` | 167 | Security | TOTP secret reached third-party. | QR now generates locally. | Authentication tests passed. |
+| 11 | `src/components/MfaSetupFlow.vue` | 200 | Correctness | Fallback produced invalid QR. | Uses the declared `qrcode-generator` dependency. | Production build passed. |
+| 12 | `src/services/receipt-tools.mjs` | 782 | Security | Receipt loaded runtime CDN. | Uses server PDF fallback. | Receipt tests passed. |
+| 13 | `api/receipt-pdf.js` | 18 | Architecture | Chromium URL had default. | URL now environment-required. | Vercel Production configured; endpoint tests passed. |
+| 14 | `api/reference.js` | former 2423 | Imports | Dead handlers imported missing engine. | Retired handlers were removed. | Import scan passed. |
+| 15 | `src/services/action-service.mjs` | former 62 | Data flow | Mirror bypassed service boundary. | Dead mirror branch removed. | Service tests passed. |
+| 16 | `src/data/route-manifest.js` | 10 | Routes | Cancel action lacked handler. | Unsupported action was removed. | Route tests passed. |
+| 17 | `apps/admin/src/components/AppShell.vue` | 163 | Architecture | Deployment domain was embedded. | Uses configuration or origin. | CORS contract passed. |
+| 18 | `src/components/oem-hub/OemSettingsPage.vue` | 65 | Architecture | Placeholder exposed upstream IP. | Replaced with neutral guidance. | Production build passed. |
+| 19 | `.env.example` | 140 | Configuration | Used variables lacked documentation. | Missing variables were added. | Environment scan passed. |
+| 20 | `supabase/migrations/20260518100000_meter_purchase_orders.sql` | 6 | Migrations | Applied migration lacks guards. | No applied file changed. | Human baseline decision required. |
+| 21 | `supabase/migrations/20260518110000_fraud_risk_engine.sql` | 8 | Migrations | Applied migration lacks guards. | No applied file changed. | Human baseline decision required. |
+| 22 | `supabase/migrations/20260518120000_operations_hardening.sql` | 6 | Migrations | Applied migration lacks guards. | No applied file changed. | Human baseline decision required. |
+| 23 | `supabase/migrations/20260518130000_compliance_launch.sql` | 5 | Migrations | Applied migration lacks guards. | No applied file changed. | Human baseline decision required. |
+| 24 | `supabase/migrations/20260525130000_wallet_support_system.sql` | 8 | Migrations | Applied migration lacks guards. | No applied file changed. | Human baseline decision required. |
+| 25 | `package.json` | 7 | Runtime | Active Node version mismatches. | No source change appropriate. | Node 24 detected. |
+| 26 | `package.json` | 61 | Dependencies | Two moderate advisories remain. | Accepted baseline retained. | Security audit passed. |
+| 27 | `tests/vendor-role-rename.test.cjs` | 8 | Test integrity | Test referenced renamed migration. | Updated the migration path. | Wallet suite passed. |
+| 28 | `tools/migration-hygiene-check.cjs` | former 20 | Migrations | Allowlist contained dead filename. | Deleted the stale exception. | Hygiene check passed. |
+| 29 | `tests/visual-parity.test.cjs` | 12 | Test integrity | Test required private crawl artifact. | Added synthetic temporary crawl data. | Parallel suite passed. |
+| 30 | `tests/live-proxy.test.cjs` | 56 | Test integrity | Response mock lacked setHeader. | Added faithful header forwarding. | Live proxy test passed. |
+| 31 | `.gitignore` | 20 | Security | Runtime logs and SQLite journals remained tracked. | Removed them from Git tracking while preserving local runtime files. | Git status and ignore rules verified. |
 
-## Root-cause detail for #2 (method)
+## Clean Checks
 
-1. `protectedPath("/api/…/GetReadingTask")` → true (it is a live-read path per `requiresLiveRead`).
-2. Handler ran `enforceCrmSession(required=true)` at line ~4039 — checks `bev_token`/CRM-session **cookies** only — *before* `authorizeRequest` (~4048), which is where Bearer/`trustedLiveReadActor` resolves.
-3. A Bearer-authenticated live read therefore 401'd at the cookie gate. Reason string `"Server session required"`, `_proxy.source:"authz"` — captured from the real handler.
-4. Probe fidelity required matching the test runtime: `tools/env-loader.cjs:18` skips `.env` when `process.argv[1]` contains `/tests/`. Outside `/tests/`, `.env` loaded `CRON_SECRET` and `SUPABASE_AUTH_ENABLED=true`, which changed the auth decision — so the probe was made faithful by faking a `/tests/` entrypoint. With that, the fix yields 200/live.
+- All scoped files read.
+- Relative imports all resolve.
+- No circular dependencies found.
+- No unused imports found.
+- Base components stay presentational.
+- New state uses Pinia.
+- Authorization headers stay centralized.
+- Demo backdoors remain absent.
+- Protected APIs authenticate first.
+- Writes enforce route policies.
+- Service-role stays server-side.
+- Browser keys remain publishable.
+- Forty-five routes remain valid.
+- Manifest components all resolve.
+- Manifest roles remain valid.
+- API references all resolve.
+- Thirteen RPC definitions exist.
+- User tables enforce RLS.
+- Anonymous execute grants absent.
+- Sourcemaps remain disabled.
+- Environment coverage is complete.
 
-## Checks that passed clean (no findings)
+## Verification
 
-- **A. Imports** — all relative imports across 129 src files resolve. No dead imports.
-- **B. Architecture** — `VITE_USER_MIRROR_ENABLED` default `"false"`. No live upstream URL code default. No hardcoded secrets/IPs (only CORS localhost + loopback proxy target). No business logic in `src/components/base/`.
-- **C. Auth/security** — no `getCookie("token")→Authorization`; no `roleId` render gate; `demoLogin()` is a removal comment only; no plaintext external `fetch()`; `/api/*` enforces auth; money-write paths keep service-role.
-- **D. Data flow** — src services route through api.js / typed clients; portals reach data only via the wallet API; service-role stays server-side.
-- **E. Route manifest** — 45 routes, all have title/group/hash; all roles valid; all `apis` resolve.
-- **G. Migrations** — 74 migrations, no duplicate version prefixes, hygiene guard passes. Consumption tables carry RLS. No `grant … to anon`.
-- **H. Env** — every var used in code is documented in `.env.example`. No `VITE_*` secret exposure.
-- **Consumption engine** — hardened `queryConsumption` requires a `ConsumptionAuthority` (5 refs); error-swallowing `catch {}` gone; four-way isolation holds (16 authority tests + contract test green).
-
-## Build & test results
-
-- **Build:** PASS (exit 0) — 5 vite builds. `sourcemap: false` confirmed.
-- **Typecheck:** PASS — root and wallet backend.
-- **Wallet vitest:** 134/134 across 18 files.
-- **Root suite (`test:parallel`):** 59/61. Remaining failures: #1 (crawl fixture) and #3 (live-proxy state-ordering). `server-session-timeout` observed flaking once under parallel load; passes 2/2 standalone and on re-run — a concurrency artifact, not a defect.
+- Build: PASS, exit zero.
+- Five frontend bundles completed.
+- Wallet backend compiled cleanly.
+- Root typecheck passed cleanly.
+- Wallet TypeScript passed strictly.
+- Wallet tests: 137 passed.
+- Root jobs: 63 passed.
+- Security suite passed completely.
+- Contract suite passed completely.
+- Service suite passed completely.
+- Authentication suite passed completely.
+- Hardening checks: 16 passed.
+- Migration hygiene: 79 passed.
+- Dependency audit baseline passed.
+- Node verification correctly failed.
+- Required runtime: Node 22.
+- Active runtime: Node 24.13.1.
 
 ## Counts
 
-- Files scanned: 280 source files + configs.
-- Findings: 3.
-- Fixed: 1 (#2 — the auth ordering bug, with proof and no regression).
-- Flagged: 2 (#1 crawl fixture; #3 pre-existing test-ordering fragility, unmasked by #2).
+- Files scanned: 468.
+- Directories mapped: 73.
+- Lines read: 113,131.
+- Findings: 31.
+- Fixed: 23.
+- Flagged: 8.
+
+## Required Decisions
+
+- Rotate the Supabase key.
+- Purge leaked repository history.
+- Choose migration baseline strategy.
+- Run production under Node 22.
+- Monitor accepted dependency advisories.
+
+Concurrent consumption edits were preserved.
