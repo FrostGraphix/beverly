@@ -3,6 +3,7 @@
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
 const defaultLoginDomain = "org.acoblighting.com";
 const defaultRequestTimeoutMs = 5000;
+const authRequestTimeoutMs = 12000;
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -46,15 +47,15 @@ function restHeaders(prefer) {
   return headers;
 }
 
-function supabaseRequestTimeoutMs() {
-  const value = Number(process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
+function supabaseRequestTimeoutMs(timeoutMs) {
+  const value = Number(timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
   return Number.isFinite(value) ? Math.min(15000, Math.max(1000, value)) : defaultRequestTimeoutMs;
 }
 
-function supabaseFetch(url, options = {}) {
+function supabaseFetch(url, { timeoutMs, ...options } = {}) {
   return fetch(url, {
     ...options,
-    signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs())
+    signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs(timeoutMs))
   });
 }
 
@@ -204,6 +205,7 @@ async function signInWithPassword({ userId, password }) {
   try {
     email = await resolveAuthEmail(userId);
     ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+      timeoutMs: authRequestTimeoutMs,
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({
