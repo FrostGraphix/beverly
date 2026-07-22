@@ -7,6 +7,12 @@ import path from 'node:path';
 import { VENDING_VAT_BASIS_POINTS } from '@beverly/tokens';
 import { z } from 'zod';
 
+const envBoolean = z.preprocess((value) => {
+    if (typeof value === 'boolean') return value;
+    if (value === undefined || value === '') return undefined;
+    return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}, z.boolean());
+
 function loadEnvFile(filePath: string) {
     if (!fs.existsSync(filePath)) return;
     const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
@@ -49,9 +55,10 @@ const schema = z.object({
         return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
     }, z.boolean()).optional(),
 
-    PAYSTACK_SECRET_KEY: z.string().optional(),
-    PAYSTACK_PUBLIC_KEY: z.string().optional(),
-    PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
+    PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
+    PAYSTACK_PUBLIC_KEY: z.string().regex(/^pk_(test|live)_[A-Za-z0-9]+$/).optional(),
+    PAYSTACK_CALLBACK_URL: z.string().url().optional(),
+    PAYSTACK_WEBHOOK_URL: z.string().url().optional(),
 
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
@@ -76,22 +83,22 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    CUSTOMER_APP_URL: z.string().default('https://beverly.acoblighting.com'),
-    VENDOR_PORTAL_URL: z.string().default('https://vendor.beverly.acoblighting.com'),
-    STAFF_PORTAL_URL: z.string().default('https://beverly.acoblighting.com/wallet-admin'),
+    CUSTOMER_APP_URL: z.string().url(),
+    VENDOR_PORTAL_URL: z.string().url(),
+    STAFF_PORTAL_URL: z.string().url(),
 
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
     // services decrypt oem_credentials rows written by the CRM's Settings UI).
     OEM_CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
-    OEM_REGISTRY_DISABLED: z.coerce.boolean().default(false),
+    OEM_REGISTRY_DISABLED: envBoolean.default(false),
     OEM_CONFIG_CACHE_TTL_MS: z.coerce.number().int().min(1000).default(30000),
 
-    FEATURE_CUSTOMER_WALLET: z.coerce.boolean().default(true),
-    FEATURE_METER_PURCHASE: z.coerce.boolean().default(true),
-    FEATURE_VENDOR_VENDING: z.coerce.boolean().default(true),
-    MONEY_WRITES_ENABLED: z.coerce.boolean().default(false),
-    DEV_CONSOLE_ENABLED: z.coerce.boolean().default(false),
+    FEATURE_CUSTOMER_WALLET: envBoolean.default(true),
+    FEATURE_METER_PURCHASE: envBoolean.default(true),
+    FEATURE_VENDOR_VENDING: envBoolean.default(true),
+    MONEY_WRITES_ENABLED: envBoolean.default(false),
+    DEV_CONSOLE_ENABLED: envBoolean.default(false),
     DEV_CONSOLE_BREAK_GLASS_TOKEN: z.string().min(32).optional(),
     // Approved database policies own the rate. This value is the outage fallback.
     VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(VENDING_VAT_BASIS_POINTS),
@@ -102,6 +109,22 @@ const schema = z.object({
             path: ['APP_ENCRYPTION_KEY'],
             message: 'Required in production.',
         });
+    }
+    if (values.NODE_ENV === 'production' && values.MONEY_WRITES_ENABLED) {
+        if (!values.PAYSTACK_SECRET_KEY) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['PAYSTACK_SECRET_KEY'],
+                message: 'Required when production money writes are enabled.',
+            });
+        }
+        if (!values.PAYSTACK_WEBHOOK_URL) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['PAYSTACK_WEBHOOK_URL'],
+                message: 'Required when production money writes are enabled.',
+            });
+        }
     }
 });
 

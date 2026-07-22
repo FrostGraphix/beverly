@@ -40,6 +40,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
@@ -66,8 +67,15 @@ import { requestDataExport, getDataExportStatus, buildDataExport, requestAccount
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
-import { assertClientIdempotencyKey } from '../services/idempotency.js';
+import {
+    abandonWalletIdempotency,
+    assertClientIdempotencyKey,
+    claimWalletIdempotency,
+    completeWalletIdempotency,
+    hashIdempotency,
+} from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
+import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -535,13 +543,34 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/wallet/fund', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { amount_minor, callback_url } = req.body as { amount_minor: number; callback_url?: string };
-        if (!amount_minor || amount_minor < 50000) {
-            return reply.code(400).send({ error: 'amount_too_low', message: 'Minimum ₦500.' });
+        let idempotencyKey: string;
+        try { idempotencyKey = assertClientIdempotencyKey(req.headers['idempotency-key']); }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'A valid Idempotency-Key header is required.';
+            return reply.code(400).send({ error: 'invalid_idempotency_key', message });
         }
+        const { amount_minor } = z.object({
+            amount_minor: z.number().int().min(50_000).max(1_000_000_000),
+        }).parse(req.body);
         const { data: cu } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).single();
         if (!(cu as any)?.email) {
             return reply.code(422).send({ error: 'email_required', message: 'Add an email address to fund via card.' });
+        }
+        const scope = `customer.wallet.fund.${req.actor!.customerId!}`;
+        const fingerprint = hashIdempotency([req.actor!.customerId!, amount_minor]);
+        let claim;
+        try {
+            claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Could not claim idempotency key.';
+            if (/idempotency key payload mismatch/i.test(message)) {
+                return reply.code(409).send({ error: 'idempotency_payload_mismatch', message });
+            }
+            throw error;
+        }
+        if (claim.state === 'replay') return claim.responsePayload;
+        if (claim.state === 'pending') {
+            return reply.code(409).send({ error: 'idempotency_in_progress', message: 'This payment request is still initializing.' });
         }
         try {
             const result = await initiateCustomerFunding({
@@ -549,10 +578,14 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerUserId: req.actor!.userId,
                 customerEmail: (cu as any).email,
                 amountMinor: amount_minor,
-                callbackUrl: callback_url,
+                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/wallet/fund?payment=return`,
+            });
+            await completeWalletIdempotency(scope, idempotencyKey, result).catch((error) => {
+                req.log.error({ error, scope }, 'Paystack initialization idempotency completion failed');
             });
             return result;
         } catch (e: any) {
+            await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403 : 400,
@@ -563,6 +596,19 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── PURCHASE ──────────────────────────────────────────────────────────────
+
+    fastify.post('/payments/:reference/verify', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { reference } = z.object({
+            reference: z.string().min(1).max(100).regex(/^[A-Za-z0-9.=-]+$/),
+        }).parse(req.params);
+        const result = await verifyOwnedPaystackPayment({
+            reference,
+            actorType: 'customer',
+            actorId: req.actor!.customerId!,
+        });
+        if (!result) return reply.code(404).send({ error: 'payment_not_found', message: 'Payment was not found.' });
+        return result;
+    });
 
     fastify.post('/purchase/preview', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
         const { meter_id, amount_minor } = req.body as { meter_id: string; amount_minor: number };
@@ -579,9 +625,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { meter_id, amount_minor, mode, idempotency_key, callback_url } = req.body as {
+        const { meter_id, amount_minor, mode, idempotency_key } = req.body as {
             meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string; callback_url?: string;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
         };
         if (!meter_id || !amount_minor || !mode || !idempotency_key) {
             return reply.code(400).send({ error: 'missing_fields' });
@@ -638,7 +684,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
-                callbackUrl: callback_url,
+                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/buy-token?payment=return`,
             });
             // Link assessment to the resulting purchase order
             if (result.purchaseOrder?.id) {
@@ -659,10 +705,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase/step-up-verify', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key, callback_url } = req.body as {
+        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key } = req.body as {
             challenge_id: string; otp: string;
             meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string; callback_url?: string;
+            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
         };
         if (!challenge_id || !otp || !meter_id || !amount_minor || !mode || !idempotency_key) {
             return reply.code(400).send({ error: 'missing_fields' });
@@ -699,7 +745,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
-                callbackUrl: callback_url,
+                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/buy-token?payment=return`,
             });
             void refreshCustomerBaseline(customerId);
             return result;
@@ -816,7 +862,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
-                callbackBaseUrl: `${process.env.CUSTOMER_APP_URL ?? 'http://localhost:5173'}/meter-orders`,
+                callbackBaseUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/meter-orders`,
                 idempotencyKey,
             });
             await logAction({

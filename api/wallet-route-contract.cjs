@@ -6,11 +6,14 @@
  * the write paths the legacy gateway may forward to it.
  */
 const moneyMutations = new Set([
+  "POST /api/v1/webhook/paystack",
   "POST /api/v1/vendor/funding/paystack",
+  "POST /api/v1/vendor/payments/:reference/verify",
   "POST /api/v1/vendor/funding/bank-transfer",
   "POST /api/v1/vendor/meter-orders",
   "POST /api/v1/vendor/vend",
   "POST /api/v1/customer/wallet/fund",
+  "POST /api/v1/customer/payments/:reference/verify",
   "POST /api/v1/customer/purchase",
   "POST /api/v1/customer/meter-orders",
   "POST /api/v1/customer/meter-orders/:id/verify-payment",

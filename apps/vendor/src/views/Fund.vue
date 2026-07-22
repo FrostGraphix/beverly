@@ -75,7 +75,6 @@ async function payNow() {
     try {
         const r = await api.post<{ authorizationUrl: string }>('/api/v1/vendor/funding/paystack', {
             amountMinor: amountNaira.value * 100,
-            callbackUrl: `${window.location.origin}/wallet/fund?funded=1`,
         });
         redirectToPayment(r.authorizationUrl);
     } catch (e: any) {
@@ -112,11 +111,29 @@ async function submitProof() {
     }
 }
 
-onMounted(() => {
-    if (new URLSearchParams(window.location.search).get('funded') === '1') {
-        success.value = 'Payment received by Paystack. Your wallet will update after webhook confirmation.';
+onMounted(async () => {
+    const query = new URLSearchParams(window.location.search);
+    const reference = query.get('reference') ?? query.get('trxref');
+    if (reference) {
+        loading.value = true;
+        try {
+            const payment = await api.post<{ status: string; fulfillmentStatus: string }>(
+                `/api/v1/vendor/payments/${encodeURIComponent(reference)}/verify`,
+            );
+            if (payment.status === 'succeeded' && ['fulfilled', 'already_fulfilled'].includes(payment.fulfillmentStatus)) {
+                success.value = 'Payment confirmed. Your wallet has been credited.';
+            } else if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
+                error.value = 'Payment confirmed, but the wallet credit needs review. Support has been notified; do not pay again.';
+            } else {
+                success.value = 'Payment is still processing. Your wallet will update automatically after confirmation.';
+            }
+        } catch (e: any) {
+            error.value = e?.message ?? 'Could not verify payment. Webhook reconciliation will continue automatically.';
+        } finally {
+            loading.value = false;
+        }
     }
-    void loadFunding();
+    await loadFunding();
 });
 </script>
 

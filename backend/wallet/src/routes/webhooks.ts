@@ -30,6 +30,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         const raw = (req.body as { __raw?: string }).__raw ?? '';
         const sig = req.headers['x-paystack-signature'] as string | undefined;
         const valid = verifyWebhookSignature(raw, sig);
+        if (!valid) {
+            return reply.code(401).send({ error: 'bad_signature' });
+        }
 
         const payload = req.body as { event?: string; data?: any };
         const eventType = payload.event ?? 'unknown';
@@ -52,9 +55,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             gateway_reference: reference,
             gateway_event_id: eventId,
             payload_digest: payloadDigest,
-            signature: valid ? 'verified' : null,
-            signature_valid: valid,
-            verified_at: valid ? new Date().toISOString() : null,
+            signature: 'verified',
+            signature_valid: true,
+            verified_at: new Date().toISOString(),
             raw_payload: storedPayload,
             payload_encrypted: encryptSecret(raw),
         }).select('id').single();
@@ -64,10 +67,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (webhookErr || !webhookRow) throw webhookErr ?? new Error('webhook_persist_failed');
         const webhookId = (webhookRow as any).id as string;
 
-        if (!valid) {
-            await markWebhookProcessed(webhookId, 'bad_signature');
-            return reply.code(401).send({ error: 'bad_signature' });
-        }
         if (eventType !== 'charge.success') {
             await markWebhookProcessed(webhookId, `ignored_event=${eventType}`);
             return reply.code(200).send({ ok: true, ignored: eventType });

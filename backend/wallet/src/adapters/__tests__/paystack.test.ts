@@ -3,19 +3,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // We import after mocking env to ensure secret is set
 vi.mock('../../config/env.js', () => ({
     env: {
-        PAYSTACK_WEBHOOK_SECRET: 'test_secret_123',
-        PAYSTACK_SECRET_KEY: 'sk_test',
+        PAYSTACK_SECRET_KEY: 'sk_test_secret_123',
     },
     isProd: false,
     isDev: true,
     corsOrigins: [],
 }));
 
-import { verifyWebhookSignature } from '../paystack.js';
+import { initializeTransaction, verifyWebhookSignature } from '../paystack.js';
 import crypto from 'node:crypto';
 
 describe('paystack webhook signature', () => {
-    const secret = 'test_secret_123';
+    const secret = 'sk_test_secret_123';
 
     it('accepts a valid HMAC-SHA512 signature', () => {
         const body = JSON.stringify({ event: 'charge.success', data: { reference: 'abc' } });
@@ -36,5 +35,13 @@ describe('paystack webhook signature', () => {
 
     it('rejects wrong signature', () => {
         expect(verifyWebhookSignature('body', 'a'.repeat(128))).toBe(false);
+    });
+
+    it('rejects non-integer gateway amounts before making a request', async () => {
+        await expect(initializeTransaction({
+            email: 'buyer@example.test',
+            amountMinor: 10.5,
+            reference: 'ref-1',
+        })).rejects.toThrow('positive integer in kobo');
     });
 });

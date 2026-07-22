@@ -19,8 +19,8 @@ assert(reference.includes("proxyCanonicalWallet"), "reference facade must proxy 
 assert(reference.includes("isLegacyFinancialMutation"), "legacy wallet mutations must be isolated");
 assert(server.includes("MONEY_WRITES_ENABLED"), "wallet backend must gate money mutations");
 assert(!server.includes("startScheduler();"), "wallet API process must not start the scheduler");
-assert(worker.includes("maintenanceQueue.add"), "worker process must own the maintenance schedules");
-assert(worker.includes("wallet maintenance worker started"), "worker process must boot the worker loop");
+assert(reference.includes("/api/cron/wallet-maintenance"), "Vercel must expose the authenticated wallet maintenance endpoint");
+assert(reference.includes("sweepPendingPayments"), "wallet maintenance must reuse the canonical payment sweeper");
 assert(dockerfile.includes("COPY --from=build /app/dist ./dist"), "wallet image must include built worker output");
 assert(compose.includes("worker:"), "wallet compose stack must define the worker service");
 assert(!vercel.env?.ALLOW_LIVE_WRITES, "Vercel production config must keep writes disabled");

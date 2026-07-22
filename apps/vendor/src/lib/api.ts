@@ -203,7 +203,7 @@ export const api = {
     del:   <T>(path: string) => request<T>('DELETE', path),
 };
 
-export function redirectToPayment(url: string | null | undefined): never {
+export function redirectToPayment(url: string | null | undefined): void {
     let parsed: URL;
     try {
         parsed = new URL(String(url ?? ''));
@@ -217,5 +217,4 @@ export function redirectToPayment(url: string | null | undefined): never {
     }
 
     window.location.assign(parsed.toString());
-    throw new ApiError(0, 'payment_redirect_started', 'Redirecting to payment.');
 }

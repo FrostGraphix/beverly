@@ -65,7 +65,12 @@ async function main() {
   const wallet = await startServer((req, res) => {
     forwarded += 1;
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ path: req.url, method: req.method, authorization: req.headers.authorization ?? null }));
+    res.end(JSON.stringify({
+      path: req.url,
+      method: req.method,
+      authorization: req.headers.authorization ?? null,
+      paystackSignature: req.headers["x-paystack-signature"] ?? null,
+    }));
   });
   const facade = await startFacade();
   const walletPort = wallet.address().port;
@@ -92,6 +97,11 @@ async function main() {
     assert.strictEqual(read.body.path, "/api/v1/vendor/wallet");
     assert.strictEqual(read.body.authorization, "Bearer test-token");
 
+    const webhook = await request(facadePort, "POST", "/api/v1/webhook/paystack", { event: "charge.success" }, {
+      "x-paystack-signature": "signed-payload",
+    });
+    assert.strictEqual(webhook.status, 503);
+
     const blocked = await request(facadePort, "POST", "/api/v1/vendor/vend", { amountMinor: 10000 });
     assert.strictEqual(blocked.status, 503);
     assert.strictEqual(blocked.body.error, "money_writes_disabled");
@@ -100,10 +110,16 @@ async function main() {
     process.env.ALLOW_LIVE_WRITES = "true";
     process.env.APPROVED_LIVE_WRITES = "true";
     process.env.WALLET_PROXY_MONEY_WRITES_ENABLED = "true";
+
+    const forwardedWebhook = await request(facadePort, "POST", "/api/v1/webhook/paystack", { event: "charge.success" }, {
+      "x-paystack-signature": "signed-payload",
+    });
+    assert.strictEqual(forwardedWebhook.status, 200);
+    assert.strictEqual(forwardedWebhook.body.paystackSignature, "signed-payload");
     process.env.VERCEL_ENV = "preview";
     const previewBlocked = await request(facadePort, "POST", "/api/v1/vendor/vend", { amountMinor: 10000 });
     assert.strictEqual(previewBlocked.status, 503);
-    assert.strictEqual(forwarded, 1);
+    assert.strictEqual(forwarded, 2);
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = key === "walletApi" ? "WALLET_API_BASE_URL"
