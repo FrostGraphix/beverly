@@ -53,6 +53,10 @@ function createProxyServer() {
         this.statusCode = code;
         return this;
       },
+      setHeader(name, value) {
+        res.setHeader(name, value);
+        return this;
+      },
       json(body) {
         res.statusCode = this.statusCode;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
