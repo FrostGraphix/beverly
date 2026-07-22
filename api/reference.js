@@ -4453,20 +4453,25 @@ async function handler(request, response) {
       }
       return;
     }
-    await refreshLiveWriteControl();
-    if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
-      result = {
-        status: 410,
-        body: {
-          code: 410,
-          msg: "Legacy wallet mutations are retired.",
-          reason: "Use the canonical wallet API.",
-          data: null,
-          result: null
-        }
-      };
-    } else {
+    if (pathname === "/api/user/login") {
+      // Authentication must remain available when the optional live-write flag store is slow.
       result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+    } else {
+      await refreshLiveWriteControl();
+      if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
+        result = {
+          status: 410,
+          body: {
+            code: 410,
+            msg: "Legacy wallet mutations are retired.",
+            reason: "Use the canonical wallet API.",
+            data: null,
+            result: null
+          }
+        };
+      } else {
+        result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+      }
     }
 
     if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
