@@ -283,6 +283,19 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    // Fired once by the vendor app's `appinstalled` event. Best-effort —
+    // reuses the existing audit log rather than a dedicated table.
+    fastify.post('/pwa-installed', { preHandler: fastify.requireVendor() }, async (req) => {
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'vendor_user',
+            action: 'pwa.installed',
+            targetType: 'vendor_user',
+            targetId: req.actor!.actorId,
+        });
+        return { ok: true };
+    });
+
     fastify.post('/profile-picture/activate', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
         try {

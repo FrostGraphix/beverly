@@ -119,3 +119,5 @@ export function toggleTheme() {
     const cur = document.documentElement.getAttribute('data-theme');
     setTheme(cur === 'dark' ? 'light' : 'dark');
 }
+
+export * from './pwaInstall.js';

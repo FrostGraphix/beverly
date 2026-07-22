@@ -60,3 +60,14 @@ export declare function getWalletGreeting(date?: Date): WalletGreeting;
 export declare function setTheme(name: 'dark' | 'light' | string): void;
 export declare function initTheme(defaultName?: string): void;
 export declare function toggleTheme(): void;
+
+export declare function isInstallDismissed(): boolean;
+export declare function dismissInstallPrompt(days?: number): void;
+export declare function clearInstallDismissal(): void;
+export declare function isStandalone(): boolean;
+export declare function isIos(): boolean;
+export declare function isIosInstallable(): boolean;
+
+export declare function getDeferredInstallPrompt(): any | null;
+export declare function onInstallPromptChange(callback: (event: any | null) => void): () => void;
+export declare function triggerInstallPrompt(): Promise<{ outcome: 'accepted' | 'dismissed'; platform: string } | null>;
