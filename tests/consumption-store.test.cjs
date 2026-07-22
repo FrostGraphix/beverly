@@ -28,9 +28,12 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
         response: { headers: { get: () => "" } },
         body: {
           sourceRows: 2,
-          stations: [{ station_id: "TUNGA", total_kwh: 20, prior_kwh: 10, meter_count: 1, active_meter_count: 1, reading_count: 2 }],
+          customerCount: 1,
+          valuation: { valueNgn: 7000, pricedKwh: 20, unpricedKwh: 0, totalKwh: 20, coveragePct: 100, complete: true, basis: "historical-snapshot" },
+          stations: [{ station_id: "TUNGA", total_kwh: 20, prior_kwh: 10, meter_count: 1, customer_count: 1, active_meter_count: 1, reading_count: 2 }],
           temporal: [{ station_id: "TUNGA", period_start: "2026-05-07", kwh_total: 20 }],
-          topMeters: [{ station_id: "TUNGA", meter_id: "M-1", customer_id: "C-1", customer_name: "Ada", total_kwh: 20, active_periods: 2 }],
+          tariffBreakdown: [{ tariff_id: "RESIDENTIAL", total_kwh: 20 }],
+          topMeters: [{ station_id: "TUNGA", meter_id: "M-1", customer_id: "C-1", customer_name: "Ada", tariff_id: "RESIDENTIAL", total_kwh: 20, active_periods: 2 }],
           rollups: [{ station_id: "TUNGA", latest_odometer_kwh: 115, meters_with_latest: 1, latest_reading: "2026-05-07" }]
         }
       };
@@ -356,6 +359,10 @@ const rpcAnalytics = await store.readStationConsumptionAnalytics({
 assert.strictEqual(rpcAnalytics.status, 200);
 assert.strictEqual(rpcAnalytics.body._proxy.source, "supabase-station-analytics-rpc");
 assert.strictEqual(rpcAnalytics.body.data.totals.consumedKwh, 20);
+assert.strictEqual(rpcAnalytics.body.data.totals.customerCount, 1);
+assert.deepStrictEqual(rpcAnalytics.body.data.valuation, { valueNgn: 7000, pricedKwh: 20, unpricedKwh: 0, totalKwh: 20, coveragePct: 100, complete: true, basis: "historical-snapshot" });
+assert.deepStrictEqual(rpcAnalytics.body.data.tariffBreakdown, [{ tariffId: "RESIDENTIAL", totalKwh: 20 }]);
+assert.strictEqual(rpcAnalytics.body.data.topMeters[0].tariffId, "RESIDENTIAL");
 assert.deepStrictEqual(rpcAnalytics.body.data.temporal.labels, ["2026-05-07"]);
 assert(requests.some((request) => request.pathname === "/rpc/get_station_consumption_analytics"));
 

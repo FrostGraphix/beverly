@@ -3,6 +3,9 @@ import {
   VENDING_VAT_BASIS_POINTS,
   calculateVendingVatBreakdown as calculateSharedVendingVatBreakdown
 } from "../../packages/tokens/index.js";
+import { parseTariffUnitPrice } from "./tariff-pricing.mjs";
+
+export { parseTariffUnitPrice } from "./tariff-pricing.mjs";
 
 export const purchaseWays = [
   { value: "paid", label: "Vend By Total Paid" },
@@ -74,12 +77,6 @@ export function tokenEndpoint(route = {}, action = "") {
   if (hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
   if (hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
   return "";
-}
-
-export function parseTariffUnitPrice(price) {
-  const parts = String(price ?? "").split("~").map((part) => Number(part)).filter((value) => Number.isFinite(value));
-  if (parts.length >= 3) return parts[2] > 0 ? parts[2] : 0;
-  return parts[0] > 0 ? parts[0] : 0;
 }
 
 export function findTariff(tariffs = [], tariffId = "") {

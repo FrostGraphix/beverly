@@ -117,8 +117,24 @@
           <span v-if="k.icon" class="scc-kpi-icon" v-html="k.icon" />
         </div>
         <strong class="scc-kpi-value">{{ k.value }}</strong>
+        <small v-if="k.money" :class="['scc-kpi-money', k.moneyUnavailable && 'scc-kpi-money--unavailable']">{{ k.money }}</small>
         <small v-if="k.sub" :class="['scc-kpi-sub', k.tone && `scc-tone--${k.tone}`]">{{ k.sub }}</small>
         <div v-if="loading" class="scc-shimmer" />
+      </div>
+    </div>
+
+    <div v-if="data" class="scc-valuation" role="status" aria-live="polite">
+      <div>
+        <strong>Tariff valuation coverage</strong>
+        <span>{{ fmt(consumptionValue.pricedKwh) }} of {{ fmt(consumptionValue.totalKwh) }} kWh matched to dated tariffs</span>
+      </div>
+      <div class="scc-valuation-metrics">
+        <span>{{ fmt(consumptionValue.coveragePct, 2) }}% covered</span>
+        <span v-if="consumptionValue.unpricedKwh > 0">{{ fmt(consumptionValue.unpricedKwh) }} kWh unpriced</span>
+        <span>{{ fmtNgn(consumptionValue.valueNgn) }} valued</span>
+        <b :class="consumptionValue.complete ? 'scc-valuation-ok' : 'scc-valuation-warn'">
+          {{ consumptionValue.complete ? 'Complete' : 'Partial history' }}
+        </b>
       </div>
     </div>
 
@@ -548,16 +564,34 @@ export default {
       return Math.min(this.topMetersPage * this.topMetersPageSize, this.topMeters.length);
     },
 
+    consumptionValue() {
+      const consumedKwh = Number(this.data?.totals?.consumedKwh) || 0;
+      const valuation = this.data?.valuation || {};
+      const hasUnpriced = valuation.unpricedKwh !== undefined && valuation.unpricedKwh !== null;
+      const hasTotal = valuation.totalKwh !== undefined && valuation.totalKwh !== null;
+      return {
+        valueNgn: Number(valuation.valueNgn) || 0,
+        pricedKwh: Number(valuation.pricedKwh) || 0,
+        unpricedKwh: hasUnpriced ? Number(valuation.unpricedKwh) || 0 : consumedKwh,
+        totalKwh: hasTotal ? Number(valuation.totalKwh) || 0 : consumedKwh,
+        coveragePct: Number(valuation.coveragePct) || 0,
+        complete: valuation.complete === true,
+      };
+    },
+
     kpiCards() {
       const t = this.data?.totals || null;
       const top = this.data?.stations?.[0];
-      const growthIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+      const customerCount = Number(t?.customerCount) || 0;
+      const stationCount = Number(t?.stationCount) || 0;
       return [
         { label: "Meter Read Total",   value: t ? `${this.fmt(t.latestOdometerKwh)} kWh` : "—", sub: t ? `${this.fmt(t.metersWithLatest, 0)} latest meter reads` : "",       tone: "", accent: "primary" },
-        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—",       sub: t ? this.growthLabel(t.growthPct) + " vs prior" : "",                  tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
+        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—", money: t ? this.moneyEquivalent() : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? this.growthLabel(t.growthPct) + " vs prior" : "", tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
         { label: "Active Meters",      value: t ? this.fmt(t.activeMeterCount, 0) : "—",         sub: t ? `of ${this.fmt(t.meterCount, 0)} seen` : "",                        tone: "", accent: "" },
-        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—",   sub: "in period",                                                            tone: "", accent: "" },
-        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—",   sub: t ? `${t.readingDays} reading periods` : "",                            tone: "", accent: "" },
+        { label: "Avg / Customer",     value: t && customerCount ? `${this.fmt(t.consumedKwh / customerCount)} kWh` : "—", money: t && customerCount ? this.moneyEquivalent(customerCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: customerCount ? `${this.fmt(customerCount, 0)} customers` : "No customers", tone: "", accent: "" },
+        { label: "Avg / Station",      value: t && stationCount ? `${this.fmt(t.consumedKwh / stationCount)} kWh` : "—", money: t && stationCount ? this.moneyEquivalent(stationCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: stationCount ? `${this.fmt(stationCount, 0)} reporting stations` : "No stations", tone: "", accent: "" },
+        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—", money: t && t.meterCount ? this.moneyEquivalent(t.meterCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: "in period", tone: "", accent: "" },
+        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—", money: t && t.readingDays ? this.moneyEquivalent(t.readingDays) : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? `${t.readingDays} reading periods` : "", tone: "", accent: "" },
         { label: "Top Station",        value: top ? top.station : "—",                      sub: top ? `${top.share}% of total load` : "",                               tone: "", accent: "" },
         { label: "Stations Reporting", value: t ? this.fmt(t.stationCount, 0) : "—",        sub: t ? `${t.readingDays} period${t.readingDays !== 1 ? "s" : ""} of data` : "", tone: "", accent: "" },
       ];
@@ -743,6 +777,17 @@ export default {
       const n = Number(value);
       if (!Number.isFinite(n)) return "—";
       return n.toLocaleString("en-NG", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    },
+
+    fmtNgn(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "—";
+      return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(n);
+    },
+
+    moneyEquivalent(divisor = 1) {
+      if (!this.consumptionValue.complete) return "Tariff value unavailable";
+      return `${this.fmtNgn(this.consumptionValue.valueNgn / Math.max(1, Number(divisor) || 1))} equivalent`;
     },
 
     growthLabel(pct) {
@@ -1241,7 +1286,28 @@ export default {
 .scc-kpi-head { display: flex; justify-content: space-between; align-items: center; }
 .scc-kpi-label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
 .scc-kpi-value { font-size: 18px; font-weight: 800; color: var(--text-main); letter-spacing: -0.025em; line-height: 1.1; }
+.scc-kpi-money { font-size: 10.5px; color: var(--primary); font-weight: 800; letter-spacing: -.01em; }
+.scc-kpi-money--unavailable { color: var(--text-faint); font-weight: 600; }
 .scc-kpi-sub   { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
+.scc-valuation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 11px;
+}
+.scc-valuation > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scc-valuation strong { font-size: 11.5px; }
+.scc-valuation span { color: var(--text-muted); }
+.scc-valuation-metrics b { padding: 3px 8px; border-radius: 999px; font-size: 10px; }
+.scc-valuation-ok { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.scc-valuation-warn { color: var(--danger, #dc2626); background: var(--danger-bg, #fef2f2); }
 .scc-tone--up      { color: var(--success, #059669); }
 .scc-tone--down    { color: var(--danger,  #ef4444); }
 .scc-tone--neutral { color: var(--text-faint); }

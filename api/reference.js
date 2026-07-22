@@ -71,6 +71,7 @@ const {
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
 const { refreshGatewayHealth } = require("../backend/src/services/gateway-health-service");
+const { syncReferenceRead } = require("../backend/src/services/tariff-snapshot-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -4150,9 +4151,15 @@ async function proxyLive(request, pathname, requestData) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
           logWriteEvent("response", { pathname: candidate, payload: liveResult.payload, status: liveResult.status });
         }
+        const normalizedBody = normalizeLivePayload(liveResult.payload, liveResult.status, candidate);
+        if (!isWriteRequest(candidate, request.method)) {
+          await syncReferenceRead(pathname, normalizedBody).catch((error) => {
+            console.error("[tariff-snapshot-sync]", error instanceof Error ? error.message : String(error));
+          });
+        }
         return {
           status: liveResult.status,
-          body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
+          body: normalizedBody
         };
       }
       lastFailure = {

@@ -15,6 +15,7 @@ import {
   aggregateDeltasByPeriod,
   buildCustomerRechargeHistory,
   buildTariffMap,
+  calculateConsumptionValue,
   resolveEffectivePrice,
   revenueGap,
   computeSiteKpis,
@@ -316,6 +317,51 @@ test("case-insensitive tariffId lookup", () => {
   const map = buildTariffMap(tariffRows);
   assertClose(resolveEffectivePrice("residential", map), 350.00, 0.001);
   assertClose(resolveEffectivePrice("kolo", map), 483.75, 0.001);
+});
+
+test("buildTariffMap supports the live banded price format", () => {
+  const map = buildTariffMap([{ tariffId: "BANDED", price: "0~999999~350", tax: 0 }]);
+  assertClose(resolveEffectivePrice("BANDED", map), 350, 0.001);
+});
+
+test("calculateConsumptionValue applies each assigned tariff", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 10 },
+    { tariffId: "KOLO", totalKwh: 5 },
+  ], map);
+  assertClose(result.valueNgn, 5918.75, 0.001);
+  assertEqual(result.complete, true);
+  assertClose(result.coveragePct, 100, 0.001);
+});
+
+test("calculateConsumptionValue exposes incomplete tariff coverage", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 10 },
+    { tariffId: "MISSING", totalKwh: 5 },
+  ], map);
+  assertClose(result.valueNgn, 3500, 0.001);
+  assertEqual(result.complete, false);
+  assertClose(result.coveragePct, 66.67, 0.001);
+});
+
+test("calculateConsumptionValue never rounds missing energy into complete coverage", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 999999 },
+    { tariffId: "MISSING", totalKwh: 1 },
+  ], map);
+  assertEqual(result.complete, false);
+  assertClose(result.unpricedKwh, 1, 0.001);
+});
+
+test("calculateConsumptionValue rejects zero-priced tariffs", () => {
+  const map = new Map([["INVALID", { effectivePrice: 0 }]]);
+  const result = calculateConsumptionValue([{ tariffId: "INVALID", totalKwh: 10 }], map);
+  assertEqual(result.complete, false);
+  assertClose(result.valueNgn, 0, 0.001);
+  assertClose(result.unpricedKwh, 10, 0.001);
 });
 
 // ── revenueGap ────────────────────────────────────────────────────────────────

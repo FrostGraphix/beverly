@@ -59,6 +59,7 @@ Keep write safety strict.
 - `backend/reference-facade/` owns local facade logic.
 - `backend/src/services/interval-export-service.js` streams styled interval XLSX exports.
 - `backend/src/services/gateway-health-service.js` reads live gateway health and persists shared incidents.
+- `backend/src/services/tariff-snapshot-service.js` synchronizes live account assignments and tariff rates into date-effective history used by consumption valuation.
 - `backend/src/services/wallet-ledger-service.js` owns immutable wallet ledger posting and balance derivation.
 - `backend/src/services/wallet-funding-service.js` owns funding requests, proof metadata, and finance approval.
 - `backend/src/services/wallet-ledger-service.js` also owns wallet holds, capture, release, and freeze state.
@@ -164,6 +165,10 @@ Keep write safety strict.
 
 - Token records are financial truth.
 - `DailyDataMeter.total1` is consumption truth.
+- Station consumption analytics returns distinct-customer counts, average consumption per customer/station, and server-valued NGN equivalents.
+- Daily consumption deltas snapshot the date-effective account tariff and positive NGN/kWh rate; aggregate valuation is the sum of those immutable daily snapshots, never a join to current account state.
+- Unmatched or invalid tariff history remains explicitly unpriced. Analytics returns priced/unpriced kWh and displays a complete NGN equivalent only when unpriced kWh is within the storage rounding tolerance.
+- Live account and tariff reads synchronize their complete paginated result sets into current bindings and date-effective history before aggregate refreshes run.
 - `usage1` is ignored.
 - `DailyDataMeter` filters dates through `currentDateRange`.
 - `stationId` remains optional for super-admin reads.

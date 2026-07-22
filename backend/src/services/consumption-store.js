@@ -540,7 +540,7 @@ function aggPeriodKey(periodStart, granularity) {
 // than several small per-station scans run in parallel).
 async function fetchStationAggregateRows({ station, periodType, fromBound, to, pageSize }) {
   const filters = [
-    "select=station_id,meter_id,customer_id,customer_name,period_type,period_start,kwh_total,reading_count",
+    "select=station_id,meter_id,customer_id,customer_name,period_type,period_start,kwh_total,reading_count,tariff_value_ngn,priced_kwh,unpriced_kwh",
     `station_id=eq.${encodeURIComponent(station)}`,
     `period_type=eq.${encodeURIComponent(periodType)}`,
     `period_start=gte.${encodeURIComponent(fromBound)}`,
@@ -619,7 +619,11 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
     if (!allRows.length) return [];
     return allRows
       .filter((r) => isCanonicalStation(r.station_id))
-      .map((r) => ({
+      .map((r) => {
+        const hasValuation = r.tariff_value_ngn !== undefined
+          && r.priced_kwh !== undefined
+          && r.unpriced_kwh !== undefined;
+        return {
         stationId:    r.station_id,
         meterId:      r.meter_id,
         customerId:   r.customer_id || "",
@@ -627,7 +631,11 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
         periodStart:  r.period_start,
         kwhTotal:     Number(r.kwh_total) || 0,
         readingCount: Number(r.reading_count) || 0,
-      }));
+        tariffValueNgn: Number(r.tariff_value_ngn) || 0,
+        pricedKwh: Number(r.priced_kwh) || 0,
+        unpricedKwh: hasValuation ? Number(r.unpriced_kwh) || 0 : Number(r.kwh_total) || 0,
+      };
+      });
   } catch (err) {
     // Table not yet created — gracefully fall back to raw-row path
     const msg = String(err?.message || err || "");
@@ -832,6 +840,21 @@ function round3(value) {
   return parseFloat((Number(value) || 0).toFixed(3));
 }
 
+function consumptionValuation(valueNgn, pricedKwh, unpricedKwh, totalKwh) {
+  const priced = Math.max(0, Number(pricedKwh) || 0);
+  const unpriced = Math.max(0, Number(unpricedKwh) || 0);
+  const total = Math.max(0, Number(totalKwh) || priced + unpriced);
+  return {
+    valueNgn: Number((Number(valueNgn) || 0).toFixed(2)),
+    pricedKwh: round3(priced),
+    unpricedKwh: round3(unpriced),
+    totalKwh: round3(total),
+    coveragePct: total > 0 ? Number(((priced / total) * 100).toFixed(2)) : 100,
+    complete: unpriced <= 0.0005,
+    basis: "historical-snapshot",
+  };
+}
+
 /**
  * Per-meter daily deltas of total1 that also carry station + customer identity.
  * Grouped by station:meter so meters reused across stations never collide.
@@ -891,6 +914,9 @@ function buildAnalyticsFromAggregates({
   const byPeriodStn = new Map();
   let consumedKwh   = 0;
   let priorKwh      = 0;
+  let tariffValueNgn = 0;
+  let pricedKwh = 0;
+  let unpricedKwh = 0;
 
   function stn(id) {
     if (!stationAcc.has(id)) {
@@ -905,6 +931,9 @@ function buildAnalyticsFromAggregates({
 
   for (const row of currentAgg) {
     consumedKwh += row.kwhTotal;
+    tariffValueNgn += row.tariffValueNgn;
+    pricedKwh += row.pricedKwh;
+    unpricedKwh += row.unpricedKwh;
     const s = stn(row.stationId);
     s.totalKwh += row.kwhTotal;
     s.readingCount += row.readingCount;
@@ -991,6 +1020,7 @@ function buildAnalyticsFromAggregates({
     }));
 
   const allMeters    = new Set(Array.from(meterAcc.keys()));
+  const allCustomers = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key));
   const activeMeters = new Set(Array.from(meterAcc.values()).filter((m) => m.totalKwh > 0).map((m) => `${m.station}:${m.meterId}`));
   const distinctDays = Array.from(byPeriod.values()).filter((v) => v > 0).length;
 
@@ -1005,6 +1035,7 @@ function buildAnalyticsFromAggregates({
           priorKwh,
           growthPct:        growth(consumedKwh, priorKwh),
           meterCount:       allMeters.size,
+          customerCount:    allCustomers.size,
           activeMeterCount: activeMeters.size,
           avgPerMeter:      allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
           avgDailyKwh:      distinctDays ? round3(consumedKwh / distinctDays) : 0,
@@ -1013,6 +1044,8 @@ function buildAnalyticsFromAggregates({
           sourceRows:       currentAgg.length,
           source:           "aggregated",
         },
+        tariffBreakdown: [],
+        valuation: consumptionValuation(tariffValueNgn, pricedKwh, unpricedKwh, consumedKwh),
         stations,
         temporal: {
           labels,
@@ -1071,6 +1104,7 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
       priorKwh: stationPrior,
       growthPct: growth(totalKwh, stationPrior),
       meterCount,
+      customerCount: Number(row.customer_count) || meterCount,
       activeMeterCount: Number(row.active_meter_count) || 0,
       avgPerMeter: meterCount ? round3(totalKwh / meterCount) : 0,
       avgDailyKwh: readingCount ? round3(totalKwh / readingCount) : 0,
@@ -1080,6 +1114,9 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
       latestOdometerKwh: stationMeterRead,
       metersWithLatest: stationLatestMeters,
       latestReading: normalizeDate(rollup.latest_reading),
+      tariffValueNgn: Number(row.tariff_value_ngn) || 0,
+      pricedKwh: round3(row.priced_kwh),
+      unpricedKwh: round3(row.unpriced_kwh),
     };
   });
 
@@ -1103,6 +1140,7 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
     station: normalizeStation(row.station_id),
     customerId: row.customer_id || "",
     customerName: row.customer_name || "",
+    tariffId: row.tariff_id || "",
     totalKwh: round3(row.total_kwh),
     activeDays: Number(row.active_periods) || 0,
     avgDailyKwh: Number(row.active_periods) ? round3(Number(row.total_kwh) / Number(row.active_periods)) : 0,
@@ -1122,6 +1160,7 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
         totals: {
           consumedKwh, priorKwh, growthPct: growth(consumedKwh, priorKwh),
           meterCount: stations.reduce((sum, row) => sum + row.meterCount, 0),
+          customerCount: Number(summary.customerCount) || stations.reduce((sum, row) => sum + row.customerCount, 0),
           activeMeterCount: stations.reduce((sum, row) => sum + row.activeMeterCount, 0),
           avgPerMeter: stations.reduce((sum, row) => sum + row.meterCount, 0)
             ? round3(consumedKwh / stations.reduce((sum, row) => sum + row.meterCount, 0)) : 0,
@@ -1132,6 +1171,16 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
           latestOdometerKwh: round3(latestOdometerKwh),
           metersWithLatest,
         },
+        tariffBreakdown: (summary.tariffBreakdown || []).map((row) => ({
+          tariffId: row.tariff_id || "",
+          totalKwh: round3(row.total_kwh),
+        })),
+        valuation: consumptionValuation(
+          summary.valuation?.valueNgn,
+          summary.valuation?.pricedKwh,
+          summary.valuation?.unpricedKwh,
+          summary.valuation?.totalKwh ?? consumedKwh
+        ),
         stations,
         temporal: { labels, kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)), seriesByStation },
         seasonality: { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) },
@@ -1420,6 +1469,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     }));
 
   const distinctDays = overallByDate.size;
+  const customerCount = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key)).size;
   const latestOdometerKwh = Array.from(latestByStation.values()).reduce((sum, entry) => sum + entry.latestOdometerKwh, 0);
   return {
     status: 200,
@@ -1436,6 +1486,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
           priorKwh: round3(priorKwh),
           growthPct: growth(consumedKwh, priorKwh),
           meterCount: allMeters.size,
+          customerCount,
           activeMeterCount: activeMeters.size,
           avgPerMeter: allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
           avgDailyKwh: distinctDays ? round3(consumedKwh / distinctDays) : 0,
@@ -1444,6 +1495,8 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
           sourceRows: rows.length,
           source: "raw-fallback",
         },
+        tariffBreakdown: [],
+        valuation: consumptionValuation(0, 0, consumedKwh, consumedKwh),
         stations,
         temporal: {
           labels,
