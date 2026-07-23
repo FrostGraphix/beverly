@@ -277,6 +277,7 @@ async function installApiMocks(page, audit = null) {
 
 async function login(page) {
   await page.goto(appUrl, { waitUntil: "load" });
+  await page.evaluate(() => localStorage.setItem("beverly.currentOem", "QA-OEM"));
   await page.fill('[data-testid="login-user-id"]', "admin");
   await page.fill('[data-testid="login-password"]', "admin");
   await page.click('[data-testid="login-submit"]');
