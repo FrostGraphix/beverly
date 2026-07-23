@@ -348,7 +348,7 @@ export async function uploadApi(path, formData, options = {}) {
 }
 
 export async function login(payload) {
-  const response = validateLoginResponse(await postApi("/api/user/login", payload, { timeout: 15000 }));
+  const response = validateLoginResponse(await postApi("/api/user/login", payload));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
 
