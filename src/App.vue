@@ -448,11 +448,26 @@ export default {
       // Returning {} guarantees capability-gated routes are hidden from the system sidebar.
       if (this.showOemHub) return {};
       
-      // Gate the sidebar/routes when a user has entered a specific OEM's workspace.
-      // Returns null otherwise (legacy single-tenant mode) → visibleRoutes
-      // applies no capability filtering, preserving the full single-tenant manifest exactly.
       const oem = this.oemStore.currentOem;
-      return oem ? (oem.capabilities || {}) : null;
+      if (!oem) return null;
+
+      const raw = oem.capabilities || {};
+      const hasCaps = Object.values(raw).some(Boolean);
+      if (!hasCaps || oem.isSeedDefault || oem.slug === "calinmeter") {
+        return {
+          remote_meter_task: true,
+          tariff_management: true,
+          gprs_support: true,
+          event_notification: true,
+          load_profile: true,
+          firmware_update: true,
+          dlms_protocol: true,
+          dlt645_protocol: true,
+          wallet_vending: true,
+          ...raw
+        };
+      }
+      return raw;
     },
     route() {
       return findRoute(this.hash, this.currentRoleId, this.currentOemCapabilities);
