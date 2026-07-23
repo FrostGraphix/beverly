@@ -142,10 +142,14 @@ assert(appVue.includes("BaseIconButton"), "App shell should consume BaseIconButt
 assert(appVue.includes('role="separator"'), "Desktop sidebar needs an accessible resize handle.");
 assert(appVue.includes('aria-label="Filter navigation links"'), "Sidebar search must filter navigation links.");
 assert(appVue.includes("sidebarGroups()"), "Sidebar navigation must expose filtered groups.");
+assert(
+  !/this\.expandedGroups\s*=\s*Object\.fromEntries\(\s*routeGroups\(this\.currentRoleId\)/s.test(appVue),
+  "Sidebar must not force-expand every permitted group on login — only the current route's group should auto-expand (see syncHash)."
+);
 assert.match(
   appVue,
-  /this\.expandedGroups\s*=\s*Object\.fromEntries\(\s*routeGroups\(this\.currentRoleId\)/s,
-  "Permitted sidebar groups must be expanded after authentication."
+  /this\.expandedGroups\[this\.route\.group\]\s*=\s*true/,
+  "Sidebar must auto-expand only the current route's group on navigation."
 );
 assert(crmSidebarCss.includes("cursor: col-resize"), "Sidebar resize handle must advertise dragging.");
 assert(!appVue.includes('class="theme-swatch"'), "Theme choices must show names only.");

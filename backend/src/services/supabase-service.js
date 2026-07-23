@@ -2,8 +2,8 @@
 
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
 const defaultLoginDomain = "org.acoblighting.com";
-const defaultRequestTimeoutMs = 5000;
-const authRequestTimeoutMs = 12000;
+const defaultRequestTimeoutMs = 15000;
+const authRequestTimeoutMs = 45000;
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -49,20 +49,42 @@ function restHeaders(prefer) {
 
 function supabaseRequestTimeoutMs(timeoutMs) {
   const value = Number(timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
-  return Number.isFinite(value) ? Math.min(15000, Math.max(1000, value)) : defaultRequestTimeoutMs;
+  return Number.isFinite(value) ? Math.min(60000, Math.max(1000, value)) : defaultRequestTimeoutMs;
 }
 
-function supabaseFetch(url, { timeoutMs, ...options } = {}) {
-  return fetch(url, {
+function isTransientConnectionError(error) {
+  const code = String((error && error.code) || "");
+  const message = String((error && error.message) || "").toLowerCase();
+  return /ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH/.test(code)
+    || message.includes("aborted due to timeout")
+    || message.includes("socket hang up")
+    || message.includes("fetch failed");
+}
+
+// `retryable` must stay opt-in, per call site — a timed-out request may have
+// already reached Supabase, so this is only safe for calls with no mutation
+// side effect (login, read-only RPC). Never set it for token refresh (Supabase
+// refresh tokens rotate/are one-time-use — replaying an already-consumed one
+// on retry would fail) or for REST writes (risk of a duplicate row/update).
+async function supabaseFetch(url, { timeoutMs, retryable = false, ...options } = {}) {
+  const attempt = () => fetch(url, {
     ...options,
     signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs(timeoutMs))
   });
+  try {
+    return await attempt();
+  } catch (error) {
+    if (retryable && isTransientConnectionError(error)) return await attempt();
+    throw error;
+  }
 }
 
 async function restRequest(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
+  const method = options.method || "GET";
   const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
-    method: options.method || "GET",
+    method,
+    retryable: options.retryable ?? method === "GET",
     headers: {
       ...restHeaders(options.prefer),
       ...(options.headers || {})
@@ -77,8 +99,10 @@ async function restRequest(pathname, options = {}) {
 
 async function restRequestWithResponse(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
+  const method = options.method || "GET";
   const result = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
-    method: options.method || "GET",
+    method,
+    retryable: options.retryable ?? method === "GET",
     headers: {
       ...restHeaders(options.prefer),
       ...(options.headers || {})
@@ -207,6 +231,7 @@ async function signInWithPassword({ userId, password }) {
     ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
       timeoutMs: authRequestTimeoutMs,
       method: "POST",
+      retryable: true, // login has no server-side mutation to duplicate — safe to retry once on a transient timeout
       headers: jsonHeaders(key),
       body: JSON.stringify({
         email,

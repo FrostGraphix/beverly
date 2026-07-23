@@ -28,6 +28,7 @@ const {
   listSgcTokenRules,
   listOemManufacturers,
   countOemStationMappings,
+  listOemStationMappings,
   getOemManufacturer,
   upsertOemManufacturer,
   deleteOemManufacturer,
@@ -188,7 +189,16 @@ function crmSessionStatus(session, token, now = Date.now()) {
   if (now - session.lastActiveAt >= limits.idleMs) return { valid: false, reason: "Session idle timeout" };
   return {
     valid: true,
-    remainingMs: Math.min(limits.idleMs, limits.absoluteMs - (now - session.startedAt))
+    remainingMs: Math.min(limits.idleMs, limits.absoluteMs - (now - session.startedAt)),
+    // Browser lifetime for the session cookie. This must track the ABSOLUTE
+    // session window, not the idle window: idle expiry is enforced server-side
+    // from `lastActiveAt` above. Giving the cookie only the idle lifetime made
+    // the browser drop bev_session after an idle gap while bev_token/bev_refresh
+    // (absolute lifetime) survived — the server then saw a missing session
+    // payload and reported "Invalid session" instead of "Session idle timeout",
+    // and the resulting cookie purge destroyed bev_refresh, so the client's
+    // /api/auth/refresh had no credential left and failed with 400.
+    absoluteRemainingMs: limits.absoluteMs - (now - session.startedAt)
   };
 }
 
@@ -234,7 +244,7 @@ function enforceCrmSession(request, response, now = Date.now(), required = false
     return authFailure(401, normalizeRequestPath(request.url), status.reason);
   }
   const touched = { ...session, lastActiveAt: now };
-  response.setHeader("Set-Cookie", crmCookie(crmSessionCookieName, signCrmSession(touched), Math.ceil(status.remainingMs / 1000)));
+  response.setHeader("Set-Cookie", crmCookie(crmSessionCookieName, signCrmSession(touched), Math.ceil(status.absoluteRemainingMs / 1000)));
   request.__crmSession = touched;
   return null;
 }
@@ -519,6 +529,7 @@ function protectedPath(pathname) {
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
   if (lowerPath === "/api/system/oem/list") return false;
+  if (lowerPath === "/api/system/client-errors") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
@@ -2399,6 +2410,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       capabilities: oem.capabilities,
       vendingStrategy: oem.vendingStrategy,
       communityCount: await countOemStationMappings(oem.id),
+      stations: await listOemStationMappings(oem.id),
       createdAt: oem.createdAt,
       updatedAt: oem.updatedAt
     })));
@@ -3952,7 +3964,22 @@ async function auditResult(request, pathname, result) {
   }
 }
 
-async function tryLivePath(request, liveUrl, requestData, token, authHeaderName) {
+function isTransientConnectionError(error) {
+  const code = String((error && error.code) || "");
+  const causeCode = String((error && error.cause && error.cause.code) || "");
+  const message = String((error && error.message) || "").toLowerCase();
+  return /ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH/.test(`${code} ${causeCode}`)
+    || message.includes("stream has been aborted")
+    || message.includes("socket hang up")
+    || message.includes("aborted");
+}
+
+// `retryable` is true only for idempotent reads. A keep-alive socket that the
+// upstream (or an intervening NAT/VPN) has silently idle-closed throws
+// ECONNRESET / "stream has been aborted" the moment it is reused — the dead
+// socket is then evicted from the pool, so an immediate retry establishes a
+// fresh connection. We never replay a write we cannot confirm reached upstream.
+async function tryLivePath(request, liveUrl, requestData, token, authHeaderName, retryable = false) {
   const axios = require("axios");
   const http = require("http");
   const https = require("https");
@@ -3965,7 +3992,7 @@ async function tryLivePath(request, liveUrl, requestData, token, authHeaderName)
     });
   }
 
-  const response = await global.liveAxios({
+  const doLiveRequest = () => global.liveAxios({
     method: request.method || "GET",
     url: liveUrl,
     headers: buildLiveHeaders(request, requestData, token, authHeaderName),
@@ -3973,6 +4000,21 @@ async function tryLivePath(request, liveUrl, requestData, token, authHeaderName)
     responseType: "text", // Get raw text to match previous fetch behavior
     timeout: Math.max(1000, Number(request.__timeoutMs || process.env.LIVE_API_TIMEOUT_MS) || 45000)
   });
+
+  const maxAttempts = retryable ? 3 : 1;
+  let response;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      response = await doLiveRequest();
+      break;
+    } catch (error) {
+      if (attempt < maxAttempts && isTransientConnectionError(error)) {
+        console.warn("[live-proxy-retry]", JSON.stringify({ liveUrl, attempt, reason: String(error && error.message || error) }));
+        continue;
+      }
+      throw error;
+    }
+  }
 
   let payload;
   const contentType = String(response.headers["content-type"] || "");
@@ -4053,7 +4095,7 @@ async function proxyLive(request, pathname, requestData) {
   for (const candidate of candidates) {
     const liveUrl = `${liveBaseUrl}${candidate}${query}`;
     try {
-      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token, authHeaderName);
+      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token, authHeaderName, !isWriteRequest(candidate, request.method));
       if (liveResult.status === 401 || liveResult.status === 403) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
         await handleAutomationIncident({

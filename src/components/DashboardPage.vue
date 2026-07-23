@@ -244,6 +244,7 @@ export default {
         if (warm && warm.status === "ready" && warm.dataset) {
           this.applyDataset(warm.dataset);
           this.warmApplied = true;
+          this.loading = false;
           this.loadDataset(activeType, false);
           return;
         }

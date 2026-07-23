@@ -82,32 +82,39 @@ export function filterDashboardSeriesToWindow(series, from, to) {
   };
 }
 
+// Per-request cap so one slow upstream call can't hold the dashboard skeleton
+// for the client's full 90s axios timeout. Each request either returns real data
+// or aborts to null within this window; the mapper fills reference fallbacks for
+// nulls, so `loading` clears promptly even when the backend is degraded.
+export const DASHBOARD_REQUEST_TIMEOUT_MS = 15000;
+
 export async function fetchDashboardData(options = {}) {
   const requestOptions = dashboardOptions(options);
   const api = options.api || { getApi, postApi };
   const scope = rangeParams(requestOptions);
+  const timeoutOption = { timeout: DASHBOARD_REQUEST_TIMEOUT_MS };
   const [panelGroup, topChart, consumptionChart, successChart, alarmChart] = await Promise.all([
-    safeRequest(() => api.postApi("/api/dashboard/readPanelGroup")),
+    safeRequest(() => api.postApi("/api/dashboard/readPanelGroup", {}, timeoutOption)),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
       ...scope,
       type: requestOptions.activeType,
       days: 30
-    })),
+    }, timeoutOption)),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
       ...scope,
       type: requestOptions.consumptionType,
       days: 30
-    })),
+    }, timeoutOption)),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
       ...scope,
       type: 6,
       days: 48
-    })),
+    }, timeoutOption)),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
       ...scope,
       type: 7,
       days: 1
-    }))
+    }, timeoutOption))
   ]);
 
   const liveConsumptionChart = isSyntheticDashboardResponse(consumptionChart) ? null : consumptionChart;
@@ -118,17 +125,17 @@ export async function fetchDashboardData(options = {}) {
           ...scope,
           pageNumber: requestOptions.pageNumber,
           pageSize: 120
-        })),
+        }, timeoutOption)),
         safeRequest(() => api.getApi("/api/dashboard/gprs", {
           ...scope,
           pageNumber: requestOptions.pageNumber,
           pageSize: 48
-        })),
+        }, timeoutOption)),
         safeRequest(() => api.getApi("/api/token/creditTokenRecord/readMore", {
           from: requestOptions.from,
           to: requestOptions.to,
           siteId: requestOptions.siteId
-        }))
+        }, timeoutOption))
       ])
     : [null, null, null];
   const liveHourly = isSyntheticDashboardResponse(hourly) ? null : hourly;

@@ -1068,6 +1068,7 @@ async function readStationAnalyticsSummary(params) {
   try {
     const { body } = await supabase.restRequestWithResponse("/rpc/get_station_consumption_analytics", {
       method: "POST",
+      retryable: true, // read-only analytics query — safe to retry once on a transient timeout
       body: params,
     });
     return body && Array.isArray(body.stations) && Array.isArray(body.temporal) ? body : null;
