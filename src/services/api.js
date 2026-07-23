@@ -161,10 +161,12 @@ apiClient.interceptors.response.use(
       }
     }
 
-    recordClientError("api-response-error", error, {
-      url: error?.config?.url || "",
-      method: error?.config?.method || ""
-    });
+    if (!axios.isCancel(error) && error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
+      recordClientError("api-response-error", error, {
+        url: error?.config?.url || "",
+        method: error?.config?.method || ""
+      });
+    }
     return Promise.reject(error);
   }
 );
