@@ -2,8 +2,8 @@
 
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
 const defaultLoginDomain = "org.acoblighting.com";
-const defaultRequestTimeoutMs = 5000;
-const authRequestTimeoutMs = 12000;
+const defaultRequestTimeoutMs = 15000;
+const authRequestTimeoutMs = 45000;
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -49,7 +49,7 @@ function restHeaders(prefer) {
 
 function supabaseRequestTimeoutMs(timeoutMs) {
   const value = Number(timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
-  return Number.isFinite(value) ? Math.min(15000, Math.max(1000, value)) : defaultRequestTimeoutMs;
+  return Number.isFinite(value) ? Math.min(60000, Math.max(1000, value)) : defaultRequestTimeoutMs;
 }
 
 function isTransientConnectionError(error) {

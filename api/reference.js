@@ -529,6 +529,7 @@ function protectedPath(pathname) {
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
   if (lowerPath === "/api/system/oem/list") return false;
+  if (lowerPath === "/api/system/client-errors") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
