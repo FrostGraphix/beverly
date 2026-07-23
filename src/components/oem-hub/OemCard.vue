@@ -54,7 +54,7 @@
                 {{ station.communityLabel || station.stationId }} ({{ station.stationId }})
               </option>
             </select>
-            <span v-else>0</span>
+            <span v-else>{{ oem.communityCount || 0 }}</span>
           </dd>
         </div>
         <div class="oem-card__meta-row">

@@ -82,7 +82,36 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       "/api": apiProxyTarget
-    }
+    },
+    watch: {
+      // Root Vite serves only the CRM (src/, packages/tokens). Without this,
+      // chokidar recursively watches the ENTIRE project tree by default —
+      // every app under apps/* (each of which already runs its own dev
+      // server/watcher), docs, Supabase SQL migrations, and worst of all
+      // backend/data/*.sqlite* (the runtime DB, which churns on every write).
+      // Confirmed via direct instrumentation: this inflated the process to
+      // ~3650 open FSWatcher handles, which starved new outbound HTTPS
+      // connections (Windows shares I/O-completion resources between file
+      // watches and socket I/O) — e.g. a Supabase RPC that takes ~250ms in a
+      // fresh process took 4.8-5.8s+ here, intermittently exceeding the 5s
+      // request timeout and surfacing as "aborted due to timeout" errors on
+      // Station Consumption and other Supabase-backed reads.
+      ignored: [
+        "**/apps/**",
+        "**/backend/data/**",
+        "**/backend/wallet/**",
+        "**/docs/**",
+        "**/supabase/**",
+        "**/contracts/**",
+        "**/tools/**",
+        "**/.tools/**",
+        "**/.codex-temp/**",
+        "**/tmp/**",
+        "**/replica-screenshots/**",
+        "**/source-crawl/**",
+        "**/*.log",
+      ],
+    },
   },
   esbuild: {
     supported: {

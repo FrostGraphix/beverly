@@ -16,7 +16,7 @@
     >
       <div class="sidebar-logo">
         <img class="sidebar-logo-lockup sidebar-logo-lockup--light" src="/brand/beverly-lockup.png" alt="Beverly" />
-        <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-light.png" alt="" aria-hidden="true" />
+        <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-white.png" alt="" aria-hidden="true" />
         <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </BaseIconButton>
@@ -168,9 +168,7 @@
                   @keydown="handleUserMenuKeydown"
                 >
                   <div class="bw-user-dropdown-brand">
-                    <span class="bw-user-dropdown-logo bw-user-dropdown-logo--avatar">
-                      <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
-                    </span>
+                    <span class="bw-user-dropdown-logo" aria-hidden="true"></span>
                     <span>
                       <strong>Beverly</strong>
                       <small>{{ displayUserName }} - {{ currentRoleName }}</small>
@@ -365,10 +363,19 @@ const sidebarDefaultWidth = 252;
 const sidebarMinWidth = 220;
 const sidebarMaxWidth = 420;
 const sidebarWidthKey = "beverly-sidebar-width";
+const sidebarCollapsedKey = "beverly-sidebar-collapsed";
 
 function savedSidebarWidth() {
   const value = Number(localStorage.getItem(sidebarWidthKey));
   return Number.isFinite(value) ? Math.min(sidebarMaxWidth, Math.max(sidebarMinWidth, value)) : sidebarDefaultWidth;
+}
+
+function savedSidebarCollapsed() {
+  const value = localStorage.getItem(sidebarCollapsedKey);
+  // No stored preference yet → start collapsed (icon rail) so the shell opens
+  // compact on login. Once the user toggles, their choice is remembered below.
+  if (value === null) return true;
+  return value === "true";
 }
 import VendingMonitorPage from "./components/wallet/VendingMonitorPage.vue";
 import ReportsPage from "./components/ReportsPage.vue";
@@ -398,7 +405,7 @@ export default {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
       sidebarOpen: window.innerWidth > 1024,
-      collapsed: false,
+      collapsed: savedSidebarCollapsed(),
       sidebarWidth: savedSidebarWidth(),
       sidebarMinWidth,
       sidebarMaxWidth,
@@ -694,11 +701,6 @@ export default {
           this.currentRoleId = response.data?.roleId || null;
           this.currentUserName = response.data?.name || response.data?.userName || null;
         }
-        this.expandedGroups = Object.fromEntries(
-          routeGroups(this.currentRoleId)
-            .filter((group) => group.routes.length > 1)
-            .map((group) => [group.name, true])
-        );
         try {
           await refreshLiveWriteStatus();
         } catch {
@@ -788,6 +790,7 @@ export default {
         return;
       }
       this.collapsed = !this.collapsed;
+      try { localStorage.setItem(sidebarCollapsedKey, String(this.collapsed)); } catch { /* storage unavailable — non-fatal */ }
     },
     closeSidebar() {
       if (this.width <= 1024) this.sidebarOpen = false;

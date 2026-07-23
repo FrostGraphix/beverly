@@ -429,8 +429,8 @@
 
 /* === Canonical Header / Nav overrides (single source of truth) === */
 
-.fixed-header { position: fixed; top: 0; right: 0; left: var(--sidebar-width); z-index: 900; background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 1px 0 rgba(0,0,0,0.05); transition: left var(--transition-layout); }
-.hideSidebar .fixed-header { left: 58px; }
+.fixed-header { position: fixed; top: 0; right: 0; left: var(--layout-sidebar-width); z-index: 900; background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 1px 0 rgba(0,0,0,0.05); transition: left var(--transition-layout); }
+.hideSidebar .fixed-header { left: var(--layout-sidebar-collapsed-width); }
 .navbar { height: 56px; display: grid; grid-template-columns: 56px 1fr auto; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.04); }
 .hamburger-container { width: 56px; height: 56px; display: grid; place-items: center; cursor: pointer; color: var(--text-strong); border: 0; background: transparent; transition: background var(--transition-fast); }
 .hamburger-container:hover { background: rgba(0,0,0,0.03); }
