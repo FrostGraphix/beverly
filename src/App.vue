@@ -122,9 +122,11 @@
         ></div>
         <header class="fixed-header">
           <div class="navbar" :aria-label="`${activePageTitle} ${currentUserName}`">
-            <div v-if="showOemHub" class="bw-header-brand" aria-label="Beverly brand home">
+            <div v-if="showOemHub" class="bw-header-brand" aria-label="Beverly OEM Hub home">
               <span class="bw-user-dropdown-logo bw-header-logo-mark" aria-hidden="true"></span>
               <span class="bw-header-logo-text">Beverly</span>
+              <span class="bw-header-logo-divider" aria-hidden="true">/</span>
+              <span class="bw-header-logo-sub">OEM Hub</span>
             </div>
             <BaseIconButton v-else ref="sidebarToggleButton" class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
               <span class="hamburger-lines">
@@ -133,7 +135,7 @@
                 <span></span>
               </span>
             </BaseIconButton>
-            <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
+            <a v-if="!showOemHub" class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
             <div class="right-menu">
               <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openGlobalSearch">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
