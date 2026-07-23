@@ -444,9 +444,13 @@ export default {
       return !["", "null", "undefined"].includes(String(this.currentRoleId || "").trim().toLowerCase());
     },
     currentOemCapabilities() {
+      // If we are on the multi-tenant OEM Hub listing, we are outside any workspace.
+      // Returning {} guarantees capability-gated routes are hidden from the system sidebar.
+      if (this.showOemHub) return {};
+      
       // Only gate the sidebar/routes when a super-admin has entered a specific OEM's
-      // workspace. Returns null otherwise → visibleRoutes/routeGroups/findRoute apply
-      // no capability filtering, preserving the full single-tenant manifest exactly.
+      // workspace. Returns null otherwise (legacy single-tenant mode) → visibleRoutes
+      // applies no capability filtering, preserving the full single-tenant manifest exactly.
       const oem = this.oemStore.currentOem;
       return oem ? (oem.capabilities || {}) : null;
     },
