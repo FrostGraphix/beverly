@@ -4,151 +4,158 @@
   <BeverlyLoader v-else-if="!isRoleReady" label="Verifying session" />
   <div
     v-else
-    :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '']"
-    :style="{ '--layout-sidebar-width': `${sidebarWidth}px` }"
-  >
-
-    <div class="drawer-bg" @click="closeSidebar"></div>
-    <aside
-      class="sidebar-container"
-      aria-label="Primary navigation"
-      :inert="width <= 1024 && !sidebarOpen ? '' : null"
+    <div
+      v-else
+      :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '', { hideSidebar: collapsed, 'no-sidebar': showOemHub }]"
+      :style="{ '--layout-sidebar-width': `${sidebarWidth}px` }"
     >
-      <div class="sidebar-logo">
-        <img class="sidebar-logo-lockup sidebar-logo-lockup--light" src="/brand/beverly-lockup.png" alt="Beverly" />
-        <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-white.png" alt="" aria-hidden="true" />
-        <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </BaseIconButton>
-      </div>
-      <div class="sidebar-find" @click="focusSidebarFilter">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-        <input
-          ref="sidebarSearchInput"
-          v-model="sidebarQuery"
-          type="search"
-          aria-label="Filter navigation links"
-          placeholder="Filter pages"
-          @keydown.esc.stop="sidebarQuery = ''"
-        />
-        <kbd>/</kbd>
-      </div>
-      <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
-        <template v-for="group in sidebarGroups" :key="`section-${group.name}`">
-          <a
-            v-if="group.routes.length === 1"
-            :class="sidebarClass(group.routes[0], false)"
-            :href="group.routes[0].external ? resolveExternalUrl(group.routes[0]) : group.routes[0].hash"
-            :target="group.routes[0].external ? '_blank' : null"
-            :rel="group.routes[0].external ? 'noopener noreferrer' : null"
-            :title="group.routes[0].title"
-            @click="closeSidebar"
-          >
-            <span class="sidebar-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(group.routes[0])"/></svg>
-            </span>
-            <span class="sidebar-label">{{ group.routes[0].title }}</span>
-          </a>
-          <template v-else>
-            <BaseButton
-              variant="quiet"
-              :class="sidebarGroupClass(group)"
-              :title="group.name"
-              :aria-expanded="String(Boolean(expandedGroups[group.name]))"
-              @click.stop="toggleGroup(group.name)"
+
+      <div class="drawer-bg" @click="closeSidebar"></div>
+      <aside
+        v-if="!showOemHub"
+        class="sidebar-container"
+        aria-label="Primary navigation"
+        :inert="width <= 1024 && !sidebarOpen ? '' : null"
+      >
+        <div class="sidebar-logo">
+          <img class="sidebar-logo-lockup sidebar-logo-lockup--light" src="/brand/beverly-lockup.png" alt="Beverly" />
+          <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-white.png" alt="" aria-hidden="true" />
+          <BaseIconButton ref="sidebarCloseButton" v-if="width <= 1024" class="sidebar-mobile-close" @click.stop="closeSidebar" aria-label="Close sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </BaseIconButton>
+        </div>
+        <div class="sidebar-find" @click="focusSidebarFilter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input
+            ref="sidebarSearchInput"
+            v-model="sidebarQuery"
+            type="search"
+            aria-label="Filter navigation links"
+            placeholder="Filter pages"
+            @keydown.esc.stop="sidebarQuery = ''"
+          />
+          <kbd>/</kbd>
+        </div>
+        <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
+          <template v-for="group in sidebarGroups" :key="`section-${group.name}`">
+            <a
+              v-if="group.routes.length === 1"
+              :class="sidebarClass(group.routes[0], false)"
+              :href="group.routes[0].external ? resolveExternalUrl(group.routes[0]) : group.routes[0].hash"
+              :target="group.routes[0].external ? '_blank' : null"
+              :rel="group.routes[0].external ? 'noopener noreferrer' : null"
+              :title="group.routes[0].title"
+              @click="closeSidebar"
             >
               <span class="sidebar-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath({ group: group.name, title: group.name })"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(group.routes[0])"/></svg>
               </span>
-              <span class="sidebar-label">{{ group.name }}</span>
-              <svg class="sidebar-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
-            </BaseButton>
-            <div v-show="sidebarQuery || expandedGroups[group.name]" class="sidebar-submenu">
-              <a
-                v-for="route in group.routes"
-                :key="route.hash"
-                :class="sidebarClass(route, true)"
-                :href="route.external ? resolveExternalUrl(route) : route.hash"
-                :target="route.external ? '_blank' : null"
-                :rel="route.external ? 'noopener noreferrer' : null"
-                :title="route.title"
-                @click="closeSidebar"
+              <span class="sidebar-label">{{ group.routes[0].title }}</span>
+            </a>
+            <template v-else>
+              <BaseButton
+                variant="quiet"
+                :class="sidebarGroupClass(group)"
+                :title="group.name"
+                :aria-expanded="String(Boolean(expandedGroups[group.name]))"
+                @click.stop="toggleGroup(group.name)"
               >
                 <span class="sidebar-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(route)"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath({ group: group.name, title: group.name })"/></svg>
                 </span>
-                <span class="sidebar-label">{{ route.title }}</span>
-                <svg v-if="route.external" class="sidebar-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
-            </div>
+                <span class="sidebar-label">{{ group.name }}</span>
+                <svg class="sidebar-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+              </BaseButton>
+              <div v-show="sidebarQuery || expandedGroups[group.name]" class="sidebar-submenu">
+                <a
+                  v-for="route in group.routes"
+                  :key="route.hash"
+                  :class="sidebarClass(route, true)"
+                  :href="route.external ? resolveExternalUrl(route) : route.hash"
+                  :target="route.external ? '_blank' : null"
+                  :rel="route.external ? 'noopener noreferrer' : null"
+                  :title="route.title"
+                  @click="closeSidebar"
+                >
+                  <span class="sidebar-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="routeIconPath(route)"/></svg>
+                  </span>
+                  <span class="sidebar-label">{{ route.title }}</span>
+                  <svg v-if="route.external" class="sidebar-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1 2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              </div>
+            </template>
           </template>
-        </template>
-        <p v-if="sidebarQuery && !sidebarGroups.length" class="sidebar-search-empty">No matching pages</p>
-      </nav>
-      <div class="sidebar-footer">
-        <BaseButton class="sidebar-signout" variant="ghost" title="Sign Out" @click="handleSignOut">
-          <span class="sidebar-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-          </span>
-          <span class="sidebar-label">Sign Out</span>
-        </BaseButton>
-      </div>
-      <div
-        v-if="width > 1024 && !collapsed"
-        class="sidebar-resizer"
-        role="separator"
-        aria-label="Resize sidebar"
-        aria-orientation="vertical"
-        :aria-valuemin="sidebarMinWidth"
-        :aria-valuemax="sidebarMaxWidth"
-        :aria-valuenow="sidebarWidth"
-        tabindex="0"
-        @pointerdown="startSidebarResize"
-        @keydown="resizeSidebarWithKeyboard"
-        @dblclick="resetSidebarWidth"
-      ></div>
-    </aside>
-    <section
-      :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]"
-      :inert="width <= 1024 && sidebarOpen ? '' : null"
-    >
-      <div
-        v-if="userDropdownOpen && width <= 1024"
-        class="bw-account-scrim"
-        @click="closeUserMenu"
-      ></div>
-      <header class="fixed-header">
-        <div class="navbar" :aria-label="`${activePageTitle} ${currentUserName}`">
-          <BaseIconButton ref="sidebarToggleButton" class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
-            <span class="hamburger-lines">
-              <span></span>
-              <span></span>
-              <span></span>
+          <p v-if="sidebarQuery && !sidebarGroups.length" class="sidebar-search-empty">No matching pages</p>
+        </nav>
+        <div class="sidebar-footer">
+          <BaseButton class="sidebar-signout" variant="ghost" title="Sign Out" @click="handleSignOut">
+            <span class="sidebar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
             </span>
-          </BaseIconButton>
-          <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
-          <div class="right-menu">
-            <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openGlobalSearch">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-              <span>Search</span>
-              <kbd>Ctrl K</kbd>
-            </BaseButton>
-            <StationAlertsBell />
-            <div class="bw-account-menu" ref="accountMenuWrap">
-              <BaseButton
-                ref="userMenuButton"
-                variant="quiet"
-                class="bw-user-chip bw-user-chip-btn"
-                @click="openUserMenu"
-                :aria-label="`User menu for ${currentUserName}`"
-                aria-haspopup="menu"
-                :aria-expanded="String(userDropdownOpen)"
-                aria-controls="beverly-account-menu"
-              >
-                <span class="bw-avatar green bw-avatar-shell">
-                  <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
-                  <template v-else>{{ userInitials }}</template>
-                </span>
+            <span class="sidebar-label">Sign Out</span>
+          </BaseButton>
+        </div>
+        <div
+          v-if="width > 1024 && !collapsed"
+          class="sidebar-resizer"
+          role="separator"
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          :aria-valuemin="sidebarMinWidth"
+          :aria-valuemax="sidebarMaxWidth"
+          :aria-valuenow="sidebarWidth"
+          tabindex="0"
+          @pointerdown="startSidebarResize"
+          @keydown="resizeSidebarWithKeyboard"
+          @dblclick="resetSidebarWidth"
+        ></div>
+      </aside>
+      <section
+        :class="['main-container', { 'main-container--account-menu-open': userDropdownOpen && width <= 1024 }]"
+        :inert="width <= 1024 && sidebarOpen ? '' : null"
+      >
+        <div
+          v-if="userDropdownOpen && width <= 1024"
+          class="bw-account-scrim"
+          @click="closeUserMenu"
+        ></div>
+        <header class="fixed-header">
+          <div class="navbar" :aria-label="`${activePageTitle} ${currentUserName}`">
+            <div v-if="showOemHub" class="bw-header-brand" aria-label="Beverly brand home">
+              <span class="bw-user-dropdown-logo bw-header-logo-mark" aria-hidden="true"></span>
+              <span class="bw-header-logo-text">Beverly</span>
+            </div>
+            <BaseIconButton v-else ref="sidebarToggleButton" class="hamburger-container" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-pressed="String(collapsed)" @click="toggleSidebar">
+              <span class="hamburger-lines">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </BaseIconButton>
+            <a class="top-route" :href="route.hash" :aria-current="'page'">{{ activePageTitle }}</a>
+            <div class="right-menu">
+              <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openGlobalSearch">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <span>Search</span>
+                <kbd>Ctrl K</kbd>
+              </BaseButton>
+              <StationAlertsBell />
+              <div class="bw-account-menu" ref="accountMenuWrap">
+                <BaseButton
+                  ref="userMenuButton"
+                  variant="quiet"
+                  class="bw-user-chip bw-user-chip-btn"
+                  @click="openUserMenu"
+                  :aria-label="`User menu for ${currentUserName}`"
+                  aria-haspopup="menu"
+                  :aria-expanded="String(userDropdownOpen)"
+                  aria-controls="beverly-account-menu"
+                >
+                  <span class="bw-avatar green bw-avatar-shell">
+                    <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
+                    <span v-else class="bw-user-dropdown-logo bw-avatar-brand-logo" aria-hidden="true"></span>
+                  </span>
                 <span class="bw-user-meta">
                   <strong>{{ currentUserFirstName }}</strong>
                   <span>{{ currentRoleName }}</span>

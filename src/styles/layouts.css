@@ -364,6 +364,42 @@ a {
   margin-left: var(--layout-sidebar-collapsed-width);
 }
 
+.no-sidebar .sidebar-container {
+  display: none !important;
+}
+
+.no-sidebar .main-container {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+.bw-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 12px;
+}
+
+.bw-header-logo-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.bw-header-logo-text {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-strong, #f8fafc);
+}
+
+.bw-avatar-brand-logo {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 999px !important;
+}
+
 .mobile .main-container {
   width: 100%;
   min-width: auto;
