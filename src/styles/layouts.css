@@ -392,6 +392,11 @@ a {
   width: 100% !important;
 }
 
+.no-sidebar .fixed-header {
+  left: 0 !important;
+  width: 100% !important;
+}
+
 .bw-header-brand {
   display: inline-flex;
   align-items: center;
