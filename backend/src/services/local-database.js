@@ -717,9 +717,25 @@ function mapOemManufacturerRow(row) {
   if (!row) return null;
   let capabilities = {};
   try {
-    capabilities = JSON.parse(row.capabilities_json || "{}");
+    capabilities = typeof row.capabilities_json === "string" ? JSON.parse(row.capabilities_json || "{}") : (row.capabilities || {});
   } catch {
     capabilities = {};
+  }
+  const isSeedDefault = row.is_seed_default === 1 || row.is_seed_default === true || row.slug === "calinmeter";
+  const hasCapabilities = capabilities && typeof capabilities === "object" && Object.values(capabilities).some(Boolean);
+  if (!hasCapabilities || isSeedDefault) {
+    capabilities = {
+      remote_meter_task: true,
+      tariff_management: true,
+      gprs_support: true,
+      event_notification: true,
+      load_profile: true,
+      firmware_update: true,
+      dlms_protocol: true,
+      dlt645_protocol: true,
+      wallet_vending: true,
+      ...capabilities
+    };
   }
   return {
     id: row.id,
@@ -727,7 +743,7 @@ function mapOemManufacturerRow(row) {
     displayName: row.display_name,
     logoStoragePath: row.logo_storage_path || "",
     status: row.status,
-    isSeedDefault: row.is_seed_default === 1,
+    isSeedDefault,
     capabilities,
     vendingStrategy: row.vending_strategy || "sts_token",
     rateLimitWindowMs: row.rate_limit_window_ms || null,
