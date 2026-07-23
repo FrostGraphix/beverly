@@ -277,6 +277,7 @@
             :role-id="currentRoleId"
             :profile-picture-url="profilePictureUrl"
             @close="profileOpen = false"
+            @profile-picture-updated="handleProfilePictureUpdated"
           />
           <SettingsPage
             v-else-if="settingsOpen"
@@ -607,6 +608,9 @@ export default {
     this.stopSidebarResize();
   },
   methods: {
+    handleProfilePictureUpdated(newUrl) {
+      this.profilePictureUrl = newUrl || "";
+    },
     setSidebarWidth(value) {
       this.sidebarWidth = Math.min(this.sidebarMaxWidth, Math.max(this.sidebarMinWidth, Math.round(value)));
     },
