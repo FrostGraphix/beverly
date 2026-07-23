@@ -188,7 +188,7 @@
                     </svg>
                     <span>Settings</span>
                   </BaseButton>
-                  <BaseButton v-if="currentRoleId === 'super-admin'" variant="quiet" class="bw-user-menu-item" role="menuitem" @click="switchOem">
+                  <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="switchOem">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
                       <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
@@ -435,7 +435,7 @@ export default {
       return useOemStore();
     },
     showOemHub() {
-      return this.currentRoleId === "super-admin" && !this.oemStore.currentOemId;
+      return Boolean(this.isRoleReady && !this.isLogin && !this.oemStore.currentOemId);
     },
     isLogin() {
       return this.hash.startsWith("#/login") || !this.hash;
@@ -448,11 +448,26 @@ export default {
       // Returning {} guarantees capability-gated routes are hidden from the system sidebar.
       if (this.showOemHub) return {};
       
-      // Only gate the sidebar/routes when a super-admin has entered a specific OEM's
-      // workspace. Returns null otherwise (legacy single-tenant mode) → visibleRoutes
-      // applies no capability filtering, preserving the full single-tenant manifest exactly.
       const oem = this.oemStore.currentOem;
-      return oem ? (oem.capabilities || {}) : null;
+      if (!oem) return null;
+
+      const raw = oem.capabilities || {};
+      const hasCaps = Object.values(raw).some(Boolean);
+      if (!hasCaps || oem.isSeedDefault || oem.slug === "calinmeter") {
+        return {
+          remote_meter_task: true,
+          tariff_management: true,
+          gprs_support: true,
+          event_notification: true,
+          load_profile: true,
+          firmware_update: true,
+          dlms_protocol: true,
+          dlt645_protocol: true,
+          wallet_vending: true,
+          ...raw
+        };
+      }
+      return raw;
     },
     route() {
       return findRoute(this.hash, this.currentRoleId, this.currentOemCapabilities);
@@ -712,10 +727,9 @@ export default {
         }
         this.syncProfileIdentity();
         this.oemStore.restoreSelection();
-        // Super-admins work inside an OEM-scoped workspace; load the registry so the
-        // sidebar can gate routes by the current OEM's capabilities (and so the Hub
-        // is warm). Non-super-admin roles never pick an OEM and keep the full manifest.
-        if (this.currentRoleId === "super-admin") {
+        // All authenticated users work inside an OEM-scoped workspace; load the registry
+        // so the sidebar can gate routes by the current OEM's capabilities (and so the Hub is warm).
+        if (this.isRoleReady && !this.isLogin) {
           if (!this.oemStore.hasOems) this.oemStore.loadOems().catch(() => {});
           // Fire-and-forget: warm every active OEM's dashboard in the background so
           // clicking a Hub card is instant. Never awaited, never blocks login.
