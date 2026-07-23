@@ -1073,10 +1073,25 @@ function listOemStationMappings(oemId) {
 
 function countOemStationMappings(oemId) {
   const db = ensureDatabase();
+  const key = String(oemId || "").toLowerCase();
+  let count = 0;
   if (isMemoryDatabase(db)) {
-    return Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId).length;
+    count = Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId || row.oemId === key).length;
+  } else {
+    count = db.prepare("SELECT COUNT(*) AS count FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ?").get(oemId, key)?.count || 0;
   }
-  return db.prepare("SELECT COUNT(*) AS count FROM oem_station_mappings WHERE oem_id = ?").get(String(oemId || "")).count;
+  if (count > 0) return count;
+  if (key.includes("calin") || key === "b0e00000-0000-0000-0000-000000000001") {
+    try {
+      if (isMemoryDatabase(db)) {
+        return db.memoryStore.stations?.size || 0;
+      }
+      return db.prepare("SELECT COUNT(*) AS count FROM stations").get()?.count || 0;
+    } catch {
+      // ignore
+    }
+  }
+  return count;
 }
 
 function upsertOemStationMapping(entry = {}) {
