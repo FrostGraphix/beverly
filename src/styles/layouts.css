@@ -397,6 +397,22 @@ a {
   width: 100% !important;
 }
 
+.no-sidebar .navbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
+.no-sidebar .bw-header-brand {
+  margin-right: auto !important;
+}
+
+.no-sidebar .right-menu {
+  margin-left: auto !important;
+}
+
 .bw-header-brand {
   display: inline-flex;
   align-items: center;
