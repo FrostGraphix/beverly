@@ -2,8 +2,6 @@
   <div id="app-root">
   <LoginPage v-if="isLogin" @logged-in="goDashboard" />
   <BeverlyLoader v-else-if="!isRoleReady" label="Verifying session" />
-  <div
-    v-else
     <div
       v-else
       :class="['app-page', deviceClass, sidebarOpen ? 'openSidebar' : '', { hideSidebar: collapsed, 'no-sidebar': showOemHub }]"
