@@ -5,6 +5,7 @@
       :disabled="disabled || loading"
       :aria-expanded="open ? 'true' : 'false'"
       aria-haspopup="dialog"
+      data-testid="table-toolbar-action-export"
       @click.stop="toggle"
     >Export</BaseButton>
 
