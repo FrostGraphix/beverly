@@ -520,10 +520,21 @@ a {
   display: grid;
   place-items: center;
   color: var(--text-strong);
-  border: 0;
-  background: transparent;
+  /* Strip the pill shape and hover fill that .base-icon-button applies */
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
   cursor: pointer;
   transition: color var(--transition-fast);
+}
+
+/* Also kill the .base-icon-button hover state for this specific button */
+.hamburger-container:hover:not(:disabled) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .bw-sidebar-toggle-icon {
