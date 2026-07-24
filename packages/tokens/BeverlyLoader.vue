@@ -91,16 +91,20 @@ withDefaults(defineProps<{
   pointer-events: none;
 }
 
-/* Ambient glow breathing behind the mark */
+/* Ambient glow breathing behind the mark.
+   Uses beverly-opacity-fade (opacity only) so it never conflicts with
+   beverly-halo-pulse which animates transform:scale. */
 .beverly-loader-halo {
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(34, 197, 94, 0.32) 0%, rgba(34, 197, 94, 0.08) 45%, transparent 70%);
-  animation: beverly-ring-fade 0.25s ease-out both, beverly-halo-pulse 2.6s ease-in-out infinite;
+  animation: beverly-opacity-fade 0.25s ease-out both, beverly-halo-pulse 2.6s ease-in-out 0.25s infinite;
 }
 
-/* Rotating loading ring framing the logo */
+/* Rotating loading ring framing the logo.
+   Uses beverly-opacity-fade (opacity only) so it never conflicts with
+   beverly-ring-spin which animates transform:rotate. */
 .beverly-loader-spin-ring {
   position: absolute;
   width: 128px;
@@ -111,7 +115,7 @@ withDefaults(defineProps<{
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: beverly-ring-fade 0.25s ease-out both, beverly-ring-spin 1.8s linear infinite;
+  animation: beverly-opacity-fade 0.25s ease-out both, beverly-ring-spin 1.8s linear 0.25s infinite;
 }
 
 /* Orbiting spark particles */
@@ -155,14 +159,19 @@ withDefaults(defineProps<{
 .beverly-loader-dots span:nth-child(2) { animation-delay: 0.2s; }
 .beverly-loader-dots span:nth-child(3) { animation-delay: 0.4s; }
 
+/* Opacity-only entrance — does NOT touch transform, so the
+   parallel beverly-body-float animation can own transform
+   without any conflict or override. */
 @keyframes beverly-mark-enter {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-@keyframes beverly-ring-fade {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
+/* Shared opacity-only fade used by the ring and halo so they
+   can coexist cleanly with their transform-based animations. */
+@keyframes beverly-opacity-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes beverly-body-float {

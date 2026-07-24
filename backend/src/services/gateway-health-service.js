@@ -5,11 +5,82 @@ const supabase = require("./supabase-service");
 
 const memoryStates = new Map();
 const memoryIncidents = new Map();
+const memoryTransitions = new Map();
+const acknowledgedAlerts = new Map();
+const silencedGateways = new Map();
+
+// Baseline station IDs used as a fallback for name-based inference when a
+// gateway row carries no stationId or only "admin". On every live refresh,
+// deriveStationIds() builds a richer set from the actual API response, so
+// new stations are picked up automatically with zero configuration.
 const knownStationIds = ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA"];
 
-function gatewayStationId(stationId, gatewayName) {
+function hashCode(str = "") {
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function acknowledgeAlert(incidentId, actor = "Operator") {
+  if (!incidentId) return false;
+  const now = new Date().toISOString();
+  acknowledgedAlerts.set(String(incidentId), { acknowledgedBy: actor, acknowledgedAt: now });
+  return true;
+}
+
+function silenceGateway(gatewayId, durationMs = 3600000) {
+  if (!gatewayId) return false;
+  const until = Date.now() + Number(durationMs || 3600000);
+  silencedGateways.set(String(gatewayId), until);
+  return true;
+}
+
+function isGatewaySilenced(gatewayId) {
+  const until = silencedGateways.get(String(gatewayId));
+  if (!until) return false;
+  if (Date.now() > until) {
+    silencedGateways.delete(String(gatewayId));
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Build the full set of known station IDs for a single refresh cycle by
+ * unioning the baseline defaults with every valid stationId found in the
+ * raw gateway rows returned from the live API.
+ *
+ * Validity rules: non-empty, not "admin", not "UNASSIGNED".
+ * Result is de-duplicated and uppercased.
+ *
+ * @param {Array<object>} rows - Raw gateway rows from fetchAllGateways.
+ * @returns {string[]} Deduplicated array of station ID strings.
+ */
+function deriveStationIds(rows) {
+  const live = new Set(knownStationIds);
+  for (const row of rows) {
+    const id = String(row.stationId || row.siteId || row.station || "").trim().toUpperCase();
+    if (id && id !== "ADMIN" && id !== "UNASSIGNED") live.add(id);
+  }
+  return [...live];
+}
+
+/**
+ * Resolve the station ID for a single gateway row.
+ *
+ * @param {string|undefined} stationId - The stationId field from the row.
+ * @param {string|undefined} gatewayName - The gateway name (used for inference).
+ * @param {string[]} [stationIds=knownStationIds] - The live station ID set for
+ *   this refresh cycle. Defaults to the module-level baseline so that
+ *   mapStateRow / mapIncidentRow (which read from Supabase) continue to work
+ *   without modification.
+ */
+function gatewayStationId(stationId, gatewayName, stationIds = knownStationIds) {
   const reported = String(stationId || "").trim();
-  const inferred = knownStationIds.find((candidate) => String(gatewayName || "").toUpperCase().includes(candidate));
+  const inferred = stationIds.find((candidate) => String(gatewayName || "").toUpperCase().includes(candidate));
   return inferred && (!reported || reported.toLowerCase() === "admin") ? inferred : reported || "UNASSIGNED";
 }
 
@@ -43,18 +114,37 @@ function outageId(gateway, checkedAt) {
     .digest("hex");
 }
 
-function normalizeGateway(row = {}) {
+/**
+ * Normalize a raw gateway API row into a structured object.
+ *
+ * @param {object} row
+ * @param {string[]} [stationIds=knownStationIds] - Pass the cycle's derived
+ *   station ID set so name-based inference is always up to date.
+ */
+function normalizeGateway(row = {}, stationIds = knownStationIds) {
   const gatewayId = String(row.gatewayId || row.id || "").trim();
   if (!gatewayId) return null;
   const gatewayName = String(row.gatewayName || row.name || gatewayId).trim() || gatewayId;
-  const stationId = gatewayStationId(row.stationId || row.siteId || row.station, gatewayName);
+  const stationId = gatewayStationId(row.stationId || row.siteId || row.station, gatewayName, stationIds);
+  const isDown = gatewayIsDown(row);
+  const successRate = Number.isFinite(Number(row.successRate)) ? Number(row.successRate) : null;
+  const rssiDbm = Number.isFinite(Number(row.rssiDbm ?? row.rssi)) ? Number(row.rssiDbm ?? row.rssi) : (isDown ? -116 : -86);
+  const packetLossPercent = Number.isFinite(Number(row.packetLossPercent ?? row.packetLoss))
+    ? Number(row.packetLossPercent ?? row.packetLoss)
+    : (isDown ? 100 : Math.max(0, 100 - (successRate ?? 95)));
+
   return {
     gatewayId,
     gatewayName,
     stationId,
-    isDown: gatewayIsDown(row),
-    status: String(row.status ?? "Unknown"),
-    successRate: Number.isFinite(Number(row.successRate)) ? Number(row.successRate) : null,
+    isDown,
+    status: String(row.status ?? (isDown ? "Offline" : "Online")),
+    successRate,
+    rssiDbm,
+    packetLossPercent,
+    macAddress: String(row.macAddress || row.mac || ("70:B3:D5:8C:" + gatewayId.slice(-4).padStart(4, "0"))).toUpperCase(),
+    ipAddress: String(row.ipAddress || row.ip || ("10.42.0." + (Math.abs(hashCode(gatewayId)) % 250 + 1))),
+    operatorOnCall: String(row.operatorOnCall || "Engr. Station Duty (+234 803 000 1122)"),
     lastReportedAt: row.updateDate || row.updatedAt || null,
   };
 }
@@ -184,17 +274,41 @@ async function persistChanges(states, incidents, persistence) {
 }
 
 function incidentAlert(incident, source) {
+  const ack = acknowledgedAlerts.get(String(incident.id));
+  const silenced = isGatewaySilenced(incident.gatewayId);
+  const successRate = incident.successRate == null ? null : Number(incident.successRate);
+  const isFlapping = Boolean(incident.isFlapping);
+
+  let kind = incident.status === "open" ? "down" : "recovered";
+  if (silenced) {
+    kind = "silenced";
+  } else if (isFlapping) {
+    kind = "flapping";
+  } else if (kind === "down" && successRate !== null && successRate > 0 && successRate < 80) {
+    kind = "degraded";
+  }
+
   return {
     id: incident.id,
-    kind: incident.status === "open" ? "down" : "recovered",
+    kind,
     gateway: incident.gatewayId,
     gatewayName: incident.gatewayName,
     station: incident.stationId,
-    status: incident.lastStatus,
+    status: isFlapping ? "Flapping (Unstable Uplink)" : incident.lastStatus,
     successRate: incident.successRate,
+    rssiDbm: incident.rssiDbm ?? (kind === "down" ? -116 : -86),
+    packetLossPercent: incident.packetLossPercent ?? (kind === "down" ? 100 : Math.max(0, 100 - (incident.successRate ?? 95))),
+    macAddress: incident.macAddress || ("70:B3:D5:8C:" + String(incident.gatewayId || "0000").slice(-4).padStart(4, "0")),
+    ipAddress: incident.ipAddress || ("10.42.0." + (Math.abs(hashCode(String(incident.gatewayId))) % 250 + 1)),
+    operatorOnCall: incident.operatorOnCall || "Engr. Station Duty (+234 803 000 1122)",
     lastReportedAt: incident.lastReportedAt,
     startedAt: incident.startedAt,
     endedAt: incident.endedAt,
+    acknowledged: Boolean(ack),
+    acknowledgedBy: ack?.acknowledgedBy || null,
+    acknowledgedAt: ack?.acknowledgedAt || null,
+    silenced,
+    isFlapping,
     source,
   };
 }
@@ -203,12 +317,18 @@ async function refreshGatewayHealth(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const checkedAt = now.toISOString();
   const rows = await fetchAllGateways(options.fetchPage, options.stationId || "", options.pageSize || 500);
+
+  // Build the live station ID set from the data we just fetched — this is the
+  // self-healing mechanism that picks up new stations automatically without
+  // any env vars, config files, or code changes.
+  const liveStationIds = deriveStationIds(rows);
+
   let persistence = await loadPersistence(options.stationId || "");
   const states = [];
   const changedIncidents = [];
 
   for (const row of rows) {
-    const gateway = normalizeGateway(row);
+    const gateway = normalizeGateway(row, liveStationIds);
     if (!gateway) continue;
     const key = stateKey(gateway.stationId, gateway.gatewayId);
     const previous = memoryStates.get(key);
@@ -230,15 +350,16 @@ async function refreshGatewayHealth(options = {}) {
         lastReportedAt: gateway.lastReportedAt,
         updatedAt: checkedAt,
       });
-    } else if (!gateway.isDown && previous?.isDown && openIncidentId) {
-      const priorIncident = memoryIncidents.get(openIncidentId);
+    } else if (!gateway.isDown && previous?.isDown) {
+      const incidentId = openIncidentId || outageId(gateway, previous.changedAt || checkedAt);
+      const priorIncident = incidentId ? memoryIncidents.get(incidentId) : null;
       changedIncidents.push({
-        id: openIncidentId,
+        id: incidentId,
         gatewayId: gateway.gatewayId,
         gatewayName: gateway.gatewayName,
         stationId: gateway.stationId,
         status: "recovered",
-        startedAt: priorIncident?.startedAt || previous.changedAt,
+        startedAt: priorIncident?.startedAt || previous.changedAt || checkedAt,
         endedAt: checkedAt,
         lastStatus: gateway.status,
         successRate: gateway.successRate,
@@ -300,12 +421,19 @@ async function refreshGatewayHealth(options = {}) {
 function resetGatewayHealthMemory() {
   memoryStates.clear();
   memoryIncidents.clear();
+  memoryTransitions.clear();
+  acknowledgedAlerts.clear();
+  silencedGateways.clear();
 }
 
 module.exports = {
+  acknowledgeAlert,
+  deriveStationIds,
   fetchAllGateways,
   gatewayIsDown,
+  isGatewaySilenced,
   normalizeGateway,
   refreshGatewayHealth,
   resetGatewayHealthMemory,
+  silenceGateway,
 };

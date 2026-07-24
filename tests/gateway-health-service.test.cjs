@@ -36,6 +36,15 @@ function gatewayResponse(status, updateDate) {
 
 (async () => {
   assert.equal(normalizeGateway({ gatewayId: "GW-2", gatewayName: "UMAISHA_2", stationId: "admin" }).stationId, "UMAISHA");
+
+  // Dynamic derivation test: gateway with "NEWSTATION_1" name and "admin" stationId should infer "NEWSTATION"
+  // when "NEWSTATION" is present in live stationId list from another gateway row.
+  const dynamicDerivationTest = normalizeGateway(
+    { gatewayId: "GW-3", gatewayName: "NEWSTATION_01", stationId: "admin" },
+    ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA", "NEWSTATION"]
+  );
+  assert.equal(dynamicDerivationTest.stationId, "NEWSTATION");
+
   resetGatewayHealthMemory();
   const down = await refreshGatewayHealth({
     now: new Date("2026-07-14T08:00:00.000Z"),
@@ -61,6 +70,11 @@ function gatewayResponse(status, updateDate) {
   assert.equal(recovered.events[0].kind, "recovered");
   assert.equal(recovered.events[0].startedAt, "2026-07-14T08:00:00.000Z");
   assert.equal(recovered.events[0].endedAt, "2026-07-14T08:02:00.000Z");
+
+  const { acknowledgeAlert, silenceGateway, isGatewaySilenced } = require("../backend/src/services/gateway-health-service");
+  assert.equal(acknowledgeAlert(recovered.events[0].id, "Operator Engr"), true);
+  assert.equal(silenceGateway("GW-1", 3600000), true);
+  assert.equal(isGatewaySilenced("GW-1"), true);
 
   const migration = fs.readFileSync(path.join(__dirname, "../supabase/migrations/20260714170000_gateway_health.sql"), "utf8");
   assert.match(migration, /create table if not exists public\.gateway_health_state/);
