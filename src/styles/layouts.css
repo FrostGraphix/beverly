@@ -522,6 +522,19 @@ a {
   color: var(--text-strong);
   border: 0;
   background: transparent;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.bw-sidebar-toggle-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted, #94a3b8);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.hamburger-container:hover .bw-sidebar-toggle-icon {
+  color: var(--primary, #22c55e);
 }
 
 .hamburger-lines {
