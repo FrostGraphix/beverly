@@ -3638,6 +3638,35 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       }
     });
   }
+  if (pathname === "/api/v1/admin/profile-picture/scan") {
+    return localJobResponse({ ok: true, scanned: true });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/upload-url") {
+    const filename = String(payload.file_name || "avatar.jpg").replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `staff/admin/${Date.now()}-${filename}`;
+    return localJobResponse({
+      path,
+      signed_url: `/api/v1/admin/profile-picture/mock-upload?path=${encodeURIComponent(path)}`,
+      public_url: `https://storage.beverly.local/wallet-profile-pictures/${path}`
+    });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/activate") {
+    const path = String(payload.path || "staff/admin/avatar.jpg");
+    const publicUrl = `https://storage.beverly.local/wallet-profile-pictures/${path}`;
+    return localJobResponse({
+      ok: true,
+      profile_picture_url: publicUrl
+    });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/mock-upload") {
+    return {
+      status: 200,
+      body: { ok: true, uploaded: true }
+    };
+  }
+  if (pathname === "/api/v1/admin/profile-picture") {
+    return localJobResponse({ ok: true, removed: true });
+  }
   if (pathname === "/api/user/changePassword") {
     if (!payload.currentPassword || !payload.newPassword || String(payload.newPassword).length < 8) {
       return {
@@ -4185,13 +4214,7 @@ async function proxyLive(request, pathname, requestData) {
 async function proxyCanonicalWallet(request, pathname, requestData) {
   const env = getEnv();
   if (!env.walletApiBaseUrl) {
-    return {
-      status: 503,
-      body: {
-        error: "wallet_backend_unconfigured",
-        message: "Wallet backend is not configured for this deployment."
-      }
-    };
+    return null;
   }
   if (isCanonicalFinancialMutation(pathname, request.method) && !env.canonicalWalletWritesEnabled) {
     return {
@@ -4275,8 +4298,10 @@ async function handler(request, response) {
     if (isCanonicalWalletRequest(pathname)) {
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
-      response.status(canonicalResult.status).json(canonicalResult.body);
-      return;
+      if (canonicalResult) {
+        response.status(canonicalResult.status).json(canonicalResult.body);
+        return;
+      }
     }
     ensureDatabase();
     let result = rateLimitResult(request);

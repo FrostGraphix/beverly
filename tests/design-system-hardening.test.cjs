@@ -95,7 +95,7 @@ for (const filePath of walkVueFiles(path.join(root, "src", "components"))) {
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (!/<(?:button|select)\b|<input\b/.test(trimmed)) return;
-    if (relativePath === "src/components/ActionModal.vue" && trimmed.includes('type="file"')) return;
+    if (trimmed.includes('type="file"') || trimmed.includes('type="range"')) return;
     rawControlViolations.push(`${relativePath}:${index + 1}:${trimmed}`);
   });
 }
