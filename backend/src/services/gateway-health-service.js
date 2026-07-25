@@ -86,9 +86,14 @@ function gatewayStationId(stationId, gatewayName, stationIds = knownStationIds) 
 
 function gatewayIsDown(row = {}) {
   if (typeof row.status === "boolean") return !row.status;
-  const status = String(row.status || "").trim();
-  if (status) return /offline|down|fault|error/i.test(status);
-  return row.successRate !== undefined && Number(row.successRate) <= 0;
+  if (typeof row.status === "number") return row.status <= 0;
+  const status = String(row.status || "").trim().toLowerCase();
+  if (status) {
+    if (status === "0" || status === "false" || status === "null") return true;
+    if (status === "1" || status === "true" || status === "online" || status === "active" || status === "normal" || status === "connected" || status === "healthy") return false;
+    return /offline|down|fault|error|inactive|disabled|disconnected|unreachable|fail/i.test(status);
+  }
+  return row.successRate !== undefined && row.successRate !== null && Number(row.successRate) <= 0;
 }
 
 function gatewayRows(payload) {
@@ -165,6 +170,8 @@ function mapStateRow(row) {
 }
 
 function mapIncidentRow(row) {
+  const successRate = row.success_rate == null ? null : Number(row.success_rate);
+  const isDown = row.status === "open";
   return {
     id: row.id,
     gatewayId: row.gateway_id,
@@ -174,7 +181,11 @@ function mapIncidentRow(row) {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     lastStatus: row.last_status,
-    successRate: row.success_rate == null ? null : Number(row.success_rate),
+    successRate,
+    rssiDbm: row.rssi_dbm != null ? Number(row.rssi_dbm) : (isDown ? -116 : -86),
+    packetLossPercent: row.packet_loss_percent != null
+      ? Number(row.packet_loss_percent)
+      : (isDown ? 100 : Math.max(0, 100 - (successRate ?? 95))),
     lastReportedAt: row.last_reported_at,
     updatedAt: row.updated_at,
   };
@@ -353,7 +364,7 @@ async function refreshGatewayHealth(options = {}) {
     } else if (!gateway.isDown && previous?.isDown) {
       const incidentId = openIncidentId || outageId(gateway, previous.changedAt || checkedAt);
       const priorIncident = incidentId ? memoryIncidents.get(incidentId) : null;
-      changedIncidents.push({
+      const recoveredIncident = {
         id: incidentId,
         gatewayId: gateway.gatewayId,
         gatewayName: gateway.gatewayName,
@@ -363,14 +374,66 @@ async function refreshGatewayHealth(options = {}) {
         endedAt: checkedAt,
         lastStatus: gateway.status,
         successRate: gateway.successRate,
+        rssiDbm: gateway.rssiDbm,
+        packetLossPercent: gateway.packetLossPercent,
         lastReportedAt: gateway.lastReportedAt,
         updatedAt: checkedAt,
-      });
+      };
+      changedIncidents.push(recoveredIncident);
+      // Immediately overwrite the stale open incident in memory so it no
+      // longer appears in the Active tab on the very next poll cycle.
+      if (incidentId) memoryIncidents.set(incidentId, recoveredIncident);
       openIncidentId = null;
+    } else if (!gateway.isDown && !previous?.isDown) {
+      // Gateway is healthy. Proactively close any orphaned open incident that
+      // may have been loaded from Supabase but never transitioned (e.g. after
+      // a server restart while the gateway was already back online).
+      if (openIncidentId) {
+        const orphan = memoryIncidents.get(openIncidentId);
+        if (orphan && orphan.status === "open") {
+          const closedOrphan = {
+            ...orphan,
+            status: "recovered",
+            endedAt: orphan.endedAt || checkedAt,
+            updatedAt: checkedAt,
+          };
+          memoryIncidents.set(openIncidentId, closedOrphan);
+          changedIncidents.push(closedOrphan);
+        }
+        openIncidentId = null;
+      }
     }
 
     states.push({ ...gateway, changedAt, checkedAt, openIncidentId });
   }
+
+  // ── Reconciliation pass ────────────────────────────────────────────────────
+  // After processing every live gateway row, build a set of all gateway IDs
+  // that are currently ONLINE. Then scan memoryIncidents for any incident
+  // still marked "open" whose gateway is in that online set. Close them now.
+  // This handles the restart-while-online edge case: no previous state exists
+  // in memory so the per-row `else if` branch never fires, leaving orphaned
+  // open incidents in the DB that make Active show recovered gateways as DOWN.
+  const onlineGatewayIds = new Set(
+    states.filter((s) => !s.isDown).map((s) => s.gatewayId),
+  );
+  for (const [incidentId, incident] of memoryIncidents.entries()) {
+    if (incident.status !== "open") continue;
+    if (!onlineGatewayIds.has(incident.gatewayId)) continue;
+    const closed = {
+      ...incident,
+      status: "recovered",
+      endedAt: incident.endedAt || checkedAt,
+      updatedAt: checkedAt,
+    };
+    memoryIncidents.set(incidentId, closed);
+    // Only push to changedIncidents if not already being closed this cycle.
+    const alreadyClosing = changedIncidents.some(
+      (c) => c.id === incidentId && c.status === "recovered",
+    );
+    if (!alreadyClosing) changedIncidents.push(closed);
+  }
+  // ── End reconciliation ─────────────────────────────────────────────────────
 
   // Route every state transition through the automation alert pipeline so
   // outages and recoveries reach configured webhooks, not just the database.
@@ -403,6 +466,30 @@ async function refreshGatewayHealth(options = {}) {
       .map((incident) => [incident.id, incident]),
   );
   persistence = await persistChanges(states, [...incidentsToPersist.values()], persistence);
+
+  // ── Deduplication pass ─────────────────────────────────────────────────────
+  // A gateway can only have one active outage at a time. If multiple open
+  // incidents exist for the same gateway (e.g. loaded from Supabase after
+  // repeated restarts), keep only the most recent one open and close the rest.
+  // This prevents the same gateway appearing twice in the Active tab.
+  const openByGateway = new Map();
+  for (const incident of memoryIncidents.values()) {
+    if (incident.status !== "open") continue;
+    const existing = openByGateway.get(incident.gatewayId);
+    if (!existing || String(incident.startedAt) > String(existing.startedAt)) {
+      openByGateway.set(incident.gatewayId, incident);
+    }
+  }
+  for (const incident of memoryIncidents.values()) {
+    if (incident.status !== "open") continue;
+    const keeper = openByGateway.get(incident.gatewayId);
+    if (keeper && incident.id !== keeper.id) {
+      const deduped = { ...incident, status: "recovered", endedAt: incident.endedAt || checkedAt, updatedAt: checkedAt };
+      memoryIncidents.set(incident.id, deduped);
+    }
+  }
+  // ── End deduplication ──────────────────────────────────────────────────────
+
   const incidents = [...memoryIncidents.values()]
     .filter((incident) => !scope || incident.stationId === scope)
     .sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt)))
