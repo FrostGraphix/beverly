@@ -93,6 +93,7 @@ function apiBody(url) {
   if (value.includes("/vendor/onboarding/list")) return { code: 0, data: { rows: [], total: 0 } };
   if (value.includes("/system/automation-report")) return { code: 0, data: { total: 0, automations: [] } };
   if (value.includes("/system/automation-control")) return { code: 0, data: { enabled: true, deliveries: [] } };
+  if (value.includes("/system/oem")) return { code: 0, data: { oems: [{ id: "calinmeter", slug: "calinmeter", displayName: "Calinmeter", status: "active", communityCount: 9, stations: [{ stationId: "KYAKALE", communityLabel: "Kyakale" }] }] } };
   if (value.includes("/token/credittoken/generate")) return { code: 0, data: { token: "1234 5678 9012 3456", createDate: "2026-01-01" } };
   return { code: 0, data: { data: [row()], rows: [row()], total: 1 }, result: { data: [row()], rows: [row()], total: 1 } };
 }
@@ -114,7 +115,13 @@ async function login(page, appUrl) {
   await page.fill('[data-testid="login-user-id"]', "admin");
   await page.fill('[data-testid="login-password"]', "admin");
   await page.click('[data-testid="login-submit"]');
-  await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
+  await page.waitForSelector(".dashboard-editor-container, .oem-hub", { timeout: 45000 });
+  const isHub = await page.evaluate(() => !!document.querySelector(".oem-hub"));
+  if (isHub) {
+    const card = await page.$(".oem-hub__grid .oem-card__surface, .oem-card .btn-primary");
+    if (card) await card.click();
+    await page.waitForSelector(".dashboard-editor-container", { timeout: 45000 });
+  }
 }
 
 async function smokeRoutes(page, routes) {
