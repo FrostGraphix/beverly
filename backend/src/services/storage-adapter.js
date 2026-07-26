@@ -840,36 +840,43 @@ function mapOemStationMappingRow(row) {
 }
 
 async function listOemStationMappings(oemId, oemSlug = "") {
-  const rows = await runWithFallback(
-    () => localDatabase.listOemStationMappings(oemId),
+  const mappings = await runWithFallback(
+    () => localDatabase.listOemStationMappings(oemId, oemSlug),
     async () => {
       const result = await supabase.restRequest(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&order=station_id.asc`);
       return (Array.isArray(result) ? result : []).map(mapOemStationMappingRow);
     }
   );
-  if (Array.isArray(rows) && rows.length > 0) return rows;
+  if (Array.isArray(mappings) && mappings.length > 0) return mappings;
 
   const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
-  if (key.includes("calin") || key.includes("b0e00000")) {
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed") || !oemId || key.trim().length > 0) {
     try {
-      const stations = await supabase.restRequest(`/stations?select=id,name,remark&order=id.asc`);
-      if (Array.isArray(stations) && stations.length > 0) {
-        return stations.map((st) => ({
-          oemId: String(oemId || ""),
-          stationId: String(st.id || st.name || ""),
-          communityLabel: String(st.name || st.remark || st.id || "")
-        }));
+      const liveStations = await runWithFallback(
+        () => localDatabase.listOemStationMappings(oemId, oemSlug),
+        async () => {
+          const rows = await supabase.restRequest(`/stations?select=id,name,community_label,remark&order=id.asc`);
+          return (Array.isArray(rows) ? rows : []).map((r) => ({
+            oemId: String(oemId || ""),
+            stationId: String(r.id || r.station_id || r.name || ""),
+            communityLabel: String(r.community_label || r.name || r.remark || r.id || "")
+          }));
+        }
+      );
+      if (Array.isArray(liveStations) && liveStations.length > 0) {
+        return liveStations;
       }
     } catch {
       // ignore
     }
   }
-  return rows || [];
+
+  return mappings || [];
 }
 
 async function countOemStationMappings(oemId, oemSlug = "") {
   const count = await runWithFallback(
-    () => localDatabase.countOemStationMappings(oemId),
+    () => localDatabase.countOemStationMappings(oemId, oemSlug),
     async () => {
       const result = await supabase.restRequestWithResponse(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&select=station_id`, {
         headers: { Prefer: "count=exact", Range: "0-0" }
@@ -881,7 +888,7 @@ async function countOemStationMappings(oemId, oemSlug = "") {
   );
   if (count > 0) return count;
   const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
-  if (key.includes("calin") || key.includes("b0e00000")) {
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed") || !oemId || key.trim().length > 0) {
     try {
       const stationRes = await supabase.restRequestWithResponse(`/stations?select=id`, {
         headers: { Prefer: "count=exact", Range: "0-0" }
