@@ -839,17 +839,35 @@ function mapOemStationMappingRow(row) {
   };
 }
 
-async function listOemStationMappings(oemId) {
-  return runWithFallback(
+async function listOemStationMappings(oemId, oemSlug = "") {
+  const rows = await runWithFallback(
     () => localDatabase.listOemStationMappings(oemId),
     async () => {
-      const rows = await supabase.restRequest(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&order=station_id.asc`);
-      return (Array.isArray(rows) ? rows : []).map(mapOemStationMappingRow);
+      const result = await supabase.restRequest(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&order=station_id.asc`);
+      return (Array.isArray(result) ? result : []).map(mapOemStationMappingRow);
     }
   );
+  if (Array.isArray(rows) && rows.length > 0) return rows;
+
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000")) {
+    try {
+      const stations = await supabase.restRequest(`/stations?select=id,name,remark&order=id.asc`);
+      if (Array.isArray(stations) && stations.length > 0) {
+        return stations.map((st) => ({
+          oemId: String(oemId || ""),
+          stationId: String(st.id || st.name || ""),
+          communityLabel: String(st.name || st.remark || st.id || "")
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return rows || [];
 }
 
-async function countOemStationMappings(oemId) {
+async function countOemStationMappings(oemId, oemSlug = "") {
   const count = await runWithFallback(
     () => localDatabase.countOemStationMappings(oemId),
     async () => {
@@ -862,8 +880,8 @@ async function countOemStationMappings(oemId) {
     }
   );
   if (count > 0) return count;
-  const key = String(oemId || "").toLowerCase();
-  if (key.includes("calin") || key === "b0e00000-0000-0000-0000-000000000001") {
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000")) {
     try {
       const stationRes = await supabase.restRequestWithResponse(`/stations?select=id`, {
         headers: { Prefer: "count=exact", Range: "0-0" }

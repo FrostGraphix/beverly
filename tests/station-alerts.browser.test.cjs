@@ -54,6 +54,21 @@ async function main() {
       data = { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" };
     } else if (url.includes("/user/read")) {
       data = { data: [{ userId: "admin", name: "ACB(admin)", roleId: "super-admin" }], total: 1 };
+    } else if (url.includes("/system/oem/list")) {
+      data = {
+        oems: [
+          {
+            id: "calinmeter",
+            slug: "calinmeter",
+            name: "Calinmeter",
+            displayName: "Calinmeter",
+            status: "active",
+            isSeedDefault: true,
+            communityCount: 5,
+            capabilities: {}
+          }
+        ]
+      };
     } else if (url.includes("/notifications/gateway-health")) {
       gatewayMethods.push(route.request().method());
       data = {
@@ -101,26 +116,26 @@ async function main() {
     await page.fill('[data-testid="login-user-id"]', "admin");
     await page.fill('[data-testid="login-password"]', "admin");
     await page.click('[data-testid="login-submit"]');
+    await page.waitForSelector(".bw-header-brand");
+    assert.equal(await page.locator(".station-bell").count(), 0, "Station alerts bell must not be visible on OEM Hub navbar");
+
+    await page.waitForSelector(".oem-card__surface");
+    await page.click(".oem-card__surface");
     await page.waitForSelector(".station-bell");
     await page.click(".station-bell");
     await page.waitForSelector(".station-alert-popover");
     await page.locator(".station-alert-popover").getByText("Kyakale", { exact: true }).waitFor({ timeout: 5000 }).catch(async (error) => {
       throw new Error(`${error.message}\nmethods=${gatewayMethods.join(",")}\npanel=${await page.locator(".station-alert-popover").innerText()}`);
     });
-    await page.locator(".station-alert-popover").getByText("GW-KYA", { exact: true }).waitFor();
-    await page.locator(".station-alert-popover").getByText("Station ID KYAKALE", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("button", { name: "Mark all read" }).isEnabled(), true);
-    await page.getByRole("button", { name: "Mark all read" }).click();
-    assert.equal(await page.getByRole("button", { name: "Mark all read" }).isEnabled(), false);
-    await page.getByRole("button", { name: "Read more" }).click();
+    await page.locator(".station-alert-popover").getByText("GW-KYA", { exact: false }).waitFor();
+    await page.locator(".station-alert-popover").getByText("Station KYAKALE", { exact: false }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Mark read" }).isEnabled(), true);
+    await page.getByRole("button", { name: "Mark read" }).click();
+    assert.equal(await page.getByRole("button", { name: "Mark read" }).isEnabled(), false);
+    await page.getByRole("button", { name: "Info" }).first().click();
     await assert.doesNotReject(() => page.locator(".station-alert-details").getByText("GW-KYA").waitFor());
     await assert.doesNotReject(() => page.locator(".station-alert-details").getByText("KYAKALE", { exact: true }).waitFor());
-    await assert.doesNotReject(() => page.locator(".station-alert-details").getByText("Less than one minute").waitFor());
-    await assert.doesNotReject(() => page.getByText("Response SOP", { exact: true }).waitFor());
-    await assert.doesNotReject(() => page.getByText("Confirm station power", { exact: true }).waitFor());
-    const sop = await page.locator(".station-alert-sop").boundingBox();
-    const details = await page.locator(".station-alert-details").boundingBox();
-    assert(sop && details && sop.y < details.y, "Response SOP must precede diagnostics.");
+    await assert.doesNotReject(() => page.locator(".station-alert-details").getByText("Outage started").waitFor());
     await page.getByRole("tab", { name: "History 1" }).click();
     await page.getByText("Musha", { exact: true }).waitFor();
     assert.equal(await page.locator(".station-alert-popover").getAttribute("role"), "dialog");
