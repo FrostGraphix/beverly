@@ -189,7 +189,7 @@
           <EChartPanel v-if="hasSeasonality" :option="seasonalityOption" />
           <div v-else class="scc-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="10" width="4" height="11" rx="1" opacity=".3"/><rect x="10" y="6" width="4" height="15" rx="1" opacity=".3"/><rect x="17" y="3" width="4" height="18" rx="1" opacity=".3"/></svg>
-            <p>{{ loading ? 'Loading…' : (dataSource === "aggregated" ? "Not available with aggregated data." : "No data.") }}</p>
+            <p>{{ loading ? 'Loading…' : 'No load profile data for this range.' }}</p>
           </div>
         </div>
       </div>
@@ -277,7 +277,7 @@
         </div>
       </div>
       <div class="scc-table-wrap">
-        <table class="scc-table">
+        <table class="scc-table scc-table--topmeters">
           <thead>
             <tr>
               <th class="scc-th-rank">#</th>
@@ -292,7 +292,8 @@
           </thead>
           <tbody>
             <tr v-for="(m, i) in pagedTopMeters" :key="m.meterId + m.station"
-              class="scc-tr scc-tr--click" @click="openMeter(m.meterId, m.station)">
+              class="scc-tr scc-tr--click" tabindex="0" @click="openMeter(m.meterId, m.station)"
+              @keydown.enter="openMeter(m.meterId, m.station)">
               <td class="scc-rank">{{ ((topMetersPage - 1) * topMetersPageSize) + i + 1 }}</td>
               <td class="scc-mono">{{ m.meterId }}</td>
               <td class="scc-customer">{{ m.customerName || '—' }}</td>
@@ -401,7 +402,7 @@
                   </div>
                 </div>
                 <div class="scc-table-wrap scc-table-wrap--scroll">
-                  <table class="scc-table">
+                  <table class="scc-table scc-table--drawer-recharges">
                     <thead>
                       <tr><th>Date</th><th class="scc-num">Units</th><th class="scc-num">Paid</th><th class="scc-num">Vend</th><th>Token</th></tr>
                     </thead>
@@ -430,7 +431,7 @@
                   </div>
                 </div>
                 <div class="scc-table-wrap scc-table-wrap--scroll">
-                  <table class="scc-table">
+                  <table class="scc-table scc-table--drawer-consumption">
                     <thead>
                       <tr><th>Date</th><th class="scc-num">Reading</th><th class="scc-num">Used kWh</th><th class="scc-num">Balance</th></tr>
                     </thead>
@@ -545,7 +546,7 @@ export default {
       return !!(this.data && this.data.stations && this.data.stations.length);
     },
     hasSeasonality() {
-      return !!(this.data && this.data.seasonality && this.data.seasonality.values.some((v) => v > 0));
+      return !!(this.data && this.data.seasonality && Array.isArray(this.data.seasonality.values) && this.data.seasonality.values.length === 7);
     },
     leagueRows() { return this.data?.stations || []; },
     topMeters()  { return this.data?.topMeters || []; },
@@ -1381,15 +1382,21 @@ export default {
 .scc-chart--empty-state {
   height: 160px;
 }
-.scc-card--share {
+.scc-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.scc-row-2 > .scc-card {
   min-height: 300px;
   display: flex;
   flex-direction: column;
 }
-.scc-card--share .scc-chart--share {
+.scc-row-2 > .scc-card .scc-chart {
   flex: 1 1 auto;
   min-height: 240px;
-  height: auto;
+  height: 100%;
 }
 .scc-chart :deep(.echart-panel),
 .scc-chart :deep(.echart-canvas) {
@@ -1406,7 +1413,6 @@ export default {
 .scc-chart :deep(.dashboard-svg-chart svg) {
   overflow: hidden;
 }
-.scc-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .scc-empty {
   display: flex;
   flex-direction: column;
@@ -1425,7 +1431,82 @@ export default {
 .scc-table-wrap--league { -webkit-overflow-scrolling: touch; }
 .scc-table-wrap--scroll { max-height: 270px; overflow-y: auto; }
 .scc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.scc-table--league { min-width: 1020px; }
+.scc-table--topmeters {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--topmeters th:nth-child(1),
+.scc-table--topmeters td:nth-child(1) { width: 36px; text-align: center; }
+.scc-table--topmeters th:nth-child(2),
+.scc-table--topmeters td:nth-child(2) { width: 90px; }
+.scc-table--topmeters th:nth-child(3),
+.scc-table--topmeters td:nth-child(3) { width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.scc-table--topmeters th:nth-child(4),
+.scc-table--topmeters td:nth-child(4) { width: 110px; }
+.scc-table--topmeters th:nth-child(5),
+.scc-table--topmeters td:nth-child(5) { width: 100px; text-align: right; }
+.scc-table--topmeters th:nth-child(6),
+.scc-table--topmeters td:nth-child(6) { width: 110px; text-align: right; }
+.scc-table--topmeters th:nth-child(7),
+.scc-table--topmeters td:nth-child(7) { width: 100px; text-align: right; }
+.scc-table--topmeters th:nth-child(8),
+.scc-table--topmeters td:nth-child(8) { width: 28px; text-align: center; }
+
+.scc-table--league {
+  width: 100%;
+  min-width: 1020px;
+  table-layout: fixed;
+}
+.scc-table--league th:nth-child(1),
+.scc-table--league td:nth-child(1) { width: 36px; text-align: center; }
+.scc-table--league th:nth-child(2),
+.scc-table--league td:nth-child(2) { width: 120px; }
+.scc-table--league th:nth-child(3),
+.scc-table--league td:nth-child(3) { width: 110px; text-align: right; }
+.scc-table--league th:nth-child(4),
+.scc-table--league td:nth-child(4) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(5),
+.scc-table--league td:nth-child(5) { width: 110px; text-align: right; }
+.scc-table--league th:nth-child(6),
+.scc-table--league td:nth-child(6) { width: 70px; text-align: right; }
+.scc-table--league th:nth-child(7),
+.scc-table--league td:nth-child(7) { width: 70px; text-align: right; }
+.scc-table--league th:nth-child(8),
+.scc-table--league td:nth-child(8) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(9),
+.scc-table--league td:nth-child(9) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(10),
+.scc-table--league td:nth-child(10) { width: 130px; }
+.scc-table--league th:nth-child(11),
+.scc-table--league td:nth-child(11) { width: 80px; text-align: right; }
+
+.scc-table--drawer-recharges {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--drawer-recharges th:nth-child(1),
+.scc-table--drawer-recharges td:nth-child(1) { width: 90px; }
+.scc-table--drawer-recharges th:nth-child(2),
+.scc-table--drawer-recharges td:nth-child(2) { width: 70px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(3),
+.scc-table--drawer-recharges td:nth-child(3) { width: 80px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(4),
+.scc-table--drawer-recharges td:nth-child(4) { width: 70px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(5),
+.scc-table--drawer-recharges td:nth-child(5) { width: 130px; }
+
+.scc-table--drawer-consumption {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--drawer-consumption th:nth-child(1),
+.scc-table--drawer-consumption td:nth-child(1) { width: 90px; }
+.scc-table--drawer-consumption th:nth-child(2),
+.scc-table--drawer-consumption td:nth-child(2) { width: 90px; text-align: right; }
+.scc-table--drawer-consumption th:nth-child(3),
+.scc-table--drawer-consumption td:nth-child(3) { width: 80px; text-align: right; }
+.scc-table--drawer-consumption th:nth-child(4),
+.scc-table--drawer-consumption td:nth-child(4) { width: 80px; text-align: right; }
 .scc-table th {
   position: sticky;
   top: 0;
@@ -1436,7 +1517,7 @@ export default {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .04em;
-  color: var(--text-faint);
+  color: var(--text-muted);
   background: var(--bg-card);
   border-bottom: 1.5px solid var(--border-color);
   white-space: nowrap;
@@ -1447,19 +1528,21 @@ export default {
   color: var(--text-muted);
   white-space: nowrap;
   vertical-align: middle;
+  font-variant-numeric: tabular-nums;
 }
 .scc-tr:last-child td { border-bottom: none; }
 .scc-tr:hover td { background: var(--_softer); }
 .scc-tr--click { cursor: pointer; }
 .scc-tr--click:hover td { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.scc-tr--click:focus-visible td { outline: 2px solid var(--primary); outline-offset: -2px; }
 
-.scc-th-rank  { width: 32px; }
+.scc-th-rank  { width: 36px; text-align: center; }
 .scc-th-action { width: 24px; }
-.scc-num      { text-align: right; }
+.scc-num      { text-align: right; font-variant-numeric: tabular-nums; }
 .scc-bold     { font-weight: 700; color: var(--text-main); }
-.scc-rank     { color: var(--text-faint); font-weight: 700; }
+.scc-rank     { color: var(--text-faint); font-weight: 700; text-align: center; }
 .scc-muted    { color: var(--text-faint); font-size: 10.5px; }
-.scc-mono     { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; letter-spacing: -0.01em; }
+.scc-mono     { font-family: var(--bev-font-mono); font-size: 11.5px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .scc-token    { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scc-customer { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scc-peak     { font-size: 11.5px; }
@@ -1574,7 +1657,7 @@ export default {
 }
 .scc-drawer-header-info { flex: 1; min-width: 0; }
 .scc-drawer-eyebrow { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--primary); display: block; margin-bottom: 2px; }
-.scc-drawer-title { margin: 0 0 3px; font-size: 20px; font-weight: 800; color: var(--text-main); font-family: ui-monospace, Menlo, monospace; letter-spacing: -0.01em; }
+.scc-drawer-title { margin: 0 0 3px; font-size: 20px; font-weight: 800; color: var(--text-main); font-family: var(--bev-font-mono); letter-spacing: -0.01em; }
 .scc-drawer-meta { margin: 0; font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .scc-drawer-close {
   display: grid;
@@ -1613,7 +1696,7 @@ export default {
 }
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .scc-row-2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {

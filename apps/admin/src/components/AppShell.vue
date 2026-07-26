@@ -110,6 +110,11 @@ const initials = computed(() => {
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 const isSuperAdmin = computed(() => auth.user?.role === 'super-admin');
 const displayName = computed(() => auth.user?.full_name || auth.user?.email || 'Administrator');
+const currentUserFirstName = computed(() => {
+    const raw = auth.user?.full_name || auth.user?.email || 'Beverly';
+    const name = raw.split(/[\s@.]+/)[0] || 'Beverly';
+    return name.charAt(0).toUpperCase() + name.slice(1);
+});
 const roleLabel = computed(() => (auth.user?.role || 'admin').replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
 
 const navIconPath: Record<string, string> = {
@@ -153,7 +158,7 @@ const navIconPath: Record<string, string> = {
 
 const defaultCrmBaseUrl = import.meta.env.DEV
     ? `${window.location.protocol}//${window.location.hostname}:9311`
-    : window.location.origin;
+    : 'https://acob-beverly.vercel.app';
 
 function toCrmUrl(baseUrl: string) {
     const [urlWithoutHash] = baseUrl.split('#');
@@ -234,8 +239,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </template>
       </nav>
 
-      <footer class="bw-sidebar-foot sidebar-account">
-        <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-back">
+      <footer v-if="isSuperAdmin" class="bw-sidebar-foot">
+        <a :href="CRM_URL" class="bw-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back to CRM
         </a>
@@ -285,18 +290,18 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
           <button
             type="button"
             class="bw-user-chip bw-user-chip-btn"
-            :aria-label="`User menu for ${auth.user?.full_name || auth.user?.email || 'staff'}`"
+            :aria-label="`User menu for ${displayName}`"
             aria-haspopup="menu"
             :aria-expanded="userMenuOpen"
             @click="toggleUserMenu"
           >
             <div class="bw-avatar green" style="overflow:hidden">
               <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" style="width:100%; height:100%; object-fit:cover" />
-              <template v-else>{{ initials }}</template>
+              <span v-else class="bw-user-dropdown-logo bw-avatar-brand-logo" aria-hidden="true"></span>
             </div>
             <div class="bw-user-meta">
-              <strong>{{ auth.user?.full_name?.split(' ')[0] || 'Staff' }}</strong>
-              <span>{{ auth.user?.role || 'admin' }}</span>
+              <strong>{{ currentUserFirstName }}</strong>
+              <span>{{ roleLabel }}</span>
             </div>
             <svg class="bw-user-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
@@ -309,7 +314,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                 <span class="bw-user-dropdown-logo" aria-hidden="true"></span>
                 <span>
                   <strong>Beverly</strong>
-                  <small>{{ auth.user?.full_name || auth.user?.email || 'Staff user' }} - {{ auth.user?.role || 'admin' }}</small>
+                  <small>{{ displayName }} - {{ roleLabel }}</small>
                 </span>
               </div>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">

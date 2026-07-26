@@ -22,3 +22,8 @@ replica-screenshots/diffs/
 
 .vercel
 .env*
+*.sqlite
+query.js
+test-login.cjs
+test_output.html
+

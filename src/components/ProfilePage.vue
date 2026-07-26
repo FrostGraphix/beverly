@@ -1,12 +1,46 @@
 <template>
   <div class="wallet-profile-shell">
+    <ProfilePictureCropModal
+      :open="cropOpen"
+      :file="cropFile"
+      @close="cropOpen = false"
+      @done="handleCroppedImage"
+    />
+
     <section class="wallet-profile-hero">
       <div class="wallet-profile-top">
-        <div class="wallet-profile-avatar-wrap">
+        <div ref="avatarMenuRef" class="wallet-profile-avatar-wrap">
           <div class="wallet-profile-avatar">
-            <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" />
+            <img v-if="activeProfilePictureUrl" :src="activeProfilePictureUrl" alt="Staff profile" />
             <template v-else>{{ initials }}</template>
           </div>
+          <BaseIconButton
+            class="wallet-avatar-edit-btn"
+            aria-label="Edit profile picture"
+            title="Edit profile picture"
+            :disabled="uploading"
+            @click="avatarMenuOpen = !avatarMenuOpen"
+          >
+            <svg v-if="!uploading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            <span v-else class="wallet-avatar-spinner" aria-hidden="true"></span>
+          </BaseIconButton>
+          <div v-if="avatarMenuOpen" class="wallet-avatar-menu">
+            <BaseButton variant="ghost" class="wallet-avatar-menu-item" @click="triggerPhotoInput">
+              Upload photo
+            </BaseButton>
+            <BaseButton
+              v-if="activeProfilePictureUrl"
+              variant="ghost"
+              class="wallet-avatar-menu-item danger"
+              @click="removePicture"
+            >
+              Remove photo
+            </BaseButton>
+          </div>
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/webp" style="display: none" @change="handleFileSelected" />
         </div>
         <div class="wallet-profile-copy">
           <p>Staff Identity</p>
@@ -25,6 +59,13 @@
         <div><span>Session</span><strong>Active</strong></div>
       </div>
     </section>
+
+    <div v-if="uploadError" class="wallet-profile-error" role="alert">
+      {{ uploadError }}
+    </div>
+    <div v-if="uploadNotice" class="wallet-profile-notice" role="status">
+      {{ uploadNotice }}
+    </div>
 
     <section class="wallet-profile-grid">
       <article class="wallet-profile-card">
@@ -77,12 +118,18 @@
 import BaseButton from "./base/BaseButton.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
-import { loadProfileState, updateRemoteProfile } from "../services/profile-store.mjs";
+import ProfilePictureCropModal from "./ProfilePictureCropModal.vue";
+import {
+  loadProfileState,
+  removeProfilePictureFlow,
+  updateRemoteProfile,
+  uploadProfilePictureFlow
+} from "../services/profile-store.mjs";
 
 export default {
   name: "ProfilePage",
-  components: { BaseButton, BaseIconButton, BaseInput },
-  emits: ["close"],
+  components: { BaseButton, BaseIconButton, BaseInput, ProfilePictureCropModal },
+  emits: ["close", "profile-picture-updated"],
   props: {
     userName: { type: String, default: "ACB(admin)" },
     roleId: { type: String, default: null },
@@ -93,10 +140,20 @@ export default {
     return {
       saving: false,
       saveSuccess: false,
+      uploading: false,
+      cropOpen: false,
+      cropFile: null,
+      avatarMenuOpen: false,
+      uploadError: null,
+      uploadNotice: null,
+      localProfilePictureUrl: saved.profilePictureUrl || "",
       form: { name: saved.name || this.userName, email: saved.email || "", phone: saved.phone || "" }
     };
   },
   computed: {
+    activeProfilePictureUrl() {
+      return this.localProfilePictureUrl || this.profilePictureUrl || "";
+    },
     initials() {
       return (this.form.name || this.userName || "U").split(/[\s()_-]+/).filter(Boolean).map((word) => word[0].toUpperCase()).slice(0, 2).join("");
     },
@@ -105,7 +162,61 @@ export default {
       return map[this.roleId] || this.roleId;
     }
   },
+  mounted() {
+    document.addEventListener("pointerdown", this.handleOutsideClick);
+  },
+  beforeUnmount() {
+    document.removeEventListener("pointerdown", this.handleOutsideClick);
+  },
   methods: {
+    handleOutsideClick(event) {
+      if (this.$refs.avatarMenuRef && !this.$refs.avatarMenuRef.contains(event.target)) {
+        this.avatarMenuOpen = false;
+      }
+    },
+    triggerPhotoInput() {
+      this.avatarMenuOpen = false;
+      if (this.$refs.photoInput) this.$refs.photoInput.click();
+    },
+    handleFileSelected(event) {
+      const file = event.target?.files?.[0];
+      if (!file) return;
+      this.cropFile = file;
+      this.cropOpen = true;
+      event.target.value = "";
+    },
+    async handleCroppedImage(file) {
+      this.cropOpen = false;
+      this.uploading = true;
+      this.uploadError = null;
+      this.uploadNotice = null;
+      try {
+        const state = await uploadProfilePictureFlow(file);
+        this.localProfilePictureUrl = state.profilePictureUrl;
+        this.uploadNotice = "Profile picture updated successfully.";
+        this.$emit("profile-picture-updated", state.profilePictureUrl);
+      } catch (err) {
+        this.uploadError = err?.message || "Picture upload failed.";
+      } finally {
+        this.uploading = false;
+      }
+    },
+    async removePicture() {
+      this.avatarMenuOpen = false;
+      this.uploading = true;
+      this.uploadError = null;
+      this.uploadNotice = null;
+      try {
+        const state = await removeProfilePictureFlow();
+        this.localProfilePictureUrl = "";
+        this.uploadNotice = "Profile picture removed.";
+        this.$emit("profile-picture-updated", "");
+      } catch (err) {
+        this.uploadError = err?.message || "Picture removal failed.";
+      } finally {
+        this.uploading = false;
+      }
+    },
     resetForm() {
       const saved = loadProfileState(this.userName);
       this.form = { name: saved.name || this.userName, email: saved.email || "", phone: saved.phone || "" };
@@ -170,12 +281,104 @@ export default {
 }
 
 .wallet-profile-avatar-wrap {
+  position: relative;
   width: max-content;
   padding: 7px;
   border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
   border-radius: 28px;
   background: color-mix(in srgb, var(--primary) 9%, transparent);
 }
+
+.wallet-avatar-edit-btn {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--bg-card);
+  color: var(--text-strong);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background-color 0.2s, transform 0.15s;
+}
+
+.wallet-avatar-edit-btn:hover {
+  background: color-mix(in srgb, var(--bg-card) 85%, var(--primary) 15%);
+  transform: scale(1.05);
+}
+
+.wallet-avatar-edit-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.wallet-avatar-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: wallet-spin 0.8s linear infinite;
+}
+
+@keyframes wallet-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wallet-avatar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2);
+}
+
+.wallet-avatar-menu-item {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.wallet-avatar-menu-item:hover {
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--primary) 10%);
+}
+
+.wallet-avatar-menu-item.danger {
+  color: #ef4444;
+}
+
+.wallet-avatar-menu-item.danger:hover {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+}
+
+.wallet-profile-error {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 
 .wallet-profile-avatar {
   width: 104px;

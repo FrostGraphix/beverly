@@ -5,7 +5,7 @@
    ════════════════════════════════════════════════════════════════════ */
 
 /* ── Google Fonts ─────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap');
 
 /* ── Semantic aliases (used throughout components) ───────────────── */
 :root {
@@ -462,6 +462,11 @@
 .bw-avatar.indigo { background: linear-gradient(135deg, oklch(70% 0.16 270), oklch(58% 0.20 290)); }
 .bw-avatar.amber  { background: linear-gradient(135deg, oklch(78% 0.16 75), oklch(64% 0.20 50)); }
 .bw-avatar.rose   { background: linear-gradient(135deg, oklch(72% 0.18 340), oklch(58% 0.22 350)); }
+.bw-avatar-brand-logo {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 999px !important;
+}
 .bw-user-meta { display: flex; flex-direction: column; line-height: 1.2; }
 .bw-user-meta strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; }
 .bw-user-meta span { font-size: var(--t-2xs); color: var(--text-muted); }

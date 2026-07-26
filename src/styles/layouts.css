@@ -181,6 +181,16 @@ a {
 [data-theme="light"] .sidebar-logo-lockup--light { display: block; }
 [data-theme="light"] .sidebar-logo-lockup--dark { display: none; }
 
+.sidebar-logo-mark {
+  display: none;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  margin: 0 auto;
+}
+.sidebar-logo-mark--light { display: none; }
+.sidebar-logo-mark--dark { display: none; }
+
 .sidebar-mobile-close {
   display: flex;
   align-items: center;
@@ -339,10 +349,19 @@ a {
 }
 
 .hideSidebar:not(.mobile) .sidebar-logo-lockup {
-  width: 34px;
-  height: 34px;
-  object-fit: cover;
-  object-position: left center;
+  display: none !important;
+}
+
+.hideSidebar:not(.mobile) .sidebar-logo-mark--dark {
+  display: block !important;
+}
+
+[data-theme="light"] .hideSidebar:not(.mobile) .sidebar-logo-mark--dark {
+  display: none !important;
+}
+
+[data-theme="light"] .hideSidebar:not(.mobile) .sidebar-logo-mark--light {
+  display: block !important;
 }
 
 .mobile .sidebar-logo-text,
@@ -362,6 +381,80 @@ a {
 
 .hideSidebar .main-container {
   margin-left: var(--layout-sidebar-collapsed-width);
+}
+
+.no-sidebar .sidebar-container {
+  display: none !important;
+}
+
+.no-sidebar .main-container {
+  margin-left: 0 !important;
+  width: 100% !important;
+}
+
+.no-sidebar .fixed-header {
+  left: 0 !important;
+  width: 100% !important;
+}
+
+.no-sidebar .navbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
+.no-sidebar .bw-header-brand {
+  margin-right: auto !important;
+}
+
+.no-sidebar .right-menu {
+  margin-left: auto !important;
+}
+
+.bw-header-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 16px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.bw-header-logo-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.bw-header-logo-text {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-strong, #f8fafc);
+  line-height: 1;
+}
+
+.bw-header-logo-divider {
+  color: var(--text-muted, #64748b);
+  font-size: 13px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.bw-header-logo-sub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  line-height: 1;
+}
+
+.bw-avatar-brand-logo {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 999px !important;
 }
 
 .mobile .main-container {
@@ -427,8 +520,32 @@ a {
   display: grid;
   place-items: center;
   color: var(--text-strong);
-  border: 0;
-  background: transparent;
+  /* Strip the pill shape and hover fill that .base-icon-button applies */
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+/* Also kill the .base-icon-button hover state for this specific button */
+.hamburger-container:hover:not(:disabled) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.bw-sidebar-toggle-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted, #94a3b8);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.hamburger-container:hover .bw-sidebar-toggle-icon {
+  color: var(--primary, #22c55e);
 }
 
 .hamburger-lines {

@@ -850,7 +850,7 @@ async function listOemStationMappings(oemId) {
 }
 
 async function countOemStationMappings(oemId) {
-  return runWithFallback(
+  const count = await runWithFallback(
     () => localDatabase.countOemStationMappings(oemId),
     async () => {
       const result = await supabase.restRequestWithResponse(`/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&select=station_id`, {
@@ -861,6 +861,21 @@ async function countOemStationMappings(oemId) {
       return Number.isFinite(total) ? total : (Array.isArray(result.body) ? result.body.length : 0);
     }
   );
+  if (count > 0) return count;
+  const key = String(oemId || "").toLowerCase();
+  if (key.includes("calin") || key === "b0e00000-0000-0000-0000-000000000001") {
+    try {
+      const stationRes = await supabase.restRequestWithResponse(`/stations?select=id`, {
+        headers: { Prefer: "count=exact", Range: "0-0" }
+      });
+      const cr = String(stationRes?.response?.headers?.get("content-range") || "");
+      const stationTotal = Number(cr.split("/")[1]);
+      if (Number.isFinite(stationTotal) && stationTotal > 0) return stationTotal;
+    } catch {
+      // ignore
+    }
+  }
+  return count;
 }
 
 async function upsertOemStationMapping(entry = {}) {

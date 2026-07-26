@@ -160,7 +160,7 @@ async function signOut() {
         >
           <div class="bw-avatar green" style="overflow:hidden">
             <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Profile" style="width:100%; height:100%; object-fit:cover" />
-            <template v-else>{{ initials }}</template>
+            <span v-else class="bw-user-dropdown-logo bw-avatar-brand-logo" aria-hidden="true"></span>
           </div>
           <div class="bw-user-meta">
             <strong>{{ displayName }}</strong>
