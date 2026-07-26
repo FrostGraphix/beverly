@@ -740,7 +740,7 @@ export default {
   background: var(--primary-light);
   color: var(--primary);
 }
-.mono-sm { font-family: "Courier New", monospace; font-size: 10px; }
+.mono-sm { font-family: var(--bev-font-mono); font-size: 10px; }
 .text-primary { color: var(--primary); }
 .text-muted { color: var(--text-muted); }
 .fw { font-weight: 700; }

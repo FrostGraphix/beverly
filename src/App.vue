@@ -844,11 +844,14 @@ export default {
       let icon = "meter";
       if (text.includes("dashboard")) icon = "dashboard";
       else if (text.includes("report") || text.includes("consumption") || text.includes("nonpurchase") || text.includes("abnormal") || text.includes("interval")) icon = "reports";
-      else if (text.includes("remote") && text.includes("task")) icon = "task";
+      else if (text.includes("remote operation task")) icon = "task";
+      else if (text.includes("remote operation")) icon = "remote_op";
       else if (text.includes("meter reading")) icon = "reading";
       else if (text.includes("meter control")) icon = "control";
       else if (text.includes("token record") || text.includes("record")) icon = "record";
       else if (text.includes("token")) icon = "token";
+      else if (text.includes("management")) icon = "management";
+      else if (text.includes("administration")) icon = "administration";
       else if (text.includes("customer")) icon = "customer";
       else if (text.includes("gateway")) icon = "gateway";
       else if (text.includes("tariff")) icon = "tariff";
@@ -858,7 +861,7 @@ export default {
       else if (text.includes("protocol") || text.includes("dlms") || text.includes("dlt645")) icon = "protocol";
       else if (text.includes("support") || text.includes("gprs") || text.includes("firmware") || text.includes("profile") || text.includes("event") || text.includes("upload")) icon = "support";
       else if (text.includes("system") || text.includes("automation")) icon = "system";
-      return routeIconPaths[icon];
+      return routeIconPaths[icon] || routeIconPaths.meter;
     },
     sidebarClass(route, indent) {
       return ["sidebar-item", indent ? "indent" : "", `sidebar-tone-${this.routeTone(route)}`, route.hash === this.route.hash ? "active" : ""];

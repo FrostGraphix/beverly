@@ -836,6 +836,31 @@ function weekdayIndex(day) {
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+async function computeSeasonalityFromDailyDeltas({ stationId, from, to }) {
+  try {
+    const dailyRows = await readAggregatedDeltas({ stationId, from, to, granularity: "daily" });
+    if (dailyRows && dailyRows.length > 0) {
+      const weekdaySum = new Array(7).fill(0);
+      const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+      for (const row of dailyRows) {
+        const date = normalizeDate(row.periodStart);
+        if (!date) continue;
+        const wd = weekdayIndex(date);
+        const value = Number(row.kwhTotal) || 0;
+        weekdaySum[wd] += value;
+        weekdayDates[wd].add(date);
+      }
+      return {
+        labels: WEEKDAY_LABELS,
+        values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+      };
+    }
+  } catch {
+    // Return empty seasonality on error
+  }
+  return { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+}
+
 function round3(value) {
   return parseFloat((Number(value) || 0).toFixed(3));
 }
@@ -901,7 +926,7 @@ function rowsToDeltasWithMeta(rows) {
  * currentAgg and priorAgg are arrays of { stationId, meterId, customerId,
  * customerName, periodStart, kwhTotal, readingCount }.
  */
-function buildAnalyticsFromAggregates({
+async function buildAnalyticsFromAggregates({
   currentAgg, priorAgg,
   from, to, priorFrom, priorTo,
   granularity, topLimit, windowDays,
@@ -1023,6 +1048,25 @@ function buildAnalyticsFromAggregates({
   const allCustomers = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key));
   const activeMeters = new Set(Array.from(meterAcc.values()).filter((m) => m.totalKwh > 0).map((m) => `${m.station}:${m.meterId}`));
   const distinctDays = Array.from(byPeriod.values()).filter((v) => v > 0).length;
+  let seasonality = { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+  if (granularity === "daily") {
+    const weekdaySum = new Array(7).fill(0);
+    const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+    for (const row of currentAgg) {
+      const date = normalizeDate(row.periodStart);
+      if (!date) continue;
+      const wd = weekdayIndex(date);
+      const value = Number(row.kwhTotal) || 0;
+      weekdaySum[wd] += value;
+      weekdayDates[wd].add(date);
+    }
+    seasonality = {
+      labels: WEEKDAY_LABELS,
+      values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+    };
+  } else {
+    seasonality = await computeSeasonalityFromDailyDeltas({ stationId: filterStation, from, to });
+  }
 
   return {
     status: 200,
@@ -1052,8 +1096,7 @@ function buildAnalyticsFromAggregates({
           kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)),
           seriesByStation,
         },
-        // Seasonality not available from period aggregates — omit gracefully
-        seasonality: { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) },
+        seasonality,
         topMeters,
       },
       _proxy: {
@@ -1079,7 +1122,7 @@ async function readStationAnalyticsSummary(params) {
   }
 }
 
-function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, granularity, requestedGranularity, windowDays }) {
+async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, granularity, requestedGranularity, windowDays, stationId }) {
   const growth = (current, prior) => prior > 0 ? round3(((current - prior) / prior) * 100) : (current > 0 ? null : 0);
   const rollups = new Map((summary.rollups || []).map((row) => [normalizeStation(row.station_id), row]));
   const stationRows = summary.stations || [];
@@ -1148,6 +1191,26 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
   }));
   const readingDays = labels.filter((label) => Number(byPeriod.get(label)) > 0).length;
 
+  let seasonality = { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+  if (granularity === "daily") {
+    const weekdaySum = new Array(7).fill(0);
+    const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+    for (const row of summary.temporal || []) {
+      const date = normalizeDate(row.period_start);
+      if (!date) continue;
+      const wd = weekdayIndex(date);
+      const value = Number(row.kwh_total) || 0;
+      weekdaySum[wd] += value;
+      weekdayDates[wd].add(date);
+    }
+    seasonality = {
+      labels: WEEKDAY_LABELS,
+      values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+    };
+  } else {
+    seasonality = await computeSeasonalityFromDailyDeltas({ stationId, from, to });
+  }
+
   return {
     status: 200,
     body: {
@@ -1184,7 +1247,7 @@ function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, gran
         ),
         stations,
         temporal: { labels, kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)), seriesByStation },
-        seasonality: { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) },
+        seasonality,
         topMeters,
       },
       _proxy: { source: "supabase-station-analytics-rpc", pathname: "/api/local/consumption/station-analytics" },
@@ -1237,11 +1300,11 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     p_top_limit: topLimit,
   });
   if (summary) {
-    return buildAnalyticsFromSummary({
+    return await buildAnalyticsFromSummary({
       summary, from, to, priorFrom, priorTo,
       granularity: chartGranularity,
       requestedGranularity: granularity,
-      windowDays,
+      windowDays, stationId,
     });
   }
 
@@ -1262,7 +1325,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   // If aggregates are available, build analytics from them (fast path).
   if (currentAgg !== null && currentAgg.length > 0) {
     const meterReadRollups = await readStationMeterReadRollups(stationId);
-    const response = buildAnalyticsFromAggregates({
+    const response = await buildAnalyticsFromAggregates({
       currentAgg, priorAgg: priorAgg || [],
       from, to, priorFrom, priorTo,
       granularity: chartGranularity, topLimit, windowDays,
@@ -1381,7 +1444,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   for (const row of rows) {
     const date = normalizeDate(row.currentDate);
     const total1 = Number(row.total1);
-    if (!date || date < from || date > to || !Number.isFinite(total1) || total1 < 0) continue;
+    if (!date || date > to || !Number.isFinite(total1) || total1 < 0) continue;
     const rowStation = normalizeStation(row.stationId);
     const meterId = normalizeMeter(row.meterId || row.customerId);
     if (!meterId) continue;

@@ -325,7 +325,7 @@ export default {
 .recharge-table td { padding: 10px; border-bottom: 1px solid rgba(209,250,229,.72); color: var(--text-main); vertical-align: middle; }
 .recharge-table tr:last-child td { border-bottom: 0; }
 .recharge-table tr:hover { background: rgba(236,253,245,.68); box-shadow: inset 3px 0 0 var(--primary); }
-.mono { font-family: "Courier New", monospace; font-size: 11px; color: var(--text-muted); word-break: break-all; }
+.mono { font-family: var(--bev-font-mono); font-size: 11px; color: var(--text-muted); word-break: break-all; }
 
 /* Token usage badges */
 .token-usage-summary { display: flex; gap: 10px; align-items: center; padding: 8px 0 12px; font-size: 12px; }

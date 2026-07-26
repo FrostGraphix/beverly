@@ -372,7 +372,7 @@
     
     .receipt-token-box { background: var(--bg-page); border: 1px solid var(--border-mid); padding: 14px; border-radius: 14px; text-align: center; margin-bottom: 12px; }
     .token-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--primary); margin-bottom: 6px; display: block; }
-    .token-value { font-family: 'Courier New', Courier, monospace; font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--primary-deep); }
+    .token-value { font-family: var(--bev-font-mono); font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--primary-deep); }
     .receipt-mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
     .receipt-mini-grid div { min-width: 0; padding: 10px 11px; border: 1px solid var(--border-color); border-radius: 12px; background: color-mix(in srgb, var(--bg-page) 72%, transparent); }
     .receipt-mini-grid span { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
