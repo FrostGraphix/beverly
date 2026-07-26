@@ -562,8 +562,13 @@
   .mobile .main-container { padding-top: 52px; }
 
   .mobile .top-route {
-    height: 52px;
-    padding: 0 8px;
-    font-size: 14px;
+    height: 100%;
+    max-width: calc(100vw - 130px);
+    padding: 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

@@ -2406,8 +2406,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       isSeedDefault: oem.isSeedDefault,
       capabilities: oem.capabilities,
       vendingStrategy: oem.vendingStrategy,
-      communityCount: await countOemStationMappings(oem.id),
-      stations: await listOemStationMappings(oem.id),
+      communityCount: await countOemStationMappings(oem.id, oem.slug),
+      stations: await listOemStationMappings(oem.id, oem.slug),
       createdAt: oem.createdAt,
       updatedAt: oem.updatedAt
     })));

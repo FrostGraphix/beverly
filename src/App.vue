@@ -123,8 +123,8 @@
         <header class="fixed-header">
           <div class="navbar" :aria-label="`${activePageTitle} ${currentUserName}`">
             <div v-if="showOemHub" class="bw-header-brand" aria-label="Beverly OEM Hub home">
-              <span class="bw-user-dropdown-logo bw-header-logo-mark" aria-hidden="true"></span>
-              <span class="bw-header-logo-text">Beverly</span>
+              <img class="sidebar-logo-lockup sidebar-logo-lockup--light" src="/brand/beverly-lockup.png" alt="Beverly" />
+              <img class="sidebar-logo-lockup sidebar-logo-lockup--dark" src="/brand/beverly-lockup-white.png" alt="" aria-hidden="true" />
               <span class="bw-header-logo-divider" aria-hidden="true">/</span>
               <span class="bw-header-logo-sub">OEM Hub</span>
             </div>
@@ -141,7 +141,7 @@
                 <span>Search</span>
                 <kbd>Ctrl K</kbd>
               </BaseButton>
-              <StationAlertsBell />
+              <StationAlertsBell v-if="!showOemHub" />
               <div class="bw-account-menu" ref="accountMenuWrap">
                 <BaseButton
                   ref="userMenuButton"
@@ -153,7 +153,7 @@
                   :aria-expanded="String(userDropdownOpen)"
                   aria-controls="beverly-account-menu"
                 >
-                  <span class="bw-avatar green bw-avatar-shell">
+                  <span class="bw-avatar bw-avatar-shell">
                     <img v-if="profilePictureUrl" :src="profilePictureUrl" alt="Staff profile" class="bw-avatar-image" />
                     <span v-else class="bw-user-dropdown-logo bw-avatar-brand-logo" aria-hidden="true"></span>
                   </span>
