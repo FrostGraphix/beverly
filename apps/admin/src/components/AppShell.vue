@@ -239,7 +239,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </template>
       </nav>
 
-      <footer v-if="isSuperAdmin" class="bw-sidebar-foot">
+      <footer v-if="isSuperAdmin" class="bw-sidebar-foot sidebar-account">
         <a :href="CRM_URL" class="bw-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back to CRM
