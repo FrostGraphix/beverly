@@ -1078,92 +1078,34 @@ function isSeedOrCalinOem(oemId, oemSlug) {
   return false;
 }
 
-function fetchAllLocalStations(oemId) {
-  const db = ensureDatabase();
-  const stationSet = new Map();
-
-  try {
-    if (isMemoryDatabase(db)) {
-      const memoryStations = Array.from(db.memoryStore.stations?.values() || []);
-      for (const s of memoryStations) {
-        const id = String(s.id || s.stationId || s.name || "").trim();
-        if (id && id.toUpperCase() !== "ADMIN") {
-          stationSet.set(id.toUpperCase(), {
-            oemId: String(oemId || ""),
-            stationId: id,
-            communityLabel: String(s.name || s.communityLabel || id)
-          });
-        }
-      }
-    } else {
-      const rows = db.prepare("SELECT * FROM stations ORDER BY id ASC").all();
-      for (const r of rows) {
-        const id = String(r.id || r.station_id || r.name || "").trim();
-        if (id && id.toUpperCase() !== "ADMIN") {
-          stationSet.set(id.toUpperCase(), {
-            oemId: String(oemId || ""),
-            stationId: id,
-            communityLabel: String(r.name || r.community_label || id)
-          });
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  for (const c of CANONICAL_FALLBACK_STATIONS) {
-    if (!stationSet.has(c.stationId.toUpperCase())) {
-      stationSet.set(c.stationId.toUpperCase(), {
-        oemId: String(oemId || ""),
-        stationId: c.stationId,
-        communityLabel: c.communityLabel
-      });
-    }
-  }
-
-  return Array.from(stationSet.values());
-}
-
 function listOemStationMappings(oemId, oemSlug) {
   const db = ensureDatabase();
-  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  const slugKey = String(oemSlug || "").trim().toLowerCase();
+  const idKey = String(oemId || "").trim();
+  const seedKey = "b0e00000-0000-0000-0000-000000000001";
+  const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey;
+
   let rows = [];
   if (isMemoryDatabase(db)) {
-    rows = Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId || row.oemId === key);
+    rows = Array.from(db.memoryStore.oem_station_mappings.values()).filter(
+      (row) => row.oemId === idKey || row.oemId === slugKey || (isCalin && (row.oemId === seedKey || row.oemId === "calinmeter"))
+    );
   } else {
     rows = db.prepare(
-      "SELECT * FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ? ORDER BY station_id ASC"
-    ).all(String(oemId || ""), key).map((row) => ({
+      "SELECT * FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ? OR (oem_id = ? AND ?) OR (oem_id = 'calinmeter' AND ?) ORDER BY station_id ASC"
+    ).all(idKey, slugKey, seedKey, isCalin ? 1 : 0, isCalin ? 1 : 0).map((row) => ({
       oemId: row.oem_id,
       stationId: row.station_id,
-      communityLabel: row.community_label || "",
+      communityLabel: row.community_label || row.station_id,
       createdAt: row.created_at
     }));
   }
-  if (rows.length > 0) return rows;
 
-  if (isSeedOrCalinOem(oemId, oemSlug)) {
-    return fetchAllLocalStations(oemId);
-  }
-  return rows;
+  return rows.filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
 }
 
 function countOemStationMappings(oemId, oemSlug) {
-  const db = ensureDatabase();
-  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
-  let count = 0;
-  if (isMemoryDatabase(db)) {
-    count = Array.from(db.memoryStore.oem_station_mappings.values()).filter((row) => row.oemId === oemId || row.oemId === key).length;
-  } else {
-    count = db.prepare("SELECT COUNT(*) AS count FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ?").get(String(oemId || ""), key)?.count || 0;
-  }
-  if (count > 0) return count;
-
-  if (isSeedOrCalinOem(oemId, oemSlug)) {
-    return fetchAllLocalStations(oemId).length;
-  }
-  return count;
+  return listOemStationMappings(oemId, oemSlug).length;
 }
 
 function upsertOemStationMapping(entry = {}) {
