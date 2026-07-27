@@ -1056,6 +1056,75 @@ function stationMappingKey(oemId, stationId) {
   return `${String(oemId || "").trim()}::${String(stationId || "").trim().toUpperCase()}`;
 }
 
+const CANONICAL_FALLBACK_STATIONS = [
+  { stationId: "KYAKALE", communityLabel: "Kyakale" },
+  { stationId: "MUSHA", communityLabel: "Musha" },
+  { stationId: "OGUFA", communityLabel: "Ogufa" },
+  { stationId: "TUNGA", communityLabel: "Tunga" },
+  { stationId: "UMAISHA", communityLabel: "Umaisha" }
+];
+
+function isSeedOrCalinOem(oemId, oemSlug) {
+  if (!oemId && !oemSlug) return true;
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed")) return true;
+  try {
+    const oem = getOemManufacturer(oemId);
+    if (!oem) return false;
+    if (oem.isSeedDefault || String(oem.slug || "").toLowerCase().includes("calin")) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function fetchAllLocalStations(oemId) {
+  const db = ensureDatabase();
+  const stationSet = new Map();
+
+  try {
+    if (isMemoryDatabase(db)) {
+      const memoryStations = Array.from(db.memoryStore.stations?.values() || []);
+      for (const s of memoryStations) {
+        const id = String(s.id || s.stationId || s.name || "").trim();
+        if (id && id.toUpperCase() !== "ADMIN") {
+          stationSet.set(id.toUpperCase(), {
+            oemId: String(oemId || ""),
+            stationId: id,
+            communityLabel: String(s.name || s.communityLabel || id)
+          });
+        }
+      }
+    } else {
+      const rows = db.prepare("SELECT * FROM stations ORDER BY id ASC").all();
+      for (const r of rows) {
+        const id = String(r.id || r.station_id || r.name || "").trim();
+        if (id && id.toUpperCase() !== "ADMIN") {
+          stationSet.set(id.toUpperCase(), {
+            oemId: String(oemId || ""),
+            stationId: id,
+            communityLabel: String(r.name || r.community_label || id)
+          });
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  for (const c of CANONICAL_FALLBACK_STATIONS) {
+    if (!stationSet.has(c.stationId.toUpperCase())) {
+      stationSet.set(c.stationId.toUpperCase(), {
+        oemId: String(oemId || ""),
+        stationId: c.stationId,
+        communityLabel: c.communityLabel
+      });
+    }
+  }
+
+  return Array.from(stationSet.values());
+}
+
 function listOemStationMappings(oemId, oemSlug) {
   const db = ensureDatabase();
   const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
@@ -1074,23 +1143,8 @@ function listOemStationMappings(oemId, oemSlug) {
   }
   if (rows.length > 0) return rows;
 
-  if (key.includes("calin") || key === "b0e00000-0000-0000-0000-000000000001" || key.includes("seed") || !oemId || key.trim().length > 0) {
-    try {
-      if (isMemoryDatabase(db)) {
-        return Array.from(db.memoryStore.stations?.values() || []).map((s) => ({
-          oemId,
-          stationId: String(s.id || s.stationId),
-          communityLabel: String(s.name || s.communityLabel || s.id)
-        }));
-      }
-      return db.prepare("SELECT * FROM stations ORDER BY id ASC").all().map((s) => ({
-        oemId,
-        stationId: String(s.id),
-        communityLabel: String(s.name || s.community_label || s.id)
-      }));
-    } catch {
-      // ignore
-    }
+  if (isSeedOrCalinOem(oemId, oemSlug)) {
+    return fetchAllLocalStations(oemId);
   }
   return rows;
 }
@@ -1105,15 +1159,9 @@ function countOemStationMappings(oemId, oemSlug) {
     count = db.prepare("SELECT COUNT(*) AS count FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ?").get(String(oemId || ""), key)?.count || 0;
   }
   if (count > 0) return count;
-  if (key.includes("calin") || key === "b0e00000-0000-0000-0000-000000000001" || key.includes("seed") || !oemId || key.trim().length > 0) {
-    try {
-      if (isMemoryDatabase(db)) {
-        return db.memoryStore.stations?.size || 0;
-      }
-      return db.prepare("SELECT COUNT(*) AS count FROM stations").get()?.count || 0;
-    } catch {
-      // ignore
-    }
+
+  if (isSeedOrCalinOem(oemId, oemSlug)) {
+    return fetchAllLocalStations(oemId).length;
   }
   return count;
 }

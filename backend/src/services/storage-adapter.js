@@ -839,6 +839,70 @@ function mapOemStationMappingRow(row) {
   };
 }
 
+const CANONICAL_FALLBACK_STATIONS = [
+  { stationId: "KYAKALE", communityLabel: "Kyakale" },
+  { stationId: "MUSHA", communityLabel: "Musha" },
+  { stationId: "OGUFA", communityLabel: "Ogufa" },
+  { stationId: "TUNGA", communityLabel: "Tunga" },
+  { stationId: "UMAISHA", communityLabel: "Umaisha" }
+];
+
+async function isSeedOrCalinOem(oemId, oemSlug) {
+  if (!oemId && !oemSlug) return true;
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed")) return true;
+  try {
+    const oem = await getOemManufacturer(oemId);
+    if (!oem) return false;
+    if (oem.isSeedDefault || String(oem.slug || "").toLowerCase().includes("calin")) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+async function fetchAllRemoteStations(oemId) {
+  const stationMap = new Map();
+
+  // Try fetching stations table from Supabase / local DB
+  try {
+    const live = await runWithFallback(
+      () => localDatabase.listOemStationMappings(oemId),
+      async () => {
+        const rows = await supabase.restRequest(`/stations?select=*&order=id.asc`);
+        return (Array.isArray(rows) ? rows : []).map((r) => ({
+          oemId: String(oemId || ""),
+          stationId: String(r.id || r.station_id || r.name || r.station || ""),
+          communityLabel: String(r.community_label || r.name || r.remark || r.id || "")
+        }));
+      }
+    );
+    if (Array.isArray(live)) {
+      for (const item of live) {
+        const id = String(item.stationId || "").trim();
+        if (id && id.toUpperCase() !== "ADMIN") {
+          stationMap.set(id.toUpperCase(), item);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback / merge canonical stations
+  for (const c of CANONICAL_FALLBACK_STATIONS) {
+    if (!stationMap.has(c.stationId.toUpperCase())) {
+      stationMap.set(c.stationId.toUpperCase(), {
+        oemId: String(oemId || ""),
+        stationId: c.stationId,
+        communityLabel: c.communityLabel
+      });
+    }
+  }
+
+  return Array.from(stationMap.values());
+}
+
 async function listOemStationMappings(oemId, oemSlug = "") {
   const mappings = await runWithFallback(
     () => localDatabase.listOemStationMappings(oemId, oemSlug),
@@ -849,26 +913,8 @@ async function listOemStationMappings(oemId, oemSlug = "") {
   );
   if (Array.isArray(mappings) && mappings.length > 0) return mappings;
 
-  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
-  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed") || !oemId || key.trim().length > 0) {
-    try {
-      const liveStations = await runWithFallback(
-        () => localDatabase.listOemStationMappings(oemId, oemSlug),
-        async () => {
-          const rows = await supabase.restRequest(`/stations?select=id,name,community_label,remark&order=id.asc`);
-          return (Array.isArray(rows) ? rows : []).map((r) => ({
-            oemId: String(oemId || ""),
-            stationId: String(r.id || r.station_id || r.name || ""),
-            communityLabel: String(r.community_label || r.name || r.remark || r.id || "")
-          }));
-        }
-      );
-      if (Array.isArray(liveStations) && liveStations.length > 0) {
-        return liveStations;
-      }
-    } catch {
-      // ignore
-    }
+  if (await isSeedOrCalinOem(oemId, oemSlug)) {
+    return fetchAllRemoteStations(oemId);
   }
 
   return mappings || [];
@@ -887,18 +933,10 @@ async function countOemStationMappings(oemId, oemSlug = "") {
     }
   );
   if (count > 0) return count;
-  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
-  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed") || !oemId || key.trim().length > 0) {
-    try {
-      const stationRes = await supabase.restRequestWithResponse(`/stations?select=id`, {
-        headers: { Prefer: "count=exact", Range: "0-0" }
-      });
-      const cr = String(stationRes?.response?.headers?.get("content-range") || "");
-      const stationTotal = Number(cr.split("/")[1]);
-      if (Number.isFinite(stationTotal) && stationTotal > 0) return stationTotal;
-    } catch {
-      // ignore
-    }
+
+  if (await isSeedOrCalinOem(oemId, oemSlug)) {
+    const list = await fetchAllRemoteStations(oemId);
+    return list.length;
   }
   return count;
 }
