@@ -3,6 +3,12 @@
 const crypto = require("crypto");
 const localDatabase = require("./local-database");
 const supabase = require("./supabase-service");
+const {
+  isUuid,
+  isExplicitStationId,
+  toDerivedStationRows,
+  canonicalStationRows
+} = require("./oem-station-fallback");
 
 const tableNames = [
   "users",
@@ -853,24 +859,6 @@ async function isSeedOrCalinOem(oemId, oemSlug) {
   return false;
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function titleCaseStationId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-}
-
-const CANONICAL_CALIN_STATIONS = [
-  { stationId: "BONDU", communityLabel: "Bondu" },
-  { stationId: "KADUNA", communityLabel: "Kaduna" },
-  { stationId: "KYAKALE", communityLabel: "Kyakale" },
-  { stationId: "MUSHA", communityLabel: "Musha" },
-  { stationId: "OGUFA", communityLabel: "Ogufa" },
-  { stationId: "TUNGA", communityLabel: "Tunga" },
-  { stationId: "UMAISHA", communityLabel: "Umaisha" }
-];
-
 async function listOemStationMappings(oemId, oemSlug = "") {
   const mappings = await runWithFallback(
     () => localDatabase.listOemStationMappings(oemId, oemSlug),
@@ -884,7 +872,7 @@ async function listOemStationMappings(oemId, oemSlug = "") {
       // oem_station_mappings.oem_id is a uuid column — a slug ("calinmeter") in an
       // `oem_id.eq.` filter makes PostgREST reject the *whole* request with 22P02
       // (invalid input syntax for type uuid), so only uuid-shaped targets go in.
-      const targets = new Set([idKey].filter((t) => UUID_PATTERN.test(t)));
+      const targets = new Set([idKey].filter(isUuid));
       if (isCalin) targets.add(seedKey);
 
       if (targets.size > 0) {
@@ -894,7 +882,7 @@ async function listOemStationMappings(oemId, oemSlug = "") {
         try {
           const result = await supabase.restRequest(query);
           const rows = (Array.isArray(result) ? result : []).map(mapOemStationMappingRow)
-            .filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+            .filter((r) => isExplicitStationId(r.stationId));
           if (rows.length > 0) return rows;
         } catch (error) {
           // A custom OEM has no safe fallback set, so let runWithFallback log the
@@ -910,22 +898,17 @@ async function listOemStationMappings(oemId, oemSlug = "") {
           const stations = await supabase.restRequest(
             "/station_meter_read_rollups?select=station_id&order=station_id.asc"
           );
-          const liveRows = (Array.isArray(stations) ? stations : []).map((r) => ({
-            oemId: String(oemId || ""),
-            stationId: String(r.station_id || "").trim(),
-            communityLabel: titleCaseStationId(r.station_id)
-          })).filter((r) => r.stationId && r.stationId.toLowerCase() !== "admin");
+          const liveRows = toDerivedStationRows(
+            oemId,
+            (Array.isArray(stations) ? stations : []).map((r) => r && r.station_id)
+          );
 
           if (liveRows.length > 0) return liveRows;
         } catch {
           // ignore
         }
 
-        return CANONICAL_CALIN_STATIONS.map((s) => ({
-          oemId: String(oemId || ""),
-          stationId: s.stationId,
-          communityLabel: s.communityLabel
-        }));
+        return canonicalStationRows(oemId);
       }
 
       return [];
