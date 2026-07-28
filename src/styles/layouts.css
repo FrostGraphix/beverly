@@ -1468,8 +1468,32 @@ a {
   }
 
   .main-container,
-  .hideSidebar .main-container {
+  .hideSidebar .main-container,
+  .mobile .main-container {
     margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  .fixed-header,
+  .hideSidebar .fixed-header,
+  .mobile .fixed-header,
+  .app-page:not(.wallet-admin-host) .fixed-header {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+
+  .navbar {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    grid-template-columns: 44px minmax(0, 1fr) auto !important;
   }
 
   .mobile .sidebar-mobile-close {
