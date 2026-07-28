@@ -25,7 +25,9 @@ const CANONICAL_CALIN_STATIONS = [
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Placeholder/scratch identifiers that operational tables accumulate. These are
-// never real communities and must not reach the OEM Hub dropdown.
+// never real communities and must not reach the OEM Hub dropdown. Keep this list
+// conservative: a real station wrongly matched here disappears from the operator's
+// community list silently, which is worse than one stray row showing through.
 const PLACEHOLDER_STATION_PATTERNS = [
   /test/i,
   /^demo/i,
@@ -54,12 +56,15 @@ function isExplicitStationId(stationId) {
 }
 
 // Tiers 2/3 — the station list is inferred from operational tables that also
-// carry test rows and synthetic meter ids, so it gets sanitised before display.
-// Numeric-only ids (0001) are meter/site scratch keys, not community names.
+// carry scratch rows, so it gets sanitised before display.
+//
+// Only genuine placeholders are dropped. Numeric ids are NOT filtered: 0001
+// ("Station0001") is a real commissioned station, so the shape of an id says
+// nothing about whether it is a real community. TEST_STATION, by contrast,
+// exists only in station_meter_read_rollups and in no OEM station registry.
 function isDerivedStationId(stationId) {
   const raw = String(stationId || "").trim();
   if (!isExplicitStationId(raw)) return false;
-  if (/^\d+$/.test(raw)) return false;
   return !PLACEHOLDER_STATION_PATTERNS.some((pattern) => pattern.test(raw));
 }
 

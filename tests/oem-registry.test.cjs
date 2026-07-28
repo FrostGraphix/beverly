@@ -109,9 +109,11 @@ const registry = require("../backend/src/services/oem-registry-service");
   // which carry scratch rows that must never reach the OEM Hub dropdown.
   assert.strictEqual(fallback.isDerivedStationId("KYAKALE"), true, "real station survives");
   assert.strictEqual(fallback.isDerivedStationId("TEST_STATION"), false, "test station filtered");
-  assert.strictEqual(fallback.isDerivedStationId("0001"), false, "numeric scratch key filtered");
   assert.strictEqual(fallback.isDerivedStationId("demo-site"), false, "demo placeholder filtered");
   assert.strictEqual(fallback.isDerivedStationId("ADMIN"), false, "ADMIN filtered from derived tiers");
+  // 0001 ("Station0001") is a real commissioned station — an id's shape says
+  // nothing about whether it names a real community.
+  assert.strictEqual(fallback.isDerivedStationId("0001"), true, "numeric station id is not a placeholder");
 
   // Exactly the production case: the rollups table returned these 7 ids.
   const derived = fallback.toDerivedStationRows("oem-1", [
@@ -119,11 +121,11 @@ const registry = require("../backend/src/services/oem-registry-service");
   ]);
   assert.deepStrictEqual(
     derived.map((r) => r.stationId),
-    ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    ["0001", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
     "derived rows are deduped, sorted, and stripped of placeholders"
   );
-  assert.strictEqual(derived[0].communityLabel, "Kyakale", "derived label is title-cased");
-  assert.strictEqual(derived[0].oemId, "oem-1", "derived rows carry the requesting OEM id");
+  assert.strictEqual(derived[1].communityLabel, "Kyakale", "derived label is title-cased");
+  assert.strictEqual(derived[1].oemId, "oem-1", "derived rows carry the requesting OEM id");
 
   // The last-resort list is subject to the same hygiene rule.
   assert(
@@ -140,7 +142,7 @@ const registry = require("../backend/src/services/oem-registry-service");
   ]);
   assert.deepStrictEqual(
     merged.map((r) => r.stationId),
-    ["BONDU", "KADUNA", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    ["0001", "BONDU", "KADUNA", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
     "unmetered registered stations survive alongside stations that have data"
   );
   assert.strictEqual(
