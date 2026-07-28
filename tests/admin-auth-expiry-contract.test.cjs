@@ -31,7 +31,7 @@ assert.match(api, /function parseJson\(text: string\): any/);
 assert.match(authStore, /import \{ ApiError, api \} from '\.\.\/lib\/api'/);
 assert.match(authStore, /function isSessionTerminalError\(error: unknown\): boolean/);
 assert.match(authStore, /error instanceof ApiError && error\.status === 401/);
-assert.match(authStore, /if \(!isSessionTerminalError\(error\)\) return/);
+assert.match(authStore, /if \(!isSessionTerminalError\(error\)\) \{[\s\S]*?return;/);
 assert.match(authStore, /async ensureFreshSession\(maxAgeMs = 60_000\)/);
 assert.match(authStore, /if \(isSessionTerminalError\(error\)\) \{\s*this\.logout\(\);\s*throw error;\s*\}/s);
 assert.match(login, /authReason\.value === 'session_timeout' \|\| authReason\.value === 'session_expired'/);
