@@ -92,6 +92,75 @@ const registry = require("../backend/src/services/oem-registry-service");
   ldb.deleteOemManufacturer(oemB.id);
 }
 
+// ── 4b. Station fallback tiers: explicit mappings are honoured verbatim, but
+// derived/canonical tiers drop placeholder ids that pollute operational tables ─
+{
+  const fallback = require("../backend/src/services/oem-station-fallback");
+
+  // An operator's explicit mapping is intent — only ADMIN (an access scope, not
+  // a community) is dropped. Numeric site keys stay, which is why section 3's
+  // "0001" mapping still counts.
+  assert.strictEqual(fallback.isExplicitStationId("0001"), true, "explicit numeric mapping kept");
+  assert.strictEqual(fallback.isExplicitStationId("TEST_STATION"), true, "explicit test mapping kept");
+  assert.strictEqual(fallback.isExplicitStationId("ADMIN"), false, "ADMIN is not a community");
+  assert.strictEqual(fallback.isExplicitStationId("  "), false, "blank station id rejected");
+
+  // Derived tiers infer from account_bindings / station_meter_read_rollups,
+  // which carry scratch rows that must never reach the OEM Hub dropdown.
+  assert.strictEqual(fallback.isDerivedStationId("KYAKALE"), true, "real station survives");
+  assert.strictEqual(fallback.isDerivedStationId("TEST_STATION"), false, "test station filtered");
+  assert.strictEqual(fallback.isDerivedStationId("0001"), false, "numeric scratch key filtered");
+  assert.strictEqual(fallback.isDerivedStationId("demo-site"), false, "demo placeholder filtered");
+  assert.strictEqual(fallback.isDerivedStationId("ADMIN"), false, "ADMIN filtered from derived tiers");
+
+  // Exactly the production case: the rollups table returned these 7 ids.
+  const derived = fallback.toDerivedStationRows("oem-1", [
+    "0001", "KYAKALE", "MUSHA", "OGUFA", "TEST_STATION", "TUNGA", "UMAISHA", "TUNGA", "", null
+  ]);
+  assert.deepStrictEqual(
+    derived.map((r) => r.stationId),
+    ["KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    "derived rows are deduped, sorted, and stripped of placeholders"
+  );
+  assert.strictEqual(derived[0].communityLabel, "Kyakale", "derived label is title-cased");
+  assert.strictEqual(derived[0].oemId, "oem-1", "derived rows carry the requesting OEM id");
+
+  // The last-resort list is subject to the same hygiene rule.
+  assert(
+    fallback.canonicalStationRows("oem-1").every((r) => fallback.isDerivedStationId(r.stationId)),
+    "canonical fallback contains no placeholder ids"
+  );
+
+  // Registered-but-unmetered sites (BONDU, KADUNA are commissioned and verified,
+  // but their meters are not onboarded) have no operational rows at all. Merging
+  // rather than falling through is what keeps them visible once any other
+  // station starts producing data.
+  const merged = fallback.mergeDerivedWithCanonical("oem-1", [
+    "0001", "KYAKALE", "MUSHA", "OGUFA", "TEST_STATION", "TUNGA", "UMAISHA"
+  ]);
+  assert.deepStrictEqual(
+    merged.map((r) => r.stationId),
+    ["BONDU", "KADUNA", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    "unmetered registered stations survive alongside stations that have data"
+  );
+  assert.strictEqual(
+    merged.find((r) => r.stationId === "BONDU").communityLabel,
+    "Bondu",
+    "curated label used for the unmetered station"
+  );
+
+  // A station discovered only in operational data is still picked up, so the
+  // static canonical list cannot cap what the card shows.
+  const withNewSite = fallback.mergeDerivedWithCanonical("oem-1", ["NEWSITE"]);
+  assert(
+    withNewSite.some((r) => r.stationId === "NEWSITE"),
+    "station present only in operational data is not dropped by the merge"
+  );
+
+  assert.strictEqual(fallback.isUuid("5dc041cc-fa6c-45ad-b7d5-ff3c19c4a5f0"), true, "uuid accepted");
+  assert.strictEqual(fallback.isUuid("calinmeter"), false, "slug rejected as uuid");
+}
+
 // ── 5. Registry resolver: decrypts credentials, respects the kill switch ─────
 (async () => {
   const oem = ldb.upsertOemManufacturer({ slug: "resolver", displayName: "Resolver", status: "active" });

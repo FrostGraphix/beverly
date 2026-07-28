@@ -11,15 +11,25 @@
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
     }
   },
+  "redirects": [
+    { "source": "/wallet-admin", "destination": "/wallet-admin/", "permanent": true },
+    { "source": "/wallet-vendor", "destination": "/wallet-vendor/", "permanent": true },
+    { "source": "/wallet-customer", "destination": "/wallet-customer/", "permanent": true },
+    { "source": "/wallet", "destination": "/wallet/", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
     { "source": "/wallet", "destination": "/wallet/index.html" },
+    { "source": "/wallet/", "destination": "/wallet/index.html" },
     { "source": "/wallet/:path*", "destination": "/wallet/index.html" },
     { "source": "/wallet-admin", "destination": "/wallet-admin/index.html" },
+    { "source": "/wallet-admin/", "destination": "/wallet-admin/index.html" },
     { "source": "/wallet-admin/:path*", "destination": "/wallet-admin/index.html" },
     { "source": "/wallet-vendor", "destination": "/wallet-vendor/index.html" },
+    { "source": "/wallet-vendor/", "destination": "/wallet-vendor/index.html" },
     { "source": "/wallet-vendor/:path*", "destination": "/wallet-vendor/index.html" },
     { "source": "/wallet-customer", "destination": "/wallet-customer/index.html" },
+    { "source": "/wallet-customer/", "destination": "/wallet-customer/index.html" },
     { "source": "/wallet-customer/:path*", "destination": "/wallet-customer/index.html" },
     { "source": "/:path*", "has": [{ "type": "host", "value": "admin-acob-beverly.vercel.app" }], "destination": "/wallet-admin/index.html" },
     { "source": "/:path*", "has": [{ "type": "host", "value": "vendor-acob-beverly.vercel.app" }], "destination": "/wallet-vendor/index.html" },

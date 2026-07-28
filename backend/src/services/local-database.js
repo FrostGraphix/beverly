@@ -10,6 +10,12 @@ try {
   DatabaseSync = null;
 }
 
+const {
+  isExplicitStationId,
+  mergeDerivedWithCanonical,
+  canonicalStationRows
+} = require("./oem-station-fallback");
+
 const defaultDatabasePath = path.resolve(__dirname, "..", "..", "..", "tmp", "reference-crm.sqlite");
 
 let database = null;
@@ -1070,22 +1076,6 @@ function isSeedOrCalinOem(oemId, oemSlug) {
   return false;
 }
 
-function titleCaseStationId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-}
-
-const CANONICAL_CALIN_STATIONS = [
-  { stationId: "BONDU", communityLabel: "Bondu" },
-  { stationId: "KADUNA", communityLabel: "Kaduna" },
-  { stationId: "KYAKALE", communityLabel: "Kyakale" },
-  { stationId: "MUSHA", communityLabel: "Musha" },
-  { stationId: "OGUFA", communityLabel: "Ogufa" },
-  { stationId: "TUNGA", communityLabel: "Tunga" },
-  { stationId: "UMAISHA", communityLabel: "Umaisha" }
-];
-
 function listOemStationMappings(oemId, oemSlug) {
   const db = ensureDatabase();
   const slugKey = String(oemSlug || "").trim().toLowerCase();
@@ -1110,7 +1100,7 @@ function listOemStationMappings(oemId, oemSlug) {
     }));
   }
 
-  const filtered = rows.filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+  const filtered = rows.filter((r) => isExplicitStationId(r.stationId));
   if (filtered.length > 0) return filtered;
 
   if (isCalin) {
@@ -1123,23 +1113,13 @@ function listOemStationMappings(oemId, oemSlug) {
           "SELECT DISTINCT station_id FROM account_bindings WHERE station_id IS NOT NULL AND station_id <> '' ORDER BY station_id ASC"
         ).all().map((row) => row.station_id);
 
-      const live = Array.from(new Set(stationIds.map((id) => String(id || "").trim()).filter(Boolean)))
-        .map((stationId) => ({
-          oemId: String(oemId || ""),
-          stationId,
-          communityLabel: titleCaseStationId(stationId)
-        }))
-        .filter((r) => r.stationId.toLowerCase() !== "admin");
+      const live = mergeDerivedWithCanonical(oemId, stationIds);
       if (live.length > 0) return live;
     } catch {
       // ignore
     }
 
-    return CANONICAL_CALIN_STATIONS.map((s) => ({
-      oemId: String(oemId || ""),
-      stationId: s.stationId,
-      communityLabel: s.communityLabel
-    }));
+    return canonicalStationRows(oemId);
   }
 
   return [];
