@@ -12,7 +12,7 @@ try {
 
 const {
   isExplicitStationId,
-  toDerivedStationRows,
+  mergeDerivedWithCanonical,
   canonicalStationRows
 } = require("./oem-station-fallback");
 
@@ -1113,7 +1113,7 @@ function listOemStationMappings(oemId, oemSlug) {
           "SELECT DISTINCT station_id FROM account_bindings WHERE station_id IS NOT NULL AND station_id <> '' ORDER BY station_id ASC"
         ).all().map((row) => row.station_id);
 
-      const live = toDerivedStationRows(oemId, stationIds);
+      const live = mergeDerivedWithCanonical(oemId, stationIds);
       if (live.length > 0) return live;
     } catch {
       // ignore

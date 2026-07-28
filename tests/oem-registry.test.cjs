@@ -131,6 +131,32 @@ const registry = require("../backend/src/services/oem-registry-service");
     "canonical fallback contains no placeholder ids"
   );
 
+  // Registered-but-unmetered sites (BONDU, KADUNA are commissioned and verified,
+  // but their meters are not onboarded) have no operational rows at all. Merging
+  // rather than falling through is what keeps them visible once any other
+  // station starts producing data.
+  const merged = fallback.mergeDerivedWithCanonical("oem-1", [
+    "0001", "KYAKALE", "MUSHA", "OGUFA", "TEST_STATION", "TUNGA", "UMAISHA"
+  ]);
+  assert.deepStrictEqual(
+    merged.map((r) => r.stationId),
+    ["BONDU", "KADUNA", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    "unmetered registered stations survive alongside stations that have data"
+  );
+  assert.strictEqual(
+    merged.find((r) => r.stationId === "BONDU").communityLabel,
+    "Bondu",
+    "curated label used for the unmetered station"
+  );
+
+  // A station discovered only in operational data is still picked up, so the
+  // static canonical list cannot cap what the card shows.
+  const withNewSite = fallback.mergeDerivedWithCanonical("oem-1", ["NEWSITE"]);
+  assert(
+    withNewSite.some((r) => r.stationId === "NEWSITE"),
+    "station present only in operational data is not dropped by the merge"
+  );
+
   assert.strictEqual(fallback.isUuid("5dc041cc-fa6c-45ad-b7d5-ff3c19c4a5f0"), true, "uuid accepted");
   assert.strictEqual(fallback.isUuid("calinmeter"), false, "slug rejected as uuid");
 }

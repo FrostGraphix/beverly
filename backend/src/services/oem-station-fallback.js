@@ -7,9 +7,11 @@
 // so the identifiers, labelling, and filtering rules live here to keep the two
 // backends from drifting apart.
 
-// Station ids used by the CRM's own reporting scope (see refresh-targets.js).
-// Deliberately the last resort only: real mappings come from the OEM's live
-// /api/station/read via backend/scripts/seed-calinmeter-oem.cjs.
+// Registered, verified Calinmeter stations. This is a superset of the CRM's
+// reporting scope (refresh-targets.js): BONDU and KADUNA are commissioned sites
+// whose meters have not been onboarded yet, so they legitimately have no rows in
+// any operational table. That is precisely why the derived tier below must not
+// be treated as the complete station list — see mergeDerivedWithCanonical.
 const CANONICAL_CALIN_STATIONS = [
   { stationId: "BONDU", communityLabel: "Bondu" },
   { stationId: "KADUNA", communityLabel: "Kaduna" },
@@ -86,6 +88,32 @@ function canonicalStationRows(oemId) {
     }));
 }
 
+// Union of "stations that have data" and "stations we know are commissioned".
+//
+// Neither source is complete on its own: the derived list misses registered
+// sites whose meters are not onboarded yet (no rollups, no bindings), and the
+// canonical list is a static snapshot that will not know about sites added
+// after it was written. Taking whichever is non-empty first — the obvious
+// fall-through — silently drops verified communities the moment any operational
+// row exists, so the two are merged instead.
+//
+// Curated canonical labels win over machine-derived ones ("Bondu" over "Bondu"
+// derived from BONDU); ids are deduped case-insensitively and sorted.
+function mergeDerivedWithCanonical(oemId, stationIds) {
+  const byId = new Map();
+
+  for (const row of toDerivedStationRows(oemId, stationIds)) {
+    byId.set(row.stationId.toUpperCase(), row);
+  }
+  for (const row of canonicalStationRows(oemId)) {
+    const key = row.stationId.toUpperCase();
+    const existing = byId.get(key);
+    byId.set(key, existing ? { ...existing, communityLabel: row.communityLabel } : row);
+  }
+
+  return Array.from(byId.values()).sort((a, b) => a.stationId.localeCompare(b.stationId));
+}
+
 module.exports = {
   CANONICAL_CALIN_STATIONS,
   UUID_PATTERN,
@@ -94,5 +122,6 @@ module.exports = {
   isExplicitStationId,
   isDerivedStationId,
   toDerivedStationRows,
-  canonicalStationRows
+  canonicalStationRows,
+  mergeDerivedWithCanonical
 };

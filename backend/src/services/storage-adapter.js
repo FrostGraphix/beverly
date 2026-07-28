@@ -6,7 +6,7 @@ const supabase = require("./supabase-service");
 const {
   isUuid,
   isExplicitStationId,
-  toDerivedStationRows,
+  mergeDerivedWithCanonical,
   canonicalStationRows
 } = require("./oem-station-fallback");
 
@@ -898,7 +898,7 @@ async function listOemStationMappings(oemId, oemSlug = "") {
           const stations = await supabase.restRequest(
             "/station_meter_read_rollups?select=station_id&order=station_id.asc"
           );
-          const liveRows = toDerivedStationRows(
+          const liveRows = mergeDerivedWithCanonical(
             oemId,
             (Array.isArray(stations) ? stations : []).map((r) => r && r.station_id)
           );
