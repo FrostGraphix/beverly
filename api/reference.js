@@ -4097,12 +4097,12 @@ async function proxyLive(request, pathname, requestData) {
   // this keeps today's Calinmeter behavior byte-identical whether or not the OEM has
   // been seeded yet.
   const requestedOemId = oemRegistry.requestedOemId(request);
-  const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId);
+  const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
   const liveBaseUrl = oemConfig ? oemConfig.liveBaseUrl : env.liveBaseUrl;
 
   // Translate the CRM-canonical (Calinmeter-shaped) path to this OEM's actual path
   // via the shared logical key. Identity for Calinmeter/default → zero regression.
-  const resolvedPath = oemConfig ? await oemRegistry.translateEndpointPathForOem(oemConfig, pathname) : pathname;
+  const resolvedPath = oemConfig ? await oemRegistry.translateEndpointPathForOem(oemConfig, pathname).catch(() => pathname) : pathname;
 
   // Auth resolution is strategy-aware for a configured OEM (static bearer, API-key
   // header, or a login/OAuth2 flow that fetches+caches a token — see
@@ -4111,12 +4111,13 @@ async function proxyLive(request, pathname, requestData) {
   let token = "";
   let authHeaderName = "Authorization";
   if (oemConfig) {
-    const resolvedAuth = await oemRegistry.resolveAuthHeader(oemConfig);
+    const resolvedAuth = await oemRegistry.resolveAuthHeader(oemConfig).catch(() => null);
     if (resolvedAuth) {
       token = resolvedAuth.value;
       authHeaderName = resolvedAuth.name;
     }
-  } else {
+  }
+  if (!token) {
     token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
   }
   const candidates = candidatePaths(resolvedPath);
