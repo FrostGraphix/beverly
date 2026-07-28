@@ -839,14 +839,6 @@ function mapOemStationMappingRow(row) {
   };
 }
 
-const CANONICAL_FALLBACK_STATIONS = [
-  { stationId: "KYAKALE", communityLabel: "Kyakale" },
-  { stationId: "MUSHA", communityLabel: "Musha" },
-  { stationId: "OGUFA", communityLabel: "Ogufa" },
-  { stationId: "TUNGA", communityLabel: "Tunga" },
-  { stationId: "UMAISHA", communityLabel: "Umaisha" }
-];
-
 async function isSeedOrCalinOem(oemId, oemSlug) {
   if (!oemId && !oemSlug) return true;
   const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
@@ -861,29 +853,86 @@ async function isSeedOrCalinOem(oemId, oemSlug) {
   return false;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function titleCaseStationId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+const CANONICAL_CALIN_STATIONS = [
+  { stationId: "BONDU", communityLabel: "Bondu" },
+  { stationId: "KADUNA", communityLabel: "Kaduna" },
+  { stationId: "KYAKALE", communityLabel: "Kyakale" },
+  { stationId: "MUSHA", communityLabel: "Musha" },
+  { stationId: "OGUFA", communityLabel: "Ogufa" },
+  { stationId: "TUNGA", communityLabel: "Tunga" },
+  { stationId: "UMAISHA", communityLabel: "Umaisha" }
+];
+
 async function listOemStationMappings(oemId, oemSlug = "") {
-  return runWithFallback(
+  const mappings = await runWithFallback(
     () => localDatabase.listOemStationMappings(oemId, oemSlug),
     async () => {
       const slugKey = String(oemSlug || "").trim().toLowerCase();
       const idKey = String(oemId || "").trim();
       const seedKey = "b0e00000-0000-0000-0000-000000000001";
-      const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey;
+      const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey
+        || ((idKey || slugKey) ? await isSeedOrCalinOem(idKey, slugKey) : false);
 
-      const targets = new Set([idKey, slugKey].filter(Boolean));
-      if (isCalin) {
-        targets.add(seedKey);
-        targets.add("calinmeter");
+      // oem_station_mappings.oem_id is a uuid column — a slug ("calinmeter") in an
+      // `oem_id.eq.` filter makes PostgREST reject the *whole* request with 22P02
+      // (invalid input syntax for type uuid), so only uuid-shaped targets go in.
+      const targets = new Set([idKey].filter((t) => UUID_PATTERN.test(t)));
+      if (isCalin) targets.add(seedKey);
+
+      if (targets.size > 0) {
+        const orClause = Array.from(targets).map((t) => `oem_id.eq.${encodeURIComponent(t)}`).join(",");
+        const query = `/oem_station_mappings?or=(${orClause})&order=station_id.asc`;
+
+        try {
+          const result = await supabase.restRequest(query);
+          const rows = (Array.isArray(result) ? result : []).map(mapOemStationMappingRow)
+            .filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+          if (rows.length > 0) return rows;
+        } catch (error) {
+          // A custom OEM has no safe fallback set, so let runWithFallback log the
+          // failure and retry locally rather than silently reporting zero.
+          if (!isCalin) throw error;
+        }
       }
 
-      const orClause = Array.from(targets).map((t) => `oem_id.eq.${encodeURIComponent(t)}`).join(",");
-      const query = `/oem_station_mappings?or=(${orClause})&order=station_id.asc`;
+      if (isCalin) {
+        try {
+          // There is no `stations` table in Supabase — station_meter_read_rollups
+          // is keyed by station_id and is the live station universe the CRM keeps.
+          const stations = await supabase.restRequest(
+            "/station_meter_read_rollups?select=station_id&order=station_id.asc"
+          );
+          const liveRows = (Array.isArray(stations) ? stations : []).map((r) => ({
+            oemId: String(oemId || ""),
+            stationId: String(r.station_id || "").trim(),
+            communityLabel: titleCaseStationId(r.station_id)
+          })).filter((r) => r.stationId && r.stationId.toLowerCase() !== "admin");
 
-      const result = await supabase.restRequest(query);
-      const rows = (Array.isArray(result) ? result : []).map(mapOemStationMappingRow);
-      return rows.filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+          if (liveRows.length > 0) return liveRows;
+        } catch {
+          // ignore
+        }
+
+        return CANONICAL_CALIN_STATIONS.map((s) => ({
+          oemId: String(oemId || ""),
+          stationId: s.stationId,
+          communityLabel: s.communityLabel
+        }));
+      }
+
+      return [];
     }
   );
+
+  return Array.isArray(mappings) ? mappings : [];
 }
 
 async function countOemStationMappings(oemId, oemSlug = "") {

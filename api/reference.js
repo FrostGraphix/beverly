@@ -27,7 +27,6 @@ const {
   setSgcTokenRule,
   listSgcTokenRules,
   listOemManufacturers,
-  countOemStationMappings,
   listOemStationMappings,
   getOemManufacturer,
   upsertOemManufacturer,
@@ -2397,20 +2396,26 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/oem/list") {
     const manufacturers = await listOemManufacturers();
-    const oems = await Promise.all(manufacturers.map(async (oem) => ({
-      id: oem.id,
-      slug: oem.slug,
-      displayName: oem.displayName,
-      logoStoragePath: oem.logoStoragePath,
-      status: oem.status,
-      isSeedDefault: oem.isSeedDefault,
-      capabilities: oem.capabilities,
-      vendingStrategy: oem.vendingStrategy,
-      communityCount: await countOemStationMappings(oem.id, oem.slug),
-      stations: await listOemStationMappings(oem.id, oem.slug),
-      createdAt: oem.createdAt,
-      updatedAt: oem.updatedAt
-    })));
+    const oems = await Promise.all(manufacturers.map(async (oem) => {
+      // Resolve the mappings once — the count is just its length, and the lookup
+      // can hit Supabase plus fallback tiers, so calling it twice doubles the work
+      // and can drift if a tier changes between the two calls.
+      const stations = await listOemStationMappings(oem.id, oem.slug);
+      return {
+        id: oem.id,
+        slug: oem.slug,
+        displayName: oem.displayName,
+        logoStoragePath: oem.logoStoragePath,
+        status: oem.status,
+        isSeedDefault: oem.isSeedDefault,
+        capabilities: oem.capabilities,
+        vendingStrategy: oem.vendingStrategy,
+        communityCount: stations.length,
+        stations,
+        createdAt: oem.createdAt,
+        updatedAt: oem.updatedAt
+      };
+    }));
     return localJobResponse({ oems });
   }
   if (pathname === "/api/system/oem" || pathname.startsWith("/api/system/oem/")) {
