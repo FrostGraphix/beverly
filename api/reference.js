@@ -4467,12 +4467,20 @@ async function handler(request, response) {
         });
       } catch (error) {
         console.error("[gateway-health]", error instanceof Error ? error.message : String(error));
-        response.status(502).json({
-          code: 502,
-          msg: "Gateway health unavailable",
-          reason: error instanceof Error ? error.message : String(error),
-          data: null,
-          result: null,
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json({
+          code: 0,
+          msg: "success",
+          reason: "Gateway health fallback",
+          result: { data: [], total: 0 },
+          data: { data: [], total: 0 },
+          meta: {
+            checkedAt: Date.now(),
+            gatewayCount: 0,
+            eventIds: [],
+            warning: error instanceof Error ? error.message : String(error),
+          },
+          _proxy: { source: "fallback", pathname },
         });
       }
       return;

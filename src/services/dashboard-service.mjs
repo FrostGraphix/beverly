@@ -1,4 +1,4 @@
-import { getApi, postApi } from "./api.js";
+import { getApi, postApi, readSessionState } from "./api.js";
 import { mapDashboardDataset } from "./mappers/dashboard-mapper.mjs";
 
 export const defaultDashboardOptions = {
@@ -92,7 +92,11 @@ export async function fetchDashboardData(options = {}) {
   const requestOptions = dashboardOptions(options);
   const api = options.api || { getApi, postApi };
   const scope = rangeParams(requestOptions);
-  const timeoutOption = { timeout: DASHBOARD_REQUEST_TIMEOUT_MS, silent: true };
+  const timeoutOption = {
+    timeout: DASHBOARD_REQUEST_TIMEOUT_MS,
+    silent: true,
+    ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
+  };
   const [panelGroup, topChart, consumptionChart, successChart, alarmChart] = await Promise.all([
     safeRequest(() => api.postApi("/api/dashboard/readPanelGroup", {}, timeoutOption)),
     safeRequest(() => api.postApi("/api/dashboard/readLineChart", {
@@ -119,7 +123,8 @@ export async function fetchDashboardData(options = {}) {
 
   const liveConsumptionChart = isSyntheticDashboardResponse(consumptionChart) ? null : consumptionChart;
   const needsFallbackData = !topChart || !liveConsumptionChart || !successChart;
-  const [hourly, gprs, payments] = needsFallbackData
+  const hasActiveSession = typeof window === "undefined" || Boolean(readSessionState());
+  const [hourly, gprs, payments] = (needsFallbackData && hasActiveSession)
     ? await Promise.all([
         safeRequest(() => api.getApi("/api/dashboard/hourly", {
           ...scope,
