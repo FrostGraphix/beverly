@@ -1056,14 +1056,6 @@ function stationMappingKey(oemId, stationId) {
   return `${String(oemId || "").trim()}::${String(stationId || "").trim().toUpperCase()}`;
 }
 
-const CANONICAL_FALLBACK_STATIONS = [
-  { stationId: "KYAKALE", communityLabel: "Kyakale" },
-  { stationId: "MUSHA", communityLabel: "Musha" },
-  { stationId: "OGUFA", communityLabel: "Ogufa" },
-  { stationId: "TUNGA", communityLabel: "Tunga" },
-  { stationId: "UMAISHA", communityLabel: "Umaisha" }
-];
-
 function isSeedOrCalinOem(oemId, oemSlug) {
   if (!oemId && !oemSlug) return true;
   const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
@@ -1078,12 +1070,29 @@ function isSeedOrCalinOem(oemId, oemSlug) {
   return false;
 }
 
+function titleCaseStationId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+const CANONICAL_CALIN_STATIONS = [
+  { stationId: "BONDU", communityLabel: "Bondu" },
+  { stationId: "KADUNA", communityLabel: "Kaduna" },
+  { stationId: "KYAKALE", communityLabel: "Kyakale" },
+  { stationId: "MUSHA", communityLabel: "Musha" },
+  { stationId: "OGUFA", communityLabel: "Ogufa" },
+  { stationId: "TUNGA", communityLabel: "Tunga" },
+  { stationId: "UMAISHA", communityLabel: "Umaisha" }
+];
+
 function listOemStationMappings(oemId, oemSlug) {
   const db = ensureDatabase();
   const slugKey = String(oemSlug || "").trim().toLowerCase();
   const idKey = String(oemId || "").trim();
   const seedKey = "b0e00000-0000-0000-0000-000000000001";
-  const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey;
+  const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey
+    || ((idKey || slugKey) ? isSeedOrCalinOem(idKey, slugKey) : false);
 
   let rows = [];
   if (isMemoryDatabase(db)) {
@@ -1101,7 +1110,39 @@ function listOemStationMappings(oemId, oemSlug) {
     }));
   }
 
-  return rows.filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+  const filtered = rows.filter((r) => r.stationId && String(r.stationId).toLowerCase() !== "admin");
+  if (filtered.length > 0) return filtered;
+
+  if (isCalin) {
+    try {
+      // There is no `stations` table locally either — account_bindings.station_id
+      // is the station universe this database actually carries.
+      const stationIds = isMemoryDatabase(db)
+        ? (db.memoryStore.account_bindings || []).map((b) => b && b.stationId)
+        : db.prepare(
+          "SELECT DISTINCT station_id FROM account_bindings WHERE station_id IS NOT NULL AND station_id <> '' ORDER BY station_id ASC"
+        ).all().map((row) => row.station_id);
+
+      const live = Array.from(new Set(stationIds.map((id) => String(id || "").trim()).filter(Boolean)))
+        .map((stationId) => ({
+          oemId: String(oemId || ""),
+          stationId,
+          communityLabel: titleCaseStationId(stationId)
+        }))
+        .filter((r) => r.stationId.toLowerCase() !== "admin");
+      if (live.length > 0) return live;
+    } catch {
+      // ignore
+    }
+
+    return CANONICAL_CALIN_STATIONS.map((s) => ({
+      oemId: String(oemId || ""),
+      stationId: s.stationId,
+      communityLabel: s.communityLabel
+    }));
+  }
+
+  return [];
 }
 
 function countOemStationMappings(oemId, oemSlug) {
