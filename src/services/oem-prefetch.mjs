@@ -7,19 +7,23 @@
 // credentials can't block the others, and with bounded concurrency so a super-admin
 // with many OEMs doesn't fan out a burst that trips the proxy's own rate limiter.
 
-import { getApi, postApi } from "./api.js";
+import { getApi, postApi, readSessionState } from "./api.js";
 import { fetchDashboardData } from "./dashboard-service.mjs";
 
 const MAX_CONCURRENT_WARMS = 2;
 
 // Wrap the shared api with a fixed X-Oem-Id header so every request this warm
 // makes targets one specific OEM, regardless of which OEM is currently selected.
+// Background pre-warming MUST set silent: true and skipAuthRedirect: true so an
+// OEM-specific upstream failure never purges the user's session or forces a login redirect.
 function oemScopedApi(oemId) {
   const headers = { "X-Oem-Id": oemId };
+  const baseOptions = { silent: true, skipAuthRedirect: true };
   return {
-    getApi: (path, params = {}) => getApi(path, params, { headers }),
+    getApi: (path, params = {}, options = {}) =>
+      getApi(path, params, { ...baseOptions, ...options, headers: { ...(options.headers || {}), ...headers } }),
     postApi: (path, payload = {}, options = {}) =>
-      postApi(path, payload, { ...options, headers: { ...(options.headers || {}), ...headers } })
+      postApi(path, payload, { ...baseOptions, ...options, headers: { ...(options.headers || {}), ...headers } })
   };
 }
 
@@ -29,6 +33,7 @@ async function warmOne(oemStore, oem) {
     const dataset = await fetchDashboardData({
       activeType: "purchaseMoney",
       consumptionType: 4,
+      skipAuthRedirect: true,
       api: oemScopedApi(oem.id)
     });
     oemStore.setWarmState(oem.id, { status: "ready", dataset, warmedAt: Date.now(), error: "" });
@@ -42,6 +47,7 @@ async function runBounded(tasks, limit) {
   const queue = [...tasks];
   const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
     while (queue.length) {
+      if (typeof window !== "undefined" && !readSessionState()) break;
       const task = queue.shift();
       await task();
     }

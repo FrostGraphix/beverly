@@ -140,8 +140,17 @@ apiClient.interceptors.response.use(
     const status = Number(error?.response?.status);
     const original = error?.config || {};
     const isRefreshCall = String(original.url || "").includes("/auth/refresh");
+    const isTerminalSession = /invalid session|session idle timeout|session absolute timeout|server session required|reauthentication required|session expired/i.test(String(apiMessage || ""));
 
-    if (status === 401 && !original.__retried && !isRefreshCall) {
+    if (original.skipAuthRedirect) {
+      // Isolated or background calls (e.g. OEM pre-warming) capture errors locally without destroying user session.
+    } else if (status === 401 && isTerminalSession) {
+      // Terminal session failure — server has already purged session cookies, so refresh is impossible.
+      clearSessionCookies();
+      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
+        window.location.hash = "#/login";
+      }
+    } else if (status === 401 && !original.__retried && !isRefreshCall) {
       // Try to transparently refresh the session, then replay the request once.
       const newToken = await refreshSession();
       if (newToken) {
@@ -161,7 +170,7 @@ apiClient.interceptors.response.use(
       }
     }
 
-    if (!axios.isCancel(error) && error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
+    if (!original.silent && !axios.isCancel(error) && error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
       recordClientError("api-response-error", error, {
         url: error?.config?.url || "",
         method: error?.config?.method || ""
@@ -306,7 +315,9 @@ export async function postApi(path, payload = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, payload, {
     headers: options.headers || {},
-    ...(options.timeout ? { timeout: options.timeout } : {})
+    ...(options.timeout ? { timeout: options.timeout } : {}),
+    ...(options.silent !== undefined ? { silent: options.silent } : {}),
+    ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
   });
   return validateApiEnvelope(response.data, cleanPath || "postApi");
 }
@@ -316,7 +327,9 @@ export async function getApi(path, params = {}, options = {}) {
   const response = await apiClient.get(cleanPath, {
     params,
     ...(options.headers ? { headers: options.headers } : {}),
-    ...(options.timeout ? { timeout: options.timeout } : {})
+    ...(options.timeout ? { timeout: options.timeout } : {}),
+    ...(options.silent !== undefined ? { silent: options.silent } : {}),
+    ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
   });
   return validateApiEnvelope(response.data, cleanPath || "getApi");
 }
