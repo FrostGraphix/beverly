@@ -50,6 +50,19 @@ function auditMeta(route, action, form) {
   };
 }
 
+function customerImportPayload(importRows = []) {
+  return importRows.map((row) => ({
+    customerId: String(row.id || row.customerId || "").trim(),
+    customerName: String(row.name || row.customerName || "").trim(),
+    phone: String(row.phone || "").trim(),
+    address: String(row.address || "").trim(),
+    certifiName: String(row.certifiName || "").trim(),
+    certifiNo: String(row.certifiNo || "").trim(),
+    remark: String(row.remark || "").trim(),
+    stationId: String(row.stationId || "").trim()
+  }));
+}
+
 function requestHeaders(route, action) {
   return {
     "X-Route-Hash": String(route?.hash || ""),
@@ -174,6 +187,8 @@ export async function submitRouteAction(route, action, form, options = {}) {
 
   const payload = isRemoteTaskConfirm(route, action)
     ? remoteTaskConfirmPayloadFromRow(form)
+    : action === "Import" && endpoint === "/api/customer/import"
+    ? customerImportPayload(importRows)
     : action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
