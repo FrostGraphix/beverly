@@ -50,17 +50,25 @@ function auditMeta(route, action, form) {
   };
 }
 
-function customerImportPayload(importRows = []) {
-  return importRows.map((row) => ({
-    customerId: String(row.id || row.customerId || "").trim(),
-    customerName: String(row.name || row.customerName || "").trim(),
-    phone: String(row.phone || "").trim(),
-    address: String(row.address || "").trim(),
-    certifiName: String(row.certifiName || "").trim(),
-    certifiNo: String(row.certifiNo || "").trim(),
-    remark: String(row.remark || "").trim(),
-    stationId: String(row.stationId || "").trim()
-  }));
+const IMPORT_FIELD_ALIASES = {
+  "/api/gateway/import": { id: "gatewayId", name: "gatewayName" },
+  "/api/customer/import": { id: "customerId", name: "customerName" },
+  "/api/tariff/import": { id: "tariffId", name: "tariffName" },
+  "/api/meter/import": { meterType: "type" },
+  "/api/dlms/import": { id: "dlmsId", name: "nameEN" }
+};
+
+const IMPORT_SYSTEM_FIELDS = new Set(["createDate", "updateDate"]);
+
+function importPayload(endpoint, importRows = []) {
+  const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
+  return importRows.map((row) => Object.entries(row).reduce((mapped, [key, value]) => {
+    if (IMPORT_SYSTEM_FIELDS.has(key)) return mapped;
+    const target = aliases[key] || key;
+    const text = String(value ?? "").trim();
+    if (text) mapped[target] = text;
+    return mapped;
+  }, {}));
 }
 
 function requestHeaders(route, action) {
@@ -187,8 +195,8 @@ export async function submitRouteAction(route, action, form, options = {}) {
 
   const payload = isRemoteTaskConfirm(route, action)
     ? remoteTaskConfirmPayloadFromRow(form)
-    : action === "Import" && endpoint === "/api/customer/import"
-    ? customerImportPayload(importRows)
+    : action === "Import" && /\/api\/.+\/import$/i.test(endpoint)
+    ? importPayload(endpoint, importRows)
     : action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
