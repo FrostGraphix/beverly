@@ -71,6 +71,25 @@ function mockResponse() {
 assert.strictEqual(handlerModule.cookieValue(mockRequest({ cookie: "bev_token=abc123; other=1" }), "bev_token"), "abc123");
 assert.strictEqual(handlerModule.cookieValue(mockRequest({ cookie: "" }), "bev_token"), "");
 
+// --- single-page fit ---
+// Receipts with ~22 or more fields laid out taller than one A4 sheet and spilled a sliver onto
+// a second page. The render now scales to fit; these cover the pure math (the Chromium round
+// trip itself is exercised by the render probe, not this dependency-light suite).
+assert.strictEqual(handlerModule.fitScaleForHeight(900), 1, "short receipts must not be scaled");
+assert.strictEqual(handlerModule.fitScaleForHeight(1123), 1, "an exact-A4 layout must not be scaled");
+const slightOverflow = handlerModule.fitScaleForHeight(1173);
+assert.ok(slightOverflow > 0.9 && slightOverflow < 1, `slight overflow should scale just under 1, got ${slightOverflow}`);
+assert.ok(1173 * slightOverflow <= 1123, "scaled height must fit the page");
+const bigOverflow = handlerModule.fitScaleForHeight(1286);
+assert.ok(1286 * bigOverflow <= 1123, "scaled height must fit the page");
+assert.strictEqual(handlerModule.fitScaleForHeight(99999), 0.5, "scale is floored so text stays legible");
+assert.strictEqual(handlerModule.fitScaleForHeight(0), 1, "unmeasurable height falls back to unscaled");
+assert.strictEqual(handlerModule.fitScaleForHeight(undefined), 1, "unmeasurable height falls back to unscaled");
+
+// Page counting reads Chromium's uncompressed page tree; /Pages must not be miscounted.
+assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Pages /Count 1 /Type /Page ")), 1);
+assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Page /Type /Page ")), 2);
+
 // --- sanitizeModel ---
 assert.strictEqual(handlerModule.sanitizeModel(null, brand), null);
 assert.strictEqual(handlerModule.sanitizeModel({}, brand), null);
