@@ -165,6 +165,51 @@ async function getBrowser() {
   return warmBrowser;
 }
 
+// A4 at the 96 CSS-px-per-inch the print pipeline assumes: 210mm x 297mm = 794 x 1122.5px.
+// Rounded up, because a document laid out to exactly 1123px still prints as one page and must
+// not be scaled.
+const A4_HEIGHT_PX = 1123;
+const MIN_FIT_SCALE = 0.5;
+
+function pdfPageCount(buffer) {
+  // Chromium/Skia writes an uncompressed page tree, so the page objects are greppable.
+  const matches = Buffer.from(buffer).toString("latin1").match(/\/Type\s*\/Page(?![s])/g);
+  return matches ? matches.length : 1;
+}
+
+function fitScaleForHeight(contentHeight) {
+  const height = Number(contentHeight) || 0;
+  if (height <= A4_HEIGHT_PX) return 1;
+  // Floor rather than round, so the scaled height never lands a hair over the page.
+  return Math.max(MIN_FIT_SCALE, Math.floor((A4_HEIGHT_PX / height) * 1000) / 1000);
+}
+
+// A receipt's height depends on how many fields the row carries, so a fixed stylesheet cannot
+// promise a single page. Measure the laid-out document and scale the render down to fit exactly
+// one A4 sheet — this keeps the design's proportions intact instead of reflowing it, and is what
+// "Fit to page" does in a browser print dialog. Page count is then verified on the real output.
+async function renderToSinglePage(page) {
+  const client = await page.createCDPSession();
+  let scale = 1;
+  try {
+    // Page.getLayoutMetrics is a protocol call, not page script, so this works with
+    // JavaScript disabled and does not weaken the render sandbox.
+    const metrics = await client.send("Page.getLayoutMetrics");
+    scale = fitScaleForHeight(metrics?.contentSize?.height);
+  } finally {
+    await client.detach().catch(() => {});
+  }
+
+  let pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true, scale });
+  // Rounding, fractional page breaks and unbreakable blocks can still push a sliver onto a
+  // second sheet; shave the scale until the real output is one page.
+  for (let attempt = 0; attempt < 3 && pdfPageCount(pdf) > 1 && scale > MIN_FIT_SCALE; attempt += 1) {
+    scale = Math.max(MIN_FIT_SCALE, Math.round(scale * 0.96 * 1000) / 1000);
+    pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true, scale });
+  }
+  return pdf;
+}
+
 async function renderReceiptPdf(html) {
   const browser = await getBrowser();
 
@@ -182,7 +227,7 @@ async function renderReceiptPdf(html) {
       else req.abort();
     });
     await page.setContent(html, { waitUntil: "load", timeout: 15000 });
-    return await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
+    return await renderToSinglePage(page);
   } catch (error) {
     // A page-level failure can mean the browser process itself is gone; drop the warm handle
     // so the next request relaunches instead of inheriting a dead one.
@@ -245,5 +290,7 @@ async function handler(request, response) {
 module.exports = handler;
 module.exports.sanitizeModel = sanitizeModel;
 module.exports.cookieValue = cookieValue;
+module.exports.fitScaleForHeight = fitScaleForHeight;
+module.exports.pdfPageCount = pdfPageCount;
 module.exports.DEFAULT_CHROMIUM_PACK_URL = DEFAULT_CHROMIUM_PACK_URL;
 module.exports.CHROMIUM_PACK_URL = CHROMIUM_PACK_URL;
