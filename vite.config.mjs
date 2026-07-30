@@ -34,6 +34,58 @@ function serveRawDocs() {
   };
 }
 
+// /api/receipt-pdf is its own Vercel function in production, but the dev middleware below
+// funnels every /api/* request into the reference handler, which treated the receipt route as
+// an upstream proxy path and answered 502 — so `npm run dev` always fell back to the plain-text
+// PDF. Dispatch it to the real handler first, with the small slice of the Vercel response API
+// that handler uses (setHeader + status().json()/send()).
+function receiptPdfApi() {
+  return {
+    name: "beverly-receipt-pdf-api",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = request.url ? request.url.split("?")[0] : "";
+        if (url !== "/api/receipt-pdf") {
+          next();
+          return;
+        }
+
+        const finish = (statusCode) => ({
+          json(body) {
+            if (response.writableEnded) return;
+            response.statusCode = statusCode;
+            response.setHeader("Content-Type", "application/json; charset=utf-8");
+            response.end(JSON.stringify(body));
+          },
+          send(body) {
+            if (response.writableEnded) return;
+            response.statusCode = statusCode;
+            response.end(Buffer.isBuffer(body) ? body : Buffer.from(String(body)));
+          }
+        });
+
+        try {
+          response.status = finish;
+          // Loaded per request so edits to the handler take effect without restarting the
+          // dev server, matching how api/reference.js is hot-reloaded here.
+          delete require.cache[require.resolve("./api/receipt-pdf")];
+          const receiptPdfHandler = require("./api/receipt-pdf");
+          await receiptPdfHandler(request, response);
+        } catch (error) {
+          if (response.writableEnded) return;
+          response.statusCode = 500;
+          response.setHeader("Content-Type", "application/json; charset=utf-8");
+          response.end(JSON.stringify({
+            code: 500,
+            msg: error instanceof Error ? error.message : "Receipt PDF render failed",
+            _proxy: { source: "vite-receipt-pdf", pathname: request.url }
+          }));
+        }
+      });
+    }
+  };
+}
+
 function embeddedReferenceApi() {
   return {
     name: "beverly-embedded-reference-api",
@@ -76,7 +128,7 @@ function embeddedReferenceApi() {
 }
 
 export default defineConfig({
-  plugins: [serveRawDocs(), embeddedReferenceApi(), vue()],
+  plugins: [serveRawDocs(), receiptPdfApi(), embeddedReferenceApi(), vue()],
   server: {
     port: 9311,
     strictPort: false,

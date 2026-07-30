@@ -777,7 +777,10 @@ function waitForDocumentReady(targetWindow) {
 
 async function downloadServerReceiptPdf(model, filename) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // A cold serverless render downloads and unpacks Chromium before the first byte, which
+  // routinely takes longer than 20s. Aborting earlier than the function's own 60s ceiling
+  // just pushes every first receipt of the day onto the plain-text fallback PDF.
+  const timeout = setTimeout(() => controller.abort(), 55000);
   try {
     const response = await fetch("/api/receipt-pdf", {
       method: "POST",
