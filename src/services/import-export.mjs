@@ -303,9 +303,14 @@ export function validateImportRows(route, importedRows, columnKey) {
   const rows = importedRows.map((sourceRow, index) => {
     const mapped = {};
     for (const field of template) {
-      mapped[field.key] = String(sourceRow[field.header] ?? "").trim();
+      const matchingHeader = Object.keys(sourceRow).find((header) =>
+        header === field.header || columnKey(header) === field.key
+      );
+      mapped[field.key] = String(matchingHeader ? sourceRow[matchingHeader] : "").trim();
     }
-    const requiredFields = template.filter((field) => !["remark", "phone", "address", "certifiName", "certifiNo"].includes(field.key));
+    const requiredFields = template.filter((field) => ![
+      "remark", "phone", "address", "certifiName", "certifiNo", "createDate", "updateDate"
+    ].includes(field.key));
     for (const field of requiredFields) {
       if (!mapped[field.key]) errors.push({ row: index + 2, field: field.header, message: `${field.header} is required` });
     }
