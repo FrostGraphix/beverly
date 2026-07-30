@@ -6,9 +6,31 @@
 // fast and dependency-light like the rest of the contract suite.
 
 const assert = require("node:assert");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const handlerModule = require(path.join("..", "api", "receipt-pdf.js"));
+const rootPackage = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+
+// --- Chromium pack URL ---
+// Production once ran with RECEIPT_PDF_CHROMIUM_PACK_URL set to an empty string, which made
+// every /api/receipt-pdf call answer 502 and silently drop clients onto the fallback PDF.
+// The endpoint now carries a pinned default, so a blank/absent env var must still resolve.
+assert.ok(handlerModule.CHROMIUM_PACK_URL, "a Chromium pack URL must always resolve");
+assert.ok(
+  handlerModule.CHROMIUM_PACK_URL.startsWith("https://"),
+  "Chromium pack URL must be https"
+);
+
+// The pack tar and the installed @sparticuz/chromium-min build must be the same release —
+// a version bump without a matching URL bump breaks Chromium launch at runtime.
+const chromiumRange = rootPackage.dependencies["@sparticuz/chromium-min"];
+const chromiumVersion = String(chromiumRange).replace(/^[^0-9]*/, "");
+assert.strictEqual(
+  handlerModule.DEFAULT_CHROMIUM_PACK_URL,
+  `https://github.com/Sparticuz/chromium/releases/download/v${chromiumVersion}/chromium-v${chromiumVersion}-pack.x64.tar`,
+  "default Chromium pack URL must match the installed @sparticuz/chromium-min version"
+);
 
 const brand = { name: "Beverly", company: "ACOB Lighting Technology Limited" };
 

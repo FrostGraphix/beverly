@@ -138,11 +138,16 @@ function runAudit(writeArtifact = true) {
       "Receipt export does not load executable code from third parties.",
       ["src/services/receipt-tools.mjs", "vercel.json"]
     ),
+    // The pack URL was previously required to live only in the environment. A blank value
+    // shipped to production and every receipt render returned 502, so the endpoint now pins
+    // a default in code. The supply-chain intent is preserved by requiring that default to be
+    // an https, version-pinned URL on the official Sparticuz release host, overridable by env.
     check(
-      "receipt-chromium-env-only",
+      "receipt-chromium-pinned-source",
       receiptPdf.includes("process.env.RECEIPT_PDF_CHROMIUM_PACK_URL") &&
-        !receiptPdf.includes("github.com/Sparticuz/chromium/releases"),
-      "Receipt Chromium assets are configured outside code.",
+        /https:\/\/github\.com\/Sparticuz\/chromium\/releases\/download\/v\d+\.\d+\.\d+\/chromium-v\d+\.\d+\.\d+-pack\.x64\.tar/.test(receiptPdf) &&
+        !/http:\/\//.test(receiptPdf),
+      "Receipt Chromium binary comes from a pinned, official, https source.",
       ["api/receipt-pdf.js", ".env.example"]
     ),
     check(
