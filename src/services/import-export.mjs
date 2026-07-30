@@ -267,6 +267,20 @@ export function importTemplateFields(route, columnKey) {
     .map((header) => ({ header, key: columnKey(header) }));
 }
 
+const IMPORT_DUPLICATE_KEYS = {
+  "#/management/gateway": { fields: ["id"], summary: "Duplicate Gateway IDs" },
+  "#/management/customer": { fields: ["id"], summary: "Duplicate Customer IDs" },
+  "#/management/tariff": { fields: ["id"], summary: "Duplicate Tariff IDs" },
+  "#/management/account": { fields: ["customerId", "meterId"], summary: "Duplicate Accounts" },
+  "#/admin/user": { fields: ["userId"], summary: "Duplicate User IDs" },
+  "#/admin/meter": { fields: ["meterId"], summary: "Duplicate Meter IDs" },
+  "#/protocol/dlms": { fields: ["id"], summary: "Duplicate DLMS IDs" }
+};
+
+const OPTIONAL_IMPORT_FIELDS = {
+  "#/management/account": new Set(["tariffId", "communicationWay", "ctRatio", "remark", "createDate", "updateDate", "stationId"])
+};
+
 function parseDelimitedRows(text, delimiter) {
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
@@ -308,15 +322,52 @@ export function validateImportRows(route, importedRows, columnKey) {
       );
       mapped[field.key] = String(matchingHeader ? sourceRow[matchingHeader] : "").trim();
     }
-    const requiredFields = template.filter((field) => ![
-      "remark", "phone", "address", "certifiName", "certifiNo", "createDate", "updateDate"
-    ].includes(field.key));
+    const optionalFields = new Set([
+      "remark", "phone", "address", "certifiName", "certifiNo", "createDate", "updateDate",
+      ...(OPTIONAL_IMPORT_FIELDS[route.hash] || [])
+    ]);
+    const requiredFields = template.filter((field) => !optionalFields.has(field.key));
     for (const field of requiredFields) {
       if (!mapped[field.key]) errors.push({ row: index + 2, field: field.header, message: `${field.header} is required` });
     }
     return mapped;
   });
+
+  const duplicateKey = IMPORT_DUPLICATE_KEYS[route.hash] || (String(route.title || "").toLowerCase() === "customer"
+    ? IMPORT_DUPLICATE_KEYS["#/management/customer"]
+    : null);
+  if (duplicateKey) {
+    const keyField = template.find((field) => field.key === duplicateKey.fields[0]);
+    const firstRowById = new Map();
+    for (const [index, row] of rows.entries()) {
+      const identityValues = duplicateKey.fields.map((field) => row[field]);
+      if (identityValues.some((value) => !value)) continue;
+      const identity = identityValues.join(" / ");
+      const firstRow = firstRowById.get(identity);
+      if (firstRow) {
+        errors.push({
+          row: index + 2,
+          field: keyField?.header || duplicateKey.fields[0],
+          message: `${duplicateKey.summary}: ${identity} (first: row ${firstRow})`,
+          kind: "duplicate",
+          item: identity,
+          summary: duplicateKey.summary
+        });
+        continue;
+      }
+      firstRowById.set(identity, index + 2);
+    }
+  }
   return { rows, errors };
+}
+
+export function importErrorMessage(errors) {
+  const duplicates = errors.filter((error) => error.kind === "duplicate");
+  if (duplicates.length) {
+    const items = [...new Set(duplicates.map((error) => error.item))];
+    return `${duplicates[0].summary}: ${items.join(", ")}`;
+  }
+  return `Import has ${errors.length} validation errors`;
 }
 
 export function buildImportPreview(existingRows, importedRows) {
