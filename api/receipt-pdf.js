@@ -156,11 +156,21 @@ async function getBrowser() {
   }
 
   const chromium = require("@sparticuz/chromium-min");
+  // Cold-start cost is dominated by fetching and unpacking the ~70MB Chromium pack, which only
+  // happens when /tmp is empty. Record which case this was and how long it took, so the decision
+  // to mirror the pack somewhere faster rests on production numbers rather than a guess.
+  const packAlreadyUnpacked = require("node:fs").existsSync("/tmp/chromium");
+  const startedAt = Date.now();
   warmBrowser = await puppeteer.launch({
     args: await puppeteer.defaultArgs({ args: chromium.args, headless: "shell" }),
     defaultViewport,
     executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
     headless: "shell"
+  });
+  console.log("[receipt-pdf] browser launched", {
+    ms: Date.now() - startedAt,
+    packAlreadyUnpacked,
+    packUrlSource: process.env.RECEIPT_PDF_CHROMIUM_PACK_URL ? "env" : "default"
   });
   return warmBrowser;
 }
