@@ -14,6 +14,8 @@
     "WalletGreeting.vue.d.ts",
     "BeverlyLoader.vue",
     "BeverlyLoader.vue.d.ts",
+    "WalletPagination.vue",
+    "WalletPagination.vue.d.ts",
     "index.js",
     "index.d.ts",
     "pwaInstall.js"
@@ -30,6 +32,10 @@
     "./BeverlyLoader.vue": {
       "types": "./BeverlyLoader.vue.d.ts",
       "import": "./BeverlyLoader.vue"
+    },
+    "./WalletPagination.vue": {
+      "types": "./WalletPagination.vue.d.ts",
+      "import": "./WalletPagination.vue"
     }
   }
 }
