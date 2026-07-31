@@ -1,9 +1,9 @@
 /**
  * Idle session timeout per SOP (§3 Auth, Sessions).
  *
- * Customer: 60 min idle, 30 day absolute
- * Vendor:   30 min idle, 12 h absolute
- * Staff:    30 min idle, 8 h  absolute
+ * Customer: 8 h idle, 24 h absolute
+ * Vendor:   8 h idle, 24 h absolute
+ * Staff:    8 h idle, 16 h absolute
  *
  * Behavior:
  *   • Tracks activity via mousemove / click / keydown / touchstart / scroll.

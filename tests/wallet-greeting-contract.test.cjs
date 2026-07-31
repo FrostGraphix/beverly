@@ -18,6 +18,8 @@ assert.match(tokenRuntime, /morning:[\s\S]*igbo: 'Ụtụtụ ọma'/);
 assert.match(tokenRuntime, /afternoon:[\s\S]*igbo: 'Ehihie ọma'/);
 assert.match(tokenRuntime, /night:[\s\S]*igbo: 'Mgbede ọma'/);
 assert.match(greetingComponent, /greeting\.value\.igbo/);
+assert.match(greetingComponent, /props\.languages\?\.length/);
+assert.match(greetingComponent, /language\[greeting\.value\.period\]/);
 
 const handCount =
   (greetingComponent.match(/👋/gu) || []).length +

@@ -2,11 +2,15 @@ import { buildConsumptionStatisticsPayload } from "../live-report-adapters.mjs";
 import { normalizeCollection } from "../response-normalizers.mjs";
 import { formatToken, normalizeAccountStatus, normalizeRemoteStatus } from "../remote-task-flow.mjs";
 
-const knownStationIds = ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA", "0001"];
+import { stationsSync } from "../station-registry.mjs";
 
+// Station inference for upstream rows that carry a name but no station id.
+// The candidate set is the discovered estate, so a newly onboarded station is
+// matched without a redeploy. Placeholder ids ("0001") are already excluded by
+// the registry, so no local filtering is needed here.
 function stationFromName(value = "") {
   const normalized = String(value || "").toUpperCase();
-  return knownStationIds.find((stationId) => stationId !== "0001" && normalized.includes(stationId)) || "";
+  return stationsSync().find((stationId) => normalized.includes(stationId)) || "";
 }
 
 export function normalizeTableResponse(rawResponse, route) {

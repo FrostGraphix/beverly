@@ -169,6 +169,74 @@ async function repairApprovedCredits() {
     }
 }
 
+// ── Payments held for review ────────────────────────────────────────────────
+// The gateway confirmed these but the reconciler could not apply them, so the
+// money is real and unapplied. Retrying re-runs verification and fulfillment;
+// the ledger key makes it safe even if the payment did partly apply.
+interface HeldPayment {
+    id: string;
+    reference: string;
+    actorType: string;
+    purpose: string;
+    amountMinor: number;
+    blockedReason: string | null;
+    verifiedAmountMinor: number | null;
+    attempts: number;
+    createdAt: string;
+}
+
+const heldPayments = ref<HeldPayment[]>([]);
+const heldLoading = ref(false);
+const retryingId = ref<string | null>(null);
+
+async function loadHeldPayments() {
+    heldLoading.value = true;
+    try {
+        const r = await api.get<{ payments: HeldPayment[] }>('/api/v1/admin/payments/requires-review?limit=50');
+        heldPayments.value = r.payments ?? [];
+    } catch {
+        // The approvals queue must still render if this panel fails.
+    } finally {
+        heldLoading.value = false;
+    }
+}
+
+async function retryHeldPayment(payment: HeldPayment) {
+    if (!canApproveFunding.value || retryingId.value) return;
+    retryingId.value = payment.id;
+    banner.value = null;
+    try {
+        const result = await api.post<{ status: string; fulfillmentStatus: string; reason?: string }>(
+            `/api/v1/admin/payments/${payment.id}/retry-fulfillment`, {},
+        );
+        const applied = ['fulfilled', 'already_fulfilled'].includes(result.fulfillmentStatus);
+        banner.value = applied
+            ? { tone: 'success', text: `Payment ${payment.reference} applied. Wallet updated.` }
+            : { tone: 'error', text: `Payment ${payment.reference} still held: ${result.reason ?? result.fulfillmentStatus}.` };
+        await Promise.all([load(), loadHeldPayments()]);
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Retry failed.';
+        banner.value = { tone: 'error', text: msg };
+    } finally {
+        retryingId.value = null;
+    }
+}
+
+function blockedReasonLabel(reason: string | null): string {
+    if (!reason) return 'Unknown';
+    return ({
+        payment_amount_mismatch: 'Paid less than requested',
+        payment_overpaid: 'Paid more than a fee can explain',
+        payment_currency_mismatch: 'Wrong currency',
+        payment_reference_mismatch: 'Reference mismatch',
+        wallet_inactive: 'Wallet inactive',
+        wallet_frozen: 'Wallet frozen',
+        funding_request_rejected: 'Funding request already rejected',
+        funding_request_expired: 'Funding request expired',
+        meter_order_cancelled: 'Meter order cancelled',
+    } as Record<string, string>)[reason] ?? reason;
+}
+
 function channelBadge(c: string) {
     return ({ paystack: 'info', bank_transfer: 'neutral', manual: 'warn' } as Record<string, string>)[c] ?? 'neutral';
 }
@@ -197,7 +265,10 @@ function printFundingReceipt(f: FundingRequest) {
     printReceipt(fundingReceipt(f));
 }
 
-onMounted(load);
+onMounted(() => {
+    void load();
+    void loadHeldPayments();
+});
 </script>
 
 <template>
@@ -233,6 +304,58 @@ onMounted(load);
         <span class="bw-kpi-note">requests with evidence</span>
       </article>
     </section>
+
+    <!-- Payments held for review -->
+    <div v-if="heldPayments.length" class="bw-card held-card" style="padding: 0">
+      <div class="bw-table-head-bar">
+        <div>
+          <h2 class="bw-h2" style="margin: 0">Payments held for review</h2>
+          <p class="bw-muted fund-sub">
+            Confirmed at Paystack but not applied. The money is real — resolve the reason, then retry.
+          </p>
+        </div>
+        <span class="bw-spacer"></span>
+        <button class="bw-btn sm" :disabled="heldLoading" @click="loadHeldPayments">
+          {{ heldLoading ? 'Loading…' : 'Refresh' }}
+        </button>
+      </div>
+      <div class="bw-t-wrap">
+        <table class="bw-table fund-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Purpose</th>
+              <th class="bw-num">Requested</th>
+              <th class="bw-num">Paid</th>
+              <th>Reason held</th>
+              <th class="bw-actions-col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in heldPayments" :key="p.id">
+              <td class="bw-mono">{{ p.reference }}</td>
+              <td>{{ p.purpose }} <span class="bw-muted">· {{ p.actorType }}</span></td>
+              <td class="bw-num funding-money">{{ naira(p.amountMinor) }}</td>
+              <td class="bw-num funding-money">
+                {{ p.verifiedAmountMinor === null ? '—' : naira(p.verifiedAmountMinor) }}
+              </td>
+              <td><span class="bw-badge warn">{{ blockedReasonLabel(p.blockedReason) }}</span></td>
+              <td class="bw-actions-col">
+                <button
+                  v-if="canApproveFunding"
+                  class="bw-btn sm primary"
+                  :disabled="retryingId !== null"
+                  @click="retryHeldPayment(p)"
+                >
+                  {{ retryingId === p.id ? 'Retrying…' : 'Retry' }}
+                </button>
+                <span v-else class="bw-muted">No permission</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <!-- Queue -->
     <div class="bw-card" style="padding: 0">

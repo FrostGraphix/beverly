@@ -14,7 +14,7 @@ const pkg = JSON.parse(read('package.json'));
 assert.match(receipts, /export function downloadReceipt\(model: ReceiptModel\): void/);
 assert.match(receipts, /downloadCanonicalReceiptPdf\(canonicalReceipt\(model\)\)/);
 assert.match(receipts, /data-pdf>PDF Export/);
-assert.match(receipts, /class="brm-btn danger" data-close>Cancel/);
+assert.match(receipts, /class="brm-btn" data-close>Close/);
 
 assert.match(buyToken, /downloadReceipt, printReceipt, purchaseReceipt, viewReceipt/);
 assert.match(buyToken, /function downloadResultReceipt\(\)/);

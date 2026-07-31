@@ -27,6 +27,8 @@ interface StaffRow {
 interface AccessResponse {
     catalog: PermissionCatalogItem[]; roles: RoleRow[];
     permissions: PermissionRow[]; staff: StaffRow[];
+    /** role_key → default permissions. Its keys are the system roles. */
+    defaults?: Record<string, string[]>;
 }
 
 /* ─── State ───────────────────────────────────────────────────────────── */
@@ -92,10 +94,23 @@ const staffByRole = computed(() => {
     for (const u of staff.value) m.set(u.role_key, (m.get(u.role_key) ?? 0) + 1);
     return m;
 });
-const isSystemRole = (roleKey: string) => ['super-admin', 'operations-manager', 'finance-checker', 'account'].includes(roleKey);
+/*
+ * System roles come from the server payload (GET /access → defaults) rather than
+ * a second hardcoded list that can drift from SYSTEM_ROLE_KEYS on the backend.
+ * The literal is only a pre-load fallback.
+ */
+const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'finance-checker', 'account']);
+const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey);
+
+/* Permissions the backend refuses to grant to a custom role — mirrors
+   RESTRICTED_TO_SYSTEM_ROLES in backend/wallet/src/services/role-identity.ts. */
+const RESTRICTED_TO_SYSTEM_ROLES = ['dev.console'];
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
 const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'finance-checker': 'fc', account: 'ac' };
+/* Custom roles get a stable colour derived from their key, so two custom roles
+   are visually distinguishable instead of all inheriting the amber of Account. */
+const CUSTOM_ROLE_COLORS = ['c1', 'c2', 'c3', 'c4'];
 const ROLE_DESCS: Record<string, string> = {
     'super-admin':          'Full system access. Can change roles, permissions, and all financial controls.',
     'operations-manager':   'Monitors vending activity, resolves disputes, reviews vendors, and runs reconciliation.',
@@ -103,7 +118,12 @@ const ROLE_DESCS: Record<string, string> = {
     account:                'Day-to-day account officer — views funding queue, monitors vending, and reads settlements.',
 };
 
-function rc(key: string) { return ROLE_COLORS[key] ?? 'ac'; }
+function rc(key: string) {
+    if (ROLE_COLORS[key]) return ROLE_COLORS[key];
+    let hash = 5381;
+    for (let i = 0; i < key.length; i++) hash = ((hash << 5) + hash + key.charCodeAt(i)) & 0x7fffffff;
+    return CUSTOM_ROLE_COLORS[hash % CUSTOM_ROLE_COLORS.length];
+}
 function initials(key: string) {
     const label = roles.value.find(r => r.role_key === key)?.role_name ?? key;
     return label.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -148,6 +168,7 @@ async function load() {
         roles.value       = d.roles;
         permissions.value = d.permissions;
         staff.value       = d.staff;
+        if (d.defaults && Object.keys(d.defaults).length) systemRoleKeys.value = Object.keys(d.defaults);
         if (!roles.value.some(r => r.role_key === selectedRole.value)) selectedRole.value = roles.value[0]?.role_key ?? 'super-admin';
     } catch (e: any) { toast(e?.message ?? 'Failed to load access policy', 'err'); }
     finally { loading.value = false; }
@@ -204,7 +225,7 @@ async function doRoleChange(user: StaffRow, roleKey: string) {
 }
 
 function openRoleEditor(role?: RoleRow) {
-    if (!canManage.value) return;
+    if (!canManage.value || loading.value) return;
     const existingPermissions = role ? permissions.value.filter(p => p.role_key === role.role_key).map(p => p.route_hash) : [];
     roleEditor.value = {
         open: true, creating: !role, roleKey: role?.role_key ?? '', name: role?.role_name ?? '',
@@ -216,8 +237,36 @@ function toggleEditorPermission(key: string) {
         ? roleEditor.value.permissions.filter(p => p !== key)
         : [...roleEditor.value.permissions, key];
 }
+
+function isGrantableToRole(key: string, roleKey: string) {
+    return !RESTRICTED_TO_SYSTEM_ROLES.includes(key) || isSystemRole(roleKey);
+}
+
+/* Critical grants selected in the editor — surfaced before save, mirroring the
+   confirmation the matrix already demands for a single critical toggle. */
+const editorCriticalPermissions = computed(() =>
+    catalog.value.filter(i => i.risk === 'critical' && roleEditor.value.permissions.includes(i.key)),
+);
+const editorNameValid = computed(() => roleEditor.value.name.trim().length >= 2);
+const editorCanSave = computed(() =>
+    editorNameValid.value && roleEditor.value.permissions.length > 0 && !saving.value,
+);
+
+function requestSaveRole() {
+    if (!canManage.value || !editorCanSave.value) return;
+    const critical = editorCriticalPermissions.value;
+    if (!critical.length) { void saveRole(); return; }
+    confirm.value = {
+        title: roleEditor.value.creating ? 'Create role with critical permissions' : 'Save critical permissions',
+        body: `${roleEditor.value.name.trim()} will hold ${critical.length} critical permission${critical.length > 1 ? 's' : ''}:\n\n${critical.map(i => `• ${i.label}`).join('\n')}\n\nStaff in this role gain these abilities immediately. The change is audit-logged.`,
+        label: roleEditor.value.creating ? 'Yes, create role' : 'Yes, save role',
+        danger: true,
+        fn: () => saveRole(),
+    };
+}
+
 async function saveRole() {
-    if (!canManage.value || !roleEditor.value.name.trim()) return;
+    if (!canManage.value || !editorNameValid.value || !roleEditor.value.permissions.length) return;
     saving.value = true;
     try {
         if (roleEditor.value.creating) {
@@ -235,7 +284,13 @@ async function saveRole() {
         }
         roleEditor.value.open = false;
         await load();
-    } catch (e: any) { toast(e?.message ?? 'Could not save custom role', 'err'); }
+    } catch (e: any) {
+        // Zod rejections carry field-level detail the bare message drops.
+        const details = Array.isArray(e?.details)
+            ? e.details.map((d: any) => `${d.path}: ${d.message}`).join('; ')
+            : (Array.isArray(e?.details?.permissions) ? e.details.permissions.join(', ') : '');
+        toast(details ? `${e?.message ?? 'Could not save custom role'} (${details})` : (e?.message ?? 'Could not save custom role'), 'err');
+    }
     finally { saving.value = false; }
 }
 function requestDeleteRole(role?: RoleRow) {
@@ -402,7 +457,10 @@ onMounted(() => { void load(); });
     <!-- ══ CONFIRM ══════════════════════════════════════════════════════ -->
     <teleport to="body">
       <transition name="ac-overlay">
-        <div v-if="confirm" class="ac-overlay" @click.self="confirm = null">
+        <!-- Above every other overlay: the role editor stays open behind this
+             dialog, and all .ac-overlay share a z-index, so without the bump
+             the later-teleported editor would paint over the confirmation. -->
+        <div v-if="confirm" class="ac-overlay ac-overlay--top" @click.self="confirm = null">
           <div :class="['ac-dialog', confirm.danger && 'ac-dialog--danger']">
             <div class="ac-dialog-glyph">
               <svg v-if="confirm.danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
@@ -452,19 +510,34 @@ onMounted(() => { void load(); });
 
     <teleport to="body">
       <transition name="ac-overlay">
-        <div v-if="roleEditor.open" class="ac-overlay" @click.self="roleEditor.open = false">
-          <form class="ac-role-editor" @submit.prevent="saveRole">
+        <div v-if="roleEditor.open" class="ac-overlay" @click.self="roleEditor.open = false" @keydown.esc="roleEditor.open = false">
+          <form
+            class="ac-role-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ac-role-editor-title"
+            @submit.prevent="requestSaveRole"
+          >
             <div class="ac-invite-head">
               <div>
                 <p class="ac-overline">Custom access role</p>
-                <h3>{{ roleEditor.creating ? 'Create custom role' : 'Edit custom role' }}</h3>
+                <h3 id="ac-role-editor-title">{{ roleEditor.creating ? 'Create custom role' : 'Edit custom role' }}</h3>
               </div>
-              <button type="button" class="bw-icon-btn" @click="roleEditor.open = false">×</button>
+              <button type="button" class="bw-icon-btn" aria-label="Close role editor" @click="roleEditor.open = false">×</button>
             </div>
             <div class="ac-fields">
               <div class="ac-field">
-                <label class="bw-label">Role name</label>
-                <input v-model="roleEditor.name" class="bw-input" placeholder="Compliance Reviewer" required maxlength="64" />
+                <label class="bw-label" for="ac-role-name">Role name</label>
+                <input
+                  id="ac-role-name"
+                  ref="roleNameInput"
+                  v-model="roleEditor.name"
+                  class="bw-input"
+                  placeholder="Compliance Reviewer"
+                  required
+                  minlength="2"
+                  maxlength="64"
+                />
               </div>
               <div class="ac-field">
                 <label class="bw-label">Description</label>
@@ -478,16 +551,36 @@ onMounted(() => { void load(); });
               </div>
               <div v-for="grp in grouped" :key="grp.g" class="ac-editor-group">
                 <p>{{ grp.g }}</p>
-                <label v-for="item in grp.items" :key="item.key" class="ac-editor-permission">
-                  <input type="checkbox" :checked="roleEditor.permissions.includes(item.key)" @change="toggleEditorPermission(item.key)" />
+                <label
+                  v-for="item in grp.items"
+                  :key="item.key"
+                  :class="['ac-editor-permission', !isGrantableToRole(item.key, roleEditor.roleKey) && 'is-blocked']"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="roleEditor.permissions.includes(item.key)"
+                    :disabled="!isGrantableToRole(item.key, roleEditor.roleKey)"
+                    @change="toggleEditorPermission(item.key)"
+                  />
                   <span>{{ item.label }}</span>
-                  <em :class="`risk-${item.risk}`">{{ item.risk }}</em>
+                  <em v-if="!isGrantableToRole(item.key, roleEditor.roleKey)" class="ac-editor-blocked">system roles only</em>
+                  <em v-else :class="`risk-${item.risk}`">{{ item.risk }}</em>
                 </label>
               </div>
             </div>
+
+            <!-- Critical grants are called out before save, not after. -->
+            <div v-if="editorCriticalPermissions.length" class="ac-editor-warning" role="status">
+              <strong>{{ editorCriticalPermissions.length }} critical permission{{ editorCriticalPermissions.length > 1 ? 's' : '' }} selected</strong>
+              <span>{{ editorCriticalPermissions.map(i => i.label).join(', ') }}</span>
+            </div>
+            <p v-if="!roleEditor.permissions.length" class="ac-editor-hint">
+              Select at least one permission — a role with none can sign in but reach nothing.
+            </p>
+
             <div class="ac-invite-actions">
               <button type="button" class="bw-btn ghost" @click="roleEditor.open = false">Cancel</button>
-              <button class="bw-btn primary" :disabled="saving || !roleEditor.name.trim()">
+              <button class="bw-btn primary" :disabled="!editorCanSave">
                 {{ saving ? 'Saving…' : (roleEditor.creating ? 'Create role' : 'Save role') }}
               </button>
             </div>
@@ -607,7 +700,7 @@ onMounted(() => { void load(); });
             <h1 class="ac-header-title">Roles &amp; Permissions</h1>
             <p class="ac-header-sub">Define exactly who can move money, approve refunds, run reconciliation, and control launch gates.</p>
           </div>
-          <button v-if="canManage" class="bw-btn primary" @click="openRoleEditor()">Create role</button>
+          <button v-if="canManage" class="bw-btn primary" :disabled="loading" @click="openRoleEditor()">Create role</button>
           <div class="ac-kpi-strip">
             <div class="ac-kpi">
               <span class="ac-kpi-num">{{ roles.length }}</span>
@@ -837,7 +930,7 @@ onMounted(() => { void load(); });
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add staff
           </button>
-          <button class="bw-btn ghost ac-add-role" :disabled="!canManage" @click="activeTab = 'matrix'; openRoleEditor()">
+          <button class="bw-btn ghost ac-add-role" :disabled="!canManage || loading" @click="activeTab = 'matrix'; openRoleEditor()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/><circle cx="12" cy="12" r="8"/></svg>
             Add role
           </button>
@@ -957,6 +1050,11 @@ onMounted(() => { void load(); });
 .rc-om { --rc: 59 130 246; --rc-fg: #60a5fa; }    /* blue    */
 .rc-fc { --rc: 16 185 129; --rc-fg: #34d399; }    /* emerald */
 .rc-ac { --rc: 245 158 11; --rc-fg: #fbbf24; }    /* amber   */
+/* Custom-role palette — distinct from the four system-role hues above. */
+.rc-c1 { --rc: 236 72 153; --rc-fg: #f472b6; }    /* pink    */
+.rc-c2 { --rc: 6 182 212;  --rc-fg: #22d3ee; }    /* cyan    */
+.rc-c3 { --rc: 132 204 22; --rc-fg: #a3e635; }    /* lime    */
+.rc-c4 { --rc: 168 85 247; --rc-fg: #c084fc; }    /* purple  */
 
 /* ═══════════════════════════════════════════════════════════════════════
    RISK PALETTE
@@ -993,6 +1091,10 @@ onMounted(() => { void load(); });
   background: oklch(0% 0 0 / .72);
   backdrop-filter: blur(6px) saturate(120%);
 }
+/* Confirmations stack above the dialog that raised them. Teleport anchors are
+   created in template order, so at equal z-index the role editor (declared
+   later) would paint over the confirmation and hide it entirely. */
+.ac-overlay--top { z-index: 260; }
 .ac-overlay-enter-active, .ac-overlay-leave-active { transition: opacity .22s var(--ease-out); }
 .ac-overlay-enter-from, .ac-overlay-leave-to { opacity: 0; }
 .ac-overlay-enter-active > *, .ac-overlay-leave-active > * { transition: transform .22s var(--ease-out), opacity .22s var(--ease-out); }
@@ -1560,6 +1662,22 @@ onMounted(() => { void load(); });
 .ac-editor-permission { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; cursor: pointer; font-size: var(--t-sm); }
 .ac-editor-permission input { accent-color: var(--green); }
 .ac-editor-permission em { margin-left: auto; font-style: normal; font-size: var(--t-2xs); text-transform: uppercase; }
+.ac-editor-permission.is-blocked { opacity: .55; cursor: not-allowed; }
+.ac-editor-blocked {
+  margin-left: auto; font-style: normal; font-size: var(--t-2xs);
+  text-transform: uppercase; color: var(--text-faint);
+}
+.ac-editor-warning {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: .75rem; padding: .6rem .8rem;
+  border: 1px solid oklch(from var(--danger) l c h / .35);
+  border-radius: var(--r-md);
+  background: oklch(from var(--danger) l c h / .10);
+  font-size: var(--t-xs);
+}
+.ac-editor-warning strong { color: var(--danger); }
+.ac-editor-warning span { color: var(--text-muted); }
+.ac-editor-hint { margin: .6rem 0 0; font-size: var(--t-xs); color: var(--text-muted); }
 .ac-role-management { display: flex; gap: .5rem; margin-left: auto; }
 .ac-role-management .bw-btn { white-space: nowrap; }
 

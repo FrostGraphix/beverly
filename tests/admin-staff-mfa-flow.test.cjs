@@ -36,7 +36,7 @@ for (const marker of [
   'beginStaffMfaReplacement',
   'generateRecoveryCodes',
   'recoveryHash',
-  'SESSION_TTL_MS = 12 * 60 * 60 * 1000',
+  'SESSION_TTL_MS = 24 * 60 * 60 * 1000',
   "surface: 'staff'",
 ]) {
   assert.ok(service.includes(marker), `service missing ${marker}`);

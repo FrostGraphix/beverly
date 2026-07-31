@@ -27,3 +27,18 @@ query.js
 test-login.cjs
 test_output.html
 
+# Build & Agent Temporary Artifacts
+dev-dist/
+artifacts/
+audit-dashboard/
+audit-*/
+.temp/
+.agents/
+.codex/
+*.timestamp-*.mjs
+
+# Generated PDFs & HTML Reports
+handler-receipt.pdf
+probe-receipt.pdf
+acob_beverly_training_plan*.html
+acob_beverly_training_plan*.pdf

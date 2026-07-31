@@ -41,8 +41,8 @@ const cases = [
   {
     hash: "#/management/account",
     expectedEndpoint: "/api/account/import",
-    rows: [{ customerId: "C-1", meterId: "M-1", tariffId: "RESIDENTIAL", stationId: "TUNGA" }],
-    expectedPayload: [{ customerId: "C-1", meterId: "M-1", tariffId: "RESIDENTIAL", stationId: "TUNGA" }]
+    rows: [{ customerId: "C-1", meterId: "M-1", tariffId: "RESIDENTIAL", ctRatio: "1", remark: "", stationId: "TUNGA" }],
+    expectedPayload: [{ customerId: "C-1", meterId: "M-1", tariffId: "RESIDENTIAL", ctRatio: "1", remark: "", stationId: "TUNGA" }]
   },
   {
     hash: "#/admin/user",

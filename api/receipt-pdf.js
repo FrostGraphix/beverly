@@ -11,10 +11,17 @@
 // data: URIs and the Google Fonts hosts the template itself references — this closes off
 // the SSRF surface a "POST HTML string, render it" endpoint would otherwise open.
 
-const { authUserFromAccessToken } = require("../backend/src/services/supabase-service");
+const { authUserFromAccessToken, restRequest } = require("../backend/src/services/supabase-service");
 
 const MAX_FIELDS = 60;
 const MAX_STRING = 500;
+
+// The -min Chromium package ships without the binary: it downloads a brotli "pack" tar at
+// cold start. The pack MUST match the installed @sparticuz/chromium-min version exactly, so
+// the default is pinned here and kept in lockstep with package.json by
+// tests/receipt-pdf-endpoint.test.cjs. RECEIPT_PDF_CHROMIUM_PACK_URL only *overrides* it
+// (e.g. to serve the same pack from a mirror closer to the function) — an unset or blank
+// value is normal and must never break rendering.
 const DEFAULT_CHROMIUM_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
 const CHROMIUM_PACK_URL = String(process.env.RECEIPT_PDF_CHROMIUM_PACK_URL || "").trim() || DEFAULT_CHROMIUM_PACK_URL;
@@ -59,7 +66,6 @@ function resolveLocalBrowser() {
   return found;
 }
 
-
 function cookieValue(request, name) {
   const cookieHeader = String(request?.headers?.cookie || "");
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
@@ -70,7 +76,7 @@ function sanitizeString(value) {
   return typeof value === "string" ? value.slice(0, MAX_STRING) : "";
 }
 
-function sanitizeModel(input, brand) {
+function sanitizeModel(input, brand, verificationStatus = "Client-generated copy") {
   if (!input || typeof input !== "object") return null;
   const rawFields = Array.isArray(input.fields) ? input.fields.slice(0, MAX_FIELDS) : [];
   const fields = rawFields
@@ -87,12 +93,56 @@ function sanitizeModel(input, brand) {
     title: sanitizeString(input.title) || "Transaction Receipt",
     subtitle: sanitizeString(input.subtitle) || "Energy Operations & Management System",
     amount: sanitizeString(input.amount),
+    subject: sanitizeString(input.subject) || "Amount",
+    status: verificationStatus,
     generatedAt: sanitizeString(input.generatedAt),
     receiptId: sanitizeString(input.receiptId) || "no-id",
     fields,
     // brand is server-owned. Client-supplied brand/company data is discarded so a
     // caller cannot spoof the footer's company identity in an official receipt.
     brand
+  };
+}
+
+function formatNaira(minor) {
+  return `₦${(Number(minor || 0) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function resolveLedgerReceiptModel(source, actor, brand) {
+  const entryId = String(source?.id || "").trim();
+  if (source?.kind !== "wallet-ledger" || !/^[0-9a-f-]{36}$/i.test(entryId)) return null;
+  const actorId = encodeURIComponent(actor.authUserId || actor.userId || "");
+  if (!actorId) return null;
+  const users = await restRequest(`/vendor_users?select=id,vendor_organization_id,full_name&or=(auth_user_id.eq.${actorId},id.eq.${actorId})&limit=1`);
+  const vendor = Array.isArray(users) ? users[0] : null;
+  if (!vendor?.vendor_organization_id) return null;
+  const wallets = await restRequest(`/wallets?select=id&owner_type=eq.vendor&owner_id=eq.${encodeURIComponent(vendor.vendor_organization_id)}&limit=1`);
+  const wallet = Array.isArray(wallets) ? wallets[0] : null;
+  if (!wallet?.id) return null;
+  const entries = await restRequest(`/wallet_ledger_entries?select=id,direction,amount_minor,balance_after_minor,entry_type,reference_type,reference_id,memo,created_by,created_at&id=eq.${encodeURIComponent(entryId)}&wallet_id=eq.${encodeURIComponent(wallet.id)}&limit=1`);
+  const entry = Array.isArray(entries) ? entries[0] : null;
+  if (!entry) return null;
+  const direction = entry.direction === "credit" ? "Credit" : "Debit";
+  return {
+    title: "Wallet Ledger Receipt",
+    subtitle: "Energy Operations & Management System",
+    amount: `${entry.direction === "credit" ? "+" : "-"}${formatNaira(entry.amount_minor)}`,
+    subject: "Ledger Amount",
+    status: "Verified ledger entry",
+    generatedAt: entry.created_at,
+    receiptId: String(entry.id).toUpperCase(),
+    brand,
+    fields: [
+      { label: "Receipt Id", value: String(entry.id).toUpperCase() },
+      { label: "Entry Type", value: String(entry.entry_type || "").replace(/_/g, " ") },
+      { label: "Direction", value: direction },
+      { label: "Balance After", value: formatNaira(entry.balance_after_minor) },
+      { label: "Reference Type", value: String(entry.reference_type || "").replace(/_/g, " ") },
+      { label: "Reference", value: String(entry.reference_id || "") },
+      { label: "Memo", value: String(entry.memo || "") },
+      { label: "Actor", value: String(vendor.full_name || entry.created_by || "Beverly operator") },
+      { label: "Created", value: String(entry.created_at || "") }
+    ].filter((field) => field.value)
   };
 }
 
@@ -273,7 +323,12 @@ async function handler(request, response) {
   }
 
   const { receiptHtml, brand } = await import("../src/services/receipt-tools.mjs");
-  const model = sanitizeModel(body.model, brand);
+  const authoritativeModel = await resolveLedgerReceiptModel(body.model?.source, actor, brand).catch(() => null);
+  if (body.model?.source?.kind === "wallet-ledger" && !authoritativeModel) {
+    response.status(404).json({ code: 404, msg: "Receipt not found" });
+    return;
+  }
+  const model = authoritativeModel || sanitizeModel(body.model, brand);
   if (!model) {
     response.status(400).json({ code: 400, msg: "Invalid receipt model" });
     return;

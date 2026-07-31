@@ -12,6 +12,8 @@ function read(relativePath) {
 
 function main() {
   const adminRoute = read("backend/wallet/src/routes/admin.ts");
+  const adminAuditRoute = read("backend/wallet/src/routes/admin-audit.ts");
+  const adminRoutes = `${adminRoute}\n${adminAuditRoute}`;
   const auditPage = read("apps/admin/src/views/Audit.vue");
   const disputesPage = read("apps/admin/src/views/Disputes.vue");
   const refundsPage = read("apps/admin/src/views/Refunds.vue");
@@ -41,7 +43,7 @@ function main() {
     "fastify.get('/purchases'",
     "fastify.get('/vending'",
   ]) {
-    assert(adminRoute.includes(route), `Missing admin route: ${route}`);
+    assert(adminRoutes.includes(route), `Missing admin route: ${route}`);
   }
 
   assert(auditPage.includes("/api/v1/admin/audit?"), "Audit page must load audit rows.");
@@ -54,7 +56,7 @@ function main() {
   assert(adminRoute.includes("status_required"), "Resolution notes must require status updates.");
   assert(disputesService.includes("listAllDisputes"), "Dispute list service contract missing.");
 
-  assert(refundsPage.includes("statusFilter = ref('pending')"), "Refunds page must use backend pending status.");
+  assert.match(refundsPage, /statusFilter\s*=\s*ref(?:<[^>]+>)?\('pending'\)/, "Refunds page must use backend pending status.");
   assert(refundsPage.includes('/api/v1/admin/refunds/summary'), "Refunds page must load server summary cards.");
   assert(refundsPage.includes('class="bw-kpi-grid refund-kpis"'), "Refunds page must render summary cards.");
   assert(refundsService.includes("count: 'exact', head: true"), "Refund summary must use exact server counts.");
@@ -65,6 +67,13 @@ function main() {
   assert(refundApprovalRpc.includes("fn_post_ledger_entry"), "Refund approval RPC must write the ledger entry.");
   assert(refundApprovalRpc.includes("ledger_entry_id = v_entry.id"), "Refund approval RPC must persist ledger linkage.");
   assert(refundsService.includes(".select('status, reason')"), "Refund rejection must preserve the original reason.");
+  assert(refundsService.includes(".eq('status', 'pending')"), "Refund rejection must atomically require pending status.");
+  assert(refundsService.includes("if (updateError)"), "Refund rejection must surface failed database updates.");
+  assert(refundsService.includes("Could not load refund requests"), "Refund listing must not turn database failures into empty results.");
+  assert(refundsService.includes("'pending', 'approved', 'rejected', 'expired'"), "Refund summary must include expired requests.");
+  assert(refundsPage.includes('<option value="expired">Expired</option>'), "Refund filters must expose expired requests.");
+  assert(refundsPage.includes("Second approver required"), "Refund approvals must explain maker-checker separation.");
+  assert(refundsPage.includes("Try again"), "Refund load failures must offer recovery.");
   assert(refundsService.includes("state_transition_missing"), "Refund approval must fail loudly if state does not update after credit.");
   assert(scheduler.includes("status: 'expired'"), "Refund expiry job must transition stale pending refunds.");
   assert(refundExpiryMigration.includes("add value if not exists 'expired'"), "Refund enum must allow expired status.");

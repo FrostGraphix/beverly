@@ -20,6 +20,8 @@ const migration = read("supabase/migrations/20260521100000_notifications_inbox.s
 assert(router.includes("path: '/notifications'"), "customer notifications route missing");
 assert(shell.includes("/api/v1/customer/notifications?limit=1"), "shell unread badge endpoint missing");
 assert(shell.includes('to="/notifications"'), "shell notifications link missing");
+assert(view.includes("openNotification(n)"), "customer notifications must support event links");
+assert(service.includes("wallet_activity") || read("backend/wallet/src/services/vendor-notifications.ts").includes("ownerType === 'customer'"), "customer wallet activity must reach notifications");
 
 for (const endpoint of [
   "fastify.get('/notifications'",

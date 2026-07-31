@@ -9,6 +9,13 @@ export interface WalletSummary {
     holds_minor: number;
     available_minor: number;
     daily_cap_minor: number | null;
+    activity: {
+        today_vended_minor: number;
+        today_vended_count: number;
+        today_funded_minor: number;
+        total_funded_minor: number;
+        total_reversed_minor: number;
+    };
 }
 
 export interface LedgerEntry {
@@ -34,6 +41,7 @@ export const useWalletStore = defineStore('vendor-wallet', {
     state: (): State => ({ summary: null, ledger: [], loading: false, error: null }),
     actions: {
         async fetchSummary() {
+            this.error = null;
             try {
                 this.summary = await api.get<WalletSummary>('/api/v1/vendor/wallet');
             } catch (e: any) {
@@ -42,6 +50,7 @@ export const useWalletStore = defineStore('vendor-wallet', {
         },
         async fetchLedger(limit = 50) {
             this.loading = true;
+            this.error = null;
             try {
                 const r = await api.get<{ entries: LedgerEntry[] }>(`/api/v1/vendor/wallet/ledger?limit=${limit}`);
                 this.ledger = r.entries;

@@ -29,6 +29,9 @@ async function main() {
   assert(fs.existsSync(path.join(dist, "index.html")), "Run the build before browser tests.");
   const componentSource = fs.readFileSync(path.join(root, "src/components/StationAlertsBell.vue"), "utf8");
   assert.match(componentSource, /setInterval\(this\.refresh, 60000\)/);
+  assert.match(componentSource, /Boolean\(readSessionState\(\)\)/, "Gateway polling must require local session state.");
+  assert.match(componentSource, /!isSessionExpired\(\)/, "Gateway polling must stop after session expiry.");
+  assert.match(componentSource, /getApi\('\/api\/notifications\/gateway-health', \{\}, \{ silent: true \}\)/, "Gateway polling must not log expected background auth failures.");
   const server = http.createServer((request, response) => {
     const file = staticFile(request.url);
     response.writeHead(200, { "Content-Type": contentType(file) });

@@ -111,6 +111,8 @@ const spoofed = handlerModule.sanitizeModel({
   brand: { name: "NotBeverly", company: "Attacker Inc" }
 }, brand);
 assert.strictEqual(spoofed.brand, brand);
+assert.strictEqual(spoofed.status, "Client-generated copy");
+assert.strictEqual(spoofed.subject, "Amount");
 
 // Non-string / malformed field entries are dropped, not rendered as "[object Object]".
 const malformed = handlerModule.sanitizeModel({

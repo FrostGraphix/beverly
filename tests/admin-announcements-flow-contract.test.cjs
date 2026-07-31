@@ -15,6 +15,7 @@ function main() {
   const vendorRoutes = read("backend/wallet/src/routes/vendor.ts");
   const adminRouter = read("apps/admin/src/router/index.ts");
   const adminShell = read("apps/admin/src/components/AppShell.vue");
+  const adminNotifications = read("apps/admin/src/views/Notifications.vue");
   const adminPage = read("apps/admin/src/views/Announcements.vue");
   const successHover = read("apps/admin/src/components/MessageSuccessHover.vue");
   const vendorRouter = read("apps/vendor/src/router/index.ts");
@@ -23,8 +24,15 @@ function main() {
   const customerPage = read("apps/customer/src/views/Notifications.vue");
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
   const notificationService = read("backend/wallet/src/services/notifications.ts");
+  const vendorNotificationService = read("backend/wallet/src/services/vendor-notifications.ts");
+  const fundingService = read("backend/wallet/src/services/funding.ts");
+  const ledgerService = read("backend/wallet/src/services/ledger.ts");
+  const disputeService = read("backend/wallet/src/services/disputes.ts");
+  const supportService = read("backend/wallet/src/services/support.ts");
   const migration = read("supabase/migrations/20260617120000_wallet_admin_announcements.sql");
   const compatibilityMigration = read("supabase/migrations/20260714120000_notifications_legacy_compatibility.sql");
+  const adminNotificationMigration = read("supabase/migrations/20260729120000_admin_notifications.sql");
+  const staffInbox = read("backend/wallet/src/services/staff-inbox.ts");
 
   for (const route of [
     "fastify.get('/announcements/recipients'",
@@ -66,6 +74,16 @@ function main() {
   assert(adminRouter.includes("path: '/announcements'"), "Admin route missing.");
   assert(adminRouter.includes("wallet.announcements.manage"), "Admin route must require announcement permission.");
   assert(adminShell.includes("Announcements"), "Admin sidebar link missing.");
+  assert(adminShell.includes('to="/notifications"'), "Admin notification bell missing.");
+  assert(adminNotifications.includes('/api/v1/admin/notifications'), "Admin inbox must use backend notifications.");
+  for (const page of [adminNotifications, vendorPage, customerPage]) {
+    assert(page.includes("const filters = ['all', 'unread', 'read'] as const"), "Notification status filters missing.");
+    assert(page.includes('v-for="item in filteredItems"') || page.includes('v-for="n in filteredItems"'), "Notification list must respect filters.");
+    assert(page.includes(':aria-pressed="filter === option"'), "Notification filters need pressed states.");
+  }
+  assert(adminRoutes.includes("fastify.get('/notifications'"), "Admin notification inbox route missing.");
+  assert(staffInbox.includes("recipient_type: 'admin'"), "Operational events must reach staff inboxes.");
+  assert(adminNotificationMigration.includes("'customer', 'vendor', 'admin'"), "Notification recipients must support staff.");
   assert(adminShell.includes("wallet.announcements.manage"), "Admin sidebar must use announcement permission.");
   assert(adminPage.includes("/api/v1/admin/announcements/recipients"), "Admin page must load recipients.");
   assert(adminPage.includes("/api/v1/admin/announcements'"), "Admin page must send announcements.");
@@ -102,6 +120,18 @@ function main() {
   assert(vendorRouter.includes("path: '/notifications'"), "Vendor notification route missing.");
   assert(vendorShell.includes("to=\"/notifications\""), "Vendor notification entry missing.");
   assert(vendorPage.includes("/api/v1/vendor/notifications"), "Vendor notification page must use backend inbox.");
+  assert(vendorPage.includes("openNotification(item)"), "Vendor notifications must support event links.");
+  assert(vendorPage.includes('aria-label="Mark every notification as read"'), "Vendor mark-all action must remain accessible.");
+  assert(vendorPage.includes("Notifications could not be marked read."), "Vendor mark-all failures must remain visible.");
+  assert(vendorRoutes.includes("await backfillVendorFundingNotifications(orgId)"), "Vendor inbox must recover missing funding notifications.");
+  assert(vendorNotificationService.includes("recipient_type: 'vendor'"), "Vendor events must persist into the shared inbox.");
+  assert(vendorNotificationService.includes("message: payload.body"), "Vendor events must support legacy notification schemas.");
+  assert(vendorNotificationService.includes("type: entry.entry_type === 'funding_credit'"), "Funding credits must use the funding notification type.");
+  assert(vendorNotificationService.includes("eventKey: `ledger:${entry.id}`"), "Funding backfill must remain idempotent.");
+  assert(fundingService.includes("notifyVendor"), "Funding events must notify vendors.");
+  assert(ledgerService.includes("await notifyWalletEntry(entry)"), "Ledger notifications must finish before serverless shutdown.");
+  assert(disputeService.includes("notifyVendor"), "Dispute events must notify vendors.");
+  assert(supportService.includes("notifyVendor"), "Support events must notify vendors.");
   assert(customerPage.includes("admin_announcement"), "Customer inbox must render admin announcements.");
   assert(customerRoutes.includes("admin_announcement: true"), "Customer notification defaults must enable announcement inbox.");
   assert(customerRoutes.includes("customer_id.eq."), "Customer inbox must include legacy customer notification rows.");

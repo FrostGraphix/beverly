@@ -474,8 +474,9 @@ import {
   triggerMeterAggregateRefresh,
 } from "../services/consumption-service.mjs";
 
+import { fetchStations, stationsSync } from "../services/station-registry.mjs";
+
 const PALETTE = ["#059669", "#2563eb", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9", "#ec4899"];
-const STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
 
 function fmtDate(d) {
   const y = d.getFullYear();
@@ -501,7 +502,10 @@ export default {
         { key: "weekly",  label: "Weekly" },
         { key: "monthly", label: "Monthly" },
       ],
-      STATIONS,
+      // Seeded from the last known estate for first paint, then replaced with
+      // the discovered list on mount — a station onboarded today appears in
+      // this dropdown today, with no redeploy.
+      STATIONS: stationsSync(),
       granularity: "daily",
       stationFilter: "",
       from: fmtDate(addDays(today, -29)),
@@ -739,6 +743,11 @@ export default {
   },
 
   mounted() {
+    // Refresh the estate before/alongside the first load so a newly onboarded
+    // station is selectable without a redeploy.
+    fetchStations()
+      .then((stations) => { if (stations.length) this.STATIONS = stations; })
+      .catch(() => { /* registry unreachable — keep the seeded list */ });
     this.load();
     this.themeObserver = new MutationObserver(() => { this.themeTick++; });
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

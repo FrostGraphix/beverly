@@ -57,9 +57,18 @@ export interface WalletGreeting {
 
 export declare function getWalletGreeting(date?: Date): WalletGreeting;
 
+export declare function publishNotificationCount(count: number): void;
+export declare function onNotificationCountChange(callback: (count: number) => void): () => void;
+
 export declare function setTheme(name: 'dark' | 'light' | string): void;
 export declare function initTheme(defaultName?: string): void;
 export declare function toggleTheme(): void;
+
+export declare const DEFAULT_PAGE_SIZE: number;
+export declare function pageCount(total: number, pageSize?: number): number;
+export declare function clampPage(page: number, total: number, pageSize?: number): number;
+export declare function paginate<T>(rows: T[], page: number, pageSize?: number): T[];
+export declare function pageRange(page: number, total: number, pageSize?: number): { first: number; last: number };
 
 export declare function isInstallDismissed(): boolean;
 export declare function dismissInstallPrompt(days?: number): void;

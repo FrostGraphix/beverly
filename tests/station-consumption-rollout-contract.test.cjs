@@ -30,8 +30,13 @@ assert(
   "station page must call refresh with stationIds"
 );
 assert(
-  adminView.includes("api.post('/api/v1/admin/consumption/refresh', { stationIds })"),
-  "wallet admin view must use station-scoped refresh payload"
+  adminView.includes("{ stationIds: [selectedStn.value] }")
+    && adminView.includes("api.post('/api/v1/admin/consumption/refresh', body)"),
+  "wallet admin view must use station-scoped refresh payload when a station is selected"
+);
+assert(
+  !adminView.includes("stations.value.map((station) => station.stationId)"),
+  "an unscoped rebuild must not send a client-side station list — the server resolves the estate"
 );
 assert(
   adminView.includes("Rebuild aggregates"),

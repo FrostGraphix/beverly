@@ -14,13 +14,21 @@ const pkg = JSON.parse(read('package.json'));
 assert.match(receipts, /export function downloadReceipt\(model: ReceiptModel\): void/);
 assert.match(receipts, /downloadCanonicalReceiptPdf\(canonicalReceipt\(model\)\)/);
 assert.match(receipts, /data-pdf>PDF Export/);
-assert.match(receipts, /class="brm-btn danger" data-close>Cancel/);
+assert.match(receipts, /class="brm-btn" data-close>Close/);
 
 assert.match(vendView, /downloadReceipt, printReceipt, purchaseReceipt, viewReceipt/);
 assert.match(vendView, /function downloadResultReceipt\(\)/);
 assert.match(vendView, /function remoteSendGeneratedToken\(\)/);
 assert.match(vendView, /const flowSteps = computed/);
+assert.match(vendView, /class="vend-flow-icon"/);
+for (const label of ['Meter', 'Amount', 'Confirm', 'Receipt']) {
+  assert.match(vendView, new RegExp(`label: '${label}', icon:`));
+}
 assert.match(vendView, /const canRemoteSendToken = computed/);
+assert.match(vendView, /idempotencyHeaders\(vendIntentKey\.value\)/);
+assert.match(vendView, /const meterIdValid = computed/);
+assert.match(vendView, /for="vend-meter-id"/);
+assert.match(vendView, /role="alert"/);
 assert.match(vendView, /purchase_order_id: result\.value\.purchaseOrder\?\.id/);
 assert.match(vendView, /remoteState\.replace\(/);
 assert.match(vendView, /\/api\/v1\/vendor\/vend\/\$\{orderId\}\/remote-send/);
@@ -33,6 +41,8 @@ assert.match(vendView, /Remote send needs manual entry/);
 
 assert.match(routes, /fastify\.post\('\/vend\/:purchaseOrderId\/remote-send'/);
 assert.match(routes, /dispatchGeneratedVendorToken/);
+assert.match(routes, /const vendMeterIdSchema = z\.string\(\)\.trim\(\)\.min\(4\)\.max\(80\)/);
+assert.equal((routes.match(/meterId: vendMeterIdSchema/g) ?? []).length, 3);
 assert.match(routes, /energy_amount_minor: purchase\.energy_amount_minor/);
 assert.match(routes, /vat_amount_minor: purchase\.vat_amount_minor/);
 assert.match(vending, /export async function dispatchGeneratedVendorToken/);

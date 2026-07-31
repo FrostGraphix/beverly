@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import StatusPopup from '../components/StatusPopup.vue';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, idempotencyHeaders, newIdempotencyKey } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
@@ -19,6 +19,8 @@ const notice = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message
 const remoteSending = ref(false);
 const copied = ref(false);
 const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
+const vendIntentKey = ref(newIdempotencyKey());
+const vendIntentFingerprint = ref('');
 
 function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
     resultPopup.value = { tone, title, message };
@@ -53,6 +55,8 @@ const meter = ref<MeterInfo | null>(null);
 const preview = ref<Preview | null>(null);
 const result = ref<{ token: string | null; units: number; receiptId: string | null; purchaseOrder: any } | null>(null);
 
+const normalizedMeterId = computed(() => meterId.value.trim());
+const meterIdValid = computed(() => normalizedMeterId.value.length >= 4 && normalizedMeterId.value.length <= 80);
 const amountMinor = computed(() => Math.max(0, Math.round(amountNaira.value * 100)));
 const canVend = computed(() => meter.value?.liveVerified !== false);
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
@@ -68,10 +72,10 @@ const remoteSendLabel = computed(() => {
     return 'Remote send';
 });
 const flowSteps = computed(() => [
-    { label: 'Meter', active: step.value === 'meter', done: ['amount', 'preview', 'success'].includes(step.value) },
-    { label: 'Amount', active: step.value === 'amount', done: ['preview', 'success'].includes(step.value) },
-    { label: 'Confirm', active: step.value === 'preview', done: step.value === 'success' },
-    { label: 'Receipt', active: step.value === 'success', done: false },
+    { label: 'Meter', icon: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M7 7h10v4H7z', 'm13 13-3 4h3l-2 3'], active: step.value === 'meter', done: ['amount', 'preview', 'success'].includes(step.value) },
+    { label: 'Amount', icon: ['M3 6h18v12H3z', 'M7 9.5h4.5a2.5 2.5 0 0 1 0 5H7', 'M9 8v8'], active: step.value === 'amount', done: ['preview', 'success'].includes(step.value) },
+    { label: 'Confirm', icon: ['M12 3 4.5 6v5.5c0 4.7 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.8 7.5-9.5V6L12 3Z', 'm8.5 12 2.2 2.2 4.8-5'], active: step.value === 'preview', done: step.value === 'success' },
+    { label: 'Receipt', icon: ['M6 3h12v18l-3-2-3 2-3-2-3 2V3Z', 'M9 8h6', 'M9 12h6', 'M9 16h4'], active: step.value === 'success', done: false },
 ]);
 const confirmLabel = computed(() => {
     if (loading.value) return 'Generating token...';
@@ -160,11 +164,18 @@ function describeApiError(e: unknown, fallback: string) {
 }
 
 async function lookupMeter() {
-    if (!meterId.value.trim()) return;
+    if (!meterIdValid.value) {
+        error.value = {
+            title: 'Check meter number',
+            message: 'Enter at least 4 characters.',
+            action: 'No meter lookup was attempted.',
+        };
+        return;
+    }
     loading.value = true; error.value = null; notice.value = null;
     try {
         const r = await api.post<{ meter: MeterInfo; preview: Preview }>('/api/v1/vendor/vend/preview', {
-            meterId: meterId.value.trim(),
+            meterId: normalizedMeterId.value,
             amountMinor: 100000,
         });
         meter.value = r.meter;
@@ -209,9 +220,14 @@ async function confirm() {
 }
 
 async function submitAuthorization() {
-    if (!meter.value || !preview.value || !authorization.value) return;
+    if (!meter.value || !preview.value || !authorization.value || loading.value) return;
     loading.value = true; error.value = null; notice.value = null;
     authError.value = '';
+    const fingerprint = `${meter.value.meterId}:${amountMinor.value}:wallet`;
+    if (vendIntentFingerprint.value !== fingerprint) {
+        vendIntentKey.value = newIdempotencyKey();
+        vendIntentFingerprint.value = fingerprint;
+    }
     try {
         const r = await api.post<{ token: string | null; units: number; receiptId: string | null; purchaseOrder: any }>(
             '/api/v1/vendor/vend',
@@ -221,6 +237,7 @@ async function submitAuthorization() {
                 mode: 'wallet',
                 authorization: authorization.value,
             },
+            idempotencyHeaders(vendIntentKey.value),
         );
         result.value = r;
         notice.value = {
@@ -259,6 +276,8 @@ function reset() {
     notice.value = null;
     copied.value = false;
     remoteSending.value = false;
+    vendIntentKey.value = newIdempotencyKey();
+    vendIntentFingerprint.value = '';
 }
 
 async function copyToken() {
@@ -368,37 +387,42 @@ async function remoteSendGeneratedToken() {
 <template>
   <AppShell title="Buy Token">
     <div class="vend-page">
-      <div class="vend-flow" aria-label="Vending progress">
-        <div v-for="item in flowSteps" :key="item.label" :class="['vend-flow-step', { active: item.active, done: item.done }]">
-          <span></span>
+      <ol class="vend-flow" aria-label="Vending progress">
+        <li v-for="item in flowSteps" :key="item.label" :class="['vend-flow-step', { active: item.active, done: item.done }]" :aria-current="item.active ? 'step' : undefined">
+          <svg class="vend-flow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path v-for="path in item.icon" :key="path" :d="path" />
+          </svg>
           <strong>{{ item.label }}</strong>
-        </div>
-      </div>
+        </li>
+      </ol>
 
       <Transition name="step-anim" mode="out-in">
       <!-- Step: meter lookup -->
-      <div v-if="step === 'meter'" key="meter" class="bw-card">
+      <form v-if="step === 'meter'" key="meter" class="bw-card" @submit.prevent="lookupMeter">
         <h1 class="bw-h1">Vend electricity</h1>
         <p class="bw-muted" style="margin: 0 0 var(--s-5)">Enter the customer's meter number to begin.</p>
-        <label class="bw-label">Meter number</label>
-        <input class="bw-input bw-mono" inputmode="numeric"
-               v-model="meterId" @keyup.enter="lookupMeter"
+        <label class="bw-label" for="vend-meter-id">Meter number</label>
+        <input id="vend-meter-id" class="bw-input bw-mono" inputmode="numeric"
+               v-model="meterId" minlength="4" maxlength="80" autocomplete="off"
+               aria-describedby="vend-meter-help vend-meter-error"
+               :aria-invalid="Boolean(error)"
                placeholder="44120…" autofocus />
-        <div v-if="error" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
+        <small id="vend-meter-help" class="bw-muted">Use at least 4 characters.</small>
+        <div v-if="error" id="vend-meter-error" class="bw-alert danger" role="alert" aria-live="polite" style="margin-top: var(--s-3); display: grid; gap: 6px">
           <strong>{{ error.title }}</strong>
           <span>{{ error.message }}</span>
           <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
         </div>
-        <button class="bw-btn primary" style="margin-top: var(--s-4); width: 100%; justify-content: center; height: 44px"
-                @click="lookupMeter" :disabled="loading || !meterId.trim()">
+        <button type="submit" class="bw-btn primary" style="margin-top: var(--s-4); width: 100%; justify-content: center; height: 44px"
+                :disabled="loading || !meterIdValid" :aria-busy="loading">
           {{ loading ? 'Looking up…' : 'Continue' }}
         </button>
-      </div>
+      </form>
 
       <!-- Step: amount -->
       <div v-else-if="step === 'amount'" key="amount" class="bw-card">
-        <button class="bw-btn sm" style="margin-bottom: var(--s-4)" @click="step = 'meter'">← Back</button>
+        <button type="button" class="bw-btn sm" style="margin-bottom: var(--s-4)" @click="step = 'meter'">← Back</button>
         <section class="bw-recharge-summary" aria-label="Selected meter">
           <div><span>Customer</span><strong>{{ meter?.customerName }}</strong></div>
           <div><span>Meter</span><strong class="bw-mono">{{ meter?.meterId }}</strong></div>
@@ -414,15 +438,15 @@ async function remoteSendGeneratedToken() {
         </div>
 
         <div style="margin-top: var(--s-5)">
-          <label class="bw-label">Energy amount (₦)</label>
-          <input class="bw-input bw-mono" type="number" min="100" step="100" v-model.number="amountNaira" style="font-size: var(--t-xl)" />
+          <label class="bw-label" for="vend-amount">Energy amount (₦)</label>
+          <input id="vend-amount" class="bw-input bw-mono" type="number" min="100" step="100" v-model.number="amountNaira" style="font-size: var(--t-xl)" />
           <div class="bw-recharge-quick-grid" style="margin-top: var(--s-3)">
-            <button v-for="n in [1000, 2000, 5000, 10000, 25000]" :key="n"
+            <button v-for="n in [1000, 2000, 5000, 10000, 25000]" :key="n" type="button"
                     class="bw-btn sm" @click="amountNaira = n">₦{{ n.toLocaleString() }}</button>
           </div>
         </div>
 
-        <div v-if="error" class="bw-alert danger" style="margin-top: var(--s-3); display: grid; gap: 6px">
+        <div v-if="error" class="bw-alert danger" role="alert" aria-live="polite" style="margin-top: var(--s-3); display: grid; gap: 6px">
           <strong>{{ error.title }}</strong>
           <span>{{ error.message }}</span>
           <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
@@ -522,15 +546,18 @@ async function remoteSendGeneratedToken() {
       :disable-confirm="!authorization"
       @confirm="submitAuthorization"
     >
-      <label class="bw-label">Vendor authorization</label>
+      <label class="bw-label" for="vend-authorization">Vendor authorization</label>
       <input
+        id="vend-authorization"
         class="bw-input bw-mono cd-input-target"
         v-model="authorization"
         type="password"
         autocomplete="off"
+        :aria-invalid="Boolean(authError)"
+        aria-describedby="vend-authorization-error"
         placeholder="PIN or password"
       />
-      <p v-if="authError" class="bw-alert danger" style="margin-top: var(--s-2)">
+      <p v-if="authError" id="vend-authorization-error" class="bw-alert danger" role="alert" style="margin-top: var(--s-2)">
         {{ authError }}
       </p>
       <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-2)">
@@ -562,6 +589,8 @@ async function remoteSendGeneratedToken() {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: var(--s-4);
+  padding: 0;
+  list-style: none;
 }
 
 .vend-flow-step {
@@ -580,16 +609,15 @@ async function remoteSendGeneratedToken() {
               background var(--dur-base, 0.22s) var(--ease-out, ease);
 }
 
-.vend-flow-step span {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: currentColor;
-  transition: transform var(--dur-fast, 0.14s) var(--ease-spring, ease), background var(--dur-base, 0.22s) var(--ease-out, ease);
+.vend-flow-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  transition: transform var(--dur-fast, 0.14s) var(--ease-spring, ease);
 }
 
-.vend-flow-step.active span {
-  transform: scale(1.3);
+.vend-flow-step.active .vend-flow-icon {
+  transform: scale(1.08);
 }
 
 .vend-flow-step strong {
@@ -657,7 +685,7 @@ async function remoteSendGeneratedToken() {
   .step-anim-enter-active,
   .step-anim-leave-active,
   .vend-flow-step,
-  .vend-flow-step span {
+  .vend-flow-icon {
     transition: none !important;
   }
 }
@@ -675,7 +703,8 @@ async function remoteSendGeneratedToken() {
   .vend-flow-step {
     grid-template-columns: 1fr;
     justify-items: center;
-    padding: 8px 4px;
+    gap: 6px;
+    padding: 9px 4px;
   }
 
   .vend-actions {
