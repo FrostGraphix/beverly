@@ -2999,6 +2999,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ funding: pending });
   }
 
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/funding/history")) {
+    const rows = walletFunding.listFundingRequests({ limit: 200 });
+    return localJobResponse({ funding: rows, nextCursor: null, summary: null });
+  }
+
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vending")) {
     const sp = adminQueryParams(request.url);
     const status = sp.get("status") || undefined;

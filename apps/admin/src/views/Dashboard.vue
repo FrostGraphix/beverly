@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; actor_id?: string | null; reference?: string | null; }
+interface FundingHistoryRow {
+    id: string;
+    amount_minor: number;
+    status: string;
+    channel?: string | null;
+    created_at: string;
+    vendor_organization_id?: string | null;
+    vendor_organizations?: { legal_name?: string | null; trading_name?: string | null } | null;
+}
 interface Application    { id: string; legal_name: string; created_at: string; }
 interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; actor_type?: string | null; reference?: string | null; created_at: string; }
 interface WalletSummary {
@@ -22,6 +31,7 @@ interface WalletSummary {
 }
 
 const funding = ref<FundingRequest[]>([]);
+const fundingHistory = ref<FundingHistoryRow[]>([]);
 const auth = useStaffAuthStore();
 const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
@@ -102,26 +112,33 @@ const recentActivityRows = computed(() => {
         };
     });
 
-    const fundingRows = funding.value.map((f) => ({
-        id: `funding-${f.id}`,
-        rawId: f.id,
-        reference: `#fund_${f.id.slice(0, 8)}`,
-        type: 'Funding',
-        kind: 'funding',
-        typeTone: 'info',
-        vendor: 'Funding queue',
-        customerName: f.actor_id || 'Vendor/Customer',
-        meterId: '',
-        actorType: 'vendor',
-        customerMeter: '',
-        station: '',
-        amountMinor: f.amount_minor,
-        unitsKwh: null,
-        units: '',
-        status: f.status.replace(/_/g, ' '),
-        statusTone: statusTone(f.status),
-        createdAt: f.created_at,
-    }));
+    const historySource = fundingHistory.value.length ? fundingHistory.value : funding.value;
+    const fundingRows = historySource.map((f) => {
+        const vendorName = (f as FundingHistoryRow).vendor_organizations?.trading_name
+            || (f as FundingHistoryRow).vendor_organizations?.legal_name
+            || (f as FundingRequest).actor_id
+            || 'Vendor funding';
+        return {
+            id: `funding-${f.id}`,
+            rawId: f.id,
+            reference: `#fund_${f.id.slice(0, 8)}`,
+            type: 'Vendor Funding',
+            kind: 'funding' as const,
+            typeTone: 'info',
+            vendor: vendorName,
+            customerName: vendorName,
+            meterId: '',
+            actorType: 'vendor' as const,
+            customerMeter: vendorName,
+            station: '',
+            amountMinor: f.amount_minor,
+            unitsKwh: null,
+            units: '',
+            status: f.status.replace(/_/g, ' '),
+            statusTone: statusTone(f.status),
+            createdAt: f.created_at,
+        };
+    });
 
     return [...purchases, ...fundingRows]
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -138,6 +155,9 @@ const recentStations = computed(() => {
     const fromRows = recentActivityRows.value.map(row => row.station).filter(Boolean);
     return [...new Set([...knownStations.value, ...fromRows])].sort();
 });
+const recentPage = ref(1);
+const recentPageSize = ref(10);
+
 const filteredRecentTransactions = computed(() =>
     recentActivityRows.value.filter((row) => {
         const matchesType = recentTypeFilter.value === 'all' || row.kind === recentTypeFilter.value;
@@ -159,7 +179,19 @@ const filteredRecentTransactions = computed(() =>
         return matchesType && matchesActor && matchesStation && matchesDate && matchesQuery;
     }),
 );
-const recentTransactions = computed(() => filteredRecentTransactions.value.slice(0, 10));
+
+const totalRecentPages = computed(() =>
+    Math.ceil(filteredRecentTransactions.value.length / recentPageSize.value) || 1,
+);
+
+const recentTransactions = computed(() => {
+    const start = (recentPage.value - 1) * recentPageSize.value;
+    return filteredRecentTransactions.value.slice(start, start + recentPageSize.value);
+});
+
+watch([recentTypeFilter, recentActorFilter, recentStationFilter, recentDateFilter, recentSearchQuery, recentPageSize], () => {
+    recentPage.value = 1;
+});
 const totalWalletFloatMinor = computed(() =>
     walletSummary.value.totalFloatMinor ?? walletSummary.value.totalBalanceMinor ?? 0,
 );
@@ -250,8 +282,9 @@ function adminAutoRefreshEnabled() {
 async function fetchAll() {
     const errors: string[] = [];
     
-    const [fundingRes, appsRes, vendingRes, walletRes, stationsRes] = await Promise.allSettled([
+    const [fundingRes, fundingHistRes, appsRes, vendingRes, walletRes, stationsRes] = await Promise.allSettled([
         api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending'),
+        api.get<{ funding: FundingHistoryRow[] }>('/api/v1/admin/funding/history?limit=50'),
         api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications'),
         api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending'),
         api.get<WalletSummary>('/api/v1/admin/wallets/summary'),
@@ -260,6 +293,8 @@ async function fetchAll() {
 
     if (fundingRes.status === 'fulfilled') funding.value = fundingRes.value.funding;
     else errors.push('Funding queue unavailable');
+
+    if (fundingHistRes.status === 'fulfilled') fundingHistory.value = fundingHistRes.value.funding;
 
     if (appsRes.status === 'fulfilled') apps.value = appsRes.value.applications;
     else errors.push('Applications feed unavailable');
@@ -790,6 +825,32 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           No transactions match filters.
         </div>
       </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="filteredRecentTransactions.length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing {{ ((recentPage - 1) * recentPageSize) + 1 }}–{{ Math.min(recentPage * recentPageSize, filteredRecentTransactions.length) }} of {{ filteredRecentTransactions.length }} matching transactions
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline" style="margin: 0; flex-direction: row; align-items: center; gap: 6px;">
+            <span>Per page</span>
+            <select v-model="recentPageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+            </select>
+          </label>
+          <button class="bw-btn sm ghost" :disabled="recentPage <= 1" @click="recentPage--">
+            Previous
+          </button>
+          <span class="bw-page-num" style="font-size: var(--t-xs); font-weight: 600; color: var(--text-muted)">
+            Page {{ recentPage }} of {{ totalRecentPages }}
+          </span>
+          <button class="bw-btn sm ghost" :disabled="recentPage >= totalRecentPages" @click="recentPage++">
+            Next
+          </button>
+        </div>
+      </div>
     </div>
 
   </AppShell>
@@ -827,12 +888,40 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
   gap: 4px;
 }
 
+.bw-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.bw-pagination-info {
+  font-size: var(--t-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.bw-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
 @media (max-width: 640px) {
   .recent-filter-grid {
     grid-template-columns: 1fr 1fr;
   }
   .recent-filter-grid > .filter-group:first-child {
     grid-column: 1 / -1;
+  }
+  .bw-pagination-bar {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
   }
 }
 </style>
