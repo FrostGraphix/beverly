@@ -157,6 +157,31 @@
   align-items: center;
   gap: var(--s-2);
 }
+.bw-nav-section.active {
+  color: var(--brand-on-surface);
+  font-weight: 800;
+}
+.bw-nav-section-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  justify-content: space-between;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.bw-nav-section-btn:hover {
+  color: var(--text-dim);
+}
+.bw-nav-section-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.bw-nav-section-chevron.collapsed {
+  transform: rotate(-90deg);
+}
 .bw-nav-dev-divider {
   height: 1px;
   background: var(--glass-border);
@@ -385,8 +410,8 @@
 
 /* Icon button */
 .bw-icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--r-md);
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -1438,7 +1463,7 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
+  min-height: 44px;
   padding: 0 10px;
   background: transparent;
   border: 1px solid transparent;
