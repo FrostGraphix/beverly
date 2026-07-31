@@ -1115,6 +1115,17 @@ function isAccountCreatePath(pathname) {
   return String(pathname || "").toLowerCase() === "/api/account/create";
 }
 
+function isAccountImportPath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/account/import";
+}
+
+// Create and import are the same operation as far as the local sync queue is
+// concerned: both push customer/meter bindings upstream and both must land
+// there. Neither may report success unless upstream accepted the rows.
+function isAccountUploadPath(pathname) {
+  return isAccountCreatePath(pathname) || isAccountImportPath(pathname);
+}
+
 function isAccountReadPath(pathname) {
   return String(pathname || "").toLowerCase() === "/api/account/read";
 }
@@ -1138,14 +1149,22 @@ function accountBindingPayloadRows(requestData) {
     .filter((row) => row.customerId && row.meterId);
 }
 
-async function persistLocalAccountBindings(requestData, source = "local-fallback") {
+async function persistLocalAccountBindings(requestData, source = "local-fallback", options = {}) {
   const rows = accountBindingPayloadRows(requestData);
+  const status = options.status || (source === "live" ? "active" : "pending");
+  const lastError = String(options.lastError || "");
   for (const row of rows) {
+    const existing = (await listAccountBindings({ customerId: row.customerId, meterId: row.meterId }))[0] || null;
     await saveAccountBinding({
       ...row,
       source,
-      status: "active",
-      details: row
+      status,
+      details: {
+        ...row,
+        lastError,
+        attempts: status === "pending" ? Number(existing?.attempts || 0) + 1 : 0,
+        lastAttemptAt: new Date().toISOString()
+      }
     });
   }
   return rows;
@@ -1165,7 +1184,9 @@ function accountReadFilters(requestData) {
   return {
     customerId: String(payload.customerId || "").trim(),
     meterId: String(payload.meterId || "").trim(),
-    stationId: String(payload.stationId || payload.SITE_ID || "").trim()
+    stationId: String(payload.stationId || payload.SITE_ID || "").trim(),
+    searchTerm: String(payload.searchTerm || "").trim(),
+    status: String(payload.status || "").trim()
   };
 }
 
@@ -1173,70 +1194,322 @@ function accountBindingKey(row = {}) {
   return `${String(row.customerId || "").trim()}::${String(row.meterId || "").trim()}`;
 }
 
-async function mergeLocalAccountBindings(pathname, requestData, result) {
-  if (!isAccountReadPath(pathname)) return result;
-  const localRows = await listAccountBindings(accountReadFilters(requestData));
-  if (!localRows.length) return result;
-  const body = result?.body;
-  if (!body || typeof body !== "object") {
-    return {
-      status: 200,
-      body: {
-        code: 0,
-        msg: "success",
-        reason: "success",
-        data: {
-          total: localRows.length,
-          data: localRows
-        },
-        result: {
-          total: localRows.length,
-          data: localRows
-        },
-        _proxy: {
-          source: "local-fallback",
-          pathname
-        }
-      }
+// Pushes queued bindings upstream one row at a time so a single bad row cannot
+// hide the fate of the rest: each row comes back either synced (removed from
+// the queue) or failed with the upstream reason attached.
+async function retryPendingAccountBindings(request, payload = {}) {
+  const requested = accountBindingPayloadRows({ parsedBody: payload.rows || [] });
+  const queued = requested.length
+    ? requested
+    : (await listAccountBindings({ status: "pending", stationId: payload.stationId || "" }));
+  const results = [];
+  for (const entry of queued) {
+    const row = {
+      customerId: String(entry.customerId || ""),
+      meterId: String(entry.meterId || ""),
+      tariffId: String(entry.tariffId || ""),
+      ctRatio: String(entry.ctRatio || ""),
+      stationId: String(entry.stationId || ""),
+      remark: String(entry.remark || "")
     };
+    const syntheticRequest = {
+      method: "POST",
+      url: "/api/account/create",
+      headers: { ...(request?.headers || {}) }
+    };
+    const requestData = jsonRequestData([row]);
+    let outcome;
+    try {
+      outcome = await proxyLive(syntheticRequest, "/api/account/create", requestData);
+    } catch (error) {
+      outcome = null;
+      results.push({ ...row, synced: false, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    const code = Number(outcome?.body?.code);
+    const synced = Boolean(outcome) && outcome.status < 300 && (code === 0 || code === 200);
+    if (synced) {
+      await saveAccountBinding({ ...row, source: "live", status: "active", details: { ...row, lastError: "", attempts: 0 } });
+      invalidateAccountTotalCache();
+      invalidateMeterStatsCache();
+      results.push({ ...row, synced: true, error: "" });
+      continue;
+    }
+    const reason = String(outcome?.body?.reason || outcome?.body?.msg || "Upstream unreachable");
+    await persistLocalAccountBindings(requestData, "upstream-rejected", { status: "pending", lastError: reason });
+    results.push({ ...row, synced: false, error: reason });
   }
-  const liveRows = collectionRowsFromPayload(body);
-  const merged = new Map();
-  for (const row of liveRows) merged.set(accountBindingKey(row), row);
-  for (const row of localRows) merged.set(accountBindingKey(row), { ...merged.get(accountBindingKey(row)), ...row });
-  const mergedRows = Array.from(merged.values());
-  const mergedBody = JSON.parse(JSON.stringify(body));
-  setCollectionRows(mergedBody, mergedRows, mergedRows.length);
-  mergedBody._proxy = {
-    ...(body._proxy || {}),
-    source: body._proxy?.source === "local-fallback" ? "local-fallback" : `${body._proxy?.source || "live"}+local`,
-    pathname
-  };
   return {
-    status: result.status,
-    body: mergedBody
+    attempted: results.length,
+    synced: results.filter((row) => row.synced).length,
+    failed: results.filter((row) => !row.synced).length,
+    rows: results
   };
 }
 
-function localAccountCreateResponse(pathname, rows, lastFailure) {
+// KPI figures used to be extrapolated from a single 20-row sample, which is how
+// "active meters" showed 767 instead of 2,050. These are exact counts:
+//   totalMeters      every registered meter
+//   connectedMeters  meters bound to a customer (an account binding exists)
+//   activeMeters     connected meters whose meter record is switched on
+//   inactiveMeters   connected meters that are not
+//   unassignedMeters registered meters with no customer attached
+const meterStatsCache = new Map();
+const meterStatsTtlMs = 60000;
+const meterStatsPageSize = 500;
+const meterStatsMaxPages = 60;
+
+function invalidateMeterStatsCache() {
+  meterStatsCache.clear();
+}
+
+async function walkLiveCollection(request, pathname, filters, onRows) {
+  for (let pageNumber = 1; pageNumber <= meterStatsMaxPages; pageNumber += 1) {
+    const syntheticRequest = {
+      method: "POST",
+      url: pathname,
+      headers: { ...(request?.headers || {}) }
+    };
+    const payload = { pageNumber, pageSize: meterStatsPageSize, ...filters };
+    const result = await proxyLive(syntheticRequest, pathname, jsonRequestData(payload));
+    if (!result || result.status >= 400) return false;
+    const rows = collectionRowsFromPayload(result.body);
+    onRows(rows);
+    if (rows.length < meterStatsPageSize) return true;
+  }
+  return true;
+}
+
+async function resolveMeterStats(request, options = {}) {
+  const stationId = String(options.stationId || "").trim();
+  const cacheKey = stationId.toUpperCase();
+  const cached = meterStatsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.stats;
+
+  const meterStatus = new Map();
+  const meterFilters = stationId ? { stationId } : {};
+  const metersOk = await walkLiveCollection(request, "/api/meter/read", meterFilters, (rows) => {
+    for (const row of rows) {
+      const meterId = String(row?.meterId || "").trim();
+      if (meterId) meterStatus.set(meterId, row?.status === true);
+    }
+  });
+
+  const connectedMeters = new Set();
+  let activeConnected = 0;
+  const accountsOk = await walkLiveCollection(request, "/api/account/read", meterFilters, (rows) => {
+    for (const row of rows) {
+      const meterId = String(row?.meterId || "").trim();
+      if (!meterId || connectedMeters.has(meterId)) continue;
+      connectedMeters.add(meterId);
+      const active = meterStatus.has(meterId) ? meterStatus.get(meterId) : row?.status === true;
+      if (active) activeConnected += 1;
+    }
+  });
+
+  const stats = {
+    totalMeters: meterStatus.size,
+    connectedMeters: connectedMeters.size,
+    activeMeters: activeConnected,
+    inactiveMeters: connectedMeters.size - activeConnected,
+    unassignedMeters: Math.max(0, meterStatus.size - connectedMeters.size),
+    stationId: stationId || "",
+    exact: metersOk && accountsOk
+  };
+  if (stats.exact) meterStatsCache.set(cacheKey, { stats, expiresAt: Date.now() + meterStatsTtlMs });
+  return stats;
+}
+
+async function splitAccountImportPerRow(request, requestData) {
+  const rows = accountBindingPayloadRows(requestData);
+  if (!rows.length) return null;
+  const results = [];
+  for (const row of rows) {
+    const rowRequestData = jsonRequestData([row]);
+    const syntheticRequest = {
+      method: "POST",
+      url: "/api/account/create",
+      headers: { ...(request?.headers || {}) }
+    };
+    let outcome = null;
+    try {
+      outcome = await proxyLive(syntheticRequest, "/api/account/create", rowRequestData);
+    } catch (error) {
+      results.push({ ...row, synced: false, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    const code = Number(outcome?.body?.code);
+    if (outcome && outcome.status < 300 && (code === 0 || code === 200)) {
+      results.push({ ...row, synced: true, error: "" });
+      continue;
+    }
+    const reason = String(outcome?.body?.reason || outcome?.body?.msg || "Upstream rejected this binding");
+    await persistLocalAccountBindings(rowRequestData, "upstream-rejected", { status: "pending", lastError: reason });
+    results.push({ ...row, synced: false, error: reason });
+  }
+  const synced = results.filter((row) => row.synced).length;
+  const failed = results.length - synced;
+  if (!synced) return null;
+  invalidateAccountTotalCache();
+      invalidateMeterStatsCache();
+  const summary = { synced, failed, rows: results, mode: "per-row-import" };
+  const reason = failed
+    ? `${synced} binding(s) imported, ${failed} rejected by the API`
+    : `${synced} binding(s) imported`;
   return {
-    status: 200,
+    status: failed ? 207 : 200,
     body: {
-      code: 0,
-      msg: "success",
-      reason: "Account binding stored locally while upstream is unavailable",
-      data: {
-        stored: true,
-        rows,
-        mode: "local-fallback"
-      },
-      result: {
-        stored: true,
-        rows,
-        mode: "local-fallback"
-      },
+      code: failed ? 207 : 0,
+      msg: reason,
+      reason,
+      data: summary,
+      result: summary,
+      _proxy: { source: "live", pathname: "/api/account/import", mode: "per-row-import" }
+    }
+  };
+}
+
+// An upstream rejection is recorded against the queue so the operator can see
+// which rows failed and exactly why, and retry them after fixing the data.
+async function recordAccountUploadRejection(requestData, payload) {
+  const reason = String(payload?.reason || payload?.msg || "Upstream rejected the account binding");
+  await persistLocalAccountBindings(requestData, "upstream-rejected", {
+    status: "pending",
+    lastError: reason
+  }).catch((error) => {
+    console.error("[account-upload-rejection]", error instanceof Error ? error.message : String(error));
+    return [];
+  });
+}
+
+// There is no local stand-in for the account list any more. Locally stored
+// bindings are never presented as live data — not on a good read (it corrupted
+// totals and pagination) and not on a failed one (it dressed stale local rows
+// up as the real register). A failed read now fails visibly; anything not yet
+// accepted upstream lives in the explicit queue at
+// /api/local/accountBindings/read and is shown as a queue in the UI.
+
+// The upstream account read reports `total` = the number of rows on the page
+// whenever the query is not station-scoped, so a 10-row page claims a total of
+// 10 and every client stops after page one. Paging itself is correct, so the
+// true count is resolved by walking full pages once and caching the answer.
+const accountTotalCache = new Map();
+const accountTotalTtlMs = 60000;
+const accountTotalPageSize = 500;
+const accountTotalMaxPages = 40;
+
+function accountTotalCacheKey(filters) {
+  return JSON.stringify({
+    customerId: filters.customerId || "",
+    meterId: filters.meterId || "",
+    stationId: String(filters.stationId || "").toUpperCase(),
+    searchTerm: filters.searchTerm || ""
+  });
+}
+
+function invalidateAccountTotalCache() {
+  accountTotalCache.clear();
+}
+
+function jsonRequestData(payload) {
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  return {
+    rawBody,
+    rawText: rawBody.toString("utf8"),
+    parsedBody: payload,
+    contentType: jsonContentType
+  };
+}
+
+async function fetchLiveAccountPage(request, filters, pageNumber) {
+  const payload = {
+    pageNumber,
+    pageSize: accountTotalPageSize,
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+    ...(filters.meterId ? { meterId: filters.meterId } : {}),
+    ...(filters.stationId ? { stationId: filters.stationId } : {}),
+    ...(filters.searchTerm ? { searchTerm: filters.searchTerm } : {})
+  };
+  const syntheticRequest = {
+    method: "POST",
+    url: "/api/account/read",
+    headers: { ...(request?.headers || {}) },
+    __timeoutMs: request?.__timeoutMs
+  };
+  const result = await proxyLive(syntheticRequest, "/api/account/read", jsonRequestData(payload));
+  if (!result || result.status >= 400) return null;
+  return collectionRowsFromPayload(result.body);
+}
+
+async function resolveLiveAccountTotal(request, requestData) {
+  const filters = accountReadFilters(requestData);
+  const key = accountTotalCacheKey(filters);
+  const cached = accountTotalCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.total;
+  let total = 0;
+  for (let pageNumber = 1; pageNumber <= accountTotalMaxPages; pageNumber += 1) {
+    const rows = await fetchLiveAccountPage(request, filters, pageNumber);
+    if (!Array.isArray(rows)) return null;
+    total += rows.length;
+    if (rows.length < accountTotalPageSize) break;
+  }
+  accountTotalCache.set(key, { total, expiresAt: Date.now() + accountTotalTtlMs });
+  return total;
+}
+
+async function withResolvedAccountTotal(pathname, request, requestData, result) {
+  if (!isAccountReadPath(pathname)) return result;
+  if (!result || result.status >= 400) return result;
+  if (result.body?._proxy?.source === "local-fallback") return result;
+  const body = result.body;
+  const rows = collectionRowsFromPayload(body);
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  const requestedPageSize = Math.min(Math.max(Number(payload.pageSize) || 20, 1), accountTotalPageSize);
+  const pageNumber = Math.max(1, Number(payload.pageNumber) || 1);
+  const declaredTotal = declaredCollectionTotal(body, rows.length);
+  const rowsSoFar = (pageNumber - 1) * requestedPageSize + rows.length;
+  // A page that came back full may have more behind it; if upstream's total
+  // does not already account for those rows, it is the unreliable kind.
+  if (rows.length < requestedPageSize || declaredTotal > rowsSoFar) return result;
+  const resolvedTotal = await resolveLiveAccountTotal(request, requestData).catch((error) => {
+    console.error("[account-total-resolve]", error instanceof Error ? error.message : String(error));
+    return null;
+  });
+  if (!Number.isFinite(resolvedTotal) || resolvedTotal <= declaredTotal) return result;
+  const nextBody = JSON.parse(JSON.stringify(body));
+  setCollectionRows(nextBody, rows, resolvedTotal);
+  nextBody._proxy = {
+    ...(body._proxy || {}),
+    totalSource: "resolved-page-walk"
+  };
+  return { status: result.status, body: nextBody };
+}
+
+// Upstream could not be reached at all (transport failure, 5xx, timeout). The
+// rows are queued locally so nothing is lost, but the caller is told plainly
+// that they are NOT live yet — code 202, never 0. Returning "success" here is
+// what previously let 164 bindings sit unsynced while the UI showed them as
+// real upstream records.
+function queuedAccountUploadResponse(pathname, rows, lastFailure) {
+  const reason = "Queued for upstream sync — not live yet. Upstream was unreachable.";
+  const body = {
+    queued: true,
+    synced: false,
+    rows,
+    mode: "pending-sync",
+    pendingCount: rows.length,
+    upstreamError: lastFailure?.payload?.reason || lastFailure?.error || ""
+  };
+  return {
+    status: 202,
+    body: {
+      code: 202,
+      msg: reason,
+      reason,
+      data: body,
+      result: body,
       _proxy: {
-        source: "local-fallback",
+        source: "local-queue",
         pathname,
         upstreamStatus: lastFailure?.status || 0
       }
@@ -3751,6 +4024,28 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       updatedBy: payload.updatedBy || ""
     }));
   }
+  if (pathname === "/api/local/meterStats/read") {
+    return localJobResponse(await resolveMeterStats(request, { stationId: payload.stationId || "" }));
+  }
+  if (pathname === "/api/local/accountBindings/read") {
+    const rows = await listAccountBindings({
+      status: payload.status === "all" ? "" : String(payload.status || "pending"),
+      stationId: payload.stationId || "",
+      customerId: payload.customerId || "",
+      meterId: payload.meterId || "",
+      searchTerm: payload.searchTerm || ""
+    });
+    return localJobResponse({ total: rows.length, data: rows });
+  }
+  if (pathname === "/api/local/accountBindings/retry") {
+    return localJobResponse(await retryPendingAccountBindings(request, payload));
+  }
+  if (pathname === "/api/local/accountBindings/discard") {
+    const rows = accountBindingPayloadRows({ parsedBody: payload.rows || payload });
+    let removed = 0;
+    for (const row of rows) removed += await deleteAccountBinding(row);
+    return localJobResponse({ removed });
+  }
   if (pathname === "/api/local/importJobs/read") {
     return localJobResponse(await listImportJobs({
       routeHash: payload.routeHash || "",
@@ -4157,25 +4452,42 @@ async function proxyLive(request, pathname, requestData) {
           continue;
         }
         if (isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
-          if (isAccountCreatePath(candidate)) {
-            lastFailure = {
-              pathname,
-              candidate,
-              status: liveResult.status,
-              payload: liveResult.payload
-            };
-            continue;
+          // Account uploads used to fall through to a local "success" here. An
+          // upstream business rejection (e.g. code 99 "The meter and the
+          // customer are not under the same Station.") is a real answer about
+          // real data — it is returned verbatim so the operator can fix the row.
+          // A batch import rejected as a whole would throw away the rows that
+          // were perfectly fine, so it is retried row by row: every acceptable
+          // binding lands live now, and only the genuinely bad rows are queued
+          // with the reason upstream gave for them.
+          if (isAccountImportPath(candidate) && accountBindingPayloadRows(requestData).length > 1) {
+            const split = await splitAccountImportPerRow(request, requestData);
+            if (split) return split;
+          }
+          if (isAccountUploadPath(candidate)) {
+            await recordAccountUploadRejection(requestData, liveResult.payload);
           }
           return {
             status: liveResult.status,
             body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
           };
         }
-        if (isAccountCreatePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
-          await persistLocalAccountBindings(requestData, "live");
+        if (isAccountUploadPath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
+          // Accepted upstream: the binding is live, so any queued copy is
+          // cleared and the local row becomes a plain mirror.
+          await persistLocalAccountBindings(requestData, "live", { status: "active" });
+          invalidateAccountTotalCache();
+          invalidateMeterStatsCache();
         }
         if (isAccountDeletePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
           await removeLocalAccountBindings(requestData);
+          invalidateAccountTotalCache();
+          invalidateMeterStatsCache();
+        }
+        // Meter writes change the station/status the KPI counts are built from.
+        if (/^\/api\/meter\/(create|update|delete)$/i.test(candidate)) {
+          invalidateMeterStatsCache();
+          invalidateAccountTotalCache();
         }
         if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
@@ -4210,9 +4522,12 @@ async function proxyLive(request, pathname, requestData) {
   }
 
   if (lastFailure) logProxyFailure(lastFailure);
-  if (isAccountCreatePath(pathname) && String(request.method || "GET").toUpperCase() === "POST") {
-    const rows = await persistLocalAccountBindings(requestData, "local-fallback");
-    if (rows.length) return localAccountCreateResponse(pathname, rows, lastFailure);
+  if (isAccountUploadPath(pathname) && String(request.method || "GET").toUpperCase() === "POST") {
+    const rows = await persistLocalAccountBindings(requestData, "local-fallback", {
+      status: "pending",
+      lastError: lastFailure?.payload?.reason || lastFailure?.error || "Upstream unreachable"
+    });
+    if (rows.length) return queuedAccountUploadResponse(pathname, rows, lastFailure);
   }
   return null;
 }
@@ -4676,7 +4991,7 @@ async function handler(request, response) {
       result = fallbackRemoteTask(pathname, requestData);
     }
 
-    result = await mergeLocalAccountBindings(pathname, requestData, result);
+    result = await withResolvedAccountTotal(pathname, request, requestData, result);
 
     if (!result) {
       result = {

@@ -125,6 +125,29 @@
 
       <p v-if="writeAction" class="modal-confirmation">{{ form.confirmationText }}</p>
       <div v-if="importPreview" class="modal-result">{{ importPreview }}</div>
+      <div v-if="preflightRunning" class="modal-result">Validating rows against the live API…</div>
+      <div v-else-if="preflight" class="preflight-panel" :class="{ 'has-blocking': preflightBlocking.length }">
+        <div class="preflight-head">
+          <span class="preflight-title">Live API pre-check</span>
+          <span class="preflight-summary">{{ preflightSummaryText }}</span>
+        </div>
+        <ul v-if="preflightBlocking.length" class="preflight-issues">
+          <li v-for="entry in preflightBlocking.slice(0, 5)" :key="`blocking-${entry.line}`">
+            <strong>Line {{ entry.line }}</strong> — {{ entry.issue.message }}
+          </li>
+          <li v-if="preflightBlocking.length > 5" class="preflight-more">
+            +{{ preflightBlocking.length - 5 }} more — download the report for the full list
+          </li>
+        </ul>
+        <label v-if="preflightFixes.length" class="preflight-fix">
+          <BaseCheckbox v-model="applyMeterStationFix">
+            Move {{ preflightFixes.length }} meter(s) to their customer's station first (live change to the meter record)
+          </BaseCheckbox>
+        </label>
+        <div class="preflight-actions">
+          <BaseButton size="sm" variant="ghost" type="button" @click="downloadPreflightReport">Download report</BaseButton>
+        </div>
+      </div>
       <div v-if="error" class="modal-error">{{ error }}</div>
       <div v-if="result" class="modal-result">{{ result }}</div>
     </div>
@@ -156,6 +179,7 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseModalShell from "./base/BaseModalShell.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { buildErrorReport, buildImportPreview, downloadTextFile, exportCsvText, exportExcelXml, parseImportFile, validateImportRows } from "../services/import-export.mjs";
+import { alignMeterStations, preflightAccountImport, preflightReportCsv, preflightSummary } from "../services/account-import-preflight.mjs";
 import { logExportJob } from "../services/local-jobs.mjs";
 import { columnKey, tableSiteOptions } from "../services/table-service";
 import { actionEndpoint, submitRouteAction } from "../services/action-service.mjs";
@@ -191,6 +215,9 @@ export default {
       responseLog: "",
       importRows: [],
       importErrors: [],
+      preflight: null,
+      preflightRunning: false,
+      applyMeterStationFix: false,
       selectedFile: null,
       uploadPreview: "",
       stations: [],
@@ -256,6 +283,10 @@ export default {
       return s;
     },
     pwLabel() { return ["", "Weak", "Fair", "Good", "Strong"][this.pwStrength]; },
+    isAccountRoute() { return String(this.route?.hash || "").includes("management/account"); },
+    preflightBlocking() { return this.preflight?.blocking || []; },
+    preflightFixes() { return this.preflight?.fixes || []; },
+    preflightSummaryText() { return preflightSummary(this.preflight || {}); },
     rolePermissions() { return ROLE_PERMISSIONS; },
     permissionsSelected() {
       const raw = String(this.form.remark || "");
@@ -292,7 +323,7 @@ export default {
         const staticSites = tableSiteOptions.filter(opt => opt.value !== "");
         const combined = [...staticSites];
         for (const station of this.stations) {
-          if (!combined.some(s => s.value === station.value)) combined.push(station);
+          if (!combined.some(s => s.value.toUpperCase() === station.value.toUpperCase())) combined.push(station);
         }
         return combined;
       }
@@ -371,11 +402,35 @@ export default {
       const validated = validateImportRows(this.route, importedRows, columnKey);
       this.importRows = validated.rows;
       this.importErrors = validated.errors;
+      this.preflight = null;
+      this.applyMeterStationFix = false;
       if (this.importErrors.length) {
         const report = buildErrorReport(this.importErrors);
         downloadTextFile(`${this.route.title}-import-errors.csv`, report, "text/csv;charset=utf-8");
         this.error = `Import has ${this.importErrors.length} validation errors`;
+        return;
       }
+      if (this.isAccountRoute) await this.runAccountPreflight();
+    },
+    async runAccountPreflight() {
+      this.preflightRunning = true;
+      try {
+        this.preflight = await preflightAccountImport(this.importRows);
+        if (this.preflightBlocking.length) {
+          this.error = `${this.preflightBlocking.length} row(s) will be rejected by the API. Fix them or import the rest.`;
+        } else {
+          this.error = "";
+        }
+      } catch (error) {
+        this.preflight = null;
+        this.error = userFacingError(error, "Could not validate rows against the live API");
+      } finally {
+        this.preflightRunning = false;
+      }
+    },
+    downloadPreflightReport() {
+      if (!this.preflight) return;
+      downloadTextFile(`${this.route.title}-import-precheck.csv`, preflightReportCsv(this.preflight), "text/csv;charset=utf-8");
     },
     async submit() {
       this.error = "";
@@ -412,9 +467,31 @@ export default {
             return;
           }
         }
+        let importRows = this.importRows;
+        if (this.action === "Import" && this.isAccountRoute) {
+          if (this.applyMeterStationFix && this.preflightFixes.length) {
+            const fixResults = await alignMeterStations(this.preflightFixes);
+            const failedFixes = fixResults.filter((fix) => !fix.ok);
+            if (failedFixes.length) {
+              const msg = `Could not move ${failedFixes.length} meter(s): ${failedFixes[0].error}`;
+              this.error = msg;
+              toastError(msg);
+              return;
+            }
+            await this.runAccountPreflight();
+          }
+          if (!this.preflight) await this.runAccountPreflight();
+          importRows = this.preflight?.ready || [];
+          if (!importRows.length) {
+            const msg = "No rows can be imported — every row was rejected by the pre-check.";
+            this.error = msg;
+            toastError(msg);
+            return;
+          }
+        }
         const actionResult = await submitRouteAction(this.route, this.action, this.form, {
           fields: this.fields,
-          importRows: this.importRows,
+          importRows,
           selectedFile: this.selectedFile,
           uploadMode: this.uploadMode
         });
@@ -424,8 +501,18 @@ export default {
           this.result = `Upload submitted: ${this.form.fileName}`;
           toastSuccess(`Upload submitted: ${this.form.fileName}`);
         } else if (this.action === "Import") {
-          this.result = `Import submitted: ${this.importRows.length} rows`;
-          toastSuccess(`Import submitted — ${this.importRows.length} rows`);
+          const skipped = this.importRows.length - importRows.length;
+          const skippedNote = skipped > 0 ? ` · ${skipped} skipped by pre-check` : "";
+          if (actionResult.queued || actionResult.partial) {
+            this.result = `${actionResult.resultText}${skippedNote}`;
+            toastError(actionResult.resultText);
+          } else {
+            this.result = `Imported ${importRows.length} row(s) to the live API${skippedNote}`;
+            toastSuccess(`Imported ${importRows.length} row(s) to the live API`);
+          }
+        } else if (actionResult.queued) {
+          this.result = actionResult.resultText;
+          toastError(actionResult.resultText);
         } else {
           this.result = actionResult.resultText;
           toastSuccess(actionResult.resultText || `${this.action} completed successfully.`);

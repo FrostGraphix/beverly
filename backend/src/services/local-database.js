@@ -1525,27 +1525,60 @@ function deleteAccountBinding(entry) {
   return Number(result.changes || 0);
 }
 
+// Rows written by the old silent-fallback path carry status "active" even
+// though they never reached upstream. Anything whose source is a fallback or a
+// rejection is unsynced by definition, whatever its stored status says.
+const unsyncedBindingSources = new Set(["local-fallback", "upstream-rejected"]);
+
+function isPendingBinding(row = {}) {
+  return String(row.status || "") === "pending" || unsyncedBindingSources.has(String(row.source || ""));
+}
+
+function accountBindingDetails(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function listAccountBindings(options = {}) {
   const db = ensureDatabase();
   const customerId = String(options.customerId || "").trim();
   const meterId = String(options.meterId || "").trim();
   const stationId = String(options.stationId || "").trim().toUpperCase();
+  const status = String(options.status || "").trim();
+  const searchTerm = String(options.searchTerm || "").trim().toLowerCase();
+  const matchesSearch = (row) => !searchTerm || [row.customerId, row.meterId, row.tariffId, row.stationId]
+    .some((value) => String(value || "").toLowerCase().includes(searchTerm));
   if (isMemoryDatabase(db)) {
     let rows = db.memoryStore.account_bindings.slice();
     if (customerId) rows = rows.filter((row) => String(row.customerId || "") === customerId);
     if (meterId) rows = rows.filter((row) => String(row.meterId || "") === meterId);
     if (stationId) rows = rows.filter((row) => String(row.stationId || "").toUpperCase() === stationId);
-    return rows.map((row) => ({
-      customerId: row.customerId,
-      meterId: row.meterId,
-      tariffId: row.tariffId,
-      ctRatio: row.ctRatio,
-      stationId: row.stationId,
-      remark: row.remark,
-      createDate: row.createdAt,
-      updateDate: row.updatedAt,
-      _localFallback: true
-    }));
+    if (status === "pending") rows = rows.filter(isPendingBinding);
+    else if (status) rows = rows.filter((row) => String(row.status || "") === status && !isPendingBinding(row));
+    return rows.filter(matchesSearch).map((row) => {
+      const details = accountBindingDetails(row.details);
+      return {
+        customerId: row.customerId,
+        meterId: row.meterId,
+        tariffId: row.tariffId,
+        ctRatio: row.ctRatio,
+        stationId: row.stationId,
+        remark: row.remark,
+        source: row.source,
+        status: row.status,
+        lastError: String(details.lastError || ""),
+        attempts: Number(details.attempts || 0),
+        createDate: row.createdAt,
+        updateDate: row.updatedAt,
+        _localFallback: true
+      };
+    });
   }
   const clauses = [];
   const params = [];
@@ -1563,22 +1596,34 @@ function listAccountBindings(options = {}) {
   }
   const whereClause = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db.prepare(`
-    SELECT customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, created_at, updated_at
+    SELECT customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, source, status, detail_json, created_at, updated_at
     FROM account_bindings
     ${whereClause}
     ORDER BY updated_at DESC
   `).all(...params);
-  return rows.map((row) => ({
-    customerId: row.customer_id,
-    meterId: row.meter_id,
-    tariffId: row.tariff_id,
-    ctRatio: row.ct_ratio,
-    stationId: row.station_id,
-    remark: row.remark,
-    createDate: row.created_at,
-    updateDate: row.updated_at,
-    _localFallback: true
-  }));
+  return rows.map((row) => {
+    const details = accountBindingDetails(row.detail_json);
+    return {
+      customerId: row.customer_id,
+      meterId: row.meter_id,
+      tariffId: row.tariff_id,
+      ctRatio: row.ct_ratio,
+      stationId: row.station_id,
+      remark: row.remark,
+      source: row.source,
+      status: row.status,
+      lastError: String(details.lastError || ""),
+      attempts: Number(details.attempts || 0),
+      createDate: row.created_at,
+      updateDate: row.updated_at,
+      _localFallback: true
+    };
+  }).filter((row) => {
+    if (!matchesSearch(row)) return false;
+    if (status === "pending") return isPendingBinding(row);
+    if (status) return String(row.status || "") === status && !isPendingBinding(row);
+    return true;
+  });
 }
 
 function tableCounts() {
