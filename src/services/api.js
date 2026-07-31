@@ -40,8 +40,8 @@ apiClient.interceptors.request.use((config) => {
 });
 
 const sessionStorageKey = "beverly.session";
-const defaultIdleTimeoutMs = 30 * 60 * 1000;
-const defaultAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultIdleTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultAbsoluteTimeoutMs = 16 * 60 * 60 * 1000;
 
 // Session cookie keys written by JS (display values only).
 // token and refreshToken are intentionally excluded — they are HttpOnly

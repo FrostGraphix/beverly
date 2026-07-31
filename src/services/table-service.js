@@ -142,6 +142,7 @@ function routeUsesServerPagination(route) {
     || hash.includes("management/tariff")
     || hash.includes("admin/log")
     || hash.includes("admin/meter")
+    || hash.includes("admin/station")
     || hash.includes("token-generate")
     || hash.includes("prepay-report/abnormal-alarm")
     || hash.includes("prepay-report/low-purchase-situation")

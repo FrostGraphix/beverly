@@ -14,7 +14,10 @@ const root = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
 const service = read("backend/wallet/src/services/consumption.ts");
-const adminRoutes = read("backend/wallet/src/routes/admin.ts");
+// Station scoping moved into its own module so the admin route groups share
+// one definition; read both so the contract follows the rule, not the file.
+const adminRoutes = read("backend/wallet/src/routes/admin.ts")
+  + read("backend/wallet/src/routes/admin-station-scope.ts");
 const vendorRoutes = read("backend/wallet/src/routes/vendor.ts");
 const customerRoutes = read("backend/wallet/src/routes/customer.ts");
 const authPlugin = read("backend/wallet/src/plugins/auth.ts");
@@ -53,6 +56,53 @@ assert.ok(
 // Spend must be real, not a hardcoded zero presented as money.
 assert.ok(service.includes("async function attachSpend"), "spend must be computed from purchase_orders");
 
+// ── Energy value is distinct from wallet spend ──────────────────────────────
+// Every consumption page rendered "₦0.00" because the service reported only
+// wallet spend, while the aggregates already carried the tariff-valued
+// consumption. Both numbers must reach the client, and stay separate.
+assert.ok(
+  service.includes("tariff_value_ngn") && service.includes("energy_value_minor"),
+  "consumption rows must carry the stored tariff valuation"
+);
+assert.ok(
+  service.includes("function nairaToMinor"),
+  "the aggregate stores naira; the API must convert to minor units"
+);
+for (const [view, label] of [
+  ["apps/admin/src/views/Consumption.vue", "admin"],
+  ["apps/vendor/src/views/Consumption.vue", "vendor"],
+  ["apps/customer/src/views/Consumption.vue", "customer"],
+]) {
+  const source = read(view);
+  assert.ok(
+    source.includes("energy_value_minor"),
+    `${label} consumption page must show energy value, not only wallet spend`
+  );
+}
+
+// ── Theme awareness ─────────────────────────────────────────────────────────
+// `var(--surface-subtle, #f9f9f9)` is not a token — --surface-subtle is defined
+// nowhere, so the light literal won in every dark theme and the expanded meter
+// drawer rendered as a white slab. No consumption view may carry a hex literal
+// as a custom-property fallback.
+for (const [view, label] of [
+  ["apps/admin/src/views/Consumption.vue", "admin"],
+  ["apps/vendor/src/views/Consumption.vue", "vendor"],
+  ["apps/customer/src/views/Consumption.vue", "customer"],
+]) {
+  const source = read(view);
+  const fallbackHex = source.match(/var\(--[a-z0-9-]+,\s*#[0-9a-fA-F]{3,8}\s*\)/g) ?? [];
+  assert.deepEqual(
+    fallbackHex, [],
+    `${label} consumption page must not fall back to a hard-coded colour: ${fallbackHex.join(", ")}`
+  );
+  const undefinedTokens = source.match(/--surface-subtle|--surface-muted/g) ?? [];
+  assert.deepEqual(
+    undefinedTokens, [],
+    `${label} consumption page references a token that does not exist: ${undefinedTokens.join(", ")}`
+  );
+}
+
 // ── Admin: super-admin all, other staff scoped ──────────────────────────────
 assert.ok(
   adminRoutes.includes("assignedStations ? stationsAuthority(assignedStations) : allStations()"),
@@ -73,8 +123,36 @@ for (const role of ["finance-checker", "account"]) {
   );
 }
 
+// ── Station picker reads the real registry, not a derived sample ────────────
+// The admin picker preferred a list derived from the first 5000 reading rows
+// unioned with vendor_organizations, so it showed onboarding fixtures
+// ("SMOKE-STATION", "KADUNA") and ids-as-names. The OEM registry is the
+// authority; the derivation is the fallback.
+assert.match(
+  adminRoutes,
+  /source = await listStations\(\{ force \}\)/,
+  "admin /stations must read the OEM station registry first"
+);
+assert.match(
+  adminRoutes,
+  /if \(!source\.length\) \{[\s\S]{0,600}listStoredStations\(\)/,
+  "the derived station list must be a fallback, not the primary source"
+);
+
 // ── Vendor: exactly one station, from the actor, never the query string ─────
 assert.ok(vendorRoutes.includes("fastify.get('/consumption'"), "vendor must expose /consumption");
+// A route with no auth preHandler never populates req.actor, so its own
+// vendorActorOrReply guard rejected every caller with 403 "Vendor user
+// required." — the vendor consumption page could never load for anyone.
+assert.match(
+  vendorRoutes,
+  /fastify\.get\('\/consumption', \{ preHandler: fastify\.requireVendor\(\) \}/,
+  "vendor /consumption must authenticate, or req.actor is never set and every request 403s"
+);
+assert.ok(
+  vendorRoutes.includes("fastify.get('/consumption', { preHandler: fastify.requireVendor() }"),
+  "vendor consumption must authenticate before reading actor scope"
+);
 assert.ok(
   vendorRoutes.includes("stationsAuthority([actor.stationId])"),
   "vendor authority must come from the actor's assigned station"

@@ -7,8 +7,29 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
+// The admin API is registered from several modules under routes/. The contract
+// is which routes the API exposes, not which file holds them, so a marker may
+// be satisfied by any of them.
+const ADMIN_ROUTE_MODULES = [
+  "backend/wallet/src/routes/admin.ts",
+  "backend/wallet/src/routes/admin-funding.ts",
+  "backend/wallet/src/routes/admin-audit.ts",
+  "backend/wallet/src/routes/admin-csv.ts",
+  "backend/wallet/src/routes/admin-dev.ts",
+  "backend/wallet/src/routes/admin-station-scope.ts",
+  "backend/wallet/src/routes/admin-access-constants.ts",
+];
+
+function sourceFor(file) {
+  if (file !== "backend/wallet/src/routes/admin.ts") return read(file);
+  return ADMIN_ROUTE_MODULES
+    .filter((modulePath) => fs.existsSync(path.join(root, modulePath)))
+    .map(read)
+    .join("\n");
+}
+
 function assertMarkers(file, markers) {
-  const source = read(file);
+  const source = sourceFor(file);
   for (const marker of markers) {
     assert.ok(source.includes(marker), `${file} missing ${marker}`);
   }
@@ -36,6 +57,7 @@ function main() {
   const vendorMeterOrderCreate = read("apps/vendor/src/views/MeterOrderCreate.vue");
   const meterOrdersService = read("backend/wallet/src/services/meter-orders.ts");
   const customerMeterOrders = read("backend/wallet/src/routes/customer.ts");
+  const paymentTransactions = read("backend/wallet/src/services/payment-transactions.ts");
   const walletCss = read("packages/tokens/wallet.css");
   const rootPackage = JSON.parse(read("package.json"));
 
@@ -220,8 +242,10 @@ function main() {
     "fastify.put('/notifications/preferences'",
   ]);
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
-  assert.match(customerRoutes, /Number\(ps\.data\?\.amount\) !== Number\(\(order as any\)\.amount_minor\)/);
-  assert.match(customerRoutes, /payment_amount_mismatch/);
+  assert.match(customerRoutes, /processPaystackChargeSuccess/);
+  assert.match(paymentTransactions, /classifyGatewayAmount/);
+  assert.match(paymentTransactions, /!isCreditable\(amountAssessment\)/);
+  assert.match(paymentTransactions, /payment_amount_mismatch/);
   assert.match(customerRoutes, /if \(!purchaseRows\?\.length\) return \{ receipts: \[\] \}/);
 
   for (const apiSource of [customerApi, vendorApi]) {
@@ -230,7 +254,6 @@ function main() {
     assert.match(apiSource, /function unwrapEnvelope/);
     assert.match(apiSource, /function portalBasePath/);
     assert.match(apiSource, /const loginPath = `\$\{portalBasePath\(\)\}login`/);
-    assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) \{/);
     assert.match(apiSource, /const refreshed = await refreshAccessToken\(\)/);
     assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) handleUnauthorized\(\)/);
     assert.match(apiSource, /Idempotency-Key/);
@@ -288,9 +311,20 @@ function main() {
   assert.match(vendorShell, /class="sidebar-avatar"/);
   assert.match(vendorShell, /class="bw-btn sidebar-signout"/);
   assert.match(vendorShell, /\? 'Vendor User' : 'Vendor'/);
+  assert.match(vendorShell, /isItemActive/);
+  assert.match(vendorShell, /aria-current/);
   assert.match(adminShell, /class="bw-sidebar-foot sidebar-account"/);
   assert.match(adminShell, /class="sidebar-avatar"/);
   assert.match(adminShell, /class="bw-btn sidebar-signout"/);
+  assert.match(adminShell, /isItemActive/);
+  assert.match(adminShell, /isGroupActive/);
+  assert.match(adminShell, /toggleGroupCollapse/);
+  assert.match(adminShell, /aria-expanded/);
+  assert.match(adminShell, /aria-current/);
+  assert.match(read("apps/customer/src/components/AppShell.vue"), /isTabActive/);
+  assert.match(read("apps/customer/src/components/AppShell.vue"), /aria-current/);
+  assert.match(walletCss, /\.bw-nav-section\.active/);
+  assert.match(walletCss, /\.bw-nav-section-chevron/);
   assert.match(walletCss, /\.sidebar-account-card/);
   assert.match(read("backend/wallet/src/routes/vendor.ts"), /period: z\.enum\(\['1d', '7d', '30d', 'all'\]\)/);
   assert.match(read("backend/wallet/src/services/vending.ts"), /\.range\(offset, offset \+ limit - 1\)/);
@@ -317,7 +351,7 @@ function main() {
   assert.match(meterOrdersService, /deterministicMeterOrderReference\('morda'/);
   assert.doesNotMatch(meterOrdersService, /Date\.now\(\).*Math\.random/);
   assert.match(customerMeterOrders, /assertClientIdempotencyKey/);
-  assert.match(customerMeterOrders, /\.eq\('status', 'pending_payment'\)/);
+  assert.match(customerMeterOrders, /status !== 'pending_payment'/);
   assert.match(walletCss, /\.bw-scrim\s*\{[\s\S]*pointer-events:\s*none;/);
   assert.match(walletCss, /\.bw-scrim\.open\s*\{[\s\S]*pointer-events:\s*auto;/);
   assert.match(walletCss, /\.bw-t-wrap:has\(~ \.bw-t-cards\)\s*\{\s*display:\s*none;/);

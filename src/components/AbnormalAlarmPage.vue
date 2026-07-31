@@ -169,7 +169,7 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import ExportRangeMenu from "./base/ExportRangeMenu.vue";
-import { LIVE_STATIONS } from "../services/consumption-service.mjs";
+import { fetchStations, stationsSync } from "../services/station-registry.mjs";
 import { downloadTextFile } from "../services/import-export.mjs";
 
 const DAY = 86400000;
@@ -189,7 +189,9 @@ export default {
       stationId: "", alarmType: "", severity: "", searchTerm: "", page: 1, pageSize: 20,
       from: dateInput(Date.now() - (7 * DAY)), to: dateInput(Date.now()),
       exportRange: "30d", exportLoading: false, exportError: "",
-      stations: LIVE_STATIONS,
+      // Discovered estate; seeded for first paint and refreshed on mount so a
+      // newly onboarded station can be filtered on immediately.
+      stations: stationsSync(),
       alarmTypes: [],
       severityOptions: [{ value: "", label: "All" }, { value: "critical", label: "Critical" }, { value: "warning", label: "Warning" }],
       userToggledView: false
@@ -208,6 +210,9 @@ export default {
     }
   },
   mounted() {
+    fetchStations()
+      .then((stations) => { if (stations.length) this.stations = stations; })
+      .catch(() => { /* registry unreachable — keep the seeded list */ });
     this.load();
     if (typeof window !== "undefined") {
       window.addEventListener("resize", this.handleResize, { passive: true });

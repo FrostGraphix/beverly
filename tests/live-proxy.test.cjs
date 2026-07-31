@@ -195,6 +195,12 @@ async function main() {
         return;
       }
 
+      if (req.url.startsWith("/api/fail/auth")) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 401, reason: "upstream credential rejected", result: null }));
+        return;
+      }
+
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ code: 404, reason: "not found", result: null }));
     });
@@ -353,6 +359,11 @@ async function main() {
       });
       assert.strictEqual(fallback.status, 502);
       assert.strictEqual(fallback.body._proxy.source, "live-required");
+
+      const upstreamAuthFailure = await request(proxyPort, "GET", "/api/fail/auth");
+      assert.strictEqual(upstreamAuthFailure.status, 502, "upstream auth must not invalidate the Beverly session");
+      assert.strictEqual(upstreamAuthFailure.body.errorCode, "UPSTREAM_AUTH_FAILURE");
+      assert.strictEqual(upstreamAuthFailure.body._proxy.source, "live-upstream-auth");
 
       const readMore = await request(proxyPort, "GET", "/api/token/creditTokenRecord/readMore?FROM=2026-01-01T00:00:00.000Z&TO=2026-01-17T00:00:00.000Z&SITE_ID=KYAKALE");
       assert.strictEqual(readMore.status, 200);

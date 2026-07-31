@@ -40,6 +40,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/privacy', name: 'privacy', component: () => import('../views/Privacy.vue'), meta: { auth: true, permission: 'wallet.privacy.review' } },
     { path: '/profile', name: 'profile', component: () => import('../views/Profile.vue'), meta: { auth: true } },
     { path: '/security', name: 'security', component: () => import('../views/Security.vue'), meta: { auth: true } },
+    { path: '/notifications', name: 'notifications', component: () => import('../views/Notifications.vue'), meta: { auth: true } },
     { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue'), meta: { auth: true } },
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue'), meta: { auth: true, permission: 'wallet.dashboard.view' } },
     // Developer Console

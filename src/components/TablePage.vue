@@ -384,7 +384,7 @@ export default {
     managementStatCards() {
       const hash = String(this.route.hash || "");
       const totalMetersCount = Number(this.managementStats?.totalMeters ?? this.total ?? 0);
-      const defaultStations = Number(this.managementStats?.stations ?? 5);
+      const defaultStations = Number(this.managementStats?.stations ?? 9);
 
       if (hash === "#/management/customer") return [
         { label: "Total Customers", value: this.managementStats?.totalCustomers ?? this.total, tone: "primary" },
@@ -585,15 +585,15 @@ export default {
       this.managementStatsKey = key;
       const stationRoute = { hash: "#/admin/station", title: "Station", apis: ["/api/station/read"], columns: ["id"] };
       try {
-        const stationTable = await fetchTableData(stationRoute, { exportAll: true }).catch(() => ({ total: 5, rows: [] }));
+        const stationTable = await fetchTableData(stationRoute, { pageNumber: 1, pageSize: 50 }).catch(() => ({ total: 9, rows: [] }));
         if (key !== this.managementStatsKey) return;
-        const stationTotalCount = stationTable?.total || 5;
+        const stationTotalCount = stationTable?.total || (Array.isArray(stationTable?.rows) && stationTable.rows.length ? stationTable.rows.length : 9);
         if (hash === "#/management/customer") {
           this.managementStats = { totalCustomers: this.total, stations: stationTotalCount };
           return;
         }
         const meterRoute = { hash: "#/admin/meter", title: "Meter", apis: ["/api/meter/read"], columns: ["meterId", "status", "stationId"] };
-        const meterTable = await fetchTableData(meterRoute, { exportAll: true, bulkRead: true, siteId: this.selectedSite }).catch(() => null);
+        const meterTable = await fetchTableData(meterRoute, { pageNumber: 1, pageSize: 50, bulkRead: true, siteId: this.selectedSite }).catch(() => null);
         if (key !== this.managementStatsKey) return;
 
         const totalMeters = (meterTable && meterTable.total) ? meterTable.total : (this.total || (this.allRows ? this.allRows.length : 0));
@@ -622,8 +622,8 @@ export default {
         if (key === this.managementStatsKey) {
           const fallbackTotal = this.total || (this.allRows ? this.allRows.length : 0);
           this.managementStats = hash === "#/management/customer"
-            ? { totalCustomers: this.total, stations: 5 }
-            : { totalMeters: fallbackTotal, activeMeters: fallbackTotal, inactiveMeters: 0, stations: 5 };
+            ? { totalCustomers: this.total, stations: 9 }
+            : { totalMeters: fallbackTotal, activeMeters: fallbackTotal, inactiveMeters: 0, stations: 9 };
         }
       }
     },

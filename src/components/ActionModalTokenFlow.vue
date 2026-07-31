@@ -265,7 +265,7 @@
 
     <template #footer>
       <div class="modal-actions">
-        <BaseButton v-if="!tokenFinal" @click="$emit('close')">Cancel</BaseButton>
+        <BaseButton v-if="!tokenFinal" variant="danger" @click="$emit('close')">Cancel</BaseButton>
         <BaseButton v-if="tokenFinal" @click="downloadFinalReceipt">PDF Receipt</BaseButton>
         <BaseButton v-if="tokenFinal" @click="printFinalReceipt">Print Receipt</BaseButton>
         <BaseButton v-if="tokenFinal" @click="resetRecharge">New Recharge</BaseButton>

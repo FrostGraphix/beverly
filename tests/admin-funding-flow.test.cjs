@@ -13,7 +13,10 @@ function read(relativePath) {
 function main() {
   const api = read("apps/admin/src/lib/api.ts");
   const page = read("apps/admin/src/views/Funding.vue");
-  const route = read("backend/wallet/src/routes/admin.ts");
+  // Funding handlers were split out of admin.ts into their own module; the
+  // contract is the behaviour, not which file registers it.
+  const route = read("backend/wallet/src/routes/admin.ts")
+    + read("backend/wallet/src/routes/admin-funding.ts");
   const service = read("backend/wallet/src/services/funding.ts");
   const ledger = read("backend/wallet/src/services/ledger.ts");
   const migration = read("supabase/migrations/20260518165000_wallet_runtime_ledger_schema.sql");
@@ -42,7 +45,7 @@ function main() {
   assert(service.includes("reconcileApprovedFundingCredits"), "Funding service must reconcile approved funding rows.");
   assert(service.includes("vendor_organizations(legal_name, trading_name, contact_email"), "Funding service must hydrate vendor identity.");
   assert(service.includes("entryType: 'funding_credit'"), "Funding approval must write funding credit entries.");
-  assert(service.includes("idempotencyKey: `funding.${funding.id}.credit`"), "Funding approval must stay idempotent.");
+  assert(service.includes("idempotencyKey: fundingCreditKey(funding.id)"), "Funding approval must stay idempotent.");
   assert(service.includes(".in('status', ['under_review', 'proof_uploaded'])"), "Funding approval must be race-safe.");
 
   assert(ledger.includes("update public.wallets") || migration.includes("update public.wallets"), "Ledger credit must update wallet balance.");

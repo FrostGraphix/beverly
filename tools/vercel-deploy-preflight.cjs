@@ -51,6 +51,9 @@ function checkVercelDeployPreflight(options = {}) {
 
   const linkedOrgId = vercelProject?.orgId || vercelRepo?.projects?.[0]?.orgId || "";
   const requestedScope = env.VERCEL_TEAM_ID || env.VERCEL_ORG_ID || env.VERCEL_SCOPE || "";
+  if (!String(env.OEM_CREDENTIALS_ENCRYPTION_KEY || "").trim()) {
+    failures.push("OEM_CREDENTIALS_ENCRYPTION_KEY is required to decrypt production OEM credentials");
+  }
   if (linkedOrgId === beverlyTeamId && requestedScope !== beverlyTeamId) {
     failures.push(
       `Vercel deploy scope must be ${beverlyTeamId}. July 2 failed because a non-member actor deployed from a personal scope; set VERCEL_TEAM_ID or VERCEL_ORG_ID to ${beverlyTeamId} before running vercel deploy.`

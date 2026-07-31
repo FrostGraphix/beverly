@@ -152,7 +152,7 @@
 
     <template #footer>
       <div class="modal-actions">
-        <BaseButton @click="remoteBatchStep === 'review' ? remoteBatchStep = 'form' : $emit('close')">
+        <BaseButton :variant="remoteBatchStep === 'review' ? 'secondary' : 'danger'" @click="remoteBatchStep === 'review' ? remoteBatchStep = 'form' : $emit('close')">
           {{ remoteBatchStep === 'review' ? 'Back' : 'Cancel' }}
         </BaseButton>
         <BaseButton v-if="isRemoteBatchFlow && remoteBatchStep === 'form'" variant="primary" :disabled="tokenLoading || Boolean(remoteTaskFormError)" @click="advanceRemoteBatchStep">Review</BaseButton>

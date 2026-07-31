@@ -18,12 +18,12 @@ router.isReady().then(() => { routeReady.value = true; });
 
 onMounted(() => { void auth.hydrate(); });
 
-// SOP: Vendor 30 min idle, 12 h absolute. Warn at T-2min.
+// SOP: Vendor 8 h idle, 24 h absolute. Warn at T-2min.
 const isAuthed = computed(() => auth.isAuthenticated);
 const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
-    idleMs:     30 * 60 * 1000,
+    idleMs:     8 * 60 * 60 * 1000,
     warningMs:  2  * 60 * 1000,
-    absoluteMs: 12 * 60 * 60 * 1000,
+    absoluteMs: 24 * 60 * 60 * 1000,
     onTimeout: async () => {
         if (!auth.isAuthenticated) return;
         await auth.logout();

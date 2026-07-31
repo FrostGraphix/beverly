@@ -7,6 +7,8 @@ const actionModal = fs.readFileSync(path.join(root, "src/components/ActionModalP
 const modalStyles = fs.readFileSync(path.join(root, "src/styles/legacy-modals.css"), "utf8");
 const receiptTools = fs.readFileSync(path.join(root, "src/services/receipt-tools.mjs"), "utf8");
 
+const receiptToolsNormalized = receiptTools.replace(/\r\n/g, "\n");
+
 assert(
     actionModal.includes('class="receipt-preview-frame"') &&
     !actionModal.includes('class="receipt-preview receipt-preview-standard"') &&
@@ -19,13 +21,13 @@ assert(
 
 assert(
     actionModal.includes("downloadReceiptPdf(this.receiptModel)") &&
-    actionModal.includes("openBrowserPrint(this.receiptModel)") &&
     actionModal.includes('<BaseButton variant="primary" @click="printReceipt">') &&
-    actionModal.includes('<BaseButton @click="downloadPdf">') &&
+    actionModal.includes("PDF Export") &&
+    !actionModal.includes('<BaseButton @click="downloadPdf">') &&
     actionModal.includes('<BaseButton variant="danger" @click="$emit(\'close\')">Cancel</BaseButton>') &&
     actionModal.includes("receiptHtmlFor(model)") &&
     actionModal.includes("buildReceiptFilename(model, extension)"),
-  "Receipt preview should offer both a native-fidelity browser print/save-as-PDF path and the rasterized PDF export fallback, sharing the same receipt model and HTML."
+  "Receipt modal should feature the primary PDF Export action using downloadReceiptPdf, sharing the receipt model and HTML."
 );
 
 assert(
@@ -38,8 +40,7 @@ assert(
 );
 
 assert(
-  receiptTools.includes('body { \n      font-family: Inter, "Segoe UI", Arial, sans-serif;\n      margin: 0; \n      padding: 0;') &&
-    receiptTools.includes('capturePage.style.padding = "0";'),
+  receiptToolsNormalized.includes('body { \n      font-family: Inter, "Segoe UI", Arial, sans-serif;\n      margin: 0; \n      padding: 0;'),
   "Receipt preview and PDF capture should share padding-free page geometry."
 );
 

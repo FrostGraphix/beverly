@@ -26,9 +26,10 @@ assert.match(customerLogin, /refreshToken: r\.refresh_token/);
 assert.match(customerStore, /setSession\(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = \{\}\)/);
 assert.match(customerApi, /grant_type=refresh_token/);
 assert.match(customerApi, /function shouldRedirectUnauthorized\(path: string\): boolean/);
+assert.match(customerApi, /function shouldRefreshUnauthorized\(path: string\): boolean/);
 assert.match(customerApi, /path !== '\/api\/v1\/customer\/me'/);
 assert.match(customerApi, /!path\.startsWith\('\/api\/v1\/customer\/auth\/'\)/);
-assert.match(customerApi, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\)/);
+assert.match(customerApi, /if \(res\.status === 401 && shouldRefreshUnauthorized\(path\)\)/);
 
 assert.match(vendorStore, /REFRESH_TOKEN_KEY/);
 assert.match(vendorStore, /TOKEN_EXPIRES_AT_KEY/);
@@ -36,8 +37,9 @@ assert.match(vendorStore, /setSession\(token: string, user: VendorUserProfile, r
 assert.match(vendorLogin, /refreshToken: typeof tokData\.refresh_token === 'string'/);
 assert.match(vendorApi, /grant_type=refresh_token/);
 assert.match(vendorApi, /function shouldRedirectUnauthorized\(path: string\): boolean/);
+assert.match(vendorApi, /function shouldRefreshUnauthorized\(path: string\): boolean/);
 assert.match(vendorApi, /path !== '\/api\/v1\/vendor\/me'/);
-assert.match(vendorApi, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\)/);
+assert.match(vendorApi, /if \(res\.status === 401 && shouldRefreshUnauthorized\(path\)\)/);
 
 assert.match(pkg.scripts['test:auth'], /tests\/customer-vendor-session-refresh-contract\.test\.cjs/);
 

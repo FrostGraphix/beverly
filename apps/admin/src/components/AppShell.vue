@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 
@@ -8,10 +8,40 @@ defineProps<{ title?: string }>();
 
 const auth = useStaffAuthStore();
 const router = useRouter();
+const route = useRoute();
 const drawerOpen = ref(false);
 const userMenuOpen = ref(false);
 const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
+
+const collapsedGroups = ref<Record<string, boolean>>({});
+
+function toggleGroupCollapse(label: string) {
+    collapsedGroups.value[label] = !collapsedGroups.value[label];
+}
+
+function isItemActive(itemTo: string): boolean {
+    const path = route.path;
+    if (path === itemTo) return true;
+    if (itemTo !== '/' && path.startsWith(itemTo)) {
+        if (itemTo === '/vendors' && (path.startsWith('/vendors/analytics') || path === '/vendors/new')) {
+            return path === '/vendors/new';
+        }
+        if (itemTo === '/funding' && path.startsWith('/funding/history')) return false;
+        if (itemTo === '/dev/api-keys' && path !== '/dev/api-keys') return false;
+        return true;
+    }
+    return false;
+}
+
+function isGroupActive(group: { items: Array<{ to: string }> }): boolean {
+    return group.items.some((item) => isItemActive(item.to));
+}
+
+function isGroupCollapsed(label: string, group: { items: Array<{ to: string }> }): boolean {
+    if (isGroupActive(group)) return false;
+    return !!collapsedGroups.value[label];
+}
 const navGroups = computed(() => [
     {
         label: 'Overview',
@@ -223,19 +253,36 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </div>
       </div>
 
-      <nav class="bw-nav">
+      <nav class="bw-nav" aria-label="Admin primary navigation">
         <template v-for="group in navGroups" :key="group.label">
           <div v-if="group.label === 'Developer'" class="bw-nav-dev-divider" />
-          <div :class="['bw-nav-section', { 'bw-nav-section-dev': group.label === 'Developer' }]">
-            {{ group.label }}
+          <button
+            type="button"
+            :class="['bw-nav-section-btn', 'bw-nav-section', { 'bw-nav-section-dev': group.label === 'Developer', active: isGroupActive(group) }]"
+            :aria-expanded="!isGroupCollapsed(group.label, group)"
+            @click="toggleGroupCollapse(group.label)"
+          >
+            <span>{{ group.label }}</span>
             <span v-if="group.label === 'Developer'" class="bw-nav-dev-badge">DEV</span>
-          </div>
-          <RouterLink v-for="item in group.items" :key="item.to" :to="item.to" class="bw-nav-item" @click="closeDrawer">
-            <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path :d="navIconPath[item.icon]" />
+            <svg class="bw-nav-section-chevron" :class="{ collapsed: isGroupCollapsed(group.label, group) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
             </svg>
-            {{ item.text }}
-          </RouterLink>
+          </button>
+          <div v-show="!isGroupCollapsed(group.label, group)" class="bw-nav-group-body">
+            <RouterLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              :class="['bw-nav-item', { active: isItemActive(item.to) }]"
+              :aria-current="isItemActive(item.to) ? 'page' : undefined"
+              @click="closeDrawer"
+            >
+              <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path :d="navIconPath[item.icon]" />
+              </svg>
+              {{ item.text }}
+            </RouterLink>
+          </div>
         </template>
       </nav>
 
@@ -278,7 +325,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 
         <span class="bw-spacer" />
 
-        <slot name="topbar-end" />
+        <!-- Notification bell -->
+        <RouterLink to="/notifications" class="bw-icon-btn" title="Notifications" aria-label="Notifications" style="border: none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </RouterLink>
 
         <!-- Theme toggle -->
         <button class="bw-icon-btn" @click="toggleTheme" title="Toggle theme" style="border: none">
@@ -386,8 +439,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
   opacity: 0;
   z-index: calc(var(--z-dropdown) - 1);
   background:
-    radial-gradient(circle at 82% 9%, oklch(from var(--brand-500) l c h / 0.18), transparent 24rem),
-    linear-gradient(135deg, oklch(from var(--surface) l c h / 0.12), oklch(from var(--surface-2) l c h / 0.32));
+    radial-gradient(circle at 82% 9%, color-mix(in oklch, var(--brand-500) 18%, transparent), transparent 24rem),
+    linear-gradient(135deg, color-mix(in oklch, var(--surface) 12%, transparent), color-mix(in oklch, var(--surface-2) 32%, transparent));
   backdrop-filter: blur(0) saturate(100%);
   -webkit-backdrop-filter: blur(0) saturate(100%);
   transition:

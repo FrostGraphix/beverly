@@ -21,11 +21,22 @@ function assertIncludes(source, value, label) {
 assertIncludes(service, "refresh_meter_reading_aggregates_for_station", "service");
 assertIncludes(service, "p_station_id", "service");
 assertIncludes(service, "DEFAULT_REFRESH_STATIONS", "service");
+// The estate must be discovered, not hardcoded: the constant is a fallback for
+// an unreachable registry, never the list of stations Beverly operates.
+assertIncludes(service, "list_consumption_station_ids", "service");
+assertIncludes(service, "resolveRefreshStations", "service");
 assertIncludes(service, "meter_consumption_aggregates", "service");
 assertIncludes(service, "groupedRows", "service");
+assertIncludes(service, "fetchAllRows", "service");
 assertIncludes(routes, "stationIds", "admin route");
 assertIncludes(routes, "refreshConsumptionAggregates(stationIds)", "admin route");
-assertIncludes(view, "api.post('/api/v1/admin/consumption/refresh', { stationIds })", "admin view");
+// Selecting a station rebuilds exactly that station; selecting none sends no
+// list at all, so the server resolves the whole estate from the database
+// rather than from a station list this page happened to load earlier.
+assertIncludes(view, "selectedStn.value ? { stationIds: [selectedStn.value] } : {}", "admin view");
+assertIncludes(view, "api.post('/api/v1/admin/consumption/refresh', body)", "admin view");
+assertIncludes(view, "spend=true", "admin view");
+assertIncludes(view, "readingCount(r)", "admin view");
 assertIncludes(migration, "create or replace function public.refresh_meter_reading_aggregates_for_station", "migration");
 
 if (service.includes("rpc('refresh_consumption_aggregates'")) {

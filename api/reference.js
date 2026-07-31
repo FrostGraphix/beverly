@@ -68,6 +68,7 @@ const {
   ingestWebhookReadings,
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
+const stationRegistry = require("../backend/src/services/station-registry");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
 const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
 const { acknowledgeAlert, refreshGatewayHealth, silenceGateway } = require("../backend/src/services/gateway-health-service");
@@ -117,8 +118,8 @@ const defaultCorsOrigins = [
 ];
 const rateLimitBuckets = new Map();
 const crmSessionCookieName = "bev_session";
-const defaultCrmIdleTimeoutMs = 30 * 60 * 1000;
-const defaultCrmAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultCrmIdleTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultCrmAbsoluteTimeoutMs = 16 * 60 * 60 * 1000;
 
 loadEnvFile();
 
@@ -1108,11 +1109,13 @@ function hasBusinessFailure(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const code = Number(payload.code);
   const emptyPayload = payload.result === null || payload.data === null;
-  return Number.isFinite(code) && code !== 0 && code !== 200 && emptyPayload;
+  const hasErrorMsg = /error|fail|please enter/i.test(String(payload.msg || payload.reason || ""));
+  return (Number.isFinite(code) && code !== 0 && code !== 200 && emptyPayload) || (hasErrorMsg && emptyPayload);
 }
 
 function isAccountCreatePath(pathname) {
-  return String(pathname || "").toLowerCase() === "/api/account/create";
+  const lower = String(pathname || "").toLowerCase();
+  return lower === "/api/account/create" || lower === "/api/account/import";
 }
 
 function isAccountReadPath(pathname) {
@@ -1127,14 +1130,25 @@ function accountBindingPayloadRows(requestData) {
   const payload = requestData?.parsedBody;
   const rows = Array.isArray(payload) ? payload : payload ? [payload] : [];
   return rows
-    .map((row) => ({
-      customerId: String(row?.customerId || "").trim(),
-      meterId: String(row?.meterId || "").trim(),
-      tariffId: String(row?.tariffId || "").trim(),
-      ctRatio: String(row?.ctRatio || "").trim(),
-      stationId: String(row?.stationId || "").trim(),
-      remark: String(row?.remark || "").trim()
-    }))
+    .map((row) => {
+      let ctRatioVal = String(row?.ctRatio || "").trim();
+      let numVal = Number(ctRatioVal);
+      if (ctRatioVal && ctRatioVal.includes("/")) {
+        const parts = ctRatioVal.split("/").map(Number);
+        if (parts.length === 2 && parts[1] !== 0 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          numVal = parts[0] / parts[1];
+        }
+      }
+      const ctRatio = Number.isFinite(numVal) && numVal > 0 ? String(numVal) : "1";
+      return {
+        customerId: String(row?.customerId || "").trim(),
+        meterId: String(row?.meterId || "").trim(),
+        tariffId: String(row?.tariffId || "").trim(),
+        ctRatio,
+        stationId: String(row?.stationId || "").trim(),
+        remark: String(row?.remark || "").trim()
+      };
+    })
     .filter((row) => row.customerId && row.meterId);
 }
 
@@ -2431,6 +2445,17 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-store") {
     return localJobResponse(await dailyMeterTableReport());
   }
+  // Canonical station estate. The browser bundles read this instead of carrying
+  // their own copy of the list, so onboarding a station needs no redeploy.
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/stations") {
+    const stations = await stationRegistry.getStations();
+    return localJobResponse({
+      stations,
+      count: stations.length,
+      source: "station-registry",
+      generatedAt: new Date().toISOString()
+    });
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-audit") {
     return localJobResponse(await buildConsumptionAudit());
   }
@@ -2726,6 +2751,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ funding: pending });
   }
 
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/funding/history")) {
+    const rows = walletFunding.listFundingRequests({ limit: 200 });
+    return localJobResponse({ funding: rows, nextCursor: null, summary: null });
+  }
+
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vending")) {
     const sp = adminQueryParams(request.url);
     const status = sp.get("status") || undefined;
@@ -2988,7 +3018,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "desc").trim().toLowerCase() === "desc" ? "desc" : "asc";
     const offset = Math.max(0, Number(qp.get("offset") || body.offset || 0));
     const pageLimit = Math.min(1000, Math.max(10, Number(qp.get("limit") || qp.get("pageLimit") || body.pageLimit || body.limit || 200)));
-    const stationScope = stationId ? [stationId] : ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+    const stationScope = stationId ? [stationId] : await stationRegistry.getStations();
     const warnings = [];
     const sources = await Promise.all(stationScope.map(async (station) => {
       try {
@@ -4144,6 +4174,24 @@ async function proxyLive(request, pathname, requestData) {
         }).catch((error) => {
           console.error("[automation-live-auth-hook]", error instanceof Error ? error.message : String(error));
         });
+        // Never pass an upstream 401/403 through. The browser reads any 401 as
+        // "your Beverly session expired" and logs the operator out, when the
+        // real fault is our OEM credential. Surface it as a gateway failure.
+        return {
+          status: 502,
+          body: {
+            code: 502,
+            msg: "Upstream credential rejected",
+            reason: "Upstream credential rejected",
+            errorCode: "UPSTREAM_AUTH_FAILURE",
+            data: null,
+            result: null,
+            _proxy: {
+              source: "live-upstream-auth",
+              pathname
+            }
+          }
+        };
       }
       if (liveResult.ok || (liveResult.status < 500 && liveResult.status !== 404)) {
         if (!isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {

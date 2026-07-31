@@ -103,6 +103,10 @@ function shouldRedirectUnauthorized(path: string): boolean {
     return !path.startsWith('/api/v1/customer/auth/') && path !== '/api/v1/customer/me' && path !== '/api/v1/customer/logout';
 }
 
+function shouldRefreshUnauthorized(path: string): boolean {
+    return !path.startsWith('/api/v1/customer/auth/') && path !== '/api/v1/customer/logout';
+}
+
 function rememberTokenStorage(): boolean {
     try { return localStorage.getItem(TOKEN_KEY) !== null; } catch { return true; }
 }
@@ -147,6 +151,7 @@ async function requestToken(path: string): Promise<string | null> {
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const hasBody = body !== undefined;
 
     try {
         let token = await requestToken(path);
@@ -155,9 +160,9 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
             : null;
         const send = async () => {
             const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
                 ...(init.headers as Record<string, string> ?? {}),
             };
+            if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
             if (token) headers['Authorization'] = `Bearer ${token}`;
             if (idempotencyKey) {
                 headers['Idempotency-Key'] = idempotencyKey;
@@ -166,13 +171,13 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
                 ...init,
                 method,
                 headers,
-                body: body !== undefined ? JSON.stringify(body) : undefined,
+                body: hasBody ? JSON.stringify(body) : undefined,
                 credentials: 'include',
                 signal: init.signal ?? controller.signal,
             });
         };
         let res = await send();
-        if (res.status === 401 && shouldRedirectUnauthorized(path)) {
+        if (res.status === 401 && shouldRefreshUnauthorized(path)) {
             const refreshed = await refreshAccessToken();
             if (refreshed && refreshed !== token) {
                 token = refreshed;
@@ -210,11 +215,26 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
 
 export const api = {
     get:   <T>(path: string) => request<T>('GET', path),
-    post:  <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+    post:  <T>(path: string, body?: unknown, init?: RequestInit) => request<T>('POST', path, body, init),
     put:   <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
     patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
     del:   <T>(path: string) => request<T>('DELETE', path),
 };
+
+/**
+ * Idempotency key tied to one user intent rather than one fetch.
+ *
+ * `request` mints a fresh UUID per call, so a double-click on a money button
+ * reads as two separate intents server-side and opens two checkouts. Callers
+ * representing a single intent hold their key across retries.
+ */
+export function idempotencyHeaders(key: string): RequestInit {
+    return { headers: { 'Idempotency-Key': key } };
+}
+
+export function newIdempotencyKey(): string {
+    return crypto.randomUUID();
+}
 
 export function redirectToPayment(url: string | null | undefined): void {
     let parsed: URL;

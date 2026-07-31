@@ -233,6 +233,7 @@ assert.strictEqual("orderBy" in tableRequest(accountRoute, { pageNumber: 1, page
 assert.strictEqual(routeUsesServerPagination(accountRoute), true);
 assert.strictEqual(routeUsesServerPagination(creditTokenGenerateRoute), true);
 assert.strictEqual(routeUsesServerPagination(meterRoute), true);
+assert.strictEqual(routeUsesServerPagination({ hash: "#/admin/station" }), true);
 assert.strictEqual(routeUsesServerPagination(manifestLogRoute), true);
 assert.strictEqual(tableRequest(creditTokenGenerateRoute, { pageNumber: 4, pageSize: 50, orderBy: "meterId asc" }).payload.pageSize, 20);
 assert.strictEqual(tableRequest(meterRoute, { pageNumber: 1, pageSize: 100, orderBy: "meterId asc" }).payload.pageSize, 20);

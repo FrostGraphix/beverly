@@ -17,6 +17,7 @@ const moneyMutations = new Set([
   "POST /api/v1/customer/purchase",
   "POST /api/v1/customer/meter-orders",
   "POST /api/v1/customer/meter-orders/:id/verify-payment",
+  "POST /api/v1/admin/payments/:id/retry-fulfillment",
   "POST /api/v1/admin/funding/reconcile-approved",
   "POST /api/v1/admin/funding/:id/approve",
   "POST /api/v1/admin/funding/:id/reject",
