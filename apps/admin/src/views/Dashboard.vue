@@ -11,6 +11,9 @@ interface Purchase        { id: string; amount_minor: number; energy_amount_mino
 interface WalletSummary {
     walletCount: number;
     totalFloatMinor: number;
+    vendorFloatMinor?: number;
+    customerFloatMinor?: number;
+    byOwnerType?: Record<string, number>;
     totalBalanceMinor?: number;
     activeWallets?: number;
     suspendedWallets?: number;
@@ -32,6 +35,8 @@ const statTodayPurchasesMinor = ref(0);
 const statFailedToday = ref(0);
 const statApplications = ref(0);
 const statTotalWalletFloatMinor = ref(0);
+const statVendorFloatMinor = ref(0);
+const statCustomerFloatMinor = ref(0);
 const statTokensDeliveredToday = ref(0);
 const recentTypeFilter = ref('all');
 const recentActorFilter = ref('all');
@@ -158,9 +163,13 @@ const recentTransactions = computed(() => filteredRecentTransactions.value.slice
 const totalWalletFloatMinor = computed(() =>
     walletSummary.value.totalFloatMinor ?? walletSummary.value.totalBalanceMinor ?? 0,
 );
+const vendorFloatMinor = computed(() => walletSummary.value.vendorFloatMinor ?? 0);
+const customerFloatMinor = computed(() => walletSummary.value.customerFloatMinor ?? 0);
 const activeWalletCount = computed(() =>
     walletSummary.value.byStatus?.active ?? walletSummary.value.activeWallets ?? 0,
 );
+const vendorWalletCount = computed(() => walletSummary.value.byOwnerType?.vendor ?? 0);
+const customerWalletCount = computed(() => walletSummary.value.byOwnerType?.customer ?? 0);
 
 function animateStat(targetRef: { value: number }, target: number, durationMs = 700) {
     const from = Number(targetRef.value || 0);
@@ -183,6 +192,8 @@ function syncAnimatedStats() {
     animateStat(statFailedToday, failedToday.value);
     animateStat(statApplications, apps.value.length);
     animateStat(statTotalWalletFloatMinor, totalWalletFloatMinor.value);
+    animateStat(statVendorFloatMinor, vendorFloatMinor.value);
+    animateStat(statCustomerFloatMinor, customerFloatMinor.value);
     animateStat(statTokensDeliveredToday, deliveredToday.value);
 }
 
@@ -412,6 +423,46 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <div class="bw-kpi-foot">
           <span class="bw-delta up">{{ activeWalletCount }} active</span>
           <span class="bw-kpi-note">across all wallets</span>
+        </div>
+      </router-link>
+
+      <!-- Vendor float -->
+      <router-link
+        to="/wallets?ownerType=vendor"
+        class="bw-kpi bw-kpi-link"
+        style="text-decoration:none; color:inherit"
+        aria-label="Filter vendor wallets"
+      >
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Vendor Float</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 3-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--info)">{{ naira(statVendorFloatMinor) }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ vendorWalletCount }} vendor</span>
+          <span class="bw-kpi-note">wallets</span>
+        </div>
+      </router-link>
+
+      <!-- Customer float -->
+      <router-link
+        to="/wallets?ownerType=customer"
+        class="bw-kpi bw-kpi-link"
+        style="text-decoration:none; color:inherit"
+        aria-label="Filter customer wallets"
+      >
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Customer Float</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statCustomerFloatMinor) }}</div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ customerWalletCount }} customer</span>
+          <span class="bw-kpi-note">wallets</span>
         </div>
       </router-link>
 
