@@ -226,7 +226,14 @@ export async function submitRouteAction(route, action, form, options = {}) {
       ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
+  // 202 means the proxy could not reach upstream and queued the rows locally.
+  // That is not a success and not an error — it is reported as "queued" so the
+  // caller can tell the operator the records are not live yet.
+  const queued = responseCode === 202;
+  // 207 means some rows went live and some were rejected; both counts are
+  // reported rather than collapsing the batch into one success or one failure.
+  const partial = responseCode === 207;
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !queued && !partial && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
   }
 
@@ -244,6 +251,15 @@ export async function submitRouteAction(route, action, form, options = {}) {
     await verifyCustomerDeleted(form, api);
   }
   const mapped = mapActionResponse(response, action, isRemoteTaskConfirmAccepted(response, route, action) ? "submitted" : "success");
+  const summary = response?.result || response?.data || {};
+  const queuedCount = Number(summary.pendingCount || 0);
+  const syncedCount = Number(summary.synced || 0);
+  const failedCount = Number(summary.failed || 0);
+  const resultText = queued
+    ? `Queued ${queuedCount || (Array.isArray(payload) ? payload.length : 1)} row(s) — upstream unreachable, not live yet`
+    : partial
+      ? `${syncedCount} row(s) live, ${failedCount} rejected by the API`
+      : mapped.resultText;
 
   return {
     endpoint,
@@ -251,6 +267,11 @@ export async function submitRouteAction(route, action, form, options = {}) {
     requestLog,
     responseLog: response,
     mapped,
-    resultText: mapped.resultText
+    queued,
+    partial,
+    queuedCount,
+    syncedCount,
+    failedCount,
+    resultText
   };
 }

@@ -13,7 +13,8 @@
       <section v-if="managementStatCards.length" class="management-stat-grid" aria-label="Management summary">
         <article v-for="card in managementStatCards" :key="card.label" class="management-stat-card" :class="`tone-${card.tone}`">
           <span>{{ card.label }}</span>
-          <strong>{{ card.value }}</strong>
+          <strong>{{ formatStatValue(card.value) }}</strong>
+          <small v-if="card.hint" class="management-stat-hint">{{ card.hint }}</small>
         </article>
       </section>
     </template>
@@ -105,6 +106,40 @@
         </div>
       </div>
       <p v-if="route.note" class="quota-line">{{ route.note }}</p>
+      <div v-if="pendingBindings.length" class="sync-banner" data-testid="account-pending-sync">
+        <div class="sync-banner__text">
+          <strong>{{ pendingBindings.length }} binding(s) not on the live API.</strong>
+          <span>{{ pendingBindingReason }}</span>
+        </div>
+        <div class="sync-banner__actions">
+          <BaseButton size="sm" :disabled="syncBusy" @click="showPendingDetail = !showPendingDetail">
+            {{ showPendingDetail ? 'Hide' : 'Review' }}
+          </BaseButton>
+          <BaseButton size="sm" variant="primary" :disabled="syncBusy" @click="retryPendingSync">
+            {{ syncBusy ? 'Syncing…' : 'Retry sync' }}
+          </BaseButton>
+        </div>
+      </div>
+      <div v-if="pendingBindings.length && showPendingDetail" class="sync-detail">
+        <table class="sync-detail__table">
+          <thead>
+            <tr><th>Customer</th><th>Meter</th><th>Station</th><th>Attempts</th><th>Last API response</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in pendingBindings" :key="`${row.customerId}-${row.meterId}`">
+              <td>{{ row.customerId }}</td>
+              <td>{{ row.meterId }}</td>
+              <td>{{ row.stationId }}</td>
+              <td>{{ row.attempts }}</td>
+              <td class="sync-detail__error">{{ row.lastError || 'Not attempted yet' }}</td>
+              <td>
+                <BaseButton size="sm" variant="ghost" :disabled="syncBusy" @click="retryPendingSync([row])">Retry</BaseButton>
+                <BaseButton size="sm" variant="danger" :disabled="syncBusy" @click="discardPending(row)">Discard</BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </template>
     <div class="table-scroll" @click="closeRowActionMenu">
       <table>
@@ -301,10 +336,11 @@ import BaseTableShell from "./base/BaseTableShell.vue";
 import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
-import { columnKey, createFormSeed, exportRowsForRoute, fetchTableData, fetchTableExportData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { columnKey, createFormSeed, exportRowsForRoute, fetchTableData, fetchTableExportData, isBatchCheckableRoute, loadDynamicStationOptions, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
 import { downloadTextFile, exportCsvText } from "../services/import-export.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mjs";
-import { toastWarn } from "../services/toast.js";
+import { discardPendingAccountBindings, fetchMeterStats, fetchPendingAccountBindings, retryPendingAccountBindings, summarizeSyncResult } from "../services/account-sync-service.mjs";
+import { toastError, toastSuccess, toastWarn } from "../services/toast.js";
 
 export default {
   name: "TablePage",
@@ -342,7 +378,10 @@ export default {
       loadToken: 0,
       managementStats: null,
       managementStatsKey: "",
-      dataSource: ""
+      dataSource: "",
+      pendingBindings: [],
+      showPendingDetail: false,
+      syncBusy: false
     };
   },
   computed: {
@@ -351,6 +390,15 @@ export default {
     },
     isBatchCheckable() {
       return isBatchCheckableRoute(this.route);
+    },
+    isAccountRoute() {
+      return String(this.route?.hash || "").includes("management/account");
+    },
+    pendingBindingReason() {
+      const reasons = new Set(this.pendingBindings.map((row) => String(row.lastError || "").trim()).filter(Boolean));
+      if (!reasons.size) return "They are queued locally and have never reached the API.";
+      if (reasons.size === 1) return `API says: ${[...reasons][0]}`;
+      return `${reasons.size} different API errors — review for details.`;
     },
     sortableColumns() {
       return (this.route.columns || []).filter(c => c !== "Actions");
@@ -383,7 +431,6 @@ export default {
     },
     managementStatCards() {
       const hash = String(this.route.hash || "");
-      const totalMetersCount = Number(this.managementStats?.totalMeters ?? this.total ?? 0);
       const defaultStations = Number(this.managementStats?.stations ?? 9);
 
       if (hash === "#/management/customer") return [
@@ -392,31 +439,18 @@ export default {
       ];
 
       if (hash === "#/management/account") {
-        let activeCount = this.managementStats?.activeMeters;
-        let inactiveCount = this.managementStats?.inactiveMeters;
-
-        if (activeCount == null || activeCount === "-") {
-          const rows = this.allRows && this.allRows.length ? this.allRows : this.filteredRows;
-          if (rows && rows.length) {
-            const inactiveSet = new Set(["false", "0", "inactive", "offline", "disabled", "failed", "failure"]);
-            let inact = 0;
-            for (const r of rows) {
-              const s = String(r.status ?? r.isActive ?? r.active ?? r.isOnline ?? "").toLowerCase();
-              if (inactiveSet.has(s)) inact++;
-            }
-            inactiveCount = inact;
-            activeCount = Math.max(0, totalMetersCount - inact);
-          } else {
-            activeCount = totalMetersCount;
-            inactiveCount = 0;
-          }
-        }
-
+        // Exact counts from /api/local/meterStats/read — a meter is "connected"
+        // when a customer is bound to it (an account row exists), and "active"
+        // when that connected meter is switched on upstream. These used to be
+        // extrapolated from a 20-row sample, which is why Active read 767.
+        const stats = this.managementStats || {};
+        const stationCount = stats.stations ?? defaultStations;
         return [
-          { label: "Total Meters", value: totalMetersCount, tone: "primary" },
-          { label: "Active Meters", value: activeCount, tone: "success" },
-          { label: "Inactive Meters", value: inactiveCount, tone: "danger" },
-          { label: "Stations", value: defaultStations, tone: "neutral" }
+          { label: "Total Meters", value: stats.totalMeters ?? 0, tone: "primary", hint: `${stats.unassignedMeters ?? 0} unassigned` },
+          { label: "Connected Meters", value: stats.connectedMeters ?? 0, tone: "primary", hint: "customer attached" },
+          { label: "Active Meters", value: stats.activeMeters ?? 0, tone: "success", hint: "connected and on" },
+          { label: "Inactive Meters", value: stats.inactiveMeters ?? 0, tone: "danger", hint: "connected but off" },
+          { label: "Stations", value: stationCount, tone: "neutral" }
         ];
       }
       return [];
@@ -475,6 +509,7 @@ export default {
         this.currentPage = 1;
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
+        loadDynamicStationOptions().catch(() => null);
         this.load();
       }
     }
@@ -540,6 +575,7 @@ export default {
         this.dataSource = table.meta?.source || "";
         this.applyControls({ reloadServer: false });
         this.loadManagementStats();
+        this.loadPendingBindings();
       } catch (error) {
         if (token !== this.loadToken) return;
         this.allRows = [];
@@ -577,6 +613,48 @@ export default {
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
+    formatStatValue(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric.toLocaleString() : value;
+    },
+    async loadPendingBindings() {
+      if (!this.isAccountRoute) return;
+      try {
+        this.pendingBindings = await fetchPendingAccountBindings({ stationId: this.selectedSite || "" });
+      } catch {
+        this.pendingBindings = [];
+      }
+    },
+    async retryPendingSync(rows = null) {
+      if (this.syncBusy) return;
+      const target = Array.isArray(rows) && rows.length ? rows : this.pendingBindings;
+      if (!target.length) return;
+      this.syncBusy = true;
+      try {
+        const result = await retryPendingAccountBindings(target);
+        const message = summarizeSyncResult(result);
+        if (result.failed) toastWarn(message);
+        else toastSuccess(message);
+        await this.loadPendingBindings();
+        if (result.synced) await this.load();
+      } catch (error) {
+        toastError(error?.message || "Sync failed");
+      } finally {
+        this.syncBusy = false;
+      }
+    },
+    async discardPending(row) {
+      if (this.syncBusy) return;
+      this.syncBusy = true;
+      try {
+        await discardPendingAccountBindings([row]);
+        await this.loadPendingBindings();
+      } catch (error) {
+        toastError(error?.message || "Could not discard the queued binding");
+      } finally {
+        this.syncBusy = false;
+      }
+    },
     async loadManagementStats() {
       const hash = String(this.route.hash || "");
       if (!["#/management/customer", "#/management/account"].includes(hash)) return;
@@ -588,42 +666,25 @@ export default {
         const stationTable = await fetchTableData(stationRoute, { pageNumber: 1, pageSize: 50 }).catch(() => ({ total: 9, rows: [] }));
         if (key !== this.managementStatsKey) return;
         const stationTotalCount = stationTable?.total || (Array.isArray(stationTable?.rows) && stationTable.rows.length ? stationTable.rows.length : 9);
+
         if (hash === "#/management/customer") {
           this.managementStats = { totalCustomers: this.total, stations: stationTotalCount };
           return;
         }
-        const meterRoute = { hash: "#/admin/meter", title: "Meter", apis: ["/api/meter/read"], columns: ["meterId", "status", "stationId"] };
-        const meterTable = await fetchTableData(meterRoute, { pageNumber: 1, pageSize: 50, bulkRead: true, siteId: this.selectedSite }).catch(() => null);
+
+        // Account page KPIs are about meters, counted exactly rather than
+        // extrapolated from one page of samples.
+        const stats = await fetchMeterStats({ stationId: this.selectedSite || "" });
         if (key !== this.managementStatsKey) return;
-
-        const totalMeters = (meterTable && meterTable.total) ? meterTable.total : (this.total || (this.allRows ? this.allRows.length : 0));
-        const inactiveSet = new Set(["false", "0", "inactive", "offline", "disabled", "failed", "failure"]);
-        let inactiveCount = 0;
-
-        const sourceRows = (meterTable && Array.isArray(meterTable.rows) && meterTable.rows.length)
-          ? meterTable.rows
-          : (this.allRows && this.allRows.length ? this.allRows : this.filteredRows);
-
-        if (sourceRows && sourceRows.length) {
-          for (const row of sourceRows) {
-            const statusStr = String(row.status ?? row.isActive ?? row.active ?? row.isOnline ?? "").toLowerCase();
-            if (inactiveSet.has(statusStr)) inactiveCount++;
-          }
-        }
-        const activeCount = Math.max(0, totalMeters - inactiveCount);
-
-        this.managementStats = {
-          totalMeters,
-          activeMeters: activeCount,
-          inactiveMeters: inactiveCount,
-          stations: stationTotalCount
-        };
+        this.managementStats = { ...stats, stations: stationTotalCount };
       } catch {
         if (key === this.managementStatsKey) {
-          const fallbackTotal = this.total || (this.allRows ? this.allRows.length : 0);
           this.managementStats = hash === "#/management/customer"
             ? { totalCustomers: this.total, stations: 9 }
-            : { totalMeters: fallbackTotal, activeMeters: fallbackTotal, inactiveMeters: 0, stations: 9 };
+            : { totalMeters: 0, connectedMeters: 0, activeMeters: 0, inactiveMeters: 0, unassignedMeters: 0, stations: 9 };
+          // Clear the memo so a failed attempt (e.g. the session was not ready
+          // yet) is retried on the next load instead of pinning zeros.
+          this.managementStatsKey = "";
         }
       }
     },
@@ -855,6 +916,7 @@ export default {
     },
     handleModalDone() {
       this.closeModal();
+      loadDynamicStationOptions(undefined, true).catch(() => null);
       this.load();
     }
   }
@@ -888,7 +950,7 @@ export default {
 }
 .management-stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   padding: 0 24px 18px;
 }
@@ -915,6 +977,15 @@ export default {
   color: var(--text-strong);
   font-family: var(--font-mono);
   font-size: 24px;
+}
+
+.management-stat-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .management-stat-card.tone-primary { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-color)); }
