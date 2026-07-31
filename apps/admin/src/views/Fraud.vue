@@ -130,7 +130,7 @@ onMounted(load);
     </div>
 
     <!-- Table -->
-    <div class="bw-table-wrap">
+    <div class="bw-t-wrap">
       <table class="bw-table">
         <thead>
           <tr>
@@ -186,6 +186,39 @@ onMounted(load);
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="bw-t-cards">
+      <div v-for="a in assessments" :key="`fraud-card-${a.id}`" class="bw-tc" :class="{ 'bw-row-muted': a.resolved }">
+        <div class="bw-tc-top">
+          <div>
+            <div class="bw-tc-vendor">{{ a.customers?.users?.full_name ?? '—' }}</div>
+            <div class="bw-tc-id">{{ a.meter_id }} · {{ shortDate(a.created_at) }}</div>
+          </div>
+          <div class="bw-tc-amt bw-money">{{ naira(a.amount_minor) }}</div>
+        </div>
+        <div class="bw-tc-mid">
+          <div class="bw-tc-pair">
+            <span class="bw-tc-pair-label">Score & Action</span>
+            <span class="bw-tc-pair-val">
+              <span class="bw-score-pill" :style="`background:${scoreColor(a.score)}22; color:${scoreColor(a.score)}`">{{ a.score }}</span>
+              <span :class="ACTION_BADGE[a.action] ?? 'bw-badge gray'" style="margin-left: 6px">{{ a.action.replace('_', ' ') }}</span>
+            </span>
+          </div>
+          <div class="bw-tc-pair" v-if="a.fraud_signals?.length">
+            <span class="bw-tc-pair-label">Signals</span>
+            <div v-for="sig in a.fraud_signals" :key="sig.id" class="bw-signal-chip" :title="sig.detail">
+              {{ sig.signal_type.replace(/_/g, ' ') }} <span class="bw-signal-weight">+{{ sig.weight }}</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 4px;">
+          <button v-if="!a.resolved" class="bw-btn sm" @click="openResolve(a.id)">Resolve</button>
+          <span v-else class="bw-muted" style="font-size:var(--t-xs)">Resolved</span>
+        </div>
+      </div>
+      <div v-if="assessments.length === 0 && !loading" class="bw-muted" style="text-align:center; padding:var(--s-8)">No flagged transactions</div>
     </div>
 
     <!-- Resolve modal -->

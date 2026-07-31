@@ -28,4 +28,10 @@ assert.ok(
   "wallet summary route must expose dashboard-compatible aliases",
 );
 
+assert.match(
+  dashboard,
+  /const recentDateFilter = ref\('all'\)/,
+  "recentDateFilter must default to 'all'",
+);
+
 console.log("admin dashboard wallet summary contract passed");

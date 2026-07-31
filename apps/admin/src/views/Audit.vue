@@ -417,6 +417,35 @@ onMounted(() => {
           </table>
         </div>
 
+        <!-- Mobile cards -->
+        <div class="bw-t-cards">
+          <div v-for="e in entries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
+            <div class="bw-tc-top">
+              <div>
+                <div class="bw-tc-vendor">{{ e.action }}</div>
+                <div class="bw-tc-id">{{ shortDate(e.created_at) }}</div>
+              </div>
+              <span :class="['bw-badge', actorBadge(e.actor_type)]">{{ e.actor_type || 'system' }}</span>
+            </div>
+            <div class="bw-tc-mid">
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Actor Name</span>
+                <span class="bw-tc-pair-val">{{ actorName(e) }}</span>
+                <span class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ e.actor_role || shortId(e.actor_user_id) }}</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.target_type">
+                <span class="bw-tc-pair-label">Target</span>
+                <span class="bw-tc-pair-val">{{ e.target_type }} (#{{ shortId(e.target_id) }})</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.ip">
+                <span class="bw-tc-pair-label">IP Address</span>
+                <span class="bw-tc-pair-val bw-mono">{{ e.ip }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!entries.length && !loading" class="bw-muted empty" style="padding: var(--s-6); text-align: center;">No matching entries.</div>
+        </div>
+
         <div v-if="cursor" class="load-more">
           <button class="bw-btn" :disabled="loading" @click="loadAudit(false)">
             {{ loading ? 'Loading…' : 'Load more' }}

@@ -1798,6 +1798,10 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
   }
   .bw-t-wrap:has(~ .bw-t-cards) { display: none; }
   .bw-t-wrap ~ .bw-t-cards { display: block; }
+  .bw-table-wrapper:has(~ .bw-t-cards),
+  .bw-table-wrap:has(~ .bw-t-cards) { display: none; }
+  .bw-table-wrapper ~ .bw-t-cards,
+  .bw-table-wrap ~ .bw-t-cards { display: block; }
 }
 
 /* ════════════════════════════════════════════════════════════════════

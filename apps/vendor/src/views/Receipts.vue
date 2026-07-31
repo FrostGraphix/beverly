@@ -195,7 +195,7 @@ onMounted(load);
           </table>
         </div>
 
-        <div class="receipt-mobile-list">
+        <div class="bw-t-cards receipt-mobile-list">
           <button v-for="r in filtered" :key="r.id" class="receipt-mobile-card" @click="openReceipt(r)">
             <span>
               <strong>{{ r.customer_name || 'Customer' }}</strong>
