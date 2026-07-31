@@ -134,7 +134,7 @@
 
     <template #footer>
       <div class="modal-actions">
-        <BaseButton @click="sopStep === 2 ? sopStep = 1 : $emit('close')">
+        <BaseButton :variant="sopStep === 2 ? 'secondary' : 'danger'" @click="sopStep === 2 ? sopStep = 1 : $emit('close')">
           {{ sopStep === 2 ? 'Back' : 'Cancel' }}
         </BaseButton>
         <BaseButton v-if="sopStep === 1" variant="primary" @click="sopNext">Continue &rarr;</BaseButton>

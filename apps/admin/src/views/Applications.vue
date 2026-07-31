@@ -86,9 +86,14 @@ onMounted(load);
         <h2 class="bw-h2" style="margin: 0">Public interest submissions</h2>
         <span class="bw-spacer"></span>
         <div class="bw-row" style="gap: 2px">
-          <button v-for="s in (['submitted','contacted','rejected','converted'] as const)" :key="s"
-                  :class="['bw-btn sm', status === s ? 'primary' : '']"
-                  @click="status = s; void load()">{{ s }}</button>
+          <button
+            v-for="s in (['submitted','contacted','rejected','converted'] as const)"
+            :key="s"
+            :class="['bw-btn sm', status === s ? 'primary' : '']"
+            @click="status = s; void load()"
+          >
+            {{ s }}
+          </button>
         </div>
       </div>
 

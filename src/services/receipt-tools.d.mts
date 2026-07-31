@@ -11,10 +11,18 @@ export interface CanonicalReceiptModel {
   subtitle: string;
   receiptId: string;
   amount?: string;
+  subject?: string;
+  status?: string;
+  source?: { kind: string; id: string };
   generatedAt: string;
   brand: { name: string; company: string; email: string; phone: string; web: string; address: string };
   fields: CanonicalReceiptField[];
 }
 
 export function receiptHtml(model: CanonicalReceiptModel, options?: Record<string, unknown>): string;
-export function downloadReceiptPdf(model: CanonicalReceiptModel): Promise<void>;
+export function downloadReceiptPdf(model: CanonicalReceiptModel): Promise<{
+  ok: boolean;
+  mode: 'server' | 'fallback';
+  filename: string;
+  error?: unknown;
+}>;

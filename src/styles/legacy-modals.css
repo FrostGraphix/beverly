@@ -324,6 +324,17 @@
       width: 100%;
       min-width: 0;
     }
+    .modal-print-receipt .modal-actions .base-button--danger {
+      background: var(--color-danger) !important;
+      color: #ffffff !important;
+      border-color: var(--color-danger) !important;
+    }
+    .modal-print-receipt .modal-actions .base-button--danger:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--color-danger) 85%, #000) !important;
+      border-color: color-mix(in srgb, var(--color-danger) 85%, #000) !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--color-danger) 40%, transparent);
+    }
     @media (max-width: 560px) {
       .modal-print-receipt.base-modal-shell {
         width: calc(100vw - 16px);

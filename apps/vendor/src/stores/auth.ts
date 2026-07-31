@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { api } from '../lib/api';
+import { disableDeviceNotifications } from '../lib/push-notifications';
 
 export interface VendorUserProfile {
     id: string;
@@ -116,6 +117,7 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
             return me;
         },
         async logout() {
+            try { await disableDeviceNotifications(); } catch { /* noop */ }
             try { await api.post('/api/v1/vendor/logout', {}); } catch { /* noop */ }
             this.accessToken = null;
             this.user = null;

@@ -59,14 +59,28 @@ const IMPORT_FIELD_ALIASES = {
 };
 
 const IMPORT_SYSTEM_FIELDS = new Set(["createDate", "updateDate"]);
+const IMPORT_EMPTY_FIELD_DEFAULTS = {
+  "/api/account/import": new Set(["remark"])
+};
 
 function importPayload(endpoint, importRows = []) {
   const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
+  const emptyFieldDefaults = IMPORT_EMPTY_FIELD_DEFAULTS[endpoint] || new Set();
   return importRows.map((row) => Object.entries(row).reduce((mapped, [key, value]) => {
     if (IMPORT_SYSTEM_FIELDS.has(key)) return mapped;
     const target = aliases[key] || key;
-    const text = String(value ?? "").trim();
-    if (text) mapped[target] = text;
+    let text = String(value ?? "").trim();
+    if (target === "ctRatio") {
+      let numVal = Number(text);
+      if (text && text.includes("/")) {
+        const parts = text.split("/").map(Number);
+        if (parts.length === 2 && parts[1] !== 0 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          numVal = parts[0] / parts[1];
+        }
+      }
+      text = Number.isFinite(numVal) && numVal > 0 ? String(numVal) : "1";
+    }
+    if (text || emptyFieldDefaults.has(target)) mapped[target] = text;
     return mapped;
   }, {}));
 }
@@ -212,14 +226,7 @@ export async function submitRouteAction(route, action, form, options = {}) {
       ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
-  // 202 means the proxy could not reach upstream and queued the rows locally.
-  // That is not a success and not an error — it is reported as "queued" so the
-  // caller can tell the operator the records are not live yet.
-  const queued = responseCode === 202;
-  // 207 means some rows went live and some were rejected; both counts are
-  // reported rather than collapsing the batch into one success or one failure.
-  const partial = responseCode === 207;
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !queued && !partial && !isRemoteTaskConfirmAccepted(response, route, action)) {
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
   }
 
@@ -237,15 +244,6 @@ export async function submitRouteAction(route, action, form, options = {}) {
     await verifyCustomerDeleted(form, api);
   }
   const mapped = mapActionResponse(response, action, isRemoteTaskConfirmAccepted(response, route, action) ? "submitted" : "success");
-  const summary = response?.result || response?.data || {};
-  const queuedCount = Number(summary.pendingCount || 0);
-  const syncedCount = Number(summary.synced || 0);
-  const failedCount = Number(summary.failed || 0);
-  const resultText = queued
-    ? `Queued ${queuedCount || (Array.isArray(payload) ? payload.length : 1)} row(s) — upstream unreachable, not live yet`
-    : partial
-      ? `${syncedCount} row(s) live, ${failedCount} rejected by the API`
-      : mapped.resultText;
 
   return {
     endpoint,
@@ -253,11 +251,6 @@ export async function submitRouteAction(route, action, form, options = {}) {
     requestLog,
     responseLog: response,
     mapped,
-    queued,
-    partial,
-    queuedCount,
-    syncedCount,
-    failedCount,
-    resultText
+    resultText: mapped.resultText
   };
 }

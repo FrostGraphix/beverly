@@ -18,7 +18,25 @@ import {
 } from "./consumption-aggregator.mjs";
 import { buildSuspectLedger } from "./fraud-engine.mjs";
 
-export const LIVE_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+import { fetchStations, stationsSync, SEED_STATIONS } from "./station-registry.mjs";
+
+/**
+ * @deprecated Rendering floor only. The estate is discovered — prefer
+ * `liveStations()` (sync, last known) or `await resolveStations()` (fresh).
+ * Kept as a named export because existing views import it directly.
+ */
+export const LIVE_STATIONS = SEED_STATIONS;
+
+/** Last known station estate — safe in synchronous render paths. */
+export function liveStations() {
+  return stationsSync();
+}
+
+/** Current station estate, refreshed from the registry. */
+export async function resolveStations(explicit = null) {
+  if (Array.isArray(explicit) && explicit.length) return explicit;
+  return fetchStations();
+}
 export const LEDGER_STEPS_PER_STATION = 2;
 export const SITE_CONSUMPTION_FIRST_DATA_DATE = "2025-01-01";
 export const DAILY_METER_PAGE_SIZE = 1000;
@@ -387,14 +405,15 @@ export async function fetchDailyMeterDataset(stationId, from, to) {
  * @param {Array<string>} stations
  * @returns {Promise<Map<string, Array<Object>>>}
  */
-export async function fetchAllStationsDailyData(from, to, stations = LIVE_STATIONS) {
+export async function fetchAllStationsDailyData(from, to, stations = null) {
   const result = await fetchAllStationsDailyDataDetailed(from, to, stations);
   return result.stationRows;
 }
 
-export async function fetchAllStationsDailyDataDetailed(from, to, stations = LIVE_STATIONS) {
+export async function fetchAllStationsDailyDataDetailed(from, to, stations = null) {
+  const estate = await resolveStations(stations);
   const results = await Promise.allSettled(
-    stations.map(async (stationId) => ({ stationId, dataset: await fetchDailyMeterDataset(stationId, from, to) }))
+    estate.map(async (stationId) => ({ stationId, dataset: await fetchDailyMeterDataset(stationId, from, to) }))
   );
   const stationRows = new Map();
   const stationMeta = new Map();
@@ -473,8 +492,8 @@ export async function fetchStationConsumptionAnalytics({ stationId = null, from,
  * Refreshes each station sequentially (per-station RPC) to avoid statement
  * timeouts. Returns { ok, durationMs } or throws on failure.
  */
-export async function triggerMeterAggregateRefresh(stationIds = LIVE_STATIONS) {
-  const stationList = Array.isArray(stationIds) && stationIds.length ? stationIds : LIVE_STATIONS;
+export async function triggerMeterAggregateRefresh(stationIds = null) {
+  const stationList = await resolveStations(stationIds);
   const response = await authedFetch("/api/v1/admin/consumption/refresh", {
     method: "POST",
     body: JSON.stringify({ stationIds: stationList }),
@@ -524,7 +543,7 @@ export async function fetchConsumptionSummary({ stationId = null, from, to, gran
 export async function fetchAccounts(stationId = null) {
   if (stationId) return fetchAllPages("/api/account/read", { stationId }, 5000);
   const results = await Promise.allSettled(
-    LIVE_STATIONS.map((id) => fetchAllPages("/api/account/read", { stationId: id }, 5000))
+    (await resolveStations()).map((id) => fetchAllPages("/api/account/read", { stationId: id }, 5000))
   );
   return results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 }
@@ -742,7 +761,7 @@ export async function loadConsumptionData(filters, callbacks) {
   }
 
   const selectedStationId = stationId ? stationId.toUpperCase() : null;
-  const stations = selectedStationId ? [selectedStationId] : LIVE_STATIONS;
+  const stations = selectedStationId ? [selectedStationId] : await resolveStations();
 
   try {
     const { priorFrom, priorTo } = computePriorPeriodDates(from, to);

@@ -320,6 +320,7 @@ export function receiptHtml(model, options = {}) {
   const stationId = receiptFieldValue(model, ["Station Id"]);
   const totalUnit = receiptFieldValue(model, ["Total Unit"]);
   const displayTime = receiptTime(model);
+  const amountLabel = model.subject || "Amount";
   const filename = buildReceiptFilename(model, "pdf");
   const pageTitle = filename.replace(/\.pdf$/i, "");
   const theme = options.theme || {};
@@ -568,12 +569,27 @@ export function receiptHtml(model, options = {}) {
       gap: 8px;
       margin-bottom: 14px;
     }
+    .receipt-status {
+      width: fit-content;
+      margin: 0 0 14px;
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--primary-deep);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
     .detail-item {
       padding: 9px 10px;
       border: 1px solid ${detailBorder};
       border-radius: 12px;
       background: ${detailBackground};
       min-width: 0;
+    }
+    .detail-item.wide {
+      grid-column: 1 / -1;
     }
     .detail-item span {
       display: block;
@@ -615,6 +631,10 @@ export function receiptHtml(model, options = {}) {
     @media (max-width: 720px) {
       .receipt { width: 100%; padding: 20px; min-height: 100vh; }
       .summary-grid { grid-template-columns: 1fr; }
+      .detail-section { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 360px) {
+      .detail-section { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -632,10 +652,12 @@ export function receiptHtml(model, options = {}) {
 
     <div class="hero">
       <div class="amount-display">
-        <span class="amount-label">Amount Purchased</span>
+        <span class="amount-label">${escapeHtml(amountLabel)}</span>
         <span class="amount-value">${escapeHtml(model.amount || "0.00")}</span>
       </div>
     </div>
+
+    ${model.status ? `<div class="receipt-status">${escapeHtml(model.status)}</div>` : ''}
 
     ${tokenField ? `
     <div class="token-box">
@@ -648,11 +670,14 @@ export function receiptHtml(model, options = {}) {
       ${model.fields
         .filter((field) => !field.isToken && !["total paid", "amount"].includes(String(field.label).toLowerCase()))
         .slice(0, 24)
-        .map((field) => `
-      <div class="detail-item">
+        .map((field) => {
+          const wideField = /^(receipt id|reference|memo|created|actor)$/i.test(String(field.label));
+          return `
+      <div class="detail-item${wideField ? ' wide' : ''}">
         <span>${escapeHtml(field.label)}</span>
         <strong>${escapeHtml(field.value)}</strong>
-      </div>`)
+      </div>`;
+        })
         .join("")}
     </div>
 
@@ -689,7 +714,7 @@ export function buildReceiptPdfBytes(model) {
     model.subtitle,
     `Receipt: ${receiptId}`,
     `Time: ${receiptTime(model)}`,
-    `Amount Purchased: ${model.amount || "0.00"}`,
+    `${model.subject || "Amount"}: ${model.amount || "0.00"}`,
     `Token: ${tokenField?.value || ""}`,
     "----------------------------------------",
     `Customer: ${customerName}`,
