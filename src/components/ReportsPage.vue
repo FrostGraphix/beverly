@@ -167,7 +167,7 @@ import BaseTableShell from "./base/BaseTableShell.vue";
 import ExportToolbar from "./base/ExportToolbar.vue";
 import EChartPanel from "./EChartPanel.vue";
 import { pageNumbers, pageSizeOptions as tablePageSizeOptions, paginateRows, totalPages } from "../services/table-helpers.mjs";
-import { tableSiteOptions } from "../services/table-service.js";
+import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
 import {
   reportTypes,
   fetcherForType,
@@ -230,6 +230,7 @@ export default {
     }
   },
   mounted() {
+    loadDynamicStationOptions().catch(() => null);
     this.themeObserver = new MutationObserver(() => this.rebuildChart());
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     document.addEventListener("keydown", this.handleKeydown);

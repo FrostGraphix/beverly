@@ -23,8 +23,14 @@ assert.match(
 
 assert.match(
   viteConfig,
-  /response\.status = [\s\S]*referenceHandler\(request, response\)/,
+  /response\.status = [\s\S]*loadReferenceHandler\(\)\(request, response\)/,
   "Vite should preserve the native response stream for CSV exports"
+);
+
+assert.match(
+  viteConfig,
+  /server\.watcher\.on\("change", onServerFileChange\)/,
+  "Vite should re-require the API handler when server-side files change"
 );
 
 assert.match(

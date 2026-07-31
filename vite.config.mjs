@@ -5,7 +5,40 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
-const referenceHandler = require("./api/reference");
+const referenceModulePath = require.resolve("./api/reference");
+
+// The handler used to be required once at config load, so every edit to the
+// proxy needed a full dev-server restart — and stale server code silently
+// contradicted the freshly hot-reloaded UI. It is now re-required whenever the
+// file (or anything it pulled in from this repo) changes on disk.
+let referenceHandlerCache = require(referenceModulePath);
+let referenceHandlerStamp = 0;
+
+function clearServerModuleCache() {
+  const root = process.cwd();
+  for (const id of Object.keys(require.cache)) {
+    if (!id.startsWith(root)) continue;
+    if (id.includes("node_modules")) continue;
+    delete require.cache[id];
+  }
+}
+
+function loadReferenceHandler() {
+  return referenceHandlerCache;
+}
+
+function reloadReferenceHandler(reason) {
+  const now = Date.now();
+  if (now - referenceHandlerStamp < 50) return;
+  referenceHandlerStamp = now;
+  try {
+    clearServerModuleCache();
+    referenceHandlerCache = require(referenceModulePath);
+    console.log(`[api-reload] reloaded server handler after change in ${reason}`);
+  } catch (error) {
+    console.error("[api-reload] failed, keeping previous handler:", error instanceof Error ? error.message : error);
+  }
+}
 
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET
   || (process.env.API_PORT ? `http://127.0.0.1:${process.env.API_PORT}` : "http://127.0.0.1:9310");
@@ -38,6 +71,17 @@ function embeddedReferenceApi() {
   return {
     name: "beverly-embedded-reference-api",
     configureServer(server) {
+      const watchRoots = ["api", "backend/src", "packages"].map((dir) => path.resolve(process.cwd(), dir));
+      server.watcher.add(watchRoots);
+      const onServerFileChange = (file) => {
+        const resolved = path.resolve(file);
+        if (!watchRoots.some((root) => resolved.startsWith(root))) return;
+        if (!/\.(c?js|mjs|json)$/.test(resolved)) return;
+        reloadReferenceHandler(path.relative(process.cwd(), resolved));
+      };
+      server.watcher.on("change", onServerFileChange);
+      server.watcher.on("add", onServerFileChange);
+
       server.middlewares.use(async (request, response, next) => {
         if (!request.url?.startsWith("/api")) {
           next();
@@ -53,7 +97,7 @@ function embeddedReferenceApi() {
               response.end(JSON.stringify(body));
             }
           });
-          await referenceHandler(request, response);
+          await loadReferenceHandler()(request, response);
         } catch (error) {
           if (response.writableEnded) return;
           response.statusCode = 500;

@@ -35,7 +35,7 @@
         <span>Station</span>
         <BaseSelect v-model="stationId" @change="applyFilters">
           <option value="">All stations</option>
-          <option v-for="station in stations" :key="station" :value="station">{{ station }}</option>
+          <option v-for="station in stationList" :key="station" :value="station">{{ station }}</option>
         </BaseSelect>
       </label>
       <label>
@@ -170,6 +170,7 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import { LIVE_STATIONS } from "../services/consumption-service.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
 import { downloadTextFile } from "../services/import-export.mjs";
 
 const DAY = 86400000;
@@ -195,7 +196,14 @@ export default {
       userToggledView: false
     };
   },
+  created() {
+    loadDynamicStationOptions().catch(() => null);
+  },
   computed: {
+    stationList() {
+      const dynamic = tableSiteOptions.filter(o => o.value).map(o => o.value);
+      return Array.from(new Set([...LIVE_STATIONS, ...dynamic]));
+    },
     pageCount() { return Math.max(1, Math.ceil(this.total / this.pageSize)); },
     statCards() {
       return [

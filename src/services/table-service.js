@@ -1,5 +1,7 @@
+import { reactive } from "vue";
 import { getApi, postApi } from "./api.js";
 import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapper.mjs";
+import { normalizeCollection } from "./response-normalizers.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
@@ -9,14 +11,54 @@ import { isWriteEndpoint } from "./write-helpers.mjs";
 const tableFetchPageSize = 500;
 const liveReadPageSize = 20;
 const maxTableRows = 20000;
-export const tableSiteOptions = [
+export const tableSiteOptions = reactive([
   { value: "", label: "All sites" },
   { value: "KYAKALE", label: "Kyakale" },
   { value: "MUSHA", label: "Musha" },
   { value: "UMAISHA", label: "Umaisha" },
   { value: "TUNGA", label: "Tunga" },
-  { value: "OGUFA", label: "Ogufa" }
-];
+  { value: "OGUFA", label: "Ogufa" },
+  { value: "BONDU", label: "Bondu" },
+  { value: "KADUNA", label: "Kaduna" }
+]);
+
+let stationLoadingPromise = null;
+
+export async function loadDynamicStationOptions(api = defaultTableApi, forceRefresh = false) {
+  if (stationLoadingPromise && !forceRefresh) return stationLoadingPromise;
+  stationLoadingPromise = (async () => {
+    try {
+      const res = await api.postApi("/api/station/read", { pageNumber: 1, pageSize: 500 }).catch(() => null);
+      const collection = normalizeCollection(res);
+      const rows = Array.isArray(collection?.rows) ? collection.rows : [];
+      if (rows.length > 0) {
+        const fetched = rows.map((s) => {
+          const id = String(s.stationId || s.id || s.station_id || s.name || "").trim();
+          const rawName = String(s.name || s.stationName || s.station_name || s.communityLabel || id).trim();
+          let label = rawName;
+          if (rawName && rawName === rawName.toUpperCase() && rawName.length > 1 && !/^\d+$/.test(rawName)) {
+            label = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
+          }
+          return { value: id, label: label || id };
+        }).filter((opt) => opt.value && opt.value.toLowerCase() !== "admin");
+
+        for (const opt of fetched) {
+          const existingIdx = tableSiteOptions.findIndex((existing) => existing.value.toUpperCase() === opt.value.toUpperCase());
+          if (existingIdx === -1) {
+            tableSiteOptions.push(opt);
+          } else {
+            tableSiteOptions[existingIdx].label = opt.label;
+          }
+        }
+      }
+    } catch {
+      // Keep static defaults on failure
+    }
+    return tableSiteOptions;
+  })();
+  return stationLoadingPromise;
+}
+
 export const defaultTableOptions = {
   siteId: "",
   get from() { return new Date(new Date().getFullYear(), 0, 1).toISOString(); },
@@ -142,10 +184,26 @@ function routeUsesServerPagination(route) {
     || hash.includes("management/tariff")
     || hash.includes("admin/log")
     || hash.includes("admin/meter")
+    || hash.includes("admin/station")
     || hash.includes("token-generate")
     || hash.includes("prepay-report/abnormal-alarm")
     || hash.includes("prepay-report/low-purchase-situation")
     || hash.startsWith("#/remote-operation/");
+}
+
+function isAccountRoute(route) {
+  return String(route?.hash || "").includes("management/account");
+}
+
+// The upstream account read matches `searchTerm` against identifiers only —
+// searching "HARUNA" upstream returns nothing even though that customer has a
+// binding. Identifier-shaped terms stay server-side (one fast call); anything
+// else needs the full set pulled so names can be matched client-side.
+function needsClientSideAccountSearch(route, options = {}) {
+  if (!isAccountRoute(route)) return false;
+  const term = String(options.searchTerm || "").trim();
+  if (!term) return false;
+  return !/^[0-9]+$/.test(term);
 }
 
 function isLongNonpurchaseRoute(route) {
@@ -709,6 +767,28 @@ export async function fetchTableData(route, options = {}, api = defaultTableApi)
         method: request.method,
         source: "verified-live-total"
       }
+    };
+  }
+  if (needsClientSideAccountSearch(route, requestOptions)) {
+    const bulkRequest = tableRequest(route, {
+      ...requestOptions,
+      searchTerm: "",
+      pageNumber: 1,
+      pageSize: tableFetchPageSize,
+      bulkRead: true
+    });
+    const fullCollection = await fetchAllTableRows(bulkRequest, route, api, rowLimit);
+    const mappedAll = mapTableCollection({ data: { rows: fullCollection.rows, total: fullCollection.total } }, route);
+    const searchedRows = searchRows(route, mappedAll.rows, requestOptions.searchTerm || "");
+    const sortedRows = sortRows(route, searchedRows, requestedDirection, requestedField);
+    const pageSize = Math.max(1, Number(requestOptions.pageSize || 10));
+    const pageNumber = Math.max(1, Number(requestOptions.pageNumber || 1));
+    return {
+      ...mappedAll,
+      rows: requestOptions.exportAll ? sortedRows : sortedRows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize),
+      total: sortedRows.length,
+      serverPaginated: true,
+      meta: { path: request.path, method: request.method, source: "client-name-search" }
     };
   }
   if (routeUsesServerPagination(route)) {
