@@ -1,9 +1,11 @@
 import { Worker } from 'bullmq';
 import { closeQueues, maintenanceQueue, queuesEnabled, redisConnection } from './queue/index.js';
 import {
+    expireStaleFundingRequests,
     processRefundExpiry,
     reconcileRemoteSends,
     recomputeFraudBaselines,
+    refreshConsumptionForAllStations,
     scanStuckPurchases,
     sweepExpiredHolds,
     sweepPendingPayments,
@@ -23,7 +25,10 @@ const schedules = [
     { name: 'settlement', pattern: '0 3 * * *' },
     { name: 'fraud-baseline', pattern: '0 5 * * *' },
     { name: 'refund-expiry', pattern: '0 * * * *' },
+    { name: 'funding-expiry', pattern: '10 * * * *' },
     { name: 'webhook-retention', pattern: '20 4 * * *' },
+    // Matches the "refreshes every 6 h" promise on the consumption pages.
+    { name: 'consumption-refresh', pattern: '30 */6 * * *' },
 ] as const;
 
 async function processMaintenance(name: string): Promise<void> {
@@ -36,7 +41,9 @@ async function processMaintenance(name: string): Promise<void> {
         case 'settlement': return runDailySettlement();
         case 'fraud-baseline': return recomputeFraudBaselines();
         case 'refund-expiry': return processRefundExpiry();
+        case 'funding-expiry': return expireStaleFundingRequests();
         case 'webhook-retention': await purgeExpiredWebhookPayloads(); return;
+        case 'consumption-refresh': return refreshConsumptionForAllStations();
         default: throw new Error(`Unknown maintenance job: ${name}`);
     }
 }

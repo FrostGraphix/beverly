@@ -1,16 +1,20 @@
 "use strict";
 
 const supabase = require("./supabase-service");
+const stationRegistry = require("./station-registry");
 
-// Canonical list of real, live stations. Anything else in the raw tables
-// (e.g. "0001", "TEST_STATION" from smoke-tests / webhook tests) is junk and
-// must never surface in analytics. Filtering here keeps the numbers correct
-// regardless of what test data lands in daily_meter_readings.
-const CANONICAL_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-const CANONICAL_STATION_SET = new Set(CANONICAL_STATIONS);
-
+// The live station estate is discovered from the database, never hardcoded —
+// see backend/src/services/station-registry.js. Junk ids ("0001",
+// "TEST_STATION", "SMOKE-STATION") are excluded by the registry itself, so
+// analytics stay correct no matter what test data lands in
+// daily_meter_readings, and a newly onboarded station is included the moment
+// its first reading arrives.
 function isCanonicalStation(stationId) {
-  return CANONICAL_STATION_SET.has(normalizeStation(stationId));
+  return stationRegistry.isKnownStationSync(normalizeStation(stationId));
+}
+
+async function canonicalStations() {
+  return stationRegistry.getStations();
 }
 
 function storeEnabled() {
@@ -265,7 +269,8 @@ async function dateBoundForStation(stationId = "", direction = "asc") {
   return row?.reading_date || null;
 }
 
-async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterStationStats(stations = null) {
+  stations = Array.isArray(stations) && stations.length ? stations : await canonicalStations();
   if (!storeEnabled()) {
     return {
       enabled: false,
@@ -309,7 +314,7 @@ async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "
   }
 }
 
-async function dailyMeterTableReport(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterTableReport(stations = null) {
   const stats = await dailyMeterStationStats(stations);
   return {
     ...stats,
@@ -605,9 +610,11 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
 
   // One station if requested, otherwise every canonical station (junk/test
   // stations are never queried, so they can't leak into totals).
+  const estate = await canonicalStations();
+  const estateSet = new Set(estate);
   const stations = stationId
-    ? (isCanonicalStation(stationId) ? [normalizeStation(stationId)] : [])
-    : CANONICAL_STATIONS;
+    ? (estateSet.has(normalizeStation(stationId)) ? [normalizeStation(stationId)] : [])
+    : estate;
   if (!stations.length) return [];
 
   try {
@@ -618,7 +625,7 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
     const allRows = perStation.flat();
     if (!allRows.length) return [];
     return allRows
-      .filter((r) => isCanonicalStation(r.station_id))
+      .filter((r) => estateSet.has(normalizeStation(r.station_id)))
       .map((r) => {
         const hasValuation = r.tariff_value_ngn !== undefined
           && r.priced_kwh !== undefined
@@ -681,13 +688,12 @@ async function readStationMeterReadRollups(stationId = "") {
  *
  * Falls back gracefully if the per-station function hasn't been deployed yet.
  */
-const KNOWN_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-
 async function refreshMeterReadingAggregates() {
   const t0 = Date.now();
   const results = [];
 
-  for (const station of KNOWN_STATIONS) {
+  // Discovered estate — a station onboarded today is refreshed today.
+  for (const station of await canonicalStations()) {
     const { body, response } = await supabase.restRequestWithResponse(
       "/rpc/refresh_meter_reading_aggregates_for_station",
       { method: "POST", body: { p_station_id: station } }
@@ -1309,8 +1315,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   }
 
   // ── Try aggregate table path ──────────────────────────────────────────────
-  const DEFAULT_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-  const allowedStations = stationId ? null : new Set(DEFAULT_STATIONS);
+  const allowedStations = stationId ? null : new Set(await canonicalStations());
   const [currentAggRaw, priorAggRaw] = await Promise.all([
     readAggregatedDeltas({ stationId, from, to, granularity: queryGranularity }),
     readAggregatedDeltas({ stationId, from: priorFrom, to: priorTo, granularity: queryGranularity }),

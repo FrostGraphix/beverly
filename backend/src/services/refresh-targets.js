@@ -1,6 +1,11 @@
 "use strict";
 
-const stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+const stationRegistry = require("./station-registry");
+
+// Kept as a named export for callers that still import it, but the refresh
+// targets themselves are built from the discovered estate (see below) so a
+// newly onboarded station is polled without a code change.
+const stations = stationRegistry.SEED_STATIONS;
 
 function todayRange(now = new Date()) {
   const end = now.toISOString().slice(0, 10);
@@ -52,7 +57,18 @@ function pagedDailyMeterPayload(extra = {}) {
   });
 }
 
-function refreshTargets(scope = "hot", now = new Date()) {
+/**
+ * @param {string} scope
+ * @param {Date} now
+ * @param {string[]|null} stationScope Explicit estate. Defaults to the
+ *   discovered station registry, so onboarding a station adds its poll targets
+ *   with no code change. Callers that can await should prime the registry
+ *   first (see station-registry.primeStationRegistry).
+ */
+function refreshTargets(scope = "hot", now = new Date(), stationScope = null) {
+  const activeStations = Array.isArray(stationScope) && stationScope.length
+    ? stationScope
+    : stationRegistry.getStationsSync();
   const daily = todayRange(now);
   const monthly = monthlyRange(now);
   const midnight = previousDayRange(now);
@@ -67,7 +83,7 @@ function refreshTargets(scope = "hot", now = new Date()) {
     { name: "accounts", path: "/api/account/read", payload: basePayload({ pageSize: 500 }), cadence: "1h", paginate: true },
     { name: "customers", path: "/api/customer/read", payload: basePayload(), cadence: "1h" },
     { name: "meters", path: "/api/meter/read", payload: basePayload(), cadence: "1h" },
-    ...stations.map((stationId) => ({
+    ...activeStations.map((stationId) => ({
       name: `daily-meter-${stationId.toLowerCase()}`,
       path: "/api/DailyDataMeter/read",
       payload: basePayload({ stationId, FROM: daily.from, TO: daily.to }),
@@ -75,7 +91,7 @@ function refreshTargets(scope = "hot", now = new Date()) {
     }))
   ];
   const dailyReports = [
-    ...stations.map((stationId) => ({
+    ...activeStations.map((stationId) => ({
       name: `daily-consumption-sync-${stationId.toLowerCase()}`,
       path: "/api/DailyDataMeter/read",
       payload: pagedDailyMeterPayload({ stationId, FROM: midnight.from, TO: midnight.to }),
@@ -86,7 +102,7 @@ function refreshTargets(scope = "hot", now = new Date()) {
     { name: "low-purchase", path: "/API/PrepayReport/LowPurchaseSituation", payload: basePayload({ from: daily.from, to: daily.to }), cadence: "24h" },
     { name: "consumption-statistics", path: "/API/PrepayReport/ConsumptionStatistics", payload: basePayload({ from: daily.from, to: daily.to }), cadence: "24h" }
   ];
-  const backfill = stations.map((stationId) => ({
+  const backfill = activeStations.map((stationId) => ({
     name: `historical-consumption-backfill-${stationId.toLowerCase()}`,
     path: "/api/DailyDataMeter/read",
     payload: pagedDailyMeterPayload({

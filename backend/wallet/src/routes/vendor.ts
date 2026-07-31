@@ -8,7 +8,8 @@ import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
-import { getBalance, getEntries } from '../services/ledger.js';
+import { getBalance, getEntries, getWalletActivitySummary } from '../services/ledger.js';
+import { startOfBusinessDay } from '../services/wallet-summary.js';
 import {
     initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, FundingError,
 } from '../services/funding.js';
@@ -63,6 +64,19 @@ import {
     hashIdempotency,
 } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
+import { isChannelEnabled } from '../services/feature-flags.js';
+
+/** Kill switch for gateway funding. Absent flag = channel on (see isChannelEnabled). */
+const PAYSTACK_FUNDING_FLAG = 'wallet.funding.paystack';
+
+import { backfillVendorFundingNotifications, notifyVendor } from '../services/vendor-notifications.js';
+import {
+    removeVendorPushSubscription,
+    saveVendorPushSubscription,
+    vendorPushConfig,
+} from '../services/vendor-push.js';
+
+const vendMeterIdSchema = z.string().trim().min(4).max(80);
 
 function bearerToken(req: FastifyRequest): string {
     const auth = req.headers.authorization ?? '';
@@ -304,6 +318,33 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    fastify.get('/push/config', { preHandler: fastify.requireVendor() }, async () => vendorPushConfig());
+
+    fastify.post('/push/subscription', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const actor = req.actor!;
+        if (!actor.vendorOrganizationId) return reply.code(403).send({ error: 'forbidden' });
+        const subscription = z.object({
+            endpoint: z.string().url().max(2048),
+            keys: z.object({
+                p256dh: z.string().min(16).max(512),
+                auth: z.string().min(8).max(512),
+            }),
+        }).parse(req.body);
+        await saveVendorPushSubscription({
+            vendorOrganizationId: actor.vendorOrganizationId,
+            vendorUserId: actor.actorId,
+            subscription,
+            userAgent: req.headers['user-agent'],
+        });
+        return { ok: true };
+    });
+
+    fastify.delete('/push/subscription', { preHandler: fastify.requireVendor() }, async (req) => {
+        const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query);
+        await removeVendorPushSubscription(req.actor!.actorId, endpoint);
+        return { ok: true };
+    });
+
     fastify.post('/profile-picture/activate', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
         try {
@@ -328,6 +369,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             .maybeSingle();
         const orgId = (vendorUser as any)?.vendor_organization_id;
         if (!orgId) return { notifications: [], nextCursor: null, unreadCount: 0 };
+        await backfillVendorFundingNotifications(orgId);
         const vendorRecipientScope = `vendor_organization_id.eq.${orgId},and(recipient_type.eq.vendor,recipient_id.eq.${orgId})`;
 
         let inbox = adminClient
@@ -456,7 +498,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({ code: z.string().min(6).max(24) });
         const { code } = schema.parse(req.body);
         try {
-            return await verifyVendorMfaEnrollment(actor, bearerToken(req), code, mfaMeta(req));
+            const result = await verifyVendorMfaEnrollment(actor, bearerToken(req), code, mfaMeta(req));
+            await notifyVendor(actor.vendorOrganizationId, {
+                type: 'security_update',
+                title: 'Two-factor authentication enabled',
+                body: 'Your Beverly account now has stronger sign-in protection.',
+                eventKey: `security:${actor.actorId}:mfa-enabled:${Date.now()}`,
+                metadata: { path: '/security' },
+            });
+            return result;
         } catch (error) {
             return sendMfaError(reply, error);
         }
@@ -492,7 +542,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({ code: z.string().min(6).max(24) });
         const { code } = schema.parse(req.body);
         try {
-            return await regenerateVendorRecoveryCodes(actor, code, mfaMeta(req));
+            const result = await regenerateVendorRecoveryCodes(actor, code, mfaMeta(req));
+            await notifyVendor(actor.vendorOrganizationId, {
+                type: 'security_update',
+                title: 'Recovery codes replaced',
+                body: 'Your previous recovery codes no longer work.',
+                eventKey: `security:${actor.actorId}:recovery-codes:${Date.now()}`,
+                metadata: { path: '/security' },
+            });
+            return result;
         } catch (error) {
             return sendMfaError(reply, error);
         }
@@ -504,7 +562,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         const schema = z.object({ code: z.string().min(6).max(24) });
         const { code } = schema.parse(req.body);
         try {
-            return await disableVendorMfa(actor, code, mfaMeta(req));
+            const result = await disableVendorMfa(actor, code, mfaMeta(req));
+            await notifyVendor(actor.vendorOrganizationId, {
+                type: 'security_update',
+                title: 'Two-factor authentication disabled',
+                body: 'Two-factor protection was removed from your account.',
+                eventKey: `security:${actor.actorId}:mfa-disabled:${Date.now()}`,
+                metadata: { path: '/security' },
+            });
+            return result;
         } catch (error) {
             return sendMfaError(reply, error);
         }
@@ -586,6 +652,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
+        await notifyVendor(actor.vendorOrganizationId, {
+            type: 'security_update',
+            title: 'Password changed',
+            body: 'Your Beverly account password changed successfully.',
+            eventKey: `security:${actor.actorId}:password:${Date.now()}`,
+            metadata: { path: '/security' },
+        });
+
         return { ok: true, was_temp_password: wasTempPassword };
     });
 
@@ -593,7 +667,10 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/wallet', { preHandler: fastify.requireVendor() }, async (req) => {
         const orgId = req.actor!.vendorOrganizationId!;
         const wallet = await getOrCreateWallet('vendor', orgId, { dailyCapMinor: 500_000_000 });
-        const balance = await getBalance(wallet.id);
+        const [balance, activity] = await Promise.all([
+            getBalance(wallet.id),
+            getWalletActivitySummary(wallet.id, startOfBusinessDay()),
+        ]);
         return {
             wallet_id: wallet.id,
             currency: wallet.currency,
@@ -602,6 +679,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             holds_minor: balance.activeHoldsMinor,
             available_minor: balance.availableMinor,
             daily_cap_minor: wallet.daily_debit_cap_minor,
+            activity,
         };
     });
 
@@ -722,6 +800,12 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── funding: initiate Paystack ──
     fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const orgId = req.actor!.vendorOrganizationId!;
+        if (!await isChannelEnabled(PAYSTACK_FUNDING_FLAG, { userId: req.actor!.userId })) {
+            return reply.code(503).send({
+                error: 'funding_channel_disabled',
+                message: 'Card and transfer funding is temporarily unavailable. Please try again later.',
+            });
+        }
         const idempotencyKey = requireIdempotencyKey(req, reply);
         if (!idempotencyKey) return;
         const schema = z.object({
@@ -826,7 +910,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ── vending: preview ──
     fastify.post('/vend/preview', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const schema = z.object({
-            meterId: z.string().min(1),
+            meterId: vendMeterIdSchema,
             amountMinor: z.number().int().min(10000),
         });
         const body = schema.parse(req.body);
@@ -846,7 +930,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // upstream payloads without creating wallet holds, purchase orders, tokens, or tasks.
     fastify.post('/vend/live-plan', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const schema = z.object({
-            meterId: z.string().min(1),
+            meterId: vendMeterIdSchema,
             amountMinor: z.number().int().min(10000),
             mode: z.enum(['wallet', 'remote_send']).default('wallet'),
         });
@@ -912,7 +996,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
         const schema = z.object({
-            meterId: z.string().min(1),
+            meterId: vendMeterIdSchema,
             amountMinor: z.number().int().min(10000),
             mode: z.enum(['wallet', 'remote_send']).default('wallet'),
             authorization: z.string().min(4).max(80),
@@ -1307,7 +1391,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // for the customers at that site. Authority comes from the actor's station,
     // never from the query string, so a vendor cannot ask for another site.
 
-    fastify.get('/consumption', async (req, reply) => {
+    fastify.get('/consumption', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const actor = vendorActorOrReply(req, reply);
         if (!actor) return undefined;
 
@@ -1328,7 +1412,15 @@ const route: FastifyPluginAsync = async (fastify) => {
             });
         }
 
-        const { queryConsumption, stationsAuthority } = await import('../services/consumption.js');
+        const { queryConsumption, stationsAuthority, canonicalStationId, METER_BREAKDOWN_MAX_ROWS } =
+            await import('../services/consumption.js');
+        // Meter rows are one per meter *per period*. The estate's largest site
+        // is 726 meters, so a monthly view is ~9.4k rows — the previous 500-row
+        // cap made a vendor's own page under-report their own station. Grouped
+        // rows stay capped low because they are one row per period.
+        const limit = scope === 'meter'
+            ? Math.min(Number(qs.limit ?? METER_BREAKDOWN_MAX_ROWS), METER_BREAKDOWN_MAX_ROWS)
+            : Math.min(Number(qs.limit ?? 120), 500);
         const rows = await queryConsumption(
             {
                 scope,
@@ -1338,12 +1430,18 @@ const route: FastifyPluginAsync = async (fastify) => {
                 period_type: period,
                 from: qs.from ?? undefined,
                 to: qs.to ?? undefined,
-                limit: Math.min(Number(qs.limit ?? 120), 500),
+                limit,
                 withSpend: qs.spend === 'true',
             },
             stationsAuthority([actor.stationId]),
         );
-        return { rows, count: rows.length, stationId: actor.stationId };
+        return {
+            rows,
+            count: rows.length,
+            meterCount: new Set(rows.map((row) => row.meter_id).filter(Boolean)).size,
+            truncated: rows.length >= limit,
+            stationId: canonicalStationId(actor.stationId),
+        };
     });
 };
 

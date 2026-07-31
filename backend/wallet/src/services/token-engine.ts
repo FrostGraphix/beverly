@@ -490,9 +490,13 @@ export async function listStations(opts: { force?: boolean; oemId?: string | nul
         body: JSON.stringify({ pageNumber: 1, pageSize: 500 }),
     }, opts.oemId ?? undefined);
     const raw = resp.result?.data ?? [];
-    // Exclude system noise rows (legacy "admin", "0001" placeholder)
+    // Exclude system noise rows (legacy "admin", "0001" placeholder). The
+    // numeric case was documented here but never actually filtered, so "0001"
+    // reached the admin station picker and the consumption estate.
     const stations: StationInfo[] = raw
-        .filter((s) => s.stationId && s.stationId.toUpperCase() !== 'ADMIN')
+        .filter((s) => s.stationId
+            && s.stationId.toUpperCase() !== 'ADMIN'
+            && !/^\d+$/.test(s.stationId.trim()))
         .map((s) => ({ stationId: s.stationId, name: s.name ?? s.stationId, remark: s.remark ?? null }))
         .sort((a, b) => a.name.localeCompare(b.name));
     stationsCache.set(cacheKey, { at: Date.now(), data: stations });

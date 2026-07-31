@@ -52,6 +52,21 @@ export async function isFlagEnabled(key: string, opts?: { region?: string; userI
     return true;
 }
 
+/**
+ * Kill-switch check for a live payment channel — fails *open*.
+ *
+ * `isFlagEnabled` treats a missing row as "off", which is right for rolling a
+ * new feature out but catastrophic for a channel already carrying money: a
+ * flag nobody inserted would silently stop payments. Here an absent flag means
+ * "not governed by a switch, carry on", and only an explicitly disabled flag
+ * closes the channel.
+ */
+export async function isChannelEnabled(key: string, opts?: { region?: string; userId?: string }): Promise<boolean> {
+    const flag = await getFlag(key);
+    if (!flag) return true;
+    return isFlagEnabled(key, opts);
+}
+
 function deterministicBucket(userId: string, flagKey: string): number {
     let hash = 5381;
     const str = userId + '::' + flagKey;

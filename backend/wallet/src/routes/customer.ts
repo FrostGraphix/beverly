@@ -75,7 +75,12 @@ import {
     hashIdempotency,
 } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
-import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
+import { processPaystackChargeSuccess, verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
+import { isChannelEnabled } from '../services/feature-flags.js';
+
+/** Kill switch for gateway funding. Absent flag = channel on (see isChannelEnabled). */
+const PAYSTACK_FUNDING_FLAG = 'wallet.funding.paystack';
+
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -543,6 +548,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/wallet/fund', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        if (!await isChannelEnabled(PAYSTACK_FUNDING_FLAG, { userId: req.actor!.userId })) {
+            return reply.code(503).send({
+                error: 'funding_channel_disabled',
+                message: 'Card funding is temporarily unavailable. Please try again later.',
+            });
+        }
         let idempotencyKey: string;
         try { idempotencyKey = assertClientIdempotencyKey(req.headers['idempotency-key']); }
         catch (error) {
@@ -914,42 +925,24 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!order) return reply.code(404).send({ error: 'not_found' });
         if ((order as any).status !== 'pending_payment') return order;
 
-        // Verify with Paystack
-        const res = await fetch(`https://api.paystack.co/transaction/verify/${(order as any).payment_reference}`, {
-            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
-        });
-        const ps: any = await res.json();
-        if (ps.data?.status === 'success' && Number(ps.data?.amount) !== Number((order as any).amount_minor)) {
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType: 'customer',
-                action: 'meter_order.payment_amount_mismatch',
-                targetId: id,
-                metadata: {
-                    reference: (order as any).payment_reference,
-                    expectedAmountMinor: (order as any).amount_minor,
-                    verifiedAmountMinor: ps.data?.amount ?? null,
-                },
+        // Same reconciler the webhook uses: one verification path, one set of
+        // amount rules, one fulfillment lease. This endpoint just lets a
+        // returning payer see the result sooner than the webhook would.
+        try {
+            await processPaystackChargeSuccess((order as any).payment_reference, 'callback');
+        } catch (error: any) {
+            return reply.code(502).send({
+                error: 'payment_verification_failed',
+                message: error?.message ?? 'Could not verify the payment.',
             });
-            return reply.code(409).send({ error: 'payment_amount_mismatch', message: 'Verified payment amount does not match this meter order.' });
         }
-        if (ps.data?.status === 'success') {
-            const { data: paidOrder, error: paidError } = await adminClient
-                .from('meter_purchase_orders')
-                .update({ status: 'paid', updated_at: new Date().toISOString() })
-                .eq('id', id)
-                .eq('status', 'pending_payment')
-                .select('*')
-                .maybeSingle();
-            if (paidError) return reply.code(500).send({ error: 'payment_update_failed', message: paidError.message });
-            if (!paidOrder) {
-                const { data: latest } = await adminClient.from('meter_purchase_orders').select('*').eq('id', id).maybeSingle();
-                return latest ?? order;
-            }
-            await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.payment_confirmed', targetId: id });
-            return paidOrder;
-        }
-        return order;
+
+        const { data: latest } = await adminClient
+            .from('meter_purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+        return latest ?? order;
     });
 
     // ── DISPUTES ─────────────────────────────────────────────────────────────
@@ -1404,7 +1397,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 period_type: period,
                 from: qs.from ?? undefined,
                 to: qs.to ?? undefined,
-                limit: Math.min(Number(qs.limit ?? 120), 500),
+                // One row per meter per period. A customer with several meters
+                // and a daily view exceeds 120 quickly, and the KPI totals are
+                // summed from these rows — truncation silently understates
+                // their own usage.
+                limit: Math.min(Number(qs.limit ?? 2000), 5000),
                 withSpend: qs.spend !== 'false',
             },
             metersAuthority(meterIds),

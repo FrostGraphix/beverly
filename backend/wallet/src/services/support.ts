@@ -7,6 +7,8 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyDisputeUpdate } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { notifyStaffInbox } from './staff-inbox.js';
 
 export class SupportError extends Error {
     constructor(message: string, public code: string) {
@@ -176,6 +178,14 @@ export async function createTicket(input: {
         body: input.description,
     });
 
+    void notifyStaffInbox({
+        type: 'support_review',
+        title: 'New support ticket',
+        body: `${(data as any).reference}: ${input.subject}`,
+        eventKey: `staff:ticket:${ticketId}:created`,
+        metadata: { ticket_id: ticketId, path: '/support' },
+    });
+
     return { id: ticketId, reference: (data as any).reference };
 }
 
@@ -207,14 +217,33 @@ export async function addTicketMessage(input: {
         else if (input.senderActorType === 'customer' || input.senderActorType === 'vendor') patch.status = 'pending';
         await adminClient.from('support_tickets').update(patch).eq('id', input.ticketId);
 
+        if (input.senderActorType === 'customer' || input.senderActorType === 'vendor') {
+            void notifyStaffInbox({
+                type: 'support_review',
+                title: 'New support reply',
+                body: input.body,
+                eventKey: `staff:ticket:${input.ticketId}:reply:${Date.now()}`,
+                metadata: { ticket_id: input.ticketId, path: '/support' },
+            });
+        }
+
         if (input.senderActorType === 'staff') {
-            const { data: t } = await adminClient.from('support_tickets').select('customer_id, reference').eq('id', input.ticketId).maybeSingle();
+            const { data: t } = await adminClient.from('support_tickets').select('customer_id, vendor_organization_id, reference').eq('id', input.ticketId).maybeSingle();
             if ((t as any)?.customer_id) {
                 notifyDisputeUpdate((t as any).customer_id, {
                     disputeId: input.ticketId,
                     status: 'reply',
                     message: `Support replied to ${(t as any).reference}`,
                 }).catch(() => undefined);
+            }
+            if ((t as any)?.vendor_organization_id) {
+                await notifyVendor((t as any).vendor_organization_id, {
+                    type: 'support_update',
+                    title: 'Support replied',
+                    body: `Support replied to ${(t as any).reference}.`,
+                    eventKey: `ticket:${input.ticketId}:reply:${Date.now()}`,
+                    metadata: { ticket_id: input.ticketId, path: `/help?ticket=${input.ticketId}` },
+                });
             }
         }
     }
@@ -283,13 +312,22 @@ export async function updateTicket(input: {
     await adminClient.from('support_tickets').update(patch).eq('id', input.ticketId);
 
     if (input.status === 'resolved' || input.status === 'closed') {
-        const { data: t } = await adminClient.from('support_tickets').select('customer_id, reference').eq('id', input.ticketId).maybeSingle();
+        const { data: t } = await adminClient.from('support_tickets').select('customer_id, vendor_organization_id, reference').eq('id', input.ticketId).maybeSingle();
         if ((t as any)?.customer_id) {
             notifyDisputeUpdate((t as any).customer_id, {
                 disputeId: input.ticketId,
                 status: input.status,
                 message: `Ticket ${(t as any).reference} ${input.status}`,
             }).catch(() => undefined);
+        }
+        if ((t as any)?.vendor_organization_id) {
+            await notifyVendor((t as any).vendor_organization_id, {
+                type: 'support_update',
+                title: 'Support ticket updated',
+                body: `Ticket ${(t as any).reference} ${input.status}.`,
+                eventKey: `ticket:${input.ticketId}:${input.status}`,
+                metadata: { ticket_id: input.ticketId, path: `/help?ticket=${input.ticketId}` },
+            });
         }
     }
 }
@@ -383,7 +421,7 @@ export async function sendChatMessage(input: {
     // Maintain unread counters + waiting status.
     const { data: s } = await adminClient
         .from('support_chat_sessions')
-        .select('unread_for_staff, unread_for_user, status')
+        .select('unread_for_staff, unread_for_user, status, vendor_organization_id')
         .eq('id', input.sessionId)
         .maybeSingle();
     if (!s) return;
@@ -393,9 +431,25 @@ export async function sendChatMessage(input: {
         patch.unread_for_staff = Number((s as any).unread_for_staff ?? 0) + 1;
         if ((s as any).status === 'ended') patch.status = 'active';
         else patch.status = 'waiting';
+        void notifyStaffInbox({
+            type: 'support_review',
+            title: 'New support chat',
+            body: input.body,
+            eventKey: `staff:chat:${input.sessionId}:message:${Date.now()}`,
+            metadata: { chat_session_id: input.sessionId, path: '/support' },
+        });
     } else if (input.senderActorType === 'staff') {
         patch.unread_for_user = Number((s as any).unread_for_user ?? 0) + 1;
         patch.status = 'active';
+        if ((s as any).vendor_organization_id) {
+            await notifyVendor((s as any).vendor_organization_id, {
+                type: 'support_update',
+                title: 'New support message',
+                body: input.body,
+                eventKey: `chat:${input.sessionId}:message:${Date.now()}`,
+                metadata: { chat_session_id: input.sessionId, path: '/help' },
+            });
+        }
     }
     await adminClient.from('support_chat_sessions').update(patch).eq('id', input.sessionId);
 }

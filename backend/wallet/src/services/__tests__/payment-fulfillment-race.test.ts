@@ -175,14 +175,35 @@ describe('paystack fulfillment race safety', () => {
         expect(store.ledgerKeys.get('customer_fund.tx-1.paystack.credit')).toBe(1);
     });
 
-    it('blocks on amount mismatch without touching the ledger', async () => {
-        store.txs['tx-1'].amount_minor = 499_99;
+    it('blocks underpayment without touching the ledger', async () => {
+        // Paid less than requested: never creditable.
+        store.txs['tx-1'].amount_minor = 500_01;
         const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
         expect(result.status).toBe('blocked');
         expect(result.reason).toBe('payment_amount_mismatch');
         expect(store.ledgerKeys.size).toBe(0);
         expect(store.txs['tx-1'].status).toBe('requires_review');
         expect(store.txs['tx-1'].metadata?.fulfillment_completed_at).toBeUndefined();
+    });
+
+    it('blocks an overpayment too large to be a gateway fee', async () => {
+        store.txs['tx-1'].amount_minor = 100_0;
+        const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
+        expect(result.status).toBe('blocked');
+        expect(result.reason).toBe('payment_overpaid');
+        expect(store.ledgerKeys.size).toBe(0);
+    });
+
+    it('credits the requested amount when the payer bore the gateway fee', async () => {
+        // Requested ₦499.00, Paystack settled ₦500.00 because the payer covers
+        // the fee. This must credit ₦499.00 rather than block.
+        store.txs['tx-1'].amount_minor = 499_00;
+        const result = await processPaystackChargeSuccess('ref-race-1', 'webhook');
+        expect(result.status).toBe('fulfilled');
+        expect(store.ledgerKeys.get('customer_fund.tx-1.paystack.credit')).toBe(1);
+        expect(store.txs['tx-1'].status).toBe('succeeded');
+        expect(store.txs['tx-1'].metadata?.gateway_amount_kind).toBe('fee_surplus');
+        expect(store.txs['tx-1'].metadata?.credited_amount_minor).toBe(499_00);
     });
 
     it('blocks on reference mismatch without touching the ledger', async () => {

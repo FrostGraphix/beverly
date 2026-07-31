@@ -16,6 +16,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
+import { notifyWalletEntry } from './vendor-notifications.js';
 import { assertWalletCanTransact } from './wallets.js';
 
 export type EntryType =
@@ -43,6 +44,36 @@ export interface LedgerEntry {
     memo: string | null;
     created_by: string;
     created_at: string;
+}
+
+export interface WalletActivitySummary {
+    today_vended_minor: number;
+    today_vended_count: number;
+    today_funded_minor: number;
+    total_funded_minor: number;
+    total_reversed_minor: number;
+}
+
+export async function getWalletActivitySummary(walletId: string, dayStart: Date): Promise<WalletActivitySummary> {
+    const { data, error } = await adminClient.rpc('fn_wallet_activity_summary', {
+        p_wallet_id: walletId,
+        p_day_start: dayStart.toISOString(),
+    });
+    if (error) {
+        console.error('[ledger] wallet activity summary failed:', {
+            code: error.code,
+            details: error.details,
+        });
+        throw new LedgerError('Wallet summary is temporarily unavailable.', 'activity_summary_error');
+    }
+    const summary = (Array.isArray(data) ? data[0] : data) ?? {};
+    return {
+        today_vended_minor: Number(summary.today_vended_minor ?? 0),
+        today_vended_count: Number(summary.today_vended_count ?? 0),
+        today_funded_minor: Number(summary.today_funded_minor ?? 0),
+        total_funded_minor: Number(summary.total_funded_minor ?? 0),
+        total_reversed_minor: Number(summary.total_reversed_minor ?? 0),
+    };
 }
 
 export interface PostEntryInput {
@@ -130,6 +161,10 @@ export async function postEntry(input: PostEntryInput): Promise<LedgerEntry> {
         userAgent: input.audit?.userAgent ?? null,
         correlationId: input.audit?.correlationId ?? null,
     }).catch(() => undefined);
+
+    await notifyWalletEntry(entry).catch((notificationError) => {
+        console.error('[ledger] notification delivery failed:', notificationError);
+    });
 
     return entry;
 }

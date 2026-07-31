@@ -73,21 +73,32 @@ export async function approveRefund(refundRequestId: string, approvedByUserId: s
 }
 
 export async function rejectRefund(refundRequestId: string, rejectedByUserId: string, reason: string): Promise<void> {
-    const { data: req } = await adminClient
+    const { data: req, error: readError } = await adminClient
         .from('refund_requests')
         .select('status, reason')
         .eq('id', refundRequestId)
         .single();
 
+    if (readError && readError.code !== 'PGRST116') {
+        throw new RefundError('Could not load refund request', 'db_error');
+    }
     if (!req) throw new RefundError('Refund request not found', 'not_found');
     if ((req as any).status !== 'pending') throw new RefundError('Refund is not pending', 'invalid_status');
 
-    await adminClient.from('refund_requests').update({
-        status:              'rejected',
-        rejected_by_user_id: rejectedByUserId,
-        processed_at:        new Date().toISOString(),
-        reason:              `${(req as any).reason} [Rejected: ${reason}]`,
-    }).eq('id', refundRequestId);
+    const { data: rejected, error: updateError } = await adminClient
+        .from('refund_requests')
+        .update({
+            status:              'rejected',
+            rejected_by_user_id: rejectedByUserId,
+            processed_at:        new Date().toISOString(),
+            reason:              `${(req as any).reason} [Rejected: ${reason}]`,
+        })
+        .eq('id', refundRequestId)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle();
+    if (updateError) throw new RefundError('Could not reject refund request', 'db_error');
+    if (!rejected) throw new RefundError('Refund is not pending', 'invalid_status');
 
     await logAction({
         actorUserId: rejectedByUserId,
@@ -105,12 +116,13 @@ export async function listRefundRequests(opts: { status?: string; limit?: number
         .order('created_at', { ascending: false })
         .limit(opts.limit ?? 200);
     if (opts.status) query = query.eq('status', opts.status);
-    const { data } = await query;
+    const { data, error } = await query;
+    if (error) throw new RefundError('Could not load refund requests', 'db_error');
     return data ?? [];
 }
 
 export async function getRefundSummary() {
-    const statuses = ['pending', 'approved', 'rejected'] as const;
+    const statuses = ['pending', 'approved', 'rejected', 'expired'] as const;
     const [total, ...statusCounts] = await Promise.all([
         adminClient.from('refund_requests').select('id', { count: 'exact', head: true }),
         ...statuses.map((status) => adminClient
@@ -125,5 +137,6 @@ export async function getRefundSummary() {
         pending: statusCounts[0].count ?? 0,
         approved: statusCounts[1].count ?? 0,
         rejected: statusCounts[2].count ?? 0,
+        expired: statusCounts[3].count ?? 0,
     };
 }

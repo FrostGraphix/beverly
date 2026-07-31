@@ -1,9 +1,15 @@
 "use strict";
 
 const supabase = require("./supabase-service");
+const stationRegistry = require("./station-registry");
 
 const BATCH_SIZE = 500;
-const CANONICAL_STATIONS = new Set(["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]);
+
+// Discovered estate, not a hardcoded list — a station onboarded today gets
+// tariff snapshots today. See backend/src/services/station-registry.js.
+function canonicalStationSet() {
+  return new Set(stationRegistry.getStationsSync());
+}
 
 function text(value) {
   return String(value ?? "").trim();
@@ -74,7 +80,7 @@ function normalizeTariff(row, observedAt) {
   const sourceUpdatedAt = text(row?.updateDate || row?.update_date || row?.createDate || row?.create_date);
   const sourceStation = text(row?.stationId || row?.station_id).toUpperCase();
   return {
-    station_scope: CANONICAL_STATIONS.has(sourceStation) ? sourceStation : "*",
+    station_scope: canonicalStationSet().has(sourceStation) ? sourceStation : "*",
     tariff_id: tariffId,
     tariff_name: text(row?.tariffName || row?.tariff_name),
     raw_price: rawPrice,

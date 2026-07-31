@@ -15,7 +15,7 @@ import {
 } from './totp.js';
 
 const SALT = 'beverly-staff-mfa';
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const ISSUER = 'Beverly Wallet Admin';
 
 export class StaffMfaError extends Error {

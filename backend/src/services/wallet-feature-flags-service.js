@@ -9,7 +9,9 @@ function seedDefaults() {
   const defaults = [
     { key: "wallet.vending.enabled",        description: "Enable wallet-based vending for vendors",       enabled: true,  rollout_percent: 100, regions: [] },
     { key: "wallet.funding.bank_transfer",   description: "Allow bank transfer as a funding channel",      enabled: true,  rollout_percent: 100, regions: [] },
-    { key: "wallet.funding.paystack",        description: "Allow Paystack online funding channel",         enabled: false, rollout_percent: 0,   regions: [] },
+    // Live channel: seeded on. This is a kill switch, not a rollout gate —
+    // seeding it off would stop funding the moment the seed ran.
+    { key: "wallet.funding.paystack",        description: "Allow Paystack online funding channel",         enabled: true,  rollout_percent: 100, regions: [] },
     { key: "wallet.refunds.self_service",    description: "Allow vendors to request refunds directly",     enabled: true,  rollout_percent: 100, regions: [] },
     { key: "eih.fraud.auto_flag",            description: "Auto-flag EIH anomalies in fraud engine",       enabled: true,  rollout_percent: 100, regions: [] },
     { key: "settlement.auto_batch",          description: "Automatically generate daily settlement batches", enabled: false, rollout_percent: 0, regions: [] },

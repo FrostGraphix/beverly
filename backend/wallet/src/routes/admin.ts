@@ -13,9 +13,6 @@ import { adminClient } from '../db/supabase.js';
 import {
     createVendorOrganization, setVendorStatus,
 } from '../services/vendor-onboarding.js';
-import {
-    approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls,
-} from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { logAction } from '../services/audit.js';
@@ -40,6 +37,29 @@ import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
 import { revokePortalSession } from '../services/portal-session.js';
 import adminDevRoutes from './admin-dev.js';
+import adminFundingRoutes from './admin-funding.js';
+import adminAuditRoutes from './admin-audit.js';
+import { csvEscape, toCsv } from './admin-csv.js';
+import { staffStations, stationOwnerIds } from './admin-station-scope.js';
+import {
+    buildCustomRoleKey,
+    escapeLikePattern,
+    isLegacyRoleNameSchemaError,
+    isReservedRoleName,
+    isUniqueViolation,
+    isUsableRoleSlug,
+    slugifyRoleName,
+    ungrantablePermissions,
+} from '../services/role-identity.js';
+import { fetchAllRows } from '../services/paged-query.js';
+import {
+    scopeWalletsToStations,
+    summarizeWallets,
+    startOfBusinessDay,
+    sumMinor,
+    type WalletRow,
+    type WalletBalanceRow,
+} from '../services/wallet-summary.js';
 import {
     DEFAULT_ROLE_PERMISSIONS,
     PERMISSION_CATALOG,
@@ -47,20 +67,6 @@ import {
     ROLE_LEGACY_NAMES,
     SYSTEM_ROLE_KEYS,
 } from './admin-access-constants.js';
-
-function csvEscape(v: unknown): string {
-    if (v === null || v === undefined) return '';
-    const s = typeof v === 'string' ? v : JSON.stringify(v);
-    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-}
-
-function toCsv<T extends object>(rows: T[], columns: string[]): string {
-    return [
-        columns.map(csvEscape).join(','),
-        ...rows.map((row) => columns.map((column) => csvEscape((row as Record<string, unknown>)[column])).join(',')),
-    ].join('\n');
-}
 
 function isUuid(value: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -268,6 +274,9 @@ const OPEN_ADMIN_ROUTES = new Set([
     'GET /me',
     'PATCH /me',
     'POST /logout',
+    'GET /notifications',
+    'POST /notifications/read-all',
+    'PATCH /notifications/:id/read',
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
     'DELETE /profile-picture',
@@ -304,6 +313,8 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /funding/pending': 'wallet.funding.view',
     'GET /funding/history': 'wallet.funding.view',
     'POST /funding/reconcile-approved': 'wallet.funding.approve',
+    'GET /payments/requires-review': 'wallet.funding.view',
+    'POST /payments/:id/retry-fulfillment': 'wallet.funding.approve',
     'POST /funding/:id/approve': 'wallet.funding.approve',
     'POST /funding/:id/reject': 'wallet.funding.approve',
     'GET /wallets': 'wallet.funding.view',
@@ -480,13 +491,6 @@ function requireAccessManager(req: any, reply: any): boolean {
     return true;
 }
 
-function staffStations(req: FastifyRequest): string[] | null {
-    if (req.actor?.role === 'super-admin') return null;
-    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
-        .map((value) => String(value ?? '').trim().toUpperCase())
-        .filter(Boolean))];
-}
-
 function scopeStations(query: any, stationIds: string[] | null, column = 'station_id') {
     return stationIds ? query.in(column, stationIds) : query;
 }
@@ -497,25 +501,30 @@ function missingColumn(error: { message?: string } | null, column: string) {
         && (message.includes('schema cache') || message.includes('does not exist'));
 }
 
-async function stationOwnerIds(stationIds: string[]): Promise<{ vendors: Set<string>; customers: Set<string> }> {
-    const [{ data: vendors }, { data: meters }] = await Promise.all([
-        adminClient.from('vendor_organizations').select('id').overlaps('operating_stations', stationIds),
-        adminClient.from('customer_meters').select('customer_id').in('station_id', stationIds),
-    ]);
-    return {
-        vendors: new Set((vendors ?? []).map((row: any) => row.id)),
-        customers: new Set((meters ?? []).map((row: any) => row.customer_id)),
-    };
-}
 
+/**
+ * Every station the platform knows about.
+ *
+ * This used to scan the first 5000 daily_meter_readings rows and derive the
+ * list from whatever station ids happened to appear — at production volume
+ * that is a single station, so the rest of the estate silently vanished from
+ * the station picker and from consumption rebuilds. The set is now computed in
+ * the database over the full table; the row-sampling path survives only as a
+ * fallback for when the RPC is unavailable.
+ */
 async function listStoredStations(): Promise<Array<{ stationId: string; name: string; remark: null }>> {
-    const [{ data: readings }, { data: vendors }] = await Promise.all([
-        adminClient.from('daily_meter_readings').select('station_id').not('station_id', 'is', null).limit(5000),
-        adminClient.from('vendor_organizations').select('operating_stations').limit(1000),
-    ]);
     const ids = new Set<string>();
-    for (const row of readings ?? []) if ((row as any).station_id) ids.add(String((row as any).station_id).trim().toUpperCase());
-    for (const row of vendors ?? []) for (const id of (row as any).operating_stations ?? []) if (id) ids.add(String(id).trim().toUpperCase());
+    try {
+        const { listConsumptionStationIds } = await import('../services/consumption.js');
+        for (const id of await listConsumptionStationIds()) ids.add(id);
+    } catch {
+        const [{ data: readings }, { data: vendors }] = await Promise.all([
+            adminClient.from('daily_meter_readings').select('station_id').not('station_id', 'is', null).limit(5000),
+            adminClient.from('vendor_organizations').select('operating_stations').limit(1000),
+        ]);
+        for (const row of readings ?? []) if ((row as any).station_id) ids.add(String((row as any).station_id).trim().toUpperCase());
+        for (const row of vendors ?? []) for (const id of (row as any).operating_stations ?? []) if (id) ids.add(String(id).trim().toUpperCase());
+    }
     return [...ids].filter(Boolean).sort().map((stationId) => ({ stationId, name: stationId, remark: null }));
 }
 
@@ -683,6 +692,51 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions,
             catalog: PERMISSION_CATALOG,
         };
+    });
+
+    fastify.get('/notifications', async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(50).default(20),
+            cursor: z.string().optional(),
+        }).parse(req.query);
+        let inbox = adminClient
+            .from('notifications')
+            .select('id, type, title, body, metadata, read, created_at')
+            .eq('recipient_type', 'admin')
+            .eq('recipient_id', req.actor!.userId)
+            .order('created_at', { ascending: false })
+            .limit(query.limit + 1);
+        if (query.cursor) inbox = inbox.lt('created_at', query.cursor);
+        const { data, error } = await inbox;
+        if (error) throw error;
+        const rows = data ?? [];
+        const { count } = await adminClient.from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('recipient_type', 'admin')
+            .eq('recipient_id', req.actor!.userId)
+            .eq('read', false);
+        return {
+            notifications: rows.slice(0, query.limit),
+            nextCursor: rows.length > query.limit ? rows[query.limit - 1]?.created_at ?? null : null,
+            unreadCount: count ?? 0,
+        };
+    });
+
+    fastify.post('/notifications/read-all', async (req) => {
+        await adminClient.from('notifications').update({ read: true })
+            .eq('recipient_type', 'admin')
+            .eq('recipient_id', req.actor!.userId)
+            .eq('read', false);
+        return { ok: true };
+    });
+
+    fastify.patch('/notifications/:id/read', async (req) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        await adminClient.from('notifications').update({ read: true })
+            .eq('id', id)
+            .eq('recipient_type', 'admin')
+            .eq('recipient_id', req.actor!.userId);
+        return { ok: true };
     });
 
     fastify.post('/logout', async (req) => {
@@ -859,6 +913,14 @@ const route: FastifyPluginAsync = async (fastify) => {
                 message: 'Super Admin must keep the full permission set.',
             });
         }
+        const blocked = ungrantablePermissions(next, SYSTEM_ROLE_KEYS.has(roleKey));
+        if (blocked.length) {
+            return reply.code(400).send({
+                error: 'permission_not_grantable',
+                message: `These permissions cannot be granted to a custom role: ${blocked.join(', ')}.`,
+                details: { permissions: blocked },
+            });
+        }
         await ensureAccessDefaults();
         await adminClient.from('permissions').delete().eq('role_key', roleKey);
         if (next.length) {
@@ -884,20 +946,67 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = z.object({
             name: z.string().trim().min(2).max(64),
             description: z.string().trim().max(240).optional().default(''),
-            permissions: z.array(z.string()).max(PERMISSION_CATALOG.length).default([]),
+            // A role with no permissions can sign in but reach nothing — reject
+            // it here rather than shipping a staff member into an empty app.
+            permissions: z.array(z.string()).min(1).max(PERMISSION_CATALOG.length),
         }).parse(req.body);
-        const slug = body.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-        const roleKey = `custom-${slug}`;
-        if (slug.length < 2) {
-            return reply.code(400).send({ error: 'invalid_role_name', message: 'Choose a unique custom role name.' });
+        const slug = slugifyRoleName(body.name);
+        const roleKey = buildCustomRoleKey(body.name);
+        if (!isUsableRoleSlug(slug)) {
+            return reply.code(400).send({
+                error: 'invalid_role_name',
+                message: 'Role names must contain at least two latin letters or digits.',
+            });
+        }
+        if (isReservedRoleName(body.name)) {
+            return reply.code(409).send({
+                error: 'role_name_reserved',
+                message: 'That name belongs to a system role. Choose another.',
+            });
         }
         const { data: existing } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
-        if (existing) return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        if (existing) {
+            return reply.code(409).send({
+                error: 'role_exists',
+                message: `"${body.name}" resolves to the same role key as an existing role (${roleKey}). Choose a more distinct name.`,
+            });
+        }
+        const { data: sameName } = await adminClient.from('roles').select('role_key').ilike('role_name', escapeLikePattern(body.name)).maybeSingle();
+        if (sameName) {
+            return reply.code(409).send({ error: 'role_name_taken', message: 'Another role already uses this name.' });
+        }
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
         const selectedPermissions = [...new Set(body.permissions.filter((p) => valid.has(p)))];
+        const blocked = ungrantablePermissions(selectedPermissions, SYSTEM_ROLE_KEYS.has(roleKey));
+        if (blocked.length) {
+            return reply.code(400).send({
+                error: 'permission_not_grantable',
+                message: `These permissions cannot be granted to a custom role: ${blocked.join(', ')}.`,
+                details: { permissions: blocked },
+            });
+        }
+        if (!selectedPermissions.length) {
+            return reply.code(400).send({
+                error: 'role_requires_permission',
+                message: 'Select at least one valid permission for this role.',
+            });
+        }
+        // `name` is deliberately not written: on legacy databases it is the enum
+        // app_role, which has no member for a custom role. Identity is role_key;
+        // the display name lives in role_name/label.
         const { data: role, error: roleError } = await adminClient.from('roles').insert({
-            name: roleKey, role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
+            role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
         }).select('role_key, role_name, label, description').single();
+        if (isUniqueViolation(roleError)) {
+            return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        }
+        if (isLegacyRoleNameSchemaError(roleError)) {
+            req.log.error({ err: roleError }, 'roles.name still NOT NULL — custom roles cannot be created');
+            return reply.code(503).send({
+                error: 'role_schema_migration_required',
+                message: 'Custom roles are unavailable until the roles.name migration (20260728140000_roles_name_nullable.sql) is applied to this database.',
+            });
+        }
         if (roleError || !role) return reply.code(400).send({ error: 'role_create_failed', message: roleError?.message ?? 'Could not create role.' });
         if (selectedPermissions.length) {
             const { error: permissionError } = await adminClient.from('permissions').insert(
@@ -918,6 +1027,16 @@ const route: FastifyPluginAsync = async (fastify) => {
         const roleKey = (req.params as { roleKey: string }).roleKey;
         if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be renamed.' });
         const body = z.object({ name: z.string().trim().min(2).max(64), description: z.string().trim().max(240).optional().default('') }).parse(req.body);
+        if (isReservedRoleName(body.name)) {
+            return reply.code(409).send({
+                error: 'role_name_reserved',
+                message: 'That name belongs to a system role. Choose another.',
+            });
+        }
+        const { data: nameClash } = await adminClient.from('roles').select('role_key').ilike('role_name', escapeLikePattern(body.name)).neq('role_key', roleKey).maybeSingle();
+        if (nameClash) {
+            return reply.code(409).send({ error: 'role_name_taken', message: 'Another role already uses this name.' });
+        }
         const { data: role, error } = await adminClient.from('roles').update({ role_name: body.name, label: body.name, description: body.description || null, updated_at: new Date().toISOString() })
             .eq('role_key', roleKey).select('role_key, role_name, label, description').maybeSingle();
         if (error || !role) return reply.code(404).send({ error: 'role_not_found', message: error?.message ?? 'Role was not found.' });
@@ -1104,9 +1223,38 @@ const route: FastifyPluginAsync = async (fastify) => {
         const force = (req.query as { refresh?: string }).refresh === '1';
         try {
             const assignedStations = staffStations(req);
-            const stored = await listStoredStations();
-            const source = force || !stored.length ? await listStations({ force }) : stored;
-            const stations = source.filter((station) => !assignedStations || assignedStations.includes(station.stationId.toUpperCase()));
+            // The OEM station registry is the authority: it is the only source
+            // with real station *names*. The DB derivation is a fallback for
+            // when the energy backend is unreachable — it can only ever return
+            // ids-as-names, which is what made the picker look like fallback
+            // data ("0001", "SMOKE-STATION", names identical to ids).
+            let source: Array<{ stationId: string; name: string; remark?: string | null }> = [];
+            try {
+                source = await listStations({ force });
+            } catch (e) {
+                req.log.warn({ err: e }, 'station registry unavailable; deriving stations from stored data');
+            }
+
+            if (!source.length) {
+                // Fallback only. This path derives ids from our own tables and
+                // so can surface onboarding fixtures ("SMOKE-STATION",
+                // "KADUNA") that are not stations at all — narrow it to ids the
+                // consumption pipeline recognises. The OEM path needs no such
+                // filter: a real station that has not reported a reading yet
+                // must still be listable, which an allow-list would prevent.
+                source = await listStoredStations();
+                try {
+                    const { listConsumptionStationIds } = await import('../services/consumption.js');
+                    const known = new Set(await listConsumptionStationIds());
+                    source = source.filter((station) => known.has(station.stationId));
+                } catch {
+                    // Registry function unavailable — better a broad list than none.
+                }
+            }
+
+            const stations = source
+                .map((station) => ({ ...station, stationId: station.stationId.trim().toUpperCase() }))
+                .filter((station) => !assignedStations || assignedStations.includes(station.stationId));
             return { stations, count: stations.length };
         } catch (e: any) {
             if (e instanceof TokenEngineError) {
@@ -1127,14 +1275,19 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── vendor applications queue ──
+    // Station-scoped like every other admin list. Applications that name no
+    // operating station stay visible to estate-wide staff only.
     fastify.get('/vendor-applications', async (req) => {
         const status = (req.query as { status?: string }).status ?? 'submitted';
-        const { data } = await adminClient
+        const assignedStations = staffStations(req);
+        let query = adminClient
             .from('vendor_applications')
             .select('*')
             .eq('status', status)
             .order('created_at', { ascending: true })
             .limit(200);
+        if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
+        const { data } = await query;
         return { applications: data ?? [] };
     });
 
@@ -1447,21 +1600,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { transactions: rows, nextCursor };
     });
 
-    // ── vendor funding history ──
-    fastify.get('/vendors/:id/funding', async (req) => {
-        const id = (req.params as { id: string }).id;
-        const { limit, cursor } = req.query as { limit?: string; cursor?: string };
-        let query = adminClient.from('payment_transactions').select('*')
-            .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
-            .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 50), 200));
-        if (cursor) query = query.lt('created_at', cursor);
-        const { data } = await query;
-        const rows = data ?? [];
-        const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
-        return { funding: rows, nextCursor };
-    });
-
     // ── vendor staff accounts ──
     fastify.get('/vendors/:id/staff', async (req) => {
         const id = (req.params as { id: string }).id;
@@ -1472,111 +1610,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { staff: data ?? [] };
     });
 
-    // ── funding approval queue ──
-    fastify.get('/funding/pending', async (req) => {
-        const list = await listPendingFunding(200);
-        const assignedStations = staffStations(req);
-        if (!assignedStations) return { funding: list };
-        const { vendors } = await stationOwnerIds(assignedStations);
-        return { funding: list.filter((row) => vendors.has(row.vendor_organization_id)) };
-    });
-
-    // ── funding history (all statuses, filterable) ──
-    fastify.get('/funding/history', async (req) => {
-        const { status, channel, from, to, limit, cursor } = req.query as {
-            status?: string; channel?: string; from?: string; to?: string;
-            limit?: string; cursor?: string;
-        };
-        const assignedStations = staffStations(req);
-        const scopedVendors = assignedStations ? (await stationOwnerIds(assignedStations)).vendors : null;
-        if (scopedVendors && !scopedVendors.size) return { funding: [], nextCursor: null, summary: null };
-        const pageSize = Math.min(Number(limit ?? 50), 200);
-        let query = adminClient
-            .from('funding_requests')
-            .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
-            .order('created_at', { ascending: false })
-            .limit(pageSize);
-        if (scopedVendors) query = query.in('vendor_organization_id', [...scopedVendors]);
-        if (status === 'pending') query = query.in('status', ['initiated', 'proof_uploaded', 'under_review']);
-        else if (status && status !== 'all') query = query.eq('status', status);
-        if (channel && channel !== 'all') query = query.eq('channel', channel);
-        if (from)   query = query.gte('created_at', new Date(from).toISOString());
-        if (to)     query = query.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
-        if (cursor) query = query.lt('created_at', cursor);
-        const { data } = await query;
-        const rows = (data ?? []) as any[];
-        const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
-        const withUrls = await attachProofUrls(rows);
-        // KPI aggregates (only on first page / no cursor)
-        let summary: Record<string, number> | null = null;
-        if (!cursor) {
-            let aggQ = adminClient.from('funding_requests').select('status, amount_minor');
-            if (scopedVendors) aggQ = aggQ.in('vendor_organization_id', [...scopedVendors]);
-            if (from)    aggQ = aggQ.gte('created_at', new Date(from).toISOString());
-            if (to)      aggQ = aggQ.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
-            if (channel && channel !== 'all') aggQ = aggQ.eq('channel', channel);
-            const { data: agg } = await aggQ.limit(10_000);
-            const rows2 = (agg ?? []) as any[];
-            const sumMinor = (s: string) => rows2.filter((r) => r.status === s).reduce((acc, r) => acc + Number(r.amount_minor ?? 0), 0);
-            summary = {
-                totalCount:    rows2.length,
-                approvedCount: rows2.filter((r) => r.status === 'approved').length,
-                pendingCount:  rows2.filter((r) => ['initiated', 'proof_uploaded', 'under_review'].includes(r.status)).length,
-                rejectedCount: rows2.filter((r) => r.status === 'rejected').length,
-                approvedMinor: sumMinor('approved'),
-            };
-        }
-        return { funding: withUrls, nextCursor, summary };
-    });
-
-    fastify.post('/funding/reconcile-approved', async (req, reply) => {
-        try {
-            const result = await reconcileApprovedFundingCredits({
-                repairedBy: req.actor!.userId,
-                limit: 250,
-            });
-            return { ok: true, ...result };
-        } catch (e: any) {
-            return reply.code(400).send({
-                error: e.code ?? 'funding_reconcile_failed',
-                message: e.message,
-            });
-        }
-    });
-
-    fastify.post('/funding/:id/approve', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        try {
-            const r = await approveFundingRequest({ fundingRequestId: id, approvedBy: req.actor!.userId });
-            const balance = await getBalance(r.funding.wallet_id);
-            return {
-                ...r,
-                balance,
-                receipt: {
-                    fundingRequestId: r.funding.id,
-                    walletId: r.funding.wallet_id,
-                    ledgerEntryId: r.ledgerEntry.id,
-                    creditedAmountMinor: r.ledgerEntry.amount_minor,
-                    availableBalanceMinor: balance.availableMinor,
-                    approvedAt: r.funding.approved_at,
-                },
-            };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'approve_failed', message: e.message });
-        }
-    });
-
-    fastify.post('/funding/:id/reject', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        const schema = z.object({ reason: z.string().min(2) });
-        const body = schema.parse(req.body);
-        try {
-            const r = await rejectFundingRequest({ fundingRequestId: id, rejectedBy: req.actor!.userId, reason: body.reason });
-            return r;
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'reject_failed', message: e.message });
-        }
-    });
+    await fastify.register(adminFundingRoutes);
 
     // ════════════════════════════════════════════════════════════
     // WALLETS — full admin experience
@@ -1662,46 +1696,29 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary across the entire wallet system.
+    //
+    // `owner_id` is load-bearing: station scoping filters on it, so omitting it
+    // from the select silently zeroes the float for every non-super-admin.
+    // Balances come from one paged read of v_wallet_balances rather than a
+    // getBalance() call per wallet — this endpoint is polled every 30s by each
+    // open dashboard.
     fastify.get('/wallets/summary', async (req) => {
-        const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, status');
-        let wallets = walletsRaw ?? [];
         const assignedStations = staffStations(req);
-        if (assignedStations) {
-            const owners = await stationOwnerIds(assignedStations);
-            wallets = wallets.filter((wallet: any) => wallet.owner_type === 'vendor'
-                ? owners.vendors.has(wallet.owner_id)
-                : owners.customers.has(wallet.owner_id));
-        }
-        const { getBalance } = await import('../services/ledger.js');
-        const balances = await Promise.all(wallets.map((w: any) => getBalance(w.id).catch(() => null)));
+        const walletRows = await fetchAllRows<WalletRow>(
+            () => adminClient.from('wallets').select('id, owner_type, owner_id, status').order('id'),
+        );
+        const stationOwners = assignedStations ? await stationOwnerIds(assignedStations) : null;
+        const wallets = scopeWalletsToStations(walletRows, stationOwners);
 
-        let totalFloat = 0, totalHolds = 0, vendorFloat = 0, customerFloat = 0;
-        const byStatus: Record<string, number> = {};
-        const byOwnerType: Record<string, number> = {};
-        for (let i = 0; i < wallets.length; i++) {
-            const w = wallets[i] as any;
-            const b = balances[i];
-            const bal = b?.ledgerBalanceMinor ?? 0;
-            totalFloat += bal;
-            totalHolds += b?.activeHoldsMinor ?? 0;
-            if (w.owner_type === 'vendor')   vendorFloat   += bal;
-            if (w.owner_type === 'customer') customerFloat += bal;
-            byStatus[w.status]         = (byStatus[w.status] ?? 0) + 1;
-            byOwnerType[w.owner_type]  = (byOwnerType[w.owner_type] ?? 0) + 1;
-        }
-        return {
-            walletCount: wallets.length,
-            totalFloatMinor:    totalFloat,
-            totalBalanceMinor:  totalFloat,
-            totalHoldsMinor:    totalHolds,
-            vendorFloatMinor:   vendorFloat,
-            customerFloatMinor: customerFloat,
-            activeWallets:      byStatus.active ?? 0,
-            suspendedWallets:   byStatus.frozen ?? 0,
-            closedWallets:      byStatus.closed ?? 0,
-            byStatus,
-            byOwnerType,
-        };
+        const balanceRows = await fetchAllRows<WalletBalanceRow>(
+            () => adminClient
+                .from('v_wallet_balances')
+                .select('wallet_id, ledger_balance_minor, active_holds_minor')
+                .order('wallet_id'),
+        );
+        const balances = new Map(balanceRows.map((row) => [row.wallet_id, row]));
+
+        return summarizeWallets(wallets, balances);
     });
 
     // Single wallet detail (with owner block + computed balance).
@@ -2239,30 +2256,52 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary for purchases dashboard.
+    //
+    // Value totals are paged with fetchAllRows: an unbounded select is capped by
+    // PostgREST, which would report an exact count next to a truncated sum.
+    // "Today" is the Africa/Lagos business day, not the server's local midnight.
     fastify.get('/purchases/summary', async (req) => {
         const now = new Date();
-        const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const sod = startOfBusinessDay(now).toISOString();
         const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
 
         const assignedStations = staffStations(req);
         const scope = (query: any) => scopeStations(query, assignedStations);
-        const [today, last24h, failed24h, refunded] = await Promise.all([
-            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', sod)),
-            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo)),
+        type PurchaseAmountRow = {
+            amount_minor: number | string | null;
+            actor_type?: 'vendor' | 'customer' | null;
+        };
+        const amountRows = (build: () => any) => fetchAllRows<PurchaseAmountRow>(
+            () => scope(build()).order('id'),
+        );
+
+        const [today, last24h, deliveredToday, failedToday, failed24h, refunded] = await Promise.all([
+            amountRows(() => adminClient.from('purchase_orders').select('amount_minor').gte('created_at', sod)),
+            amountRows(() => adminClient.from('purchase_orders').select('amount_minor').gte('created_at', dayAgo)),
+            amountRows(() => adminClient.from('purchase_orders').select('amount_minor, actor_type').gte('created_at', sod).eq('status', 'delivered')),
+            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', sod).eq('status', 'failed')),
             scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', dayAgo).eq('status', 'failed')),
             scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded')),
         ]);
 
-        const sumMinor = (arr: any[] | null | undefined) =>
-            (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
+        const vendorDeliveredToday = deliveredToday.filter((row) => row.actor_type === 'vendor');
+        const customerDeliveredToday = deliveredToday.filter((row) => row.actor_type === 'customer');
 
         return {
-            todayCount:       today.count ?? 0,
-            todayValueMinor:  sumMinor(today.data),
-            last24hCount:     last24h.count ?? 0,
-            last24hValueMinor: sumMinor(last24h.data),
-            failed24hCount:   failed24h.count ?? 0,
-            refundedCount:    refunded.count ?? 0,
+            businessDayStart:         sod,
+            todayCount:               today.length,
+            todayValueMinor:          sumMinor(today),
+            last24hCount:             last24h.length,
+            last24hValueMinor:        sumMinor(last24h),
+            deliveredTodayCount:      deliveredToday.length,
+            deliveredTodayValueMinor: sumMinor(deliveredToday),
+            vendorTodayCount:         vendorDeliveredToday.length,
+            vendorTodayValueMinor:    sumMinor(vendorDeliveredToday),
+            customerTodayCount:       customerDeliveredToday.length,
+            customerTodayValueMinor:  sumMinor(customerDeliveredToday),
+            failedTodayCount:         failedToday.count ?? 0,
+            failed24hCount:           failed24h.count ?? 0,
+            refundedCount:            refunded.count ?? 0,
         };
     });
 
@@ -2925,7 +2964,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const normalizedStatus = status === 'requested' || status === 'under_review'
             ? 'pending'
             : status;
-        return { refunds: await listRefundRequests({ status: normalizedStatus, limit: 200 }) };
+        const parsedStatus = z.enum(['pending', 'approved', 'rejected', 'expired'])
+            .optional()
+            .parse(normalizedStatus);
+        return { refunds: await listRefundRequests({ status: parsedStatus, limit: 200 }) };
     });
 
     fastify.post('/refunds', async (req, reply) => {
@@ -2992,181 +3034,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    // ── audit log viewer ──
-    async function resolveRegisteredActorNames(actorIds: string[]): Promise<Map<string, string>> {
-        const ids = [...new Set(actorIds.map((value) => String(value || '').trim()).filter(Boolean))];
-        if (!ids.length) return new Map();
-        const [byAuth, byUser] = await Promise.all([
-            adminClient
-                .from('users')
-                .select('auth_user_id, user_name, email')
-                .in('auth_user_id', ids),
-            adminClient
-                .from('users')
-                .select('user_id, user_name, email')
-                .in('user_id', ids),
-        ]);
-        const out = new Map<string, string>();
-        for (const row of (byAuth.data ?? []) as any[]) {
-            const id = String(row.auth_user_id ?? '').trim();
-            const name = String(row.user_name ?? row.email ?? '').trim();
-            if (id && name) out.set(id, name);
-        }
-        for (const row of (byUser.data ?? []) as any[]) {
-            const id = String(row.user_id ?? '').trim();
-            const name = String(row.user_name ?? row.email ?? '').trim();
-            if (id && name) out.set(id, name);
-        }
-        return out;
-    }
+    await fastify.register(adminAuditRoutes);
 
-    function enrichAuditActors(rows: any[], actorNames: Map<string, string>): any[] {
-        return rows.map((row) => {
-            const actorId = String(row.actor_user_id ?? '').trim();
-            const registrationName = actorNames.get(actorId);
-            if (!registrationName) return row;
-            const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
-            return {
-                ...row,
-                actor_name: registrationName,
-                metadata: {
-                    ...metadata,
-                    actor_name: registrationName,
-                    registration_name: registrationName,
-                },
-            };
-        });
-    }
-
-    fastify.get('/audit', async (req, reply) => {
-        const { actor, actorType, action, targetType, target, since, until, limit, cursor } =
-            req.query as Record<string, string | undefined>;
-        let query = adminClient
-            .from('wallet_audit_log')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 100), 500));
-        if (actor)      query = query.eq('actor_user_id', actor);
-        if (actorType)  query = query.eq('actor_type', actorType);
-        if (action)     query = query.ilike('action', `${action}%`);
-        if (targetType) query = query.eq('target_type', targetType);
-        if (target)     query = query.eq('target_id', target);
-        if (since)      query = query.gte('created_at', since);
-        if (until)      query = query.lte('created_at', until);
-        if (cursor)     query = query.lt('created_at', cursor);
-        const { data, error } = await query;
-        if (error) {
-            return reply.code(502).send({
-                error: 'audit_log_unavailable',
-                message: 'Audit log failed to load.',
-                details: error.message,
-            });
-        }
-        const rows = data ?? [];
-        const actorNames = await resolveRegisteredActorNames(rows.map((entry: any) => String(entry.actor_user_id ?? '')).filter(Boolean));
-        const entries = enrichAuditActors(rows as any[], actorNames);
-        const nextCursor = entries.length === Math.min(Number(limit ?? 100), 500)
-            ? entries[entries.length - 1].created_at
-            : null;
-        return { entries, nextCursor };
-    });
-
-    // ── single audit row (for detail drawer) ──
-    fastify.get('/audit/:id', async (req, reply) => {
-        const { id } = req.params as { id: string };
-        const { data, error } = await adminClient.from('wallet_audit_log').select('*').eq('id', id).maybeSingle();
-        if (error || !data) return reply.code(404).send({ error: 'not_found', message: 'Audit entry not found.' });
-        const actorNames = await resolveRegisteredActorNames([String((data as any).actor_user_id ?? '')].filter(Boolean));
-        const [entry] = enrichAuditActors([data as any], actorNames);
-        return entry;
-    });
-
-    // ── CSV export (capped at 10k rows for safety) ──
-    fastify.get('/audit/export.csv', async (req, reply) => {
-        const { actor, actorType, action, targetType, target, since, until } =
-            req.query as Record<string, string | undefined>;
-        let query = adminClient.from('wallet_audit_log').select('*')
-            .order('created_at', { ascending: false }).limit(10_000);
-        if (actor)      query = query.eq('actor_user_id', actor);
-        if (actorType)  query = query.eq('actor_type', actorType);
-        if (action)     query = query.ilike('action', `${action}%`);
-        if (targetType) query = query.eq('target_type', targetType);
-        if (target)     query = query.eq('target_id', target);
-        if (since)      query = query.gte('created_at', since);
-        if (until)      query = query.lte('created_at', until);
-        const { data, error } = await query;
-        if (error) {
-            return reply.code(502).send({
-                error: 'audit_export_unavailable',
-                message: 'Audit export failed.',
-                details: error.message,
-            });
-        }
-        const rowsRaw = data ?? [];
-        const actorNames = await resolveRegisteredActorNames(rowsRaw.map((entry: any) => String(entry.actor_user_id ?? '')).filter(Boolean));
-        const rows = enrichAuditActors(rowsRaw as any[], actorNames);
-        const header = ['created_at', 'actor_type', 'actor_user_id', 'actor_role', 'action',
-                        'target_type', 'target_id', 'ip', 'correlation_id'];
-        const csv = [
-            header.join(','),
-            ...rows.map((r: any) => header.map((h) => csvEscape(r[h])).join(',')),
-        ].join('\n');
-        reply.header('Content-Type', 'text/csv; charset=utf-8');
-        reply.header('Content-Disposition', `attachment; filename="audit-${new Date().toISOString().slice(0, 10)}.csv"`);
-        return csv;
-    });
-
-    // ── security events viewer ──
-    fastify.get('/security-events', async (req, reply) => {
-        const { eventType, severity, actor, since, until, limit } =
-            req.query as Record<string, string | undefined>;
-        let query = adminClient
-            .from('wallet_security_events')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(Math.min(Number(limit ?? 100), 500));
-        if (eventType) query = query.eq('event_type', eventType);
-        if (severity)  query = query.eq('severity', severity);
-        if (actor)     query = query.eq('actor_user_id', actor);
-        if (since)     query = query.gte('created_at', since);
-        if (until)     query = query.lte('created_at', until);
-        const { data, error } = await query;
-        if (error) {
-            return reply.code(502).send({
-                error: 'security_events_unavailable',
-                message: 'Security events failed to load.',
-                details: error.message,
-            });
-        }
-        return { events: data ?? [] };
-    });
-
-    // ── audit summary: counts by action over the last N days ──
-    fastify.get('/audit/summary', async (req, reply) => {
-        const days = Math.min(Math.max(Number((req.query as { days?: string }).days ?? 7), 1), 90);
-        const since = new Date(Date.now() - days * 86400_000).toISOString();
-        const { data, error } = await adminClient
-            .from('wallet_audit_log')
-            .select('action, actor_type')
-            .gte('created_at', since)
-            .limit(10_000);
-        if (error) {
-            return reply.code(502).send({
-                error: 'audit_summary_unavailable',
-                message: 'Audit summary failed to load.',
-                details: error.message,
-            });
-        }
-        const byAction: Record<string, number> = {};
-        const byActorType: Record<string, number> = {};
-        for (const row of data ?? []) {
-            const a = (row as any).action;
-            const t = (row as any).actor_type;
-            byAction[a]     = (byAction[a]     ?? 0) + 1;
-            byActorType[t]  = (byActorType[t]  ?? 0) + 1;
-        }
-        return { days, total: (data ?? []).length, byAction, byActorType };
-    });
 
     // ════════════════════════════════════════════════════════════
     // REPORTS — analytics aggregation across the wallet system
@@ -3451,7 +3320,13 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/consumption', async (req, reply) => {
         const qs = req.query as Record<string, string>;
         const assignedStations = staffStations(req);
-        const scope      = (assignedStations ? 'station' : qs.scope) as 'meter' | 'station' | 'cumulative' ?? 'station';
+        // Scope is a presentation choice; authority is the security boundary.
+        // Forcing station-scoped staff onto scope='station' made the portal's
+        // cumulative card render one row per station under a single period
+        // label — duplicated keys and a "system-wide" total that was really
+        // just the newest station. Honour the requested scope; the authority
+        // below still confines it to their assignment.
+        const scope      = (qs.scope ?? 'station') as 'meter' | 'station' | 'cumulative';
         const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
         const scope_id   = qs.scope_id || undefined;
         const from       = qs.from ?? undefined;
@@ -3488,27 +3363,52 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!station_id) {
             return reply.code(400).send({ error: 'missing_station_id', message: 'station_id is required' });
         }
-        if (assignedStations && !assignedStations.includes(station_id.toUpperCase())) {
+        if (assignedStations && !assignedStations.includes(station_id.trim().toUpperCase())) {
             return reply.code(404).send({ error: 'not_found', message: 'Station not found for your assignment.' });
         }
         if (!['day','week','month','year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
 
-        const { queryMeterBreakdown, allStations, stationsAuthority } = await import('../services/consumption.js');
+        const { queryMeterBreakdown, allStations, stationsAuthority, METER_BREAKDOWN_MAX_ROWS } =
+            await import('../services/consumption.js');
         const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
-        const rows = await queryMeterBreakdown(station_id, period, authority, from, to);
-        return { rows, count: rows.length };
+        const limit = Math.min(Number(qs.limit ?? METER_BREAKDOWN_MAX_ROWS), METER_BREAKDOWN_MAX_ROWS);
+        const rows = await queryMeterBreakdown(station_id, period, authority, from, to, qs.spend === 'true', limit);
+        // The estate's largest site is 726 meters; a daily view over a long
+        // window still exceeds any sane cap. Say so rather than render a
+        // partial list as if it were the whole station.
+        return {
+            rows,
+            count: rows.length,
+            meterCount: new Set(rows.map((row) => row.meter_id)).size,
+            truncated: rows.length >= limit,
+            limit,
+        };
     });
 
     fastify.post('/consumption/refresh', async (req, reply) => {
         try {
             const body = (req.body ?? {}) as { stationId?: string; station_id?: string; stationIds?: string[]; station_ids?: string[] };
             const assignedStations = staffStations(req);
-            const stationIds = assignedStations ?? body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
+            const requested = body.stationIds ?? body.station_ids
+                ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
+            // Station-scoped staff refresh their assignment, and may narrow to
+            // one of their own stations — never widen past it. An unscoped
+            // request (undefined) lets the service discover the whole estate.
+            const stationIds = assignedStations
+                ? (requested?.length
+                    ? requested.map((id) => String(id ?? '').trim().toUpperCase()).filter((id) => assignedStations.includes(id))
+                    : assignedStations)
+                : requested;
+            if (assignedStations && !stationIds?.length) {
+                return reply.code(403).send({ error: 'station_required', message: 'No station in your assignment matched this request.' });
+            }
             const { refreshConsumptionAggregates } = await import('../services/consumption.js');
             const result = await refreshConsumptionAggregates(stationIds);
-            return { ...result, ok: true };
+            // `ok` is the service's verdict. Overwriting it with `true` made a
+            // run where every station failed look like a success.
+            return result;
         } catch (e: any) {
             return reply.code(500).send({ error: 'refresh_failed', message: e.message, result: e.result });
         }

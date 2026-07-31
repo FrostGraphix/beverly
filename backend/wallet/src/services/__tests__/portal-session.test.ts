@@ -19,9 +19,9 @@ function actor(type: ActorType): Actor {
 
 describe('portal session policies', () => {
     it.each([
-        ['staff', 1_800, 28_800],
-        ['vendor_user', 1_800, 43_200],
-        ['customer', 3_600, 2_592_000],
+        ['staff', 28_800, 57_600],
+        ['vendor_user', 28_800, 86_400],
+        ['customer', 28_800, 86_400],
     ] as const)('enforces %s limits', (type, idleSeconds, absoluteSeconds) => {
         const identity = portalSessionIdentity(actor(type), token({ iat: 1_700_000_000, session_id: 'stable-session' }));
         expect(identity.policy).toEqual({ idleSeconds, absoluteSeconds });

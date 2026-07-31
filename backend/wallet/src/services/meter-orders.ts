@@ -165,6 +165,66 @@ async function createOrderRow(input: {
     return data as MeterOrderRecord;
 }
 
+/**
+ * Register a gateway-paid meter order with the payment reconciler.
+ *
+ * Every Paystack charge needs a local `payment_transactions` row: it is what
+ * the webhook matches on, what the stuck-payment sweeper retries, and what
+ * carries the fulfillment lease. Orders created without one are invisible to
+ * all three and depend entirely on the payer returning to the callback URL.
+ */
+async function createMeterOrderPaymentTransaction(input: {
+    order: MeterOrderRecord;
+    actorType: 'customer' | 'vendor';
+    actorId: string;
+    reference: string;
+    amountMinor: number;
+}): Promise<void> {
+    const { error } = await adminClient.from('payment_transactions').insert({
+        gateway: 'paystack',
+        gateway_reference: input.reference,
+        actor_type: input.actorType,
+        actor_id: input.actorId,
+        purpose: 'meter_order',
+        amount_minor: input.amountMinor,
+        status: 'initiated',
+        idempotency_key: `meter_order.${input.order.id}`,
+        metadata: { meter_order_id: input.order.id },
+    });
+    // A duplicate here means the idempotent retry already registered it.
+    if (error && (error as { code?: string }).code !== '23505') {
+        throw new MeterOrderError(error.message, 'payment_transaction_create_failed', 500);
+    }
+}
+
+async function failMeterOrderCheckout(
+    orderId: string,
+    reference: string,
+    reason?: string,
+): Promise<void> {
+    const now = new Date().toISOString();
+    await Promise.all([
+        adminClient
+            .from('meter_purchase_orders')
+            .update({ status: 'cancelled', updated_at: now })
+            .eq('id', orderId)
+            .eq('status', 'pending_payment'),
+        adminClient
+            .from('payment_transactions')
+            .update({
+                status: 'failed',
+                metadata: {
+                    meter_order_id: orderId,
+                    checkout_init_failed_at: now,
+                    checkout_init_error: reason ?? 'checkout_init_failed',
+                },
+                updated_at: now,
+            })
+            .eq('gateway', 'paystack')
+            .eq('gateway_reference', reference),
+    ]);
+}
+
 export async function createCustomerPortalMeterOrder(input: {
     customerId: string;
     customerUserId: string;
@@ -199,16 +259,12 @@ export async function createCustomerPortalMeterOrder(input: {
             ]);
             const callbackUrl = new URL(input.callbackBaseUrl);
             callbackUrl.searchParams.set('ref', reference);
-            const paystack = await initializeTransaction({
-                email,
-                amountMinor,
-                reference,
-                metadata: { customer_id: input.customerId, order_type: 'meter_purchase' },
-                callbackUrl: callbackUrl.toString(),
-            });
-            if (!paystack.authorization_url) {
-                throw new MeterOrderError('Could not initialize payment.', 'payment_init_failed', 502);
-            }
+
+            // The order and its payment transaction are created *before* the
+            // gateway call so the webhook has something to match on. Without a
+            // payment_transactions row the webhook resolves to `no_local_tx`
+            // and the order can only ever advance if the payer happens to
+            // return to the callback URL.
             const order = await createOrderRow({
                 customerId: input.customerId,
                 customerName: customer.full_name,
@@ -224,6 +280,39 @@ export async function createCustomerPortalMeterOrder(input: {
                 createdByActorType: 'customer',
                 createdByActorId: input.customerUserId,
             });
+            await createMeterOrderPaymentTransaction({
+                order,
+                actorType: 'customer',
+                actorId: input.customerId,
+                reference,
+                amountMinor,
+            });
+
+            let paystack;
+            try {
+                paystack = await initializeTransaction({
+                    email,
+                    amountMinor,
+                    reference,
+                    metadata: {
+                        customer_id: input.customerId,
+                        order_type: 'meter_purchase',
+                        meter_order_id: order.id,
+                    },
+                    callbackUrl: callbackUrl.toString(),
+                });
+            } catch (error: any) {
+                await failMeterOrderCheckout(order.id, reference, error?.message);
+                throw new MeterOrderError(
+                    error?.message ?? 'Could not initialize payment.',
+                    'payment_init_failed',
+                    502,
+                );
+            }
+            if (!paystack.authorization_url) {
+                await failMeterOrderCheckout(order.id, reference, 'missing_authorization_url');
+                throw new MeterOrderError('Could not initialize payment.', 'payment_init_failed', 502);
+            }
             return { order, authorizationUrl: paystack.authorization_url };
         },
     );

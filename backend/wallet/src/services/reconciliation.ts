@@ -34,20 +34,30 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         const since = `${date}T00:00:00Z`;
         const until = `${date}T23:59:59Z`;
 
-        // Our DB: sum of payment_transactions completed on this date.
+        // Our DB: payment_transactions completed on this date, keyed by
+        // reference so a per-reference discrepancy cannot net to zero against
+        // an offsetting one and hide inside a matching gross total.
         const { data: dbTxns } = await adminClient
             .from('payment_transactions')
-            .select('amount_minor')
+            .select('gateway_reference, amount_minor')
+            .eq('gateway', 'paystack')
             .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))
             .gte('completed_at', since)
             .lte('completed_at', until);
 
+        const dbByReference = new Map<string, number>();
+        for (const row of (dbTxns ?? []) as any[]) {
+            const reference = String(row.gateway_reference ?? '');
+            if (!reference) continue;
+            dbByReference.set(reference, (dbByReference.get(reference) ?? 0) + Number(row.amount_minor));
+        }
         const dbTotal = (dbTxns ?? []).reduce((s: number, r: any) => s + Number(r.amount_minor), 0);
         const dbCount = (dbTxns ?? []).length;
 
         // Paystack: list transactions for the date, following pagination so
         // high-volume days (> perPage transactions) never report a false delta.
         let gatewayTotal: number | null = null;
+        const gatewayByReference = new Map<string, number>();
         try {
             const paystackKey = process.env.PAYSTACK_SECRET_KEY;
             if (paystackKey) {
@@ -63,7 +73,13 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
                     );
                     const ps: any = await res.json();
                     if (!ps.status || !Array.isArray(ps.data)) break;
-                    sum += (ps.data as any[]).reduce((s, t) => s + Number(t.amount), 0);
+                    for (const t of ps.data as any[]) {
+                        sum += Number(t.amount);
+                        const reference = String(t.reference ?? '');
+                        if (reference) {
+                            gatewayByReference.set(reference, (gatewayByReference.get(reference) ?? 0) + Number(t.amount));
+                        }
+                    }
                     if (ps.data.length < perPage) {
                         complete = true;
                         break;
@@ -77,13 +93,41 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         }
 
         const mismatch = gatewayTotal !== null ? Math.abs(dbTotal - gatewayTotal) : null;
-        const status   = mismatch === null ? 'ok'
-                       : mismatch > MISMATCH_ALERT_THRESHOLD_MINOR ? 'mismatch'
+
+        // Per-reference comparison. A charge the gateway settled but we never
+        // applied nets out of the gross total against an unrelated surplus, so
+        // it has to be counted on its own.
+        const unappliedReferences: string[] = [];
+        const unknownReferences: string[] = [];
+        if (gatewayTotal !== null) {
+            for (const [reference] of gatewayByReference) {
+                if (!dbByReference.has(reference)) unappliedReferences.push(reference);
+            }
+            for (const [reference] of dbByReference) {
+                if (!gatewayByReference.has(reference)) unknownReferences.push(reference);
+            }
+        }
+        const referenceGaps = unappliedReferences.length + unknownReferences.length;
+
+        const status   = gatewayTotal === null ? 'ok'
+                       : referenceGaps > 0 ? 'mismatch'
+                       : mismatch !== null && mismatch > MISMATCH_ALERT_THRESHOLD_MINOR ? 'mismatch'
                        : 'ok';
 
         let notes: string | null = null;
-        if (status === 'mismatch' && mismatch !== null) {
-            notes = `DB total: ₦${(dbTotal / 100).toFixed(2)}, Gateway total: ₦${(gatewayTotal! / 100).toFixed(2)}, Delta: ₦${(mismatch / 100).toFixed(2)}`;
+        if (status === 'mismatch') {
+            const parts = [
+                `DB total: ₦${(dbTotal / 100).toFixed(2)}`,
+                `Gateway total: ₦${((gatewayTotal ?? 0) / 100).toFixed(2)}`,
+                `Delta: ₦${((mismatch ?? 0) / 100).toFixed(2)}`,
+            ];
+            if (unappliedReferences.length) {
+                parts.push(`Settled at gateway but not applied (${unappliedReferences.length}): ${unappliedReferences.slice(0, 10).join(', ')}`);
+            }
+            if (unknownReferences.length) {
+                parts.push(`Marked succeeded locally but absent at gateway (${unknownReferences.length}): ${unknownReferences.slice(0, 10).join(', ')}`);
+            }
+            notes = parts.join(' · ');
             console.error(`[RECONCILIATION] MISMATCH on ${date}: ${notes}`);
         } else if (gatewayTotal === null) {
             // "ok" here only means "nothing proven wrong" — make the gap visible.

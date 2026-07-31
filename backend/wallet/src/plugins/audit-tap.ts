@@ -9,7 +9,7 @@
  * never have a silent-mutation hole.
  *
  * Skipped paths:
- *   • /api/v1/webhooks/*      — webhooks have their own dedicated audit
+ *   • /api/v1/webhook/*       — webhooks have their own dedicated audit
  *   • /api/v1/customer/auth/* — OTP flows audit themselves with PII redaction
  *   • /healthz, /readyz       — health probes
  */
@@ -20,7 +20,7 @@ import { logAction, auditFromRequest } from '../services/audit.js';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 const SKIP_PREFIXES = [
-    '/api/v1/webhooks/',
+    '/api/v1/webhook/',
     '/api/v1/customer/auth/',
     '/healthz',
     '/readyz',

@@ -87,6 +87,12 @@ const schema = z.object({
     VENDOR_PORTAL_URL: z.string().url(),
     STAFF_PORTAL_URL: z.string().url(),
 
+    WEB_PUSH_VAPID_PUBLIC_KEY: z.string().optional(),
+    WEB_PUSH_VAPID_PRIVATE_KEY: z.string().optional(),
+    WEB_PUSH_VAPID_SUBJECT: z.string().refine((value) => value.startsWith('mailto:') || value.startsWith('https://'), {
+        message: 'Must use a mailto: or https:// value.',
+    }).optional(),
+
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
     // services decrypt oem_credentials rows written by the CRM's Settings UI).
@@ -125,6 +131,14 @@ const schema = z.object({
                 message: 'Required when production money writes are enabled.',
             });
         }
+    }
+    const pushValues = [values.WEB_PUSH_VAPID_PUBLIC_KEY, values.WEB_PUSH_VAPID_PRIVATE_KEY, values.WEB_PUSH_VAPID_SUBJECT];
+    if (pushValues.some(Boolean) && !pushValues.every(Boolean)) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['WEB_PUSH_VAPID_PUBLIC_KEY'],
+            message: 'All WEB_PUSH_VAPID settings are required together.',
+        });
     }
 });
 

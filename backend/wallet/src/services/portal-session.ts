@@ -3,9 +3,9 @@ import { adminClient } from '../db/supabase.js';
 import type { Actor, ActorType } from '../plugins/auth.js';
 
 const POLICIES: Record<ActorType, { idleSeconds: number; absoluteSeconds: number }> = {
-    staff: { idleSeconds: 30 * 60, absoluteSeconds: 8 * 60 * 60 },
-    vendor_user: { idleSeconds: 30 * 60, absoluteSeconds: 12 * 60 * 60 },
-    customer: { idleSeconds: 60 * 60, absoluteSeconds: 30 * 24 * 60 * 60 },
+    staff: { idleSeconds: 8 * 60 * 60, absoluteSeconds: 16 * 60 * 60 },
+    vendor_user: { idleSeconds: 8 * 60 * 60, absoluteSeconds: 24 * 60 * 60 },
+    customer: { idleSeconds: 8 * 60 * 60, absoluteSeconds: 24 * 60 * 60 },
 };
 
 type JwtClaims = { iat?: number; session_id?: string };

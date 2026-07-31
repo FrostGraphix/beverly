@@ -7,6 +7,8 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyDisputeUpdate } from './notifications.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { notifyStaffInbox } from './staff-inbox.js';
 
 export class DisputeError extends Error {
     constructor(message: string, public code: string) {
@@ -39,6 +41,13 @@ export async function raiseDispute(input: {
         .single();
 
     if (error || !data) throw new DisputeError('Could not create dispute', 'db_error');
+    void notifyStaffInbox({
+        type: 'dispute_review',
+        title: 'New dispute raised',
+        body: `${(data as any).reference}: ${input.subject}`,
+        eventKey: `staff:dispute:${(data as any).id}:raised`,
+        metadata: { dispute_id: (data as any).id, path: '/disputes' },
+    });
     return { id: (data as any).id, reference: (data as any).reference };
 }
 
@@ -77,7 +86,7 @@ export async function updateDisputeStatus(input: {
     // Notify the customer who raised the dispute (if any)
     const { data: dispute } = await adminClient
         .from('disputes')
-        .select('customer_id')
+        .select('customer_id, vendor_organization_id, reference')
         .eq('id', input.disputeId)
         .maybeSingle();
     if ((dispute as any)?.customer_id) {
@@ -86,6 +95,15 @@ export async function updateDisputeStatus(input: {
             status: input.status,
             message: input.resolutionNote,
         }).catch(() => undefined);
+    }
+    if ((dispute as any)?.vendor_organization_id) {
+        await notifyVendor((dispute as any).vendor_organization_id, {
+            type: 'dispute_update',
+            title: 'Dispute updated',
+            body: input.resolutionNote ?? `Dispute ${(dispute as any).reference ?? ''} is now ${input.status}.`,
+            eventKey: `dispute:${input.disputeId}:${input.status}`,
+            metadata: { dispute_id: input.disputeId, path: `/disputes/${input.disputeId}` },
+        });
     }
 }
 

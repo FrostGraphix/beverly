@@ -185,6 +185,55 @@ export async function processRefundExpiry(): Promise<void> {
     console.warn(`[JOB:refund-expiry] expired ${ids.length} refund requests pending >7 days`);
 }
 
+// ── Funding expiry (close out checkouts the vendor never completed) ──────────
+export async function expireStaleFundingRequests(): Promise<void> {
+    const now = new Date().toISOString();
+    // Only unpaid states expire. A request that reached review or approval is
+    // holding real money and must be resolved by a human, never by a sweeper.
+    const { data: stale } = await adminClient
+        .from('funding_requests')
+        .select('id, vendor_organization_id, amount_minor, channel')
+        .in('status', ['initiated', 'proof_uploaded'])
+        .not('expires_at', 'is', null)
+        .lt('expires_at', now)
+        .limit(200);
+    if (!stale?.length) return;
+
+    const ids = (stale as any[]).map((row) => row.id);
+    const { data: expired, error } = await adminClient
+        .from('funding_requests')
+        .update({ status: 'expired', updated_at: now })
+        .in('id', ids)
+        .in('status', ['initiated', 'proof_uploaded'])
+        .select('id');
+    if (error) throw error;
+    console.info(`[JOB:funding-expiry] expired ${(expired ?? []).length} unpaid funding requests`);
+}
+
+// ── Consumption aggregate refresh ────────────────────────────────────────────
+/**
+ * Rebuilds meter_consumption_aggregates for the whole estate.
+ *
+ * The consumption pages advertise "refreshes every 6 h", but nothing scheduled
+ * this — the only trigger was an admin clicking Rebuild. Stations therefore
+ * drifted stale silently, and a station nobody thought to select drifted
+ * forever. Passing no station list makes the service discover every station
+ * from the database, so a newly onboarded site is covered on its next run.
+ */
+export async function refreshConsumptionForAllStations(): Promise<void> {
+    const { refreshConsumptionAggregates } = await import('../services/consumption.js');
+    const result = await refreshConsumptionAggregates();
+    for (const station of result.stations.filter((entry) => !entry.ok)) {
+        console.error(`[JOB:consumption] refresh failed for ${station.stationId}: ${station.error}`);
+    }
+    console.info(
+        `[JOB:consumption] refreshed ${result.refreshedStations} station(s), ${result.failedStations} failed in ${result.durationMs}ms`,
+    );
+    // Surface a partial failure to BullMQ so it retries rather than logging
+    // success over a station that never rebuilt.
+    if (!result.ok) throw new Error(`Consumption refresh failed for ${result.failedStations} station(s)`);
+}
+
 // ── Scheduler init ─────────────────────────────────────────────────────────────
 export function startScheduler(): void {
     // Hold expiry — every 5 min

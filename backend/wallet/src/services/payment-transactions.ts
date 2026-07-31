@@ -7,10 +7,16 @@ import { sendTokenSmsToCustomer } from './customer-purchase.js';
 import { notifyTokenPurchased, notifyWalletFunded } from './notifications.js';
 import { assertWalletCanTransact, findWalletByOwner, type Wallet } from './wallets.js';
 import { PAYMENT_STATUS, PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
+import { blockCodeFor, classifyGatewayAmount, isCreditable } from './gateway-amounts.js';
+import {
+    fundingCreditKey,
+    legacyPaystackFundingCreditKey,
+    UNCREDITABLE_FUNDING_STATUSES,
+} from './funding-credit.js';
 
 type PaymentTransaction = Record<string, any>;
 
-export type PaystackFulfillmentSource = 'webhook' | 'scheduler' | 'callback';
+export type PaystackFulfillmentSource = 'webhook' | 'scheduler' | 'callback' | 'manual_retry';
 
 export interface PaystackFulfillmentResult {
     status: 'fulfilled' | 'already_fulfilled' | 'blocked';
@@ -23,7 +29,81 @@ interface FulfillmentStepResult {
 }
 
 function sourceActor(source: PaystackFulfillmentSource) {
-    return source === 'webhook' ? 'webhook' : 'system';
+    if (source === 'webhook') return 'webhook';
+    if (source === 'manual_retry') return 'staff';
+    return 'system';
+}
+
+export class PaymentRetryError extends Error {
+    constructor(message: string, public code: string) { super(message); this.name = 'PaymentRetryError'; }
+}
+
+/**
+ * Clear a blocked payment so fulfillment can run again.
+ *
+ * Blocking sets `completed_at`, and `fn_claim_payment_fulfillment` refuses to
+ * claim anything with a `completed_at` — deliberately, so a blocked payment is
+ * never re-driven by accident. That also means a payment blocked for a reason
+ * since fixed (a wallet unfrozen, a mismatch explained) can never recover on
+ * its own. This is the one supervised way back in.
+ */
+export async function clearPaymentFulfillmentBlock(input: {
+    paymentTransactionId: string;
+    clearedBy: string;
+}): Promise<PaymentTransaction> {
+    const { data: tx, error } = await adminClient
+        .from('payment_transactions')
+        .select('*')
+        .eq('id', input.paymentTransactionId)
+        .maybeSingle();
+    if (error) throw error;
+    if (!tx) throw new PaymentRetryError('Payment transaction not found.', 'not_found');
+    if ((tx as any).gateway !== 'paystack') {
+        throw new PaymentRetryError('Only Paystack payments can be re-driven.', 'unsupported_gateway');
+    }
+    if ((tx as any).status !== PAYMENT_STATUS.REQUIRES_REVIEW) {
+        throw new PaymentRetryError(
+            `Only payments held for review can be retried (current status: ${(tx as any).status}).`,
+            'invalid_state',
+        );
+    }
+
+    const now = new Date().toISOString();
+    const { data: cleared, error: clearError } = await adminClient
+        .from('payment_transactions')
+        .update({
+            status: PAYMENT_STATUS.PENDING,
+            completed_at: null,
+            fulfillment_claimed_at: null,
+            fulfillment_lease_token: null,
+            fulfillment_last_error: null,
+            fulfillment_next_retry_at: null,
+            metadata: {
+                ...(((tx as any).metadata ?? {}) as Record<string, unknown>),
+                fulfillment_blocked: false,
+                fulfillment_block_cleared_at: now,
+                fulfillment_block_cleared_by: input.clearedBy,
+                requires_ops_review: false,
+            },
+            updated_at: now,
+        })
+        .eq('id', input.paymentTransactionId)
+        .eq('status', PAYMENT_STATUS.REQUIRES_REVIEW)
+        .select('*')
+        .maybeSingle();
+    if (clearError) throw clearError;
+    if (!cleared) throw new PaymentRetryError('Another reviewer already acted on this payment.', 'concurrent_update');
+
+    await logAction({
+        actorUserId: input.clearedBy,
+        actorType: 'staff',
+        action: 'paystack.fulfillment_block_cleared',
+        targetType: 'payment_transaction',
+        targetId: input.paymentTransactionId,
+        before: { status: PAYMENT_STATUS.REQUIRES_REVIEW, reason: (tx as any).fulfillment_last_error },
+        after: { status: PAYMENT_STATUS.PENDING },
+    });
+    return cleared as PaymentTransaction;
 }
 
 async function findWalletById(walletId: string): Promise<Wallet | null> {
@@ -97,9 +177,13 @@ async function blockSuccessfulPaymentFulfillment(
     const code = error?.code ?? 'wallet_inactive';
     const prefix = code === 'payment_amount_mismatch'
         ? 'paystack_amount_mismatch'
-        : code.startsWith('payment_')
-            ? 'paystack_verification_mismatch'
-            : 'wallet_inactive_on_paystack_success';
+        : code === 'payment_overpaid'
+            ? 'paystack_overpaid'
+            : code.startsWith('payment_')
+                ? 'paystack_verification_mismatch'
+                : code.startsWith('funding_')
+                    ? 'paystack_funding_state'
+                    : 'wallet_inactive_on_paystack_success';
     const blockedAt = new Date().toISOString();
 
     if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
@@ -192,6 +276,18 @@ async function fulfillVendorFunding(
             ),
         };
     }
+    // A request staff already closed out must never be credited by the gateway
+    // path — that would silently resurrect it as `approved`.
+    if (UNCREDITABLE_FUNDING_STATUSES.has(String((fr as any).status))) {
+        return {
+            blocked: await blockSuccessfulPaymentFulfillment(
+                tx,
+                verified,
+                source,
+                { code: `funding_request_${(fr as any).status}` },
+            ),
+        };
+    }
 
     const wallet = await findWalletByOwner('vendor', (fr as any).vendor_organization_id);
     try {
@@ -208,23 +304,30 @@ async function fulfillVendorFunding(
         if (walletUpdateError) throw walletUpdateError;
     }
 
-    await postEntry({
-        walletId: wallet.id,
-        direction: 'credit',
-        amountMinor: (fr as any).amount_minor,
-        entryType: 'payment_credit',
-        referenceType: 'funding_request',
-        referenceId: (fr as any).id,
-        idempotencyKey: `funding.${(fr as any).id}.paystack.credit`,
-        memo: `Paystack ${tx.gateway_reference}`,
-        createdBy: (fr as any).submitted_by,
-        audit: { actorType: sourceActor(source) },
-    });
+    // Canonical key — shared with the staff-approval path in funding.ts so the
+    // two routes to a funding credit can never both fire. Rows credited before
+    // this unification carry the legacy key; honour it so we never re-credit.
+    const alreadyCreditedLegacy = await ledgerEntryExists(legacyPaystackFundingCreditKey((fr as any).id));
+    if (!alreadyCreditedLegacy) {
+        await postEntry({
+            walletId: wallet.id,
+            direction: 'credit',
+            amountMinor: (fr as any).amount_minor,
+            entryType: 'funding_credit',
+            referenceType: 'funding_request',
+            referenceId: (fr as any).id,
+            idempotencyKey: fundingCreditKey((fr as any).id),
+            memo: `Paystack ${tx.gateway_reference}`,
+            createdBy: (fr as any).submitted_by,
+            audit: { actorType: sourceActor(source) },
+        });
+    }
     const { error: fundingApprovalError } = await adminClient
         .from('funding_requests')
         .update({
             status: 'approved',
             approved_at: new Date().toISOString(),
+            rejection_reason: null,
         })
         .eq('id', (fr as any).id);
     if (fundingApprovalError) throw fundingApprovalError;
@@ -251,12 +354,16 @@ async function fulfillCustomerWalletFunding(
         return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'wallet_owner_mismatch' }) };
     }
 
+    // Credit what was requested, not what the gateway charged: when the payer
+    // bears the fee, `verified.amount` is grossed up and the surplus never
+    // reaches our settlement account.
+    const creditableMinor = Number(tx.amount_minor);
     const idempotencyKey = `customer_fund.${tx.id}.paystack.credit`;
     const alreadyCredited = await ledgerEntryExists(idempotencyKey);
     await postEntry({
         walletId: wallet.id,
         direction: 'credit',
-        amountMinor: verified.amount,
+        amountMinor: creditableMinor,
         entryType: 'payment_credit',
         referenceType: 'payment_transaction',
         referenceId: tx.id,
@@ -268,11 +375,59 @@ async function fulfillCustomerWalletFunding(
 
     if (!alreadyCredited && !tx.metadata?.wallet_funded_notified_at) {
         notifyWalletFunded(tx.actor_id, {
-            amountMinor: verified.amount,
+            amountMinor: creditableMinor,
             reference: tx.gateway_reference,
         }).catch(() => undefined);
         return { metadata: { wallet_funded_notified_at: new Date().toISOString() } };
     }
+    return {};
+}
+
+async function fulfillMeterOrder(
+    tx: PaymentTransaction,
+    verified: VerifyResult,
+    source: PaystackFulfillmentSource,
+): Promise<FulfillmentStepResult> {
+    const meterOrderId = tx.metadata?.meter_order_id as string | undefined;
+    if (!meterOrderId) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'meter_order_missing' }) };
+    }
+
+    const { data: order, error: orderError } = await adminClient
+        .from('meter_purchase_orders')
+        .select('*')
+        .eq('id', meterOrderId)
+        .maybeSingle();
+    if (orderError) throw orderError;
+    if (!order) {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'meter_order_missing' }) };
+    }
+    if (Number((order as any).amount_minor) !== Number(tx.amount_minor)) {
+        return {
+            blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'payment_amount_mismatch' }),
+        };
+    }
+    if ((order as any).status === 'cancelled') {
+        return { blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'meter_order_cancelled' }) };
+    }
+    // Already past payment — nothing to do, and re-running must not rewind it.
+    if ((order as any).status !== 'pending_payment') return {};
+
+    const { error: paidError } = await adminClient
+        .from('meter_purchase_orders')
+        .update({ status: 'paid', updated_at: new Date().toISOString() })
+        .eq('id', meterOrderId)
+        .eq('status', 'pending_payment');
+    if (paidError) throw paidError;
+
+    await logAction({
+        actorUserId: null,
+        actorType: sourceActor(source),
+        action: 'meter_order.payment_confirmed',
+        targetType: 'meter_purchase_order',
+        targetId: meterOrderId,
+        after: { reference: tx.gateway_reference, source },
+    });
     return {};
 }
 
@@ -451,12 +606,19 @@ async function fulfillClaimedPaystackTransaction(input: {
     if ((PAYMENT_SUCCEEDED_STATUSES as readonly string[]).includes(tx.status) && tx.metadata?.fulfillment_completed_at) {
         return { status: 'already_fulfilled' };
     }
-    if (Number(tx.amount_minor) !== Number(verified.amount)) {
+    // Paystack grosses the charge up when the payer bears the fee, so the
+    // verified amount is legitimately above what we asked for. Credit the
+    // requested amount; hold anything we cannot explain as a fee.
+    const amountAssessment = classifyGatewayAmount({
+        expectedMinor: Number(tx.amount_minor),
+        paidMinor: Number(verified.amount),
+    });
+    if (!isCreditable(amountAssessment)) {
         return blockSuccessfulPaymentFulfillment(
             tx,
             verified,
             source,
-            { code: 'payment_amount_mismatch' },
+            { code: blockCodeFor(amountAssessment) },
         );
     }
     if (verified.reference !== tx.gateway_reference) {
@@ -466,19 +628,27 @@ async function fulfillClaimedPaystackTransaction(input: {
         return blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'payment_currency_mismatch' });
     }
 
-    let extraMetadata: Record<string, unknown> = {};
+    let extraMetadata: Record<string, unknown> = {
+        gateway_amount_kind: amountAssessment.kind,
+        gateway_surplus_minor: amountAssessment.surplusMinor,
+        credited_amount_minor: amountAssessment.creditableMinor,
+    };
     if (tx.purpose === 'wallet_funding' && tx.actor_type === 'vendor') {
         const result = await fulfillVendorFunding(tx, verified, source);
         if (result.blocked) return result.blocked;
-        extraMetadata = result.metadata ?? {};
+        extraMetadata = { ...extraMetadata, ...(result.metadata ?? {}) };
     } else if (tx.purpose === 'wallet_funding' && tx.actor_type === 'customer') {
         const result = await fulfillCustomerWalletFunding(tx, verified, source);
         if (result.blocked) return result.blocked;
-        extraMetadata = result.metadata ?? {};
+        extraMetadata = { ...extraMetadata, ...(result.metadata ?? {}) };
     } else if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
         const result = await fulfillCustomerTokenPurchase(tx, verified, source);
         if (result.blocked) return result.blocked;
-        extraMetadata = result.metadata ?? {};
+        extraMetadata = { ...extraMetadata, ...(result.metadata ?? {}) };
+    } else if (tx.purpose === 'meter_order') {
+        const result = await fulfillMeterOrder(tx, verified, source);
+        if (result.blocked) return result.blocked;
+        extraMetadata = { ...extraMetadata, ...(result.metadata ?? {}) };
     } else {
         return blockSuccessfulPaymentFulfillment(tx, verified, source, { code: 'unsupported_payment_target' });
     }

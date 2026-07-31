@@ -12,6 +12,9 @@ import { postEntry, type LedgerEntry } from './ledger.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
+import { notifyVendor } from './vendor-notifications.js';
+import { notifyStaffInbox } from './staff-inbox.js';
+import { fundingCreditKeys, fundingCreditKey } from './funding-credit.js';
 import crypto from 'node:crypto';
 
 const PROOF_BUCKET = 'uploads';
@@ -100,6 +103,10 @@ function normalizeFundingEmail(email: string): string {
         throw new FundingError('A valid vendor email is required to initialize Paystack funding.', 'email_required');
     }
     return normalized;
+}
+
+function formatNaira(amountMinor: number): string {
+    return `₦${(amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
 }
 
 export async function initiatePaystackFunding(input: InitiatePaystackInput): Promise<InitiatePaystackResult> {
@@ -197,6 +204,13 @@ export async function initiatePaystackFunding(input: InitiatePaystackInput): Pro
         after: { amountMinor: input.amountMinor, reference },
     });
 
+    await notifyVendor(input.vendorOrganizationId, {
+        type: 'funding_update',
+        title: 'Funding started',
+        body: `Complete payment for ${formatNaira(input.amountMinor)} to fund your wallet.`,
+        eventKey: `funding:${(fr as FundingRequest).id}:initiated`,
+        metadata: { funding_request_id: (fr as FundingRequest).id, path: '/wallet/funding' },
+    });
     return {
         fundingRequest: fr as FundingRequest,
         paymentTransactionId: (pt as { id: string }).id,
@@ -330,6 +344,21 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         after: { amountMinor: input.amountMinor, reference: (data as FundingRequest).funding_reference },
     });
 
+    await notifyVendor(input.vendorOrganizationId, {
+        type: 'funding_update',
+        title: 'Funding submitted',
+        body: `${formatNaira(input.amountMinor)} is awaiting review.`,
+        eventKey: `funding:${(data as FundingRequest).id}:submitted`,
+        metadata: { funding_request_id: (data as FundingRequest).id, path: '/wallet/funding' },
+    });
+    void notifyStaffInbox({
+        type: 'funding_review',
+        title: 'Funding needs review',
+        body: `${formatNaira(input.amountMinor)} bank funding was submitted.`,
+        eventKey: `staff:funding:${(data as FundingRequest).id}:submitted`,
+        metadata: { funding_request_id: (data as FundingRequest).id, path: '/funding' },
+    });
+
     return data as FundingRequest;
 }
 
@@ -350,12 +379,14 @@ async function canonicalVendorWallet(funding: FundingRequest): Promise<Wallet> {
 }
 
 async function findFundingCredit(fundingId: string): Promise<LedgerEntry | null> {
+    // Checks both the canonical key and the legacy gateway key: a request the
+    // Paystack path already credited must never be credited again by approval.
     const { data } = await adminClient
         .from('wallet_ledger_entries')
         .select('*')
-        .eq('idempotency_key', `funding.${fundingId}.credit`)
-        .maybeSingle();
-    return (data as LedgerEntry) ?? null;
+        .in('idempotency_key', fundingCreditKeys(fundingId))
+        .limit(1);
+    return ((data ?? [])[0] as LedgerEntry) ?? null;
 }
 
 async function repairApprovedFundingWallet(input: {
@@ -467,7 +498,7 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
         entryType: 'funding_credit',
         referenceType: 'funding_request',
         referenceId: funding.id,
-        idempotencyKey: `funding.${funding.id}.credit`,
+        idempotencyKey: fundingCreditKey(funding.id),
         memo: `Funding approved · ${funding.channel}`,
         createdBy: input.approvedBy,
         audit: { actorType: 'staff', actorRole: 'finance-checker' },
@@ -480,6 +511,10 @@ export async function approveFundingRequest(input: ApproveFundingInput): Promise
             status: 'approved',
             approved_by: input.approvedBy,
             approved_at: new Date().toISOString(),
+            // `rejection_reason` doubles as the hold reason when the gateway
+            // path blocks. Approving resolves that hold, so clear it rather
+            // than leaving an approved row reading like a rejected one.
+            rejection_reason: null,
         })
         .eq('id', funding.id)
         .in('status', ['under_review', 'proof_uploaded'])
@@ -549,7 +584,7 @@ export async function reconcileApprovedFundingCredits(input: {
                 entryType: 'funding_credit',
                 referenceType: 'funding_request',
                 referenceId: funding.id,
-                idempotencyKey: `funding.${funding.id}.credit`,
+                idempotencyKey: fundingCreditKey(funding.id),
                 memo: `Funding reconciled · ${funding.channel}`,
                 createdBy: input.repairedBy,
                 audit: { actorType: 'staff', actorRole: 'finance-checker' },
@@ -626,6 +661,14 @@ export async function rejectFundingRequest(opts: {
         targetType: 'funding_request',
         targetId: opts.fundingRequestId,
         after: { status: 'rejected', reason: opts.reason },
+    });
+
+    await notifyVendor((data as FundingRequest).vendor_organization_id, {
+        type: 'funding_update',
+        title: 'Funding rejected',
+        body: `Funding was rejected: ${opts.reason}`,
+        eventKey: `funding:${opts.fundingRequestId}:rejected`,
+        metadata: { funding_request_id: opts.fundingRequestId, path: '/wallet/funding' },
     });
 
     return data as FundingRequest;

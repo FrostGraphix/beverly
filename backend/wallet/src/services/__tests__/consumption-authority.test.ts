@@ -50,6 +50,8 @@ const PURCHASES = [
 /** Minimal PostgREST-shaped builder honouring .in()/.eq() so filters are real. */
 function makeBuilder(table: string) {
     const filters: Array<(r: any) => boolean> = [];
+    let from = 0;
+    let to = Number.MAX_SAFE_INTEGER;
     const builder: any = {
         select: () => builder,
         order: () => builder,
@@ -58,9 +60,10 @@ function makeBuilder(table: string) {
         lte: (col: string, val: string) => { filters.push((r) => String(r[col]) <= val); return builder; },
         eq: (col: string, val: any) => { filters.push((r) => String(r[col]) === String(val)); return builder; },
         in: (col: string, vals: any[]) => { filters.push((r) => vals.map(String).includes(String(r[col]))); return builder; },
+        range: (start: number, end: number) => { from = start; to = end; return builder; },
         then: (resolve: any) => {
             const source = table === 'meter_consumption_aggregates' ? AGGREGATES : PURCHASES;
-            return resolve({ data: source.filter((r) => filters.every((f) => f(r))), error: null });
+            return resolve({ data: source.filter((r) => filters.every((f) => f(r))).slice(from, to + 1), error: null });
         },
     };
     return builder;
@@ -146,6 +149,17 @@ describe('consumption authority isolation', () => {
 });
 
 describe('consumption correctness', () => {
+    it('groups every aggregate page before limiting output', async () => {
+        const originalLength = AGGREGATES.length;
+        AGGREGATES.push(...Array.from({ length: 1001 }, (_, i) => row('TUNGA', `M-X${i}`, 'C-X', 'Extra', 1)));
+        try {
+            const rows = await queryConsumption({ scope: 'station', period_type: 'month', limit: 1 }, stationsAuthority(['TUNGA']));
+            expect(rows[0]!.kwh_total).toBe(1301);
+        } finally {
+            AGGREGATES.splice(originalLength);
+        }
+    });
+
     it('station scope aggregates meters and drops per-meter identity', async () => {
         const rows = await queryConsumption({ scope: 'station', period_type: 'month' }, stationsAuthority(['TUNGA']));
         expect(rows).toHaveLength(1);
@@ -165,6 +179,20 @@ describe('consumption correctness', () => {
     it('reports real naira spend instead of a hardcoded zero', async () => {
         const rows = await queryConsumption({ ...monthly, withSpend: true }, metersAuthority(['M-T1']));
         expect(rows[0]!.amount_minor_total).toBe(500_00);
+    });
+
+    it('sums every delivered purchase page', async () => {
+        const originalLength = PURCHASES.length;
+        PURCHASES.push(...Array.from({ length: 1001 }, () => ({
+            meter_id: 'M-T1', station_id: 'TUNGA', amount_minor: 1,
+            created_at: '2026-07-07T10:00:00Z', status: 'delivered',
+        })));
+        try {
+            const rows = await queryConsumption({ ...monthly, withSpend: true }, metersAuthority(['M-T1']));
+            expect(rows[0]!.amount_minor_total).toBe(510_01);
+        } finally {
+            PURCHASES.splice(originalLength);
+        }
     });
 
     it('spend stays scoped — a customer sees no spend from other meters', async () => {

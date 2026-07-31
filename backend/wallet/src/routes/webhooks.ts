@@ -61,11 +61,25 @@ const route: FastifyPluginAsync = async (fastify) => {
             raw_payload: storedPayload,
             payload_encrypted: encryptSecret(raw),
         }).select('id').single();
+        let webhookId: string;
         if (webhookErr?.code === '23505') {
-            return reply.code(200).send({ ok: true, duplicate: true });
+            // Paystack is retrying. If our first attempt persisted the row but
+            // then failed to fulfil, the retry must re-drive it — otherwise the
+            // dedupe index silently swallows the only retry we get.
+            const { data: prior } = await adminClient
+                .from('payment_webhooks')
+                .select('id, processed')
+                .eq('gateway', 'paystack')
+                .eq('payload_digest', payloadDigest)
+                .maybeSingle();
+            if (!prior || (prior as any).processed) {
+                return reply.code(200).send({ ok: true, duplicate: true });
+            }
+            webhookId = (prior as any).id as string;
+        } else {
+            if (webhookErr || !webhookRow) throw webhookErr ?? new Error('webhook_persist_failed');
+            webhookId = (webhookRow as any).id as string;
         }
-        if (webhookErr || !webhookRow) throw webhookErr ?? new Error('webhook_persist_failed');
-        const webhookId = (webhookRow as any).id as string;
 
         if (eventType !== 'charge.success') {
             await markWebhookProcessed(webhookId, `ignored_event=${eventType}`);

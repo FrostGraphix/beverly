@@ -1,6 +1,11 @@
 import { verifyTransaction } from '../adapters/paystack.js';
 import { adminClient } from '../db/supabase.js';
-import { fulfillSuccessfulPaystackTransaction, type PaystackFulfillmentSource } from './payment-transactions.js';
+import {
+    clearPaymentFulfillmentBlock,
+    fulfillSuccessfulPaystackTransaction,
+    PaymentRetryError,
+    type PaystackFulfillmentSource,
+} from './payment-transactions.js';
 
 export interface PaystackWebhookProcessingResult {
     status: 'ignored' | 'fulfilled' | 'already_fulfilled' | 'blocked';
@@ -43,6 +48,46 @@ export async function verifyOwnedPaystackPayment(input: {
         reference: input.reference,
         status: String((latest as { status?: string } | null)?.status ?? (owned as { status: string }).status),
         purpose: (owned as { purpose: string }).purpose,
+        fulfillmentStatus: result.status,
+        reason: result.reason,
+    };
+}
+
+export interface RetryBlockedPaymentResult {
+    paymentTransactionId: string;
+    reference: string;
+    status: string;
+    fulfillmentStatus: PaystackWebhookProcessingResult['status'];
+    reason?: string;
+}
+
+/**
+ * Staff-driven recovery for a payment held at `requires_review`: lift the block,
+ * then re-run verification and fulfillment. Fulfillment is idempotent on the
+ * ledger key, so a payment that did credit cannot be credited twice by this.
+ */
+export async function retryBlockedPaystackPayment(input: {
+    paymentTransactionId: string;
+    retriedBy: string;
+}): Promise<RetryBlockedPaymentResult> {
+    const tx = await clearPaymentFulfillmentBlock({
+        paymentTransactionId: input.paymentTransactionId,
+        clearedBy: input.retriedBy,
+    });
+    const reference = String((tx as { gateway_reference?: string }).gateway_reference ?? '');
+    if (!reference) throw new PaymentRetryError('Payment has no gateway reference.', 'missing_reference');
+
+    const result = await processPaystackChargeSuccess(reference, 'manual_retry');
+    const { data: latest } = await adminClient
+        .from('payment_transactions')
+        .select('status')
+        .eq('id', input.paymentTransactionId)
+        .maybeSingle();
+
+    return {
+        paymentTransactionId: input.paymentTransactionId,
+        reference,
+        status: String((latest as { status?: string } | null)?.status ?? 'unknown'),
         fulfillmentStatus: result.status,
         reason: result.reason,
     };
