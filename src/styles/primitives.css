@@ -524,6 +524,51 @@
   min-width: 0;
 }
 
+.sync-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bev-space-3);
+  margin: var(--bev-space-3) var(--bev-space-4) 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 40%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning, #d97706) 10%, transparent);
+  color: var(--text-main);
+  font-size: var(--bev-font-size-sm);
+}
+
+.sync-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sync-banner__actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sync-detail {
+  margin: var(--bev-space-2) var(--bev-space-4) 0;
+  overflow-x: auto;
+}
+
+.sync-detail__table {
+  width: 100%;
+  min-width: 640px;
+  font-size: var(--bev-font-size-sm);
+}
+
+.sync-detail__error {
+  color: var(--danger);
+  max-width: 380px;
+  white-space: normal;
+}
+
 .base-table-shell__meta {
   padding: 0 var(--bev-space-4) var(--bev-space-3);
 }
@@ -640,10 +685,24 @@ td.action-column {
   max-width: none;
   padding-inline: 12px;
   border-left: 1px solid var(--color-border);
-  background:
-    linear-gradient(90deg, rgba(255,255,255,0), var(--bg-card) 18%),
-    var(--bg-card);
+  /* Solid, never translucent: the old leading transparent band let the column
+     scrolling underneath (Remark) bleed through the Actions header and cells. */
+  background: var(--bg-card);
   box-shadow: -18px 0 28px rgba(15, 23, 42, .1);
+}
+
+/* The soft edge lives outside the cell so it can fade the incoming row without
+   making any part of the sticky column see-through. */
+th.action-column::before,
+td.action-column::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -28px;
+  width: 28px;
+  background: linear-gradient(90deg, transparent, var(--bg-card));
+  pointer-events: none;
 }
 
 th.action-column {

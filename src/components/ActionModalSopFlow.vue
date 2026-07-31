@@ -274,7 +274,7 @@ export default {
         const staticSites = tableSiteOptions.filter(opt => opt.value !== "");
         const combined = [...staticSites];
         for (const station of this.stations) {
-          if (!combined.some(s => s.value === station.value)) combined.push(station);
+          if (!combined.some(s => s.value.toUpperCase() === station.value.toUpperCase())) combined.push(station);
         }
         return combined;
       }

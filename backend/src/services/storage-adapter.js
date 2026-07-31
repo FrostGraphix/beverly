@@ -110,7 +110,27 @@ function countFromRange(value) {
   return match ? Number(match[1]) : 0;
 }
 
+// Mirrors local-database: a binding written by the old silent-fallback path is
+// unsynced regardless of the status column it was stored with.
+const unsyncedBindingSources = new Set(["local-fallback", "upstream-rejected"]);
+
+function isPendingBinding(row = {}) {
+  return String(row.status || "") === "pending" || unsyncedBindingSources.has(String(row.source || ""));
+}
+
+function accountBindingDetails(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function mapAccountBindingRow(row = {}) {
+  const details = accountBindingDetails(row.detail_json);
   return {
     customerId: row.customer_id,
     meterId: row.meter_id,
@@ -118,6 +138,10 @@ function mapAccountBindingRow(row = {}) {
     ctRatio: row.ct_ratio,
     stationId: row.station_id,
     remark: row.remark,
+    source: row.source,
+    status: row.status,
+    lastError: String(details.lastError || ""),
+    attempts: Number(details.attempts || 0),
     createDate: row.created_at,
     updateDate: row.updated_at,
     _supabase: true
@@ -367,14 +391,23 @@ async function listAccountBindings(options = {}) {
     () => localDatabase.listAccountBindings(options),
     async () => {
       const filters = [
-        "select=customer_id,meter_id,tariff_id,ct_ratio,station_id,remark,created_at,updated_at"
+        "select=customer_id,meter_id,tariff_id,ct_ratio,station_id,remark,source,status,detail_json,created_at,updated_at"
       ];
       if (options.customerId) filters.push(`customer_id=eq.${encodeURIComponent(String(options.customerId))}`);
       if (options.meterId) filters.push(`meter_id=eq.${encodeURIComponent(String(options.meterId))}`);
       if (options.stationId) filters.push(`station_id=eq.${encodeURIComponent(String(options.stationId).toUpperCase())}`);
       filters.push("order=updated_at.desc");
       const rows = await supabase.restRequest(`/account_bindings?${filters.join("&")}`);
-      return (Array.isArray(rows) ? rows : []).map(mapAccountBindingRow);
+      const mapped = (Array.isArray(rows) ? rows : []).map(mapAccountBindingRow);
+      const searchTerm = String(options.searchTerm || "").trim().toLowerCase();
+      const status = String(options.status || "").trim();
+      return mapped.filter((row) => {
+        if (status === "pending" && !isPendingBinding(row)) return false;
+        if (status && status !== "pending" && (String(row.status || "") !== status || isPendingBinding(row))) return false;
+        if (!searchTerm) return true;
+        return [row.customerId, row.meterId, row.tariffId, row.stationId]
+          .some((value) => String(value || "").toLowerCase().includes(searchTerm));
+      });
     }
   );
 }
