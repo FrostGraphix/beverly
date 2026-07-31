@@ -93,7 +93,7 @@
       </section>
       <template #footer>
         <div class="modal-actions picker-footer">
-          <BaseButton @click="pickerStep === 1 ? $emit('close') : pickerStep = 1">{{ pickerStep === 1 ? "Cancel" : "Back" }}</BaseButton>
+          <BaseButton :variant="pickerStep === 1 ? 'danger' : 'secondary'" @click="pickerStep === 1 ? $emit('close') : pickerStep = 1">{{ pickerStep === 1 ? "Cancel" : "Back" }}</BaseButton>
           <BaseButton v-if="pickerStep === 1" variant="primary" :disabled="!selectedRow" @click="pickerStep = 2">Continue</BaseButton>
           <BaseButton v-else variant="primary" @click="confirmSelection">Confirm</BaseButton>
           </div>

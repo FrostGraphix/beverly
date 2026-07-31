@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import { RouterLink, useRouter } from 'vue-router';
+import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import {
     toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
-    getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt,
+    getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
 } from '@beverly/tokens';
 import ChatWidget from './ChatWidget.vue';
 
 defineProps<{ title?: string; hideTabbar?: boolean }>();
 const auth = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const userMenuOpen = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 
@@ -23,6 +24,15 @@ const showIosInstall   = ref(false);
 // Notification bell
 const unreadCount = ref(0);
 let bellPoll: ReturnType<typeof setInterval> | null = null;
+
+function isTabActive(to: string): boolean {
+    const path = route.path;
+    if (path === to) return true;
+    if (to === '/buy-token' && (path === '/buy-meter' || path.startsWith('/buy-token'))) return true;
+    if (to === '/meters' && (path === '/onboard-meter' || path.startsWith('/meters'))) return true;
+    if (to === '/wallet' && (path.startsWith('/wallet/fund') || path.startsWith('/wallet/funding'))) return true;
+    return false;
+}
 
 const initials = computed(() => {
     const name = auth.customer?.full_name ?? auth.customer?.email ?? auth.customer?.phone ?? 'C';
@@ -40,6 +50,7 @@ async function fetchUnread() {
 }
 
 let unsubscribeInstallPrompt: (() => void) | null = null;
+let unsubscribeNotificationCount: (() => void) | null = null;
 
 function handleAppInstalled() {
     showIosInstall.value = false;
@@ -50,6 +61,7 @@ function handleAppInstalled() {
 }
 
 onMounted(() => {
+    unsubscribeNotificationCount = onNotificationCountChange((count) => { unreadCount.value = count; });
     installPrompt.value = getDeferredInstallPrompt();
     unsubscribeInstallPrompt = onInstallPromptChange((e) => {
         installPrompt.value = e;
@@ -63,6 +75,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     unsubscribeInstallPrompt?.();
+    unsubscribeNotificationCount?.();
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     if (bellPoll) clearInterval(bellPoll);
 });
@@ -109,16 +122,24 @@ async function signOut() {
 <template>
   <div class="bw-mobile-shell">
     <!-- PWA install banner -->
-    <div v-if="installPrompt && !installDismissed" class="bw-install-banner">
-      <span>Add Beverly to your home screen. You may need to sign in again after installing.</span>
-      <button class="bw-btn small" @click="promptInstall">Install</button>
-      <button class="bw-icon-btn" @click="dismissInstall" aria-label="Dismiss">
+    <div v-if="installPrompt && !installDismissed" class="bw-install-toast" role="status">
+      <span class="bw-install-logo" aria-hidden="true"></span>
+      <span class="bw-install-copy">
+        <strong>Install Beverly</strong>
+        <small>Keep your customer wallet nearby.</small>
+      </span>
+      <button class="bw-btn primary sm bw-install-action" @click="promptInstall">Install</button>
+      <button class="bw-icon-btn bw-install-dismiss" @click="dismissInstall" aria-label="Dismiss install prompt">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div v-else-if="showIosInstall && !installDismissed" class="bw-install-banner">
-      <span>Add Beverly to your home screen: tap Share, then "Add to Home Screen".</span>
-      <button class="bw-icon-btn" @click="dismissInstall" aria-label="Dismiss">
+    <div v-else-if="showIosInstall && !installDismissed" class="bw-install-toast" role="status">
+      <span class="bw-install-logo" aria-hidden="true"></span>
+      <span class="bw-install-copy">
+        <strong>Install Beverly</strong>
+        <small>Tap Share, then Add Home.</small>
+      </span>
+      <button class="bw-icon-btn bw-install-dismiss" @click="dismissInstall" aria-label="Dismiss install prompt">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -142,11 +163,11 @@ async function signOut() {
         </svg>
       </RouterLink>
       <!-- Notification bell -->
-      <RouterLink to="/notifications" class="bw-bell" aria-label="Notifications">
+      <RouterLink to="/notifications" class="bw-bell" :aria-label="unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications, none unread'">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
         </svg>
-        <span v-if="unreadCount > 0" class="bw-bell-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+        <span v-if="unreadCount > 0" class="bw-bell-badge" aria-hidden="true">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </RouterLink>
       </div>
       <div class="bw-account-menu bw-customer-account-menu" ref="accountMenuWrap">
@@ -208,8 +229,7 @@ async function signOut() {
                 <path d="M6 19c3-5 7-8 13-8" />
               </svg>
               <span>Theme</span>
-            </button>
-            <div class="bw-user-menu-separator"></div>
+            </button>            <div class="bw-user-menu-separator"></div>
             <button type="button" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="signOut">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -231,34 +251,34 @@ async function signOut() {
     </main>
 
     <!-- Bottom tab bar -->
-    <nav v-if="!hideTabbar" class="bw-tabbar">
-      <RouterLink to="/" class="bw-tab">
+    <nav v-if="!hideTabbar" class="bw-tabbar" aria-label="Customer navigation bar">
+      <RouterLink to="/" :class="['bw-tab', { active: isTabActive('/') }]" :aria-current="isTabActive('/') ? 'page' : undefined">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 13l9-9 9 9M5 11v9h14v-9"/>
         </svg>
         Home
       </RouterLink>
-      <RouterLink to="/buy-token" class="bw-tab">
+      <RouterLink to="/buy-token" :class="['bw-tab', { active: isTabActive('/buy-token') }]" :aria-current="isTabActive('/buy-token') ? 'page' : undefined">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
         </svg>
         Buy
       </RouterLink>
-      <RouterLink to="/wallet" class="bw-tab">
+      <RouterLink to="/wallet" :class="['bw-tab', { active: isTabActive('/wallet') }]" :aria-current="isTabActive('/wallet') ? 'page' : undefined">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="2" y="6" width="20" height="12" rx="2"/>
           <path d="M2 10h20"/>
         </svg>
         Wallet
       </RouterLink>
-      <RouterLink to="/meters" class="bw-tab">
+      <RouterLink to="/meters" :class="['bw-tab', { active: isTabActive('/meters') }]" :aria-current="isTabActive('/meters') ? 'page' : undefined">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/>
           <path d="M12 7v5l3 2"/>
         </svg>
         Meters
       </RouterLink>
-      <RouterLink to="/profile" class="bw-tab">
+      <RouterLink to="/profile" :class="['bw-tab', { active: isTabActive('/profile') }]" :aria-current="isTabActive('/profile') ? 'page' : undefined">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="8" r="4"/>
           <path d="M4 22v-2a8 8 0 0116 0v2"/>
@@ -276,18 +296,32 @@ async function signOut() {
 /* ── Tab-bar height token — consumed by ChatWidget for bubble offset ── */
 :root { --bw-tabbar-height: 56px; }
 
-.bw-install-banner {
+.bw-install-toast {
+  position: fixed;
+  top: max(var(--s-3), env(safe-area-inset-top));
+  left: 50%;
+  z-index: var(--z-toast);
+  width: min(620px, calc(100vw - 32px));
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-2) var(--s-4);
-  /* neutral surface — not brand-green so it doesn't stack with appbar + brand mark */
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--t-sm);
-  color: var(--text-dim);
+  padding: 10px;
+  background: color-mix(in oklab, var(--glass-bg) 88%, transparent);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  animation: bw-install-arrive 280ms var(--ease-out);
 }
-.bw-install-banner span { flex: 1; }
+.bw-install-logo { width:42px;height:42px;flex:0 0 42px;border-radius:var(--r-lg);background:var(--brand-mark-url) center/74% no-repeat,var(--brand-glow);border:1px solid oklch(from var(--brand) l c h / .28); }
+.bw-install-copy { flex:1 1 auto;min-width:0;display:grid;gap:1px; }
+.bw-install-copy strong { color:var(--text);font-size:var(--t-base); }
+.bw-install-copy small { color:var(--text-dim);font-size:var(--t-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.bw-install-action,.bw-install-dismiss { flex:0 0 auto; }
+@keyframes bw-install-arrive { from { opacity:0;transform:translate(-50%,-12px); } }
+@media (prefers-reduced-motion: reduce) { .bw-install-toast { animation:none; } }
 
 .bw-appbar-actions {
   display: flex;
@@ -308,6 +342,7 @@ async function signOut() {
   flex-shrink: 0;
 }
 .bw-bell:hover { background: var(--surface-2, oklch(from var(--surface) calc(l - 0.04) c h)); }
+.bw-bell.router-link-active { border-color: var(--brand); color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
 .bw-bell:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); border-radius: var(--r-full); }
 .bw-bell-badge {
   position: absolute;
@@ -336,10 +371,13 @@ async function signOut() {
 }
 
 @media (max-width: 520px) {
+  .bw-install-toast { top:max(8px,env(safe-area-inset-top));width:calc(100vw - 16px);gap:var(--s-2);padding:8px;border-radius:var(--r-lg); }
+  .bw-install-logo { width:38px;height:38px;flex-basis:38px; }
+  .bw-install-copy small { max-width:38vw; }
   .bw-appbar-actions { gap: 0; }
   .bw-bell {
-    width: 36px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 
   .bw-customer-user-chip .bw-user-meta {

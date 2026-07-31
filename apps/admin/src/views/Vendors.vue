@@ -253,6 +253,42 @@ onMounted(() => {
           </tbody>
         </table>
       </div>
+
+      <!-- Mobile cards -->
+      <div class="bw-t-cards">
+        <div v-for="v in vendors" :key="`vendor-card-${v.id}`" class="bw-tc" @click="router.push(`/vendors/${v.id}`)">
+          <div class="bw-tc-top">
+            <div>
+              <div class="bw-tc-vendor">{{ v.legal_name }}</div>
+              <div v-if="v.trading_name" class="bw-muted" style="font-size: var(--t-xs)">{{ v.trading_name }}</div>
+            </div>
+            <span :class="['bw-badge', statusBadge(v.status)]">{{ v.status }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Contact</span>
+              <span class="bw-tc-pair-val bw-mono">{{ v.contact_email }}</span>
+              <span v-if="v.contact_phone" class="bw-muted bw-mono" style="font-size: var(--t-xs)">{{ v.contact_phone }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Risk Level</span>
+              <span class="bw-badge neutral">{{ v.risk_level }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Created</span>
+              <span class="bw-tc-pair-val bw-muted">{{ shortDate(v.created_at) }}</span>
+            </div>
+          </div>
+          <div class="action-cluster" @click.stop style="margin-top: 4px;">
+            <router-link :to="`/vendors/${v.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
+            <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
+            <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
+            <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
+            <button v-if="canManageVendors" class="bw-btn sm danger" @click="askDelete(v)">Delete</button>
+          </div>
+        </div>
+        <div v-if="!vendors.length && !loading" class="bw-muted" style="text-align: center; padding: var(--s-6)">No vendors yet.</div>
+      </div>
     </div>
 
     <!-- Status change confirm -->

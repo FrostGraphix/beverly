@@ -15,7 +15,7 @@
         <p v-if="description">{{ description }}</p>
         <slot />
         <div class="confirm-actions">
-          <BaseButton :disabled="loading" @click="cancel">Cancel</BaseButton>
+          <BaseButton variant="danger" :disabled="loading" @click="cancel">Cancel</BaseButton>
           <BaseButton variant="danger" :disabled="loading || disabled" @click="$emit('confirm')">
             {{ loading ? "Working..." : confirmLabel }}
           </BaseButton>

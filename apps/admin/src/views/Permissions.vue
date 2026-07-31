@@ -25,7 +25,10 @@ interface AccessResponse {
     staff: unknown[];
 }
 
-const STAFF_ROLES = ['super-admin', 'operations-manager', 'finance-checker', 'account'];
+// System roles first, in a stable order; every other role (custom ones created
+// from Roles & Team) follows alphabetically. Filtering to a fixed list here
+// silently hid custom roles from this matrix.
+const SYSTEM_ROLE_ORDER = ['super-admin', 'operations-manager', 'finance-checker', 'account'];
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -81,9 +84,13 @@ function riskClass(r: string) {
     return ({ critical: 'danger', high: 'warn', medium: 'info', low: 'neutral' } as Record<string, string>)[r] ?? 'neutral';
 }
 
-const displayRoles = computed(() =>
-    STAFF_ROLES.filter((k) => roles.value.some((r) => r.role_key === k)),
-);
+const displayRoles = computed(() => [
+    ...SYSTEM_ROLE_ORDER.filter((k) => roles.value.some((r) => r.role_key === k)),
+    ...roles.value
+        .map((r) => r.role_key)
+        .filter((k) => !SYSTEM_ROLE_ORDER.includes(k))
+        .sort(),
+]);
 
 async function load() {
     loading.value = true;

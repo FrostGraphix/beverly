@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
@@ -16,6 +17,12 @@ export default defineConfig(({ command, mode }) => {
         },
         plugins: [
             vue(),
+            {
+                name: 'ensure-out-dir',
+                configResolved(config) {
+                    mkdirSync(config.build.outDir, { recursive: true });
+                },
+            },
             VitePWA({
                 registerType: 'autoUpdate',
                 includeAssets: ['brand/beverly-mark.png', 'apple-touch-icon.png'],
@@ -35,6 +42,7 @@ export default defineConfig(({ command, mode }) => {
                 },
                 workbox: {
                     navigateFallback: assetPath('index.html'),
+                    importScripts: ['push-sw.js'],
                     runtimeCaching: [
                         {
                             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
@@ -48,6 +56,7 @@ export default defineConfig(({ command, mode }) => {
                         },
                     ],
                 },
+                devOptions: { enabled: true },
             }),
         ],
         server: {

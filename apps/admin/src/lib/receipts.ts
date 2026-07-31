@@ -273,13 +273,15 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
       <div class="brm-backdrop">
         <section class="brm-sheet" role="dialog" aria-modal="true" aria-label="Receipt preview">
           <header class="brm-head">
-            <div class="brm-title"><span class="brm-print-icon">&#128438;</span><strong>Print ${escapeHtml(model.title)}</strong></div>
+            <div class="brm-title"><span class="brm-print-icon">&#128438;</span><strong>Receipt Preview · ${escapeHtml(model.title)}</strong></div>
             <button class="brm-icon" data-close aria-label="Close">X</button>
           </header>
           <iframe class="brm-frame" title="Receipt preview"></iframe>
           <footer class="brm-actions">
+            <button class="brm-btn" data-print>Print</button>
             <button class="brm-btn primary" data-pdf>PDF Export</button>
-            <button class="brm-btn danger" data-close>Cancel</button>
+            <button class="brm-btn" data-close>Close</button>
+            <span class="brm-status" role="status" aria-live="polite"></span>
           </footer>
         </section>
       </div>
@@ -290,20 +292,26 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
         .brm-head,.brm-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border,rgba(255,214,0,.18))}
         .brm-actions{border-top:1px solid var(--border,rgba(255,214,0,.18));border-bottom:0;justify-content:flex-end}
         .brm-title{display:flex;align-items:center;gap:12px;min-width:0}.brm-print-icon{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(22,163,74,.24);border-radius:10px;background:#f3fbf5;color:#166534;font-size:20px}.brm-head strong{display:block;color:#102a1b;font-size:18px;overflow-wrap:anywhere}
-        .brm-icon{width:34px;height:34px;border:0;border-radius:10px;background:transparent;color:var(--text-main,#d7dee9);font-size:24px;cursor:pointer}
-        .brm-icon:hover,.brm-btn:hover{background:rgba(255,214,0,.12)}
+        .brm-icon{width:44px;height:44px;border:0;border-radius:var(--r-lg);background:transparent;color:var(--brand-900);font-size:24px;cursor:pointer}
+        .brm-icon:hover,.brm-btn:hover{background:var(--brand-100)}
         .brm-frame{width:100%;height:100%;border:0;background:#050608}
-        .brm-btn{border:1px solid var(--border,rgba(255,214,0,.28));border-radius:10px;background:transparent;color:var(--text-main,#d7dee9);padding:9px 14px;font-weight:800;cursor:pointer}
-        .brm-btn.primary{background:#072e19;border-color:#16a34a;color:#fff}.brm-btn.danger{background:#dc2626;border-color:#dc2626;color:#fff}
-        .brm-sheet{background:#fff;border-color:rgba(22,163,74,.24)}.brm-head,.brm-actions{background:#fff;border-color:rgba(22,163,74,.18)}.brm-head span{color:#64756b}.brm-head strong,.brm-icon,.brm-btn{color:#183126}.brm-icon:hover,.brm-btn:hover{background:rgba(22,163,74,.08)}.brm-frame{background:#eef7f0}.brm-btn{border-color:rgba(22,163,74,.28)}
-        @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-print-icon{width:38px;height:38px}}
+        .brm-btn{min-height:44px;border:1px solid var(--brand-200);border-radius:var(--r-lg);background:var(--brand-50);color:var(--brand-900);padding:9px 14px;font-weight:800;cursor:pointer}.brm-btn:disabled{cursor:wait;opacity:.65}.brm-btn:focus-visible,.brm-icon:focus-visible{outline:0;box-shadow:0 0 0 3px var(--brand-glow),0 0 0 5px var(--brand)}
+        .brm-btn.primary{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-600) 100%);border-color:var(--brand-600);color:oklch(8% 0.04 145);box-shadow:0 4px 12px var(--brand-glow)}.brm-btn.primary:hover{background:linear-gradient(180deg,var(--brand-400) 0%,var(--brand-500) 100%)}.brm-status{width:100%;color:var(--brand-800);font-size:12px;text-align:right}
+        .brm-sheet{background:#fff;border-color:var(--brand-200)}.brm-head,.brm-actions{background:#fff;border-color:var(--brand-100)}.brm-head span{color:var(--brand-800)}.brm-head strong{color:var(--brand-900)}.brm-frame{background:var(--brand-50)}
+        @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-status{grid-column:1/-1;text-align:center}.brm-print-icon{width:38px;height:38px}}
       </style>`;
     document.body.appendChild(host);
     const frame = host.querySelector<HTMLIFrameElement>('.brm-frame');
     let frameLoaded = false;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const cleanup = () => {
         window.removeEventListener('keydown', onKey);
+        frame?.contentDocument?.removeEventListener('keydown', onKey);
+        document.body.style.overflow = previousOverflow;
         removeReceiptModal();
+        previousFocus?.focus();
     };
     const printFrame = () => {
         const run = () => frame?.contentWindow?.print();
@@ -315,17 +323,47 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
     };
     function onKey(event: KeyboardEvent) {
         if (event.key === 'Escape') cleanup();
+        if (event.key !== 'Tab') return;
+        const controls = [...host.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+        if (!controls.length) return;
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.target instanceof Node && event.target.ownerDocument !== document) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault(); first.focus();
+        }
     }
     if (frame) {
-        frame.addEventListener('load', () => { frameLoaded = true; }, { once: true });
+        frame.addEventListener('load', () => {
+            frameLoaded = true;
+            frame.contentDocument?.addEventListener('keydown', onKey);
+        }, { once: true });
         frame.srcdoc = html;
     }
     host.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', cleanup));
-    host.querySelector('[data-pdf]')?.addEventListener('click', () => { void downloadCanonicalReceiptPdf(canonicalReceipt(model)); });
+    host.querySelector('[data-print]')?.addEventListener('click', printFrame);
+    host.querySelector('[data-pdf]')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        const status = host.querySelector<HTMLElement>('.brm-status');
+        button.disabled = true;
+        button.textContent = 'Exporting...';
+        try {
+            const result = await downloadCanonicalReceiptPdf(canonicalReceipt(model));
+            if (status) status.textContent = result.mode === 'server' ? 'PDF downloaded.' : 'Basic PDF downloaded.';
+        } finally {
+            button.disabled = false;
+            button.textContent = 'PDF Export';
+        }
+    });
     host.querySelector('.brm-backdrop')?.addEventListener('click', (event) => {
         if (event.target === event.currentTarget) cleanup();
     });
     window.addEventListener('keydown', onKey);
+    host.querySelector<HTMLButtonElement>('[data-close]')?.focus();
     if (shouldPrint) printFrame();
 }
 
@@ -410,11 +448,11 @@ export function purchaseReceipt(row: any): ReceiptModel {
 
 export function refundReceipt(row: any): ReceiptModel {
     return {
-        title: 'Refund Receipt',
+        title: row.status === 'approved' ? 'Refund Receipt' : 'Refund Request Record',
         receiptId: id(row.id),
         amount: money(row.amount_minor),
         status: clean(row.status),
-        issuedAt: date(row.approved_at || row.rejected_at || row.created_at),
+        issuedAt: date(row.processed_at || row.created_at),
         subject: 'Refund Amount',
         fields: [
             field('Wallet ID', row.wallet_id),
