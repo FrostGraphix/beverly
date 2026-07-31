@@ -6,9 +6,31 @@
 // fast and dependency-light like the rest of the contract suite.
 
 const assert = require("node:assert");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const handlerModule = require(path.join("..", "api", "receipt-pdf.js"));
+const rootPackage = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+
+// --- Chromium pack URL ---
+// Production once ran with RECEIPT_PDF_CHROMIUM_PACK_URL set to an empty string, which made
+// every /api/receipt-pdf call answer 502 and silently drop clients onto the fallback PDF.
+// The endpoint now carries a pinned default, so a blank/absent env var must still resolve.
+assert.ok(handlerModule.CHROMIUM_PACK_URL, "a Chromium pack URL must always resolve");
+assert.ok(
+  handlerModule.CHROMIUM_PACK_URL.startsWith("https://"),
+  "Chromium pack URL must be https"
+);
+
+// The pack tar and the installed @sparticuz/chromium-min build must be the same release —
+// a version bump without a matching URL bump breaks Chromium launch at runtime.
+const chromiumRange = rootPackage.dependencies["@sparticuz/chromium-min"];
+const chromiumVersion = String(chromiumRange).replace(/^[^0-9]*/, "");
+assert.strictEqual(
+  handlerModule.DEFAULT_CHROMIUM_PACK_URL,
+  `https://github.com/Sparticuz/chromium/releases/download/v${chromiumVersion}/chromium-v${chromiumVersion}-pack.x64.tar`,
+  "default Chromium pack URL must match the installed @sparticuz/chromium-min version"
+);
 
 const brand = { name: "Beverly", company: "ACOB Lighting Technology Limited" };
 
@@ -48,6 +70,25 @@ function mockResponse() {
 // --- cookieValue ---
 assert.strictEqual(handlerModule.cookieValue(mockRequest({ cookie: "bev_token=abc123; other=1" }), "bev_token"), "abc123");
 assert.strictEqual(handlerModule.cookieValue(mockRequest({ cookie: "" }), "bev_token"), "");
+
+// --- single-page fit ---
+// Receipts with ~22 or more fields laid out taller than one A4 sheet and spilled a sliver onto
+// a second page. The render now scales to fit; these cover the pure math (the Chromium round
+// trip itself is exercised by the render probe, not this dependency-light suite).
+assert.strictEqual(handlerModule.fitScaleForHeight(900), 1, "short receipts must not be scaled");
+assert.strictEqual(handlerModule.fitScaleForHeight(1123), 1, "an exact-A4 layout must not be scaled");
+const slightOverflow = handlerModule.fitScaleForHeight(1173);
+assert.ok(slightOverflow > 0.9 && slightOverflow < 1, `slight overflow should scale just under 1, got ${slightOverflow}`);
+assert.ok(1173 * slightOverflow <= 1123, "scaled height must fit the page");
+const bigOverflow = handlerModule.fitScaleForHeight(1286);
+assert.ok(1286 * bigOverflow <= 1123, "scaled height must fit the page");
+assert.strictEqual(handlerModule.fitScaleForHeight(99999), 0.5, "scale is floored so text stays legible");
+assert.strictEqual(handlerModule.fitScaleForHeight(0), 1, "unmeasurable height falls back to unscaled");
+assert.strictEqual(handlerModule.fitScaleForHeight(undefined), 1, "unmeasurable height falls back to unscaled");
+
+// Page counting reads Chromium's uncompressed page tree; /Pages must not be miscounted.
+assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Pages /Count 1 /Type /Page ")), 1);
+assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Page /Type /Page ")), 2);
 
 // --- sanitizeModel ---
 assert.strictEqual(handlerModule.sanitizeModel(null, brand), null);
