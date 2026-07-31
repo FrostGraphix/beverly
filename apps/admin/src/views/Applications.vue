@@ -86,9 +86,14 @@ onMounted(load);
         <h2 class="bw-h2" style="margin: 0">Public interest submissions</h2>
         <span class="bw-spacer"></span>
         <div class="bw-row" style="gap: 2px">
-          <button v-for="s in (['submitted','contacted','rejected','converted'] as const)" :key="s"
-                  :class="['bw-btn sm', status === s ? 'primary' : '']"
-                  @click="status = s; void load()">{{ s }}</button>
+          <button
+            v-for="s in (['submitted','contacted','rejected','converted'] as const)"
+            :key="s"
+            :class="['bw-btn sm', status === s ? 'primary' : '']"
+            @click="status = s; void load()"
+          >
+            {{ s }}
+          </button>
         </div>
       </div>
 
@@ -138,6 +143,35 @@ onMounted(load);
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="bw-t-cards">
+        <div v-for="a in apps" :key="`app-card-${a.id}`" class="bw-tc">
+          <div class="bw-tc-top">
+            <div>
+              <div class="bw-tc-vendor">{{ a.legal_name }}</div>
+              <div class="bw-tc-id">{{ shortDate(a.created_at) }}</div>
+            </div>
+            <span class="bw-badge info">{{ a.business_type || 'Retail' }}</span>
+          </div>
+          <div class="bw-tc-mid">
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Contact</span>
+              <span class="bw-tc-pair-val">{{ a.contact_name }}</span>
+              <span class="bw-muted bw-mono" style="font-size: var(--t-xs)">{{ a.contact_email }}</span>
+            </div>
+            <div class="bw-tc-pair" v-if="a.operating_stations?.length">
+              <span class="bw-tc-pair-label">Stations</span>
+              <span class="bw-tc-pair-val">{{ a.operating_stations.join(', ') }}</span>
+            </div>
+          </div>
+          <div class="bw-row" style="gap: 6px; margin-top: 4px;">
+            <button v-if="status === 'submitted'" class="bw-btn sm primary" @click="convertToVendor(a)">Approve</button>
+            <button v-if="auth.hasPermission('wallet.vendors.manage')" class="bw-btn sm danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
+              {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+        <div v-if="!apps.length && !loading" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</div>
       </div>
     </div>
 

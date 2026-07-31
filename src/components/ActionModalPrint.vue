@@ -18,10 +18,6 @@
     <template #footer>
       <div class="modal-actions">
         <BaseButton variant="primary" @click="printReceipt">
-          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg>
-          Print / Save PDF
-        </BaseButton>
-        <BaseButton @click="downloadPdf">
           <svg class="svg-icon" viewBox="0 0 1024 1024"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372zm128-448c0-4.4-3.6-8-8-8h-88v-120c0-4.4-3.6-8-8-8h-48c-4.4 0-8 3.6-8 8v120h-88c-4.4 0-8 3.6-8 8s3.6 8 8 8h88v120c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8v-120h88c4.4 0 8-3.6 8-8z"></path></svg>
           PDF Export
         </BaseButton>
@@ -36,7 +32,7 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseModalShell from "./base/BaseModalShell.vue";
 import { printModelForRoute } from "../services/table-service";
-import { buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf, openBrowserPrint, receiptHtml } from "../services/receipt-tools.mjs";
+import { buildReceiptFilename, buildReceiptThemeFromDocument, downloadReceiptPdf, receiptHtml } from "../services/receipt-tools.mjs";
 import { logPrintJob } from "../services/local-jobs.mjs";
 
 export default {
@@ -89,19 +85,6 @@ export default {
       } else {
         this.result = `✓ PDF saved automatically: ${result.filename}`;
       }
-    },
-    async downloadPdf() {
-      // Secondary export: open browser print dialog as a fallback / alternative.
-      const opened = openBrowserPrint(this.receiptModel);
-      await logPrintJob(this.route, this.receiptModel, "browser-print", "credit", {
-        fileName: this.receiptFilename(this.receiptModel, "html"),
-        content: this.receiptHtmlFor(this.receiptModel),
-        contentType: "text/html;charset=utf-8",
-        format: "html"
-      });
-      this.result = opened
-        ? "Print dialog opened — choose \"Save as PDF\" as the destination to save manually."
-        : "Popup blocked. Allow popups for this site and try again."
     }
   }
 };

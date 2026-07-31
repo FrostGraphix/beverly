@@ -139,6 +139,38 @@ onMounted(load);
             </tbody>
           </table>
         </div>
+
+        <!-- Mobile cards -->
+        <div class="bw-t-cards">
+          <div v-for="order in orders" :key="`order-card-${order.id}`" class="bw-tc">
+            <div class="bw-tc-top">
+              <div>
+                <div class="bw-tc-vendor">{{ order.customer_name_snapshot || 'Customer' }}</div>
+                <div class="bw-tc-id">{{ order.contact_phone }}</div>
+              </div>
+              <div class="bw-tc-amt bw-money">{{ amount(order.amount_minor) }}</div>
+            </div>
+            <div class="bw-tc-mid">
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Type</span>
+                <span class="bw-tc-pair-val">{{ order.meter_type === 'three_phase' ? 'Three Phase' : 'Single Phase' }}</span>
+              </div>
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Status</span>
+                <span class="bw-badge neutral">{{ order.status.replace(/_/g, ' ') }}</span>
+              </div>
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Address</span>
+                <span class="bw-tc-pair-val">{{ order.property_address }} ({{ order.service_area }})</span>
+              </div>
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Sponsor & Date</span>
+                <span class="bw-tc-pair-val bw-muted">{{ order.sponsor_mode === 'vendor_wallet' ? 'Vendor wallet' : 'Manual paid' }} · {{ dateLabel(order.created_at) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!orders.length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6)">No vendor meter orders yet.</div>
+        </div>
       </div>
     </div>
   </AppShell>

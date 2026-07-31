@@ -59,14 +59,28 @@ const IMPORT_FIELD_ALIASES = {
 };
 
 const IMPORT_SYSTEM_FIELDS = new Set(["createDate", "updateDate"]);
+const IMPORT_EMPTY_FIELD_DEFAULTS = {
+  "/api/account/import": new Set(["remark"])
+};
 
 function importPayload(endpoint, importRows = []) {
   const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
+  const emptyFieldDefaults = IMPORT_EMPTY_FIELD_DEFAULTS[endpoint] || new Set();
   return importRows.map((row) => Object.entries(row).reduce((mapped, [key, value]) => {
     if (IMPORT_SYSTEM_FIELDS.has(key)) return mapped;
     const target = aliases[key] || key;
-    const text = String(value ?? "").trim();
-    if (text) mapped[target] = text;
+    let text = String(value ?? "").trim();
+    if (target === "ctRatio") {
+      let numVal = Number(text);
+      if (text && text.includes("/")) {
+        const parts = text.split("/").map(Number);
+        if (parts.length === 2 && parts[1] !== 0 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          numVal = parts[0] / parts[1];
+        }
+      }
+      text = Number.isFinite(numVal) && numVal > 0 ? String(numVal) : "1";
+    }
+    if (text || emptyFieldDefaults.has(target)) mapped[target] = text;
     return mapped;
   }, {}));
 }

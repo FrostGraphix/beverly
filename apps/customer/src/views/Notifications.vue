@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
+import { publishNotificationCount } from '@beverly/tokens';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,7 @@ interface Preferences {
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const tab = ref<'inbox' | 'settings'>('inbox');
+const router = useRouter();
 
 // Inbox
 const items       = ref<Notification[]>([]);
@@ -33,6 +36,11 @@ const loading     = ref(false);
 const loadingMore = ref(false);
 const markingAll  = ref(false);
 const inboxError  = ref('');
+const filter = ref<'all' | 'unread' | 'read'>('all');
+const filters = ['all', 'unread', 'read'] as const;
+const filteredItems = computed(() => items.value.filter((item) =>
+    filter.value === 'all' || (filter.value === 'read' ? item.read : !item.read)
+));
 
 // Preferences
 const prefs       = ref<Preferences>({
@@ -55,6 +63,7 @@ const NOTIF_ICON: Record<string, string> = {
     low_balance:       'M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
     payment_failed:    'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M12 3C6.48 3 2 7.48 2 12s4.48 9 10 9 10-4.48 10-10S17.52 3 12 3z',
     meter_order_update:'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
+    wallet_activity:    'M2 6h20v14H2zM2 10h20M16 14h2',
 };
 
 const NOTIF_COLOR: Record<string, string> = {
@@ -66,6 +75,7 @@ const NOTIF_COLOR: Record<string, string> = {
     low_balance:       'oklch(78% 0.16 75)',
     payment_failed:    'oklch(60% 0.22 25)',
     meter_order_update:'oklch(70% 0.15 220)',
+    wallet_activity:    'var(--brand)',
 };
 
 function fmtDate(iso: string) {
@@ -160,7 +170,10 @@ async function loadInbox(reset = true) {
         );
         items.value.push(...r.notifications);
         nextCursor.value  = r.nextCursor;
-        if (reset) unreadCount.value = r.unreadCount;
+        if (reset) {
+            unreadCount.value = r.unreadCount;
+            publishNotificationCount(unreadCount.value);
+        }
     } catch (e: any) {
         inboxError.value = e.message ?? 'Failed to load notifications.';
     } finally { loading.value = false; }
@@ -181,18 +194,34 @@ async function loadMore() {
 async function markRead(id: string) {
     const notif = items.value.find(n => n.id === id);
     if (!notif || notif.read) return;
-    notif.read = true;
-    if (unreadCount.value > 0) unreadCount.value--;
-    await api.patch(`/api/v1/customer/notifications/${id}/read`).catch(() => undefined);
+    inboxError.value = '';
+    try {
+        await api.patch(`/api/v1/customer/notifications/${id}/read`);
+        notif.read = true;
+        if (unreadCount.value > 0) unreadCount.value--;
+        publishNotificationCount(unreadCount.value);
+    } catch (error: any) {
+        inboxError.value = error?.message ?? 'Notification could not be marked read.';
+    }
+}
+
+async function openNotification(notification: Notification) {
+    await markRead(notification.id);
+    const path = typeof notification.metadata?.path === 'string' ? notification.metadata.path : '';
+    if (path) await router.push(path);
 }
 
 async function markAllRead() {
     markingAll.value = true;
+    inboxError.value = '';
     try {
         await api.post('/api/v1/customer/notifications/read-all');
         items.value.forEach(n => { n.read = true; });
         unreadCount.value = 0;
-    } catch { /* noop */ } finally { markingAll.value = false; }
+        publishNotificationCount(0);
+    } catch (error: any) {
+        inboxError.value = error?.message ?? 'Notifications could not be marked read.';
+    } finally { markingAll.value = false; }
 }
 
 // ── Preferences actions ───────────────────────────────────────────────────────
@@ -247,20 +276,26 @@ onMounted(async () => {
 
     <!-- Tabs -->
     <div class="notif-tabs">
-      <button :class="['notif-tab', { active: tab === 'inbox' }]" @click="tab = 'inbox'">
+      <button type="button" :class="['notif-tab', { active: tab === 'inbox' }]" :aria-pressed="tab === 'inbox'" @click="tab = 'inbox'">
         Inbox
         <span v-if="unreadCount > 0" class="notif-tab-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
-      <button :class="['notif-tab', { active: tab === 'settings' }]" @click="tab = 'settings'">
+      <button type="button" :class="['notif-tab', { active: tab === 'settings' }]" :aria-pressed="tab === 'settings'" @click="tab = 'settings'">
         Preferences
       </button>
     </div>
 
     <!-- ── INBOX TAB ────────────────────────────────────────────────────── -->
     <div v-if="tab === 'inbox'">
+      <div class="notification-filters" aria-label="Filter notifications">
+        <button v-for="option in filters" :key="option" type="button" :class="['notification-filter', { active: filter === option }]" :aria-pressed="filter === option" @click="filter = option">
+          {{ option }}
+        </button>
+      </div>
+
       <!-- Mark all read -->
       <div v-if="unreadCount > 0" style="display:flex; justify-content:flex-end; margin-bottom: var(--s-3)">
-        <button class="bw-btn sm" :disabled="markingAll" @click="markAllRead">
+        <button type="button" class="bw-btn sm notif-mark-all" :disabled="markingAll" @click="markAllRead">
           {{ markingAll ? 'Marking…' : 'Mark all read' }}
         </button>
       </div>
@@ -277,12 +312,17 @@ onMounted(async () => {
         <p style="font-size: var(--t-sm); color: var(--text-dim)">Events like token purchases and wallet top-ups will appear here.</p>
       </div>
 
+      <div v-else-if="!filteredItems.length" class="bw-empty-state">
+        <p>No {{ filter }} notifications</p>
+        <p style="font-size: var(--t-sm); color: var(--text-dim)">Choose another filter.</p>
+      </div>
+
       <div v-else class="bw-stack" style="gap: var(--s-2)">
         <div
-          v-for="n in items"
+          v-for="n in filteredItems"
           :key="n.id"
           :class="['notif-item', { unread: !n.read }]"
-          @click="markRead(n.id)"
+          @click="openNotification(n)"
         >
           <!-- Icon -->
           <div class="notif-icon" :style="`background: ${NOTIF_COLOR[n.type] ?? 'var(--brand)'}/14;`">
@@ -382,7 +422,9 @@ onMounted(async () => {
   justify-content: center;
   gap: var(--s-1);
   transition: background 0.15s, color 0.15s;
+  min-height: 44px;
 }
+.notif-mark-all { min-height: 44px; }
 .notif-tab.active {
   background: var(--glass-bg-strong);
   color: var(--text);
@@ -401,6 +443,30 @@ onMounted(async () => {
   line-height: 16px;
   text-align: center;
 }
+.notification-filters {
+  display: flex;
+  gap: var(--s-1);
+  margin-bottom: var(--s-3);
+}
+.notification-filter {
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.notification-filter.active {
+  border-color: oklch(from var(--brand) l c h / 0.55);
+  background: oklch(from var(--brand) l c h / 0.14);
+  color: var(--brand);
+}
+.notification-filter:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 /* Inbox items */
 .notif-item {

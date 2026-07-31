@@ -1,6 +1,6 @@
 /**
  * Idle session timeout per SOP.
- * Vendor: 30 min idle, 12 h absolute.
+ * Vendor: 8 h idle, 24 h absolute.
  * Mirrors apps/customer/src/composables/useIdleTimeout.ts.
  */
 import { onMounted, onBeforeUnmount, ref } from 'vue';

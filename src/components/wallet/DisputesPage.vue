@@ -130,7 +130,7 @@
         <label>Amount (NGN)<BaseInput v-model.number="createForm.amountNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
         <label>Description<textarea v-model="createForm.description" class="ops-textarea" rows="3"></textarea></label>
         <div class="modal-actions">
-          <BaseButton @click="createOpen = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="createOpen = false">Cancel</BaseButton>
           <BaseButton variant="primary" :disabled="submitting" @click="submitCreate">Open</BaseButton>
         </div>
       </div>
@@ -143,7 +143,7 @@
         <p>Dispute {{ shortId(resolveModal.row?.id) }}</p>
         <label>Resolution Note<textarea v-model="resolveModal.note" class="ops-textarea" rows="3"></textarea></label>
         <div class="modal-actions">
-          <BaseButton @click="resolveModal.open = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="resolveModal.open = false">Cancel</BaseButton>
           <BaseButton :variant="resolveModal.nextStatus === 'resolved_approved' ? 'primary' : 'danger'" :disabled="submitting" @click="submitResolve">Confirm</BaseButton>
         </div>
       </div>

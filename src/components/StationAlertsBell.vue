@@ -196,7 +196,7 @@
 <script>
 import BaseIconButton from './base/BaseIconButton.vue';
 import BaseButton from './base/BaseButton.vue';
-import { getApi, postApi } from '../services/api.js';
+import { getApi, isSessionExpired, readSessionState, postApi } from '../services/api.js';
 import { formatGatewayDuration } from '../services/gateway-health.mjs';
 
 export default {
@@ -251,7 +251,7 @@ export default {
     }
   },
   mounted() {
-    this.refresh();
+    if (this.canRefresh()) this.refresh();
     this.poller = window.setInterval(this.refresh, 60000);
     window.addEventListener('pointerdown', this.closeOutside, true);
   },
@@ -260,6 +260,11 @@ export default {
     window.removeEventListener('pointerdown', this.closeOutside, true);
   },
   methods: {
+    canRefresh() {
+      return !window.location.hash.startsWith('#/login')
+        && Boolean(readSessionState())
+        && !isSessionExpired();
+    },
     toggle() {
       this.open = !this.open;
       if (this.open && !this.activeAlerts.length && this.historyAlerts.length) {
@@ -356,12 +361,12 @@ export default {
     },
 
     async refresh() {
-      if (this.fetching) return;
+      if (this.fetching || !this.canRefresh()) return;
       this.fetching = true;
       this.loading = !this.alerts.length;
       this.errorMessage = '';
       try {
-        const response = await getApi('/api/notifications/gateway-health');
+        const response = await getApi('/api/notifications/gateway-health', {}, { silent: true });
         const alerts = response?.result?.data || response?.data?.data || [];
         this.alerts = Array.isArray(alerts) ? alerts : [];
         const eventIds = Array.isArray(response?.meta?.eventIds) ? response.meta.eventIds.map(String) : [];

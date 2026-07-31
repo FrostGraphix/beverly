@@ -405,7 +405,7 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
         </table>
       </div>
 
-      <div class="support-mobile-list">
+      <div class="bw-t-cards support-mobile-list">
         <article v-for="f in faqs" :key="`faq-mobile-${f.id}`" class="support-ticket-card">
           <div>
             <span>{{ categoryName(f.category_id) }}</span>

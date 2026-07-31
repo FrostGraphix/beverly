@@ -6,6 +6,9 @@ export interface StaffProfile {
     email: string | null;
     full_name: string | null;
     role: string;
+    /** Station scope for this staff member. Empty for super-admin (estate-wide). */
+    station_id?: string | null;
+    station_ids?: string[];
     profile_picture_url: string | null;
     updated_at?: string | null;
 }
@@ -16,6 +19,13 @@ interface State {
     user: StaffProfile | null;
     permissions: string[];
     lastValidatedAt: number | null;
+    /**
+     * True when the cached profile/permissions could not be revalidated against
+     * /me for a non-terminal reason (network, 5xx). The session stays usable —
+     * the server remains the authority on every request — but the UI should
+     * present its entitlements as stale rather than current.
+     */
+    permissionsStale: boolean;
 }
 
 function isSessionTerminalError(error: unknown): boolean {
@@ -23,10 +33,20 @@ function isSessionTerminalError(error: unknown): boolean {
 }
 
 export const useStaffAuthStore = defineStore('staff-auth', {
-    state: (): State => ({ hydrated: false, accessToken: null, user: null, permissions: [], lastValidatedAt: null }),
+    state: (): State => ({
+        hydrated: false,
+        accessToken: null,
+        user: null,
+        permissions: [],
+        lastValidatedAt: null,
+        permissionsStale: false,
+    }),
     getters: {
         isAuthenticated: (s) => !!s.accessToken && !!s.user,
         hasPermission: (s) => (permission: string) => s.user?.role === 'super-admin' || s.permissions.includes(permission),
+        stationScope: (s): string[] => (s.user?.station_ids?.length
+            ? s.user.station_ids
+            : (s.user?.station_id ? [s.user.station_id] : [])),
     },
     actions: {
         async hydrate(force = false) {
@@ -53,7 +73,13 @@ export const useStaffAuthStore = defineStore('staff-auth', {
                 try {
                     await this.refreshSession();
                 } catch (error) {
-                    if (!isSessionTerminalError(error)) return;
+                    if (!isSessionTerminalError(error)) {
+                        // Keep cached entitlements so a transient /me outage does
+                        // not lock out a working session, but mark them stale.
+                        this.permissionsStale = true;
+                        this.lastValidatedAt = null;
+                        return;
+                    }
                     this.logout();
                 }
             }
@@ -64,6 +90,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.user = fresh.user;
             this.permissions = fresh.permissions;
             this.lastValidatedAt = Date.now();
+            this.permissionsStale = false;
             localStorage.setItem('beverly.staff.user', JSON.stringify(fresh.user));
             localStorage.setItem('beverly.staff.permissions', JSON.stringify(fresh.permissions));
         },
@@ -77,6 +104,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
                     this.logout();
                     throw error;
                 }
+                this.permissionsStale = true;
             }
         },
         setSession(token: string, user: StaffProfile, permissions: string[] = []) {
@@ -84,6 +112,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.user = user;
             this.permissions = permissions;
             this.lastValidatedAt = Date.now();
+            this.permissionsStale = false;
             localStorage.setItem('beverly.staff.access_token', token);
             localStorage.setItem('beverly.staff.user', JSON.stringify(user));
             localStorage.setItem('beverly.staff.permissions', JSON.stringify(permissions));
@@ -94,6 +123,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.user = null;
             this.permissions = [];
             this.lastValidatedAt = null;
+            this.permissionsStale = false;
             localStorage.removeItem('beverly.staff.access_token');
             localStorage.removeItem('beverly.staff.user');
             localStorage.removeItem('beverly.staff.permissions');

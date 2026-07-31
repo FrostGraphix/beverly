@@ -154,7 +154,7 @@
 
     <template #footer>
       <div class="modal-actions">
-        <BaseButton @click="$emit('close')">Cancel</BaseButton>
+        <BaseButton variant="danger" @click="$emit('close')">Cancel</BaseButton>
         <BaseButton :variant="action === 'Delete' ? 'danger' : 'primary'" native-type="submit">{{ action === 'Delete' ? 'Delete' : 'Confirm' }}</BaseButton>
       </div>
     </template>
@@ -178,7 +178,7 @@ import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseModalShell from "./base/BaseModalShell.vue";
 import BaseSelect from "./base/BaseSelect.vue";
-import { buildErrorReport, buildImportPreview, downloadTextFile, exportCsvText, exportExcelXml, parseImportFile, validateImportRows } from "../services/import-export.mjs";
+import { buildErrorReport, buildImportPreview, downloadTextFile, exportCsvText, exportExcelXml, importErrorMessage, parseImportFile, validateImportRows } from "../services/import-export.mjs";
 import { alignMeterStations, preflightAccountImport, preflightReportCsv, preflightSummary } from "../services/account-import-preflight.mjs";
 import { logExportJob } from "../services/local-jobs.mjs";
 import { columnKey, tableSiteOptions } from "../services/table-service";
@@ -407,7 +407,7 @@ export default {
       if (this.importErrors.length) {
         const report = buildErrorReport(this.importErrors);
         downloadTextFile(`${this.route.title}-import-errors.csv`, report, "text/csv;charset=utf-8");
-        this.error = `Import has ${this.importErrors.length} validation errors`;
+        this.error = importErrorMessage(this.importErrors);
         return;
       }
       if (this.isAccountRoute) await this.runAccountPreflight();
@@ -433,8 +433,11 @@ export default {
       downloadTextFile(`${this.route.title}-import-precheck.csv`, preflightReportCsv(this.preflight), "text/csv;charset=utf-8");
     },
     async submit() {
+      if (this.action === "Import" && this.importErrors.length) {
+        this.error = importErrorMessage(this.importErrors);
+        return;
+      }
       this.error = "";
-      if (this.action === "Import" && this.importErrors.length) return;
       if (this.action === "Export") {
         const timestamp = new Date().toISOString().split("T")[0];
         const baseFilename = `Beverly_${this.route.title.replace(/\s+/g, "_")}_${timestamp}`;

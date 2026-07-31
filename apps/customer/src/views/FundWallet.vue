@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api, redirectToPayment } from '../lib/api';
+import { api, idempotencyHeaders, newIdempotencyKey, redirectToPayment } from '../lib/api';
 import { naira } from '../lib/format';
 
 const amountRaw = ref('');
@@ -12,12 +12,24 @@ const success   = ref<string | null>(null);
 
 const amountMinor = () => Math.round(parseFloat(amountRaw.value || '0') * 100);
 
+// One key per top-up intent, so a double-click cannot open two checkouts.
+const fundIntentKey = ref(newIdempotencyKey());
+const fundIntentAmount = ref<number | null>(null);
+
 async function fund() {
     const amt = amountMinor();
     if (amt < 50000) { error.value = 'Minimum top-up is ₦500.'; return; }
     loading.value = true; error.value = null;
+    if (fundIntentAmount.value !== amt) {
+        fundIntentKey.value = newIdempotencyKey();
+        fundIntentAmount.value = amt;
+    }
     try {
-        const r = await api.post<{ authorizationUrl: string }>('/api/v1/customer/wallet/fund', { amount_minor: amt });
+        const r = await api.post<{ authorizationUrl: string }>(
+            '/api/v1/customer/wallet/fund',
+            { amount_minor: amt },
+            idempotencyHeaders(fundIntentKey.value),
+        );
         redirectToPayment(r.authorizationUrl);
     } catch (e: any) {
         error.value = e?.message ?? 'Could not initiate payment.';

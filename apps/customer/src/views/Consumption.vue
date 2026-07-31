@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { naira } from '../lib/format';
+import WalletPagination from '@beverly/tokens/WalletPagination.vue';
+import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
 
 // A customer sees only their own meters. The backend resolves that set from
 // registered meters UNION meters they have bought tokens for, so a meter paid
@@ -15,7 +17,10 @@ interface AggRow {
     period_start: string;
     kwh_total: number;
     reading_count: number;
+    /** Paid through the Beverly wallet. */
     amount_minor_total: number;
+    /** Energy used, priced at the tariff in force. */
+    energy_value_minor?: number;
     meter_id?: string;
     last_refreshed_at: string;
 }
@@ -56,9 +61,24 @@ const fmtKwh = (value: number) =>
 
 const totalKwh = computed(() => rows.value.reduce((sum, row) => sum + Number(row.kwh_total ?? 0), 0));
 const totalSpend = computed(() => rows.value.reduce((sum, row) => sum + Number(row.amount_minor_total ?? 0), 0));
+// What the meter recorded, priced at tariff — distinct from what was paid to
+// Beverly, which is zero for a customer who vends elsewhere.
+const totalValue = computed(() => rows.value.reduce((sum, row) => sum + Number(row.energy_value_minor ?? 0), 0));
 const showMeterColumn = computed(() => !selectedMeter.value && meters.value.length > 1);
 
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+const page = ref(1);
+const pagedRows = computed(() => paginate(rows.value, page.value, PAGE_SIZE));
+// Changing period or meter produces a different list; staying on page 7 of the
+// old one would show an empty table.
+watch([period, selectedMeter], () => { page.value = 1; });
+
+// Period and meter can both change faster than the network responds; without
+// this guard a slow earlier request could land last and repaint stale figures.
+let loadRequestId = 0;
+
 async function load() {
+    const requestId = ++loadRequestId;
     loading.value = true;
     error.value = '';
     try {
@@ -66,12 +86,14 @@ async function load() {
         const res = await api.get<ConsumptionResponse>(
             `/api/v1/customer/consumption?period=${period.value}${meterParam}`,
         );
+        if (requestId !== loadRequestId) return;
         rows.value = res.rows ?? [];
         meters.value = res.meters ?? [];
     } catch (e: any) {
+        if (requestId !== loadRequestId) return;
         error.value = e?.message ?? 'Could not load your consumption.';
     } finally {
-        loading.value = false;
+        if (requestId === loadRequestId) loading.value = false;
     }
 }
 
@@ -107,6 +129,10 @@ onMounted(load);
             <strong class="kpi-value">{{ fmtKwh(totalKwh) }}</strong>
           </div>
           <div class="kpi">
+            <span class="kpi-label">Value of energy used</span>
+            <strong class="kpi-value">{{ naira(totalValue) }}</strong>
+          </div>
+          <div class="kpi">
             <span class="kpi-label">Amount spent</span>
             <strong class="kpi-value">{{ naira(totalSpend) }}</strong>
           </div>
@@ -127,20 +153,23 @@ onMounted(load);
                 <th>Period</th>
                 <th v-if="showMeterColumn">Meter</th>
                 <th class="num">Energy used</th>
+                <th class="num">Value</th>
                 <th class="num">Spent</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-if="loading"><td :colspan="showMeterColumn ? 4 : 3" class="empty">Loading…</td></tr>
-              <tr v-else-if="!rows.length"><td :colspan="showMeterColumn ? 4 : 3" class="empty">No consumption recorded for this period.</td></tr>
-              <tr v-for="(row, index) in rows" v-else :key="`${row.scope_id}-${row.period_start}-${index}`">
+              <tr v-if="loading"><td :colspan="showMeterColumn ? 5 : 4" class="empty">Loading…</td></tr>
+              <tr v-else-if="!rows.length"><td :colspan="showMeterColumn ? 5 : 4" class="empty">No consumption recorded for this period.</td></tr>
+              <tr v-for="(row, index) in pagedRows" v-else :key="`${row.scope_id}-${row.period_start}-${index}`">
                 <td>{{ periodLabel(row) }}</td>
                 <td v-if="showMeterColumn" class="mono">{{ row.meter_id }}</td>
                 <td class="num">{{ fmtKwh(row.kwh_total) }}</td>
+                <td class="num">{{ naira(row.energy_value_minor ?? 0) }}</td>
                 <td class="num">{{ naira(row.amount_minor_total) }}</td>
               </tr>
             </tbody>
           </table>
+          <WalletPagination v-model:page="page" :total="rows.length" :page-size="PAGE_SIZE" item-label="periods" />
         </div>
       </template>
     </div>
@@ -150,21 +179,22 @@ onMounted(load);
 <style scoped>
 .consumption { display: flex; flex-direction: column; gap: 1.25rem; }
 .head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; justify-content: space-between; }
-h1 { margin: 0; font-size: 1.5rem; }
-.sub { margin: 0.25rem 0 0; color: var(--text-muted, #667); font-size: 0.875rem; }
+h1 { margin: 0; font-size: 1.5rem; color: var(--text); }
+.sub { margin: 0.25rem 0 0; color: var(--text-muted); font-size: 0.875rem; }
 .controls { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.select { padding: 0.5rem 0.75rem; border: 1px solid var(--border, #d5d8e0); border-radius: 8px; font: inherit; }
-.notice { padding: 1rem; border-radius: 8px; background: var(--surface-muted, #f4f6fa); }
-.notice.error { background: #fdecec; color: #8c1b1b; }
+.select { padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--surface-2); color: var(--text); }
+.notice { padding: 1rem; border-radius: 8px; background: var(--surface-2); }
+.notice.error { border-color: oklch(from var(--danger) l c h / .30); background: oklch(from var(--danger) l c h / .12); color: var(--danger-on-surface); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; }
-.kpi { display: flex; flex-direction: column; gap: 0.35rem; padding: 1rem; border: 1px solid var(--border, #d5d8e0); border-radius: 10px; }
-.kpi-label { font-size: 0.8125rem; color: var(--text-muted, #667); }
-.kpi-value { font-size: 1.25rem; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--border, #d5d8e0); border-radius: 10px; }
+.kpi { display: flex; flex-direction: column; gap: 0.35rem; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; }
+.kpi-label { font-size: 0.8125rem; color: var(--text-muted); }
+.kpi-value { font-size: 1.25rem; color: var(--text); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 table { width: 100%; border-collapse: collapse; min-width: 420px; }
-th, td { padding: 0.7rem 0.85rem; text-align: left; border-bottom: 1px solid var(--border, #eceef3); }
-th { font-size: 0.8125rem; color: var(--text-muted, #667); font-weight: 600; }
+th, td { padding: 0.7rem 0.85rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-size: 0.8125rem; color: var(--text-muted); font-weight: 600; background: var(--surface-2); }
+td { color: var(--text-dim); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .mono { font-family: ui-monospace, monospace; font-size: 0.875rem; }
-.empty { text-align: center; color: var(--text-muted, #667); padding: 2rem; }
+.empty { text-align: center; color: var(--text-muted); padding: 2rem; }
 </style>
