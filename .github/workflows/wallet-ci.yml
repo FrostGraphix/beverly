@@ -1,7 +1,11 @@
 name: Wallet Ecosystem CI
 
 on:
+  # `labeled` is included so the `e2e` opt-in below works on an already-open
+  # PR. With the default types (opened/synchronize/reopened) the label could
+  # only ever take effect if it was applied before the PR was created.
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main, master]
     paths:
