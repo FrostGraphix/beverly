@@ -121,6 +121,20 @@ async function readJsonBody(request) {
 // sub-second render instead of repeating the launch cost.
 let warmBrowser = null;
 
+async function loadBrowserRuntime(serverless = IS_SERVERLESS) {
+  const puppeteer = await import("puppeteer-core");
+  if (typeof puppeteer.launch !== "function" || typeof puppeteer.defaultArgs !== "function") {
+    throw new Error("puppeteer-core runtime exports are invalid");
+  }
+  if (!serverless) return { puppeteer, chromium: null };
+
+  const chromium = (await import("@sparticuz/chromium-min")).default;
+  if (!chromium || !Array.isArray(chromium.args) || typeof chromium.executablePath !== "function") {
+    throw new Error("@sparticuz/chromium-min runtime exports are invalid");
+  }
+  return { puppeteer, chromium };
+}
+
 async function isBrowserUsable(browser) {
   if (!browser?.connected) return false;
   // `connected` only reflects the socket's own view. A lambda that was frozen and thawed can
@@ -141,7 +155,7 @@ async function getBrowser() {
   if (await isBrowserUsable(warmBrowser)) return warmBrowser;
   if (warmBrowser) await warmBrowser.close().catch(() => {});
   warmBrowser = null;
-  const puppeteer = require("puppeteer-core");
+  const { puppeteer, chromium } = await loadBrowserRuntime(IS_SERVERLESS);
   const defaultViewport = { width: 794, height: 1123, deviceScaleFactor: 2 };
 
   if (!IS_SERVERLESS) {
@@ -155,7 +169,6 @@ async function getBrowser() {
     return warmBrowser;
   }
 
-  const chromium = require("@sparticuz/chromium-min");
   // Cold-start cost is dominated by fetching and unpacking the ~70MB Chromium pack, which only
   // happens when /tmp is empty. Record which case this was and how long it took, so the decision
   // to mirror the pack somewhere faster rests on production numbers rather than a guess.
@@ -302,5 +315,7 @@ module.exports.sanitizeModel = sanitizeModel;
 module.exports.cookieValue = cookieValue;
 module.exports.fitScaleForHeight = fitScaleForHeight;
 module.exports.pdfPageCount = pdfPageCount;
+module.exports.loadBrowserRuntime = loadBrowserRuntime;
+module.exports.renderReceiptPdf = renderReceiptPdf;
 module.exports.DEFAULT_CHROMIUM_PACK_URL = DEFAULT_CHROMIUM_PACK_URL;
 module.exports.CHROMIUM_PACK_URL = CHROMIUM_PACK_URL;

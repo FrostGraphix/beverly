@@ -693,7 +693,9 @@ export default {
         });
         const model  = printModelForRoute(this.route, receiptRow);
         const result = await downloadReceiptPdf(model);
-        this.showPopup('success', 'Receipt downloaded', result?.filename || 'PDF saved.');
+        const fallback = result?.mode === 'fallback';
+        this.showPopup('success', fallback ? 'Basic receipt downloaded' : 'Receipt downloaded',
+          fallback ? `${result.filename} — styled PDF export was unavailable.` : result?.filename || 'PDF saved.');
       } catch (err) {
         this.showPopup('error', 'Download failed', err?.message || 'Could not generate receipt.');
       }

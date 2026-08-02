@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml, requiredReceiptFields, validateReceiptModel } from "../src/services/receipt-tools.mjs";
+import { buildCanonicalReceiptRow, buildReceiptFilename, buildReceiptModel, buildReceiptPdfBytes, downloadReceiptPdf, receiptHtml, requiredReceiptFields, validatePdfBlob, validateReceiptModel } from "../src/services/receipt-tools.mjs";
 import { columnKey } from "../src/services/table-helpers.mjs";
 
 const route = {
@@ -60,6 +60,10 @@ assert(filename.includes("Beverly_Cancel_Receipt_8311_mohammed_kaura_"));
 assert.strictEqual(downloadReceiptPdf.constructor.name, "AsyncFunction");
 assert.strictEqual(String.fromCharCode(...pdfBytes.slice(0, 8)), "%PDF-1.4");
 assert(pdfBytes.length > 900);
+const validPdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+assert.strictEqual(await validatePdfBlob(validPdfBlob), validPdfBlob);
+await assert.rejects(validatePdfBlob(new Blob(["<html>error</html>"], { type: "text/html" })), /content type/);
+await assert.rejects(validatePdfBlob(new Blob(["not a pdf"], { type: "application/pdf" })), /invalid PDF body/);
 
 const canonicalRow = buildCanonicalReceiptRow({
   row: { stationId: "TUNGA" },

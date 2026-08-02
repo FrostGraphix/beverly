@@ -800,6 +800,16 @@ function waitForDocumentReady(targetWindow) {
   });
 }
 
+export async function validatePdfBlob(blob) {
+  const contentType = String(blob?.type || "").toLowerCase();
+  if (!/^application\/pdf(?:;|$)/.test(contentType)) {
+    throw new Error(`receipt-pdf endpoint returned invalid content type: ${contentType || "unknown"}`);
+  }
+  const signature = new TextDecoder("ascii").decode(await blob.slice(0, 5).arrayBuffer());
+  if (signature !== "%PDF-") throw new Error("receipt-pdf endpoint returned an invalid PDF body");
+  return blob;
+}
+
 async function downloadServerReceiptPdf(model, filename) {
   const controller = new AbortController();
   // A cold serverless render downloads and unpacks Chromium before the first byte, which
@@ -815,7 +825,7 @@ async function downloadServerReceiptPdf(model, filename) {
       signal: controller.signal
     });
     if (!response.ok) throw new Error(`receipt-pdf endpoint returned ${response.status}`);
-    const blob = await response.blob();
+    const blob = await validatePdfBlob(await response.blob());
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;

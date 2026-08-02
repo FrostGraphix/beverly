@@ -6,6 +6,7 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const vercelJson = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+const vercelIgnore = fs.readFileSync(path.join(root, ".vercelignore"), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -15,6 +16,10 @@ assert(!fs.existsSync(path.join(root, "now.json")), "legacy now.json must not ex
 assert(packageJson.engines?.node === "22.x", "package.json engines.node must pin Vercel to 22.x");
 assert(packageJson.packageManager === "pnpm@10.28.0", "package.json packageManager must pin Vercel pnpm");
 assert(vercelJson.version === 2, "vercel.json must stay on version 2");
+assert(
+  vercelIgnore.split(/\r?\n/).includes("/assets") && !vercelIgnore.split(/\r?\n/).includes("assets"),
+  ".vercelignore must exclude only root assets, not the backend email logo required by the build"
+);
 assert(!Object.values(vercelJson.functions ?? {}).some((entry) => entry.runtime), "vercel.json must not set custom runtimes for current api functions");
 assert(
   vercelJson.functions?.["api/reference.js"]?.excludeFiles?.includes("tmp") &&
