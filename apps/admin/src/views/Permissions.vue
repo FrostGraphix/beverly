@@ -116,7 +116,7 @@ onMounted(load);
     <div v-if="error" class="bw-banner error">{{ error }}</div>
 
     <!-- Risk summary -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile">
         <p class="kpi-label">Total permissions</p>
         <p class="kpi-value">{{ catalog.length }}</p>

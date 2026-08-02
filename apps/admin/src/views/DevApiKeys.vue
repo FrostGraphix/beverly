@@ -134,7 +134,7 @@ onMounted(load);
 
     <div v-else>
       <!-- KPI row -->
-      <div class="kpi-row">
+      <div class="kpi-row bw-mobile-kpi-grid">
         <div class="bw-kpi">
           <span class="bw-kpi-label">Active Keys</span>
           <span class="bw-kpi-val">{{ active.length }}</span>

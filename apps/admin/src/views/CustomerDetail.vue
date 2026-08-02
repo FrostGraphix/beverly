@@ -172,7 +172,7 @@ onMounted(loadDetail);
       </div>
 
       <!-- Stat tiles -->
-      <div class="stat-grid">
+      <div class="stat-grid bw-mobile-kpi-grid">
         <div class="stat-tile brand">
           <p class="stat-label">Wallet balance</p>
           <p class="stat-value">{{ naira(detail.balance_minor) }}</p>

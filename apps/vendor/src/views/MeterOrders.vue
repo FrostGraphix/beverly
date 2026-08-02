@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, ApiError } from '../lib/api';
 
 interface MeterOrder {
@@ -20,6 +21,9 @@ interface MeterOrder {
 const orders = ref<MeterOrder[]>([]);
 const loading = ref(true);
 const error = ref('');
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 
 const stats = computed(() => {
     const count = (status: string) => orders.value.filter((order) => order.status === status).length;
@@ -63,7 +67,7 @@ onMounted(load);
         <RouterLink to="/meter-orders/new" class="bw-btn primary" style="text-decoration:none">New Order</RouterLink>
       </div>
 
-      <div class="mo-kpi-row" aria-label="Meter order summary">
+      <div class="mo-kpi-row bw-mobile-kpi-grid" aria-label="Meter order summary">
         <div class="mo-kpi">
           <span class="mo-kpi-label">Total orders</span>
           <span class="mo-kpi-value">{{ loading ? '—' : stats.total }}</span>
@@ -90,13 +94,14 @@ onMounted(load);
         <p class="bw-error">{{ error }}</p>
       </div>
 
-      <div class="bw-card flush">
+      <div class="bw-card flush bw-data-region" :data-view="viewMode">
         <div class="bw-table-head-bar">
           <div>
             <div class="bw-card-title">Recent orders</div>
             <div class="bw-card-sub">{{ loading ? 'Loading…' : `${orders.length} orders` }}</div>
           </div>
           <button class="bw-btn sm" :disabled="loading" @click="load">{{ loading ? 'Loading…' : 'Refresh' }}</button>
+          <WalletDataViewSwitch v-model="viewMode" label="Meter order display view" />
         </div>
 
         <div class="bw-t-wrap">

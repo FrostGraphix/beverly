@@ -32,6 +32,9 @@ function isSessionTerminalError(error: unknown): boolean {
     return error instanceof ApiError && error.status === 401;
 }
 
+let sessionRefreshPromise: Promise<void> | null = null;
+let lastRefreshAttemptAt = 0;
+
 export const useStaffAuthStore = defineStore('staff-auth', {
     state: (): State => ({
         hydrated: false,
@@ -78,6 +81,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
                         // not lock out a working session, but mark them stale.
                         this.permissionsStale = true;
                         this.lastValidatedAt = null;
+                        lastRefreshAttemptAt = Date.now();
                         return;
                     }
                     this.logout();
@@ -96,16 +100,25 @@ export const useStaffAuthStore = defineStore('staff-auth', {
         },
         async ensureFreshSession(maxAgeMs = 60_000) {
             if (!this.accessToken) return;
-            if (this.lastValidatedAt && Date.now() - this.lastValidatedAt < maxAgeMs) return;
-            try {
-                await this.refreshSession();
-            } catch (error) {
-                if (isSessionTerminalError(error)) {
-                    this.logout();
-                    throw error;
-                }
-                this.permissionsStale = true;
+            const freshnessAt = this.lastValidatedAt ?? lastRefreshAttemptAt;
+            if (freshnessAt && Date.now() - freshnessAt < maxAgeMs) return;
+            if (!sessionRefreshPromise) {
+                lastRefreshAttemptAt = Date.now();
+                sessionRefreshPromise = (async () => {
+                    try {
+                        await this.refreshSession();
+                    } catch (error) {
+                        if (isSessionTerminalError(error)) {
+                            this.logout();
+                            throw error;
+                        }
+                        this.permissionsStale = true;
+                    }
+                })().finally(() => {
+                    sessionRefreshPromise = null;
+                });
             }
+            return sessionRefreshPromise;
         },
         setSession(token: string, user: StaffProfile, permissions: string[] = []) {
             this.accessToken = token;
@@ -113,6 +126,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.permissions = permissions;
             this.lastValidatedAt = Date.now();
             this.permissionsStale = false;
+            lastRefreshAttemptAt = Date.now();
             localStorage.setItem('beverly.staff.access_token', token);
             localStorage.setItem('beverly.staff.user', JSON.stringify(user));
             localStorage.setItem('beverly.staff.permissions', JSON.stringify(permissions));
@@ -124,6 +138,7 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.permissions = [];
             this.lastValidatedAt = null;
             this.permissionsStale = false;
+            lastRefreshAttemptAt = 0;
             localStorage.removeItem('beverly.staff.access_token');
             localStorage.removeItem('beverly.staff.user');
             localStorage.removeItem('beverly.staff.permissions');

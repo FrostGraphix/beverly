@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -28,6 +29,9 @@ const summary = ref<{ total: number; byStatus: Record<Vendor['status'], number> 
 const q = ref('');
 const status = ref<'' | Vendor['status']>('');
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 
 // ─ Action modal ──────────────────────────────────────────────
@@ -167,7 +171,7 @@ onMounted(() => {
       </div>
     </transition>
 
-    <section class="bw-kpi-grid vendor-kpis" aria-label="Vendor summary">
+    <section class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpis" aria-label="Vendor summary">
       <article class="bw-kpi featured">
         <span class="bw-kpi-label">Total vendors</span>
         <strong class="bw-kpi-value">{{ summary?.total ?? 0 }}</strong>
@@ -190,7 +194,7 @@ onMounted(() => {
       </article>
     </section>
 
-    <div class="bw-card" style="padding: 0">
+    <div class="bw-card bw-data-region" :data-view="viewMode" style="padding: 0">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">Vendor organizations</h2>
         <input class="bw-input" v-model="q" placeholder="Search…" style="width: 220px" @keyup.enter="load" />
@@ -202,6 +206,8 @@ onMounted(() => {
           <option value="closed">Closed</option>
         </select>
         <span class="bw-spacer"></span>
+        <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
+        <router-link to="/vendors/analytics" class="bw-btn" style="text-decoration: none">View analytics</router-link>
         <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
       </div>
 
@@ -279,13 +285,13 @@ onMounted(() => {
               <span class="bw-tc-pair-val bw-muted">{{ shortDate(v.created_at) }}</span>
             </div>
           </div>
-          <div class="action-cluster" @click.stop style="margin-top: 4px;">
-            <router-link :to="`/vendors/${v.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
-            <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
-            <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
-            <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
-            <button v-if="canManageVendors" class="bw-btn sm danger" @click="askDelete(v)">Delete</button>
-          </div>
+          <MobileActionMenu label="Vendor actions" @click.stop>
+            <router-link :to="`/vendors/${v.id}`" class="mobile-action-item">View</router-link>
+            <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'frozen')">Freeze</button>
+            <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'suspended')">Suspend</button>
+            <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="mobile-action-item primary" @click="ask(v, 'approved')">Reactivate</button>
+            <button v-if="canManageVendors" class="mobile-action-item danger" @click="askDelete(v)">Delete</button>
+          </MobileActionMenu>
         </div>
         <div v-if="!vendors.length && !loading" class="bw-muted" style="text-align: center; padding: var(--s-6)">No vendors yet.</div>
       </div>

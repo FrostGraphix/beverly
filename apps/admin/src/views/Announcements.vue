@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
       {{ banner.text }}
     </div>
 
-    <section class="bw-kpi-grid announcements-kpis" aria-label="Announcement summary">
+    <section class="bw-kpi-grid bw-mobile-kpi-grid announcements-kpis" aria-label="Announcement summary">
       <article class="bw-kpi featured">
         <span class="bw-kpi-label">Customers</span>
         <strong class="bw-kpi-value">{{ customerCount }}</strong>

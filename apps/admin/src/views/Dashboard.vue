@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; actor_id?: string | null; reference?: string | null; }
 interface FundingHistoryRow {
@@ -54,6 +55,9 @@ const recentStationFilter = ref('');
 const recentDateFilter = ref('all');
 const recentSearchQuery = ref('');
 const showRecentFilters = ref(false);
+const recentViewMode = ref<'grid' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'grid' : 'table',
+);
 const knownStations = ref<string[]>([]);
 
 const RECENT_TYPE_FILTERS = [
@@ -328,6 +332,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
   <AppShell title="Dashboard">
 
     <WalletGreeting
+      class="dashboard-greeting"
       audience="Wallet command room"
       :name="staffName"
       detail="for Beverly wallet operations."
@@ -352,10 +357,10 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- KPI grid -->
-    <div v-if="loading" class="bw-kpi-grid" aria-label="Loading dashboard">
+    <div v-if="loading" class="bw-kpi-grid bw-mobile-kpi-grid" aria-label="Loading dashboard">
       <div v-for="n in 6" :key="`kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
     </div>
-    <div v-else class="bw-kpi-grid">
+    <div v-else class="bw-kpi-grid bw-mobile-kpi-grid">
 
       <!-- Featured: pending funding -->
       <div class="bw-kpi featured">
@@ -660,13 +665,18 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- Recent transactions -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="recentViewMode">
       <div class="bw-table-head-bar recent-head-bar">
         <div>
           <div class="bw-card-title">Recent Transactions</div>
           <div class="bw-card-sub">Most recent vending orders and wallet activity</div>
         </div>
         <div class="bw-row" style="gap: var(--s-2)">
+          <WalletDataViewSwitch
+            v-model="recentViewMode"
+            :modes="['grid', 'table']"
+            label="Recent transaction view"
+          />
           <button
             class="bw-btn sm"
             :class="{ active: showRecentFilters }"
@@ -794,6 +804,9 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
+        <template v-if="loading">
+          <div v-for="n in 3" :key="`recent-card-skeleton-${n}`" class="bw-tc bw-skeleton" aria-hidden="true"></div>
+        </template>
         <div v-for="p in recentTransactions" :key="`recent-card-${p.id}`" class="bw-tc">
           <div class="bw-tc-top">
             <div>
@@ -857,6 +870,9 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 </template>
 
 <style scoped>
+.dashboard-greeting {
+  margin-bottom: calc(var(--s-3) * -1);
+}
 .recent-filter-panel {
   padding: var(--s-3) var(--s-4);
   background: var(--surface-2);

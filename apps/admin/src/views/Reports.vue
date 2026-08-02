@@ -5,17 +5,19 @@ import { api, naira } from '../lib/api';
 import { downloadAuthedCsv } from '../lib/export';
 import { downloadReportPdf, type ReportFamily } from '../lib/report-pdf';
 
-interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
+type ReportAudience = 'all' | 'vendor' | 'customer';
+interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
 interface CountRow { key: string; count: number; pct: number; }
 interface MoneyRow { key: string; minor: number; pct: number; }
 interface ReportOverview {
+    audience: ReportAudience;
     range: { since: string; until: string; days: number };
     kpis: {
         revenueMinor: number; energyRevenueMinor: number; vatMinor: number; feeMinor: number; purchaseCount: number; deliveredCount: number;
         failedCount: number; successRate: number; avgOrderValueMinor: number;
         fundingApprovedMinor: number; fundingCount: number; settlementNetMinor: number;
         settlementGrossMinor: number; settlementBatches: number; refundApprovedMinor: number;
-        refundCount: number; disputesOpened: number; newCustomers: number;
+        refundCount: number; disputesOpened: number; newCustomers: number; newVendors: number;
         auditLogsCount?: number; securityEventsCount?: number; securityAlertsHigh?: number;
     };
     series: { daily: DailyPoint[] };
@@ -42,12 +44,22 @@ const PRESETS = [
 
 const loading = ref(true);
 const error = ref('');
+const rangeError = ref('');
 const report = ref<ReportOverview | null>(null);
 const activePreset = ref('30d');
 const since = ref('');
 const until = ref('');
 const metric = ref<'revenueMinor' | 'purchaseCount' | 'fundingMinor' | 'newCustomers'>('revenueMinor');
 const selectedFamily = ref<ReportFamily>('financial');
+const audience = ref<ReportAudience>('all');
+let loadSequence = 0;
+
+const AUDIENCES: { key: ReportAudience; label: string; description: string }[] = [
+    { key: 'all', label: 'Combined', description: 'Vendors and customers' },
+    { key: 'vendor', label: 'Vendors', description: 'Vendor-owned activity' },
+    { key: 'customer', label: 'Customers', description: 'Customer-owned activity' },
+];
+const audienceLabel = computed(() => AUDIENCES.find((item) => item.key === audience.value)?.label ?? 'Combined');
 
 const REPORT_TEMPLATES: { id: ReportFamily; title: string; description: string; metric: typeof metric.value; icon: string }[] = [
     { id: 'financial', title: 'Financial report', description: 'Revenue, funding, settlements', metric: 'revenueMinor', icon: '01' },
@@ -69,6 +81,7 @@ const METRIC_META: Record<string, { label: string; money: boolean; color: string
 function isoDay(d: Date) { return d.toISOString().slice(0, 10); }
 
 function applyPreset(days: number, key: string) {
+    rangeError.value = '';
     activePreset.value = key;
     const now = new Date();
     until.value = isoDay(now);
@@ -77,23 +90,41 @@ function applyPreset(days: number, key: string) {
 }
 
 function applyCustom() {
-    if (!since.value || !until.value) return;
+    rangeError.value = '';
+    if (!since.value || !until.value) {
+        rangeError.value = 'Choose both dates.';
+        return;
+    }
+    if (since.value > until.value) {
+        rangeError.value = 'Start date must precede end date.';
+        return;
+    }
     activePreset.value = 'custom';
     void load();
 }
 
 async function load() {
+    const requestId = ++loadSequence;
     loading.value = true; error.value = '';
     try {
         const q = new URLSearchParams();
         if (since.value) q.set('since', since.value);
         if (until.value) q.set('until', until.value);
-        report.value = await api.get<ReportOverview>(`/api/v1/admin/reports/overview?${q.toString()}`);
+        q.set('audience', audience.value);
+        q.set('family', selectedFamily.value);
+        const nextReport = await api.get<ReportOverview>(`/api/v1/admin/reports/overview?${q.toString()}`);
+        if (requestId === loadSequence) report.value = nextReport;
     } catch (e: any) {
-        error.value = e?.message ?? 'Failed to load reports.';
+        if (requestId === loadSequence) error.value = e?.message ?? 'Failed to load reports.';
     } finally {
-        loading.value = false;
+        if (requestId === loadSequence) loading.value = false;
     }
+}
+
+function selectAudience(next: ReportAudience) {
+    if (audience.value === next) return;
+    audience.value = next;
+    void load();
 }
 
 const k = computed(() => report.value?.kpis);
@@ -174,6 +205,8 @@ async function exportCsv() {
     const q = new URLSearchParams();
     if (since.value) q.set('since', since.value);
     if (until.value) q.set('until', until.value);
+    q.set('audience', audience.value);
+    q.set('family', selectedFamily.value);
     try { await downloadAuthedCsv(`/api/v1/admin/reports/export.csv?${q.toString()}`, 'beverly-report'); }
     catch (e: any) { error.value = e?.message ?? 'CSV export failed.'; }
 }
@@ -199,9 +232,9 @@ function exportPdf() {
 
     downloadReportPdf({
         family: selectedFamily.value,
-        title: selectedTemplate.value.title,
+        title: `${audienceLabel.value} ${selectedTemplate.value.title}`,
         period: `${report.value.range.since.slice(0, 10)} to ${report.value.range.until.slice(0, 10)} | ${report.value.range.days} days`,
-        generatedBy: 'Beverly Wallet Admin',
+        generatedBy: `Beverly Wallet Admin · ${audienceLabel.value}`,
         kpis: selectedFamily.value === 'audit' ? [
             { label: 'Audit Logs', value: fmtNum(kp.auditLogsCount || 0), note: 'Total events recorded' },
             { label: 'Security Events', value: fmtNum(kp.securityEventsCount || 0), note: 'Auth & abuse events' },
@@ -247,8 +280,10 @@ function reportInsights(kp: ReportOverview['kpis']): string[] {
 }
 
 function selectTemplate(id: ReportFamily) {
+    if (selectedFamily.value === id) return;
     selectedFamily.value = id;
     metric.value = REPORT_TEMPLATES.find((item) => item.id === id)?.metric ?? 'revenueMinor';
+    void load();
 }
 
 onMounted(() => applyPreset(30, '30d'));
@@ -259,22 +294,47 @@ onMounted(() => applyPreset(30, '30d'));
     <section class="rp-intro">
       <div>
         <p class="bw-label">Beverly reporting centre</p>
-        <h1>Reports built for decisions.</h1>
-        <p>Choose a report. Set the period. Generate the assigned PDF.</p>
+        <h1>Build decision-ready reports.</h1>
+        <p>Select a report, confirm dates, then export.</p>
       </div>
-      <div class="rp-download-note"><strong>PDF ready</strong><span>Three-page compiled format.</span></div>
+      <div class="rp-download-note">
+        <strong>{{ loading ? 'Loading data' : 'Export ready' }}</strong>
+        <span>{{ selectedTemplate.title }} selected.</span>
+      </div>
     </section>
 
+    <p class="rp-step-label">Step 1 · Select report</p>
     <section class="rp-templates" aria-label="Report templates">
-      <button v-for="template in REPORT_TEMPLATES" :key="template.id" :class="['rp-template', selectedFamily === template.id && 'selected']" @click="selectTemplate(template.id)">
+      <button
+        v-for="template in REPORT_TEMPLATES"
+        :key="template.id"
+        :class="['rp-template', selectedFamily === template.id && 'selected']"
+        :aria-pressed="selectedFamily === template.id"
+        @click="selectTemplate(template.id)"
+      >
         <span class="rp-template-index">{{ template.icon }}</span>
         <strong>{{ template.title }}</strong>
         <span>{{ template.description }}</span>
-        <em>Generate report</em>
+        <em>{{ selectedFamily === template.id ? 'Selected' : 'Select report' }}</em>
+      </button>
+    </section>
+    <p class="rp-step-label">Step 2 · Choose ownership</p>
+    <section class="rp-audiences" aria-label="Report ownership">
+      <button
+        v-for="item in AUDIENCES"
+        :key="item.key"
+        :class="['rp-audience', audience === item.key && 'selected']"
+        :aria-pressed="audience === item.key"
+        :disabled="loading"
+        @click="selectAudience(item.key)"
+      >
+        <strong>{{ item.label }}</strong>
+        <span>{{ item.description }}</span>
       </button>
     </section>
 <!-- Controls -->
-    <div class="rp-controls">
+    <div class="rp-controls" :aria-busy="loading">
+      <p class="rp-step-label">Step 3 · Confirm reporting period</p>
       <div class="rp-presets">
         <button
           v-for="p in PRESETS" :key="p.key"
@@ -287,19 +347,23 @@ onMounted(() => applyPreset(30, '30d'));
         <span class="rp-range-sep">-</span>
         <input v-model="until" type="date" class="bw-input bw-input-sm" />
         <div class="rp-actions">
-          <button class="bw-btn bw-btn-sm bw-btn-ghost" @click="applyCustom">Apply</button>
-          <button class="bw-btn bw-btn-sm" :disabled="!report" @click="exportCsv">Export CSV</button>
-          <button class="bw-btn bw-btn-sm rp-generate" :disabled="!report" @click="exportPdf">Generate PDF</button>
+          <button class="bw-btn bw-btn-sm bw-btn-ghost" :disabled="loading" @click="applyCustom">Apply dates</button>
+          <button class="bw-btn bw-btn-sm" :disabled="!report || loading" @click="exportCsv">Export CSV</button>
+          <button class="bw-btn bw-btn-sm rp-generate" :disabled="!report || loading" @click="exportPdf">Export PDF</button>
         </div>
       </div>
+      <p v-if="rangeError" class="rp-range-error" role="alert">{{ rangeError }}</p>
     </div>
 
-    <div v-if="error" class="bw-error-banner">{{ error }}</div>
+    <div v-if="error" class="bw-error-banner rp-error" role="alert">
+      <span>{{ error }}</span>
+      <button class="bw-btn bw-btn-sm" :disabled="loading" @click="load">Retry</button>
+    </div>
 
     <!-- KPI grid -->
-    <div class="rp-kpis">
+    <div class="rp-kpis bw-mobile-kpi-grid">
       <div class="rp-kpi rp-kpi--hero">
-        <span class="rp-kpi-label">Revenue</span>
+        <span class="rp-kpi-label">{{ audience === 'customer' ? 'Customer purchases' : audience === 'vendor' ? 'Vendor revenue' : 'Total revenue' }}</span>
         <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.revenueMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.deliveredCount ?? 0) }} delivered &middot; avg {{ fmtMoney(k?.avgOrderValueMinor ?? 0) }}</span>
       </div>
@@ -314,14 +378,14 @@ onMounted(() => applyPreset(30, '30d'));
         <span class="rp-kpi-sub">{{ fmtNum(k?.failedCount ?? 0) }} failed</span>
       </div>
       <div class="rp-kpi">
-        <span class="rp-kpi-label">Funding inflow</span>
+        <span class="rp-kpi-label">{{ audience === 'vendor' ? 'Vendor funding' : audience === 'customer' ? 'Customer funding' : 'Funding inflow' }}</span>
         <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.fundingApprovedMinor ?? 0) }}</strong>
         <span class="rp-kpi-sub">{{ fmtNum(k?.fundingCount ?? 0) }} top-ups</span>
       </div>
       <div class="rp-kpi">
-        <span class="rp-kpi-label">Settlement (net)</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.settlementNetMinor ?? 0) }}</strong>
-        <span class="rp-kpi-sub">{{ fmtNum(k?.settlementBatches ?? 0) }} batches</span>
+        <span class="rp-kpi-label">{{ audience === 'customer' ? 'Average purchase' : 'Settlement (net)' }}</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(audience === 'customer' ? (k?.avgOrderValueMinor ?? 0) : (k?.settlementNetMinor ?? 0)) }}</strong>
+        <span class="rp-kpi-sub">{{ audience === 'customer' ? fmtNum(k?.deliveredCount ?? 0) + ' delivered' : fmtNum(k?.settlementBatches ?? 0) + ' batches' }}</span>
       </div>
       <div class="rp-kpi">
         <span class="rp-kpi-label">Refunds approved</span>
@@ -334,8 +398,8 @@ onMounted(() => applyPreset(30, '30d'));
         <span class="rp-kpi-sub">opened in range</span>
       </div>
       <div class="rp-kpi">
-        <span class="rp-kpi-label">New customers</span>
-        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.newCustomers ?? 0) }}</strong>
+        <span class="rp-kpi-label">{{ audience === 'vendor' ? 'New vendors' : audience === 'customer' ? 'New customers' : 'New accounts' }}</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(audience === 'vendor' ? (k?.newVendors ?? 0) : audience === 'customer' ? (k?.newCustomers ?? 0) : (k?.newCustomers ?? 0) + (k?.newVendors ?? 0)) }}</strong>
         <span class="rp-kpi-sub">in range</span>
       </div>
     </div>
@@ -426,6 +490,12 @@ onMounted(() => applyPreset(30, '30d'));
 
 <style scoped>
 .rp-intro { display:flex; justify-content:space-between; gap:var(--s-4); align-items:flex-end; padding:var(--s-5); margin-bottom:var(--s-4); border:1px solid oklch(from var(--brand) l c h / .28); border-radius:var(--r-lg, 14px); background:linear-gradient(118deg, oklch(from var(--brand) l c h / .16), var(--surface, #0d1117) 56%); }
+.rp-step-label { margin: 0; color: var(--text-muted); font-size: var(--t-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.rp-audiences { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s-3); margin:var(--s-2) 0 var(--s-4); }
+.rp-audience { display:grid; gap:3px; padding:var(--s-3) var(--s-4); text-align:left; color:var(--text); font:inherit; cursor:pointer; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
+.rp-audience span { color:var(--text-muted); font-size:var(--t-xs); }
+.rp-audience.selected { border-color:var(--brand); background:oklch(from var(--brand) l c h / .12); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .18); }
+.rp-audience:disabled { cursor:wait; opacity:.72; }
 .rp-skeleton, .rp-chart-skeleton { color: transparent; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: rp-shimmer 1.4s ease-in-out infinite; }
 .rp-skeleton { display: block; width: 72%; min-height: 28px; }
 .rp-chart-skeleton { min-height: 280px; }
@@ -438,14 +508,16 @@ onMounted(() => applyPreset(30, '30d'));
 .rp-download-note strong { color:var(--brand); font-size:var(--t-sm); text-transform:uppercase; letter-spacing:.08em; }
 .rp-download-note span { color:var(--text-muted, #94a3b8); font-size:var(--t-xs); }
 .rp-templates { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s-3); margin-bottom:var(--s-4); }
-.rp-template { position:relative; display:grid; gap:6px; min-height:144px; padding:18px; text-align:left; color:var(--text, #e2e8f0); font:inherit; cursor:pointer; border:1px solid var(--border, #1e293b); border-radius:var(--r-lg, 14px); background:var(--surface, #0d1117); transition:transform .16s ease, border-color .16s ease, background .16s ease; overflow:hidden; }
-.rp-template::after { content:''; position:absolute; width:90px; height:90px; border-radius:50%; right:-38px; bottom:-42px; background:oklch(from var(--brand) l c h / .1); }
-.rp-template:hover { transform:translateY(-2px); border-color:oklch(from var(--brand) l c h / .55); }
-.rp-template.selected { border-color:var(--brand); background:linear-gradient(135deg, oklch(from var(--brand) l c h / .15), var(--surface, #0d1117)); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .22); }
-.rp-template-index { color:var(--brand); font:700 11px var(--font-mono, monospace); letter-spacing:.08em; }
-.rp-template strong { font-size:var(--t-md); letter-spacing:-.02em; }
-.rp-template span:not(.rp-template-index) { font-size:var(--t-xs); color:var(--text-muted, #94a3b8); }
-.rp-template em { margin-top:auto; font-style:normal; color:var(--brand); font-size:11px; font-weight:700; }
+.rp-template { position:relative; isolation:isolate; display:grid; grid-template-rows:auto auto 1fr auto; gap:8px; min-height:158px; padding:16px; text-align:left; color:var(--text, #e2e8f0); font:inherit; cursor:pointer; border:1px solid var(--border, #1e293b); border-radius:var(--r-lg, 14px); background:linear-gradient(145deg, var(--surface-2, #111821), var(--surface, #0d1117)); box-shadow:0 10px 24px rgb(0 0 0 / .12); transition:transform .16s ease, border-color .16s ease, box-shadow .16s ease; overflow:hidden; }
+.rp-template::after { content:''; position:absolute; z-index:-1; width:96px; height:96px; border-radius:50%; right:-50px; bottom:-50px; background:oklch(from var(--brand) l c h / .13); }
+.rp-template:focus-visible { outline:3px solid oklch(from var(--brand) l c h / .42); outline-offset:3px; }
+.rp-template.selected { border-color:var(--brand); background:linear-gradient(145deg, oklch(from var(--brand) l c h / .16), var(--surface, #0d1117)); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .2), 0 14px 30px oklch(from var(--brand) l c h / .08); }
+.rp-template-index { display:inline-grid; place-items:center; width:30px; height:30px; border:1px solid oklch(from var(--brand) l c h / .22); border-radius:9px; color:var(--brand); background:oklch(from var(--brand) l c h / .09); font:800 11px var(--font-mono, monospace); letter-spacing:.06em; }
+.rp-template strong { position:relative; z-index:1; font-size:var(--t-md); line-height:1.2; letter-spacing:-.02em; }
+.rp-template span:not(.rp-template-index) { position:relative; z-index:1; display:-webkit-box; overflow:hidden; color:var(--text-muted, #94a3b8); font-size:var(--t-xs); line-height:1.35; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.rp-template em { position:relative; z-index:1; justify-self:start; margin-top:auto; padding:4px 8px; border-radius:999px; color:var(--brand); background:oklch(from var(--brand) l c h / .1); font-size:10px; line-height:1.2; font-style:normal; font-weight:800; }
+.rp-template.selected em { color:var(--brand-contrast, #fff); background:var(--brand); }
+@media (hover:hover) { .rp-template:hover { transform:translateY(-2px); border-color:oklch(from var(--brand) l c h / .55); box-shadow:0 14px 30px rgb(0 0 0 / .18); } }
 .rp-generate { background:var(--brand); color:var(--brand-contrast, #fff); }
 .rp-controls {
   display: grid;
@@ -482,6 +554,8 @@ onMounted(() => applyPreset(30, '30d'));
 }
 
 .rp-range-sep { color: var(--text-muted, #94a3b8); }
+.rp-range-error { margin: 0; color: var(--danger); font-size: var(--t-sm); }
+.rp-error { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
 .rp-chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border, #1e293b); background: transparent; color: var(--text-muted, #94a3b8); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: all .15s; }
 .rp-chip.sm { padding: 4px 10px; font-size: var(--t-xs); }
 .rp-chip:hover { color: var(--text, #e2e8f0); border-color: var(--border-strong, #334155); }
@@ -512,7 +586,12 @@ onMounted(() => applyPreset(30, '30d'));
 @media (max-width: 640px) {
   .rp-intro { display:grid; padding:var(--s-4); }
   .rp-templates { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-  .rp-template { min-height:132px; padding:14px; }
+  .rp-template { min-height:150px; padding:13px; }
+  .rp-kpis > .rp-kpi {
+    min-height:79px;
+    padding:10px !important;
+    gap:5px !important;
+  }
   .rp-kpi--hero { grid-column: span 1; }
   .rp-controls { padding: var(--s-3); }
   .rp-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -528,6 +607,20 @@ onMounted(() => applyPreset(30, '30d'));
   .rp-actions .bw-btn {
     justify-content: center;
   }
+}
+
+@media (max-width: 440px) {
+  .rp-audiences { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rp-audience { justify-items:center; padding-inline:var(--s-2); text-align:center; }
+  .rp-audience span { display:none; }
+  .rp-templates { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
+  .rp-template { min-height:148px; padding:12px; }
+  .rp-template strong { font-size:13px; }
+  .rp-template-index { width:28px; height:28px; }
+  .rp-actions { grid-template-columns: 1fr; }
+  .rp-actions .bw-btn { width: 100%; }
+  .rp-bar-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .rp-bar-track { grid-column: 1 / -1; }
 }
 </style>
 

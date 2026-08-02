@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 const purchases = ref<any[]>([]);
 const loading   = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
 
 onMounted(async () => {
@@ -57,9 +61,10 @@ function printPurchaseReceipt(p: any) {
               :class="['bw-seg', filter === f ? 'active' : '']"
               @click="filter = f">{{ f }}</button>
     </div>
+    <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
 
     <!-- Desktop table -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-t-wrap">
         <table class="bw-table">
           <thead>

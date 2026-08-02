@@ -128,7 +128,7 @@ onMounted(loadErrors);
     <!-- ERRORS TAB -->
     <div v-if="tab === 'errors'">
       <!-- KPIs -->
-      <div class="kpi-row">
+      <div class="kpi-row bw-mobile-kpi-grid">
         <div class="bw-kpi">
           <span class="bw-kpi-label">Total Occurrences</span>
           <span class="bw-kpi-val" :style="totalErrors > 0 ? 'color:var(--danger)' : ''">{{ totalErrors.toLocaleString() }}</span>

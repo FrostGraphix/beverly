@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { useWalletStore, type LedgerEntry } from '../stores/wallet';
 import { naira } from '../lib/format';
 import { downloadReceipt, ledgerReceipt, printReceipt, viewReceipt } from '../lib/receipts';
 
 const wallet = useWalletStore();
-const viewMode = ref<'cards' | 'table'>(
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'cards' : 'table',
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
 
 function viewLedgerReceipt(entry: LedgerEntry) {
@@ -36,7 +37,7 @@ onMounted(async () => {
   <AppShell title="Wallet">
     <div class="bw-stack">
 
-      <div class="bw-kpi-grid wallet-stat-grid" aria-label="Wallet summary">
+      <div class="bw-kpi-grid bw-mobile-kpi-grid wallet-stat-grid" aria-label="Wallet summary">
         <div class="bw-kpi featured wallet-stat">
           <span class="bw-kpi-label">Balance</span>
           <strong class="bw-kpi-value wallet-stat-value brand">{{ naira(wallet.summary?.balance_minor) }}</strong>
@@ -58,26 +59,19 @@ onMounted(async () => {
       </div>
 
       <!-- Ledger -->
-      <div class="bw-card flush">
+      <div class="bw-card flush bw-data-region" :data-view="viewMode">
         <div class="bw-table-head-bar">
           <div>
             <div class="bw-card-title">Ledger</div>
             <div class="bw-card-sub">{{ wallet.ledger.length }} entries</div>
           </div>
-          <div class="ledger-view-switch" aria-label="Ledger layout">
-            <button type="button" :class="['ledger-view-button', { active: viewMode === 'cards' }]" :aria-pressed="viewMode === 'cards'" @click="viewMode = 'cards'">
-              Cards
-            </button>
-            <button type="button" :class="['ledger-view-button', { active: viewMode === 'table' }]" :aria-pressed="viewMode === 'table'" @click="viewMode = 'table'">
-              Table
-            </button>
-          </div>
+          <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
         </div>
 
         <div v-if="wallet.error" class="bw-alert danger ledger-error">{{ wallet.error }}</div>
 
         <!-- Table view -->
-        <div v-if="viewMode === 'table'" class="bw-t-wrap ledger-table-view">
+        <div class="bw-t-wrap ledger-table-view">
           <table class="bw-table ledger-table">
             <caption>Wallet ledger entries</caption>
             <thead>
@@ -120,7 +114,7 @@ onMounted(async () => {
         </div>
 
         <!-- Card view -->
-        <div v-else class="bw-t-cards ledger-card-view">
+        <div class="bw-t-cards ledger-card-view">
           <div v-for="e in wallet.ledger" :key="e.id" class="bw-tc">
             <div class="bw-tc-top">
               <div>

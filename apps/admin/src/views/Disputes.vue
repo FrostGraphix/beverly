@@ -199,7 +199,7 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
       </div>
     </transition>
 
-    <section class="dispute-stat-grid" aria-label="Dispute summary">
+    <section class="dispute-stat-grid bw-mobile-kpi-grid" aria-label="Dispute summary">
       <div class="dispute-stat">
         <span class="stat-label">Active</span>
         <strong>{{ summary.open }}</strong>

@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
@@ -35,7 +36,7 @@ const loading    = ref(false);
 const error      = ref('');
 const nextCursor = ref<string | null>(null);
 const loadingMore = ref(false);
-const cardView = ref<'table' | 'grid'>('table');
+const cardView = ref<'table' | 'list'>('table');
 const PAGE = 100;
 const POLL_INTERVAL_MS = 5_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -164,24 +165,12 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
     <div v-if="error" class="bw-error-banner" role="alert" style="margin-bottom: var(--s-4)">{{ error }}</div>
 
     <!-- Table -->
-    <div class="bw-card" style="padding:0">
+    <div class="bw-card bw-data-region" :data-view="cardView" style="padding:0">
       <div class="vending-layout-bar">
         <span>Purchase results</span>
-        <div class="vending-view-toggle" aria-label="Purchase layout">
-          <button type="button" :class="{ active: cardView === 'grid' }" :aria-pressed="cardView === 'grid'" aria-label="Grid view" title="Grid view" @click="cardView = 'grid'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
-          </button>
-          <button type="button" :class="{ active: cardView === 'table' }" :aria-pressed="cardView === 'table'" aria-label="Table view" title="Table view" @click="cardView = 'table'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
-            </svg>
-          </button>
-        </div>
+        <WalletDataViewSwitch v-model="cardView" label="Vending display view" />
       </div>
-      <div :class="['bw-t-wrap', 'vending-table-wrap', { 'mobile-table-active': cardView === 'table' }]">
+      <div class="bw-t-wrap vending-table-wrap">
         <table class="bw-table">
           <thead>
             <tr>
@@ -237,7 +226,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
       </div>
 
       <!-- Mobile cards -->
-      <div :class="['bw-t-cards', `vending-cards--${cardView}`]">
+      <div class="bw-t-cards">
         <div v-for="p in items" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>

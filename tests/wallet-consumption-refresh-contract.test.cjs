@@ -20,7 +20,7 @@ function assertIncludes(source, value, label) {
 
 assertIncludes(service, "refresh_meter_reading_aggregates_for_station", "service");
 assertIncludes(service, "p_station_id", "service");
-assertIncludes(service, "DEFAULT_REFRESH_STATIONS", "service");
+assertIncludes(service, "await listStations()", "service");
 assertIncludes(service, "meter_consumption_aggregates", "service");
 assertIncludes(service, "groupedRows", "service");
 assertIncludes(routes, "stationIds", "admin route");

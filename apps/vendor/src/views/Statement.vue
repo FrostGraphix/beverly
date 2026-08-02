@@ -69,7 +69,7 @@ onMounted(async () => {
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
 
     <template v-else>
-      <div class="bw-kpi-grid statement-stat-grid" aria-label="Statement summary">
+      <div class="bw-kpi-grid bw-mobile-kpi-grid statement-stat-grid" aria-label="Statement summary">
         <div class="bw-kpi statement-stat">
           <span class="bw-kpi-label">Total Periods</span>
           <strong class="bw-kpi-value statement-stat-value">{{ batches.length }}</strong>

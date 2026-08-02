@@ -21,6 +21,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, viewReceipt, walletReceipt } from '../lib/receipts';
@@ -67,6 +68,9 @@ const summary = ref<WalletSummary | null>(null);
 const wallets = ref<Wallet[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 
 const fOwnerType = ref<'' | 'vendor' | 'customer'>('');
@@ -316,7 +320,7 @@ watch([fOwnerType, fStatus], () => loadList());
     </transition>
 
     <!-- KPI strip -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Total float</p>
         <p class="kpi-value">{{ naira(summary?.totalFloatMinor) }}</p>
@@ -379,10 +383,11 @@ watch([fOwnerType, fStatus], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
         <span class="bw-spacer"></span>
+        <WalletDataViewSwitch v-model="viewMode" label="Wallet display view" />
         <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span style="width:6px"></span>

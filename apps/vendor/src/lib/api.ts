@@ -24,6 +24,7 @@ export const API_BASE = BASE;
 const TOKEN_KEY = 'beverly.vendor.access_token';
 const REFRESH_TOKEN_KEY = 'beverly.vendor.refresh_token';
 const TOKEN_EXPIRES_AT_KEY = 'beverly.vendor.access_token_expires_at';
+const REQUEST_TIMEOUT_MS = 20_000;
 const REFRESH_SKEW_MS = 60_000;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -164,12 +165,15 @@ async function requestToken(): Promise<string | null> {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
-    let token = await requestToken();
-    const hasBody = body !== undefined;
-    const idempotencyKey = method !== 'GET' && method !== 'HEAD'
-        ? String((init.headers as Record<string, string> | undefined)?.['Idempotency-Key'] ?? crypto.randomUUID())
-        : null;
-    const send = async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+        let token = await requestToken();
+        const hasBody = body !== undefined;
+        const idempotencyKey = method !== 'GET' && method !== 'HEAD'
+            ? String((init.headers as Record<string, string> | undefined)?.['Idempotency-Key'] ?? crypto.randomUUID())
+            : null;
+        const send = async () => {
         const headers: Record<string, string> = {
             ...(init.headers as Record<string, string> ?? {}),
         };
@@ -178,27 +182,37 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         if (idempotencyKey) {
             headers['Idempotency-Key'] = idempotencyKey;
         }
-        return fetch(`${BASE}${path}`, {
-            ...init, method, headers,
-            body: hasBody ? JSON.stringify(body) : undefined,
-            credentials: 'include',
-        });
-    };
-    let res = await send();
-    if (res.status === 401 && shouldRefreshUnauthorized(path)) {
-        const refreshed = await refreshAccessToken();
-        if (refreshed && refreshed !== token) {
-            token = refreshed;
-            res = await send();
+            return fetch(`${BASE}${path}`, {
+                ...init, method, headers,
+                body: hasBody ? JSON.stringify(body) : undefined,
+                credentials: 'include',
+                signal: init.signal ?? controller.signal,
+            });
+        };
+        let res = await send();
+        if (res.status === 401 && shouldRefreshUnauthorized(path)) {
+            const refreshed = await refreshAccessToken();
+            if (refreshed && refreshed !== token) {
+                token = refreshed;
+                res = await send();
+            }
         }
+        const text = await res.text();
+        const json = parseJson(text);
+        if (!res.ok) {
+            if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
+            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
+        }
+        return unwrapEnvelope<T>(json);
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new ApiError(0, 'request_timeout', 'The server took too long to respond. Please try again.');
+        }
+        throw error;
+    } finally {
+        window.clearTimeout(timeout);
     }
-    const text = await res.text();
-    const json = parseJson(text);
-    if (!res.ok) {
-        if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
-        throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
-    }
-    return unwrapEnvelope<T>(json);
 }
 
 export const api = {

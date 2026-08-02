@@ -5,6 +5,7 @@ import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import { useStaffAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
 import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
+import PwaUpdateToast from '@beverly/tokens/PwaUpdateToast.vue';
 
 const auth = useStaffAuthStore();
 const router = useRouter();
@@ -42,4 +43,5 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
     @stay="stayActive"
     @logout="auth.logout(); $router.push({ name: 'login', query: { reason: 'session_timeout' } })"
   />
+  <PwaUpdateToast app-name="Wallet Admin" />
 </template>

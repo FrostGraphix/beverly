@@ -70,7 +70,7 @@ assert.match(backendReportService, /token_transactions/);
 assert.match(backendReportService, /\/api\/token\/creditTokenRecord\/readMore/);
 assert.match(backendReportService, /usesShortLiveRange/);
 assert.match(backendReportService, /liveTokenPayments/);
-assert.match(backendReportService, /reportStations/);
+assert.match(backendReportService, /\/api\/station\/read/);
 assert.match(backendReportService, /url\.searchParams\.set\("SITE_ID", stationId\)/);
 assert.match(backendReportService, /reportStationId: stationId/);
 assert.match(backendReportService, /payment\.meterId \|\| payment\.serialNumber/);

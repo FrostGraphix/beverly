@@ -43,7 +43,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 
 <style scoped>
 .mobile-action-menu {
-  display: none;
+  display: flex;
   position: relative;
   justify-content: flex-end;
 }
@@ -101,9 +101,4 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   color: var(--brand);
 }
 
-@media (max-width: 720px) {
-  .mobile-action-menu {
-    display: flex;
-  }
-}
 </style>
