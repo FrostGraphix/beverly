@@ -36,7 +36,8 @@ onMounted(async () => {
     />
 
     <!-- Balance hero -->
-    <div class="bw-balance-hero">
+    <div v-if="loading" class="bw-balance-hero bw-skeleton customer-balance-skeleton" role="status" aria-label="Loading dashboard"></div>
+    <div v-else class="bw-balance-hero">
       <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">Wallet balance</p>
       <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-1)">
         {{ naira(wallet?.balance_minor) }}
@@ -69,6 +70,9 @@ onMounted(async () => {
       </div>
 
       <div class="bw-t-cards" style="display:block">
+        <template v-if="loading">
+          <div v-for="n in 3" :key="`customer-ledger-skeleton-${n}`" class="bw-tc bw-skeleton customer-ledger-skeleton" aria-hidden="true"></div>
+        </template>
         <div v-for="e in ledger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
@@ -89,3 +93,8 @@ onMounted(async () => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.customer-balance-skeleton { min-height: 190px; }
+.customer-ledger-skeleton { min-height: 76px; margin: var(--s-2) var(--s-3); }
+</style>

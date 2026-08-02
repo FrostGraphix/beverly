@@ -126,14 +126,20 @@ onMounted(load);
           v-for="p in (['7d','30d','90d','all'] as const)"
           :key="p"
           :class="['va-pill', { active: period === p }]"
+          :aria-pressed="period === p"
+          :disabled="loading"
           @click="changePeriod(p)"
         >{{ p === 'all' ? 'All time' : p }}</button>
       </div>
     </div>
 
     <!-- Error banner -->
-    <div v-if="error" class="bw-banner error" style="margin-bottom: var(--s-3)">
-      {{ error }}
+    <div v-if="error && !data" class="bw-card va-error" role="alert">
+      <h2 class="va-card-title">Analytics unavailable</h2>
+      <p class="bw-muted">{{ error }}</p>
+      <button class="bw-btn primary" :disabled="loading" @click="load">
+        {{ loading ? 'Retrying…' : 'Try again' }}
+      </button>
     </div>
 
     <!-- Skeleton / loading state -->
@@ -141,8 +147,13 @@ onMounted(load);
 
     <template v-else-if="data">
 
+      <div v-if="error" class="bw-banner error" role="alert" style="margin-bottom: var(--s-3)">
+        {{ error }}
+        <button class="bw-btn sm" :disabled="loading" @click="load">Try again</button>
+      </div>
+
       <!-- ── KPI tiles ───────────────────────────────────────── -->
-      <div class="va-kpi-grid">
+      <div class="va-kpi-grid bw-mobile-kpi-grid">
         <div class="va-kpi brand">
           <p class="va-kpi-label">Total vended</p>
           <p class="va-kpi-value">{{ naira(data.summary.total_vended_minor) }}</p>
@@ -336,6 +347,9 @@ onMounted(load);
 .va-pill { background: transparent; border: none; padding: 6px 14px; border-radius: calc(var(--r-lg) - 2px); font-size: var(--t-sm); font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
 .va-pill:hover { color: var(--text); background: var(--glass-bg-strong); }
 .va-pill.active { background: var(--brand); color: oklch(8% 0.04 145); box-shadow: 0 2px 8px oklch(from var(--brand) l c h / 0.35); }
+.va-pill:disabled { cursor: not-allowed; opacity: 0.65; }
+.va-error { padding: var(--s-5); }
+.va-error p { margin: var(--s-2) 0 var(--s-4); }
 
 /* ── KPI grid ── */
 .va-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-4); }

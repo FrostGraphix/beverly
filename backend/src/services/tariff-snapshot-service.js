@@ -3,8 +3,6 @@
 const supabase = require("./supabase-service");
 
 const BATCH_SIZE = 500;
-const CANONICAL_STATIONS = new Set(["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]);
-
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -74,7 +72,7 @@ function normalizeTariff(row, observedAt) {
   const sourceUpdatedAt = text(row?.updateDate || row?.update_date || row?.createDate || row?.create_date);
   const sourceStation = text(row?.stationId || row?.station_id).toUpperCase();
   return {
-    station_scope: CANONICAL_STATIONS.has(sourceStation) ? sourceStation : "*",
+    station_scope: sourceStation && sourceStation !== "ADMIN" ? sourceStation : "*",
     tariff_id: tariffId,
     tariff_name: text(row?.tariffName || row?.tariff_name),
     raw_price: rawPrice,

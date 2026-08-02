@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
+import { adminPushNotifications } from '../lib/push-notifications';
 
 defineProps<{ title?: string }>();
 
@@ -24,9 +25,6 @@ function isItemActive(itemTo: string): boolean {
     const path = route.path;
     if (path === itemTo) return true;
     if (itemTo !== '/' && path.startsWith(itemTo)) {
-        if (itemTo === '/vendors' && (path.startsWith('/vendors/analytics') || path === '/vendors/new')) {
-            return path === '/vendors/new';
-        }
         if (itemTo === '/funding' && path.startsWith('/funding/history')) return false;
         if (itemTo === '/dev/api-keys' && path !== '/dev/api-keys') return false;
         return true;
@@ -55,7 +53,6 @@ const navGroups = computed(() => [
         items: [
             { to: '/applications', text: 'Applications', permission: 'wallet.vendors.review', icon: 'applications' },
             { to: '/vendors', text: 'Vendors', permission: 'wallet.vendors.review', icon: 'vendors' },
-            { to: '/vendors/analytics', text: 'Vendor Analytics', permission: 'wallet.vendors.review', icon: 'vendor-analytics' },
             { to: '/customers', text: 'Customers', permission: 'wallet.customers.view', icon: 'customers' },
         ],
     },
@@ -234,7 +231,10 @@ async function signOut() {
     }
 }
 
-onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown));
+onMounted(() => {
+    document.addEventListener('pointerdown', handleDocumentPointerDown);
+    void adminPushNotifications.sync().catch(() => undefined);
+});
 onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown));
 </script>
 

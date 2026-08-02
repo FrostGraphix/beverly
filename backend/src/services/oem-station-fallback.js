@@ -12,16 +12,6 @@
 // whose meters have not been onboarded yet, so they legitimately have no rows in
 // any operational table. That is precisely why the derived tier below must not
 // be treated as the complete station list — see mergeDerivedWithCanonical.
-const CANONICAL_CALIN_STATIONS = [
-  { stationId: "BONDU", communityLabel: "Bondu" },
-  { stationId: "KADUNA", communityLabel: "Kaduna" },
-  { stationId: "KYAKALE", communityLabel: "Kyakale" },
-  { stationId: "MUSHA", communityLabel: "Musha" },
-  { stationId: "OGUFA", communityLabel: "Ogufa" },
-  { stationId: "TUNGA", communityLabel: "Tunga" },
-  { stationId: "UMAISHA", communityLabel: "Umaisha" }
-];
-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Placeholder/scratch identifiers that operational tables accumulate. These are
@@ -83,14 +73,8 @@ function toDerivedStationRows(oemId, stationIds) {
   }));
 }
 
-function canonicalStationRows(oemId) {
-  return CANONICAL_CALIN_STATIONS
-    .filter((station) => isDerivedStationId(station.stationId))
-    .map((station) => ({
-      oemId: String(oemId || ""),
-      stationId: station.stationId,
-      communityLabel: station.communityLabel
-    }));
+function canonicalStationRows(oemId, stationIds = []) {
+  return toDerivedStationRows(oemId, stationIds);
 }
 
 // Union of "stations that have data" and "stations we know are commissioned".
@@ -110,17 +94,10 @@ function mergeDerivedWithCanonical(oemId, stationIds) {
   for (const row of toDerivedStationRows(oemId, stationIds)) {
     byId.set(row.stationId.toUpperCase(), row);
   }
-  for (const row of canonicalStationRows(oemId)) {
-    const key = row.stationId.toUpperCase();
-    const existing = byId.get(key);
-    byId.set(key, existing ? { ...existing, communityLabel: row.communityLabel } : row);
-  }
-
   return Array.from(byId.values()).sort((a, b) => a.stationId.localeCompare(b.stationId));
 }
 
 module.exports = {
-  CANONICAL_CALIN_STATIONS,
   UUID_PATTERN,
   isUuid,
   titleCaseStationId,

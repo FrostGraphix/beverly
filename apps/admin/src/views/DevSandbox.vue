@@ -122,7 +122,7 @@ onMounted(load);
       </div>
 
       <!-- Stats row -->
-      <div class="sandbox-kpis">
+      <div class="sandbox-kpis bw-mobile-kpi-grid">
         <div class="bw-kpi">
           <span class="bw-kpi-label">Test Wallets Seeded</span>
           <span class="bw-kpi-val">{{ status.test_wallets_seeded }}</span>

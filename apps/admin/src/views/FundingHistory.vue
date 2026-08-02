@@ -194,7 +194,7 @@ function printFundingReceipt(f: FundingRow) {
     </transition>
 
     <!-- KPI row -->
-    <div class="fh-kpi-row" v-if="summary">
+    <div class="fh-kpi-row bw-mobile-kpi-grid" v-if="summary">
       <div class="fh-kpi">
         <span class="fh-kpi-label">Approved</span>
         <span class="fh-kpi-value brand">{{ naira(summary.approvedMinor) }}</span>

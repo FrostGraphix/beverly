@@ -282,7 +282,7 @@ onMounted(() => {
       </div>
     </transition>
 
-    <section class="bw-kpi-grid funding-kpis" aria-label="Funding approval summary">
+    <section class="bw-kpi-grid bw-mobile-kpi-grid funding-kpis" aria-label="Funding approval summary">
       <article class="bw-kpi featured">
         <span class="bw-kpi-label">Pending requests</span>
         <strong class="bw-kpi-value">{{ items.length }}</strong>

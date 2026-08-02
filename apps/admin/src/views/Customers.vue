@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { useStaffAuthStore } from '../stores/auth';
@@ -46,6 +47,9 @@ const summary = ref<Summary | null>(null);
 const customers = ref<CustomerRow[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const banner = ref<string | null>(null);
 const success = ref<string | null>(null);
 const deleteOpen = ref(false);
@@ -173,7 +177,7 @@ watch([fStatus, fTier], () => loadList());
     </div>
 
     <!-- KPI -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Total customers</p>
         <p class="kpi-value">{{ summary?.total ?? 0 }}</p>
@@ -229,10 +233,11 @@ watch([fStatus, fTier], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ customers.length }} customers</h2>
         <span class="bw-spacer"></span>
+        <WalletDataViewSwitch v-model="viewMode" label="Customer display view" />
         <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>

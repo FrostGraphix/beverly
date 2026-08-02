@@ -16,6 +16,11 @@
     "BeverlyLoader.vue.d.ts",
     "WalletPagination.vue",
     "WalletPagination.vue.d.ts",
+    "WalletDataViewSwitch.vue",
+    "WalletDataViewSwitch.vue.d.ts",
+    "PwaUpdateToast.vue",
+    "PwaUpdateToast.vue.d.ts",
+    "push-notifications.ts",
     "index.js",
     "index.d.ts",
     "pwaInstall.js"
@@ -36,6 +41,18 @@
     "./WalletPagination.vue": {
       "types": "./WalletPagination.vue.d.ts",
       "import": "./WalletPagination.vue"
+    },
+    "./WalletDataViewSwitch.vue": {
+      "types": "./WalletDataViewSwitch.vue.d.ts",
+      "import": "./WalletDataViewSwitch.vue"
+    },
+    "./PwaUpdateToast.vue": {
+      "types": "./PwaUpdateToast.vue.d.ts",
+      "import": "./PwaUpdateToast.vue"
+    },
+    "./push-notifications": {
+      "types": "./push-notifications.ts",
+      "import": "./push-notifications.ts"
     }
   }
 }

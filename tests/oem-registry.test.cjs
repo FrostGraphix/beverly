@@ -127,10 +127,10 @@ const registry = require("../backend/src/services/oem-registry-service");
   assert.strictEqual(derived[1].communityLabel, "Kyakale", "derived label is title-cased");
   assert.strictEqual(derived[1].oemId, "oem-1", "derived rows carry the requesting OEM id");
 
-  // The last-resort list is subject to the same hygiene rule.
+  // API station rows use identical hygiene.
   assert(
-    fallback.canonicalStationRows("oem-1").every((r) => fallback.isDerivedStationId(r.stationId)),
-    "canonical fallback contains no placeholder ids"
+    fallback.canonicalStationRows("oem-1", ["NEWSITE", "TEST_STATION"]).every((r) => fallback.isDerivedStationId(r.stationId)),
+    "API stations contain no placeholders"
   );
 
   // Registered-but-unmetered sites (BONDU, KADUNA are commissioned and verified,
@@ -142,13 +142,8 @@ const registry = require("../backend/src/services/oem-registry-service");
   ]);
   assert.deepStrictEqual(
     merged.map((r) => r.stationId),
-    ["0001", "BONDU", "KADUNA", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
-    "unmetered registered stations survive alongside stations that have data"
-  );
-  assert.strictEqual(
-    merged.find((r) => r.stationId === "BONDU").communityLabel,
-    "Bondu",
-    "curated label used for the unmetered station"
+    ["0001", "KYAKALE", "MUSHA", "OGUFA", "TUNGA", "UMAISHA"],
+    "derived rows contain supplied stations only"
   );
 
   // A station discovered only in operational data is still picked up, so the

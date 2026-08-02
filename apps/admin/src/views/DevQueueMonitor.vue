@@ -107,7 +107,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
     <div v-if="error" class="bw-error-banner" style="margin-bottom:var(--s-3)">{{ error }}</div>
 
     <!-- Summary KPIs -->
-    <div class="kpi-row" style="margin-bottom:var(--s-4)">
+    <div class="kpi-row bw-mobile-kpi-grid" style="margin-bottom:var(--s-4)">
       <div class="bw-kpi">
         <span class="bw-kpi-label">Pending</span>
         <span class="bw-kpi-val">{{ totalPending }}</span>

@@ -20,6 +20,7 @@ import { onMounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -80,7 +81,7 @@ const items = ref<Purchase[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
-const cardView = ref<'table' | 'grid'>('table');
+const cardView = ref<'table' | 'list'>('table');
 
 const fStatus    = ref('');
 const fActorType = ref('');
@@ -89,6 +90,16 @@ const fMeterType = ref('');
 const fQ         = ref('');
 const fSince     = ref('');
 const fUntil     = ref('');
+const stationOptions = ref<{ stationId: string; name: string; oemName: string | null }[]>([]);
+
+async function loadStations() {
+    try {
+        const result = await api.get<{ stations: { stationId: string; name: string; oemName: string | null }[] }>('/api/v1/admin/stations');
+        stationOptions.value = result.stations ?? [];
+    } catch (e: any) {
+        banner.value = { tone: 'error', text: e?.message ?? 'Could not load stations.' };
+    }
+}
 
 async function loadSummary() {
     try { summary.value = await api.get<PurchaseSummary>('/api/v1/admin/purchases/summary'); }
@@ -277,7 +288,7 @@ function printPurchaseReceipt(p: Purchase | PurchaseDetail['purchase']) {
     printReceipt(purchaseReceipt(p));
 }
 
-onMounted(() => { void loadSummary(); void loadList(); });
+onMounted(() => { void loadStations(); void loadSummary(); void loadList(); });
 watch([fStatus, fActorType], () => loadList());
 </script>
 
@@ -291,7 +302,7 @@ watch([fStatus, fActorType], () => loadList());
     </transition>
 
     <!-- KPI strip -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Today</p>
         <p class="kpi-value">{{ naira(summary?.todayValueMinor) }}</p>
@@ -342,7 +353,12 @@ watch([fStatus, fActorType], () => loadList());
         </div>
         <div>
           <label class="bw-label">Station</label>
-          <input class="bw-input bw-mono" v-model="fStation" placeholder="e.g. TUNGA" @keyup.enter="loadList()" />
+          <select class="bw-input bw-mono" v-model="fStation" @change="loadList()">
+            <option value="">All</option>
+            <option v-for="station in stationOptions" :key="station.stationId" :value="station.stationId">
+              {{ station.name || station.stationId }}{{ station.oemName ? ` · ${station.oemName}` : '' }}
+            </option>
+          </select>
         </div>
         <div>
           <label class="bw-label">Phase</label>
@@ -372,7 +388,7 @@ watch([fStatus, fActorType], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="cardView">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ items.length }} purchases</h2>
         <span class="bw-spacer"></span>
@@ -384,23 +400,11 @@ watch([fStatus, fActorType], () => loadList());
 
       <div class="purchase-layout-bar">
         <span>Purchase results</span>
-        <div class="purchase-view-toggle" aria-label="Purchase layout">
-          <button type="button" :class="{ active: cardView === 'grid' }" :aria-pressed="cardView === 'grid'" aria-label="Grid view" title="Grid view" @click="cardView = 'grid'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
-          </button>
-          <button type="button" :class="{ active: cardView === 'table' }" :aria-pressed="cardView === 'table'" aria-label="Table view" title="Table view" @click="cardView = 'table'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
-            </svg>
-          </button>
-        </div>
+        <WalletDataViewSwitch v-model="cardView" label="Purchase display view" />
       </div>
 
       <!-- Desktop -->
-      <div :class="['bw-t-wrap', 'purchase-table-wrap', { 'mobile-table-active': cardView === 'table' }]">
+      <div class="bw-t-wrap purchase-table-wrap">
         <table class="bw-table">
           <thead>
             <tr>
@@ -449,7 +453,7 @@ watch([fStatus, fActorType], () => loadList());
       </div>
 
       <!-- Mobile -->
-      <div :class="['bw-t-cards', 'p-cards', `p-cards--${cardView}`]">
+      <div class="bw-t-cards p-cards">
         <div v-for="p in items" :key="p.id" class="p-card" @click="openDetail(p)">
           <div class="pc-head">
             <div>

@@ -46,6 +46,9 @@ const stationId = ref('');
 const loading = ref(false);
 const error = ref('');
 const noStation = ref(false);
+const meterNumber = ref('');
+const selectedMeter = ref('');
+const meterError = ref('');
 let loadRequestId = 0;
 
 const periodLabelText = computed(() => PERIODS.find((option) => option.value === period.value)?.label ?? 'Monthly');
@@ -81,16 +84,22 @@ const fmtKwh = (value: number) =>
 
 async function load() {
   const requestId = ++loadRequestId;
-  loading.value = true;
   error.value = '';
   noStation.value = false;
+  if (view.value === 'meters' && !selectedMeter.value) {
+    rows.value = [];
+    truncated.value = false;
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
   try {
     const scope = view.value === 'site' ? 'station' : 'meter';
     // The server sizes the row cap per scope; asking for a client-side number
     // here is how the meter view ended up truncated at 120 rows.
-    const response = await api.get<ConsumptionResponse>(
-      `/api/v1/vendor/consumption?scope=${scope}&period=${period.value}&spend=true`,
-    );
+    const params = new URLSearchParams({ scope, period: period.value, spend: 'true' });
+    if (scope === 'meter') params.set('meter_id', selectedMeter.value);
+    const response = await api.get<ConsumptionResponse>(`/api/v1/vendor/consumption?${params}`);
     if (requestId !== loadRequestId) return;
     rows.value = Array.isArray(response.rows) ? response.rows : [];
     stationId.value = response.stationId ?? '';
@@ -106,6 +115,18 @@ async function load() {
   } finally {
     if (requestId === loadRequestId) loading.value = false;
   }
+}
+
+function searchMeter() {
+  const value = meterNumber.value.trim();
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(value)) {
+    meterError.value = 'Enter a valid meter number.';
+    return;
+  }
+  meterError.value = '';
+  selectedMeter.value = value;
+  page.value = 1;
+  load();
 }
 
 // A new period or view is a different list; page 7 of the old one would be empty.
@@ -148,6 +169,27 @@ onMounted(load);
         </div>
       </header>
 
+      <form v-if="view === 'meters'" class="meter-search" aria-label="Meter consumption search" novalidate @submit.prevent="searchMeter">
+        <label for="consumption-meter-number">
+          <span>Meter number</span>
+          <input
+            id="consumption-meter-number"
+            v-model="meterNumber"
+            class="meter-input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="64"
+            placeholder="Enter meter number"
+            :aria-invalid="Boolean(meterError)"
+            :aria-describedby="meterError ? 'meter-number-error' : undefined"
+            @input="meterError = ''"
+          />
+        </label>
+        <button type="submit" class="meter-submit" :disabled="loading">View analytics</button>
+        <span v-if="meterError" id="meter-number-error" class="meter-error" role="alert">{{ meterError }}</span>
+      </form>
+
       <div v-if="loading" class="notice loading" role="status">Loading consumption…</div>
       <div v-else-if="noStation" class="notice" role="status">
         No station is assigned yet. Contact Beverly operations.
@@ -156,13 +198,16 @@ onMounted(load);
         <span>{{ error }}</span>
         <button type="button" class="retry" @click="load">Retry</button>
       </div>
+      <div v-else-if="view === 'meters' && !selectedMeter" class="notice" role="status">
+        Enter a meter number to view consumption analytics.
+      </div>
 
       <section v-else id="consumption-results" aria-live="polite">
         <div v-if="truncated" class="notice" role="status">
           This station has more data than one page holds for the selected period — figures below cover the rows
           shown. Choose a coarser period for the full site total.
         </div>
-        <div class="kpis">
+        <div class="kpis bw-mobile-kpi-grid">
           <article class="kpi featured">
             <span class="kpi-label">Total consumption</span>
             <strong class="kpi-value">{{ fmtKwh(totalKwh) }}</strong>
@@ -200,7 +245,7 @@ onMounted(load);
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!rows.length"><td :colspan="view === 'meters' ? 7 : 5" class="empty">No consumption recorded.</td></tr>
+              <tr v-if="!rows.length"><td :colspan="view === 'meters' ? 7 : 5" class="empty">{{ view === 'meters' ? `No consumption found for meter ${selectedMeter}.` : 'No consumption recorded.' }}</td></tr>
               <tr v-for="(row, index) in pagedRows" v-else :key="`${row.scope_id}-${row.period_start}-${index}`">
                 <td>{{ periodLabel(row) }}</td>
                 <td v-if="view === 'meters'" class="mono">{{ row.meter_id }}</td>
@@ -236,9 +281,16 @@ h1 { margin: 0; color: var(--text); font: var(--fw-extrabold) var(--t-3xl)/1.15 
 .seg-btn { min-height: 36px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-muted); cursor: pointer; font: var(--fw-semibold) var(--t-base)/1 var(--font-sans); }
 .seg-btn:hover { color: var(--text); background: var(--surface-3); }
 .seg-btn.active { background: var(--brand); color: oklch(8% 0.04 145); box-shadow: 0 3px 10px var(--brand-glow); }
-.seg-btn:focus-visible, .select:focus-visible, .retry:focus-visible, .table-wrap:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); }
+.seg-btn:focus-visible, .select:focus-visible, .meter-input:focus-visible, .meter-submit:focus-visible, .retry:focus-visible, .table-wrap:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); }
 .period-control { display: grid; gap: var(--s-1); color: var(--text-muted); font-size: var(--t-xs); font-weight: var(--fw-semibold); }
 .select { min-height: 44px; padding: 0 var(--s-8) 0 var(--s-3); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); color: var(--text); font: inherit; }
+.meter-search { display: grid; grid-template-columns: minmax(240px, 420px) auto; gap: var(--s-2); align-items: end; padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface-2); }
+.meter-search label { display: grid; gap: var(--s-1); color: var(--text-muted); font-size: var(--t-xs); font-weight: var(--fw-semibold); }
+.meter-input { width: 100%; min-height: 44px; padding: 0 var(--s-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: var(--fw-semibold) var(--t-base)/1 var(--font-mono); }
+.meter-input::placeholder { color: var(--text-muted); font-family: var(--font-sans); font-weight: var(--fw-regular); }
+.meter-submit { min-height: 44px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-md); background: var(--brand); color: oklch(8% 0.04 145); font: var(--fw-bold) var(--t-base)/1 var(--font-sans); cursor: pointer; }
+.meter-submit:disabled { opacity: .55; cursor: wait; }
+.meter-error { grid-column: 1 / -1; color: var(--danger-on-surface); font-size: var(--t-xs); }
 .notice { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface-2); color: var(--text-dim); }
 .notice.error { border-color: oklch(from var(--danger) l c h / .30); background: oklch(from var(--danger) l c h / .12); color: var(--danger-on-surface); }
 .loading { min-height: 84px; justify-content: center; }
@@ -272,6 +324,8 @@ tbody tr:hover td { background: var(--surface-2); }
   .kpi { padding: var(--s-4); }
   .kpi-value { font-size: var(--t-xl); overflow-wrap: anywhere; }
   .notice.error { align-items: flex-start; flex-direction: column; }
+  .meter-search { grid-template-columns: 1fr; }
+  .meter-submit { width: 100%; }
 }
 @media (max-width: 360px) {
   .controls, .kpis { grid-template-columns: 1fr; }

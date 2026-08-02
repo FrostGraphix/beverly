@@ -26,6 +26,7 @@ export const API_BASE = BASE;
 const STAFF_ACCESS_TOKEN_KEY = 'beverly.staff.access_token';
 const STAFF_USER_KEY = 'beverly.staff.user';
 const STAFF_PERMISSIONS_KEY = 'beverly.staff.permissions';
+const REQUEST_TIMEOUT_MS = 20_000;
 let authRedirecting = false;
 
 export class ApiError extends Error {
@@ -118,6 +119,8 @@ function handleMfaRequired(): void {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const hasBody = body !== undefined;
     const headers: Record<string, string> = {
         ...(init.headers as Record<string, string> ?? {}),
@@ -128,19 +131,30 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
     if (method !== 'GET' && method !== 'HEAD') {
         headers['Idempotency-Key'] = headers['Idempotency-Key'] ?? crypto.randomUUID();
     }
-    const res = await fetch(`${BASE}${path}`, {
-        ...init, method, headers,
-        body: hasBody ? JSON.stringify(body) : undefined,
-        credentials: 'include',
-    });
-    const text = await res.text();
-    const json = parseJson(text);
-    if (!res.ok) {
-        if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
-        else if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
-        throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
+    try {
+        const res = await fetch(`${BASE}${path}`, {
+            ...init, method, headers,
+            body: hasBody ? JSON.stringify(body) : undefined,
+            credentials: 'include',
+            signal: init.signal ?? controller.signal,
+        });
+        const text = await res.text();
+        const json = parseJson(text);
+        if (!res.ok) {
+            if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
+            else if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
+            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
+        }
+        return unwrapEnvelope<T>(json);
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new ApiError(0, 'request_timeout', 'The server took too long to respond. Please try again.');
+        }
+        throw error;
+    } finally {
+        window.clearTimeout(timeout);
     }
-    return unwrapEnvelope<T>(json);
 }
 
 export function naira(minor: number | null | undefined): string {

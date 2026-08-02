@@ -11,6 +11,7 @@ const auth = useVendorAuthStore();
 const wallet = useWalletStore();
 const vendorName = computed(() => auth.user?.organization_name?.split(' ')[0] || auth.user?.full_name?.split(' ')[0] || 'vendor');
 const activityFilter = ref<'all' | 'credit' | 'debit' | 'reversal'>('all');
+const dashboardLoading = ref(true);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshDashboard() {
@@ -25,7 +26,11 @@ function refreshWhenVisible() {
 }
 
 onMounted(async () => {
-    await refreshDashboard();
+    try {
+        await refreshDashboard();
+    } finally {
+        dashboardLoading.value = false;
+    }
     document.addEventListener('visibilitychange', refreshWhenVisible);
     refreshTimer = setInterval(refreshWhenVisible, 60_000);
 });
@@ -64,6 +69,15 @@ const filterCount = (filter: typeof activityFilter.value) => {
     <!-- Onboarding checklist (only shown until complete or dismissed) -->
     <VendorOnboardingChecklist />
 
+    <div v-if="dashboardLoading" class="dashboard-skeleton" role="status" aria-label="Loading dashboard">
+      <div class="bw-card bw-skeleton dashboard-balance-skeleton"></div>
+      <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
+        <div v-for="n in 5" :key="`vendor-kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
+      </div>
+      <div class="bw-card bw-skeleton dashboard-activity-skeleton"></div>
+    </div>
+
+    <template v-else>
     <!-- Hero balance card -->
     <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg); border-color: oklch(70% 0.19 145 / 0.28); position: relative; overflow: hidden">
       <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--brand), transparent)"></div>
@@ -84,7 +98,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
     </div>
 
     <!-- KPI tiles -->
-    <div class="bw-kpi-grid vendor-kpi-grid">
+    <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
       <div class="bw-kpi">
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Today Vended</span>
@@ -217,11 +231,15 @@ const filterCount = (filter: typeof activityFilter.value) => {
         <div v-if="!filteredLedger.length" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No matching activity.</div>
       </div>
     </div>
+    </template>
 
   </AppShell>
 </template>
 
 <style scoped>
+.dashboard-skeleton { display: grid; gap: var(--s-5); }
+.dashboard-balance-skeleton { min-height: 190px; }
+.dashboard-activity-skeleton { min-height: 280px; }
 .vendor-kpi-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }

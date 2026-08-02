@@ -72,12 +72,13 @@ router.beforeEach(async (to) => {
     // Keep the login route reachable for the challenge screen.
     if (to.meta.guest && auth.isAuthenticated && to.query.reason !== 'mfa_required') return { name: 'dashboard' };
     if (to.meta.auth) {
-        try {
-            await auth.ensureFreshSession();
-        } catch {
-            auth.logout();
-            return { name: 'login', query: { redirect: to.fullPath, reason: 'session_expired' } };
-        }
+        // Hydration already validates the first route. Later refreshes happen
+        // behind navigation, while every API request remains server-authorized.
+        void auth.ensureFreshSession().catch(() => {
+            if (!auth.isAuthenticated) {
+                void router.replace({ name: 'login', query: { redirect: to.fullPath, reason: 'session_expired' } });
+            }
+        });
     }
     const permission = typeof to.meta.permission === 'string' ? to.meta.permission : '';
     if (permission && !auth.hasPermission(permission)) return { name: 'not-found' };

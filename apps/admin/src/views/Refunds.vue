@@ -1,6 +1,6 @@
 ﻿<template>
   <AppShell title="Refunds">
-    <section class="bw-kpi-grid refund-kpis" aria-label="Refund summary" :aria-busy="loading && !summaryLoaded">
+    <section class="bw-kpi-grid bw-mobile-kpi-grid refund-kpis" aria-label="Refund summary" :aria-busy="loading && !summaryLoaded">
       <article class="bw-kpi featured refund-kpi-total">
         <span class="bw-kpi-label">Total requests</span>
         <strong class="bw-kpi-value">{{ summaryValue('total') }}</strong>

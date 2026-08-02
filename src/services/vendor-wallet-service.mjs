@@ -135,14 +135,16 @@ export async function loadLedgerRows(organizationId = readVendorOrganizationId()
   return response.data?.rows || [];
 }
 
-export async function submitOnboarding({ organizationId, actorId }) {
+export async function submitOnboarding({ organizationId, actorId, operatingSites = [] }) {
+  const stationIds = [...new Set(operatingSites.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean))];
+  if (!stationIds.length) throw new Error("Select at least one API station");
   const response = await postApi("/api/vendor/onboarding/submit", {
     organizationId,
     actorId,
     businessIdentity: { registrationName: "Vendor Portal Account" },
     primaryContact: { name: "Vendor" },
     bankDetails: { bankName: "Pending verification" },
-    operatingSites: ["TUNGA"]
+    operatingSites: stationIds
   });
   return response.data;
 }

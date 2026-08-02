@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import { VitePWA } from "vite-plugin-pwa";
 import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -172,7 +173,39 @@ function embeddedReferenceApi() {
 }
 
 export default defineConfig({
-  plugins: [serveRawDocs(), receiptPdfApi(), embeddedReferenceApi(), vue()],
+  plugins: [
+    serveRawDocs(),
+    receiptPdfApi(),
+    embeddedReferenceApi(),
+    vue(),
+    VitePWA({
+      registerType: "prompt",
+      includeAssets: ["brand/beverly-mark.png"],
+      manifest: {
+        name: "Beverly CRM",
+        short_name: "Beverly CRM",
+        description: "Beverly customer operations platform.",
+        theme_color: "#22c55e",
+        background_color: "#0a0e14",
+        display: "standalone",
+        start_url: "/",
+        icons: [
+          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/pwa-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        navigateFallback: "/index.html",
+        importScripts: ["push-sw.js"],
+        runtimeCaching: [{
+          urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
+          handler: "CacheFirst",
+          options: { cacheName: "google-fonts", expiration: { maxEntries: 30, maxAgeSeconds: 31_536_000 } },
+        }],
+      },
+    }),
+  ],
   server: {
     port: 9311,
     strictPort: false,

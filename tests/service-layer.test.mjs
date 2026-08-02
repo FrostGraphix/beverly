@@ -161,7 +161,7 @@ const gatewayTable = mapTableCollection({
 }, gatewayRoute);
 assert.strictEqual(gatewayTable.rows[0].id, "GW-1");
 assert.strictEqual(gatewayTable.rows[0].name, "UMAISHA_2");
-assert.strictEqual(gatewayTable.rows[0].stationId, "UMAISHA");
+assert.strictEqual(gatewayTable.rows[0].stationId, "admin");
 assert.strictEqual(gatewayTable.rows[0].status, "Online");
 assert(manifestGatewayRoute.actions.includes("Edit"));
 assert(manifestGatewayRoute.actions.includes("Delete"));
@@ -1422,7 +1422,7 @@ assert.deepStrictEqual(dashboard.alarms, [
   { label: "Battery Low", color: "#e5cf0d", value: 2 },
   { label: "Relay Open", color: "#97b552", value: 4 }
 ]);
-assert.strictEqual(dashboard.meta.siteId, "KYAKALE");
+assert.strictEqual(dashboard.meta.siteId, "");
 
 const dashboardCalls = [];
 const monthlyDashboard = await fetchDashboardData({
@@ -1494,22 +1494,22 @@ assert.deepStrictEqual(
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 2, days: 30 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "", type: 2, days: 30 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 5, days: 30 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "", type: 5, days: 30 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 6, days: 48 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "", type: 6, days: 48 }
     },
     {
       method: "POST",
       path: "/api/dashboard/readLineChart",
-      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "KYAKALE", type: 7, days: 1 }
+      payload: { from: "2026-06-17T00:00:00.000Z", to: "2026-07-16T12:00:00.000Z", siteId: "", type: 7, days: 1 }
     }
   ]
 );

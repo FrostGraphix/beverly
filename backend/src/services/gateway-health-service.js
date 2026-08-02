@@ -9,12 +9,6 @@ const memoryTransitions = new Map();
 const acknowledgedAlerts = new Map();
 const silencedGateways = new Map();
 
-// Baseline station IDs used as a fallback for name-based inference when a
-// gateway row carries no stationId or only "admin". On every live refresh,
-// deriveStationIds() builds a richer set from the actual API response, so
-// new stations are picked up automatically with zero configuration.
-const knownStationIds = ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA"];
-
 function hashCode(str = "") {
   let hash = 0;
   for (let i = 0; i < str.length; i += 1) {
@@ -59,8 +53,8 @@ function isGatewaySilenced(gatewayId) {
  * @param {Array<object>} rows - Raw gateway rows from fetchAllGateways.
  * @returns {string[]} Deduplicated array of station ID strings.
  */
-function deriveStationIds(rows) {
-  const live = new Set(knownStationIds);
+function deriveStationIds(rows, stationIds = []) {
+  const live = new Set(stationIds.map((stationId) => String(stationId || "").trim().toUpperCase()).filter(Boolean));
   for (const row of rows) {
     const id = String(row.stationId || row.siteId || row.station || "").trim().toUpperCase();
     if (id && id !== "ADMIN" && id !== "UNASSIGNED") live.add(id);
@@ -73,12 +67,9 @@ function deriveStationIds(rows) {
  *
  * @param {string|undefined} stationId - The stationId field from the row.
  * @param {string|undefined} gatewayName - The gateway name (used for inference).
- * @param {string[]} [stationIds=knownStationIds] - The live station ID set for
- *   this refresh cycle. Defaults to the module-level baseline so that
- *   mapStateRow / mapIncidentRow (which read from Supabase) continue to work
- *   without modification.
+ * @param {string[]} [stationIds] - Live station IDs.
  */
-function gatewayStationId(stationId, gatewayName, stationIds = knownStationIds) {
+function gatewayStationId(stationId, gatewayName, stationIds = []) {
   const reported = String(stationId || "").trim();
   const inferred = stationIds.find((candidate) => String(gatewayName || "").toUpperCase().includes(candidate));
   return inferred && (!reported || reported.toLowerCase() === "admin") ? inferred : reported || "UNASSIGNED";
@@ -123,10 +114,9 @@ function outageId(gateway, checkedAt) {
  * Normalize a raw gateway API row into a structured object.
  *
  * @param {object} row
- * @param {string[]} [stationIds=knownStationIds] - Pass the cycle's derived
- *   station ID set so name-based inference is always up to date.
+ * @param {string[]} [stationIds] - Live station IDs.
  */
-function normalizeGateway(row = {}, stationIds = knownStationIds) {
+function normalizeGateway(row = {}, stationIds = []) {
   const gatewayId = String(row.gatewayId || row.id || "").trim();
   if (!gatewayId) return null;
   const gatewayName = String(row.gatewayName || row.name || gatewayId).trim() || gatewayId;
@@ -332,7 +322,7 @@ async function refreshGatewayHealth(options = {}) {
   // Build the live station ID set from the data we just fetched — this is the
   // self-healing mechanism that picks up new stations automatically without
   // any env vars, config files, or code changes.
-  const liveStationIds = deriveStationIds(rows);
+  const liveStationIds = deriveStationIds(rows, options.stationIds);
 
   let persistence = await loadPersistence(options.stationId || "");
   const states = [];

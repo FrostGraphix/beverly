@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
@@ -17,6 +18,9 @@ interface PurchaseOrder {
 
 const purchases = ref<PurchaseOrder[]>([]);
 const loading   = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
 const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
 const exporting = ref(false);
@@ -106,7 +110,7 @@ onMounted(async () => {
 
 <template>
   <AppShell title="Transactions">
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <div>
           <div class="bw-card-title">Vending history</div>
@@ -117,6 +121,7 @@ onMounted(async () => {
                   :class="['bw-seg', filter === f ? 'active' : '']"
                   @click="filter = f">{{ f }}</button>
         </div>
+        <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
       </div>
 
       <div class="transaction-toolbar">

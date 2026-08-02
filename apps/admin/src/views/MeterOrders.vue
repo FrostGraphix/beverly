@@ -319,7 +319,7 @@ function doExport() {
     </transition>
 
     <!-- KPI row -->
-    <div class="mo-kpi-row" aria-label="Meter order summary">
+    <div class="mo-kpi-row bw-mobile-kpi-grid" aria-label="Meter order summary">
       <div class="mo-kpi">
         <span class="mo-kpi-label">Total orders</span>
         <span class="mo-kpi-value">{{ stats?.total ?? '—' }}</span>

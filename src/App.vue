@@ -1,5 +1,6 @@
 <template>
   <div id="app-root">
+  <PwaUpdateToast app-name="Beverly CRM" />
   <LoginPage v-if="isLogin" @logged-in="goDashboard" />
   <BeverlyLoader v-else-if="!isRoleReady" label="Verifying session" />
     <div
@@ -391,6 +392,7 @@ import ReportsPage from "./components/ReportsPage.vue";
 import StationAlertsBell from "./components/StationAlertsBell.vue";
 import OemHubPage from "./components/oem-hub/OemHubPage.vue";
 import BeverlyLoader from "@beverly/tokens/BeverlyLoader.vue";
+import PwaUpdateToast from "@beverly/tokens/PwaUpdateToast.vue";
 import { useOemStore } from "./stores/oem-store";
 import { warmAllOems } from "./services/oem-prefetch.mjs";
 import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
@@ -409,7 +411,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",

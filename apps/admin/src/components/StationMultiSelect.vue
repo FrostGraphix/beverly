@@ -9,7 +9,14 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { api } from '../lib/api';
 
-interface Station { stationId: string; name: string; remark?: string | null; }
+interface Station {
+    stationId: string;
+    name: string;
+    remark?: string | null;
+    oemId: string | null;
+    oemName: string | null;
+    status: 'active' | 'disabled';
+}
 
 const props = withDefaults(defineProps<{
     modelValue: string[];          // selected stationIds
@@ -37,18 +44,26 @@ const byId = computed(() => {
 });
 
 const selected = computed<Station[]>(() =>
-    props.modelValue.map((id) => byId.value.get(id.toUpperCase()) ?? { stationId: id, name: id }),
+    props.modelValue.map((id) => byId.value.get(id.toUpperCase()) ?? {
+        stationId: id,
+        name: id,
+        oemId: null,
+        oemName: null,
+        status: 'active',
+    }),
 );
 
 const filtered = computed<Station[]>(() => {
     const q = query.value.trim().toLowerCase();
     const sel = new Set(props.modelValue.map((id) => id.toUpperCase()));
     return all.value
+        .filter((s) => s.status === 'active')
         .filter((s) => !sel.has(s.stationId.toUpperCase()))
         .filter((s) =>
             !q ||
             s.stationId.toLowerCase().includes(q) ||
-            s.name.toLowerCase().includes(q),
+            s.name.toLowerCase().includes(q) ||
+            String(s.oemName ?? '').toLowerCase().includes(q),
         )
         .slice(0, 50);
 });
@@ -126,9 +141,10 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
 <template>
   <div ref="rootEl" class="msel" :class="{ 'msel--disabled': disabled }">
     <div class="msel-control" @click="open = true">
-      <span v-for="s in selected" :key="s.stationId" class="chip">
+      <span v-for="s in selected" :key="`${s.oemId}:${s.stationId}`" class="chip">
         <span class="chip-id">{{ s.stationId }}</span>
         <span v-if="s.name && s.name !== s.stationId" class="chip-name">· {{ s.name }}</span>
+        <span v-if="s.oemName" class="chip-name">· {{ s.oemName }}</span>
         <button type="button" class="chip-x" aria-label="Remove" @click.stop="remove(s.stationId)">×</button>
       </span>
       <input
@@ -159,7 +175,7 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
         <ul v-else class="msel-list" role="listbox">
           <li
             v-for="(s, i) in filtered"
-            :key="s.stationId"
+            :key="`${s.oemId}:${s.stationId}`"
             class="msel-row"
             :class="{ 'msel-row--active': i === focusIndex }"
             role="option"
@@ -168,6 +184,7 @@ watch(query, () => { focusIndex.value = -1; open.value = true; });
           >
             <span class="msel-id">{{ s.stationId }}</span>
             <span v-if="s.name && s.name !== s.stationId" class="msel-name">{{ s.name }}</span>
+            <span v-if="s.oemName" class="msel-name">{{ s.oemName }}</span>
           </li>
         </ul>
         <div class="msel-foot">

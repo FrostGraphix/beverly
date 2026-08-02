@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { publishNotificationCount } from '@beverly/tokens';
+import type { DeviceNotificationState } from '@beverly/tokens/push-notifications';
+import { adminPushNotifications } from '../lib/push-notifications';
 
 interface Notification {
     id: string;
@@ -24,6 +26,16 @@ const markingAll = ref(false);
 const error = ref('');
 const filter = ref<'all' | 'unread' | 'read'>('all');
 const filters = ['all', 'unread', 'read'] as const;
+const deviceState = ref<DeviceNotificationState>(adminPushNotifications.state());
+const deviceBusy = ref(false);
+const deviceMessage = ref('');
+const deviceLabel = computed(() => ({
+    enabled: 'Enabled on this device',
+    blocked: 'Blocked in browser settings',
+    unsupported: 'Unsupported by this browser',
+    unavailable: 'Unavailable until configured',
+    default: 'Off on this device',
+}[deviceState.value]));
 const filteredItems = computed(() => items.value.filter((item) =>
     filter.value === 'all' || (filter.value === 'read' ? item.read : !item.read)
 ));
@@ -87,7 +99,40 @@ async function markAllRead() {
     }
 }
 
-onMounted(() => void load());
+async function toggleDeviceNotifications() {
+    if (deviceBusy.value) return;
+    deviceBusy.value = true;
+    deviceMessage.value = '';
+    try {
+        deviceState.value = deviceState.value === 'enabled'
+            ? await adminPushNotifications.disable()
+            : await adminPushNotifications.enable();
+    } catch (caught: any) {
+        deviceMessage.value = caught?.message ?? 'Device notifications could not be updated.';
+    } finally {
+        deviceBusy.value = false;
+    }
+}
+
+async function testDeviceNotifications() {
+    if (deviceBusy.value) return;
+    deviceBusy.value = true;
+    deviceMessage.value = '';
+    try {
+        await adminPushNotifications.test();
+        deviceMessage.value = 'Test notification sent.';
+        await load();
+    } catch (caught: any) {
+        deviceMessage.value = caught?.message ?? 'Test notification failed.';
+    } finally {
+        deviceBusy.value = false;
+    }
+}
+
+onMounted(() => {
+    void load();
+    void adminPushNotifications.sync().then((state) => { deviceState.value = state; }).catch(() => undefined);
+});
 </script>
 
 <template>
@@ -104,6 +149,20 @@ onMounted(() => void load());
     </div>
 
     <div v-if="error" class="bw-alert danger" role="alert">{{ error }}</div>
+
+    <section class="bw-card device-notifications" aria-labelledby="device-notifications-title">
+      <div>
+        <strong id="device-notifications-title">Device notifications</strong>
+        <span>{{ deviceLabel }}</span>
+        <small v-if="deviceMessage" aria-live="polite">{{ deviceMessage }}</small>
+      </div>
+      <div class="device-actions">
+        <button v-if="deviceState === 'enabled'" type="button" class="bw-btn" :disabled="deviceBusy" @click="testDeviceNotifications">Send test</button>
+        <button type="button" class="bw-btn primary" :disabled="deviceBusy || ['blocked', 'unsupported', 'unavailable'].includes(deviceState)" @click="toggleDeviceNotifications">
+          {{ deviceBusy ? 'Working...' : (deviceState === 'enabled' ? 'Turn off' : 'Turn on') }}
+        </button>
+      </div>
+    </section>
 
     <div class="notification-filters" aria-label="Filter notifications">
       <button v-for="option in filters" :key="option" type="button" :class="['notification-filter', { active: filter === option }]" :aria-pressed="filter === option" @click="filter = option">
@@ -152,6 +211,10 @@ onMounted(() => void load());
 .an-head h1 { margin: var(--s-1) 0; font-size: clamp(1.6rem, 4vw, 2.4rem); }
 .an-head p { margin: 0; color: var(--text-muted); }
 .notification-filters { display: flex; gap: var(--s-1); margin-bottom: var(--s-4); }
+.device-notifications { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); margin-bottom: var(--s-4); }
+.device-notifications > div:first-child { display: grid; gap: var(--s-1); }
+.device-notifications span, .device-notifications small { color: var(--text-muted); }
+.device-actions { display: flex; gap: var(--s-2); }
 .notification-filter { min-height: 44px; padding: 0 var(--s-3); border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--t-sm); font-weight: 700; text-transform: capitalize; cursor: pointer; }
 .notification-mark-all { min-height: 44px; }
 .notification-filter.active { border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); background: color-mix(in srgb, var(--brand) 14%, var(--surface)); color: var(--brand); }
@@ -168,6 +231,8 @@ onMounted(() => void load());
 .an-more { display: flex; justify-content: center; margin-top: var(--s-4); }
 @media (max-width: 640px) {
   .an-head { display: grid; }
+  .device-notifications { align-items: stretch; flex-direction: column; }
+  .device-actions > * { flex: 1; }
   .an-row { grid-template-columns: 9px minmax(0, 1fr); }
   .an-row time { grid-column: 2; }
 }

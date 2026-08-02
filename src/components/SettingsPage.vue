@@ -129,6 +129,24 @@
 
           <div class="profile-section-title" style="margin-top:24px">Notifications</div>
           <div class="profile-pref-group">
+            <div class="profile-pref-row">
+              <div class="profile-pref-label">
+                <span class="profile-pref-name">Device Push</span>
+                <span class="profile-pref-desc">{{ devicePushLabel }}</span>
+                <span v-if="devicePushMessage" class="profile-pref-desc" aria-live="polite">{{ devicePushMessage }}</span>
+              </div>
+              <div class="device-push-actions">
+                <BaseButton v-if="devicePushState === 'enabled'" size="sm" :disabled="devicePushBusy" @click="testDevicePush">Send Test</BaseButton>
+                <BaseButton
+                  size="sm"
+                  variant="primary"
+                  :disabled="devicePushBusy || ['blocked', 'unsupported', 'unavailable'].includes(devicePushState)"
+                  @click="toggleDevicePush"
+                >
+                  {{ devicePushBusy ? 'Working...' : (devicePushState === 'enabled' ? 'Turn Off' : 'Turn On') }}
+                </BaseButton>
+              </div>
+            </div>
             <div class="profile-pref-row" v-for="option in notifOptions" :key="option.id">
               <div class="profile-pref-label">
                 <span class="profile-pref-name">{{ option.label }}</span>
@@ -213,6 +231,7 @@ import MfaSetupFlow from "./MfaSetupFlow.vue";
 import { changeUserPassword, loadPreferenceState, savePreferenceState } from "../services/profile-store.mjs";
 import { getMFAStatus, unenrollMFA } from "../services/mfa-service.mjs";
 import { getApi, putApi, setRuntimeLiveWritesAllowed } from "../services/api.js";
+import { crmPushNotifications } from "../services/push-notifications.mjs";
 
 const supportedThemeChoices = ["system", "light", "executive", "contrast"];
 
@@ -238,6 +257,9 @@ export default {
       showPw: { current: false, next: false, confirm: false },
       passwordMessage: "",
       prefsMessage: "",
+      devicePushState: crmPushNotifications.state(),
+      devicePushBusy: false,
+      devicePushMessage: "",
       prefs: savePreferenceState({ ...loadPreferenceState(), theme: normalizeThemeChoice(loadPreferenceState().theme) }),
       themes: [
         { id: "system", label: "System", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
@@ -265,7 +287,7 @@ export default {
     };
   },
   async mounted() {
-    await this.loadMfaStatus();
+    await Promise.all([this.loadMfaStatus(), this.syncDevicePush()]);
   },
   computed: {
     roleName() {
@@ -288,6 +310,15 @@ export default {
     canChangePw() {
       return this.pw.current && this.pw.next.length >= 8 && this.pw.next === this.pw.confirm;
     },
+    devicePushLabel() {
+      return {
+        enabled: "Enabled on this device",
+        blocked: "Blocked in browser settings",
+        unsupported: "Unsupported by this browser",
+        unavailable: "Unavailable until configured",
+        default: "Off on this device"
+      }[this.devicePushState];
+    },
     isSuperAdmin() {
       return String(this.roleId || "").toLowerCase().replace(/_/g, "-") === "super-admin";
     },
@@ -308,6 +339,36 @@ export default {
   methods: {
     normalizeTab(tab) {
       return ["security", "settings", "operations"].includes(tab) ? tab : "security";
+    },
+    async syncDevicePush() {
+      try { this.devicePushState = await crmPushNotifications.sync(); } catch { /* best effort */ }
+    },
+    async toggleDevicePush() {
+      if (this.devicePushBusy) return;
+      this.devicePushBusy = true;
+      this.devicePushMessage = "";
+      try {
+        this.devicePushState = this.devicePushState === "enabled"
+          ? await crmPushNotifications.disable()
+          : await crmPushNotifications.enable();
+      } catch (error) {
+        this.devicePushMessage = error?.message || "Device notifications failed.";
+      } finally {
+        this.devicePushBusy = false;
+      }
+    },
+    async testDevicePush() {
+      if (this.devicePushBusy) return;
+      this.devicePushBusy = true;
+      this.devicePushMessage = "";
+      try {
+        await crmPushNotifications.test();
+        this.devicePushMessage = "Test notification sent.";
+      } catch (error) {
+        this.devicePushMessage = error?.message || "Test notification failed.";
+      } finally {
+        this.devicePushBusy = false;
+      }
     },
     async openOperations() {
       this.activeTab = "operations";
@@ -500,6 +561,13 @@ export default {
   padding: 24px;
 }
 
+.device-push-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .live-control-card {
   display: grid;
   gap: 14px;
@@ -575,6 +643,10 @@ export default {
   .live-control-status {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .device-push-actions {
+    justify-content: flex-start;
   }
 }
 </style>
