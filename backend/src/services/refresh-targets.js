@@ -1,7 +1,5 @@
 "use strict";
 
-const stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-
 function todayRange(now = new Date()) {
   const end = now.toISOString().slice(0, 10);
   const startDate = new Date(now);
@@ -52,7 +50,10 @@ function pagedDailyMeterPayload(extra = {}) {
   });
 }
 
-function refreshTargets(scope = "hot", now = new Date()) {
+function refreshTargets(scope = "hot", now = new Date(), stationIds = []) {
+  const stations = Array.from(new Set((Array.isArray(stationIds) ? stationIds : [])
+    .map((stationId) => String(stationId || "").trim().toUpperCase())
+    .filter(Boolean)));
   const daily = todayRange(now);
   const monthly = monthlyRange(now);
   const midnight = previousDayRange(now);
@@ -115,6 +116,5 @@ module.exports = {
   localDateKey,
   previousDayRange,
   refreshTargets,
-  stations,
   todayRange
 };

@@ -115,7 +115,11 @@
           </label>
           <label v-if="!isRemoteBatchFlow" class="modal-field">
             <span>Station Id</span>
-            <BaseInput v-model="form.stationId" :readonly="!remoteTaskAllowsManualEntry" />
+            <BaseSelect v-if="remoteTaskAllowsManualEntry" v-model="form.stationId">
+              <option value="">Select station</option>
+              <option v-for="station in stationOptions" :key="station.stationId" :value="station.stationId">{{ station.label }}</option>
+            </BaseSelect>
+            <BaseInput v-else v-model="form.stationId" readonly />
           </label>
           <label v-if="!isRemoteBatchFlow" class="modal-field">
             <span>Data Item</span>
@@ -169,6 +173,7 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseModalShell from "./base/BaseModalShell.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { liveWritesAllowed, postApi } from "../services/api.js";
+import { fetchStationOptions } from "../services/station-registry.mjs";
 import { guardedWriteMessage } from "../services/guarded-write.mjs";
 import {
   buildRemoteTaskPayload,
@@ -219,7 +224,8 @@ export default {
       error: "",
       result: "",
       requestLog: "",
-      responseLog: ""
+      responseLog: "",
+      stationOptions: []
     };
   },
   computed: {
@@ -287,8 +293,15 @@ export default {
   watch: {
     remoteDataOptions() { this.syncRemoteTaskDataItem(); }
   },
-  created() {
+  async created() {
     this.syncRemoteTaskDataItem();
+    if (this.remoteTaskAllowsManualEntry) {
+      try {
+        this.stationOptions = await fetchStationOptions();
+      } catch (error) {
+        this.error = error?.message || "Failed to load stations";
+      }
+    }
   },
   methods: {
     syncRemoteTaskDataItem() {

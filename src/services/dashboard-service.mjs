@@ -2,7 +2,7 @@ import { getApi, postApi, readSessionState } from "./api.js";
 import { mapDashboardDataset } from "./mappers/dashboard-mapper.mjs";
 
 export const defaultDashboardOptions = {
-  siteId: "KYAKALE",
+  siteId: "",
   pageNumber: 1,
   pageSize: 500,
   activeType: 3,

@@ -4,6 +4,7 @@ import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapp
 import { normalizeCollection } from "./response-normalizers.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
+import { fetchStationOptions } from "./station-registry.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "./token-flow.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
@@ -12,14 +13,7 @@ const tableFetchPageSize = 500;
 const liveReadPageSize = 20;
 const maxTableRows = 20000;
 export const tableSiteOptions = reactive([
-  { value: "", label: "All sites" },
-  { value: "KYAKALE", label: "Kyakale" },
-  { value: "MUSHA", label: "Musha" },
-  { value: "UMAISHA", label: "Umaisha" },
-  { value: "TUNGA", label: "Tunga" },
-  { value: "OGUFA", label: "Ogufa" },
-  { value: "BONDU", label: "Bondu" },
-  { value: "KADUNA", label: "Kaduna" }
+  { value: "", label: "All sites" }
 ]);
 
 let stationLoadingPromise = null;
@@ -28,31 +22,29 @@ export async function loadDynamicStationOptions(api = defaultTableApi, forceRefr
   if (stationLoadingPromise && !forceRefresh) return stationLoadingPromise;
   stationLoadingPromise = (async () => {
     try {
-      const res = await api.postApi("/api/station/read", { pageNumber: 1, pageSize: 500 }).catch(() => null);
-      const collection = normalizeCollection(res);
-      const rows = Array.isArray(collection?.rows) ? collection.rows : [];
+      const rows = api === defaultTableApi
+        ? await fetchStationOptions({ force: forceRefresh })
+        : normalizeCollection(await api.postApi("/api/station/read", { pageNumber: 1, pageSize: 500 })).rows;
       if (rows.length > 0) {
         const fetched = rows.map((s) => {
           const id = String(s.stationId || s.id || s.station_id || s.name || "").trim();
-          const rawName = String(s.name || s.stationName || s.station_name || s.communityLabel || id).trim();
+          const rawName = String(s.label || s.name || s.stationName || s.station_name || s.communityLabel || id).trim();
           let label = rawName;
           if (rawName && rawName === rawName.toUpperCase() && rawName.length > 1 && !/^\d+$/.test(rawName)) {
             label = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
           }
-          return { value: id, label: label || id };
+          return {
+            value: id,
+            label: label || id,
+            oemId: String(s.oemId || "").trim(),
+            status: String(s.status || "active").trim().toLowerCase(),
+          };
         }).filter((opt) => opt.value && opt.value.toLowerCase() !== "admin");
 
-        for (const opt of fetched) {
-          const existingIdx = tableSiteOptions.findIndex((existing) => existing.value.toUpperCase() === opt.value.toUpperCase());
-          if (existingIdx === -1) {
-            tableSiteOptions.push(opt);
-          } else {
-            tableSiteOptions[existingIdx].label = opt.label;
-          }
-        }
+        tableSiteOptions.splice(0, tableSiteOptions.length, { value: "", label: "All sites" }, ...fetched);
       }
-    } catch {
-      // Keep static defaults on failure
+    } catch (error) {
+      if (tableSiteOptions.length === 1) throw error;
     }
     return tableSiteOptions;
   })();

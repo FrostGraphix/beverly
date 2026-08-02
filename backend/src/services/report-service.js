@@ -8,7 +8,6 @@
 const { ensureDatabase } = require("./local-database");
 const supabase = require("./supabase-service");
 const consumptionStore = require("./consumption-store");
-const { stations: reportStations } = require("./refresh-targets");
 
 const liveTokenPath = "/api/token/creditTokenRecord/readMore";
 
@@ -26,11 +25,32 @@ function reportStationDatabaseId(stationId) {
   return value ? `${value[0].toUpperCase()}${value.slice(1)}` : "";
 }
 
+async function liveStationIds(baseUrl, token) {
+  const response = await fetch(`${baseUrl}/api/station/read`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ pageNumber: 1, pageSize: 500 })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.reason || body.msg || `Live station request failed: ${response.status}`);
+  const rows = [body?.result?.list, body?.data?.list, body?.result?.data, body?.data?.data, body?.result, body?.data]
+    .find(Array.isArray) || [];
+  const stationIds = [...new Set(rows
+    .map((row) => String(row?.stationId || row?.station_id || row?.id || "").trim().toUpperCase())
+    .filter((stationId) => stationId && stationId !== "ADMIN"))];
+  if (!stationIds.length) throw new Error("Live station directory returned no stations");
+  return stationIds;
+}
+
 async function liveTokenPayments(start, end, filters = {}) {
   const baseUrl = liveApiBaseUrl();
   if (!baseUrl || !usesShortLiveRange(start, end)) return null;
   const token = process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "";
-  const stationIds = filters.stationId ? [filters.stationId] : reportStations;
+  const stationIds = filters.stationId ? [filters.stationId] : await liveStationIds(baseUrl, token);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
   try {

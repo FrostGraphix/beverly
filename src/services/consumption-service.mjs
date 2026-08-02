@@ -18,14 +18,14 @@ import {
 } from "./consumption-aggregator.mjs";
 import { buildSuspectLedger } from "./fraud-engine.mjs";
 
-import { fetchStations, stationsSync, SEED_STATIONS } from "./station-registry.mjs";
+import { fetchStations, stationsSync } from "./station-registry.mjs";
 
 /**
- * @deprecated Rendering floor only. The estate is discovered — prefer
+ * @deprecated Empty compatibility export. Prefer discovered stations.
  * `liveStations()` (sync, last known) or `await resolveStations()` (fresh).
  * Kept as a named export because existing views import it directly.
  */
-export const LIVE_STATIONS = SEED_STATIONS;
+export const LIVE_STATIONS = [];
 
 /** Last known station estate — safe in synchronous render paths. */
 export function liveStations() {

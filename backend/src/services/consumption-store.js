@@ -2,17 +2,6 @@
 
 const supabase = require("./supabase-service");
 
-// Canonical list of real, live stations. Anything else in the raw tables
-// (e.g. "0001", "TEST_STATION" from smoke-tests / webhook tests) is junk and
-// must never surface in analytics. Filtering here keeps the numbers correct
-// regardless of what test data lands in daily_meter_readings.
-const CANONICAL_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-const CANONICAL_STATION_SET = new Set(CANONICAL_STATIONS);
-
-function isCanonicalStation(stationId) {
-  return CANONICAL_STATION_SET.has(normalizeStation(stationId));
-}
-
 function storeEnabled() {
   if (process.env.SUPABASE_CONSUMPTION_STORE_ENABLED === "false") return false;
   return supabase.serviceConfigured();
@@ -265,7 +254,7 @@ async function dateBoundForStation(stationId = "", direction = "asc") {
   return row?.reading_date || null;
 }
 
-async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterStationStats(stations = []) {
   if (!storeEnabled()) {
     return {
       enabled: false,
@@ -309,7 +298,7 @@ async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "
   }
 }
 
-async function dailyMeterTableReport(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterTableReport(stations = []) {
   const stats = await dailyMeterStationStats(stations);
   return {
     ...stats,
@@ -598,16 +587,12 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
   return rows;
 }
 
-async function readAggregatedDeltas({ stationId, from, to, granularity = "daily" }) {
+async function readAggregatedDeltas({ stationIds = [], from, to, granularity = "daily" }) {
   const periodType = aggPeriodType(granularity);
   const fromBound = from;
   const pageSize = 1000;
 
-  // One station if requested, otherwise every canonical station (junk/test
-  // stations are never queried, so they can't leak into totals).
-  const stations = stationId
-    ? (isCanonicalStation(stationId) ? [normalizeStation(stationId)] : [])
-    : CANONICAL_STATIONS;
+  const stations = [...new Set(stationIds.map(normalizeStation).filter(Boolean))];
   if (!stations.length) return [];
 
   try {
@@ -617,9 +602,7 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
     );
     const allRows = perStation.flat();
     if (!allRows.length) return [];
-    return allRows
-      .filter((r) => isCanonicalStation(r.station_id))
-      .map((r) => {
+    return allRows.map((r) => {
         const hasValuation = r.tariff_value_ngn !== undefined
           && r.priced_kwh !== undefined
           && r.unpriced_kwh !== undefined;
@@ -681,13 +664,11 @@ async function readStationMeterReadRollups(stationId = "") {
  *
  * Falls back gracefully if the per-station function hasn't been deployed yet.
  */
-const KNOWN_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-
-async function refreshMeterReadingAggregates() {
+async function refreshMeterReadingAggregates(stationIds = []) {
   const t0 = Date.now();
   const results = [];
 
-  for (const station of KNOWN_STATIONS) {
+  for (const station of [...new Set(stationIds.map(normalizeStation).filter(Boolean))]) {
     const { body, response } = await supabase.restRequestWithResponse(
       "/rpc/refresh_meter_reading_aggregates_for_station",
       { method: "POST", body: { p_station_id: station } }
@@ -727,7 +708,7 @@ async function readDailyMeterSummary({ requestPayload: payload }) {
   if (!from || !to) return null;
 
   // ── Try aggregate table first ──────────────────────────────────────────────
-  const aggRows = await readAggregatedDeltas({ stationId, from, to, granularity });
+  const aggRows = await readAggregatedDeltas({ stationIds: stationId ? [stationId] : [], from, to, granularity });
 
   if (aggRows !== null && aggRows.length > 0) {
     const byStation = new Map();
@@ -838,7 +819,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 async function computeSeasonalityFromDailyDeltas({ stationId, from, to }) {
   try {
-    const dailyRows = await readAggregatedDeltas({ stationId, from, to, granularity: "daily" });
+    const dailyRows = await readAggregatedDeltas({ stationIds: stationId ? [stationId] : [], from, to, granularity: "daily" });
     if (dailyRows && dailyRows.length > 0) {
       const weekdaySum = new Array(7).fill(0);
       const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
@@ -1269,6 +1250,9 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   if (!storeEnabled()) return null;
   const request = requestPayload(payload);
   const stationId = normalizeStation(request.stationId || request.SITE_ID || request.siteId || "");
+  const stationIds = stationId
+    ? [stationId]
+    : [...new Set((Array.isArray(request.stationIds) ? request.stationIds : []).map(normalizeStation).filter(Boolean))];
   const from = normalizeDate(request.FROM || request.from);
   const to = normalizeDate(request.TO || request.to);
   const granularity = normalizeGranularity(request.granularity);
@@ -1309,18 +1293,12 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   }
 
   // ── Try aggregate table path ──────────────────────────────────────────────
-  const DEFAULT_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-  const allowedStations = stationId ? null : new Set(DEFAULT_STATIONS);
   const [currentAggRaw, priorAggRaw] = await Promise.all([
-    readAggregatedDeltas({ stationId, from, to, granularity: queryGranularity }),
-    readAggregatedDeltas({ stationId, from: priorFrom, to: priorTo, granularity: queryGranularity }),
+    readAggregatedDeltas({ stationIds, from, to, granularity: queryGranularity }),
+    readAggregatedDeltas({ stationIds, from: priorFrom, to: priorTo, granularity: queryGranularity }),
   ]);
-  const currentAgg = allowedStations && currentAggRaw
-    ? currentAggRaw.filter((row) => allowedStations.has(normalizeStation(row.stationId)))
-    : currentAggRaw;
-  const priorAgg = allowedStations && priorAggRaw
-    ? priorAggRaw.filter((row) => allowedStations.has(normalizeStation(row.stationId)))
-    : priorAggRaw;
+  const currentAgg = currentAggRaw;
+  const priorAgg = priorAggRaw;
 
   // If aggregates are available, build analytics from them (fast path).
   if (currentAgg !== null && currentAgg.length > 0) {
@@ -1359,7 +1337,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
 
   // ── Fallback: raw row scan (pre-migration path) ───────────────────────────
   const baselineFrom = addDaysIso(priorFrom, -1);
-  const targetStations = stationId ? [stationId] : DEFAULT_STATIONS;
+  const targetStations = stationIds;
   const rowsArrays = await Promise.all(
     targetStations.map((st) => readCompactRowsFromStore({ stationId: st, from: baselineFrom, to }).catch(() => []))
   );

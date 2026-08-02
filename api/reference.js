@@ -1421,6 +1421,63 @@ function jsonRequestData(payload) {
   };
 }
 
+async function fetchLiveStationIds(request) {
+  const syntheticRequest = {
+    method: "POST",
+    url: "/api/station/read",
+    headers: { ...(request?.headers || {}) },
+    __timeoutMs: request?.__timeoutMs
+  };
+  const result = await proxyLive(
+    syntheticRequest,
+    "/api/station/read",
+    jsonRequestData({ pageNumber: 1, pageSize: 500 })
+  );
+  if (!result || result.status >= 400) throw new Error("Station API unavailable");
+  return [...new Set(collectionRowsFromPayload(result.body)
+    .map((row) => String(row?.stationId || row?.station_id || row?.id || "").trim().toUpperCase())
+    .filter((stationId) => stationId && stationId !== "ADMIN"))];
+}
+
+function stationStatus(value) {
+  if (value === false || value === 0) return "disabled";
+  const normalized = String(value ?? "active").trim().toLowerCase();
+  return ["disabled", "inactive", "offline", "deleted"].includes(normalized) ? "disabled" : "active";
+}
+
+async function fetchLiveStationDirectory(request) {
+  const manufacturers = (await listOemManufacturers()).filter((oem) => oem.status === "active" || oem.isSeedDefault);
+  const batches = await Promise.all(manufacturers.map(async (oem) => {
+    const config = await oemRegistry.getOemScopedLiveConfig(oem.id);
+    if (!config && !oem.isSeedDefault) return [];
+    const result = await proxyLive(
+      {
+        method: "POST",
+        url: "/api/station/read",
+        headers: { ...(request?.headers || {}), "x-oem-id": oem.id },
+        __timeoutMs: request?.__timeoutMs,
+      },
+      "/api/station/read",
+      jsonRequestData({ pageNumber: 1, pageSize: 500 })
+    );
+    if (!result || result.status >= 400) return [];
+    return collectionRowsFromPayload(result.body).map((row) => {
+      const stationId = String(row?.stationId || row?.station_id || row?.id || "").trim().toUpperCase();
+      return {
+        stationId,
+        name: String(row?.name || row?.stationName || row?.station_name || stationId).trim() || stationId,
+        oemId: oem.id,
+        oemSlug: oem.slug,
+        oemName: oem.displayName,
+        status: stationStatus(row?.status),
+      };
+    }).filter((station) => station.stationId && station.stationId !== "ADMIN");
+  }));
+  const stations = batches.flat().sort((left, right) => left.name.localeCompare(right.name));
+  if (!stations.length) throw new Error("Live station directory returned no stations");
+  return stations;
+}
+
 async function fetchLiveAccountPage(request, filters, pageNumber) {
   const payload = {
     pageNumber,
@@ -1977,7 +2034,7 @@ async function buildConsumptionAudit() {
   const configuredFrom = configuredConsumptionBackfillFrom();
   const generatedAt = new Date().toISOString();
   const midnightExpectedDate = expectedMidnightSyncDate();
-  const stats = await dailyMeterStationStats();
+  const stats = await dailyMeterStationStats(await fetchLiveStationIds());
   if (!stats.tableReady) {
     return {
       enabled: stats.enabled,
@@ -2669,11 +2726,18 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/oem/list") {
     const manufacturers = await listOemManufacturers();
+    const liveStationIds = await fetchLiveStationIds(request);
     const oems = await Promise.all(manufacturers.map(async (oem) => {
       // Resolve the mappings once — the count is just its length, and the lookup
       // can hit Supabase plus fallback tiers, so calling it twice doubles the work
       // and can drift if a tier changes between the two calls.
-      const stations = await listOemStationMappings(oem.id, oem.slug);
+      const stations = oem.isSeedDefault
+        ? liveStationIds.map((stationId) => ({
+          oemId: oem.id,
+          stationId,
+          communityLabel: stationId.charAt(0) + stationId.slice(1).toLowerCase(),
+        }))
+        : await listOemStationMappings(oem.id, oem.slug);
       return {
         id: oem.id,
         slug: oem.slug,
@@ -2702,7 +2766,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse(governancePlan());
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-store") {
-    return localJobResponse(await dailyMeterTableReport());
+    return localJobResponse(await dailyMeterTableReport(await fetchLiveStationIds(request)));
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-audit") {
     return localJobResponse(await buildConsumptionAudit());
@@ -2755,15 +2819,24 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/local/consumption/summary") {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
+  if (pathname === "/api/local/stations") {
+    const stations = await fetchLiveStationDirectory(request);
+    return localJobResponse({ stations, count: stations.length });
+  }
   if (pathname === "/api/local/consumption/station-analytics") {
-    return readStationConsumptionAnalytics({ requestPayload: requestData.parsedBody });
+    return readStationConsumptionAnalytics({
+      requestPayload: {
+        ...requestData.parsedBody,
+        stationIds: await fetchLiveStationIds(request),
+      },
+    });
   }
   if (pathname === "/api/local/consumption/meter-analysis") {
     return readMeterConsumptionAnalysis({ requestPayload: requestData.parsedBody });
   }
   if (pathname === "/api/local/consumption/refresh-aggregates") {
     try {
-      const result = await refreshMeterReadingAggregates();
+      const result = await refreshMeterReadingAggregates(await fetchLiveStationIds(request));
       return { status: 200, body: { ok: true, durationMs: result.durationMs } };
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
@@ -3266,7 +3339,15 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "desc").trim().toLowerCase() === "desc" ? "desc" : "asc";
     const offset = Math.max(0, Number(qp.get("offset") || body.offset || 0));
     const pageLimit = Math.min(1000, Math.max(10, Number(qp.get("limit") || qp.get("pageLimit") || body.pageLimit || body.limit || 200)));
-    const stationScope = stationId ? [stationId] : ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+    let stationScope;
+    try {
+      stationScope = stationId ? [stationId] : await fetchLiveStationIds(request);
+    } catch (error) {
+      return {
+        status: 503,
+        body: { code: 503, msg: "Station directory unavailable", reason: error instanceof Error ? error.message : String(error) }
+      };
+    }
     const warnings = [];
     const sources = await Promise.all(stationScope.map(async (station) => {
       try {
@@ -3714,8 +3795,19 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const tariffNairaPerKwh = 55;
     const vat = calculateVendingVatBreakdown(amtMinor);
     const unitsKwh = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
+    const accountRows = await fetchLiveAccountPage(request, { meterId }, 1);
+    const account = accountRows?.find((row) => String(row?.meterId || row?.meter_id || "").trim() === meterId);
+    if (!account) return { status: 404, body: { code: 404, msg: "Meter not found", reason: "meter_not_found" } };
+    const stationId = String(account.stationId || account.station_id || "").trim();
+    if (!stationId) return { status: 422, body: { code: 422, msg: "Meter station unavailable", reason: "station_unavailable" } };
     return localJobResponse({
-      meter: { meterId, customerId: `CUST-${meterId.slice(-4)}`, customerName: "Customer " + meterId.slice(-4), stationId: "TUNGA", tariffId: "TARIFF-01" },
+      meter: {
+        meterId,
+        customerId: String(account.customerId || account.customer_id || ""),
+        customerName: String(account.customerName || account.customer_name || ""),
+        stationId,
+        tariffId: String(account.tariffId || account.tariff_id || "TARIFF-01")
+      },
       preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: tariffNairaPerKwh, tariffId: "TARIFF-01" }
     });
   }
@@ -4146,7 +4238,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
 async function runRefreshJob(scope) {
   const control = readAutomationControl();
-  const targets = refreshTargets(scope);
+  const stationIds = scope === "hot" ? [] : await fetchLiveStationIds();
+  const targets = refreshTargets(scope, new Date(), stationIds);
   const results = [];
   for (const target of targets) {
     let attempts = 1;
@@ -4755,8 +4848,10 @@ async function handler(request, response) {
       const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
       const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
       try {
+        const stationIds = await fetchLiveStationIds(request);
         const summary = await refreshGatewayHealth({
           stationId,
+          stationIds,
           fetchPage: (payload) => {
             const rawBody = Buffer.from(JSON.stringify(payload));
             return proxyLive(

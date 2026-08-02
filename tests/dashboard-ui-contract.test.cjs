@@ -24,6 +24,8 @@ assert(cardRule.includes("padding: 14px 14px"), "Dashboard card padding should r
 assert(gridRule.includes("gap: 18px"), "Dashboard card spacing should remain consistent.");
 assert(iconRule.includes("width: 44px"), "Dashboard stat icons should stay compact.");
 assert(valueRule.includes("font-size: clamp(20px, 1.88vw, 28px)"), "Dashboard values should retain desktop hierarchy.");
+assert(valueRule.includes("text-overflow: ellipsis"), "Dashboard values should clamp safely.");
+assert(!css.includes(".dashboard-stat-card--totalPurchaseMoney .dashboard-stat-value"), "Money values should match every KPI value size.");
 assert(css.includes("font-size: 16px"), "Mobile dashboard values should fit without truncation.");
 assert(css.includes("height: 300px; min-height: 280px"), "Mobile charts should remain compact.");
 assert(!modalCss.includes(".dashboard-stat-value"), "Modal CSS must not override dashboard values.");

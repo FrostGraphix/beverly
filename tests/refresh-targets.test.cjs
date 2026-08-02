@@ -2,13 +2,14 @@
 
 const assert = require("assert");
 const { localDateKey, previousDayRange, refreshTargets } = require("../backend/src/services/refresh-targets");
+const stations = ["TUNGA"];
 
 const hot = refreshTargets("hot", new Date("2026-05-07T10:00:00Z"));
-const hourly = refreshTargets("hourly", new Date("2026-05-07T10:00:00Z"));
-const midnight = refreshTargets("hourly", new Date("2026-05-07T00:00:00Z"));
-const dailySyncTarget = refreshTargets("daily", new Date("2026-05-07T23:00:00Z"))
+const hourly = refreshTargets("hourly", new Date("2026-05-07T10:00:00Z"), stations);
+const midnight = refreshTargets("hourly", new Date("2026-05-07T00:00:00Z"), stations);
+const dailySyncTarget = refreshTargets("daily", new Date("2026-05-07T23:00:00Z"), stations)
   .find((target) => target.name === "daily-consumption-sync-tunga");
-const backfillTarget = refreshTargets("backfill", new Date("2026-05-07T23:00:00Z"))
+const backfillTarget = refreshTargets("backfill", new Date("2026-05-07T23:00:00Z"), stations)
   .find((target) => target.name === "historical-consumption-backfill-tunga");
 
 assert(hot.some((target) => target.name === "dashboard-panels"));
@@ -29,7 +30,7 @@ assert.deepStrictEqual(previousDayRange(new Date("2026-05-07T23:00:00Z")), {
   from: "2026-05-07",
   to: "2026-05-07"
 });
-assert(refreshTargets("all").length > hourly.length);
+assert(refreshTargets("all", new Date(), stations).length > hourly.length);
 
 console.log(JSON.stringify({
   hot: hot.length,

@@ -1,26 +1,15 @@
 /**
- * station-registry.mjs
+ * Browser-side station directory.
  *
- * Browser-side view of the canonical station estate.
- *
- * The station list used to be a literal repeated across the CRM bundle, the
- * table mapper, and StationConsumptionPage. Onboarding a station meant editing
- * each copy and shipping a release; anything missed left the new station absent
- * from the UI while the backend already knew about it.
- *
- * The estate is now served by `/api/system/stations`, which reads the same
- * `list_consumption_station_ids()` registry the backend uses. A station appears
- * here the moment its first reading lands — no redeploy.
- *
- * SEED_STATIONS is a rendering floor for first paint and offline failure, not
- * the estate. Never branch on it for correctness.
+ * The directory aggregates every active OEM's live station API.
  */
 
-export const SEED_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
+import { postApi } from "./api.js";
+import { normalizeCollection } from "./response-normalizers.mjs";
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
-let cachedStations = null;
+let cachedOptions = null;
 let cachedAt = 0;
 let inFlight = null;
 
@@ -28,53 +17,68 @@ export function canonicalStationId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-function normalize(values) {
-  const seen = new Set();
-  for (const value of Array.isArray(values) ? values : []) {
-    const id = canonicalStationId(typeof value === "string" ? value : value?.stationId ?? value?.station_id);
-    if (id) seen.add(id);
+function normalize(rows) {
+  const byId = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const stationId = canonicalStationId(
+      typeof row === "string" ? row : row?.stationId ?? row?.station_id ?? row?.id
+    );
+    if (!stationId || stationId === "ADMIN") continue;
+    const name = String(
+      typeof row === "string" ? row : row?.name ?? row?.stationName ?? row?.station_name ?? stationId
+    ).trim();
+    const oemId = String(typeof row === "string" ? "" : row?.oemId ?? row?.oem_id ?? "").trim();
+    const oemName = String(typeof row === "string" ? "" : row?.oemName ?? row?.oem_name ?? "").trim();
+    byId.set(`${oemId}:${stationId}`, {
+      stationId,
+      name: name || stationId,
+      label: oemName ? `${name || stationId} · ${oemName}` : name || stationId,
+      oemId,
+      oemSlug: String(typeof row === "string" ? "" : row?.oemSlug ?? row?.oem_slug ?? "").trim(),
+      oemName,
+      status: String(typeof row === "string" ? "active" : row?.status ?? "active").trim().toLowerCase(),
+    });
   }
-  return [...seen].sort();
+  return [...byId.values()].sort((left, right) => left.label.localeCompare(right.label));
 }
 
-/**
- * Last known estate. Returns the seed until the first successful fetch, so
- * synchronous render paths always have something sensible to draw.
- */
+/** Last successful API result. */
 export function stationsSync() {
-  return cachedStations || SEED_STATIONS;
+  return (cachedOptions || []).map((station) => station.stationId);
 }
 
-/** Current estate, refreshed from the API when the cache is cold. */
-export async function fetchStations({ force = false } = {}) {
-  if (!force && cachedStations && Date.now() - cachedAt < CACHE_TTL_MS) {
-    return cachedStations;
+export function stationOptionsSync() {
+  return cachedOptions || [];
+}
+
+/** Current multi-OEM station directory. */
+export async function fetchStationOptions({ force = false } = {}) {
+  if (!force && cachedOptions && Date.now() - cachedAt < CACHE_TTL_MS) {
+    return cachedOptions;
   }
   if (inFlight) return inFlight;
 
   inFlight = (async () => {
     try {
-      const response = await fetch("/api/system/stations", {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (response.ok) {
-        const body = await response.json();
-        const stations = normalize(body?.stations ?? body?.data?.stations);
-        if (stations.length) {
-          cachedStations = stations;
-          cachedAt = Date.now();
-        }
-      }
-    } catch {
-      // Offline or endpoint unavailable — keep the last known estate rather
-      // than collapsing the UI to an empty station list.
+      const response = await postApi("/api/local/stations", {});
+      const options = normalize(normalizeCollection(response).rows);
+      if (!options.length) throw new Error("Station API returned no stations");
+      cachedOptions = options;
+      cachedAt = Date.now();
+      return cachedOptions;
+    } catch (error) {
+      if (cachedOptions) return cachedOptions;
+      throw error;
     } finally {
       inFlight = null;
     }
-    return cachedStations || SEED_STATIONS;
   })();
 
   return inFlight;
+}
+
+export async function fetchStations(options = {}) {
+  return (await fetchStationOptions(options)).map((station) => station.stationId);
 }
 
 export function isKnownStation(stationId) {
@@ -83,6 +87,6 @@ export function isKnownStation(stationId) {
 }
 
 export function invalidateStations() {
-  cachedStations = null;
+  cachedOptions = null;
   cachedAt = 0;
 }

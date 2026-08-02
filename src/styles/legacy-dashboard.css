@@ -144,7 +144,7 @@
   max-width: 100%;
   font-family: var(--bev-font-mono);
   color: var(--text-strong);
-  font-size: clamp(19px, 1.8vw, 27px);
+  font-size: clamp(20px, 1.88vw, 28px);
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -153,10 +153,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.dashboard-stat-card--totalPurchaseMoney .dashboard-stat-value {
-  font-size: clamp(16px, 1.5vw, 22px);
-  letter-spacing: -0.05em;
 }
 .dashboard-stat-symbol {
   display: inline-block;
@@ -322,17 +318,11 @@
   .dashboard-stat-value {
     font-size: clamp(17px, 1.55vw, 22px);
   }
-  .dashboard-stat-card--totalPurchaseMoney .dashboard-stat-value {
-    font-size: clamp(15px, 1.28vw, 19px);
-  }
 }
 
 @media (min-width: 1441px) {
   .dashboard-stat-value {
     font-size: clamp(20px, 1.65vw, 28px);
-  }
-  .dashboard-stat-card--totalPurchaseMoney .dashboard-stat-value {
-    font-size: clamp(18px, 1.38vw, 24px);
   }
 }
 
@@ -388,13 +378,9 @@
     font-size: 16px;
     letter-spacing: -0.045em;
     line-height: 1.05;
-    overflow: visible;
-    text-overflow: clip;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
-  }
-  .dashboard-stat-card--totalPurchaseMoney .dashboard-stat-value {
-    font-size: 14px;
-    letter-spacing: -0.055em;
   }
   .dashboard-chart-card { padding: 12px; border-radius: 8px; }
   .dashboard-chart-wide { margin-bottom: 12px; }

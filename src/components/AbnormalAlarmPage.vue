@@ -85,8 +85,12 @@
         </div>
         <div class="alarm-ledger-tools">
           <div class="alarm-view-switch" role="group" aria-label="Alarm result view">
-            <BaseButton size="sm" :class="{ active: viewMode === 'cards' }" :aria-pressed="viewMode === 'cards'" @click="setViewMode('cards')">Cards</BaseButton>
-            <BaseButton size="sm" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="setViewMode('table')">Table</BaseButton>
+            <BaseButton size="sm" aria-label="List view" title="List view" :class="{ active: viewMode === 'list' }" :aria-pressed="viewMode === 'list'" @click="setViewMode('list')">
+              <svg class="alarm-view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>
+            </BaseButton>
+            <BaseButton size="sm" aria-label="Table view" title="Table view" :class="{ active: viewMode === 'table' }" :aria-pressed="viewMode === 'table'" @click="setViewMode('table')">
+              <svg class="alarm-view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM3 10h18M3 16h18M9 4v16M15 4v16" /></svg>
+            </BaseButton>
           </div>
           <div class="alarm-source">
             <span>Source</span>
@@ -130,7 +134,7 @@
 
       </div>
 
-      <div v-else class="alarm-card-list" aria-label="Alarm cards">
+      <div v-else class="alarm-card-list" aria-label="Alarm list">
         <article v-for="row in rows" :key="rowKey(row)" class="alarm-card">
           <header>
             <div><span :class="['alarm-pill', row.severity]">{{ row.severity }}</span><h3>{{ row.alarmLabel }}</h3></div>
@@ -185,7 +189,7 @@ export default {
   data() {
     return {
       rows: [], total: 0, summary: {}, meta: {}, loading: false, error: "", selected: null,
-      viewMode: typeof window !== "undefined" && window.innerWidth <= 680 ? "cards" : "table",
+      viewMode: typeof window !== "undefined" && window.innerWidth <= 680 ? "list" : "table",
       stationId: "", alarmType: "", severity: "", searchTerm: "", page: 1, pageSize: 20,
       from: dateInput(Date.now() - (7 * DAY)), to: dateInput(Date.now()),
       exportRange: "30d", exportLoading: false, exportError: "",
@@ -227,7 +231,7 @@ export default {
     handleResize() {
       if (!this.userToggledView && typeof window !== "undefined") {
         if (window.innerWidth <= 680 && this.viewMode === "table") {
-          this.viewMode = "cards";
+          this.viewMode = "list";
         }
       }
     },
@@ -543,7 +547,7 @@ export default {
 }
 
 .alarm-view-switch button {
-  min-width: 68px;
+  min-width: 40px;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -557,6 +561,11 @@ export default {
   align-items: center;
   justify-content: center;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+.alarm-view-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .alarm-view-switch button.active {

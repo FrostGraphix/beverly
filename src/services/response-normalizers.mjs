@@ -31,7 +31,7 @@ export function envelopeSources(payload) {
   ];
 }
 
-const collectionFields = ["records", "list", "data", "items", "rows", "payments", "readings"];
+const collectionFields = ["records", "list", "data", "items", "rows", "stations", "payments", "readings"];
 
 export function normalizeEnvelope(payload) {
   if (Array.isArray(payload)) {

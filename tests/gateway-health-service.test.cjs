@@ -35,7 +35,7 @@ function gatewayResponse(status, updateDate) {
 }
 
 (async () => {
-  assert.equal(normalizeGateway({ gatewayId: "GW-2", gatewayName: "UMAISHA_2", stationId: "admin" }).stationId, "UMAISHA");
+  assert.equal(normalizeGateway({ gatewayId: "GW-2", gatewayName: "UMAISHA_2", stationId: "admin" }, ["UMAISHA"]).stationId, "UMAISHA");
 
   // Dynamic derivation test: gateway with "NEWSTATION_1" name and "admin" stationId should infer "NEWSTATION"
   // when "NEWSTATION" is present in live stationId list from another gateway row.

@@ -3,6 +3,7 @@
 Status: release blocked.
 
 Read first:
+- [Master Playbook](docs/MASTER_PLAYBOOK.md)
 - [Release Status](docs/RELEASE_STATUS.md)
 - [Production Gap Analysis](docs/PRODUCTION_GAP_ANALYSIS.md)
 - [Architecture](ARCHITECTURE.md)
