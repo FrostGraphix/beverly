@@ -20,6 +20,7 @@
  * `scope_id?: string` signature did whenever the caller left it undefined.
  */
 import { adminClient } from '../db/supabase.js';
+import { listStations } from './token-engine.js';
 
 export type PeriodType = 'day' | 'week' | 'month' | 'year';
 export type ScopeType  = 'meter' | 'station' | 'cumulative';
@@ -177,10 +178,11 @@ export interface ConsumptionRefreshResult {
     stations: ConsumptionRefreshStationResult[];
 }
 
-const DEFAULT_REFRESH_STATIONS = ['KYAKALE', 'MUSHA', 'UMAISHA', 'TUNGA', 'OGUFA'];
+export const DEFAULT_REFRESH_STATIONS = ['TUNGA', 'UMAISHA', 'OGUFA', 'KYAKALE', 'MUSHA'];
 
-function normalizeRefreshStations(stationIds?: string[]): string[] {
-    const ids = (stationIds?.length ? stationIds : DEFAULT_REFRESH_STATIONS)
+async function resolveRefreshStations(stationIds?: string[]): Promise<string[]> {
+    const source = stationIds?.length ? stationIds : (await listStations()).map((station) => station.stationId);
+    const ids = (source.length ? source : DEFAULT_REFRESH_STATIONS)
         .map((value) => String(value ?? '').trim().toUpperCase())
         .filter(Boolean);
     return [...new Set(ids)];
@@ -188,7 +190,7 @@ function normalizeRefreshStations(stationIds?: string[]): string[] {
 
 export async function refreshConsumptionAggregates(stationIds?: string[]): Promise<ConsumptionRefreshResult> {
     const t0 = Date.now();
-    const stationList = normalizeRefreshStations(stationIds);
+    const stationList = await resolveRefreshStations(stationIds);
     if (!stationList.length) throw new Error('Consumption refresh requires at least one station');
 
     const stations: ConsumptionRefreshStationResult[] = [];
