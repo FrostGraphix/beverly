@@ -7,7 +7,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-const adminRoute = read("backend/wallet/src/routes/admin.ts");
+const adminRoute = read("backend/wallet/src/routes/admin.ts") + read("backend/wallet/src/routes/admin-reports.ts");
 const reportsView = read("apps/admin/src/views/Reports.vue");
 const reportPdf = read("apps/admin/src/lib/report-pdf.ts");
 
