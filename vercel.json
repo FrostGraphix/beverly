@@ -10,7 +10,6 @@
     },
     "api/receipt-pdf.js": {
       "maxDuration": 60,
-      "memory": 2048,
       "excludeFiles": "{tmp,docs,tests,assets,backend/data,replica-screenshots,source-crawl,legacy-reference-app}/**"
     },
     "api/[...path].js": {
