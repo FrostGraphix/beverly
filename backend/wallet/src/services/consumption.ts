@@ -178,9 +178,11 @@ export interface ConsumptionRefreshResult {
     stations: ConsumptionRefreshStationResult[];
 }
 
+export const DEFAULT_REFRESH_STATIONS = ['TUNGA', 'UMAISHA', 'OGUFA', 'KYAKALE', 'MUSHA'];
+
 async function resolveRefreshStations(stationIds?: string[]): Promise<string[]> {
     const source = stationIds?.length ? stationIds : (await listStations()).map((station) => station.stationId);
-    const ids = source
+    const ids = (source.length ? source : DEFAULT_REFRESH_STATIONS)
         .map((value) => String(value ?? '').trim().toUpperCase())
         .filter(Boolean);
     return [...new Set(ids)];
