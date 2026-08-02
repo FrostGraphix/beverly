@@ -78,6 +78,9 @@ const schema = z.object({
 
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM: z.string().default('Beverly <noreply@acoblighting.com>'),
+    VAPID_PUBLIC_KEY: z.string().min(40).optional(),
+    VAPID_PRIVATE_KEY: z.string().min(20).optional(),
+    VAPID_SUBJECT: z.string().default('mailto:wallet@acoblighting.com'),
     // Absolute base URL this backend is deployed at, used to build the
     // /assets/beverly-logo.png link embedded in transactional emails
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
@@ -103,6 +106,13 @@ const schema = z.object({
     // Approved database policies own the rate. This value is the outage fallback.
     VENDING_VAT_BASIS_POINTS: z.coerce.number().int().min(0).max(10_000).default(VENDING_VAT_BASIS_POINTS),
 }).superRefine((values, context) => {
+    if (Boolean(values.VAPID_PUBLIC_KEY) !== Boolean(values.VAPID_PRIVATE_KEY)) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['VAPID_PUBLIC_KEY'],
+            message: 'VAPID public and private keys must be configured together.',
+        });
+    }
     if (values.NODE_ENV === 'production' && !values.APP_ENCRYPTION_KEY) {
         context.addIssue({
             code: z.ZodIssueCode.custom,

@@ -20,7 +20,7 @@ import { getBalance } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
-import { listStations, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
+import { listStationDirectory, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
 import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
 import {
     listFaqCategories, listFaqs, upsertFaqCategory, deleteFaqCategory, upsertFaq, deleteFaq,
@@ -39,6 +39,8 @@ import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
 import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
 import { revokePortalSession } from '../services/portal-session.js';
+import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
 import adminDevRoutes from './admin-dev.js';
 import {
     DEFAULT_ROLE_PERMISSIONS,
@@ -47,7 +49,6 @@ import {
     ROLE_LEGACY_NAMES,
     SYSTEM_ROLE_KEYS,
 } from './admin-access-constants.js';
-
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -271,6 +272,13 @@ const OPEN_ADMIN_ROUTES = new Set([
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
     'DELETE /profile-picture',
+    'GET /notifications',
+    'POST /notifications/read-all',
+    'PATCH /notifications/:id/read',
+    'GET /push/config',
+    'POST /push/subscription',
+    'DELETE /push/subscription',
+    'POST /push/test',
 ]);
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
@@ -292,6 +300,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
     'GET /vendors/summary': 'wallet.vendors.review',
+    'GET /vendors/analytics': 'wallet.vendors.review',
     'DELETE /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
     'PATCH /vendors/:id/station': 'wallet.vendors.manage',
@@ -508,17 +517,6 @@ async function stationOwnerIds(stationIds: string[]): Promise<{ vendors: Set<str
     };
 }
 
-async function listStoredStations(): Promise<Array<{ stationId: string; name: string; remark: null }>> {
-    const [{ data: readings }, { data: vendors }] = await Promise.all([
-        adminClient.from('daily_meter_readings').select('station_id').not('station_id', 'is', null).limit(5000),
-        adminClient.from('vendor_organizations').select('operating_stations').limit(1000),
-    ]);
-    const ids = new Set<string>();
-    for (const row of readings ?? []) if ((row as any).station_id) ids.add(String((row as any).station_id).trim().toUpperCase());
-    for (const row of vendors ?? []) for (const id of (row as any).operating_stations ?? []) if (id) ids.add(String(id).trim().toUpperCase());
-    return [...ids].filter(Boolean).sort().map((stationId) => ({ stationId, name: stationId, remark: null }));
-}
-
 async function enforceResourceStation(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     if (OPEN_ADMIN_ROUTES.has(adminRouteKey(req))) return true;
     const stationIds = staffStations(req);
@@ -683,6 +681,120 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions,
             catalog: PERMISSION_CATALOG,
         };
+    });
+
+    fastify.get('/notifications', async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(100).default(20),
+            cursor: z.string().datetime().optional(),
+        }).parse(req.query ?? {});
+        let rowsQuery = adminClient
+            .from('notifications')
+            .select('id, type, title, body, metadata, read, created_at')
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .order('created_at', { ascending: false })
+            .limit(query.limit);
+        if (query.cursor) rowsQuery = rowsQuery.lt('created_at', query.cursor);
+        const [{ data, error }, { count, error: countError }] = await Promise.all([
+            rowsQuery,
+            adminClient
+                .from('notifications')
+                .select('id', { count: 'exact', head: true })
+                .eq('recipient_type', 'staff')
+                .eq('recipient_id', req.actor!.userId)
+                .eq('read', false),
+        ]);
+        if (error) throw error;
+        if (countError) throw countError;
+        const notifications = data ?? [];
+        return {
+            notifications,
+            nextCursor: notifications.length === query.limit ? notifications.at(-1)?.created_at ?? null : null,
+            unreadCount: count ?? 0,
+        };
+    });
+
+    fastify.post('/notifications/read-all', async (req) => {
+        const { error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .eq('read', false);
+        if (error) throw error;
+        return { ok: true };
+    });
+
+    fastify.patch('/notifications/:id/read', async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { data, error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id)
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return reply.code(404).send({ error: 'not_found', message: 'Notification not found.' });
+        return { ok: true };
+    });
+
+    fastify.get('/push/config', async () => pushConfig());
+
+    fastify.post('/push/subscription', async (req) => {
+        const body = z.object({
+            portal: z.enum(['admin', 'crm']),
+            endpoint: z.string().url().max(2048),
+            keys: z.object({
+                p256dh: z.string().min(20).max(512),
+                auth: z.string().min(8).max(256),
+            }),
+        }).parse(req.body ?? {});
+        await savePushSubscription({
+            actorType: 'staff',
+            actorId: req.actor!.userId,
+            portal: body.portal,
+            subscription: body,
+            userAgent: req.headers['user-agent'],
+        });
+        return { ok: true };
+    });
+
+    fastify.delete('/push/subscription', async (req) => {
+        const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
+        await removePushSubscription({ actorType: 'staff', actorId: req.actor!.userId, endpoint });
+        return { ok: true };
+    });
+
+    fastify.post('/push/test', async (req, reply) => {
+        const { portal } = z.object({ portal: z.enum(['admin', 'crm']) }).parse(req.body ?? {});
+        if (!pushConfig().available) {
+            return reply.code(503).send({ error: 'push_unavailable', message: 'Push notifications are not configured.' });
+        }
+        const now = new Date().toISOString();
+        await insertAnnouncementNotifications([{
+            customer_id: null,
+            recipient_type: 'staff',
+            recipient_id: req.actor!.userId,
+            type: 'push_test',
+            title: 'Beverly notifications enabled',
+            body: 'This device can receive operational updates.',
+            metadata: { path: '/notifications', portal },
+            read: false,
+            created_at: now,
+        }]);
+        const delivery = await sendWebPush('staff', req.actor!.userId, {
+            title: 'Beverly notifications enabled',
+            body: 'This device can receive operational updates.',
+            url: portal === 'admin' ? './notifications' : './',
+            tag: `beverly-${portal}-push-test`,
+        }, portal);
+        if (!delivery.sent) {
+            return reply.code(409).send({ error: 'push_subscription_missing', message: 'No active subscription exists for this device.' });
+        }
+        return { ok: true, delivery };
     });
 
     fastify.post('/logout', async (req) => {
@@ -1104,8 +1216,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const force = (req.query as { refresh?: string }).refresh === '1';
         try {
             const assignedStations = staffStations(req);
-            const stored = await listStoredStations();
-            const source = force || !stored.length ? await listStations({ force }) : stored;
+            const source = await listStationDirectory({ force });
             const stations = source.filter((station) => !assignedStations || assignedStations.includes(station.stationId.toUpperCase()));
             return { stations, count: stations.length };
         } catch (e: any) {
@@ -1122,7 +1233,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/stations/refresh', async () => {
         invalidateStationsCache();
-        const stations = await listStations({ force: true });
+        const stations = await listStationDirectory({ force: true });
         return { ok: true, count: stations.length };
     });
 
@@ -3188,32 +3299,56 @@ const route: FastifyPluginAsync = async (fastify) => {
         return String(iso).slice(0, 10);
     }
 
-    async function gatherReportData(sinceIso: string, untilIso: string, stationIds?: string[]) {
+    type ReportAudience = 'all' | 'vendor' | 'customer';
+    type ReportFamily = 'financial' | 'transactions' | 'vendors-wallets' | 'audit' | 'disputes' | 'general';
+
+    const reportAudienceSchema = z.enum(['all', 'vendor', 'customer']);
+    const reportFamilySchema = z.enum(['financial', 'transactions', 'vendors-wallets', 'audit', 'disputes', 'general']);
+
+    async function gatherReportData(sinceIso: string, untilIso: string, audience: ReportAudience, family: ReportFamily, stationIds?: string[]) {
         const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
-        const purchasesQuery = inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, fee_minor, status, created_at, actor_type, station_id'));
+        const readRows = async (source: string, query: PromiseLike<{ data: any[] | null; error: { message: string } | null }>) => {
+            const { data, error } = await query;
+            if (error) throw new Error(`${source} report query failed: ${error.message}`);
+            return data ?? [];
+        };
+
+        let purchasesQuery = inRange(adminClient.from('purchase_orders').select('amount_minor, energy_amount_minor, vat_amount_minor, status, created_at, actor_type, station_id'));
+        if (audience !== 'all') purchasesQuery = purchasesQuery.eq('actor_type', audience);
         if (stationIds) purchasesQuery.in('station_id', stationIds);
-        const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents] = await Promise.all([
-            purchasesQuery.limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('funding_requests').select('amount_minor, channel, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('customers').select('created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('settlement_batches').select('gross_amount_minor, fee_minor, net_amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('wallet_audit_log').select('action, actor_type, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('wallet_security_events').select('event_type, severity, created_at')).limit(50_000).then((r: any) => r.data ?? []),
+
+        let fundingQuery = inRange(adminClient.from('payment_transactions').select('amount_minor, created_at, actor_type').eq('purpose', 'wallet_funding').in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)));
+        if (audience !== 'all') fundingQuery = fundingQuery.eq('actor_type', audience);
+
+        let refundsQuery = inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at, wallets!inner(owner_type)'));
+        if (audience !== 'all') refundsQuery = refundsQuery.eq('wallets.owner_type', audience);
+
+        let disputesQuery = inRange(adminClient.from('disputes').select('status, created_at, raised_by_actor_type'));
+        if (audience !== 'all') disputesQuery = disputesQuery.eq('raised_by_actor_type', audience);
+
+        const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements, auditLogs, securityEvents] = await Promise.all([
+            readRows('Purchases', purchasesQuery.limit(50_000)),
+            readRows('Funding', fundingQuery.limit(50_000)),
+            family !== 'vendors-wallets' || audience === 'customer' ? Promise.resolve([]) : readRows('Funding requests', inRange(adminClient.from('funding_requests').select('amount_minor, channel, status, created_at')).limit(50_000)),
+            readRows('Refunds', refundsQuery.limit(50_000)),
+            readRows('Disputes', disputesQuery.limit(50_000)),
+            audience === 'vendor' ? Promise.resolve([]) : readRows('Customers', inRange(adminClient.from('customers').select('created_at')).limit(50_000)),
+            audience === 'customer' ? Promise.resolve([]) : readRows('Vendors', inRange(adminClient.from('vendor_organizations').select('created_at')).limit(50_000)),
+            audience === 'customer' ? Promise.resolve([]) : readRows('Settlements', inRange(adminClient.from('settlement_batches').select('gross_amount_minor, fee_minor, net_amount_minor, status, created_at')).limit(50_000)),
+            family === 'audit' ? readRows('Audit logs', inRange(adminClient.from('wallet_audit_log').select('action, actor_type, created_at')).limit(50_000)) : Promise.resolve([]),
+            family === 'audit' ? readRows('Security events', inRange(adminClient.from('wallet_security_events').select('event_type, severity, created_at')).limit(50_000)) : Promise.resolve([]),
         ]);
-        return { purchases, funding, fundingRequests, refunds, disputes, newCustomers, settlements, auditLogs, securityEvents } as Record<string, any[]>;
+        return { purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements, auditLogs, securityEvents } as Record<string, any[]>;
     }
 
-    function buildReport(sinceIso: string, untilIso: string, days: number, d: Record<string, any[]>) {
+    function buildReport(sinceIso: string, untilIso: string, days: number, audience: ReportAudience, d: Record<string, any[]>) {
         const num = (v: unknown) => Number(v ?? 0);
         const delivered = d.purchases.filter((p) => p.status === 'delivered');
         const failed = d.purchases.filter((p) => p.status === 'failed');
         const revenueMinor = delivered.reduce((s, p) => s + num(p.amount_minor), 0);
         const energyRevenueMinor = delivered.reduce((s, p) => s + num(p.energy_amount_minor ?? p.amount_minor), 0);
         const vatMinor = delivered.reduce((s, p) => s + num(p.vat_amount_minor), 0);
-        const feeMinor = delivered.reduce((s, p) => s + num(p.fee_minor), 0);
+        const feeMinor = 0;
         const fundingApprovedMinor = d.funding.reduce((s, p) => s + num(p.amount_minor), 0);
         const approvedRefunds = d.refunds.filter((r) => r.status === 'approved');
         const refundApprovedMinor = approvedRefunds.reduce((s, r) => s + num(r.amount_minor), 0);
@@ -3222,11 +3357,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         const processed = delivered.length + failed.length;
 
         // Daily buckets (zero-filled across the range)
-        const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number; auditLogsCount: number; securityEventsCount: number }>();
+        const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount: number; securityEventsCount: number }>();
         const startMs = new Date(sinceIso).getTime();
         for (let i = 0; i < days; i++) {
             const key = dayKey(new Date(startMs + i * 86400_000).toISOString());
-            buckets.set(key, { date: key, revenueMinor: 0, energyRevenueMinor: 0, vatMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0, auditLogsCount: 0, securityEventsCount: 0 });
+            buckets.set(key, { date: key, revenueMinor: 0, energyRevenueMinor: 0, vatMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, newVendors: 0, refundMinor: 0, auditLogsCount: 0, securityEventsCount: 0 });
         }
         const touch = (iso: string) => buckets.get(dayKey(iso));
         for (const p of delivered) {
@@ -3240,6 +3375,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         for (const f of d.funding) { const b = touch(f.created_at); if (b) b.fundingMinor += num(f.amount_minor); }
         for (const c of d.newCustomers) { const b = touch(c.created_at); if (b) b.newCustomers += 1; }
+        for (const v of d.newVendors) { const b = touch(v.created_at); if (b) b.newVendors += 1; }
         for (const r of approvedRefunds) { const b = touch(r.created_at); if (b) b.refundMinor += num(r.amount_minor); }
         for (const log of (d.auditLogs || [])) { const b = touch(log.created_at); if (b) b.auditLogsCount += 1; }
         for (const e of (d.securityEvents || [])) { const b = touch(e.created_at); if (b) b.securityEventsCount += 1; }
@@ -3285,6 +3421,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
 
         return {
+            audience,
             range: { since: sinceIso, until: untilIso, days },
             kpis: {
                 revenueMinor,
@@ -3305,6 +3442,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 refundCount: d.refunds.length,
                 disputesOpened: d.disputes.length,
                 newCustomers: d.newCustomers.length,
+                newVendors: d.newVendors.length,
                 auditLogsCount: (d.auditLogs || []).length,
                 securityEventsCount: (d.securityEvents || []).length,
                 securityAlertsHigh: (d.securityEvents || []).filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
@@ -3329,6 +3467,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 refunds: d.refunds.length,
                 disputes: d.disputes.length,
                 customers: d.newCustomers.length,
+                vendorOrganizations: d.newVendors.length,
                 settlements: d.settlements.length,
                 auditLogs: (d.auditLogs || []).length,
                 securityEvents: (d.securityEvents || []).length,
@@ -3336,23 +3475,42 @@ const route: FastifyPluginAsync = async (fastify) => {
         };
     }
 
-    fastify.get('/reports/overview', async (req) => {
+    fastify.get('/reports/overview', async (req, reply) => {
+        const audienceResult = reportAudienceSchema.safeParse((req.query as { audience?: string }).audience ?? 'all');
+        if (!audienceResult.success) return reply.code(400).send({ error: 'invalid_report_audience', message: 'Audience must be all, vendor, or customer.' });
+        const familyResult = reportFamilySchema.safeParse((req.query as { family?: string }).family ?? 'financial');
+        if (!familyResult.success) return reply.code(400).send({ error: 'invalid_report_family', message: 'The requested report type is invalid.' });
         const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso, staffStations(req) ?? undefined);
-        return buildReport(sinceIso, untilIso, days, data);
+        try {
+            const data = await gatherReportData(sinceIso, untilIso, audienceResult.data, familyResult.data, staffStations(req) ?? undefined);
+            return buildReport(sinceIso, untilIso, days, audienceResult.data, data);
+        } catch (error) {
+            req.log.error({ err: error, audience: audienceResult.data }, 'report overview query failed');
+            return reply.code(502).send({ error: 'reports_unavailable', message: 'Reports could not be loaded. Please retry.' });
+        }
     });
 
     fastify.get('/reports/export.csv', async (req, reply) => {
+        const audienceResult = reportAudienceSchema.safeParse((req.query as { audience?: string }).audience ?? 'all');
+        if (!audienceResult.success) return reply.code(400).send({ error: 'invalid_report_audience', message: 'Audience must be all, vendor, or customer.' });
+        const familyResult = reportFamilySchema.safeParse((req.query as { family?: string }).family ?? 'financial');
+        if (!familyResult.success) return reply.code(400).send({ error: 'invalid_report_family', message: 'The requested report type is invalid.' });
         const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso, staffStations(req) ?? undefined);
-        const report = buildReport(sinceIso, untilIso, days, data);
-        const header = ['date', 'revenue_minor', 'energy_revenue_minor', 'vat_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers'];
+        let report: ReturnType<typeof buildReport>;
+        try {
+            const data = await gatherReportData(sinceIso, untilIso, audienceResult.data, familyResult.data, staffStations(req) ?? undefined);
+            report = buildReport(sinceIso, untilIso, days, audienceResult.data, data);
+        } catch (error) {
+            req.log.error({ err: error, audience: audienceResult.data }, 'report export query failed');
+            return reply.code(502).send({ error: 'reports_unavailable', message: 'Report export could not be prepared. Please retry.' });
+        }
+        const header = ['date', 'audience', 'revenue_minor', 'energy_revenue_minor', 'vat_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers', 'new_vendors'];
         const csv = [
             header.join(','),
-            ...report.series.daily.map((r) => [r.date, r.revenueMinor, r.energyRevenueMinor, r.vatMinor, r.purchaseCount, r.fundingMinor, r.refundMinor, r.newCustomers].map(csvEscape).join(',')),
+            ...report.series.daily.map((r) => [r.date, audienceResult.data, r.revenueMinor, r.energyRevenueMinor, r.vatMinor, r.purchaseCount, r.fundingMinor, r.refundMinor, r.newCustomers, r.newVendors].map(csvEscape).join(',')),
         ].join('\n');
         reply.header('Content-Type', 'text/csv; charset=utf-8');
-        reply.header('Content-Disposition', `attachment; filename="report-${sinceIso.slice(0, 10)}_${untilIso.slice(0, 10)}.csv"`);
+        reply.header('Content-Disposition', `attachment; filename="report-${audienceResult.data}-${sinceIso.slice(0, 10)}_${untilIso.slice(0, 10)}.csv"`);
         return csv;
     });
 
@@ -3573,8 +3731,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-    // Developer console routes live in admin-dev.ts; they inherit this
-    // plugin's preHandler chain (dev.console permission, MFA, break-glass).
+    await fastify.register(adminVendorAnalyticsRoutes);
     await fastify.register(adminDevRoutes);
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {

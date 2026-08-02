@@ -1390,6 +1390,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!['day', 'week', 'month', 'year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
+        const meterId = String(qs.meter_id ?? '').trim().toUpperCase();
+        if (meterId && !/^[A-Z0-9_-]{3,64}$/.test(meterId)) {
+            return reply.code(400).send({
+                error: 'invalid_meter_id',
+                message: 'Enter a valid meter number.',
+            });
+        }
 
         const customerId = req.actor!.customerId!;
         const meterIds = await customerMeterIds(customerId);
@@ -1400,7 +1407,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
         const rows = await queryConsumption(
             {
                 scope: 'meter',
-                scope_id: qs.meter_id || undefined,
+                scope_id: meterId || undefined,
                 period_type: period,
                 from: qs.from ?? undefined,
                 to: qs.to ?? undefined,

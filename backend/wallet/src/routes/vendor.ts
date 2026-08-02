@@ -1307,7 +1307,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     // for the customers at that site. Authority comes from the actor's station,
     // never from the query string, so a vendor cannot ask for another site.
 
-    fastify.get('/consumption', async (req, reply) => {
+    fastify.get('/consumption', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const actor = vendorActorOrReply(req, reply);
         if (!actor) return undefined;
 
@@ -1320,6 +1320,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         if (!['day', 'week', 'month', 'year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
+        }
+        const meterId = String(qs.meter_id ?? '').trim();
+        if (meterId && !/^[A-Za-z0-9_-]{3,64}$/.test(meterId)) {
+            return reply.code(400).send({
+                error: 'invalid_meter_id',
+                message: 'Enter a valid meter number.',
+            });
         }
         if (!actor.stationId) {
             return reply.code(409).send({
@@ -1334,7 +1341,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 scope,
                 // Meter drill-down stays inside the vendor's own station because
                 // the authority below is ANDed with any scope_id supplied here.
-                scope_id: scope === 'meter' ? (qs.meter_id || undefined) : actor.stationId,
+                scope_id: scope === 'meter' ? (meterId || undefined) : actor.stationId,
                 period_type: period,
                 from: qs.from ?? undefined,
                 to: qs.to ?? undefined,

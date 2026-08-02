@@ -63,6 +63,7 @@ async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; a
     if (oemConfig && oemConfig.baseUrl) {
         return { baseUrl: oemConfig.baseUrl, authHeader: resolveOemAuthHeader(oemConfig) };
     }
+    if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
         authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
@@ -468,6 +469,10 @@ export interface StationInfo {
     stationId: string;
     name: string;
     remark?: string | null;
+    oemId: string | null;
+    oemSlug: string | null;
+    oemName: string | null;
+    status: 'active' | 'disabled';
 }
 
 // Keyed by oemId (default-OEM key '' when none given) so a future second OEM's
@@ -482,9 +487,10 @@ export async function listStations(opts: { force?: boolean; oemId?: string | nul
         return cached.data;
     }
     // Upstream returns: { code, reason, result: { total, data: [{ stationId, name, ... }] } }
+    const owner = await resolveOemConfig(opts.oemId ?? undefined);
     const resp = await energyCall<{
         code?: number;
-        result?: { total?: number; data?: Array<{ stationId: string; name: string; remark?: string | null }> };
+        result?: { total?: number; data?: Array<{ stationId: string; name: string; remark?: string | null; status?: unknown }> };
     }>('/api/station/read', {
         method: 'POST',
         body: JSON.stringify({ pageNumber: 1, pageSize: 500 }),
@@ -493,10 +499,35 @@ export async function listStations(opts: { force?: boolean; oemId?: string | nul
     // Exclude system noise rows (legacy "admin", "0001" placeholder)
     const stations: StationInfo[] = raw
         .filter((s) => s.stationId && s.stationId.toUpperCase() !== 'ADMIN')
-        .map((s) => ({ stationId: s.stationId, name: s.name ?? s.stationId, remark: s.remark ?? null }))
+        .map((s) => ({
+            stationId: s.stationId,
+            name: s.name ?? s.stationId,
+            remark: s.remark ?? null,
+            oemId: owner?.oemId ?? null,
+            oemSlug: owner?.slug ?? null,
+            oemName: owner?.displayName ?? null,
+            status: s.status === false || s.status === 0 || /^(disabled|inactive|offline|deleted)$/i.test(String(s.status ?? ''))
+                ? 'disabled' as const
+                : 'active' as const,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
     stationsCache.set(cacheKey, { at: Date.now(), data: stations });
     return stations;
+}
+
+export async function listStationDirectory(opts: { force?: boolean } = {}): Promise<StationInfo[]> {
+    const { data, error } = await adminClient
+        .from('oem_manufacturers')
+        .select('id')
+        .eq('status', 'active')
+        .order('display_name');
+    if (error) throw new TokenEngineError(error.message, 'oem_directory_unavailable', true);
+    const owners = (data ?? []).map((row) => String(row.id || '').trim()).filter(Boolean);
+    if (!owners.length) return listStations({ force: opts.force });
+    const results = await Promise.allSettled(owners.map((oemId) => listStations({ force: opts.force, oemId })));
+    const stations = results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    if (!stations.length) throw new TokenEngineError('No OEM station directory is available', 'stations_unavailable', true);
+    return stations.sort((left, right) => `${left.oemName}:${left.name}`.localeCompare(`${right.oemName}:${right.name}`));
 }
 
 export function invalidateStationsCache() {
