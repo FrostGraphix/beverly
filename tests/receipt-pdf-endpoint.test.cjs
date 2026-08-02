@@ -89,6 +89,7 @@ assert.strictEqual(handlerModule.fitScaleForHeight(undefined), 1, "unmeasurable 
 // Page counting reads Chromium's uncompressed page tree; /Pages must not be miscounted.
 assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Pages /Count 1 /Type /Page ")), 1);
 assert.strictEqual(handlerModule.pdfPageCount(Buffer.from("/Type /Page /Type /Page ")), 2);
+assert.strictEqual(typeof handlerModule.renderReceiptPdf, "function");
 
 // --- sanitizeModel ---
 assert.strictEqual(handlerModule.sanitizeModel(null, brand), null);
@@ -121,6 +122,12 @@ assert.strictEqual(malformed.fields.length, 1);
 
 // --- handler: method + auth gates (no Chromium involved) ---
 (async () => {
+  const { puppeteer, chromium } = await handlerModule.loadBrowserRuntime(true);
+  assert.strictEqual(typeof puppeteer.launch, "function");
+  assert.strictEqual(typeof puppeteer.defaultArgs, "function");
+  assert.ok(Array.isArray(chromium.args));
+  assert.strictEqual(typeof chromium.executablePath, "function");
+
   const getResponse = mockResponse();
   await handlerModule(mockRequest({ method: "GET" }), getResponse);
   assert.strictEqual(getResponse.statusCode, 405);
