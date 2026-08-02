@@ -9,13 +9,21 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 for (const file of [
   "apps/admin/src/views/CustomerDetail.vue",
-  "apps/admin/src/views/Vending.vue",
-  "apps/admin/src/views/Purchases.vue",
   "apps/admin/src/views/Support.vue",
 ]) {
   const source = read(file);
   assert(source.includes("Table view"), `${file} must expose table view.`);
   assert(!source.includes("List view"), `${file} must not expose list view.`);
+}
+
+for (const file of [
+  "apps/admin/src/views/Vending.vue",
+  "apps/admin/src/views/Purchases.vue",
+]) {
+  const source = read(file);
+  assert(source.includes("WalletDataViewSwitch"), `${file} must expose shared data views.`);
+  assert(source.includes("'table' | 'list'"), `${file} must expose table and list views.`);
+  assert(!source.includes("| 'grid'"), `${file} must not expose grid view.`);
 }
 
 const vending = read("apps/admin/src/views/Vending.vue");

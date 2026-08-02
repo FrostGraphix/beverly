@@ -278,9 +278,8 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
           </header>
           <iframe class="brm-frame" title="Receipt preview"></iframe>
           <footer class="brm-actions">
-            <button class="brm-btn" data-print>Print</button>
             <button class="brm-btn primary" data-pdf>PDF Export</button>
-            <button class="brm-btn" data-close>Close</button>
+            <button class="brm-btn danger" data-close>Cancel</button>
             <span class="brm-status" role="status" aria-live="polite"></span>
           </footer>
         </section>
@@ -296,9 +295,9 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
         .brm-icon:hover,.brm-btn:hover{background:var(--brand-100)}
         .brm-frame{width:100%;height:100%;border:0;background:#050608}
         .brm-btn{min-height:44px;border:1px solid var(--brand-200);border-radius:var(--r-lg);background:var(--brand-50);color:var(--brand-900);padding:9px 14px;font-weight:800;cursor:pointer}.brm-btn:disabled{cursor:wait;opacity:.65}.brm-btn:focus-visible,.brm-icon:focus-visible{outline:0;box-shadow:0 0 0 3px var(--brand-glow),0 0 0 5px var(--brand)}
-        .brm-btn.primary{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-600) 100%);border-color:var(--brand-600);color:oklch(8% 0.04 145);box-shadow:0 4px 12px var(--brand-glow)}.brm-btn.primary:hover{background:linear-gradient(180deg,var(--brand-400) 0%,var(--brand-500) 100%)}.brm-status{width:100%;color:var(--brand-800);font-size:12px;text-align:right}
+        .brm-btn.primary{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-600) 100%);border-color:var(--brand-600);color:oklch(8% 0.04 145);box-shadow:0 4px 12px var(--brand-glow)}.brm-btn.primary:hover{background:linear-gradient(180deg,var(--brand-400) 0%,var(--brand-500) 100%)}.brm-btn.danger{background:#fff1f2;border-color:#fecdd3;color:#be123c}.brm-btn.danger:hover{background:#ffe4e6}.brm-status{width:100%;color:var(--brand-800);font-size:12px;text-align:right}
         .brm-sheet{background:#fff;border-color:var(--brand-200)}.brm-head,.brm-actions{background:#fff;border-color:var(--brand-100)}.brm-head span{color:var(--brand-800)}.brm-head strong{color:var(--brand-900)}.brm-frame{background:var(--brand-50)}
-        @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-status{grid-column:1/-1;text-align:center}.brm-print-icon{width:38px;height:38px}}
+        @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-status{grid-column:1/-1;text-align:center}.brm-print-icon{width:38px;height:38px}}
       </style>`;
     document.body.appendChild(host);
     const frame = host.querySelector<HTMLIFrameElement>('.brm-frame');
@@ -345,7 +344,6 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
         frame.srcdoc = html;
     }
     host.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', cleanup));
-    host.querySelector('[data-print]')?.addEventListener('click', printFrame);
     host.querySelector('[data-pdf]')?.addEventListener('click', async (event) => {
         const button = event.currentTarget as HTMLButtonElement;
         const status = host.querySelector<HTMLElement>('.brm-status');
