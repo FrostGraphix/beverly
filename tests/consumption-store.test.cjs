@@ -269,9 +269,20 @@ const response = await store.readDailyMeterRows({
 
 assert.strictEqual(response.status, 200);
 assert.strictEqual(response.body._proxy.source, "supabase-consumption");
-assert.strictEqual(response.body.result.total, 1);
+// readDailyMeterRows no longer selects row_json in any mode. It used to, for
+// non-compact reads, but the nightly retention job blanks row_json after 7
+// days, so those reads returned zero rows for ~89% of the table and silently
+// fell through to the upstream proxy. Both modes now project the persisted
+// scalar columns, which are populated for every row regardless of age — so
+// this read resolves against the same two-row fixture the compact path uses.
+assert.strictEqual(response.body.result.total, 2);
 assert.strictEqual(response.body.result.data[0].meterId, "M-1");
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("reading_date=gte.2026-05-07")));
+// Regression guard: no read path may request row_json again.
+assert(
+  !requests.some((request) => request.kind === "read" && request.pathname.includes("select=row_json")),
+  "readDailyMeterRows must not select row_json — the column is retention-blanked and being retired"
+);
 
 const report = await store.dailyMeterTableReport(["TUNGA"]);
 assert.strictEqual(report.enabled, true);

@@ -318,13 +318,17 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
 
   const pageNumber = Math.max(1, Number(request.pageNumber || 1));
   const pageSize = Math.max(1, Math.min(Number(request.pageSize || 5000), 5000));
-  const compact = request.compact === true || request.compact === "true";
   const offset = (pageNumber - 1) * pageSize;
   const rangeEnd = offset + pageSize - 1;
+  // row_json is no longer read. It carried the raw OEM payload, but the nightly
+  // retention job blanks it after 7 days, so it was already absent from ~89% of
+  // rows: a non-compact read of anything older returned zero rows and silently
+  // fell through to the upstream proxy. Both modes now reconstruct from the
+  // persisted scalar columns, which are populated for every row regardless of
+  // age. This also removes the last reader of row_json, allowing the column to
+  // be blanked and eventually dropped.
   const query = [
-    compact
-      ? "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1"
-      : "select=row_json",
+    "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1",
     `station_id=eq.${encodeURIComponent(stationId)}`,
     `reading_date=gte.${encodeURIComponent(from)}`,
     `reading_date=lte.${encodeURIComponent(to)}`,
@@ -338,19 +342,16 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
     },
   });
   const rows = (Array.isArray(body) ? body : [])
-    .map((row) => {
-      if (!compact) return row.row_json || {};
-      return {
-        stationId: row.station_id,
-        meterId: row.meter_id,
-        customerId: row.customer_id,
-        customerName: row.customer_name,
-        currentDate: row.reading_date,
-        total1: row.total1,
-        remain1: row.remain1,
-      };
-    })
-    .filter((row) => Object.keys(row).length);
+    .map((row) => ({
+      stationId: row.station_id,
+      meterId: row.meter_id,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      currentDate: row.reading_date,
+      total1: row.total1,
+      remain1: row.remain1,
+    }))
+    .filter((row) => row.stationId || row.meterId);
   if (!rows.length) return null;
   const total = totalFromContentRange(response.headers.get("content-range"), rows.length);
   return {
