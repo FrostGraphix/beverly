@@ -66,10 +66,6 @@ async function continueFromDetails() {
         return;
     }
     error.value = null;
-    if (accountMode.value === 'phone') {
-        await submitPhone();
-        return;
-    }
     step.value = 'password';
     nextTick(() => passwordInput.value?.focus());
 }
@@ -79,7 +75,55 @@ function backToDetails() {
     step.value = 'details';
 }
 
-async function submitPhone() {
+async function submitPassword() {
+    if (accountMode.value === 'email') {
+        await submitEmail();
+    } else {
+        await submitPhonePassword();
+    }
+}
+
+async function submitPhonePassword() {
+    const validationError = validatePassword();
+    if (validationError) {
+        error.value = validationError;
+        errorCode.value = null;
+        return;
+    }
+    loading.value = true;
+    error.value = null;
+    errorCode.value = null;
+    try {
+        const normalised = normaliseNigerianPhone(phone.value);
+        const r = await api.post<{ access_token: string; refresh_token?: string | null; expires_at?: number | null; expires_in?: number | null; customer: any; is_new: boolean }>('/api/v1/customer/auth/phone/signup', {
+            phone: normalised,
+            password: password.value,
+            full_name: fullName.value.trim(),
+            email: email.value.trim() || undefined,
+        });
+        auth.setSession(r.access_token, r.customer, true, {
+            refreshToken: r.refresh_token,
+            expiresAt: r.expires_at,
+            expiresIn: r.expires_in,
+        });
+        await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+    } catch (e: any) {
+        handleError(e);
+        if (errorCode.value === 'email_in_use' || errorCode.value === 'phone_in_use') {
+            step.value = 'details';
+        }
+    } finally {
+        loading.value = false;
+    }
+}
+
+async function submitPhoneOtp() {
+    const validationError = validateDetails();
+    if (validationError) {
+        error.value = validationError;
+        errorCode.value = null;
+        return;
+    }
     loading.value = true;
     error.value = null;
     errorCode.value = null;
@@ -131,7 +175,11 @@ async function submitEmail() {
             expiresAt: r.expires_at,
             expiresIn: r.expires_in,
         });
-        await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+        if (!r.customer?.email_verified_at) {
+            await router.replace('/verify-email');
+        } else {
+            await router.replace(r.customer.kyc_tier === 0 ? '/kyc' : '/');
+        }
     } catch (e: any) {
         handleError(e);
         if (errorCode.value === 'email_in_use' || errorCode.value === 'phone_in_use') {
@@ -169,7 +217,7 @@ function handleError(e: any) {
     compact
   >
     <template #header-accessory>
-      <div v-if="accountMode === 'email'" class="step-indicator" aria-label="Signup progress">
+      <div class="step-indicator" aria-label="Signup progress">
         <div class="step-dot" :class="{ 'step-dot--active': step === 'details', 'step-dot--done': step === 'password' }">1</div>
         <div class="step-line" :class="{ 'step-line--done': step === 'password' }" />
         <div class="step-dot" :class="{ 'step-dot--active': step === 'password' }">2</div>
@@ -179,10 +227,9 @@ function handleError(e: any) {
     <form class="auth-form" @submit.prevent novalidate>
       <div class="mode-switch" role="tablist" aria-label="Signup method">
         <button type="button" :class="{ active: accountMode === 'email' }" @click="switchMode('email')">Email account</button>
-        <button type="button" :class="{ active: accountMode === 'phone' }" @click="switchMode('phone')">Phone OTP</button>
+        <button type="button" :class="{ active: accountMode === 'phone' }" @click="switchMode('phone')">Phone account</button>
       </div>
 
-      <!-- Step indicator (email mode only — phone mode's second step is the OTP screen) -->
       <!-- STEP 1: details -->
       <template v-if="step === 'details'">
         <div class="field">
@@ -225,7 +272,7 @@ function handleError(e: any) {
               @keydown.enter.prevent="continueFromDetails"
             />
           </div>
-          <p class="field-hint">{{ accountMode === 'phone' ? 'This will receive your OTP.' : 'Optional for account recovery.' }}</p>
+          <p class="field-hint">{{ accountMode === 'phone' ? 'Your primary login phone number.' : 'Optional for account recovery.' }}</p>
         </div>
 
         <!-- Email -->
@@ -259,11 +306,14 @@ function handleError(e: any) {
 
         <button class="bw-btn primary lg auth-btn" type="button" :disabled="loading" @click="continueFromDetails">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-          {{ loading ? 'Sending code…' : accountMode === 'email' ? 'Continue' : 'Send code' }}
+          {{ loading ? 'Processing…' : 'Continue' }}
+        </button>
+        <button v-if="accountMode === 'phone'" class="bw-btn secondary lg auth-btn" type="button" style="margin-top: 8px;" :disabled="loading" @click="submitPhoneOtp">
+          Send SMS OTP Instead
         </button>
       </template>
 
-      <!-- STEP 2: password (email mode only) -->
+      <!-- STEP 2: password -->
       <template v-else>
         <button type="button" class="step-back" @click="backToDetails">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -303,7 +353,7 @@ function handleError(e: any) {
             placeholder="Re-enter your password"
             :disabled="loading"
             @input="error = null"
-            @keydown.enter.prevent="submitEmail"
+            @keydown.enter.prevent="submitPassword"
           />
         </div>
 
@@ -315,7 +365,7 @@ function handleError(e: any) {
           <span>{{ error }}</span>
         </div>
 
-        <button class="bw-btn primary lg auth-btn" type="button" :disabled="loading" @click="submitEmail">
+        <button class="bw-btn primary lg auth-btn" type="button" :disabled="loading" @click="submitPassword">
           <span v-if="loading" class="btn-spinner" aria-hidden="true" />
           {{ loading ? 'Creating account...' : 'Create account' }}
         </button>
