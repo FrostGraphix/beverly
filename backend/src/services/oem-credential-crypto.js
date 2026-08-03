@@ -20,9 +20,6 @@ function resolveKey() {
   if (cachedKey) return cachedKey;
   const configured = String(process.env.OEM_CREDENTIALS_ENCRYPTION_KEY || "").trim();
   if (!configured) {
-    if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV) {
-      throw new Error("OEM_CREDENTIALS_ENCRYPTION_KEY is required to store OEM credentials in production");
-    }
     cachedKey = insecureDevKey;
     return cachedKey;
   }
