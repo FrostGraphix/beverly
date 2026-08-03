@@ -28,14 +28,14 @@ function saveDraft() {
         step: t1Index.value,
     };
     try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
         draftSaved.value = true;
         setTimeout(() => { draftSaved.value = false; }, 2000);
     } catch { /* storage unavailable */ }
 }
 
 function clearDraft() {
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     draftExists.value = false;
 }
 
@@ -67,7 +67,7 @@ watch([fullName, dob, address, state, lga, t1Index], () => {
     // Only auto-save once something meaningful is entered
     if (fullName.value || dob.value || address.value) {
         try {
-            localStorage.setItem(DRAFT_KEY, JSON.stringify({
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
                 fullName: fullName.value, dob: dob.value,
                 address: address.value, state: state.value, lga: lga.value,
                 step: t1Index.value,
@@ -98,7 +98,7 @@ const dobMax = computed(() =>
 onMounted(() => {
     if (tier.value >= 1) return; // Tier 1 already done — no draft needed
     try {
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) return;
         const draft: T1Draft = JSON.parse(raw);
         if (draft.fullName || draft.dob || draft.address) {

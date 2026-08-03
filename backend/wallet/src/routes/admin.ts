@@ -3058,8 +3058,11 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/refunds/:id/approve', async (req, reply) => {
         const id = (req.params as { id: string }).id;
+        const { amount_minor } = z.object({
+            amount_minor: z.number().int().positive().optional(),
+        }).parse(req.body ?? {});
         try {
-            await approveRefund(id, req.actor!.userId);
+            await approveRefund(id, req.actor!.userId, amount_minor);
             return { ok: true };
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'approve_failed', message: e.message });

@@ -22,6 +22,7 @@
               <th>Mismatch</th>
               <th>Notes</th>
               <th>Created</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -35,9 +36,12 @@
               </td>
               <td class="bw-text-sm" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.notes || 'â€”' }}</td>
               <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
+              <td>
+                <button v-if="hasDetails(r)" class="bw-btn bw-btn-sm" @click="openDetails(r)">Details</button>
+              </td>
             </tr>
             <tr v-if="!runs.length">
-              <td colspan="7" class="bw-empty">No reconciliation runs yet. Click "Run Now" to start.</td>
+              <td colspan="8" class="bw-empty">No reconciliation runs yet. Click "Run Now" to start.</td>
             </tr>
           </tbody>
         </table>
@@ -56,6 +60,40 @@
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Gateway</span><span class="bw-tc-pair-val">{{ naira(r.gateway_total_minor) }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Mismatch</span><span class="bw-tc-pair-val" :style="r.mismatch_minor > 0 ? 'color:var(--red)' : ''">{{ r.mismatch_minor > 0 ? naira(r.mismatch_minor) : 'â€”' }}</span></div>
           </div>
+          <div v-if="hasDetails(r)" class="bw-tc-foot">
+            <button class="bw-btn bw-btn-sm" @click="openDetails(r)">Details</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="detailsRun" class="bw-modal-backdrop" @click.self="detailsRun = null">
+      <div class="bw-modal">
+        <div class="bw-modal-header">
+          <h2>Mismatch details — {{ detailsRun.run_date }}</h2>
+          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="detailsRun = null">Close</button>
+        </div>
+        <div class="bw-modal-body">
+          <p class="bw-muted" style="font-size:var(--t-sm)">
+            References present on only one side of reconciliation. Investigate each before manual correction.
+          </p>
+          <div class="detail-col">
+            <strong>In our DB, missing from gateway ({{ detailsRefs.db_only.length }})</strong>
+            <ul v-if="detailsRefs.db_only.length" class="ref-list">
+              <li v-for="ref in detailsRefs.db_only" :key="'db-' + ref" class="bw-mono">{{ ref }}</li>
+            </ul>
+            <p v-else class="bw-muted" style="font-size:var(--t-sm)">None</p>
+          </div>
+          <div class="detail-col">
+            <strong>On gateway, missing from our DB ({{ detailsRefs.gateway_only.length }})</strong>
+            <ul v-if="detailsRefs.gateway_only.length" class="ref-list">
+              <li v-for="ref in detailsRefs.gateway_only" :key="'gw-' + ref" class="bw-mono">{{ ref }}</li>
+            </ul>
+            <p v-else class="bw-muted" style="font-size:var(--t-sm)">None</p>
+          </div>
+        </div>
+        <div class="bw-modal-footer">
+          <button class="bw-btn" @click="detailsRun = null">Close</button>
         </div>
       </div>
     </div>
@@ -63,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { api, naira } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import { exportCsv, printPdf } from '../lib/export';
@@ -72,6 +110,23 @@ const runs     = ref<any[]>([]);
 const loading  = ref(false);
 const error    = ref('');
 const running  = ref(false);
+const detailsRun = ref<any>(null);
+const detailsRefs = computed(() => {
+  const refs = detailsRun.value?.mismatched_references;
+  return {
+    db_only: Array.isArray(refs?.db_only) ? refs.db_only : [],
+    gateway_only: Array.isArray(refs?.gateway_only) ? refs.gateway_only : [],
+  };
+});
+
+function hasDetails(r: any) {
+  const refs = r?.mismatched_references;
+  return Boolean(refs && (refs.db_only?.length || refs.gateway_only?.length));
+}
+
+function openDetails(r: any) {
+  detailsRun.value = r;
+}
 
 async function load() {
   loading.value = true;
@@ -142,6 +197,10 @@ onMounted(load);
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .row-alert { background: oklch(from var(--red) l c h / 0.07); }
+.detail-col { margin-top: 1rem; }
+.detail-col strong { display: block; margin-bottom: .5rem; }
+.ref-list { max-height: 220px; overflow-y: auto; padding-left: 1.1rem; margin: 0; font-size: var(--t-sm); }
+.ref-list li { padding: 2px 0; }
 </style>
 
 

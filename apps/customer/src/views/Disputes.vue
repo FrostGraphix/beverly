@@ -36,6 +36,11 @@ const form = ref({
   subject: 'Token rejected by meter',
   description: '',
 });
+const evidenceFile = ref<File | null>(null);
+const evidenceError = ref('');
+const uploadingEvidence = ref(false);
+const ALLOWED_EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 
 const visibleDisputes = computed(() => {
   if (statusFilter.value === 'all') return disputes.value;
@@ -78,7 +83,42 @@ function openNew(orderId = '') {
     subject: 'Token rejected by meter',
     description: '',
   };
+  evidenceFile.value = null;
+  evidenceError.value = '';
   showNew.value = true;
+}
+
+function onEvidenceSelected(e: Event) {
+  evidenceError.value = '';
+  const file = (e.target as HTMLInputElement)?.files?.[0] ?? null;
+  if (!file) { evidenceFile.value = null; return; }
+  if (!ALLOWED_EVIDENCE_TYPES.includes(file.type)) {
+    evidenceError.value = 'Only JPEG, PNG, WEBP, or PDF files are accepted.';
+    evidenceFile.value = null;
+    return;
+  }
+  if (file.size > MAX_EVIDENCE_BYTES) {
+    evidenceError.value = 'File must be under 5MB.';
+    evidenceFile.value = null;
+    return;
+  }
+  evidenceFile.value = file;
+}
+
+async function uploadEvidence(disputeId: string, file: File) {
+  const payload = await api.post<any>(`/api/v1/customer/disputes/${disputeId}/evidence/upload-url`, {
+    file_name: file.name,
+    content_type: file.type,
+    size_bytes: file.size,
+  });
+  if (!payload?.signed_url) throw new Error('evidence_upload_unavailable');
+  const uploadResponse = await fetch(payload.signed_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!uploadResponse.ok) throw new Error('evidence_upload_failed');
+  await api.post(`/api/v1/customer/disputes/${disputeId}/evidence/activate`, { path: payload.path });
 }
 
 function applyIssueType(type: IssueType) {
@@ -106,6 +146,19 @@ async function submitNew() {
     };
     if (form.value.purchase_order_id) payload.purchase_order_id = form.value.purchase_order_id;
     const result = await api.post<any>('/api/v1/customer/disputes', payload);
+    if (evidenceFile.value && result?.id) {
+      uploadingEvidence.value = true;
+      try {
+        await uploadEvidence(result.id, evidenceFile.value);
+      } catch {
+        notice.value = `Dispute ${result.reference ?? ''} raised, but the attachment failed to upload. You can add it from the dispute detail later.`;
+        showNew.value = false;
+        await load();
+        return;
+      } finally {
+        uploadingEvidence.value = false;
+      }
+    }
     showNew.value = false;
     notice.value = `Dispute ${result.reference ?? ''} raised.`;
     await load();
@@ -315,12 +368,19 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             <textarea v-model="form.description" class="bw-textarea" rows="5" placeholder="Describe the issue, meter message, and what you already tried."></textarea>
           </label>
 
+          <label class="field">
+            <span>Photo or document (optional)</span>
+            <input type="file" class="bw-input" accept="image/jpeg,image/png,image/webp,application/pdf" @change="onEvidenceSelected" />
+            <small v-if="evidenceFile" style="color: var(--text-2)">{{ evidenceFile.name }} attached</small>
+          </label>
+          <div v-if="evidenceError" class="dispute-error">{{ evidenceError }}</div>
+
           <div v-if="newError" class="dispute-error">{{ newError }}</div>
         </div>
         <div class="bw-modal-footer">
           <button class="bw-btn bw-btn-ghost" @click="showNew = false">Cancel</button>
-          <button class="bw-btn bw-btn-brand" :disabled="saving" @click="submitNew">
-            {{ saving ? 'Submitting...' : 'Submit dispute' }}
+          <button class="bw-btn bw-btn-brand" :disabled="saving || uploadingEvidence" @click="submitNew">
+            {{ uploadingEvidence ? 'Uploading attachment...' : saving ? 'Submitting...' : 'Submit dispute' }}
           </button>
         </div>
       </div>
@@ -346,6 +406,20 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             <span>Energy value <strong>{{ naira(detail.purchase_order.energy_amount_minor ?? detail.purchase_order.amount_minor) }}</strong></span>
             <span>VAT <strong>{{ naira(detail.purchase_order.vat_amount_minor ?? 0) }}</strong></span>
             <span>Status <strong>{{ statusLabel(detail.purchase_order.status) }}</strong></span>
+          </div>
+
+          <div v-if="detail?.evidence?.length" class="section-label">Attachments</div>
+          <div v-if="detail?.evidence?.length" class="evidence-list">
+            <a
+              v-for="(item, idx) in detail.evidence"
+              :key="item.path"
+              :href="item.url ?? undefined"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="evidence-chip"
+            >
+              Attachment {{ idx + 1 }}
+            </a>
           </div>
 
           <div class="section-label">Conversation</div>
@@ -638,6 +712,21 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
   margin: 0;
   color: var(--text-2);
   font-size: var(--t-sm);
+}
+.evidence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.evidence-chip {
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+  background: var(--glass-bg);
 }
 @media (max-width: 420px) {
   .issue-grid,
