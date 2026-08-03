@@ -43,7 +43,7 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import {
-    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
+    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
 } from '../services/customer-auth.js';
 import {
     submitKycTier1, submitKycTier2Nin, KycError,
@@ -87,7 +87,7 @@ import {
 } from '../services/customer-email-otp.js';
 
 function customerAuthStatus(code: string): number {
-    return code === 'rate_limit' ? 429
+    return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
         : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
         : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
         : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
@@ -96,6 +96,24 @@ function customerAuthStatus(code: string): number {
         : code === 'invalid_credentials' ? 401
         : code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401
         : 400;
+}
+
+const publicAuthIpAttempts = new Map<string, { count: number; resetAt: number }>();
+const PUBLIC_AUTH_RATE_LIMIT_MAX = 20;
+const PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function assertPublicAuthIpRateLimited(ip: string): void {
+    if (env.NODE_ENV === 'test') return;
+    const now = Date.now();
+    const entry = publicAuthIpAttempts.get(ip);
+    if (!entry || entry.resetAt < now) {
+        publicAuthIpAttempts.set(ip, { count: 1, resetAt: now + PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS });
+        return;
+    }
+    if (entry.count >= PUBLIC_AUTH_RATE_LIMIT_MAX) {
+        throw new AuthError('Too many auth requests from this IP. Please wait a few minutes.', 'rate_limit_exceeded');
+    }
+    entry.count += 1;
 }
 
 function emailOtpStatus(code: string): number {
@@ -213,6 +231,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email, password, and full_name required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await signupWithEmail({ email, password, full_name, phone });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
@@ -229,7 +248,44 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email and password required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await loginWithEmail({ email, password });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/signup', async (req, reply) => {
+        const { phone, password, full_name, email } = req.body as {
+            phone: string; password: string; full_name: string; email?: string;
+        };
+        if (!phone || !password || !full_name) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone, password, and full_name required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await signupWithPhone({ phone, password, full_name, email });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/login', async (req, reply) => {
+        const { phone, password } = req.body as { phone: string; password: string };
+        if (!phone || !password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone and password required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await loginWithPhone({ phone, password });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
             if (e instanceof AuthError) {

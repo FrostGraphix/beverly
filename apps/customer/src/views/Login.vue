@@ -76,6 +76,21 @@ async function submit() {
             return;
         }
         const normalised = normaliseNigerianPhone(phone.value);
+        if (password.value) {
+            const r = await api.post<{ access_token: string; refresh_token?: string | null; expires_at?: number | null; expires_in?: number | null; customer: any; is_new: boolean }>('/api/v1/customer/auth/phone/login', {
+                phone: normalised,
+                password: password.value,
+            });
+            auth.setSession(r.access_token, r.customer, rememberLogin.value, {
+                refreshToken: r.refresh_token,
+                expiresAt: r.expires_at,
+                expiresIn: r.expires_in,
+            });
+            writeRememberedLogin(normalised, rememberLogin.value);
+            playLoginVoice();
+            await router.replace(r.customer.kyc_tier === 0 ? { path: '/kyc', query: { redirect: redirectTarget.value } } : redirectTarget.value);
+            return;
+        }
         const r = await api.post<{ challenge_id: string; expires_at: string; retry_after_seconds: number }>(
             '/api/v1/customer/auth/login',
             { phone: normalised },
@@ -98,7 +113,7 @@ async function submit() {
             if (e.code === 'customer_not_found') {
                 error.value = 'No account found for this number.';
             } else if (e.code === 'invalid_credentials') {
-                error.value = 'Invalid email or password.';
+                error.value = 'Invalid credentials provided.';
             } else if (e.code === 'rate_limit') {
                 error.value = 'Too many requests. Wait a few minutes and try again.';
             } else if (e.code === 'account_inactive') {
@@ -139,31 +154,54 @@ async function submit() {
     <form class="auth-form" @submit.prevent="submit" novalidate>
       <div class="mode-switch" role="tablist" aria-label="Login method">
         <button type="button" :class="{ active: loginMode === 'email' }" @click="loginMode = 'email'">Email</button>
-        <button type="button" :class="{ active: loginMode === 'phone' }" @click="loginMode = 'phone'">Phone OTP</button>
+        <button type="button" :class="{ active: loginMode === 'phone' }" @click="loginMode = 'phone'">Phone</button>
       </div>
 
       <!-- Phone field -->
-      <div v-if="loginMode === 'phone'" class="field">
-        <label class="field-label" for="login-phone">Phone number</label>
-        <div class="phone-wrap">
-          <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">NG</span>
-            +234
-          </span>
-          <input
-            id="login-phone"
-            ref="phoneInput"
-            v-model="phone"
-            class="bw-input phone-input"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            placeholder="080 0000 0000"
-            :disabled="loading"
-            @input="error = null"
-          />
+      <template v-if="loginMode === 'phone'">
+        <div class="field">
+          <label class="field-label" for="login-phone">Phone number</label>
+          <div class="phone-wrap">
+            <span class="phone-prefix">
+              <span class="flag" aria-hidden="true">NG</span>
+              +234
+            </span>
+            <input
+              id="login-phone"
+              ref="phoneInput"
+              v-model="phone"
+              class="bw-input phone-input"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="080 0000 0000"
+              :disabled="loading"
+              @input="error = null"
+            />
+          </div>
         </div>
-      </div>
+        <div class="field">
+          <label class="field-label" for="login-phone-password">
+            Password
+            <span class="field-optional">Optional (or leave empty to send SMS OTP)</span>
+          </label>
+          <div class="password-field">
+            <input
+              id="login-phone-password"
+              v-model="password"
+              class="bw-input"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="Your password"
+              :disabled="loading"
+              @input="error = null"
+            />
+            <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+      </template>
 
       <template v-else>
         <div class="field">

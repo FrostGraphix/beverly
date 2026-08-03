@@ -13,6 +13,7 @@ import { adminClient } from '../db/supabase.js';
 import { verifyWebhookSignature } from '../adapters/paystack.js';
 import { processPaystackChargeSuccess } from '../services/payment-webhooks.js';
 import { encryptSecret } from '../services/totp.js';
+import { logAction } from '../services/audit.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
     // Need raw body for signature verification.
@@ -90,6 +91,27 @@ const route: FastifyPluginAsync = async (fastify) => {
             await setWebhookRetryError(webhookId, error?.message ?? 'webhook_processing_failed');
             throw error;
         }
+    });
+
+    fastify.post('/resend', async (req) => {
+        const payload = req.body as { type?: string; data?: any };
+        const eventType = payload.type ?? 'unknown';
+        const emailData = payload.data ?? {};
+        const recipient = Array.isArray(emailData.to) ? emailData.to.join(',') : (emailData.to ?? 'unknown');
+        const subject = emailData.subject ?? 'N/A';
+
+        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.delivery_delayed') {
+            await logAction({
+                actorUserId: 'system',
+                actorType: 'system',
+                action: 'resend.email_bounced',
+                targetType: 'email',
+                targetId: recipient,
+                after: { eventType, recipient, subject, bounceData: emailData.bounce ?? emailData },
+            }).catch(() => undefined);
+        }
+
+        return { ok: true, received: eventType };
     });
 
     async function markWebhookProcessed(webhookId: string, error?: string) {

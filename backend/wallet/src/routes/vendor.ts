@@ -78,6 +78,18 @@ function vendorActorOrReply(req: FastifyRequest, reply: FastifyReply) {
     return actor;
 }
 
+function assertVendorEmailVerified(actor: any, reply: FastifyReply): boolean {
+    if (env.NODE_ENV === 'test') return true;
+    if (actor.emailVerified === false) {
+        reply.code(403).send({
+            error: 'email_verification_required',
+            message: 'Vendor email verification is required before performing this operation.',
+        });
+        return false;
+    }
+    return true;
+}
+
 function mfaMeta(req: FastifyRequest) {
     return {
         ip: req.ip,
@@ -413,6 +425,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/vend-credential', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const actor = req.actor!;
+        if (!assertVendorEmailVerified(actor, reply)) return reply;
         const schema = z.object({
             type: z.enum(['pin', 'password']),
             credential: z.string().min(4).max(80),

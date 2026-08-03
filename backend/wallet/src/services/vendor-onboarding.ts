@@ -13,6 +13,7 @@ import { sendEmail } from '../adapters/resend.js';
 import { vendorOnboardingEmail } from '../emails/templates.js';
 import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
+import { normalizeSmsPhone } from './sms-guardrails.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
@@ -83,10 +84,13 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
 
     // 2) create auth user via Supabase Admin API
     const tempPwd = genTempPassword();
+    const phone = input.primaryUserPhone ? normalizeSmsPhone(input.primaryUserPhone) : undefined;
     const { data: authUserData, error: authErr } = await adminClient.auth.admin.createUser({
-        email: input.primaryUserEmail,
+        email: input.primaryUserEmail || undefined,
+        phone: phone || undefined,
         password: tempPwd,
-        email_confirm: true,
+        email_confirm: input.primaryUserEmail ? true : undefined,
+        phone_confirm: phone ? true : undefined,
         user_metadata: { role: 'vendor', full_name: input.primaryUserFullName },
     });
     if (authErr || !authUserData.user) {
