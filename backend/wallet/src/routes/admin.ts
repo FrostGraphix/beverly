@@ -43,6 +43,7 @@ import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush }
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
 import adminDevRoutes from './admin-dev.js';
 import adminReportsRoutes from './admin-reports.js';
+import { isCorporateStaffEmail } from '../services/email-validation.js';
 import {
     DEFAULT_ROLE_PERMISSIONS,
     PERMISSION_CATALOG,
@@ -1063,6 +1064,12 @@ const route: FastifyPluginAsync = async (fastify) => {
             temporaryPassword: z.string().min(12).optional(),
         });
         const body = schema.parse(req.body);
+        if (!isCorporateStaffEmail(body.email)) {
+            return reply.code(400).send({
+                error: 'invalid_staff_email_domain',
+                message: 'Staff accounts must use an approved corporate email domain (@acoblighting.com or @org.acoblighting.com).',
+            });
+        }
         const stationIds = [...new Set(body.stationIds.map((value) => value.toUpperCase()))];
         const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', body.roleKey).maybeSingle();
         if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
@@ -1775,7 +1782,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // KPI summary across the entire wallet system.
     fastify.get('/wallets/summary', async (req) => {
-        const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, status');
+        const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, owner_id, status');
         let wallets = walletsRaw ?? [];
         const assignedStations = staffStations(req);
         if (assignedStations) {
@@ -2358,23 +2365,54 @@ const route: FastifyPluginAsync = async (fastify) => {
 
         const assignedStations = staffStations(req);
         const scope = (query: any) => scopeStations(query, assignedStations);
-        const [today, last24h, failed24h, refunded] = await Promise.all([
-            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', sod)),
+        const [todayOrdersRes, last24h, failed24hRes, refunded, succeededFunding] = await Promise.all([
+            scope(adminClient.from('purchase_orders').select('id, amount_minor, units_kwh, status, actor_type').gte('created_at', sod)),
             scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo)),
-            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', dayAgo).eq('status', 'failed')),
+            scope(adminClient.from('purchase_orders').select('id, actor_type').gte('created_at', dayAgo).eq('status', 'failed')),
             scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded')),
+            adminClient.from('payment_transactions').select('id', { count: 'exact', head: true })
+                .eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
 
         const sumMinor = (arr: any[] | null | undefined) =>
             (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
 
+        const todayRows = (todayOrdersRes.data ?? []) as any[];
+        const deliveredToday = todayRows.filter((r) => r.status === 'delivered');
+        const todayDeliveredKwh = deliveredToday.reduce((sum, r) => sum + Number(r.units_kwh ?? 0), 0);
+        const todayDeliveredValueMinor = deliveredToday.reduce((sum, r) => sum + Number(r.amount_minor ?? 0), 0);
+        const todayDeliveredCount = deliveredToday.length;
+
+        const isVendorActor = (actorType?: string) => actorType === 'vendor' || actorType === 'vendor_staff';
+        const vendorDelivered = deliveredToday.filter((r) => isVendorActor(r.actor_type));
+        const customerDelivered = deliveredToday.filter((r) => !isVendorActor(r.actor_type));
+
+        const failedRows = (failed24hRes.data ?? []) as any[];
+        const vendorFailedCount = failedRows.filter((r) => isVendorActor(r.actor_type)).length;
+        const customerFailedCount = failedRows.filter((r) => !isVendorActor(r.actor_type)).length;
+
         return {
-            todayCount:       today.count ?? 0,
-            todayValueMinor:  sumMinor(today.data),
-            last24hCount:     last24h.count ?? 0,
-            last24hValueMinor: sumMinor(last24h.data),
-            failed24hCount:   failed24h.count ?? 0,
-            refundedCount:    refunded.count ?? 0,
+            todayCount:               todayRows.length,
+            todayValueMinor:          sumMinor(todayRows),
+            todayDeliveredCount,
+            todayDeliveredValueMinor,
+            todayDeliveredKwh,
+            last24hCount:             last24h.count ?? 0,
+            last24hValueMinor:        sumMinor(last24h.data),
+            failed24hCount:           failedRows.length,
+            refundedCount:            refunded.count ?? 0,
+            succeededFundingCount:    succeededFunding.count ?? 0,
+            vendorStats: {
+                successCount:      vendorDelivered.length,
+                successValueMinor: sumMinor(vendorDelivered),
+                failedCount:       vendorFailedCount,
+            },
+            customerStats: {
+                successCount:      customerDelivered.length,
+                successValueMinor: sumMinor(customerDelivered),
+                failedCount:       customerFailedCount,
+            },
         };
     });
 
@@ -3057,6 +3095,12 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/refunds/:id/approve', async (req, reply) => {
+        if (env.NODE_ENV !== 'test' && req.actor?.mfaEnrolled && !req.actor?.mfaVerified) {
+            return reply.code(403).send({
+                error: 'mfa_required',
+                message: 'Multi-factor authentication (MFA) verification is required for refund approvals.',
+            });
+        }
         const id = (req.params as { id: string }).id;
         try {
             await approveRefund(id, req.actor!.userId);

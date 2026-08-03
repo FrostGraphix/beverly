@@ -16,10 +16,10 @@ const auth   = useVendorAuthStore();
 const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
 const redirectTarget = computed(() => safeRedirectTarget(route.query.redirect));
 
-const email    = ref('');
+const identifier = ref('');
 const password = ref('');
 const showPassword = ref(false);
-const rememberEmail = ref(true);
+const rememberLogin = ref(true);
 const loading  = ref(false);
 const error    = ref<string | null>(null);
 
@@ -30,11 +30,32 @@ function safeRedirectTarget(raw: unknown, fallback = '/') {
     return value;
 }
 
+function normaliseVendorIdentifier(raw: string): { email?: string; phone?: string } {
+    const trimmed = raw.trim();
+    if (trimmed.includes('@')) {
+        return { email: trimmed.toLowerCase() };
+    }
+    const digits = trimmed.replace(/\D/g, '');
+    let normalizedPhone = trimmed;
+    if (digits.startsWith('234') && digits.length === 13) {
+        normalizedPhone = `+${digits}`;
+    } else if (digits.startsWith('0') && digits.length === 11) {
+        normalizedPhone = `+234${digits.slice(1)}`;
+    } else if (digits.length === 10) {
+        normalizedPhone = `+234${digits}`;
+    } else if (trimmed.startsWith('+')) {
+        normalizedPhone = trimmed;
+    } else if (digits.length >= 10) {
+        normalizedPhone = `+${digits}`;
+    }
+    return { phone: normalizedPhone };
+}
+
 async function submit() {
     unlockLoginVoice();
-    const normalizedEmail = email.value.trim().toLowerCase();
-    if (!normalizedEmail || !password.value) {
-        error.value = 'Email and password are required.';
+    const idInfo = normaliseVendorIdentifier(identifier.value);
+    if ((!idInfo.email && !idInfo.phone) || !password.value) {
+        error.value = 'Email or phone number and password are required.';
         return;
     }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -43,11 +64,14 @@ async function submit() {
     }
     loading.value = true; error.value = null;
     try {
+        const payload = idInfo.email
+            ? { email: idInfo.email, password: password.value }
+            : { phone: idInfo.phone, password: password.value };
         // 1) Sign in via Supabase
         const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
-            body: JSON.stringify({ email: normalizedEmail, password: password.value }),
+            body: JSON.stringify(payload),
         });
         const tokData = await tokRes.json();
         if (!tokRes.ok) {
@@ -75,12 +99,12 @@ async function submit() {
         const me = await meRes.json();
 
         // 3) Store session + route forward (forced password reset gate)
-        auth.setSession(accessToken, me, rememberEmail.value, {
+        auth.setSession(accessToken, me, rememberLogin.value, {
             refreshToken: typeof tokData.refresh_token === 'string' ? tokData.refresh_token : null,
             expiresAt: typeof tokData.expires_at === 'number' ? tokData.expires_at : null,
             expiresIn: typeof tokData.expires_in === 'number' ? tokData.expires_in : null,
         });
-        if (rememberEmail.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, normalizedEmail);
+        if (rememberLogin.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, identifier.value.trim());
         else localStorage.removeItem(REMEMBERED_VENDOR_EMAIL_KEY);
         playLoginVoice();
         await router.push(me.password_reset_required ? { path: '/password-change', query: { redirect: redirectTarget.value } } : redirectTarget.value);
@@ -92,8 +116,8 @@ async function submit() {
 }
 
 const rememberedEmail = localStorage.getItem(REMEMBERED_VENDOR_EMAIL_KEY);
-if (rememberedEmail) email.value = rememberedEmail;
-rememberEmail.value = Boolean(rememberedEmail);
+if (rememberedEmail) identifier.value = rememberedEmail;
+rememberLogin.value = Boolean(rememberedEmail);
 </script>
 
 <template>
@@ -113,8 +137,8 @@ rememberEmail.value = Boolean(rememberedEmail);
 
       <form class="bw-stack" @submit.prevent="submit">
         <div>
-          <label class="bw-label">Email</label>
-          <input class="bw-input" v-model.trim="email" type="email" autocomplete="username" required placeholder="vendor@example.com" @input="error = null" />
+          <label class="bw-label">Email or Phone Number</label>
+          <input class="bw-input" v-model.trim="identifier" type="text" autocomplete="username" required placeholder="vendor@example.com or +234..." @input="error = null" />
         </div>
         <div>
           <label class="bw-label">Password</label>
@@ -127,15 +151,15 @@ rememberEmail.value = Boolean(rememberedEmail);
         </div>
         <div class="login-row">
           <label class="login-check">
-            <input v-model="rememberEmail" type="checkbox" />
-            Remember email
+            <input v-model="rememberLogin" type="checkbox" />
+            Remember sign in
           </label>
           <button type="button" class="login-link" @click="error = 'Ask your Beverly account manager to reset your password.'">Forgot password?</button>
         </div>
 
         <div v-if="error" class="bw-alert danger login-error">{{ error }}</div>
 
-        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !email || !password">
+        <button class="bw-btn primary lg login-submit" type="submit" :disabled="loading || !identifier || !password">
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
