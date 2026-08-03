@@ -97,8 +97,17 @@ every row makes the whole TOAST dead and truncatable. Blanking a subset leaves d
 chunks interleaved with live ones, so nothing can be returned — the space becomes
 *reusable* but stays allocated.
 
-**Rule for future work:** partial blanking prevents growth; only whole-column blanking
-reclaims without `VACUUM FULL`.
+**Rule for future work — CORRECTED 2026-08-03 15:30.** The rule as first written here
+("only whole-column blanking reclaims") was incomplete and would have led to a wasted
+operation on `daily_meter_readings`. Plain `VACUUM` returns space only when BOTH hold:
+
+1. the data lives in a **TOAST relation**, and
+2. that TOAST becomes **entirely** dead (every row blanked).
+
+Inline heap data never qualifies. `daily_meter_readings.row_json` values measure 782-856
+bytes -- below the ~2 kB TOAST threshold -- and that table's `reltoastrelid` is 8192
+bytes, i.e. empty. Blanking it would reclaim **0 MB**. See
+`STORAGE_IMPLEMENTATION_PLAN_2026-08-03.md` §2.
 
 I predicted 20–90 MB for the `audit_logs` step and explicitly declined to commit to a
 figure. The measurement was 0. Recorded so the reasoning is not repeated as fact.
