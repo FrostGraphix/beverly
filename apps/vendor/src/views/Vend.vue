@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
@@ -30,6 +30,102 @@ const authorization = ref('');
 const authError = ref('');
 const router = useRouter();
 const route = useRoute();
+
+// ── PIN brute-force lockout ────────────────────────────────────────
+const MAX_PIN_ATTEMPTS = 3;
+const LOCKOUT_MS = 30_000;
+const pinAttempts = ref(0);
+const lockedUntil = ref(0);
+const now = ref(Date.now());
+let lockTimer: number | undefined;
+const isLocked = computed(() => lockedUntil.value > now.value);
+const lockSecondsLeft = computed(() => Math.max(0, Math.ceil((lockedUntil.value - now.value) / 1000)));
+
+function tickLock() {
+    now.value = Date.now();
+    if (lockedUntil.value > now.value) {
+        lockTimer = window.setTimeout(tickLock, 500);
+    } else {
+        lockTimer = undefined;
+    }
+}
+
+function registerFailedAttempt() {
+    pinAttempts.value += 1;
+    if (pinAttempts.value >= MAX_PIN_ATTEMPTS) {
+        lockedUntil.value = Date.now() + LOCKOUT_MS;
+        pinAttempts.value = 0;
+        if (!lockTimer) tickLock();
+    }
+}
+
+function registerSuccessfulAttempt() {
+    pinAttempts.value = 0;
+}
+
+// ── In-flight vend recovery ─────────────────────────────────────────
+// A network drop between "confirm" and the response must not strand the
+// vendor without their token — the idempotency key + fingerprint let a
+// retried POST safely replay the original result instead of double-vending.
+const PENDING_VEND_KEY = 'beverly.vend.pending';
+const PENDING_MAX_AGE_MS = 30 * 60_000;
+interface PendingVend { key: string; fingerprint: string; meterId: string; amountMinor: number; savedAt: number; }
+const recoverableVend = ref<PendingVend | null>(null);
+const recovering = ref(false);
+
+function savePendingVend() {
+    if (!meter.value) return;
+    try {
+        const pending: PendingVend = {
+            key: vendIntentKey.value,
+            fingerprint: vendIntentFingerprint.value,
+            meterId: meter.value.meterId,
+            amountMinor: amountMinor.value,
+            savedAt: Date.now(),
+        };
+        localStorage.setItem(PENDING_VEND_KEY, JSON.stringify(pending));
+    } catch { /* storage unavailable */ }
+}
+
+function clearPendingVend() {
+    try { localStorage.removeItem(PENDING_VEND_KEY); } catch { /* noop */ }
+    recoverableVend.value = null;
+}
+
+onMounted(() => {
+    try {
+        const raw = localStorage.getItem(PENDING_VEND_KEY);
+        if (!raw) return;
+        const pending: PendingVend = JSON.parse(raw);
+        if (Date.now() - pending.savedAt > PENDING_MAX_AGE_MS) {
+            localStorage.removeItem(PENDING_VEND_KEY);
+            return;
+        }
+        recoverableVend.value = pending;
+    } catch { /* malformed — ignore */ }
+});
+
+function resumePendingVend() {
+    if (!recoverableVend.value) return;
+    recovering.value = true;
+    meterId.value = recoverableVend.value.meterId;
+    step.value = 'meter';
+    void lookupMeter().then(() => {
+        if (!recoverableVend.value || !meter.value) { recovering.value = false; return; }
+        amountNaira.value = recoverableVend.value.amountMinor / 100;
+        vendIntentKey.value = recoverableVend.value.key;
+        vendIntentFingerprint.value = recoverableVend.value.fingerprint;
+        return loadPreview().then(() => {
+            authError.value = '';
+            authOpen.value = true;
+            recovering.value = false;
+        });
+    });
+}
+
+function dismissRecoverableVend() {
+    clearPendingVend();
+}
 
 interface MeterInfo {
     meterId: string;
@@ -221,6 +317,10 @@ async function confirm() {
 
 async function submitAuthorization() {
     if (!meter.value || !preview.value || !authorization.value || loading.value) return;
+    if (isLocked.value) {
+        authError.value = `Too many incorrect attempts. Try again in ${lockSecondsLeft.value}s.`;
+        return;
+    }
     loading.value = true; error.value = null; notice.value = null;
     authError.value = '';
     const fingerprint = `${meter.value.meterId}:${amountMinor.value}:wallet`;
@@ -228,6 +328,7 @@ async function submitAuthorization() {
         vendIntentKey.value = newIdempotencyKey();
         vendIntentFingerprint.value = fingerprint;
     }
+    savePendingVend();
     try {
         const r = await api.post<{ token: string | null; units: number; receiptId: string | null; purchaseOrder: any }>(
             '/api/v1/vendor/vend',
@@ -240,6 +341,8 @@ async function submitAuthorization() {
             idempotencyHeaders(vendIntentKey.value),
         );
         result.value = r;
+        registerSuccessfulAttempt();
+        clearPendingVend();
         notice.value = {
             tone: 'success',
             title: 'Token generated successfully',
@@ -256,8 +359,15 @@ async function submitAuthorization() {
             return;
         }
         if (e instanceof ApiError && e.code === 'invalid_vend_credential') {
-            authError.value = 'Invalid vendor authorization.';
+            registerFailedAttempt();
+            authError.value = isLocked.value
+                ? `Too many incorrect attempts. Try again in ${lockSecondsLeft.value}s.`
+                : 'Invalid vendor authorization.';
             return;
+        }
+        if (e instanceof ApiError) {
+            // A definitive server response means this vend will not retry-succeed with the same key.
+            clearPendingVend();
         }
         error.value = describeApiError(e, e?.message ?? 'Vending failed');
     } finally {
@@ -266,6 +376,7 @@ async function submitAuthorization() {
 }
 
 function reset() {
+    clearPendingVend();
     step.value = 'meter';
     meterId.value = '';
     amountNaira.value = 2000;
@@ -395,6 +506,17 @@ async function remoteSendGeneratedToken() {
           <strong>{{ item.label }}</strong>
         </li>
       </ol>
+
+      <div v-if="recoverableVend" class="bw-alert" style="margin-bottom: var(--s-3); display: grid; gap: 6px">
+        <strong>Unfinished vend from earlier</strong>
+        <span>A vend for meter {{ recoverableVend.meterId }} ({{ naira(recoverableVend.amountMinor) }}) did not confirm. No wallet debit was confirmed on this device — check its status before retrying.</span>
+        <div style="display:flex; gap: var(--s-2)">
+          <button class="bw-btn primary sm" :disabled="recovering" @click="resumePendingVend">
+            {{ recovering ? 'Checking…' : 'Check in-flight vend' }}
+          </button>
+          <button class="bw-btn sm" @click="dismissRecoverableVend">Dismiss</button>
+        </div>
+      </div>
 
       <Transition name="step-anim" mode="out-in">
       <!-- Step: meter lookup -->
@@ -543,7 +665,7 @@ async function remoteSendGeneratedToken() {
       confirm-label="Generate token"
       tone="warn"
       :loading="loading"
-      :disable-confirm="!authorization"
+      :disable-confirm="!authorization || isLocked"
       @confirm="submitAuthorization"
     >
       <label class="bw-label" for="vend-authorization">Vendor authorization</label>
@@ -553,11 +675,15 @@ async function remoteSendGeneratedToken() {
         v-model="authorization"
         type="password"
         autocomplete="off"
+        :disabled="isLocked"
         :aria-invalid="Boolean(authError)"
         aria-describedby="vend-authorization-error"
         placeholder="PIN or password"
       />
-      <p v-if="authError" id="vend-authorization-error" class="bw-alert danger" role="alert" style="margin-top: var(--s-2)">
+      <p v-if="isLocked" class="bw-alert danger" role="alert" style="margin-top: var(--s-2)">
+        Too many incorrect attempts. Try again in {{ lockSecondsLeft }}s.
+      </p>
+      <p v-else-if="authError" id="vend-authorization-error" class="bw-alert danger" role="alert" style="margin-top: var(--s-2)">
         {{ authError }}
       </p>
       <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-2)">

@@ -16,6 +16,57 @@ const amountMinor = () => Math.round(parseFloat(amountRaw.value || '0') * 100);
 const fundIntentKey = ref(newIdempotencyKey());
 const fundIntentAmount = ref<number | null>(null);
 
+// ── Pending top-up recovery ─────────────────────────────────────────
+// If the browser is closed on Paystack's page before the redirect back,
+// this reference would otherwise only ever resolve via webhook. Persist it
+// so the customer can manually re-check without leaving this page.
+const PENDING_KEY = 'beverly.wallet.pending_topup';
+interface PendingTopup { reference: string; amountMinor: number; savedAt: number; }
+const pendingTopup = ref<PendingTopup | null>(null);
+const checkingPending = ref(false);
+
+function savePendingTopup(reference: string, amt: number) {
+    try {
+        localStorage.setItem(PENDING_KEY, JSON.stringify({ reference, amountMinor: amt, savedAt: Date.now() }));
+    } catch { /* storage unavailable */ }
+}
+
+function clearPendingTopup() {
+    try { localStorage.removeItem(PENDING_KEY); } catch { /* noop */ }
+    pendingTopup.value = null;
+}
+
+async function verifyReference(reference: string): Promise<boolean> {
+    const payment = await api.post<{ status: string; fulfillmentStatus: string }>(
+        `/api/v1/customer/payments/${encodeURIComponent(reference)}/verify`,
+    );
+    if (payment.status === 'succeeded' && ['fulfilled', 'already_fulfilled'].includes(payment.fulfillmentStatus)) {
+        success.value = 'Payment confirmed. Your wallet has been credited.';
+        clearPendingTopup();
+        return true;
+    }
+    if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
+        error.value = 'Payment confirmed, but the wallet credit needs review. Support has been notified; do not pay again.';
+        clearPendingTopup();
+        return true;
+    }
+    success.value = 'Payment is still processing. Your wallet will update automatically after confirmation.';
+    return false;
+}
+
+async function checkPendingTopup() {
+    if (!pendingTopup.value || checkingPending.value) return;
+    checkingPending.value = true;
+    error.value = null;
+    try {
+        await verifyReference(pendingTopup.value.reference);
+    } catch (e: any) {
+        error.value = e?.message ?? 'Could not verify payment. Your wallet will still update after webhook confirmation.';
+    } finally {
+        checkingPending.value = false;
+    }
+}
+
 async function fund() {
     const amt = amountMinor();
     if (amt < 50000) { error.value = 'Minimum top-up is ₦500.'; return; }
@@ -25,11 +76,12 @@ async function fund() {
         fundIntentAmount.value = amt;
     }
     try {
-        const r = await api.post<{ authorizationUrl: string }>(
+        const r = await api.post<{ authorizationUrl: string; reference?: string }>(
             '/api/v1/customer/wallet/fund',
             { amount_minor: amt },
             idempotencyHeaders(fundIntentKey.value),
         );
+        if (r.reference) savePendingTopup(r.reference, amt);
         redirectToPayment(r.authorizationUrl);
     } catch (e: any) {
         error.value = e?.message ?? 'Could not initiate payment.';
@@ -39,19 +91,16 @@ async function fund() {
 onMounted(async () => {
     const query = new URLSearchParams(window.location.search);
     const reference = query.get('reference') ?? query.get('trxref');
+
+    try {
+        const raw = localStorage.getItem(PENDING_KEY);
+        if (raw) pendingTopup.value = JSON.parse(raw);
+    } catch { /* malformed — ignore */ }
+
     if (!reference) return;
     loading.value = true;
     try {
-        const payment = await api.post<{ status: string; fulfillmentStatus: string }>(
-            `/api/v1/customer/payments/${encodeURIComponent(reference)}/verify`,
-        );
-        if (payment.status === 'succeeded' && ['fulfilled', 'already_fulfilled'].includes(payment.fulfillmentStatus)) {
-            success.value = 'Payment confirmed. Your wallet has been credited.';
-        } else if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
-            error.value = 'Payment confirmed, but the wallet credit needs review. Support has been notified; do not pay again.';
-        } else {
-            success.value = 'Payment is still processing. Your wallet will update automatically after confirmation.';
-        }
+        await verifyReference(reference);
     } catch (e: any) {
         error.value = e?.message ?? 'Could not verify payment. Your wallet will still update after webhook confirmation.';
     } finally {
@@ -79,6 +128,17 @@ onMounted(async () => {
                 @click="amountRaw = (a/100).toString()">
           {{ naira(a) }}
         </button>
+      </div>
+
+      <div v-if="pendingTopup" class="bw-alert" style="margin-bottom: var(--s-3); display: grid; gap: 6px">
+        <strong>Pending top-up: {{ naira(pendingTopup.amountMinor) }}</strong>
+        <span>We haven't confirmed this payment yet. If you already paid, check its status below instead of paying again.</span>
+        <div style="display:flex; gap: var(--s-2)">
+          <button class="bw-btn primary" style="justify-content:center" :disabled="checkingPending" @click="checkPendingTopup">
+            {{ checkingPending ? 'Checking…' : 'Check pending top-up' }}
+          </button>
+          <button class="bw-btn" @click="clearPendingTopup">Dismiss</button>
+        </div>
       </div>
 
       <div v-if="error" class="bw-alert danger" style="font-size: var(--t-sm); margin-bottom: var(--s-3)">{{ error }}</div>

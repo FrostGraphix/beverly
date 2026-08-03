@@ -136,14 +136,30 @@
     <ConfirmDialog
       :open="Boolean(approving)"
       title="Approve refund?"
-      :description="approving ? `Credit ${naira(approving.amount_minor)} immediately? This cannot be undone.` : ''"
+      :description="approving ? `Credit up to ${naira(approving.amount_minor)}. This cannot be undone.` : ''"
       confirm-label="Approve refund"
       tone="warn"
       :loading="saving"
+      :disable-confirm="!approveAmountValid"
       @update:open="(open) => { if (!open) approving = null; }"
       @confirm="submitApprove"
     >
       <div v-if="actionError" class="bw-error-banner" role="alert">{{ actionError }}</div>
+      <label class="bw-label">Amount to credit (â‚¦)</label>
+      <input
+        class="bw-input"
+        type="number"
+        min="0.01"
+        :max="approving ? approving.amount_minor / 100 : undefined"
+        step="0.01"
+        v-model="approveAmountNaira"
+      />
+      <p class="bw-muted" style="font-size: var(--t-xs); margin-top: 6px">
+        Defaults to the full requested amount. Reduce for a partial refund (e.g. energy value only, retaining the gateway fee).
+      </p>
+      <p v-if="!approveAmountValid" class="bw-error-banner" role="alert" style="margin-top: 6px">
+        Enter an amount greater than zero and no more than the requested amount.
+      </p>
     </ConfirmDialog>
 
     <ConfirmDialog
@@ -210,6 +226,12 @@ const summary      = ref<RefundSummary>({ total: 0, pending: 0, approved: 0, rej
 const approving    = ref<RefundRecord | null>(null);
 const rejecting    = ref<RefundRecord | null>(null);
 const rejectReason = ref('');
+const approveAmountNaira = ref('');
+const approveAmountValid = computed(() => {
+  if (!approving.value) return false;
+  const minor = Math.round(parseFloat(approveAmountNaira.value || '0') * 100);
+  return minor > 0 && minor <= approving.value.amount_minor;
+});
 const emptyMessage = computed(() => statusFilter.value
   ? `No ${statusLabel(statusFilter.value).toLowerCase()} refund requests.`
   : 'No refund requests yet.');
@@ -237,16 +259,19 @@ function openApprove(r: RefundRecord) {
   if (isOwnRequest(r)) return;
   actionError.value = '';
   approving.value = r;
+  approveAmountNaira.value = (r.amount_minor / 100).toString();
 }
 
 async function submitApprove() {
-  if (!approving.value) return;
+  if (!approving.value || !approveAmountValid.value) return;
   saving.value = true;
   try {
-    await api.post(`/api/v1/admin/refunds/${approving.value.id}/approve`, {});
+    const amountMinor = Math.round(parseFloat(approveAmountNaira.value) * 100);
+    const isPartial = amountMinor < approving.value.amount_minor;
+    await api.post(`/api/v1/admin/refunds/${approving.value.id}/approve`, isPartial ? { amount_minor: amountMinor } : {});
     approving.value = null;
     await load();
-    successMessage.value = 'Refund approved and wallet credited.';
+    successMessage.value = isPartial ? `Partial refund of ${naira(amountMinor)} approved and wallet credited.` : 'Refund approved and wallet credited.';
   } catch (e: any) {
     actionError.value = e.message ?? 'Failed to approve refund';
   } finally {
