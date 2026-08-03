@@ -60,10 +60,19 @@ function upstreamFailure(payload: { code?: number; msg?: string; reason?: string
 // environment. Set OEM_REGISTRY_DISABLED=true to force the legacy path instantly.
 async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
     const oemConfig = await resolveOemConfig(oemId);
-    if (oemConfig && oemConfig.baseUrl) {
-        return { baseUrl: oemConfig.baseUrl, authHeader: resolveOemAuthHeader(oemConfig) };
+    const authHeaderFromOem = resolveOemAuthHeader(oemConfig);
+    if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
+        return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
     }
-    if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
+    const isSeedDefault = !oemId || !oemConfig || oemConfig.isSeedDefault || oemConfig.slug === DEFAULT_OEM_SLUG;
+    if (isSeedDefault) {
+        const baseUrl = (oemConfig && oemConfig.baseUrl) ? oemConfig.baseUrl : (env.ENERGY_BACKEND_URL || '');
+        const authHeader = authHeaderFromOem || (env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null);
+        if (baseUrl && authHeader) {
+            return { baseUrl, authHeader };
+        }
+    }
+    if (oemId && !isSeedDefault) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
         authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
@@ -526,7 +535,13 @@ export async function listStationDirectory(opts: { force?: boolean } = {}): Prom
     if (!owners.length) return listStations({ force: opts.force });
     const results = await Promise.allSettled(owners.map((oemId) => listStations({ force: opts.force, oemId })));
     const stations = results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
-    if (!stations.length) throw new TokenEngineError('No OEM station directory is available', 'stations_unavailable', true);
+    if (!stations.length) {
+        const fallbackStations = await listStations({ force: opts.force });
+        if (!fallbackStations.length) {
+            throw new TokenEngineError('No OEM station directory is available', 'stations_unavailable', true);
+        }
+        return fallbackStations;
+    }
     return stations.sort((left, right) => `${left.oemName}:${left.name}`.localeCompare(`${right.oemName}:${right.name}`));
 }
 
