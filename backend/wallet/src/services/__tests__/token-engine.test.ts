@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import {
     previewPurchase, resolveTariffPricing, TokenEngineError,
-    listStations, invalidateStationsCache, buildCreditTokenPayload, buildRemoteTaskConfirmPayload,
+    listStations, listStationDirectory, invalidateStationsCache, buildCreditTokenPayload, buildRemoteTaskConfirmPayload,
     buildRemoteTokenStandbyConfirmPayload, buildRemoteTokenTaskLookupPayload, buildRemoteTokenTaskPayload,
     lookupArchivedMeterSample, createRemoteSendTask,
 } from '../token-engine.js';
@@ -128,6 +128,31 @@ describe('listStations', () => {
             text: async () => 'upstream unavailable',
         }) as any;
         await expect(listStations({ force: true })).rejects.toThrow(TokenEngineError);
+    });
+
+    it('falls back to default env credentials when OEM resolution produces no config', async () => {
+        globalThis.fetch = vi.fn(async (url: any) => {
+            const urlStr = String(url || '');
+            if (urlStr.includes('/api/station/read')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        code: 0,
+                        result: { total: 1, data: [{ stationId: 'BONDU', name: 'BONDU' }] },
+                    }),
+                } as any;
+            }
+            return {
+                ok: true,
+                status: 200,
+                headers: new Headers({ 'content-type': 'application/json' }),
+                text: async () => '[]',
+                json: async () => [],
+            } as any;
+        }) as any;
+        const stations = await listStationDirectory({ force: true });
+        expect(stations).toHaveLength(1);
+        expect(stations[0].stationId).toBe('BONDU');
     });
 });
 
