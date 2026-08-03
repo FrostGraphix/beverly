@@ -115,8 +115,7 @@ function main() {
     "fastify.get('/audit/export.csv'",
     "fastify.get('/security-events'",
     "fastify.get('/audit/summary'",
-    "fastify.get('/reports/overview'",
-    "fastify.get('/reports/export.csv'",
+    "adminReportsRoutes",
     "fastify.get('/feature-flags'",
     "fastify.post('/feature-flags'",
     "fastify.patch('/feature-flags/:key'",
@@ -230,7 +229,6 @@ function main() {
     assert.match(apiSource, /function unwrapEnvelope/);
     assert.match(apiSource, /function portalBasePath/);
     assert.match(apiSource, /const loginPath = `\$\{portalBasePath\(\)\}login`/);
-    assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) \{/);
     assert.match(apiSource, /const refreshed = await refreshAccessToken\(\)/);
     assert.match(apiSource, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) handleUnauthorized\(\)/);
     assert.match(apiSource, /Idempotency-Key/);

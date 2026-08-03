@@ -95,15 +95,17 @@ const smokeToken = read('tools/smoke-credit-token.cjs');
 assert.match(smokeToken, /energyAmountMinor \* \(10000 \+ vatRateBasisPoints\)/);
 assert.match(reports, /energyRevenueMinor/);
 
-const reportRoute = read('backend/wallet/src/routes/admin.ts');
+const reportRoute = read('backend/wallet/src/routes/admin-reports.ts');
 assert.match(reportRoute, /energy_revenue_minor/);
 assert.match(reportRoute, /vat_minor/);
 assert.match(reportRoute, /energyRevenueMinor: 0/);
-assert.match(reportRoute, /fastify\.get\('\/vat-policies'/);
-assert.match(reportRoute, /fastify\.post\('\/vat-policies'/);
-assert.match(reportRoute, /fastify\.post\('\/vat-policies\/:id\/approve'/);
-assert.match(reportRoute, /vat_policy\.submitted/);
-assert.match(reportRoute, /vat_policy\.approved/);
+
+const adminRoute = read('backend/wallet/src/routes/admin.ts');
+assert.match(adminRoute, /fastify\.get\('\/vat-policies'/);
+assert.match(adminRoute, /fastify\.post\('\/vat-policies'/);
+assert.match(adminRoute, /fastify\.post\('\/vat-policies\/:id\/approve'/);
+assert.match(adminRoute, /vat_policy\.submitted/);
+assert.match(adminRoute, /vat_policy\.approved/);
 
 const vatEnv = read('backend/wallet/src/config/env.ts');
 assert.match(vatEnv, /VENDING_VAT_BASIS_POINTS/);
