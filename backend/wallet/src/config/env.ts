@@ -36,6 +36,7 @@ const schema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     CORS_ORIGINS: z.string().default(''),
+    LOGIN_EMAIL_DOMAIN: z.string().default('org.acoblighting.com'),
 
     SUPABASE_URL: z.string().url(),
     SUPABASE_ANON_KEY: z.string().min(20),
