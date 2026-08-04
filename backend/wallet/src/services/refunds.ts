@@ -47,10 +47,11 @@ export async function createRefundRequest(input: {
     return (data as any).id;
 }
 
-export async function approveRefund(refundRequestId: string, approvedByUserId: string): Promise<void> {
+export async function approveRefund(refundRequestId: string, approvedByUserId: string, amountMinor?: number): Promise<void> {
     const { data: approved, error } = await adminClient.rpc('fn_approve_refund_request', {
         p_refund_request_id: refundRequestId,
         p_approved_by_user_id: approvedByUserId,
+        p_amount_minor: amountMinor ?? null,
     });
     if (error) {
         const message = error.message.toLowerCase();
@@ -58,6 +59,7 @@ export async function approveRefund(refundRequestId: string, approvedByUserId: s
         if (message.includes('not pending')) throw new RefundError('Refund is not pending', 'invalid_status');
         if (message.includes('maker-checker')) throw new RefundError('Approver must be different from requester (maker-checker)', 'maker_checker_violation');
         if (message.includes('missing ledger entry')) throw new RefundError('Approved refund is missing its ledger entry. Manual reconciliation required.', 'state_transition_missing');
+        if (message.includes('partial refund amount')) throw new RefundError('Partial amount must be greater than zero and cannot exceed the requested amount', 'invalid_amount');
         if (message.includes('wallet')) throw new RefundError(`Ledger write failed: ${error.message}`, 'ledger_error');
         throw new RefundError(`Refund approval failed: ${error.message}`, 'approve_failed');
     }
@@ -68,7 +70,12 @@ export async function approveRefund(refundRequestId: string, approvedByUserId: s
         actorType:   'staff',
         action:      'refund.approved',
         targetId:    refundRequestId,
-        metadata:    { amount_minor: req?.amount_minor, wallet_id: req?.wallet_id, ledger_entry_id: req?.ledger_entry_id ?? null },
+        metadata:    {
+            amount_minor: req?.amount_minor,
+            approved_amount_minor: req?.approved_amount_minor ?? req?.amount_minor,
+            wallet_id: req?.wallet_id,
+            ledger_entry_id: req?.ledger_entry_id ?? null,
+        },
     });
 }
 

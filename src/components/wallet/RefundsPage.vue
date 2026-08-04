@@ -6,7 +6,7 @@
         <p>Manage refund requests and approvals</p>
       </div>
       <div class="ops-head-actions">
-        <BaseButton @click="load">Refresh</BaseButton>
+        <BaseButton :loading="loading" :disabled="loading" @click="load">Refresh</BaseButton>
       </div>
     </header>
 
@@ -53,11 +53,11 @@
 
     <div v-if="error" class="ops-error" role="alert">{{ error }} <BaseButton size="sm" @click="load">Retry</BaseButton></div>
 
-    <div v-if="loading" class="ops-loading">
+    <div v-if="initialLoading" class="ops-loading" role="status" :aria-busy="initialLoading" aria-live="polite">
       <div v-for="n in 5" :key="n" class="skeleton-row-strip"></div>
     </div>
 
-    <div v-else-if="!filteredRows.length" class="ops-empty">No refunds found.</div>
+    <div v-else-if="!filteredRows.length && !refreshing" class="ops-empty">No refunds found.</div>
 
     <div v-else class="ops-table-wrap">
       <table class="ops-table" aria-label="Refunds table">
@@ -75,6 +75,9 @@
           </tr>
         </thead>
         <tbody>
+          <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
+            <td colspan="9"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
+          </tr>
           <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td><code class="mono-id">{{ shortId(row.purchaseOrderId) }}</code></td>
@@ -160,6 +163,8 @@ export default {
       search: "",
       selected: null,
       loading: false,
+      initialLoading: true,
+      refreshing: false,
       error: "",
       submitting: false,
       approveModal: { open: false, row: null, approvedNgn: 0, note: "" },
@@ -192,6 +197,11 @@ export default {
   mounted() { this.load(); },
   methods: {
     async load() {
+      if (this.initialLoading) {
+        // First paint: show full skeleton
+      } else {
+        this.refreshing = true;
+      }
       this.loading = true;
       this.error = "";
       try {
@@ -205,6 +215,8 @@ export default {
         this.error = e?.message || "Failed to load refunds";
       } finally {
         this.loading = false;
+        this.initialLoading = false;
+        this.refreshing = false;
       }
     },
     openApprove(row) {
@@ -291,8 +303,11 @@ export default {
 .ops-error { background: var(--bev-color-red-50); border: 1px solid var(--bev-color-red-100); color: var(--bev-color-red-600); border-radius: var(--bev-radius-md, 8px); padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .ops-empty { padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
 .ops-loading { display: flex; flex-direction: column; gap: 8px; }
-.skeleton-row-strip { height: 44px; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-page) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--bev-radius-sm, 6px); }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-row-strip { height: 44px; background: var(--bg-card); border-radius: var(--bev-radius-sm, 6px); position: relative; overflow: hidden; }
+.skeleton-row-strip::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, var(--bg-page) 50%, transparent 100%); animation: skeleton-sweep 1.5s ease-in-out infinite; }
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.ops-refresh-row td { padding: 8px 16px; color: var(--text-muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.ops-refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: bev-button-spin 0.7s linear infinite; flex-shrink: 0; }
 
 .ops-table-wrap { overflow-x: auto; border-radius: var(--bev-radius-lg, 12px); border: 1px solid var(--border-color); }
 .ops-table { width: 100%; border-collapse: collapse; font-size: 13px; }

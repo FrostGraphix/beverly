@@ -33,6 +33,11 @@ import {
     normalizeSmsPhone,
     SmsGuardrailError,
 } from './sms-guardrails.js';
+import {
+    validateEmailFormatAndDomain,
+    isDisposableEmail,
+    EmailValidationError,
+} from './email-validation.js';
 
 export type OtpPurpose = 'signup' | 'login' | 'recovery';
 
@@ -65,6 +70,18 @@ export interface EmailSignupInput {
 
 export interface EmailLoginInput {
     email: string;
+    password: string;
+}
+
+export interface PhoneSignupInput {
+    phone: string;
+    password: string;
+    full_name: string;
+    email?: string;
+}
+
+export interface PhoneLoginInput {
+    phone: string;
     password: string;
 }
 
@@ -156,6 +173,9 @@ function normalizeRequiredEmail(email: string): string {
     const normalized = normalizeOptionalEmail(email);
     if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
         throw new AuthError('Enter a valid email address.', 'invalid_email');
+    }
+    if (isDisposableEmail(normalized)) {
+        throw new AuthError('Disposable or temporary email addresses are not allowed.', 'disposable_email_not_allowed');
     }
     return normalized;
 }
@@ -417,12 +437,49 @@ async function emailPasswordToken(email: string, password: string): Promise<{
     };
 }
 
+export async function phonePasswordToken(phone: string, password: string): Promise<{
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: number | null;
+    expiresIn: number | null;
+    userId: string;
+}> {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone, password }),
+    });
+    const body = await res.json().catch(() => ({})) as {
+        access_token?: unknown;
+        refresh_token?: unknown;
+        expires_at?: unknown;
+        expires_in?: unknown;
+        user?: { id?: unknown };
+    };
+    if (!res.ok || !body.access_token || !body.user?.id) {
+        throw new AuthError('Invalid phone number or password.', 'invalid_credentials');
+    }
+    if (typeof body.access_token !== 'string' || typeof body.user.id !== 'string') {
+        throw new AuthError('Invalid phone number or password.', 'invalid_credentials');
+    }
+    return {
+        accessToken: body.access_token,
+        refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
+        expiresAt: typeof body.expires_at === 'number' ? body.expires_at : null,
+        expiresIn: typeof body.expires_in === 'number' ? body.expires_in : null,
+        userId: body.user.id,
+    };
+}
+
 async function createCustomerRow(input: {
     authUserId: string;
     email: string | null;
     phone: string | null;
     fullName: string | null;
-    authProvider: 'phone_otp' | 'email_password';
+    authProvider: 'phone_otp' | 'email_password' | 'phone_password';
     emailVerifiedAt?: string | null;
 }): Promise<CustomerProfile> {
     const authLink = await hasCustomersAuthUserIdColumn()
@@ -459,7 +516,15 @@ export async function signupWithEmail(
     customer: CustomerProfile;
     isNew: boolean;
 }> {
-    const email = normalizeRequiredEmail(input.email);
+    let email: string;
+    try {
+        email = await validateEmailFormatAndDomain(input.email);
+    } catch (err: any) {
+        if (err instanceof EmailValidationError) {
+            throw new AuthError(err.message, err.code);
+        }
+        throw err;
+    }
     const password = normalizePassword(input.password);
     const fullName = input.full_name?.trim();
     if (!fullName || fullName.length < 2) throw new AuthError('Full name is required.', 'full_name_required');
@@ -575,6 +640,156 @@ export async function loginWithEmail(
         targetType: 'customer',
         targetId: (customer as CustomerProfile).id,
         after: { email },
+    });
+
+    return {
+        access_token: session.accessToken,
+        refresh_token: session.refreshToken,
+        expires_at: session.expiresAt,
+        expires_in: session.expiresIn,
+        customer: customer as CustomerProfile,
+        isNew: false,
+    };
+}
+
+export async function signupWithPhone(
+    input: PhoneSignupInput,
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
+    const phone = normalizePhone(input.phone);
+    const password = normalizePassword(input.password);
+    const fullName = input.full_name?.trim();
+    if (!fullName || fullName.length < 2) throw new AuthError('Full name is required.', 'full_name_required');
+
+    let email: string | null = null;
+    if (input.email) {
+        try {
+            email = await validateEmailFormatAndDomain(input.email);
+        } catch (err: any) {
+            if (err instanceof EmailValidationError) {
+                throw new AuthError(err.message, err.code);
+            }
+            throw err;
+        }
+    }
+
+    const { data: existingPhone, error: existingPhoneErr } = await adminClient
+        .from('customers')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+    if (existingPhoneErr) throw new AuthError(existingPhoneErr.message, 'phone_lookup_failed');
+    if (existingPhone) throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+
+    if (email) {
+        const { data: existingEmail, error: existingEmailErr } = await adminClient
+            .from('customers')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+        if (existingEmailErr) throw new AuthError(existingEmailErr.message, 'email_lookup_failed');
+        if (existingEmail) throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+    }
+
+    const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
+        phone,
+        password,
+        phone_confirm: true,
+        user_metadata: { role: 'customer', full_name: fullName, email: email ?? undefined },
+    });
+    if (authErr || !authData.user) {
+        throw new AuthError(authErr?.message ?? 'User creation failed.', 'user_create_failed');
+    }
+
+    try {
+        const customer = await createCustomerRow({
+            authUserId: authData.user.id,
+            email,
+            phone,
+            fullName,
+            authProvider: 'phone_password',
+        });
+
+        await getOrCreateWallet('customer', customer.id, {
+            dailyCapMinor: 10_000_000,
+            monthlyCapMinor: 50_000_000,
+        });
+
+        if (email) {
+            try {
+                let welcomeFlagOn = false;
+                try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing */ }
+                if (welcomeFlagOn) {
+                    const content = welcomeEmail({ fullName });
+                    await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+                }
+            } catch { /* non-fatal */ }
+            sendEmailVerification(email, fullName).catch(() => undefined);
+        }
+
+        await logAction({
+            actorUserId: authData.user.id,
+            actorType: 'customer',
+            action: 'customer.phone_signup',
+            targetType: 'customer',
+            targetId: customer.id,
+            after: { email, phone },
+        });
+
+        const session = await phonePasswordToken(phone, password);
+
+        return {
+            access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
+            customer,
+            isNew: true,
+        };
+    } catch (error) {
+        await adminClient.auth.admin.deleteUser(authData.user.id);
+        throw error;
+    }
+}
+
+export async function loginWithPhone(
+    input: PhoneLoginInput,
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
+    const phone = normalizePhone(input.phone);
+    const password = normalizePassword(input.password);
+    const session = await phonePasswordToken(phone, password);
+
+    const { data: customer, error } = await adminClient
+        .from('customers')
+        .select('*')
+        .eq('auth_user_id', session.userId)
+        .maybeSingle();
+    if (error) throw new AuthError(error.message, 'customer_lookup_failed');
+    if (!customer) throw new AuthError('Customer profile not found.', 'customer_not_found');
+    if ((customer as CustomerProfile).status !== 'active') {
+        throw new AuthError('Account is not active.', 'account_inactive');
+    }
+
+    await logAction({
+        actorUserId: session.userId,
+        actorType: 'customer',
+        action: 'customer.phone_login',
+        targetType: 'customer',
+        targetId: (customer as CustomerProfile).id,
+        after: { phone },
     });
 
     return {

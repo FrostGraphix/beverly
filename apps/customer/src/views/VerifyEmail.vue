@@ -134,7 +134,7 @@ async function submit() {
       <template v-else>
         <p style="font-weight:700; margin:0 0 var(--s-1)">Enter your code</p>
         <p class="bw-muted" style="font-size: var(--t-sm); margin:0 0 var(--s-4)">
-          We sent a 6-digit code to <strong>{{ auth.customer?.email }}</strong>. It expires in 15 minutes.
+          We sent a 6-digit code to <strong>{{ auth.customer?.email }}</strong> from <strong>noreply@acoblighting.com</strong>. Please check your inbox and spam folder. It expires in 15 minutes.
         </p>
 
         <div class="otp-row" @paste.prevent="onPaste">

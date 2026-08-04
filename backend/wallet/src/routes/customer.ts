@@ -43,7 +43,7 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import {
-    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
+    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
 } from '../services/customer-auth.js';
 import {
     submitKycTier1, submitKycTier2Nin, KycError,
@@ -65,6 +65,10 @@ import {
 } from '../services/support.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import {
+    activateDisputeEvidence, assertDisputeEvidenceSop, DISPUTE_EVIDENCE_BUCKET,
+    signDisputeEvidencePaths, toDisputeEvidencePath, DisputeEvidenceError,
+} from '../services/dispute-evidence.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
 import {
@@ -83,7 +87,7 @@ import {
 } from '../services/customer-email-otp.js';
 
 function customerAuthStatus(code: string): number {
-    return code === 'rate_limit' ? 429
+    return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
         : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
         : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
         : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
@@ -92,6 +96,24 @@ function customerAuthStatus(code: string): number {
         : code === 'invalid_credentials' ? 401
         : code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401
         : 400;
+}
+
+const publicAuthIpAttempts = new Map<string, { count: number; resetAt: number }>();
+const PUBLIC_AUTH_RATE_LIMIT_MAX = 20;
+const PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function assertPublicAuthIpRateLimited(ip: string): void {
+    if (env.NODE_ENV === 'test') return;
+    const now = Date.now();
+    const entry = publicAuthIpAttempts.get(ip);
+    if (!entry || entry.resetAt < now) {
+        publicAuthIpAttempts.set(ip, { count: 1, resetAt: now + PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS });
+        return;
+    }
+    if (entry.count >= PUBLIC_AUTH_RATE_LIMIT_MAX) {
+        throw new AuthError('Too many auth requests from this IP. Please wait a few minutes.', 'rate_limit_exceeded');
+    }
+    entry.count += 1;
 }
 
 function emailOtpStatus(code: string): number {
@@ -209,6 +231,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email, password, and full_name required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await signupWithEmail({ email, password, full_name, phone });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
@@ -225,7 +248,44 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email and password required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await loginWithEmail({ email, password });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/signup', async (req, reply) => {
+        const { phone, password, full_name, email } = req.body as {
+            phone: string; password: string; full_name: string; email?: string;
+        };
+        if (!phone || !password || !full_name) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone, password, and full_name required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await signupWithPhone({ phone, password, full_name, email });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/login', async (req, reply) => {
+        const { phone, password } = req.body as { phone: string; password: string };
+        if (!phone || !password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone and password required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await loginWithPhone({ phone, password });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
             if (e instanceof AuthError) {
@@ -987,7 +1047,50 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!d || (d as any).customer_id !== req.actor!.customerId!) {
             return reply.code(404).send({ error: 'not_found' });
         }
-        return d;
+        const evidencePaths: string[] = Array.isArray((d as any).evidence_paths) ? (d as any).evidence_paths : [];
+        const evidence = await signDisputeEvidencePaths(evidencePaths);
+        return { ...d, evidence };
+    });
+
+    fastify.post('/disputes/:id/evidence/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const customerId = req.actor!.customerId!;
+        const d = await getDispute(id);
+        if (!d || (d as any).customer_id !== customerId) return reply.code(404).send({ error: 'not_found' });
+
+        let sop;
+        try {
+            sop = assertDisputeEvidenceSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: error?.code ?? 'invalid_evidence', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toDisputeEvidencePath(customerId, id, sop.file_name);
+        const { data, error } = await adminClient.storage.from(DISPUTE_EVIDENCE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        return {
+            bucket: DISPUTE_EVIDENCE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            sop: { max_bytes: 5 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] },
+        };
+    });
+
+    fastify.post('/disputes/:id/evidence/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const customerId = req.actor!.customerId!;
+        const { path } = z.object({ path: z.string().min(1) }).parse(req.body ?? {});
+        try {
+            const paths = await activateDisputeEvidence(customerId, id, path);
+            const evidence = await signDisputeEvidencePaths(paths);
+            return { evidence };
+        } catch (error: any) {
+            if (error instanceof DisputeEvidenceError) {
+                const status = error.code === 'not_found' ? 404 : 422;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            return reply.code(422).send({ error: 'evidence_activation_failed', message: 'Could not attach evidence.' });
+        }
     });
 
     fastify.post('/disputes/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
@@ -20,6 +20,81 @@ const authError = ref('');
 const copied = ref(false);
 const router = useRouter();
 const route = useRoute();
+
+// ── PIN brute-force lockout ────────────────────────────────────────
+const MAX_PIN_ATTEMPTS = 3;
+const LOCKOUT_MS = 30_000;
+const pinAttempts = ref(0);
+const lockedUntil = ref(0);
+const now = ref(Date.now());
+let lockTimer: number | undefined;
+const isLocked = computed(() => lockedUntil.value > now.value);
+const lockSecondsLeft = computed(() => Math.max(0, Math.ceil((lockedUntil.value - now.value) / 1000)));
+
+function tickLock() {
+    now.value = Date.now();
+    if (lockedUntil.value > now.value) {
+        lockTimer = window.setTimeout(tickLock, 500);
+    } else {
+        lockTimer = undefined;
+    }
+}
+
+function registerFailedAttempt() {
+    pinAttempts.value += 1;
+    if (pinAttempts.value >= MAX_PIN_ATTEMPTS) {
+        lockedUntil.value = Date.now() + LOCKOUT_MS;
+        pinAttempts.value = 0;
+        if (!lockTimer) tickLock();
+    }
+}
+
+function registerSuccessfulAttempt() {
+    pinAttempts.value = 0;
+}
+
+// ── Remote delivery auto-polling (exponential backoff) ─────────────
+const polling = ref(false);
+let pollTimer: number | undefined;
+const POLL_DELAYS_MS = [2000, 3000, 5000, 8000, 13000]; // capped backoff, then stop
+
+function stopPolling() {
+    if (pollTimer) { window.clearTimeout(pollTimer); pollTimer = undefined; }
+    polling.value = false;
+}
+
+function schedulePoll(attempt: number) {
+    const orderId = result.value?.purchaseOrder?.id;
+    if (!orderId) return;
+    const state = String(result.value?.purchaseOrder?.delivery_state ?? result.value?.remoteSend?.deliveryState ?? '');
+    if (!['remote_send_pending', 'remote_send_pending_review'].includes(state)) { stopPolling(); return; }
+    if (attempt >= POLL_DELAYS_MS.length) { stopPolling(); return; }
+    polling.value = true;
+    pollTimer = window.setTimeout(() => pollDeliveryStatus(orderId, attempt), POLL_DELAYS_MS[attempt]);
+}
+
+async function pollDeliveryStatus(orderId: string, attempt: number) {
+    try {
+        const response = await api.post<{
+            remoteTaskId: string;
+            status: 'pending' | 'success' | 'failed' | 'unknown';
+            deliveryState: string;
+            remark?: string | null;
+            purchaseOrder?: any;
+        }>(`/api/v1/vendor/vend/${orderId}/remote-send`, {});
+        if (result.value) {
+            result.value = {
+                ...result.value,
+                purchaseOrder: { ...result.value.purchaseOrder, ...(response.purchaseOrder ?? {}), delivery_state: response.deliveryState },
+                remoteSend: { status: response.status, deliveryState: response.deliveryState, remark: response.remark ?? null },
+            };
+        }
+    } catch {
+        // transient — keep backing off and retry
+    } finally {
+        schedulePoll(attempt + 1);
+    }
+}
 
 interface MeterInfo {
     meterId: string;
@@ -157,6 +232,10 @@ function confirm() {
 
 async function submitAuthorization() {
     if (!meter.value || !preview.value || !authorization.value) return;
+    if (isLocked.value) {
+        authError.value = `Too many incorrect attempts. Try again in ${lockSecondsLeft.value}s.`;
+        return;
+    }
     loading.value = true; error.value = null;
     authError.value = '';
     try {
@@ -177,9 +256,11 @@ async function submitAuthorization() {
             },
         );
         result.value = r;
+        registerSuccessfulAttempt();
         authorization.value = '';
         authOpen.value = false;
         step.value = 'success';
+        schedulePoll(0);
     } catch (e: any) {
         if (e instanceof ApiError && e.code === 'vend_credential_required') {
             authOpen.value = false;
@@ -188,7 +269,10 @@ async function submitAuthorization() {
             return;
         }
         if (e instanceof ApiError && e.code === 'invalid_vend_credential') {
-            authError.value = 'Invalid vendor authorization.';
+            registerFailedAttempt();
+            authError.value = isLocked.value
+                ? `Too many incorrect attempts. Try again in ${lockSecondsLeft.value}s.`
+                : 'Invalid vendor authorization.';
             return;
         }
         error.value = describeApiError(e, e?.message ?? 'Remote send failed');
@@ -198,6 +282,7 @@ async function submitAuthorization() {
 }
 
 function reset() {
+    stopPolling();
     step.value = 'meter';
     meterId.value = '';
     amountNaira.value = 2000;
@@ -207,6 +292,8 @@ function reset() {
     error.value = null;
     copied.value = false;
 }
+
+onUnmounted(stopPolling);
 
 async function copyToken() {
     if (!result.value?.token) return;
@@ -359,6 +446,10 @@ function downloadResultReceipt() {
           </p>
           <p class="bw-muted bw-mono" style="font-size: var(--t-sm)">{{ kwh(result?.units) }} · {{ naira(preview?.amountMinor) }}</p>
         </div>
+        <div v-if="polling" class="bw-alert" style="display: grid; gap: 4px">
+          <strong>Checking delivery status…</strong>
+          <span>Beverly is polling the meter for confirmation. The token above is already valid for manual entry.</span>
+        </div>
         <div class="bw-card">
           <div class="bw-row"><span class="bw-muted">Customer</span><span class="bw-spacer"></span><strong>{{ meter?.customerName }}</strong></div>
           <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Meter</span><span class="bw-spacer"></span><span class="bw-mono">{{ meter?.meterId }}</span></div>
@@ -386,7 +477,7 @@ function downloadResultReceipt() {
       confirm-label="Dispatch token"
       tone="warn"
       :loading="loading"
-      :disable-confirm="!authorization"
+      :disable-confirm="!authorization || isLocked"
       @confirm="submitAuthorization"
     >
       <label class="bw-label">Vendor authorization</label>
@@ -395,9 +486,13 @@ function downloadResultReceipt() {
         v-model="authorization"
         type="password"
         autocomplete="off"
+        :disabled="isLocked"
         placeholder="PIN or password"
       />
-      <p v-if="authError" class="bw-alert danger" style="margin-top: var(--s-2)">
+      <p v-if="isLocked" class="bw-alert danger" style="margin-top: var(--s-2)">
+        Too many incorrect attempts. Try again in {{ lockSecondsLeft }}s.
+      </p>
+      <p v-else-if="authError" class="bw-alert danger" style="margin-top: var(--s-2)">
         {{ authError }}
       </p>
       <p class="bw-muted" style="font-size: var(--t-xs); margin-top: var(--s-2)">

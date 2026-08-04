@@ -40,6 +40,7 @@ export interface Actor {
     mfaEnrolled?: boolean;
     kycTier?: number;
     passwordResetRequired?: boolean;
+    emailVerified?: boolean;
 }
 
 declare module 'fastify' {
@@ -94,7 +95,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 1. Vendor user lookup
     const { data: vu } = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, vendor_organizations(status, station_id)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
@@ -106,6 +107,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
         // A vendor holds exactly one station. Carry it on the actor so
         // consumption reads scope without a second lookup per request.
         const vendorStationId = String(organization?.station_id ?? '').trim().toUpperCase();
+        const emailVerified = Boolean((vu as any).email_verified_at || user.email_confirmed_at);
         return {
             userId,
             email,
@@ -117,6 +119,7 @@ async function resolveActor(token: string): Promise<Actor | null> {
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
             passwordResetRequired: (vu as any).password_reset_required,
+            emailVerified,
         };
     }
 

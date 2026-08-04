@@ -37,7 +37,7 @@ assert.match(vendorLogin, /Authentication is not configured/);
 assert.match(vendorVite, /loadEnv\(mode, resolve\(__dirname, '\.\.\/\.\.'\), ''\)/);
 assert.match(vendorVite, /env\.VITE_SUPABASE_URL \|\| env\.SUPABASE_URL/);
 assert.match(vendorVite, /env\.VITE_SUPABASE_ANON_KEY \|\| env\.SUPABASE_ANON_KEY/);
-assert.match(vendorLogin, /auth\.setSession\(accessToken, me, rememberEmail\.value, \{/);
+assert.match(vendorLogin, /auth\.setSession\(accessToken, me, (rememberLogin|rememberEmail)\.value, \{/);
 assert.match(vendorLogin, /password-change', query: \{ redirect: redirectTarget\.value \}/);
 assert.match(vendorStore, /storeToken\(token: string, remember = true, options: VendorTokenOptions = \{\}\)/);
 assert.match(vendorStore, /sessionStorage\.getItem\(TOKEN_KEY\) \?\? localStorage\.getItem\(TOKEN_KEY\)/);

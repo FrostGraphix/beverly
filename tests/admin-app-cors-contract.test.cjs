@@ -15,10 +15,10 @@ const legacyVendorAuth = fs.readFileSync(path.join(root, "src/components/vendor/
 
 assert.match(
   adminVite,
-  /proxy:\s*\{\s*'\/api':\s*\{\s*target:\s*`http:\/\/localhost:\$\{process\.env\.WALLET_PORT \|\| 4000\}`/,
+  /proxy:\s*\{\s*'\/api':\s*\{\s*target:\s*`http:\/\/(localhost|127\.0\.0\.1):\$\{process\.env\.WALLET_PORT \|\| 4000\}`/,
   "admin dev server must proxy /api to the wallet backend"
 );
-assert.match(adminVite, /base: process\.env\.VITE_ADMIN_BASE \?\? \(command === 'build' \? '\/wallet-admin\/' : '\/'\)/, "admin build must mount under /wallet-admin/");
+assert.match(adminVite, /(const\s+base\s*=\s*|base:\s*)process\.env\.VITE_ADMIN_BASE \?\? \(command === 'build' \? '\/wallet-admin\/' : '\/'\)/, "admin build must mount under /wallet-admin/");
 assert.match(adminVite, /outDir:\s*resolve\(__dirname, '\.\.\/\.\.\/dist\/wallet-admin'\)/, "admin build must emit into root dist/wallet-admin");
 
 assert.doesNotMatch(
