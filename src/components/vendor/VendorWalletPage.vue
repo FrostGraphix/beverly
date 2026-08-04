@@ -6,10 +6,16 @@
         <h1>Sell power without slowing customers down.</h1>
         <p class="hero-copy">Fund once. Vend tokens. Send remote credit. Keep every receipt traceable.</p>
       </div>
-      <div class="hero-balance">
+      <div class="hero-balance" :aria-busy="initialLoading" aria-live="polite">
         <span>Available balance</span>
-        <strong>{{ moneyMinor(summary.availableBalanceMinor) }}</strong>
-        <small>{{ summary.wallet?.walletNumber || "Wallet pending activation" }}</small>
+        <template v-if="initialLoading">
+          <span class="vw-skeleton vw-skeleton--balance"></span>
+          <span class="vw-skeleton vw-skeleton--label"></span>
+        </template>
+        <template v-else>
+          <strong>{{ moneyMinor(summary.availableBalanceMinor) }}</strong>
+          <small>{{ summary.wallet?.walletNumber || "—" }}</small>
+        </template>
       </div>
     </header>
 
@@ -30,14 +36,22 @@
             <p class="eyebrow">Operating cockpit</p>
             <h2>Wallet health</h2>
           </div>
-          <BaseButton class="ghost-pill" variant="ghost" @click="refresh">Refresh</BaseButton>
+          <BaseButton class="ghost-pill" variant="ghost" :loading="refreshing" :disabled="initialLoading" @click="doRefresh">Refresh</BaseButton>
         </div>
-        <div class="metric-grid">
-          <div v-for="metric in metrics" :key="metric.label" class="metric-tile">
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-            <small>{{ metric.help }}</small>
-          </div>
+        <div class="metric-grid" :aria-busy="initialLoading" aria-live="polite">
+          <template v-if="initialLoading">
+            <div v-for="n in 4" :key="n" class="metric-tile">
+              <span class="vw-skeleton vw-skeleton--metric-label"></span>
+              <span class="vw-skeleton vw-skeleton--metric-value"></span>
+            </div>
+          </template>
+          <template v-else>
+            <div v-for="metric in metrics" :key="metric.label" class="metric-tile">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+              <small>{{ metric.help }}</small>
+            </div>
+          </template>
         </div>
         <div class="limit-rail">
           <span :style="{ width: dailyUsagePercent + '%' }"></span>
@@ -66,15 +80,28 @@
             <h2>Funding and vending</h2>
           </div>
         </div>
-        <div class="timeline-list">
-          <div v-for="item in activityFeed" :key="item.id" class="timeline-row">
-            <span :class="['timeline-dot', item.kind]"></span>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <small>{{ item.subtitle }}</small>
+        <div class="timeline-list" :aria-busy="initialLoading" aria-live="polite">
+          <template v-if="initialLoading">
+            <div v-for="n in 4" :key="n" class="timeline-row timeline-row--skeleton">
+              <span class="timeline-dot"></span>
+              <div>
+                <span class="vw-skeleton vw-skeleton--title"></span>
+                <span class="vw-skeleton vw-skeleton--subtitle"></span>
+              </div>
+              <span class="vw-skeleton vw-skeleton--amount"></span>
             </div>
-            <b>{{ item.value }}</b>
-          </div>
+          </template>
+          <template v-else>
+            <div v-if="!activityFeed.length" class="timeline-empty">No recent activity.</div>
+            <div v-for="item in activityFeed" :key="item.id" class="timeline-row">
+              <span :class="['timeline-dot', item.kind]"></span>
+              <div>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.subtitle }}</small>
+              </div>
+              <b>{{ item.value }}</b>
+            </div>
+          </template>
         </div>
       </article>
     </section>
@@ -136,7 +163,7 @@
           </div>
         </div>
 
-        <BaseButton class="primary-action" variant="primary" :disabled="busy || buyerMode === 'direct'" @click="submitPurchase">
+        <BaseButton class="primary-action" variant="primary" :loading="busy" :disabled="busy || buyerMode === 'direct'" @click="submitPurchase">
           {{ buyerMode === "direct" ? "Customer direct is next phase" : purchaseMode === "token" ? "Generate token" : "Send remotely" }}
         </BaseButton>
       </article>
@@ -166,7 +193,7 @@
           <span>Proof reference</span>
           <BaseInput v-model.trim="funding.proofReference" type="text" placeholder="Receipt, teller, or transfer ref" />
         </label>
-        <BaseButton class="primary-action" variant="primary" :disabled="busy" @click="submitFunding">Request top-up</BaseButton>
+        <BaseButton class="primary-action" variant="primary" :loading="busy" :disabled="busy" @click="submitFunding">Request top-up</BaseButton>
       </article>
 
       <article class="command-card command-card--wide">
@@ -254,6 +281,8 @@ export default {
     return {
       activeTab: "dashboard",
       busy: false,
+      initialLoading: true,
+      refreshing: false,
       notice: "",
       error: "",
       customerSearch: "",
@@ -349,6 +378,7 @@ export default {
     },
     async bootstrap() {
       this.busy = true;
+      this.initialLoading = true;
       try {
         await this.ensureDemoWallet();
         await this.refresh();
@@ -356,6 +386,19 @@ export default {
         this.error = error.message || "Wallet could not load.";
       } finally {
         this.busy = false;
+        this.initialLoading = false;
+      }
+    },
+    async doRefresh() {
+      if (this.refreshing) return;
+      this.refreshing = true;
+      this.error = "";
+      try {
+        await this.refresh();
+      } catch (error) {
+        this.error = error.message || "Refresh failed.";
+      } finally {
+        this.refreshing = false;
       }
     },
     async ensureDemoWallet() {
@@ -822,4 +865,32 @@ export default {
     grid-template-columns: 1fr;
   }
 }
+/* ── Vendor Wallet Skeletons ── */
+.vw-skeleton {
+  display: block;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  position: relative;
+  overflow: hidden;
+}
+.vw-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--text-primary) 6%, transparent) 50%, transparent 100%);
+  animation: vw-sweep 1.5s ease-in-out infinite;
+}
+@keyframes vw-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.vw-skeleton--balance { height: 2.8rem; width: 60%; margin: 4px 0; }
+.vw-skeleton--label { height: 0.85rem; width: 38%; }
+.vw-skeleton--metric-label { height: 0.75rem; width: 55%; margin-bottom: 6px; }
+.vw-skeleton--metric-value { height: 1.4rem; width: 70%; }
+.vw-skeleton--title { height: 0.85rem; width: 65%; margin-bottom: 4px; }
+.vw-skeleton--subtitle { height: 0.75rem; width: 45%; }
+.vw-skeleton--amount { height: 0.85rem; width: 56px; }
+.timeline-row--skeleton { opacity: 0.7; }
+.timeline-empty { padding: 16px; text-align: center; color: var(--text-secondary); font-size: 0.85rem; }
 </style>

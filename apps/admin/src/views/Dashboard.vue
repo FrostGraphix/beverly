@@ -31,24 +31,53 @@ interface WalletSummary {
     byStatus?: Record<string, number>;
 }
 
+interface PurchasesSummary {
+    todayCount: number;
+    todayValueMinor: number;
+    todayDeliveredCount: number;
+    todayDeliveredValueMinor: number;
+    todayDeliveredKwh: number;
+    last24hCount: number;
+    last24hValueMinor: number;
+    failed24hCount: number;
+    refundedCount: number;
+    vendorStats?: {
+        successCount: number;
+        successValueMinor: number;
+        failedCount: number;
+    };
+    customerStats?: {
+        successCount: number;
+        successValueMinor: number;
+        failedCount: number;
+    };
+}
+
 const funding = ref<FundingRequest[]>([]);
 const fundingHistory = ref<FundingHistoryRow[]>([]);
 const auth = useStaffAuthStore();
 const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
 const walletSummary = ref<WalletSummary>({ walletCount: 0, totalFloatMinor: 0, byStatus: {} });
+const purchasesSummary = ref<PurchasesSummary | null>(null);
 const loading = ref(true);
 const feedErrors = ref<string[]>([]);
 const staffName = computed(() => auth.user?.full_name?.split(' ')[0] || 'team');
 let poll: ReturnType<typeof setInterval> | null = null;
 const statPendingFundingMinor = ref(0);
+const statTodayDeliveredKwh = ref(0);
 const statTodayPurchasesMinor = ref(0);
-const statFailedToday = ref(0);
+const statDeliveredTodayCount = ref(0);
+const statVendorSuccessCount = ref(0);
+const statVendorSuccessValueMinor = ref(0);
+const statVendorFailedCount = ref(0);
+const statCustomerSuccessCount = ref(0);
+const statCustomerSuccessValueMinor = ref(0);
+const statCustomerFailedCount = ref(0);
 const statApplications = ref(0);
 const statTotalWalletFloatMinor = ref(0);
 const statVendorFloatMinor = ref(0);
 const statCustomerFloatMinor = ref(0);
-const statTokensDeliveredToday = ref(0);
 const recentTypeFilter = ref('all');
 const recentActorFilter = ref('all');
 const recentStationFilter = ref('');
@@ -76,13 +105,43 @@ const todayVendingTotal = computed(() => {
         .filter(p => new Date(p.created_at) >= today && p.status === 'delivered')
         .reduce((s, p) => s + p.amount_minor, 0);
 });
-const failedToday = computed(() => {
+const todayKwhFromVending = computed(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'failed').length;
+    return vending.value
+        .filter(p => new Date(p.created_at) >= today && p.status === 'delivered')
+        .reduce((s, p) => s + Number(p.units_kwh ?? 0), 0);
 });
 const deliveredToday = computed(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'delivered').length;
+});
+
+const isVendorPurchase = (p: Purchase) => p.actor_type === 'vendor' || p.actor_type === 'vendor_staff';
+
+const vendorDeliveredCountFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'delivered' && isVendorPurchase(p)).length;
+});
+const vendorDeliveredValueFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'delivered' && isVendorPurchase(p)).reduce((s, p) => s + p.amount_minor, 0);
+});
+const vendorFailedCountFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'failed' && isVendorPurchase(p)).length;
+});
+
+const customerDeliveredCountFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'delivered' && !isVendorPurchase(p)).length;
+});
+const customerDeliveredValueFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'delivered' && !isVendorPurchase(p)).reduce((s, p) => s + p.amount_minor, 0);
+});
+const customerFailedCountFallback = computed(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return vending.value.filter(p => new Date(p.created_at) >= today && p.status === 'failed' && !isVendorPurchase(p)).length;
 });
 const pendingVending = computed(() =>
     vending.value.filter(p => ['hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status))
@@ -223,14 +282,35 @@ function animateStat(targetRef: { value: number }, target: number, durationMs = 
 }
 
 function syncAnimatedStats() {
+    const todayKwh = purchasesSummary.value?.todayDeliveredKwh ?? todayKwhFromVending.value;
+    const todayValue = purchasesSummary.value?.todayDeliveredValueMinor ?? todayVendingTotal.value;
+    const todayDeliveredCnt = purchasesSummary.value?.todayDeliveredCount ?? deliveredToday.value;
+
+    const vSuccessCount = purchasesSummary.value?.vendorStats?.successCount ?? vendorDeliveredCountFallback.value;
+    const vSuccessVal = purchasesSummary.value?.vendorStats?.successValueMinor ?? vendorDeliveredValueFallback.value;
+    const vFailedCnt = purchasesSummary.value?.vendorStats?.failedCount ?? vendorFailedCountFallback.value;
+
+    const cSuccessCount = purchasesSummary.value?.customerStats?.successCount ?? customerDeliveredCountFallback.value;
+    const cSuccessVal = purchasesSummary.value?.customerStats?.successValueMinor ?? customerDeliveredValueFallback.value;
+    const cFailedCnt = purchasesSummary.value?.customerStats?.failedCount ?? customerFailedCountFallback.value;
+
     animateStat(statPendingFundingMinor, pendingFundingTotal.value);
-    animateStat(statTodayPurchasesMinor, todayVendingTotal.value);
-    animateStat(statFailedToday, failedToday.value);
+    animateStat(statTodayDeliveredKwh, todayKwh);
+    animateStat(statTodayPurchasesMinor, todayValue);
+    animateStat(statDeliveredTodayCount, todayDeliveredCnt);
+
+    animateStat(statVendorSuccessCount, vSuccessCount);
+    animateStat(statVendorSuccessValueMinor, vSuccessVal);
+    animateStat(statVendorFailedCount, vFailedCnt);
+
+    animateStat(statCustomerSuccessCount, cSuccessCount);
+    animateStat(statCustomerSuccessValueMinor, cSuccessVal);
+    animateStat(statCustomerFailedCount, cFailedCnt);
+
     animateStat(statApplications, apps.value.length);
     animateStat(statTotalWalletFloatMinor, totalWalletFloatMinor.value);
     animateStat(statVendorFloatMinor, vendorFloatMinor.value);
     animateStat(statCustomerFloatMinor, customerFloatMinor.value);
-    animateStat(statTokensDeliveredToday, deliveredToday.value);
 }
 
 function typeLabel(p: Purchase) {
@@ -286,13 +366,14 @@ function adminAutoRefreshEnabled() {
 async function fetchAll() {
     const errors: string[] = [];
     
-    const [fundingRes, fundingHistRes, appsRes, vendingRes, walletRes, stationsRes] = await Promise.allSettled([
+    const [fundingRes, fundingHistRes, appsRes, vendingRes, walletRes, stationsRes, purchasesSummaryRes] = await Promise.allSettled([
         api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending'),
         api.get<{ funding: FundingHistoryRow[] }>('/api/v1/admin/funding/history?limit=50'),
         api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications'),
         api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending'),
         api.get<WalletSummary>('/api/v1/admin/wallets/summary'),
-        api.get<{ stations: any[] }>('/api/v1/admin/stations')
+        api.get<{ stations: any[] }>('/api/v1/admin/stations'),
+        api.get<PurchasesSummary>('/api/v1/admin/purchases/summary'),
     ]);
 
     if (fundingRes.status === 'fulfilled') funding.value = fundingRes.value.funding;
@@ -308,6 +389,8 @@ async function fetchAll() {
 
     if (walletRes.status === 'fulfilled') walletSummary.value = walletRes.value;
     else errors.push('Wallet summary unavailable');
+
+    if (purchasesSummaryRes.status === 'fulfilled') purchasesSummary.value = purchasesSummaryRes.value;
 
     if (stationsRes.status === 'fulfilled') {
         const list = Array.isArray(stationsRes.value?.stations)
@@ -358,11 +441,11 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 
     <!-- KPI grid -->
     <div v-if="loading" class="bw-kpi-grid bw-mobile-kpi-grid" aria-label="Loading dashboard">
-      <div v-for="n in 6" :key="`kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
+      <div v-for="n in 8" :key="`kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
     </div>
     <div v-else class="bw-kpi-grid bw-mobile-kpi-grid">
 
-      <!-- Featured: pending funding -->
+      <!-- 1: Featured: pending funding -->
       <div class="bw-kpi featured">
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Pending Funding</span>
@@ -391,44 +474,81 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </svg>
       </div>
 
-      <!-- Today vended -->
-      <div class="bw-kpi">
+      <!-- 2: Combined Today's Purchases & Energy Delivered -->
+      <router-link
+        to="/vending"
+        class="bw-kpi bw-kpi-link"
+        style="text-decoration:none; color:inherit"
+        aria-label="View today's purchases"
+      >
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Today's Purchases</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(statTodayPurchasesMinor) }}</div>
+        <div class="bw-kpi-value" style="color: var(--brand)">
+          {{ (statTodayDeliveredKwh || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} <span style="font-size: 0.65em; font-weight: 500">kWh</span>
+        </div>
         <div class="bw-kpi-foot">
-          <span class="bw-delta up">{{ deliveredToday }} vends</span>
-          <span class="bw-kpi-note">successful today</span>
+          <span class="bw-delta up">{{ naira(statTodayPurchasesMinor) }}</span>
+          <span class="bw-kpi-note">across {{ statDeliveredTodayCount }} vends</span>
         </div>
         <svg class="bw-spark" viewBox="0 0 120 36" preserveAspectRatio="none">
           <path class="fill" d="M0 36 L0 30 C20 26,30 18,50 20 C70 22,80 14,120 8 L120 36 Z"/>
           <path class="stroke" d="M0 30 C20 26,30 18,50 20 C70 22,80 14,120 8"/>
         </svg>
-      </div>
+      </router-link>
 
-      <!-- Failed today -->
-      <div :class="['bw-kpi', failedToday > 0 ? 'danger-tone' : '']">
+      <!-- 3: Vendor Transactions (Success & Failed) -->
+      <router-link
+        to="/vending?actorType=vendor"
+        :class="['bw-kpi', 'bw-kpi-link', statVendorFailedCount > 0 ? 'danger-tone' : '']"
+        style="text-decoration:none; color:inherit"
+        aria-label="View vendor transactions"
+      >
         <div class="bw-kpi-row">
-          <span class="bw-kpi-label">Failed Transactions</span>
+          <span class="bw-kpi-label">Vendor Transactions</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 3-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" :style="{ color: failedToday > 0 ? 'var(--danger)' : 'var(--text-dim)' }">
-          {{ statFailedToday }}
+        <div class="bw-kpi-value" style="color: var(--info)">
+          {{ statVendorSuccessCount }} <span style="font-size: 0.6em; font-weight:400; color:var(--text-dim)">vends</span>
         </div>
         <div class="bw-kpi-foot">
-          <span :class="['bw-delta', failedToday > 0 ? 'down' : 'flat']">
-            {{ failedToday > 0 ? 'needs review' : 'all clear' }}
+          <span class="bw-delta up">{{ naira(statVendorSuccessValueMinor) }}</span>
+          <span :class="['bw-kpi-note', statVendorFailedCount > 0 ? 'danger-text' : '']">
+            · {{ statVendorFailedCount > 0 ? `${statVendorFailedCount} failed` : '0 failed' }}
           </span>
         </div>
-      </div>
+      </router-link>
 
-      <!-- Applications -->
+      <!-- 4: Customer Transactions (Success & Failed) -->
+      <router-link
+        to="/vending?actorType=customer"
+        :class="['bw-kpi', 'bw-kpi-link', statCustomerFailedCount > 0 ? 'danger-tone' : '']"
+        style="text-decoration:none; color:inherit"
+        aria-label="View customer transactions"
+      >
+        <div class="bw-kpi-row">
+          <span class="bw-kpi-label">Customer Transactions</span>
+          <div class="bw-kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--brand)">
+          {{ statCustomerSuccessCount }} <span style="font-size: 0.6em; font-weight:400; color:var(--text-dim)">vends</span>
+        </div>
+        <div class="bw-kpi-foot">
+          <span class="bw-delta up">{{ naira(statCustomerSuccessValueMinor) }}</span>
+          <span :class="['bw-kpi-note', statCustomerFailedCount > 0 ? 'danger-text' : '']">
+            · {{ statCustomerFailedCount > 0 ? `${statCustomerFailedCount} failed` : '0 failed' }}
+          </span>
+        </div>
+      </router-link>
+
+      <!-- 5: Applications -->
       <div :class="['bw-kpi', apps.length > 0 ? 'info-tone' : '']">
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Applications</span>
@@ -446,7 +566,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
       </div>
 
-      <!-- Total wallet float -->
+      <!-- 6: Total wallet float -->
       <router-link
         to="/wallets"
         class="bw-kpi featured bw-kpi-link"
@@ -466,7 +586,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
       </router-link>
 
-      <!-- Vendor float -->
+      <!-- 7: Vendor float -->
       <router-link
         to="/wallets?ownerType=vendor"
         class="bw-kpi bw-kpi-link"
@@ -486,7 +606,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
       </router-link>
 
-      <!-- Customer float -->
+      <!-- 8: Customer float -->
       <router-link
         to="/wallets?ownerType=customer"
         class="bw-kpi bw-kpi-link"
@@ -505,21 +625,6 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           <span class="bw-kpi-note">wallets</span>
         </div>
       </router-link>
-
-      <!-- Tokens delivered today -->
-      <div class="bw-kpi info-tone">
-        <div class="bw-kpi-row">
-          <span class="bw-kpi-label">Tokens Delivered Today</span>
-          <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-          </div>
-        </div>
-        <div class="bw-kpi-value" style="color: var(--info)">{{ statTokensDeliveredToday }}</div>
-        <div class="bw-kpi-foot">
-          <span class="bw-delta up">{{ deliveredToday }} successful</span>
-          <span class="bw-kpi-note">live delivery count</span>
-        </div>
-      </div>
 
     </div>
 
@@ -927,6 +1032,11 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
   gap: var(--s-3);
 }
 
+.danger-text {
+  color: var(--danger) !important;
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .recent-filter-grid {
     grid-template-columns: 1fr 1fr;
@@ -938,6 +1048,16 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     flex-direction: column;
     align-items: center;
     text-align: center;
+  }
+  .bw-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: var(--s-3);
+  }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .bw-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--s-3);
   }
 }
 </style>
