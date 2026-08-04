@@ -1,6 +1,59 @@
 "use strict";
 
 const supabase = require("./supabase-service");
+const { normalizeIntervalRow, conditionActive } = require("./abnormal-alarm-service");
+
+// Signal columns on daily_meter_readings, in DB column -> upstream camelCase order.
+// Single source of truth for the write-side (rowToRecord) and read-side
+// (readDailyMeterRows/readCompactRowsFromStore) column list, so they can't drift.
+const NUMERIC_SIGNAL_COLUMNS = [
+  ["usage1", "usage1"],
+  ["interval_demand", "intervalDemand"],
+  ["power", "power"],
+  ["voltage_a", "voltageA"],
+  ["voltage_b", "voltageB"],
+  ["voltage_c", "voltageC"],
+  ["current_a", "currentA"],
+  ["current_b", "currentB"],
+  ["current_c", "currentC"],
+];
+// Boolean alarm flags. Stored as an already-resolved "is this alarm active" value
+// (conditionActive() applied once, at ingestion) -- see
+// abnormal-alarm-service.js's deriveAbnormalAlarmsFromResolvedFlags for why this
+// must not be re-inverted on read.
+const ALARM_FLAG_COLUMNS = [
+  ["relay_open", "relayOpen"],
+  ["battery_low", "batteryLow"],
+  ["magnetic_interference", "magneticInterference"],
+  ["terminal_cover_open", "terminalCoverOpen"],
+  ["cover_open", "coverOpen"],
+  ["current_reverse", "currentReverse"],
+  ["current_unbalance", "currentUnbalance"],
+];
+const SIGNAL_SELECT_COLUMNS = [
+  "gateway_id",
+  ...NUMERIC_SIGNAL_COLUMNS.map(([col]) => col),
+  "source2_activated",
+  ...ALARM_FLAG_COLUMNS.map(([col]) => col),
+];
+
+function numericOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+// Reverse of signalColumnsFromRow: DB snake_case -> the camelCase keys
+// deriveAbnormalAlarmsFromResolvedFlags (and normalizeIntervalRow) expect.
+function signalColumnsToRow(dbRow) {
+  const out = {
+    gatewayId: dbRow.gateway_id,
+    source2Activated: dbRow.source2_activated,
+  };
+  for (const [column, key] of NUMERIC_SIGNAL_COLUMNS) out[key] = dbRow[column];
+  for (const [column, key] of ALARM_FLAG_COLUMNS) out[key] = dbRow[column];
+  return out;
+}
 
 function storeEnabled() {
   if (process.env.SUPABASE_CONSUMPTION_STORE_ENABLED === "false") return false;
@@ -54,14 +107,26 @@ function rowToRecord(row, requestStation = "") {
     reading_date: readingDate,
     total1: Number.isFinite(Number(row.total1)) ? Number(row.total1) : null,
     remain1: Number.isFinite(Number(row.remain1)) ? Number(row.remain1) : null,
-    row_json: {
-      ...row,
-      stationId,
-      meterId,
-      currentDate: readingDate,
-    },
     captured_at: new Date().toISOString(),
+    ...signalColumnsFromRow(row, stationId),
   };
+}
+
+// Resolves the OEM fault/electrical signal fields (via abnormal-alarm-service.js's
+// own alias-matching, so ingestion-time and read-time interpretation can never
+// drift) into the typed daily_meter_readings columns. Booleans are stored as an
+// already-resolved "is this alarm active" value -- see ALARM_FLAG_COLUMNS above.
+function signalColumnsFromRow(row, stationId) {
+  const normalized = normalizeIntervalRow(row, stationId);
+  const out = {
+    gateway_id: normalized.gatewayId ? String(normalized.gatewayId) : null,
+    source2_activated: normalized.source2Activated === undefined ? null : Boolean(normalized.source2Activated),
+  };
+  for (const [column, key] of NUMERIC_SIGNAL_COLUMNS) out[column] = numericOrNull(normalized[key]);
+  for (const [column, key] of ALARM_FLAG_COLUMNS) {
+    out[column] = normalized[key] === undefined ? null : conditionActive(normalized[key]);
+  }
+  return out;
 }
 
 function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, eventType = "duplicate", sourcePage = null, sourceRow = null } = {}) {
@@ -328,7 +393,7 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
   // age. This also removes the last reader of row_json, allowing the column to
   // be blanked and eventually dropped.
   const query = [
-    "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1",
+    `select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1,${SIGNAL_SELECT_COLUMNS.join(",")}`,
     `station_id=eq.${encodeURIComponent(stationId)}`,
     `reading_date=gte.${encodeURIComponent(from)}`,
     `reading_date=lte.${encodeURIComponent(to)}`,
@@ -350,6 +415,7 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
       currentDate: row.reading_date,
       total1: row.total1,
       remain1: row.remain1,
+      ...signalColumnsToRow(row),
     }))
     .filter((row) => row.stationId || row.meterId);
   if (!rows.length) return null;
@@ -374,7 +440,7 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
   const station = normalizeStation(stationId);
   const pageSize = 1000;
   const filters = [
-    "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1",
+    `select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1,${SIGNAL_SELECT_COLUMNS.join(",")}`,
     `reading_date=gte.${encodeURIComponent(from)}`,
     `reading_date=lte.${encodeURIComponent(to)}`,
     "order=station_id.asc,meter_id.asc,reading_date.asc",
@@ -426,6 +492,7 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
     currentDate: row.reading_date,
     total1: row.total1,
     remain1: row.remain1,
+    ...signalColumnsToRow(row),
   }));
 }
 

@@ -100,7 +100,7 @@ const walletFeatureFlags = require("../backend/src/services/wallet-feature-flags
 const walletPrivacy = require("../backend/src/services/wallet-privacy-service");
 const smsNotifications = require("../backend/src/services/sms-notification-service");
 const { ingestClientErrors, listClientErrors } = require("../backend/src/services/client-error-service");
-const { ALARM_SIGNALS, deriveAbnormalAlarms, summarizeAbnormalAlarms } = require("../backend/src/services/abnormal-alarm-service");
+const { ALARM_SIGNALS, deriveAbnormalAlarms, deriveAbnormalAlarmsFromResolvedFlags, summarizeAbnormalAlarms } = require("../backend/src/services/abnormal-alarm-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -3355,8 +3355,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
           pathname: "/api/DailyDataMeter/read",
           requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
         });
-        if (stored) return stored;
-        return await proxyLive(
+        if (stored) return { ...stored, __origin: "stored" };
+        const live = await proxyLive(
           { ...request, method: "POST", url: "/api/DailyDataMeter/read" },
           "/api/DailyDataMeter/read",
           {
@@ -3364,6 +3364,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
             parsedBody: { lang: "en", pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
           }
         );
+        return { ...live, __origin: "live" };
       } catch (error) {
         warnings.push(`${station}: ${error instanceof Error ? error.message : String(error)}`);
         return null;
@@ -3373,7 +3374,19 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const sourceTotal = sources.reduce((total, source) => total + Number(source?.body?.result?.total || source?.body?.data?.total || 0), 0);
     const base = sources.find(Boolean);
     const warning = warnings.join("; ");
-    if (warning) console.error("[abnormal-alarms]", warning);    const rows = deriveAbnormalAlarms(list, stationId);
+    if (warning) console.error("[abnormal-alarms]", warning);
+    // Stored rows already carry resolved (non-inverted) alarm booleans from
+    // daily_meter_readings' typed signal columns; live-proxied rows carry the raw
+    // upstream shape. Each must go through the derivation function that matches
+    // its shape -- see deriveAbnormalAlarmsFromResolvedFlags's own comment for why.
+    const storedList = sources.filter((source) => source?.__origin === "stored")
+      .flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const liveList = sources.filter((source) => source?.__origin === "live")
+      .flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const rows = [
+      ...deriveAbnormalAlarmsFromResolvedFlags(storedList, stationId),
+      ...deriveAbnormalAlarms(liveList, stationId),
+    ];
     const alarmRows = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
     const severityRows = severity ? alarmRows.filter((row) => row.severity === severity) : alarmRows;
     const riskRows = bypassRisk ? severityRows.filter((row) => row.bypassRisk === bypassRisk) : severityRows;

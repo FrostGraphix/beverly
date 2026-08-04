@@ -82,33 +82,64 @@ function normalizeIntervalRow(record, fallbackStationId = "") {
   };
 }
 
+function evidenceFor(row) {
+  return {
+    observedLoad: [row.power, row.intervalDemand, row.currentA, row.currentB, row.currentC, row.usage1].some(positive),
+    power: row.power,
+    intervalDemand: row.intervalDemand,
+    currents: [row.currentA, row.currentB, row.currentC],
+    voltages: [row.voltageA, row.voltageB, row.voltageC]
+  };
+}
+
+function noDataAlarmRow(row) {
+  return { ...row, ...signalModel(NO_DATA_SIGNAL), relatedAlarmKeys: ["noData"], evidenceCount: 1, bypassRisk: "low", evidence: evidenceFor(row) };
+}
+
+function buildAlarmRowsForSignals(row, activeSignals) {
+  const relatedAlarmKeys = activeSignals.map((signal) => signal.key);
+  const tamperCount = activeSignals.filter((signal) => signal.category === "tamper").length;
+  const evidence = evidenceFor(row);
+  const relayWithLoad = relatedAlarmKeys.includes("relayOpen") && evidence.observedLoad;
+  const bypassRisk = tamperCount >= 2 || relayWithLoad ? "high" : tamperCount === 1 ? "medium" : "low";
+  return activeSignals.map((signal) => ({
+    ...row,
+    ...signalModel(signal),
+    relatedAlarmKeys,
+    evidenceCount: activeSignals.length,
+    bypassRisk,
+    evidence
+  }));
+}
+
+// Derives alarms from raw upstream-shaped rows (any of the alias field names in
+// ALARM_SIGNALS[].fields, in whatever raw representation the OEM sent -- boolean,
+// numeric, or string). Used for live-proxied data that was never persisted.
 function deriveAbnormalAlarms(intervalRows, fallbackStationId = "") {
   return (Array.isArray(intervalRows) ? intervalRows : []).flatMap((record) => {
     const row = normalizeIntervalRow(record, fallbackStationId);
     const activeSignals = ALARM_SIGNALS.filter((signal) => signal.fields.some((field) => conditionActive(record?.[field])));
-    const relatedAlarmKeys = activeSignals.map((signal) => signal.key);
-    const tamperCount = activeSignals.filter((signal) => signal.category === "tamper").length;
-    const observedLoad = [row.power, row.intervalDemand, row.currentA, row.currentB, row.currentC, row.usage1].some(positive);
-    const relayWithLoad = relatedAlarmKeys.includes("relayOpen") && observedLoad;
-    const bypassRisk = tamperCount >= 2 || relayWithLoad ? "high" : tamperCount === 1 ? "medium" : "low";
-    const evidence = {
-      observedLoad,
-      power: row.power,
-      intervalDemand: row.intervalDemand,
-      currents: [row.currentA, row.currentB, row.currentC],
-      voltages: [row.voltageA, row.voltageB, row.voltageC]
-    };
-    if (Number(row.total1) === NO_DATA_TOTAL) {
-      return [{ ...row, ...signalModel(NO_DATA_SIGNAL), relatedAlarmKeys: ["noData"], evidenceCount: 1, bypassRisk: "low", evidence }];
-    }
-    return activeSignals.map((signal) => ({
-      ...row,
-      ...signalModel(signal),
-      relatedAlarmKeys,
-      evidenceCount: activeSignals.length,
-      bypassRisk,
-      evidence
-    }));
+    if (Number(row.total1) === NO_DATA_TOTAL) return [noDataAlarmRow(row)];
+    return buildAlarmRowsForSignals(row, activeSignals);
+  });
+}
+
+// Derives alarms from rows whose alarm signals are already resolved to a clean
+// "is this alarm active" boolean (true/false/null) under the canonical camelCase
+// keys (relayOpen, batteryLow, ...) -- i.e. rows read back from
+// daily_meter_readings' typed signal columns, which consumption-store.js populates
+// by calling conditionActive() once at ingestion time. Deliberately does NOT call
+// conditionActive() again here: that function inverts plain booleans (true means
+// "healthy" on the raw wire, so conditionActive(true) === false), so re-applying it
+// to an already-resolved "active" boolean would flip the answer. Kept as a separate
+// function rather than a flag on deriveAbnormalAlarms so neither code path can
+// accidentally receive the other's input shape.
+function deriveAbnormalAlarmsFromResolvedFlags(rows, fallbackStationId = "") {
+  return (Array.isArray(rows) ? rows : []).flatMap((record) => {
+    const row = normalizeIntervalRow(record, fallbackStationId);
+    if (Number(row.total1) === NO_DATA_TOTAL) return [noDataAlarmRow(row)];
+    const activeSignals = ALARM_SIGNALS.filter((signal) => record?.[signal.key] === true);
+    return buildAlarmRowsForSignals(row, activeSignals);
   });
 }
 
@@ -127,6 +158,7 @@ function summarizeAbnormalAlarms(rows) {
 module.exports = {
   conditionActive,
   deriveAbnormalAlarms,
+  deriveAbnormalAlarmsFromResolvedFlags,
   normalizeIntervalRow,
   summarizeAbnormalAlarms,
   ALARM_SIGNALS: [...ALARM_SIGNALS, NO_DATA_SIGNAL]
