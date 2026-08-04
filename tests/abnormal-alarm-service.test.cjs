@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const {
   conditionActive,
   deriveAbnormalAlarms,
+  deriveAbnormalAlarmsFromResolvedFlags,
   summarizeAbnormalAlarms,
 } = require("../backend/src/services/abnormal-alarm-service");
 
@@ -82,5 +83,22 @@ assert.equal(observedRows.length, 1);
 assert.equal(observedRows[0].alarmKey, "relayOpen");
 assert.equal(observedRows[0].total1, 128.6);
 assert.equal(observedRows[0].currentDate, "2026-04-28 09:00:00");
+
+// deriveAbnormalAlarmsFromResolvedFlags takes rows whose signals are already
+// resolved to a clean "is this alarm active" boolean (as consumption-store.js's
+// ingestion path now stores) and must NOT re-invert them the way conditionActive()
+// does for raw booleans. Cross-check against deriveAbnormalAlarms on the raw
+// equivalent: both must report the same active alarms for the same real-world state.
+const rawEquivalent = { stationId: "MUSHA", meterId: "M-9", total1: 30, relayOpen: false, batteryLow: true, magneticInterference: false };
+const resolvedEquivalent = { stationId: "MUSHA", meterId: "M-9", total1: 30, relayOpen: true, batteryLow: false, magneticInterference: true };
+const fromRaw = deriveAbnormalAlarms([rawEquivalent]).map((row) => row.alarmKey).sort();
+const fromResolved = deriveAbnormalAlarmsFromResolvedFlags([resolvedEquivalent]).map((row) => row.alarmKey).sort();
+assert.deepEqual(fromRaw, ["magneticInterference", "relayOpen"]);
+assert.deepEqual(fromResolved, fromRaw, "resolved-flag derivation must agree with raw derivation for the same real-world alarm state");
+
+// noData still short-circuits identically in both paths.
+const noDataResolved = deriveAbnormalAlarmsFromResolvedFlags([{ meterId: "M-10", total1: -1 }]);
+assert.equal(noDataResolved.length, 1);
+assert.equal(noDataResolved[0].alarmKey, "noData");
 
 console.log("abnormal alarm service tests passed");

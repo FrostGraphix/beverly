@@ -199,7 +199,14 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
             customer_name: "Ada",
             reading_date: "2026-05-07",
             total1: 115,
-            remain1: 4
+            remain1: 4,
+            gateway_id: "GW-1",
+            power: 120,
+            voltage_a: 230,
+            current_a: 5,
+            relay_open: true,
+            battery_low: false,
+            magnetic_interference: true
           }
         ]
       };
@@ -256,6 +263,49 @@ assert.strictEqual(write.options.body[0].station_id, "TUNGA");
 assert.strictEqual(write.options.body[0].meter_id, "M-1");
 assert.strictEqual(write.options.body[0].reading_date, "2026-05-07");
 
+// Signal-column polarity proof: conditionActive() inverts plain booleans (raw
+// upstream "true" means healthy), so a raw relayOpen:false / magneticInterference:false
+// must be stored as *active* (true), and a raw batteryLow:true must be stored as
+// *not active* (false). Getting this backwards would silently invert every alarm.
+requests.length = 0;
+await store.writeDailyMeterRows({
+  pathname: "/api/DailyDataMeter/read",
+  requestPayload: { stationId: "TUNGA" },
+  responsePayload: {
+    code: 0,
+    result: {
+      total: 1,
+      data: [
+        {
+          stationId: "TUNGA",
+          meterId: "M-2",
+          customerId: "C-2",
+          customerName: "Bala",
+          currentDate: "2026-05-08",
+          total1: 200,
+          remain1: 10,
+          gatewayId: "GW-2",
+          power: 300,
+          voltageA: 240,
+          currentA: 6,
+          relayOpen: false,
+          batteryLow: true,
+          magneticInterference: false
+        }
+      ]
+    }
+  }
+});
+const signalWrite = requests.find((request) => request.kind === "write");
+assert.strictEqual(signalWrite.options.body[0].gateway_id, "GW-2");
+assert.strictEqual(signalWrite.options.body[0].power, 300);
+assert.strictEqual(signalWrite.options.body[0].voltage_a, 240);
+assert.strictEqual(signalWrite.options.body[0].current_a, 6);
+assert.strictEqual(signalWrite.options.body[0].relay_open, true, "raw relayOpen:false must resolve to active:true");
+assert.strictEqual(signalWrite.options.body[0].battery_low, false, "raw batteryLow:true must resolve to active:false");
+assert.strictEqual(signalWrite.options.body[0].magnetic_interference, true, "raw magneticInterference:false must resolve to active:true");
+requests.length = 0;
+
 const response = await store.readDailyMeterRows({
   pathname: "/api/DailyDataMeter/read",
   requestPayload: {
@@ -283,6 +333,27 @@ assert(
   !requests.some((request) => request.kind === "read" && request.pathname.includes("select=row_json")),
   "readDailyMeterRows must not select row_json — the column is retention-blanked and being retired"
 );
+// Regression guard: the signal columns must actually be requested and reconstructed.
+assert(
+  requests.some((request) => request.kind === "read" && request.pathname.includes("relay_open")),
+  "readDailyMeterRows must select the typed signal columns"
+);
+const signalRow = response.body.result.data.find((row) => row.meterId === "M-1" && row.currentDate === "2026-05-07");
+assert.strictEqual(signalRow.gatewayId, "GW-1");
+assert.strictEqual(signalRow.power, 120);
+assert.strictEqual(signalRow.relayOpen, true);
+assert.strictEqual(signalRow.batteryLow, false);
+assert.strictEqual(signalRow.magneticInterference, true);
+
+// End-to-end proof: rows reconstructed by readDailyMeterRows, fed through
+// deriveAbnormalAlarmsFromResolvedFlags, must report exactly the alarms the stored
+// (already-resolved) booleans say are active — relayOpen and magneticInterference,
+// not batteryLow — with no second inversion.
+const { deriveAbnormalAlarmsFromResolvedFlags } = require("../backend/src/services/abnormal-alarm-service");
+const derivedAlarms = deriveAbnormalAlarmsFromResolvedFlags(response.body.result.data, "TUNGA");
+const signalRowAlarms = derivedAlarms.filter((row) => row.meterId === "M-1" && row.currentDate === "2026-05-07");
+const derivedAlarmKeys = signalRowAlarms.map((row) => row.alarmKey).sort();
+assert.deepStrictEqual(derivedAlarmKeys, ["magneticInterference", "relayOpen"].sort());
 
 const report = await store.dailyMeterTableReport(["TUNGA"]);
 assert.strictEqual(report.enabled, true);
