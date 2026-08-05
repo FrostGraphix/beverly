@@ -578,6 +578,10 @@ export default {
         this.sidebarOpen = false;
       }
       if (newHash !== oldHash) this.closeUserMenu();
+      this.scrollToActiveLink();
+    },
+    sidebarOpen(isOpen) {
+      if (isOpen) this.scrollToActiveLink();
     }
   },
   created() {
@@ -596,6 +600,9 @@ export default {
     this.armSessionTimer();
     this.loadUser();
   },
+  mounted() {
+    this.scrollToActiveLink();
+  },
   beforeUnmount() {
     window.removeEventListener("hashchange", this.syncHash);
     window.removeEventListener("resize", this.syncWidth);
@@ -609,6 +616,14 @@ export default {
     this.stopSidebarResize();
   },
   methods: {
+    scrollToActiveLink() {
+      this.$nextTick(() => {
+        const activeEl = this.$el?.querySelector?.('.sidebar-menu .sidebar-item.active, .sidebar-menu [aria-current="page"]');
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+          activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+    },
     handleProfilePictureUpdated(newUrl) {
       this.profilePictureUrl = newUrl || "";
     },

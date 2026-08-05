@@ -27,3 +27,17 @@ query.js
 test-login.cjs
 test_output.html
 
+# Dev build outputs
+dev-dist/
+*.timestamp-*.mjs
+
+# Audit output folders & QA logs
+audit-*/
+design-qa.md
+
+# Local image crop test files
+input_check.png
+original_seal_crop.png
+reconstructed_emblem_*.png
+reconstructed_seal.png
+seal_*.png

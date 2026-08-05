@@ -273,6 +273,7 @@ const OPEN_ADMIN_ROUTES = new Set([
     'POST /logout',
     'POST /profile-picture/upload-url',
     'POST /profile-picture/scan',
+    'POST /profile-picture/activate',
     'DELETE /profile-picture',
     'GET /notifications',
     'POST /notifications/read-all',
