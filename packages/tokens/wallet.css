@@ -311,7 +311,10 @@
   grid-column: 1 / -1;
   width: 100%;
   justify-content: center;
-  color: var(--danger);
+}
+.sidebar-signout:hover {
+  box-shadow: 0 4px 14px oklch(68% 0.20 25 / 0.20);
+  transform: translateY(-1px);
 }
 .sidebar-signout svg { width: 16px; height: 16px; flex: 0 0 auto; }
 .sidebar-account .bw-back { margin-bottom: var(--s-2); }

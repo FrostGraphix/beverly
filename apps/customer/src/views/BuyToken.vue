@@ -545,8 +545,10 @@ async function remoteSendGeneratedToken() {
   background: var(--surface-0);
   border: 1px solid var(--border);
   border-radius: var(--r-xl);
-  padding: var(--s-7);
+  padding: var(--s-5);
   width: min(420px, 100%);
+  max-height: min(90vh, 520px);
+  overflow-y: auto;
   display: flex; flex-direction: column;
 }
 

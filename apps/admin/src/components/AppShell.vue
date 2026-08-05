@@ -157,7 +157,10 @@ const currentUserFirstName = computed(() => {
     const name = raw.split(/[\s@.]+/)[0] || 'Beverly';
     return name.charAt(0).toUpperCase() + name.slice(1);
 });
-const roleLabel = computed(() => (auth.user?.role || 'admin').replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
+const roleLabel = computed(() => (auth.user?.role || 'admin')
+    .replace(/^custom[-_]/i, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()));
 
 const navIconPath: Record<string, string> = {
     dashboard: 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z',
@@ -316,7 +319,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
             <strong>{{ displayName }}</strong>
             <span>{{ roleLabel }}</span>
           </div>
-          <button type="button" class="bw-btn sidebar-signout" :disabled="signingOut" @click="signOut">
+          <button type="button" class="bw-btn danger sidebar-signout" :disabled="signingOut" @click="signOut">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="m16 17 5-5-5-5" />

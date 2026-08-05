@@ -282,7 +282,7 @@ onBeforeUnmount(() => {
             <strong>{{ displayName }}</strong>
             <span>{{ roleLabel }}</span>
           </div>
-          <button type="button" class="bw-btn sidebar-signout" :disabled="signingOut" @click="signOut">
+          <button type="button" class="bw-btn danger sidebar-signout" :disabled="signingOut" @click="signOut">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <path d="m16 17 5-5-5-5" />
