@@ -294,8 +294,9 @@ async function uploadProcessedProfilePicture(file: File) {
 .profile-hero {
   position: relative;
   overflow: hidden;
-  display: grid;
-  gap: 22px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
   padding: 28px;
   background:
     linear-gradient(135deg, oklch(from var(--brand) l c h / 0.18), transparent 44%),
@@ -319,6 +320,8 @@ async function uploadProcessedProfilePicture(file: File) {
 }
 
 .profile-hero-top {
+  flex: 1 1 auto;
+  min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: end;
@@ -374,19 +377,23 @@ async function uploadProcessedProfilePicture(file: File) {
 }
 
 .profile-hero-meta {
-  display: grid;
-  grid-template-columns: 0.85fr 1.45fr 0.85fr;
-  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 148px;
+  padding-left: 24px;
+  border-left: 1px solid var(--border);
 }
 
 .profile-hero-meta > div {
   min-width: 0;
-  padding: 14px 16px 0 0;
+  padding: 9px 0;
 }
 
 .profile-hero-meta > div + div {
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
+  padding-left: 0;
+  border-left: 0;
+  border-top: 1px solid var(--border);
 }
 
 .profile-hero-meta span {
@@ -506,6 +513,8 @@ async function uploadProcessedProfilePicture(file: File) {
   .profile-hero {
     padding: 18px;
     gap: 16px;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .profile-hero-top {
@@ -524,29 +533,33 @@ async function uploadProcessedProfilePicture(file: File) {
   }
 
   .profile-hero-meta {
-    grid-template-columns: 1fr;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    min-width: unset;
+    padding-left: 0;
+    padding-top: 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
   }
 
   .profile-hero-meta > div {
-    display: grid;
-    grid-template-columns: 64px minmax(0, 1fr);
-    align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-  }
-
-  .profile-hero-meta span {
-    margin-bottom: 0;
-  }
-
-  .profile-hero-meta strong {
-    text-align: right;
+    flex: 1;
+    padding: 14px 12px 0 0;
+    display: block;
   }
 
   .profile-hero-meta > div + div {
-    padding-left: 0;
-    border-top: 1px solid var(--border);
-    border-left: 0;
+    padding-left: 12px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  .profile-hero-meta span {
+    margin-bottom: 5px;
+  }
+
+  .profile-hero-meta strong {
+    text-align: left;
   }
 }
 

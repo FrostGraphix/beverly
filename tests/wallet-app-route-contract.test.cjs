@@ -284,13 +284,13 @@ function main() {
   assert.match(vendorTransactions, /exportCsv\(`beverly-vendor-transactions-\$\{exportRange\.value\}`/);
   assert.match(vendorShell, /class="bw-sidebar-foot sidebar-account"/);
   assert.match(vendorShell, /class="sidebar-avatar"/);
-  assert.match(vendorShell, /class="bw-btn sidebar-signout"/);
+  assert.match(vendorShell, /class="bw-btn danger sidebar-signout"/);
   assert.match(vendorShell, /\? 'Vendor User' : 'Vendor'/);
   assert.match(vendorShell, /ref="navRef"/);
   assert.match(vendorShell, /scrollToActiveLink/);
   assert.match(adminShell, /class="bw-sidebar-foot sidebar-account"/);
   assert.match(adminShell, /class="sidebar-avatar"/);
-  assert.match(adminShell, /class="bw-btn sidebar-signout"/);
+  assert.match(adminShell, /class="bw-btn danger sidebar-signout"/);
   assert.match(adminShell, /ref="navRef"/);
   assert.match(adminShell, /scrollToActiveLink/);
   assert.match(walletCss, /\.sidebar-account-card/);

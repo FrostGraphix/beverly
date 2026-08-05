@@ -28,17 +28,27 @@ async function exportCropped() {
 </script>
 
 <template>
-  <div v-if="open" class="m-wrap">
-    <div class="m-card bw-card">
-      <h3 class="bw-h3">Crop profile picture</h3>
-      <p class="bw-muted">Center your face or team avatar. We export a clean square image.</p>
+  <div v-if="open" class="m-wrap" role="presentation" @click.self="emit('close')">
+    <div class="m-card bw-card" role="dialog" aria-modal="true" aria-label="Crop profile picture">
+      <div class="m-head">
+        <div class="m-head-copy">
+          <h3 class="m-title">Crop profile picture</h3>
+          <p class="m-subtitle">Center your face or team avatar. We export a clean square image.</p>
+        </div>
+        <button type="button" class="m-close" aria-label="Close crop dialog" @click="emit('close')">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
       <div class="crop-box">
         <img v-if="imageUrl" ref="imgRef" :src="imageUrl" alt="Crop source" />
       </div>
-      <input v-model.number="zoom" class="bw-input" type="range" min="1" max="2.5" step="0.1" />
-      <div class="bw-row crop-actions">
-        <button class="bw-btn" @click="emit('close')">Cancel</button>
-        <button class="bw-btn primary" @click="exportCropped">Use photo</button>
+      <label class="m-zoom-label">
+        <span class="m-zoom-text">Zoom</span>
+        <input v-model.number="zoom" class="m-zoom-input" type="range" min="1" max="2.5" step="0.1" aria-label="Zoom level" />
+      </label>
+      <div class="m-actions">
+        <button type="button" class="bw-btn" @click="emit('close')">Cancel</button>
+        <button type="button" class="bw-btn primary" @click="exportCropped">Use photo</button>
       </div>
     </div>
   </div>
@@ -51,22 +61,73 @@ async function exportCropped() {
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.56);
+  padding: 16px;
+  background: oklch(0% 0 0 / 0.58);
   backdrop-filter: blur(6px);
 }
 
 .m-card {
-  width: min(92vw, 480px);
+  width: min(92vw, 420px);
+  max-height: min(90vh, 520px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.m-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.m-head-copy {
+  min-width: 0;
+}
+
+.m-title {
+  margin: 0 0 4px;
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.m-subtitle {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.m-close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.m-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
 }
 
 .crop-box {
-  aspect-ratio: 1;
+  width: 240px;
+  height: 240px;
+  flex: 0 0 auto;
+  margin: 14px auto;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid var(--border);
-  margin: 16px 0 12px;
-  background: color-mix(in srgb, var(--panel) 84%, black 16%);
+  background: color-mix(in srgb, var(--surface) 80%, black 20%);
 }
 
 .crop-box img {
@@ -75,9 +136,33 @@ async function exportCropped() {
   object-fit: cover;
 }
 
-.crop-actions {
-  justify-content: flex-end;
+.m-zoom-label {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  margin-top: 14px;
+  margin-bottom: 4px;
+}
+
+.m-zoom-text {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.m-zoom-input {
+  flex: 1;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.m-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 </style>
