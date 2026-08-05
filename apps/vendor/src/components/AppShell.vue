@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
 import {
@@ -18,8 +18,23 @@ const drawerOpen = ref(false);
 const userMenuOpen = ref(false);
 const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
+const navRef = ref<HTMLElement | null>(null);
 const unreadCount = ref(0);
 let bellPoll: ReturnType<typeof setInterval> | null = null;
+
+function scrollToActiveLink() {
+    void nextTick(() => {
+        const activeEl = navRef.value?.querySelector('.bw-nav-item.active, [aria-current="page"]');
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+            activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    });
+}
+
+watch(() => route.path, () => scrollToActiveLink());
+watch(drawerOpen, (isOpen) => {
+    if (isOpen) scrollToActiveLink();
+});
 
 function isItemActive(to: string): boolean {
     const path = route.path;
@@ -129,6 +144,7 @@ onMounted(() => {
     void fetchUnread();
     void syncDeviceNotifications().catch(() => { /* best-effort */ });
     bellPoll = setInterval(fetchUnread, 60_000);
+    scrollToActiveLink();
 });
 onBeforeUnmount(() => {
     unsubscribeInstallPrompt?.();
@@ -176,7 +192,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <nav class="bw-nav" aria-label="Vendor primary navigation">
+      <nav ref="navRef" class="bw-nav" aria-label="Vendor primary navigation">
         <div :class="['bw-nav-section', { active: isSectionActive(['/', '/vend', '/meter-orders', '/remote-send']) }]">Vending</div>
         <RouterLink to="/" :class="['bw-nav-item', { active: isItemActive('/') }]" :aria-current="isItemActive('/') ? 'page' : undefined" @click="closeDrawer">
           <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>

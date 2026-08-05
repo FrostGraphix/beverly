@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
- * Customers admin list (super-admin / operations).
+ * Customers admin list (super-admin, operations-manager, account).
  *
  * KPI strip + filterable list. Row click → /customers/:id detail page.
+ *
+ * Station scoping: non-super-admin staff see only customers whose meters
+ * are registered at their assigned station(s). A staff member with no
+ * station assignment will receive an empty list from the API — this
+ * component surfaces an explanatory banner in that case.
  *
  * Endpoints:
  *   GET /api/v1/admin/customers[?status,kycTier,q,cursor]
@@ -52,6 +57,17 @@ const viewMode = ref<'list' | 'table'>(
 );
 const banner = ref<string | null>(null);
 const success = ref<string | null>(null);
+
+/**
+ * True when the logged-in user is station-scoped (non-super-admin) but has
+ * no station assignments in their profile. In this state the API will always
+ * return an empty customer list because the station filter has nothing to
+ * match against. We surface a dedicated banner rather than letting the table
+ * silently show "No customers match the filters."
+ */
+const stationScopeEmpty = computed(
+    () => auth.user?.role !== 'super-admin' && auth.stationScope.length === 0,
+);
 const deleteOpen = ref(false);
 const deleteTarget = ref<CustomerRow | null>(null);
 const deleteReason = ref('');
@@ -69,6 +85,9 @@ async function loadSummary() {
 
 async function loadList(reset = true) {
     loading.value = true;
+    // Clear a previous station-scope banner before each fresh load so it does
+    // not linger if the user's profile has since been updated.
+    if (banner.value?.includes('station')) banner.value = null;
     try {
         const p = new URLSearchParams();
         if (fStatus.value) p.set('status', fStatus.value);
@@ -79,6 +98,12 @@ async function loadList(reset = true) {
         const r = await api.get<{ customers: CustomerRow[]; nextCursor: string | null }>(`/api/v1/admin/customers?${p}`);
         customers.value = reset ? r.customers : [...customers.value, ...r.customers];
         cursor.value = r.nextCursor;
+        // Surface an explicit explanation when a station-scoped user has no
+        // station assignment and the API therefore returns an empty list.
+        if (reset && r.customers.length === 0 && stationScopeEmpty.value) {
+            banner.value = 'No customers are visible because your staff account has no station assigned. '
+                + 'Ask a Super Admin to assign you to a station under Roles & Team.';
+        }
     } catch (e: any) {
         banner.value = e?.message ?? 'Could not load customers.';
     } finally { loading.value = false; }

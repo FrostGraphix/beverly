@@ -813,6 +813,7 @@ a {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
 
 .bw-user-meta span {
@@ -823,6 +824,7 @@ a {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
 
 .bw-user-chevron {
