@@ -40,10 +40,21 @@ const priceLabel = computed(() => `NGN ${(priceMinor.value / 100).toLocaleString
 
 async function lookupCustomers() {
     searchBusy.value = true;
+    error.value = '';
     try {
-        const response = await api.get<{ customers: WalletCustomer[] }>(
-            `/api/v1/admin/customers?limit=12&q=${encodeURIComponent(customerSearch.value.trim())}`,
+        // Deliberately NOT /admin/customers — that list is station-scoped for
+        // staff, which would hide the customer we're about to onboard a first
+        // meter for (they have no customer_meters row, and therefore no
+        // station, yet). This endpoint searches all customers instead, gated
+        // by the same permission required to create the order.
+        const response = await api.get<{ customers: WalletCustomer[]; error?: string }>(
+            `/api/v1/admin/meter-orders/customer-search?limit=12&q=${encodeURIComponent(customerSearch.value.trim())}`,
         );
+        if (response.error) {
+            error.value = response.error;
+            customerResults.value = [];
+            return;
+        }
         customerResults.value = response.customers ?? [];
     } catch (err: any) {
         error.value = err instanceof ApiError ? err.message : 'Could not load customers.';

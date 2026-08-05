@@ -96,15 +96,13 @@ async function submit() {
         <div style="width:56px; height:56px; border-radius:50%; background: oklch(70% 0.19 145 / 0.15); display:grid; place-items:center; margin: 0 auto var(--s-4)">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <p class="bw-page-title" style="margin-bottom: var(--s-2)">Meter linked!</p>
+        <p class="bw-page-title" style="margin-bottom: var(--s-2)">Submitted for review</p>
         <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-6)">
-          <span class="bw-mono">{{ meterId.toUpperCase() }}</span> is now linked to your account.
+          <span class="bw-mono">{{ meterId.toUpperCase() }}</span> is linked to your account and awaiting admin approval.
+          You'll be able to buy tokens for it once it's approved.
         </p>
         <div class="bw-row" style="gap: var(--s-3)">
-          <router-link to="/buy-token" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
-            Buy token
-          </router-link>
-          <router-link to="/meters" class="bw-btn" style="text-decoration:none; flex:1; justify-content:center">
+          <router-link to="/meters" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
             My meters
           </router-link>
         </div>

@@ -11,6 +11,7 @@ const step    = ref<1 | 2 | 3 | 4>(1);
 
 // Step 1 — meter
 const meters    = ref<any[]>([]);
+const hasPendingMeters = ref(false);
 const selMeter  = ref<any>(null);
 
 // Step 2 — amount
@@ -74,6 +75,8 @@ function describeApiError(e: unknown, fallback: string) {
         if (['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(String(e.code))) {
             return { title: 'Wallet cannot buy token', message: e.message, action: 'Contact Beverly support.', code: e.code };
         }
+        if (e.code === 'meter_not_approved') return { title: 'Meter awaiting approval', message: e.message, action: 'You can buy a token once an admin approves this meter.', code: e.code };
+        if (e.code === 'meter_not_linked' || e.code === 'meter_rejected') return { title: 'Meter not available', message: e.message, action: 'Check My Meters for this meter\'s status.', code: e.code };
         if (e.code === 'remote_token_rejected') return { title: 'Remote send rejected', message: e.message, action: 'The token remains visible. Enter it manually.', code: e.code };
         if (e.code === 'remote_send_metadata_missing') return { title: 'Remote send unavailable', message: e.message, action: 'The token remains valid for manual entry.', code: e.code };
         if (e.code === 'request_timeout') return { title: 'Request timed out', message: e.message, action: 'Check your network and retry.', code: e.code };
@@ -87,7 +90,12 @@ onMounted(async () => {
         api.get<{ meters: any[] }>('/api/v1/customer/meters'),
         api.get<any>('/api/v1/customer/wallet').catch(() => null),
     ]);
-    meters.value = m.meters;
+    // Only approved meters can be purchased against (see assertMeterApprovedForPurchase
+    // server-side) — filtering here keeps the picker from offering a meter that
+    // would just fail at checkout.
+    const allMeters = m.meters ?? [];
+    meters.value = allMeters.filter((meter) => meter.status === 'approved');
+    hasPendingMeters.value = allMeters.some((meter) => meter.status === 'pending');
     walletBal.value = w?.available_minor ?? 0;
     if (meters.value.length === 1) selMeter.value = meters.value[0];
     const query = new URLSearchParams(window.location.search);
@@ -350,6 +358,10 @@ async function remoteSendGeneratedToken() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
           </div>
+        </div>
+        <div v-else-if="hasPendingMeters" class="bw-muted" style="text-align:center; padding: var(--s-5); font-size: var(--t-sm)">
+          Your linked meter is awaiting admin approval.
+          <router-link to="/meters" style="color:var(--brand); font-weight:600; display:block; margin-top:var(--s-2)">View status →</router-link>
         </div>
         <div v-else class="bw-muted" style="text-align:center; padding: var(--s-5); font-size: var(--t-sm)">
           No meters linked yet.

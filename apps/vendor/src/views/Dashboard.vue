@@ -106,9 +106,9 @@ const filterCount = (filter: typeof activityFilter.value) => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value">{{ naira(wallet.summary?.activity.today_vended_minor) }}</div>
+        <div class="bw-kpi-value">{{ naira(wallet.summary?.activity?.today_vended_minor) }}</div>
         <div class="bw-kpi-foot">
-          <span class="bw-delta flat">{{ wallet.summary?.activity.today_vended_count ?? 0 }} ops</span>
+          <span class="bw-delta flat">{{ wallet.summary?.activity?.today_vended_count ?? 0 }} ops</span>
         </div>
       </div>
 
@@ -119,7 +119,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(wallet.summary?.activity.today_funded_minor) }}</div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(wallet.summary?.activity?.today_funded_minor) }}</div>
         <div class="bw-kpi-foot">
           <span class="bw-delta up">credited</span>
         </div>
@@ -132,7 +132,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(wallet.summary?.activity.total_funded_minor) }}</div>
+        <div class="bw-kpi-value" style="color: var(--brand)">{{ naira(wallet.summary?.activity?.total_funded_minor) }}</div>
       </div>
 
       <div class="bw-kpi danger-tone">
@@ -142,7 +142,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" style="color: var(--danger)">{{ naira(wallet.summary?.activity.total_reversed_minor) }}</div>
+        <div class="bw-kpi-value" style="color: var(--danger)">{{ naira(wallet.summary?.activity?.total_reversed_minor) }}</div>
       </div>
 
       <div class="bw-kpi">

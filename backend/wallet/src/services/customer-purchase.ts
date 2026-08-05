@@ -38,6 +38,36 @@ export class CustomerPurchaseError extends Error {
     }
 }
 
+/**
+ * Meters a customer may link, keyed by kyc_tier. Mirrors the existing
+ * money-cap tiering in customer-kyc.ts (Tier 0 read-only, Tier 1/2 raise
+ * wallet spend caps) so verification level gates both spend and meter count.
+ */
+const METER_CAP_BY_KYC_TIER: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
+
+function meterCapForTier(kycTier: number): number {
+    return METER_CAP_BY_KYC_TIER[kycTier] ?? METER_CAP_BY_KYC_TIER[0];
+}
+
+async function assertMeterApprovedForPurchase(customerId: string, meterId: string): Promise<void> {
+    const { data: link } = await adminClient
+        .from('customer_meters')
+        .select('status')
+        .eq('customer_id', customerId)
+        .eq('meter_id', meterId)
+        .maybeSingle();
+    if (!link) {
+        throw new CustomerPurchaseError('This meter is not linked to your account. Add it under My Meters first.', 'meter_not_linked');
+    }
+    const status = (link as { status: string }).status;
+    if (status === 'pending') {
+        throw new CustomerPurchaseError('This meter is awaiting admin approval and cannot be used for purchases yet.', 'meter_not_approved');
+    }
+    if (status === 'rejected') {
+        throw new CustomerPurchaseError('This meter link was rejected. Contact support or relink with correct details.', 'meter_rejected');
+    }
+}
+
 function normalizeCustomerPaymentEmail(email: string | null | undefined, purpose: string): string {
     const normalized = String(email ?? '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
@@ -239,6 +269,8 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         if (e instanceof TokenEngineError) throw new CustomerPurchaseError(e.message, e.code);
         throw e;
     }
+
+    await assertMeterApprovedForPurchase(input.customerId, meter.meterId);
 
     const preview = await previewPurchaseWithPolicy(input.amountMinor, meter.tariffId);
     // Resolve phase: live record wins; customer's onboarding declaration fills any gap.
@@ -644,6 +676,7 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         if (e instanceof TokenEngineError) throw new CustomerPurchaseError(e.message, (e as TokenEngineError).code);
         throw e;
     }
+    if (customerId) await assertMeterApprovedForPurchase(customerId, meter.meterId);
     const preview = await previewPurchaseWithPolicy(amountMinor, meter.tariffId);
     const declared = customerId ? await declaredMeterType(customerId, meter.meterId) : null;
     const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
@@ -776,12 +809,21 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         .maybeSingle();
     if (existing) throw new CustomerPurchaseError('Meter already linked.', 'already_linked');
 
-    // Cap at 5 meters per customer
+    // Cap by KYC tier — higher-verified customers may link more meters.
+    const { data: customerRow } = await adminClient
+        .from('customers')
+        .select('kyc_tier')
+        .eq('id', customerId)
+        .maybeSingle();
+    const kycTier = Number((customerRow as { kyc_tier?: number } | null)?.kyc_tier ?? 0);
+    const meterCap = meterCapForTier(kycTier);
     const { count } = await adminClient
         .from('customer_meters')
         .select('id', { count: 'exact', head: true })
         .eq('customer_id', customerId);
-    if ((count ?? 0) >= 5) throw new CustomerPurchaseError('Maximum 5 meters per account.', 'meter_limit');
+    if ((count ?? 0) >= meterCap) {
+        throw new CustomerPurchaseError(`Maximum ${meterCap} meters per account at your verification level.`, 'meter_limit');
+    }
 
     const { data, error } = await adminClient.from('customer_meters').insert({
         customer_id: customerId,
@@ -791,6 +833,7 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         tariff_id: meter.tariffId,
         nickname: nickname ?? null,
         meter_name: meter.customerName,
+        status: 'pending',
     }).select('*').single();
     if (error) throw new CustomerPurchaseError(error.message, 'link_failed');
 
@@ -800,7 +843,7 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         action: 'customer.meter.link',
         targetType: 'customer_meter',
         targetId: (data as { id: string }).id,
-        after: { meterId, meterType, stationId: meter.stationId },
+        after: { meterId, meterType, stationId: meter.stationId, status: 'pending' },
     });
 
     return data;

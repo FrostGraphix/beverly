@@ -69,6 +69,7 @@ const navGroups = computed(() => [
             { to: '/applications', text: 'Applications', permission: 'wallet.vendors.review', icon: 'applications' },
             { to: '/vendors', text: 'Vendors', permission: 'wallet.vendors.review', icon: 'vendors' },
             { to: '/customers', text: 'Customers', permission: 'wallet.customers.view', icon: 'customers' },
+            { to: '/meter-approvals', text: 'Meter Approvals', permission: 'wallet.meters.approve', icon: 'meter' },
         ],
     },
     {

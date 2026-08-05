@@ -317,6 +317,46 @@ async function getBalanceFromLedger(walletId: string): Promise<Balance> {
     };
 }
 
+export interface ActivitySummary {
+    todayVendedMinor: number;
+    todayVendedCount: number;
+    todayFundedMinor: number;
+    totalFundedMinor: number;
+    totalReversedMinor: number;
+}
+
+export async function getActivitySummary(walletId: string): Promise<ActivitySummary> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const todayIso = startOfDay.toISOString();
+
+    const sum = (rows: { amount_minor: number | string }[] | null) =>
+        (rows ?? []).reduce((total, row) => total + Number(row.amount_minor ?? 0), 0);
+
+    const [todayVended, todayFunded, totalFunded, totalReversed] = await Promise.all([
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'purchase_debit').gte('created_at', todayIso),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'funding_credit').gte('created_at', todayIso),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'funding_credit'),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'reversal_credit'),
+    ]);
+
+    for (const result of [todayVended, todayFunded, totalFunded, totalReversed]) {
+        if (result.error) throw new LedgerError(result.error.message, 'activity_summary_error');
+    }
+
+    return {
+        todayVendedMinor: sum(todayVended.data),
+        todayVendedCount: todayVended.data?.length ?? 0,
+        todayFundedMinor: sum(todayFunded.data),
+        totalFundedMinor: sum(totalFunded.data),
+        totalReversedMinor: sum(totalReversed.data),
+    };
+}
+
 export async function getEntries(
     walletId: string,
     opts: { limit?: number; cursorAt?: string } = {},

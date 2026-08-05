@@ -5,6 +5,7 @@ export const PERMISSION_CATALOG = [
     { key: 'wallet.vendors.review', label: 'Review vendor applications', group: 'Vendors', risk: 'medium' },
     { key: 'wallet.vendors.manage', label: 'Create and manage vendors', group: 'Vendors', risk: 'high' },
     { key: 'wallet.customers.view', label: 'View customer accounts', group: 'Customers', risk: 'high' },
+    { key: 'wallet.meters.approve', label: 'Approve customer meter links', group: 'Customers', risk: 'high' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
     { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
@@ -28,7 +29,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'super-admin': PERMISSION_CATALOG.map((p) => p.key),
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
-        'wallet.customers.view', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.customers.view', 'wallet.meters.approve', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.fraud.review', 'wallet.audit.view', 'wallet.consumption.view',
     ],
     // Every staff role may view consumption. What they actually see is bounded
@@ -37,7 +38,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // nothing. Super-admin is the only role with estate-wide visibility.
     'finance-checker': [
         'wallet.dashboard.view', 'wallet.funding.view', 'wallet.funding.approve',
-        'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
+        'wallet.customers.view', 'wallet.refunds.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
         'wallet.audit.view', 'wallet.vat.manage', 'wallet.consumption.view',
     ],
     account: [
