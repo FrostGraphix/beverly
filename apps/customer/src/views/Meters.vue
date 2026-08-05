@@ -9,6 +9,20 @@ interface Meter {
     nickname?: string | null;
     meter_type?: string | null;
     station_id?: string | null;
+    status?: 'pending' | 'approved' | 'rejected' | null;
+    rejection_reason?: string | null;
+}
+
+function statusLabel(status?: string | null) {
+    if (status === 'pending') return 'Pending review';
+    if (status === 'rejected') return 'Rejected';
+    return null;
+}
+
+function statusBadgeClass(status?: string | null) {
+    if (status === 'pending') return 'warn';
+    if (status === 'rejected') return 'danger';
+    return 'neutral';
 }
 
 const meters = ref<Meter[]>([]);
@@ -111,11 +125,17 @@ async function unlink(id: string) {
             <span :class="['bw-badge', meter.meter_type === 'three_phase' ? 'info' : 'neutral']">
               {{ meterTypeLabel(meter.meter_type) }}
             </span>
+            <span v-if="statusLabel(meter.status)" :class="['bw-badge', statusBadgeClass(meter.status)]">
+              {{ statusLabel(meter.status) }}
+            </span>
             <span v-if="meter.station_id" class="bw-muted" style="font-size: var(--t-xs)">{{ meter.station_id }}</span>
           </div>
+          <p v-if="meter.status === 'rejected' && meter.rejection_reason" class="bw-muted" style="font-size: var(--t-xs); margin-top:4px">
+            {{ meter.rejection_reason }}
+          </p>
         </div>
         <div class="bw-row" style="gap: var(--s-2); flex-shrink:0">
-          <router-link :to="{ name: 'buy-token', query: { meter: meter.meter_id } }"
+          <router-link v-if="meter.status === 'approved'" :to="{ name: 'buy-token', query: { meter: meter.meter_id } }"
                        class="bw-btn" style="text-decoration:none; font-size: var(--t-sm); padding:0 var(--s-3); height:36px">
             Buy
           </router-link>

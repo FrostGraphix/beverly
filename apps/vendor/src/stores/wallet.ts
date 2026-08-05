@@ -9,7 +9,7 @@ export interface WalletSummary {
     holds_minor: number;
     available_minor: number;
     daily_cap_minor: number | null;
-    activity: {
+    activity?: {
         today_vended_minor: number;
         today_vended_count: number;
         today_funded_minor: number;

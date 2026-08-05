@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
-import { getBalance, getEntries } from '../services/ledger.js';
+import { getBalance, getEntries, getActivitySummary } from '../services/ledger.js';
 import {
     initiatePaystackFunding, initiateBankProofFunding, listVendorFunding, uploadBankFundingProof, FundingError,
 } from '../services/funding.js';
@@ -607,6 +607,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         const orgId = req.actor!.vendorOrganizationId!;
         const wallet = await getOrCreateWallet('vendor', orgId, { dailyCapMinor: 500_000_000 });
         const balance = await getBalance(wallet.id);
+        let activity = { todayVendedMinor: 0, todayVendedCount: 0, todayFundedMinor: 0, totalFundedMinor: 0, totalReversedMinor: 0 };
+        try {
+            activity = await getActivitySummary(wallet.id);
+        } catch (err) {
+            req.log.warn({ err, walletId: wallet.id }, 'failed to load wallet activity summary');
+        }
         return {
             wallet_id: wallet.id,
             currency: wallet.currency,
@@ -615,6 +621,13 @@ const route: FastifyPluginAsync = async (fastify) => {
             holds_minor: balance.activeHoldsMinor,
             available_minor: balance.availableMinor,
             daily_cap_minor: wallet.daily_debit_cap_minor,
+            activity: {
+                today_vended_minor: activity.todayVendedMinor,
+                today_vended_count: activity.todayVendedCount,
+                today_funded_minor: activity.todayFundedMinor,
+                total_funded_minor: activity.totalFundedMinor,
+                total_reversed_minor: activity.totalReversedMinor,
+            },
         };
     });
 

@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/purchases', name: 'purchases', component: () => import('../views/Purchases.vue'), meta: { auth: true, permission: 'wallet.vending.monitor' } },
     { path: '/customers', name: 'customers', component: () => import('../views/Customers.vue'), meta: { auth: true, permission: 'wallet.customers.view' } },
     { path: '/customers/:id', name: 'customer-detail', component: () => import('../views/CustomerDetail.vue'), meta: { auth: true, permission: 'wallet.customers.view' } },
+    { path: '/meter-approvals', name: 'meter-approvals', component: () => import('../views/MeterApprovals.vue'), meta: { auth: true, permission: 'wallet.meters.approve' } },
     { path: '/vending', name: 'vending', component: () => import('../views/Vending.vue'), meta: { auth: true, permission: 'wallet.vending.monitor' } },
     { path: '/consumption', name: 'consumption', component: () => import('../views/Consumption.vue'), meta: { auth: true, permission: 'wallet.consumption.view' } },
     { path: '/audit', name: 'audit', component: () => import('../views/Audit.vue'), meta: { auth: true, permission: 'wallet.audit.view' } },

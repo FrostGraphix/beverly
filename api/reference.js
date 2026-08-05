@@ -2896,8 +2896,15 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const orgId = vendorOrgId(request);
     const w = getOrProvisionVendorWallet(orgId);
     if (!w) return { status: 404, body: { message: "Wallet not found" } };
+    const emptyActivity = { today_vended_minor: 0, today_vended_count: 0, today_funded_minor: 0, total_funded_minor: 0, total_reversed_minor: 0 };
     try {
       const sum = walletLedger.walletSummary(w.id);
+      let activity = emptyActivity;
+      try {
+        activity = walletLedger.activitySummary(w.id);
+      } catch {
+        activity = emptyActivity;
+      }
       return localJobResponse({
         wallet_id: w.id,
         currency: w.currency || "NGN",
@@ -2905,10 +2912,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         balance_minor: sum.ledgerBalanceMinor,
         holds_minor: sum.heldBalanceMinor,
         available_minor: sum.availableBalanceMinor,
-        daily_cap_minor: null
+        daily_cap_minor: null,
+        activity
       });
     } catch {
-      return localJobResponse({ wallet_id: w.id, currency: "NGN", status: w.status || "active", balance_minor: 0, holds_minor: 0, available_minor: 0, daily_cap_minor: null });
+      return localJobResponse({ wallet_id: w.id, currency: "NGN", status: w.status || "active", balance_minor: 0, holds_minor: 0, available_minor: 0, daily_cap_minor: null, activity: emptyActivity });
     }
   }
 

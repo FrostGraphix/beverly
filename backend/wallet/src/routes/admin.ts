@@ -43,6 +43,7 @@ import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush }
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
 import adminDevRoutes from './admin-dev.js';
 import adminReportsRoutes from './admin-reports.js';
+import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import {
     DEFAULT_ROLE_PERMISSIONS,
@@ -57,7 +58,6 @@ function csvEscape(v: unknown): string {
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
 }
-
 function toCsv<T extends object>(rows: T[], columns: string[]): string {
     return [
         columns.map(csvEscape).join(','),
@@ -340,9 +340,13 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
+    'GET /meter-orders/customer-search': 'wallet.vendors.manage',
     'GET /meter-orders/:id': 'wallet.vendors.review',
     'POST /meter-orders': 'wallet.vendors.manage',
     'PATCH /meter-orders/:id': 'wallet.vendors.manage',
+    'GET /customer-meters': 'wallet.meters.approve',
+    'POST /customer-meters/:id/approve': 'wallet.meters.approve',
+    'POST /customer-meters/:id/reject': 'wallet.meters.approve',
     'GET /fraud': 'wallet.fraud.review',
     'PATCH /fraud/:id/resolve': 'wallet.fraud.review',
     'GET /disputes': 'wallet.disputes.manage',
@@ -501,6 +505,21 @@ function staffStations(req: FastifyRequest): string[] | null {
 
 function scopeStations(query: any, stationIds: string[] | null, column = 'station_id') {
     return stationIds ? query.in(column, stationIds) : query;
+}
+
+/**
+ * staffStations() returns `[]` (not null) for a non-super-admin with no
+ * station assigned. `[]` is truthy, so callers that just check
+ * `if (assignedStations)` silently scope every list query to zero rows
+ * instead of explaining why. This makes that case an explicit 403,
+ * matching the id-scoped behavior in enforceResourceStation().
+ */
+function requireStationScope(reply: FastifyReply, assignedStations: string[] | null): boolean {
+    if (assignedStations && !assignedStations.length) {
+        reply.code(403).send({ error: 'station_required', message: 'Your staff account needs a station assignment.' });
+        return false;
+    }
+    return true;
 }
 
 function missingColumn(error: { message?: string } | null, column: string) {
@@ -1531,6 +1550,26 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
+        const body = schema.parse(req.body);
+        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
+        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.profile_picture.override',
+            targetType: 'customer',
+            targetId: id,
+            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
+            after: { profile_picture_url: body.profile_picture_url ?? null },
+        });
+        return { ok: true };
+    });
+
     // ── vendor wallet ledger ──
     fastify.get('/vendors/:id/wallet', async (req, reply) => {
         const id = (req.params as { id: string }).id;
@@ -1990,9 +2029,11 @@ const route: FastifyPluginAsync = async (fastify) => {
     // ════════════════════════════════════════════════════════════
 
     // List customers with wallet balance + filters.
-    fastify.get('/customers', async (req) => {
+    fastify.get('/customers', async (req, reply) => {
         const { status, kycTier, q, limit, cursor } = req.query as Record<string, string | undefined>;
         const pageSize = Math.min(Number(limit ?? 100), 500);
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         const { data: walletRows, error: walletErr } = await adminClient
             .from('wallets')
             .select('id, owner_id, status')
@@ -2000,7 +2041,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (walletErr) return { customers: [], error: walletErr.message };
         const walletByOwner = new Map((walletRows ?? []).map((w: any) => [w.owner_id, w]));
         let walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
-        const assignedStations = staffStations(req);
         if (assignedStations) {
             const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
             const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
@@ -2052,10 +2092,11 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // Customer KPI summary.
-    fastify.get('/customers/summary', async (req) => {
+    fastify.get('/customers/summary', async (req, reply) => {
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         const { data: wallets } = await adminClient.from('wallets').select('id, owner_id').eq('owner_type', 'customer');
         let walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
-        const assignedStations = staffStations(req);
         if (assignedStations) {
             const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
             const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
@@ -2078,6 +2119,9 @@ const route: FastifyPluginAsync = async (fastify) => {
         const totalFloat = balances.reduce((s, b) => s + (b?.ledgerBalanceMinor ?? 0), 0);
         return { total: customers.length, byTier, byStatus, totalFloatMinor: totalFloat };
     });
+
+    // ── Customer meter link review & search routes ── extracted to admin-meter-approvals.ts
+    await fastify.register(adminMeterApprovalsRoutes);
 
     // Single customer profile + aggregates.
     fastify.get('/customers/:id', async (req, reply) => {
@@ -2533,12 +2577,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.get('/meter-orders/stats', async (req) => {
+    fastify.get('/meter-orders/stats', async (req, reply) => {
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         let query = adminClient
             .from('meter_purchase_orders')
             .select('status, amount_minor, updated_at, created_at, source_channel')
             .limit(10000);
-        const assignedStations = staffStations(req);
         query = scopeStations(query, assignedStations);
         const { data } = await query;
         const rows: any[] = data ?? [];
@@ -2564,16 +2609,17 @@ const route: FastifyPluginAsync = async (fastify) => {
         };
     });
 
-    fastify.get('/meter-orders', async (req) => {
+    fastify.get('/meter-orders', async (req, reply) => {
         const { status, q, limit, cursor } = req.query as { status?: string; q?: string; limit?: string; cursor?: string };
         const pageSize = Math.min(Number(limit ?? 100), 200);
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         let query = adminClient
             .from('meter_purchase_orders')
             .select('*, customers(full_name, email, phone), vendor_organizations(legal_name, trading_name)')
             .order('created_at', { ascending: false })
             .limit(pageSize);
         if (status) query = query.eq('status', status);
-        const assignedStations = staffStations(req);
         query = scopeStations(query, assignedStations);
         if (q) {
             const safeQ = cleanSearchTerm(q);
@@ -2585,6 +2631,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const nextCursor = rows.length === pageSize ? (rows[rows.length - 1] as any).created_at : null;
         return { orders: rows, nextCursor };
     });
+
 
     fastify.get('/meter-orders/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
@@ -3524,26 +3571,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             return signals;
         }).filter((row: any) => !alarm || row.alarmKey === alarm);
         return { rows, total: rows.length, count: rows.length };
-    });
-
-    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
-        const body = schema.parse(req.body);
-        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
-        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
-        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
-            action: 'customer.profile_picture.override',
-            targetType: 'customer',
-            targetId: id,
-            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
-            after: { profile_picture_url: body.profile_picture_url ?? null },
-        });
-        return { ok: true };
     });
 
     await fastify.register(adminVendorAnalyticsRoutes);
