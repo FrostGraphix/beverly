@@ -295,7 +295,7 @@
   font-weight: 800;
 }
 .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.sidebar-account-meta { min-width: 0; line-height: 1.25; }
+.sidebar-account-meta { min-width: 0; line-height: 1.25; text-align: left; }
 .sidebar-account-meta strong,
 .sidebar-account-meta span {
   display: block;
@@ -303,6 +303,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   letter-spacing: 0;
+  text-align: left;
 }
 .sidebar-account-meta strong { font-size: var(--t-sm); }
 .sidebar-account-meta span { margin-top: 2px; color: var(--text-muted); font-size: var(--t-xs); }
@@ -492,9 +493,9 @@
   height: 100% !important;
   border-radius: 999px !important;
 }
-.bw-user-meta { display: flex; flex-direction: column; line-height: 1.2; }
-.bw-user-meta strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; }
-.bw-user-meta span { font-size: var(--t-2xs); color: var(--text-muted); }
+.bw-user-meta { display: flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.2; }
+.bw-user-meta strong { font-size: var(--t-sm); font-weight: 600; letter-spacing: -0.01em; text-align: left; }
+.bw-user-meta span { font-size: var(--t-2xs); color: var(--text-muted); text-align: left; }
 .bw-account-menu {
   position: relative;
   display: flex;

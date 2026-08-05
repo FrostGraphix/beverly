@@ -140,7 +140,9 @@ function main() {
     "fastify.patch('/me'",
     "fastify.post('/profile-picture/upload-url'",
     "fastify.post('/profile-picture/scan'",
+    "fastify.post('/profile-picture/activate'",
     "fastify.delete('/profile-picture'",
+    "'POST /profile-picture/activate'",
     "shapeStaffProfile",
     "profile_picture_url",
   ]);

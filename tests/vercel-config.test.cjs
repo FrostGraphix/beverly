@@ -61,6 +61,14 @@ for (const [host, destination] of [
   );
 }
 
+const cspHeader = vercelJson.headers?.flatMap((h) => h.headers || []).find((h) => h.key === "Content-Security-Policy")?.value || "";
+assert(
+  cspHeader.includes("connect-src") &&
+    cspHeader.includes("https://fonts.googleapis.com") &&
+    cspHeader.includes("https://fonts.gstatic.com"),
+  "vercel.json Content-Security-Policy connect-src must allow Google Fonts for Workbox service worker caching"
+);
+
 console.log(JSON.stringify({
   node: packageJson.engines.node,
   vercelVersion: vercelJson.version,

@@ -578,6 +578,10 @@ export default {
         this.sidebarOpen = false;
       }
       if (newHash !== oldHash) this.closeUserMenu();
+      this.scrollToActiveLink();
+    },
+    sidebarOpen(isOpen) {
+      if (isOpen) this.scrollToActiveLink();
     }
   },
   created() {
@@ -596,6 +600,9 @@ export default {
     this.armSessionTimer();
     this.loadUser();
   },
+  mounted() {
+    this.scrollToActiveLink();
+  },
   beforeUnmount() {
     window.removeEventListener("hashchange", this.syncHash);
     window.removeEventListener("resize", this.syncWidth);
@@ -609,6 +616,12 @@ export default {
     this.stopSidebarResize();
   },
   methods: {
+    scrollToActiveLink() {
+      this.$nextTick(() => {
+        const el = this.$el?.querySelector?.('.sidebar-menu .sidebar-item.active, .sidebar-menu [aria-current="page"]');
+        if (el?.scrollIntoView) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    },
     handleProfilePictureUpdated(newUrl) {
       this.profilePictureUrl = newUrl || "";
     },
@@ -1056,39 +1069,14 @@ export default {
   transition: filter var(--transition-fast);
 }
 
-.main-container--account-menu-open :deep(.fixed-header .navbar) {
-  position: relative;
-  z-index: 1005;
-}
-
-.main-container--account-menu-open :deep(.fixed-header .tags-view-container) {
-  position: relative;
-  z-index: 960;
-}
-
-.main-container--account-menu-open :deep(.fixed-header) {
-  z-index: 1002;
-}
-
-.main-container--account-menu-open :deep(.bw-account-menu) {
-  position: relative;
-  z-index: 1003;
-}
-
-.main-container--account-menu-open :deep(.bw-user-dropdown) {
-  z-index: 1004;
-}
+.main-container--account-menu-open :deep(.fixed-header .navbar) { position: relative; z-index: 1005; }
+.main-container--account-menu-open :deep(.fixed-header .tags-view-container) { position: relative; z-index: 960; }
+.main-container--account-menu-open :deep(.fixed-header) { z-index: 1002; }
+.main-container--account-menu-open :deep(.bw-account-menu) { position: relative; z-index: 1003; }
+.main-container--account-menu-open :deep(.bw-user-dropdown) { z-index: 1004; }
 
 @media (min-width: 1025px) {
-  .main-container::before,
-  .bw-account-scrim {
-    display: none;
-  }
-
-  .main-container--account-menu-open :deep(.content-page) {
-    filter: none;
-  }
+  .main-container::before, .bw-account-scrim { display: none; }
+  .main-container--account-menu-open :deep(.content-page) { filter: none; }
 }
-
-/* ── Recharge wizard backdrop — mirrors account-menu-open blur effect ── */
 </style>

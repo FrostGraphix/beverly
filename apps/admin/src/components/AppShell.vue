@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
@@ -14,6 +14,21 @@ const drawerOpen = ref(false);
 const userMenuOpen = ref(false);
 const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
+const navRef = ref<HTMLElement | null>(null);
+
+function scrollToActiveLink() {
+    void nextTick(() => {
+        const activeEl = navRef.value?.querySelector('.bw-nav-item.active, [aria-current="page"]');
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+            activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    });
+}
+
+watch(() => route.path, () => scrollToActiveLink());
+watch(drawerOpen, (isOpen) => {
+    if (isOpen) scrollToActiveLink();
+});
 
 const collapsedGroups = ref<Record<string, boolean>>({});
 
@@ -135,7 +150,7 @@ const initials = computed(() => {
     return n.slice(0, 2).toUpperCase();
 });
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
-const isSuperAdmin = computed(() => auth.user?.role === 'super-admin');
+const isSuperAdmin = computed(() => auth.user?.role === 'super-admin' || auth.user?.role === 'super_admin');
 const displayName = computed(() => auth.user?.full_name || auth.user?.email || 'Administrator');
 const currentUserFirstName = computed(() => {
     const raw = auth.user?.full_name || auth.user?.email || 'Beverly';
@@ -234,6 +249,7 @@ async function signOut() {
 onMounted(() => {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     void adminPushNotifications.sync().catch(() => undefined);
+    scrollToActiveLink();
 });
 onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown));
 </script>
@@ -253,7 +269,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </div>
       </div>
 
-      <nav class="bw-nav" aria-label="Admin primary navigation">
+      <nav ref="navRef" class="bw-nav" aria-label="Admin primary navigation">
         <template v-for="group in navGroups" :key="group.label">
           <div v-if="group.label === 'Developer'" class="bw-nav-dev-divider" />
           <button
@@ -286,8 +302,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </template>
       </nav>
 
-      <footer v-if="isSuperAdmin" class="bw-sidebar-foot sidebar-account">
-        <a :href="CRM_URL" class="bw-back">
+      <footer class="bw-sidebar-foot sidebar-account">
+        <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back to CRM
         </a>
