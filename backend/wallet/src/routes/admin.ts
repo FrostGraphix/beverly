@@ -58,7 +58,6 @@ function csvEscape(v: unknown): string {
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
 }
-
 function toCsv<T extends object>(rows: T[], columns: string[]): string {
     return [
         columns.map(csvEscape).join(','),
@@ -1544,6 +1543,26 @@ const route: FastifyPluginAsync = async (fastify) => {
             actorRole: req.actor!.role,
             action: 'vendor.profile_picture.override',
             targetType: 'vendor_organization',
+            targetId: id,
+            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
+            after: { profile_picture_url: body.profile_picture_url ?? null },
+        });
+        return { ok: true };
+    });
+
+    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
+        const body = schema.parse(req.body);
+        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
+        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.profile_picture.override',
+            targetType: 'customer',
             targetId: id,
             before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
             after: { profile_picture_url: body.profile_picture_url ?? null },
@@ -3552,13 +3571,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             return signals;
         }).filter((row: any) => !alarm || row.alarmKey === alarm);
         return { rows, total: rows.length, count: rows.length };
-    });
-            targetType: 'customer',
-            targetId: id,
-            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
-            after: { profile_picture_url: body.profile_picture_url ?? null },
-        });
-        return { ok: true };
     });
 
     await fastify.register(adminVendorAnalyticsRoutes);
