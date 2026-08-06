@@ -129,6 +129,12 @@ function signalColumnsFromRow(row, stationId) {
   return out;
 }
 
+// row_json used to carry the full raw row here too -- same dead-write pattern
+// already found and fixed on daily_meter_readings and audit_logs. The only
+// read of this table (countRawDuplicateRows below) selects `id` alone; nothing
+// anywhere reads row_json. The column has a NOT NULL DEFAULT '{}'::jsonb, so
+// simply not sending it is enough -- no trigger needed like the main table
+// required (this write path is low-frequency, duplicate-detection events only).
 function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, eventType = "duplicate", sourcePage = null, sourceRow = null } = {}) {
   const stationId = normalizeStation(row.stationId || row.station || requestStation);
   const meterId = normalizeMeter(row.meterId || row.customerId);
@@ -142,13 +148,6 @@ function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, event
     event_type: eventType,
     source_page: Number.isFinite(Number(sourcePage)) ? Number(sourcePage) : null,
     source_row: Number.isFinite(Number(sourceRow)) ? Number(sourceRow) : null,
-    row_json: {
-      ...row,
-      stationId,
-      meterId,
-      currentDate: readingDate,
-      rawDuplicateIndex: duplicateIndex,
-    },
     captured_at: new Date().toISOString(),
   };
 }
