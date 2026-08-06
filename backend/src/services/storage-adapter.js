@@ -57,6 +57,16 @@ function uuidOrNull(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
 }
 
+// Full API response bodies used to be written into BOTH `detail` and `metadata`
+// (byte-identical, pure duplication) on every audited action. Investigation of
+// every caller in the repo showed that JSON is only ever read back for one
+// narrow slice: client-error telemetry (client-error-service.js's
+// listClientErrors, filtered to proxySource === "client-error"). Everything
+// else -- login/download/create/remote_command from auditResult() in
+// api/reference.js -- writes and never reads it. `metadata` is retired
+// entirely; `detail` is only populated for the slice that's actually consumed.
+// outcome/statusCode/method get real columns instead of living only in JSON,
+// matching what the local SQLite backend (local-database.js) already does.
 function mapAuditRow(entry = {}) {
   const method = String(entry.method || "GET").toUpperCase();
   const path = String(entry.path || "/");
@@ -70,22 +80,23 @@ function mapAuditRow(entry = {}) {
               : ["PUT", "PATCH"].includes(method) ? "update"
                 : method === "POST" ? "create"
                   : "download";
-  const details = sanitizeValue({
-    ...(entry.details || {}),
-    method,
-    outcome: String(entry.outcome || "success"),
-    statusCode: Number(entry.statusCode || 200),
-    proxySource: String(entry.proxySource || "unknown")
-  });
+  const outcome = String(entry.outcome || "success");
+  const statusCode = Number(entry.statusCode || 200);
+  const proxySource = String(entry.proxySource || "unknown");
+  const detail = proxySource === "client-error"
+    ? sanitizeValue({ ...(entry.details || {}), method, outcome, statusCode, proxySource })
+    : {};
   return {
     user_id: uuidOrNull(entry.userId),
     action,
     resource: path,
     resource_id: entry.resourceId || null,
-    detail: details,
-    source: String(entry.proxySource || "unknown"),
-    request_id: uuidOrNull(entry.requestId),
-    metadata: details
+    detail,
+    outcome,
+    status_code: statusCode,
+    method,
+    source: proxySource,
+    request_id: uuidOrNull(entry.requestId)
   };
 }
 
@@ -221,7 +232,7 @@ async function listAuditLogs(options = {}) {
       const sourceFilter = proxySource ? `&source=eq.${encodeURIComponent(proxySource)}` : "";
       const rows = await supabase.restRequest(`/audit_logs?select=*${sourceFilter}&order=created_at.desc&limit=${limit}`);
       return (Array.isArray(rows) ? rows : []).map((row) => {
-        const details = row.detail_json || row.detail || row.metadata || {};
+        const details = row.detail_json || row.detail || {};
         return {
           id: row.id || null,
           method: String(row.method || details.method || "GET").toUpperCase(),
