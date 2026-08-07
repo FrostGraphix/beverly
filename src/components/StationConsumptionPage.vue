@@ -779,8 +779,8 @@ export default {
     },
 
     colorFor(station) {
-      const idx = STATIONS.indexOf(String(station || "").toUpperCase());
-      return PALETTE[(idx >= 0 ? idx : STATIONS.length) % PALETTE.length];
+      const idx = this.STATIONS.indexOf(String(station || "").toUpperCase());
+      return PALETTE[(idx >= 0 ? idx : this.STATIONS.length) % PALETTE.length];
     },
 
     fmt(value, decimals = 2) {
