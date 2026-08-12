@@ -37,7 +37,11 @@ Database proof covered eight concurrent idempotent requests yielding one transfe
 
 This database proof ran against the live Beverly project because isolated staging is unavailable. Vercel preview and development currently share that database. Supabase preview branches require Pro, and restoring the inactive project exceeds the current active-project allowance. The application transfer gate remained disabled throughout proof.
 
-Production application deployment remains blocked by independent review, protected CI, and main merge. Canary activation additionally requires named vendors, approved amount and reason, an authorized MFA session, and finance/operations reconciliation. Track F remains unused.
+Production application deployment remains blocked by independent review and main merge. Canary activation additionally requires named vendors, approved amount and reason, an authorized MFA session, and finance/operations reconciliation. Track F remains unused.
+
+Draft pull request 80 is open. Protected GitHub checks pass at commit `58a2943c`. Vercel preview deployment `dpl_5sCdJ3RVu39HmQy6MQsyHnyK6Qwn` reached Ready with transfer flags disabled. An unauthenticated transfer request returned HTTP 401. Preview read probes redirect through deployment protection; the authenticated CLI probe timed out without runtime logs. Preview read-path proof therefore remains open.
+
+CodeRabbit CLI review is unavailable because its installer rejects Windows and this machine has no WSL distribution. Independent human approval remains required by branch protection.
 
 Four remote-only migration versions remain unresolved: `20260811100000`, `20260811110000`, `20260811120000`, and `20260811140000`. Their SQL bodies are absent from repository history. No fabricated placeholders were committed.
 

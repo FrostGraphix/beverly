@@ -69,9 +69,12 @@ Remote migration versions `20260811100000`, `20260811110000`, `20260811120000`, 
 - [x] Prove competing debit serialization.
 - [x] Prove transactional rollback under injected failure.
 - [x] Prove ledger conservation and notification parity.
+- [x] Open draft pull request 80.
+- [x] Pass protected pull-request checks.
+- [x] Deploy the hidden preview build.
 - [ ] Obtain independent pull-request approval.
 - [ ] Merge protected main.
-- [ ] Deploy the application changes.
+- [ ] Deploy production application changes.
 - [ ] Run an authorized transfer canary.
 - [ ] Reconcile every canary transfer.
 
@@ -87,7 +90,7 @@ Track F remains unused. No concrete evidence requires downtime or destructive re
 | `GET` | `/api/v1/admin/vendor-transfers` | Return immutable transfer history | Explicit public columns and cursor pagination | Met |
 | `GET` | `/api/v1/admin/vendor-transfers/:id` | Recover status and render receipts | Explicit public columns and durable snapshots | Met |
 | `GET` | `/api/v1/health` | Confirm process liveness | Production returned HTTP 200 | Met |
-| `GET` | `/api/v1/ready` | Confirm dependency readiness | Disabled queues now report intentional disabled mode | Met locally; deployment pending |
+| `GET` | `/api/v1/ready` | Confirm dependency readiness | Disabled queues now report intentional disabled mode | Met locally; preview protected |
 | `GET` | `/api/v1/version` | Correlate release and Git SHA | Production exposed the current main SHA | Met |
 
 The create endpoint is a declared money route. It forbids caching. It requires `MONEY_WRITES_ENABLED=true`. The route observes a shared database counter. Enforcement can activate later without code changes.
@@ -152,8 +155,15 @@ This was live-database proof, not staging proof. It remained unreachable through
 - [x] Rate-limit behavior tests
 - [x] Health readiness tests
 - [x] `git diff --check`
+- [x] Protected `Build and contracts`
+- [x] Wallet ecosystem checks
+- [x] Vercel preview deployment
 
-The local machine runs Node 24. The repository, CI, and Vercel target Node 22. The build passes locally, with an expected engine warning. CI remains the authoritative Node 22 proof.
+The local machine runs Node 24. The repository, CI, and Vercel target Node 22. The build passes locally, with an expected engine warning. Protected CI passed using Node 22.23.2.
+
+The preview deployment reached Ready. Its protected URL redirects unauthenticated read probes. An unauthorized transfer POST returned HTTP 401. The authenticated Vercel CLI health probe timed out without runtime logs, so preview read-path proof remains open. Production health already returned HTTP 200 before this change.
+
+CodeRabbit review could not run. Its CLI rejects Windows and WSL has no installed distribution. Independent human review remains mandatory.
 
 The remaining accepted advisory is moderate `uuid` exposure through ExcelJS. No fixed ExcelJS release exists. The security baseline records this explicit exception.
 
@@ -192,7 +202,7 @@ Application rollback remains safe because the migration is additive. The new tab
 Release completion requires:
 
 - [ ] An independent approving reviewer.
-- [ ] Protected CI success.
+- [x] Protected CI success.
 - [ ] Protected main merge.
 - [ ] Named canary source vendor.
 - [ ] Named canary destination vendor.
