@@ -2,9 +2,44 @@
 
 **Audit date:** 2026-07-26  
 **Repository:** `FrostGraphix/beverly`  
-**Branch reviewed:** `fix/test-timeouts`  
+**Branch reviewed:** `fix/test-timeouts`, then `codex/admin-vendor-balance-transfer`
 **Scope:** repository, deployment configuration, database migrations, security controls, CI state, tests, and operational documentation  
-**Audit type:** code- and configuration-backed review. Live production traffic, Vercel project settings, Supabase dashboard settings, DNS, certificates, backup entitlements, and third-party dashboards were not available for direct verification.
+**Audit type:** repository, Vercel, GitHub, and Supabase evidence review. Production health endpoints, project settings, environment identities, branch protection, migration state, feature flags, and controlled database behavior were directly verified on 2026-08-12. DNS, certificate internals, backup entitlements, restore execution, external paging destinations, and unrestricted traffic telemetry remain unverified.
+
+## Vendor balance transfer implementation addendum — 2026-08-12
+
+This addendum replaces the earlier vendor-to-customer funding requirement. The implemented capability is an immediate Wallet Admin transfer of existing available balance from one approved vendor wallet to another approved vendor wallet.
+
+### Evidence-backed decisions
+
+- Financial truth remains `public.wallet_ledger_entries`; no second wallet or ledger system was introduced.
+- `public.fn_admin_transfer_vendor_balance` is the only write primitive for this capability. It locks both wallets in stable ID order and commits the transfer record, source debit, destination credit, materialized balances, and two vendor inbox notifications in one transaction.
+- `public.fn_preview_admin_vendor_balance_transfer` validates the same vendor, wallet, currency, available-balance, hold, and debit-cap conditions without moving money.
+- Completed transfers are immutable. Corrections require new compensating ledger movement rather than updates or deletes.
+- Transfer records snapshot both vendor names so historical receipts remain intelligible after later vendor renames.
+- The idempotency request fingerprint remains internal: the RPC removes it from its JSON response and history/detail queries use an explicit public-column allowlist.
+- The RPCs are `SECURITY DEFINER` with an empty search path. Execute is revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to `service_role`.
+- The new table enables and forces RLS. Browser roles receive no mutation grants or permissive policies.
+- The API requires the critical `wallet.vendor_transfers.manage` permission and independently allowlists only `super-admin` and `developer`. Assigning the permission to any other role does not grant transfer authority.
+- The create endpoint also requires verified MFA, explicit confirmation, a valid idempotency key, the environment feature gate, the money-write gate, and a route-specific rate limit.
+- Successful and failed attempts use structured audit actions. Role and MFA denials use security telemetry. Audit functions remain best-effort under repository policy; the immutable transfer record is the durable financial record.
+- Vendor accounts receive in-app debit/credit notifications but have no transfer API authority.
+
+### Release posture
+
+Tracks A through D are implemented in the clean `codex/admin-vendor-balance-transfer` worktree. The additive migration `20260812145901_admin_vendor_balance_transfers.sql` is applied to the Beverly Supabase project. The environment and database transfer flags remain disabled. Existing business writes were never stopped.
+
+Local typecheck, root contracts, wallet contracts, auth contracts, security contracts, hardening (16/16), security audit, every production build target, and desktop/mobile browser verification pass. High and critical dependency findings are cleared. The remaining moderate `uuid` advisory is an explicit ExcelJS transitive exception without an available fixed ExcelJS release.
+
+The clean worktree is linked to Vercel project `beverly`. Repository, CI, and Vercel target Node 22. The current desktop runtime remains Node 24 and emits an engine warning, so protected CI provides the authoritative Node 22 result.
+
+Database proof covered eight concurrent idempotent requests yielding one transfer identifier, two competing 60,000 debits yielding one completed transfer and one insufficient-funds result, injected notification failure yielding zero partial transfer or ledger rows, two completed transfers yielding four notifications, and zero-sum ledger conservation. All synthetic fixtures were removed. The database transfer flag was restored disabled.
+
+This database proof ran against the live Beverly project because isolated staging is unavailable. Vercel preview and development currently share that database. Supabase preview branches require Pro, and restoring the inactive project exceeds the current active-project allowance. The application transfer gate remained disabled throughout proof.
+
+Production application deployment remains blocked by independent review, protected CI, and main merge. Canary activation additionally requires named vendors, approved amount and reason, an authorized MFA session, and finance/operations reconciliation. Track F remains unused.
+
+Four remote-only migration versions remain unresolved: `20260811100000`, `20260811110000`, `20260811120000`, and `20260811140000`. Their SQL bodies are absent from repository history. No fabricated placeholders were committed.
 
 ## 1. Executive verdict
 

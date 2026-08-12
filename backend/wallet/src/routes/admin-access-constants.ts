@@ -8,6 +8,7 @@ export const PERMISSION_CATALOG = [
     { key: 'wallet.meters.approve', label: 'Approve customer meter links', group: 'Customers', risk: 'high' },
     { key: 'wallet.funding.view', label: 'View funding queue', group: 'Money', risk: 'medium' },
     { key: 'wallet.funding.approve', label: 'Approve vendor funding', group: 'Money', risk: 'critical' },
+    { key: 'wallet.vendor_transfers.manage', label: 'Transfer balances between vendor wallets', group: 'Money', risk: 'critical' },
     { key: 'wallet.vending.monitor', label: 'Monitor vending activity', group: 'Money', risk: 'medium' },
     { key: 'wallet.refunds.manage', label: 'Approve refunds', group: 'Operations', risk: 'critical' },
     { key: 'wallet.disputes.manage', label: 'Resolve disputes', group: 'Operations', risk: 'medium' },
@@ -27,6 +28,7 @@ export const PERMISSION_CATALOG = [
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'super-admin': PERMISSION_CATALOG.map((p) => p.key),
+    developer: ['dev.console', 'wallet.vendor_transfers.manage'],
     'operations-manager': [
         'wallet.dashboard.view', 'wallet.vendors.review', 'wallet.vending.monitor',
         'wallet.customers.view', 'wallet.meters.approve', 'wallet.disputes.manage', 'wallet.support.manage', 'wallet.announcements.manage', 'wallet.settlement.view', 'wallet.reconciliation.run',
@@ -49,6 +51,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
 
 export const ROLE_LABELS: Record<string, string> = {
     'super-admin': 'Super Admin',
+    developer: 'Developer',
     'operations-manager': 'Operations Manager',
     'finance-checker': 'Finance Checker',
     account: 'Account Officer',
@@ -56,6 +59,7 @@ export const ROLE_LABELS: Record<string, string> = {
 
 export const ROLE_LEGACY_NAMES: Record<string, string> = {
     'super-admin': 'admin',
+    developer: 'developer',
     'operations-manager': 'ops',
     'finance-checker': 'analyst',
     account: 'finance',

@@ -17,6 +17,7 @@ These are internal Beverly team members.
 Examples:
 
 - Super Admin
+- Developer
 - Operations Manager
 - Finance Checker
 - Account Officer
@@ -45,6 +46,19 @@ Also the only role that can:
 
 - Change roles and permissions.
 - Freeze/unfreeze/close/reactivate wallets.
+- Transfer available balance between vendor wallets after MFA, approval, and confirmation.
+
+## Developer
+
+Can:
+
+- Access the Developer Console when it is enabled and the required production elevation is present.
+- Transfer available balance between vendor wallets after MFA, approval, and confirmation.
+
+Cannot:
+
+- Access other Wallet Admin business functions by default.
+- Gain transfer authority merely because a custom role receives the permission; the server also requires the explicit `developer` or `super-admin` role.
 
 ## Operations Manager
 
@@ -167,6 +181,7 @@ Think of permissions like feature switches.
 - Vendors review/manage
 - Customers view
 - Funding view/approve
+- Vendor balance transfers manage
 - Vending monitor
 - Refunds manage
 - Disputes manage
@@ -191,6 +206,7 @@ If a role does not have a permission, route access is blocked.
 3. Permission denials are audit-logged.
 4. Super Admin has full permission set.
 5. Role/permission edits are Super Admin only.
+6. Vendor transfers require `wallet.vendor_transfers.manage` plus the `super-admin` or `developer` role and verified MFA.
 
 ---
 
@@ -198,6 +214,7 @@ If a role does not have a permission, route access is blocked.
 
 - Vendor onboarding: Super Admin, Operations Manager (review), Super Admin (full manage).
 - Funding approvals: Finance Checker, Super Admin.
+- Vendor-to-vendor balance transfers: Super Admin or Developer only.
 - Refund approvals: Finance Checker, Super Admin.
 - Disputes/support: Operations Manager, Super Admin.
 - Feature flags: Super Admin only (or role with flag permission if granted).

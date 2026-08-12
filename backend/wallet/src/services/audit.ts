@@ -121,7 +121,7 @@ export function auditFromRequest(req: FastifyRequest): {
 } {
     const cid = (req.headers['x-correlation-id'] as string | undefined) ?? req.id;
     return {
-        ip:            (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip,
+        ip:            req.ip,
         userAgent:     (req.headers['user-agent'] as string | undefined) ?? null,
         correlationId: cid ?? null,
         actorUserId:   req.actor?.userId ?? null,

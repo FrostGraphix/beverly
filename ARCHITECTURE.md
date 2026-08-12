@@ -71,6 +71,7 @@ Keep write safety strict.
 - `backend/wallet/src/services/payment-webhooks.ts` owns verified Paystack webhook reconciliation.
 - Authenticated customer/vendor Paystack callback verification reuses the same idempotent fulfillment service as webhooks and reconciliation.
 - `backend/wallet/src/services/dev-console.ts` owns admin developer console data contracts.
+- `backend/wallet/src/services/vendor-transfers.ts` owns Wallet Admin vendor-to-vendor balance transfer contracts.
 - `LIVE_BEARER_TOKEN` has priority over client auth.
 - `CORS_ORIGINS` controls CORS.
 - `RATE_LIMIT_*` controls rate limiting.
@@ -129,6 +130,7 @@ Keep write safety strict.
 - Trusted backend mutations use service role.
 - Wallet ledger rows must be append-only.
 - Wallet corrections use compensating entries.
+- Vendor balance transfers use one service-role-only database RPC that atomically records the transfer, debits the source vendor wallet, credits the destination vendor wallet, and writes both vendor inbox notifications.
 
 ## Wallet Rules
 
@@ -147,6 +149,11 @@ Keep write safety strict.
 - Same actor cannot make and approve manual credits.
 - Frozen wallets cannot transact.
 - Receipts and token retrieval are first-class surfaces.
+- Vendor-to-vendor transfers conserve value: the source debit and destination credit have the same positive integer minor-unit amount and currency.
+- Vendor-to-vendor transfers are immediate only after an explicit Wallet Admin preview and confirmation.
+- Vendor-to-vendor transfers require both `wallet.vendor_transfers.manage` and an explicit `super-admin` or `developer` role; permission assignment alone never authorizes another role.
+- Vendor-to-vendor transfer requests require MFA, an idempotency key, a reason, active vendor wallets, sufficient available source balance, and distinct source and destination vendors.
+- Completed vendor transfers are immutable. Corrections use a separately authorized compensating transfer and never edit ledger history.
 
 ## Design System
 
@@ -187,6 +194,7 @@ Keep write safety strict.
 - Wallet endpoints use lowercase `/api/wallet/*`.
 - Vendor endpoints use lowercase `/api/vendor/*`.
 - Material wallet writes accept idempotency keys.
+- Wallet Admin vendor transfer endpoints live under `/api/v1/admin/vendor-transfers` and expose eligible-vendor lookup, preview, create, history, and detail contracts.
 - Paystack callbacks are built from trusted server-side portal URLs; browser-supplied callback URLs are ignored.
 - Paystack value delivery requires verified success, local ownership, exact reference, exact amount, and NGN currency.
 - Wallet responses include stable status fields.
@@ -194,6 +202,7 @@ Keep write safety strict.
 ## Roles
 
 - Super admin.
+- Developer. Default permissions are `dev.console` and `wallet.vendor_transfers.manage`; all other Wallet Admin business APIs remain denied.
 - Operations manager.
 - Account.
 
@@ -206,6 +215,12 @@ Keep write safety strict.
 - Supabase Cron invokes `/api/cron/wallet-maintenance` with the shared `CRON_SECRET` for payment recovery and scheduled wallet maintenance.
 - Supabase Vault stores the maintenance endpoint URL and bearer secret; production does not require an always-on worker or Redis.
 - `DEV_CONSOLE_ENABLED` is disabled by default; production developer routes always return `404`.
+- `FEATURE_VENDOR_BALANCE_TRANSFERS` is disabled by default. The server and database path must both reject new transfers until an approved canary enables it.
+- `APP_ENV` and `EXPECTED_SUPABASE_PROJECT_REF` bind every deployment to its intended database identity and fail closed on mismatch.
+- Preview deployments reject money writes even when a broad write variable is accidentally enabled.
+- Vendor-transfer throttling uses a database counter shared across serverless instances. `VENDOR_TRANSFER_RATE_LIMIT_MODE=observe` records breaches without interrupting business traffic; `enforce` requires a separate rollout decision.
+- Serverless readiness treats intentionally disabled Redis queues as ready. Enabled queues still require reachable Redis.
+- Vercel's platform forwarding header supplies the trusted client address. Arbitrary forwarded headers never become audit identity.
 - Vercel preview never enables money writes.
 - `npm run build` is the build gate.
 - `npm run smoke:vercel` is preview smoke.

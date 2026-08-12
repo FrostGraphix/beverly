@@ -59,6 +59,7 @@ declare module 'fastify' {
 
 const STAFF_ROLES = new Set([
     'super-admin',
+    'developer',
     'account',
     'finance-checker',
     'operations-manager',
