@@ -7,7 +7,10 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 const status = read("backend/wallet/src/services/payment-status.ts");
 const fulfillment = read("backend/wallet/src/services/payment-transactions.ts");
-const adminRoutes = read("backend/wallet/src/routes/admin.ts");
+const adminRoutes = [
+  read("backend/wallet/src/routes/admin.ts"),
+  read("backend/wallet/src/routes/admin-payment-recovery.ts"),
+].join("\n");
 const paymentWebhooks = read("backend/wallet/src/services/payment-webhooks.ts");
 const admin = read("backend/wallet/src/routes/admin.ts");
 const scheduler = read("backend/wallet/src/jobs/scheduler.ts");
