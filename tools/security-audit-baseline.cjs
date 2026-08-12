@@ -28,8 +28,12 @@ function assertNoVulnerableEchartsLinesSeries() {
 
 function readAudit() {
   try {
-    const corepack = path.join(path.dirname(process.execPath), "node_modules", "corepack", "dist", "corepack.js");
-    return JSON.parse(execFileSync(process.execPath, [corepack, "pnpm", "audit", "--prod", "--json"], {
+    const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const command = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : pnpm;
+    const args = process.platform === "win32"
+      ? ["/d", "/s", "/c", "pnpm audit --prod --json"]
+      : ["audit", "--prod", "--json"];
+    return JSON.parse(execFileSync(command, args, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"]
     }));
