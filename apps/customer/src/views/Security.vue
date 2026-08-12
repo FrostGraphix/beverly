@@ -62,6 +62,19 @@ async function requestOtpLink() {
       </router-link>
     </div>
 
+    <div class="bw-card">
+      <p style="font-weight:700; margin:0 0 var(--s-1)">Vending PIN</p>
+      <p class="bw-muted" style="font-size: var(--t-sm); margin:0 0 var(--s-4)">
+        Your four-digit PIN confirms wallet purchases.
+      </p>
+      <div :class="['bw-badge', auth.customer?.vend_pin_configured ? 'success' : 'warning']">
+        {{ auth.customer?.vend_pin_configured ? 'PIN configured' : 'PIN required' }}
+      </div>
+      <router-link to="/vend-pin" class="bw-btn" style="text-decoration:none; display:inline-flex; margin-top: var(--s-3)">
+        {{ auth.customer?.vend_pin_configured ? 'Change vending PIN' : 'Create vending PIN' }}
+      </router-link>
+    </div>
+
     <!-- Re-send login link -->
     <div class="bw-card">
       <p style="font-weight:700; margin:0 0 var(--s-1)">Sign in from new device</p>

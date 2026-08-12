@@ -14,7 +14,7 @@ export interface VendorUserProfile {
     mfa_verified: boolean;
     password_reset_required: boolean;
     vend_credential_configured: boolean;
-    vend_credential_type: 'pin' | 'password' | null;
+    vend_credential_type: 'pin' | null;
     organization_name: string;
     organization_status?: string | null;
     vendor_code?: string | null;

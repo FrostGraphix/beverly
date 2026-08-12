@@ -15,20 +15,14 @@ describe('vendor vend credential validation', () => {
         expect(hasVendorVendCredential({ ...complete, vend_credential_type: null })).toBe(false);
     });
 
-    it('accepts strong vendor PINs and passwords', () => {
+    it('accepts strong four-digit PINs', () => {
         expect(() => validateVendCredential('pin', '4829')).not.toThrow();
-        expect(() => validateVendCredential('password', 'BeverlyVend42')).not.toThrow();
     });
 
     it('rejects predictable or malformed PINs', () => {
         expect(() => validateVendCredential('pin', '1234')).toThrow(VendorVendCredentialError);
         expect(() => validateVendCredential('pin', '0000')).toThrow(VendorVendCredentialError);
         expect(() => validateVendCredential('pin', '12ab')).toThrow(VendorVendCredentialError);
-    });
-
-    it('rejects weak passwords', () => {
-        expect(() => validateVendCredential('password', 'short1')).toThrow(VendorVendCredentialError);
-        expect(() => validateVendCredential('password', 'lettersOnly')).toThrow(VendorVendCredentialError);
-        expect(() => validateVendCredential('password', '1234567890')).toThrow(VendorVendCredentialError);
+        expect(() => validateVendCredential('pin', '48291')).toThrow(VendorVendCredentialError);
     });
 });

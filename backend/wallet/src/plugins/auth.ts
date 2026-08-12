@@ -51,7 +51,7 @@ declare module 'fastify' {
     interface FastifyInstance {
         requireAuth: () => preHandlerHookHandler;
         requireStaff: () => preHandlerHookHandler;
-        requireVendor: () => preHandlerHookHandler;
+        requireVendor: (options?: { requireMfa?: boolean }) => preHandlerHookHandler;
         requireCustomer: () => preHandlerHookHandler;
         requireKycTier: (min: number) => preHandlerHookHandler;
     }
@@ -237,7 +237,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
         };
     });
 
-    fastify.decorate('requireVendor', (): preHandlerHookHandler => {
+    fastify.decorate('requireVendor', (options: { requireMfa?: boolean } = {}): preHandlerHookHandler => {
         return async (req: FastifyRequest, reply: FastifyReply) => {
             await (fastify.requireAuth() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
             if (reply.sent) return undefined;
@@ -250,7 +250,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                     message: 'Change your password before continuing.',
                 });
             }
-            if (req.actor.mfaEnrolled && !req.actor.mfaVerified) {
+            if (options.requireMfa !== false && req.actor.mfaEnrolled && !req.actor.mfaVerified) {
                 return reply.code(403).send({
                     error: 'mfa_required',
                     message: 'Verify two-factor authentication before continuing.',

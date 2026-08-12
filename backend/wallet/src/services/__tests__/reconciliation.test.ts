@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const store: {
     runs: Record<string, any>;
     dbTxns: Array<{ amount_minor: number }>;
-    gatewayPages: Array<Array<{ amount: number }>>;
+    gatewayPages: Array<Array<{ amount: number; requested_amount?: number }>>;
     fetchCalls: string[];
 } = {
     runs: {},
@@ -95,6 +95,15 @@ describe('daily reconciliation', () => {
         expect(run.notes).toContain('Delta');
     });
 
+    it('reconciles requested principal without payer fees', async () => {
+        store.dbTxns = [{ amount_minor: 500_00 }];
+        store.gatewayPages = [[{ amount: 507_62, requested_amount: 500_00 }]];
+        await runDailyReconciliation('2026-07-14');
+        const run: any = Object.values(store.runs)[0];
+        expect(run.gateway_total_minor).toBe(500_00);
+        expect(run.mismatch_minor).toBe(0);
+    });
+
     it('marks the run as gateway-unverified when the key is missing', async () => {
         delete process.env.PAYSTACK_SECRET_KEY;
         store.dbTxns = [{ amount_minor: 100_00 }];
@@ -109,5 +118,12 @@ describe('daily reconciliation', () => {
         store.runs['run-2026-07-14'] = { id: 'run-2026-07-14', run_date: '2026-07-14', status: 'ok' };
         await runDailyReconciliation('2026-07-14');
         expect(store.fetchCalls.length).toBe(0);
+    });
+
+    it('force-runs an already reconciled date', async () => {
+        store.runs['run-2026-07-14'] = { id: 'run-2026-07-14', run_date: '2026-07-14', status: 'ok' };
+        store.gatewayPages = [[]];
+        await runDailyReconciliation('2026-07-14', { force: true });
+        expect(store.fetchCalls.length).toBe(1);
     });
 });

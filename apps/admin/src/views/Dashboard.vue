@@ -17,7 +17,7 @@ interface FundingHistoryRow {
     vendor_organizations?: { legal_name?: string | null; trading_name?: string | null } | null;
 }
 interface Application    { id: string; legal_name: string; created_at: string; }
-interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; actor_type?: string | null; reference?: string | null; created_at: string; }
+interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; delivery_state?: string | null; failure_reason?: string | null; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; actor_type?: string | null; reference?: string | null; created_at: string; }
 interface WalletSummary {
     walletCount: number;
     totalFloatMinor: number;
@@ -169,7 +169,7 @@ const recentActivityRows = computed(() => {
             amountMinor: p.amount_minor,
             unitsKwh: p.units_kwh,
             units: p.units_kwh ? `${p.units_kwh.toLocaleString('en-NG', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} kWh` : '',
-            status: p.status.replace(/_/g, ' '),
+            status: purchaseStatusLabel(p),
             statusTone: statusTone(p.status),
             createdAt: p.created_at,
         };
@@ -335,6 +335,14 @@ function statusTone(status: string) {
     return 'neutral';
 }
 
+function purchaseStatusLabel(p: Purchase) {
+    if (p.status === 'delivered') return 'Token ready';
+    if (p.failure_reason?.includes('payment_amount_mismatch')) return 'Payment needs review';
+    if (p.delivery_state === 'token_generated_needs_reconciliation') return 'Token generated; reconciling';
+    if (p.delivery_state === 'awaiting_payment') return 'Payment awaiting confirmation';
+    return p.status.replace(/_/g, ' ');
+}
+
 function matchesDateFilter(iso: string, filter: string) {
     if (filter === 'all') return true;
     const created = new Date(iso);
@@ -440,8 +448,33 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- KPI grid -->
-    <div v-if="loading" class="bw-kpi-grid bw-mobile-kpi-grid" aria-label="Loading dashboard">
-      <div v-for="n in 8" :key="`kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
+    <div
+      v-if="loading"
+      class="bw-kpi-grid bw-mobile-kpi-grid"
+      aria-label="Loading dashboard metrics"
+      aria-busy="true"
+    >
+      <article
+        v-for="n in 8"
+        :key="`kpi-skeleton-${n}`"
+        class="bw-kpi dashboard-kpi-skeleton"
+        aria-hidden="true"
+      >
+        <div class="bw-kpi-row">
+          <span class="bw-skeleton dashboard-kpi-skeleton-label"></span>
+          <span class="bw-skeleton dashboard-kpi-skeleton-icon"></span>
+        </div>
+        <span class="bw-skeleton dashboard-kpi-skeleton-value"></span>
+        <div class="bw-kpi-foot dashboard-kpi-skeleton-foot">
+          <span class="bw-skeleton dashboard-kpi-skeleton-pill"></span>
+          <span class="bw-skeleton dashboard-kpi-skeleton-note"></span>
+        </div>
+        <div v-if="n <= 2" class="dashboard-kpi-skeleton-chart">
+          <span class="bw-skeleton dashboard-kpi-skeleton-line line-one"></span>
+          <span class="bw-skeleton dashboard-kpi-skeleton-line line-two"></span>
+          <span class="bw-skeleton dashboard-kpi-skeleton-line line-three"></span>
+        </div>
+      </article>
     </div>
     <div v-else class="bw-kpi-grid bw-mobile-kpi-grid">
 
@@ -977,6 +1010,64 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 <style scoped>
 .dashboard-greeting {
   margin-bottom: calc(var(--s-3) * -1);
+}
+.dashboard-kpi-skeleton {
+  overflow: hidden;
+  pointer-events: none;
+}
+.dashboard-kpi-skeleton .bw-skeleton {
+  display: block;
+  min-height: 0;
+}
+.dashboard-kpi-skeleton-label {
+  width: 42%;
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.dashboard-kpi-skeleton-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
+}
+.dashboard-kpi-skeleton-value {
+  width: 58%;
+  height: 32px;
+  margin-top: var(--s-4);
+  border-radius: var(--r-sm);
+}
+.dashboard-kpi-skeleton-foot {
+  align-items: center;
+  margin-top: var(--s-3);
+}
+.dashboard-kpi-skeleton-pill {
+  width: 72px;
+  height: 26px;
+  border-radius: var(--r-pill);
+}
+.dashboard-kpi-skeleton-note {
+  width: 38%;
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.dashboard-kpi-skeleton-chart {
+  display: flex;
+  align-items: end;
+  gap: var(--s-2);
+  height: 34px;
+  margin-top: var(--s-4);
+}
+.dashboard-kpi-skeleton-line {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--r-pill);
+  transform: rotate(-3deg);
+  transform-origin: left center;
+}
+.dashboard-kpi-skeleton-line.line-two {
+  transform: translateY(-5px) rotate(2deg);
+}
+.dashboard-kpi-skeleton-line.line-three {
+  transform: translateY(-9px) rotate(-4deg);
 }
 .recent-filter-panel {
   padding: var(--s-3) var(--s-4);

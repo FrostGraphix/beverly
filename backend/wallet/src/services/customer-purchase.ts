@@ -2,9 +2,7 @@
  * Customer purchase service.
  *
  * Wraps the shared token engine for customer-initiated purchases.
- * Supports two modes:
- *   wallet     — debits customer wallet, returns token immediately
- *   direct_pay — customer pays via Paystack; token issued after webhook confirms
+ * Token purchases debit customer wallets and return tokens immediately.
  *
  * Customer wallet funding uses a separate initiateCustomerFunding() helper
  * (Paystack gateway, same as vendor but owned by customer).
@@ -50,12 +48,18 @@ function meterCapForTier(kycTier: number): number {
 }
 
 async function assertMeterApprovedForPurchase(customerId: string, meterId: string): Promise<void> {
-    const { data: link } = await adminClient
+    const { data: link, error } = await adminClient
         .from('customer_meters')
         .select('status')
         .eq('customer_id', customerId)
         .eq('meter_id', meterId)
         .maybeSingle();
+    if (error) {
+        throw new CustomerPurchaseError(
+            'Meter approval could not be verified. No purchase was started. Please try again shortly.',
+            'meter_approval_unavailable',
+        );
+    }
     if (!link) {
         throw new CustomerPurchaseError('This meter is not linked to your account. Add it under My Meters first.', 'meter_not_linked');
     }
@@ -65,6 +69,12 @@ async function assertMeterApprovedForPurchase(customerId: string, meterId: strin
     }
     if (status === 'rejected') {
         throw new CustomerPurchaseError('This meter link was rejected. Contact support or relink with correct details.', 'meter_rejected');
+    }
+    if (status !== 'approved') {
+        throw new CustomerPurchaseError(
+            'This meter is not approved for purchases. Contact support before trying again.',
+            'meter_not_approved',
+        );
     }
 }
 
@@ -80,12 +90,10 @@ export interface CustomerPurchaseInput {
     customerId: string;
     customerUserId: string;
     customerName: string | null;
-    customerEmail: string | null;
     meterId: string;
     amountMinor: number;
-    mode: 'wallet' | 'direct_pay';
+    mode: 'wallet';
     clientIdempotencyKey: string;
-    callbackUrl?: string;
 }
 
 export interface CustomerPurchaseResult {
@@ -93,7 +101,7 @@ export interface CustomerPurchaseResult {
     token: string | null;
     units: number;
     receiptId: string | null;
-    authorizationUrl: string | null;  // for direct_pay
+    authorizationUrl: null;
     reference: string | null;
 }
 
@@ -302,7 +310,7 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
     if (createErr) throw new CustomerPurchaseError(createErr.message, 'create_order_failed');
     let po = createdRow as PurchaseOrder;
 
-    if (input.mode === 'wallet') {
+    {
         const wallet = customerWallet;
         if (!wallet) throw new CustomerPurchaseError('Wallet not provisioned.', 'wallet_missing');
 
@@ -459,94 +467,6 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             }
             throw new CustomerPurchaseError(e.message, e.code ?? 'token_failed');
         }
-    } else {
-        // direct_pay: initialise Paystack, token issued by webhook after payment
-        const email = normalizeCustomerPaymentEmail(input.customerEmail, 'card payment');
-        const reference = `CPO-${Date.now()}-${input.customerId.slice(0, 8)}`;
-
-        const { data: pt, error: ptErr } = await adminClient.from('payment_transactions').insert({
-            gateway: 'paystack',
-            gateway_reference: reference,
-            actor_type: 'customer',
-            actor_id: input.customerId,
-            purpose: 'token_purchase',
-            amount_minor: preview.grossAmountMinor,
-            status: PAYMENT_STATUS.INITIATED,
-            idempotency_key: `customer_purchase.${po.id}`,
-            metadata: { purchase_order_id: po.id },
-        }).select('id, metadata').single();
-        if (ptErr) {
-            await adminClient.from('purchase_orders').update({
-                status: 'failed',
-                failure_reason: `create_payment_failed: ${ptErr.message}`.slice(0, 500),
-            }).eq('id', po.id);
-            throw new CustomerPurchaseError(ptErr.message, 'create_payment_failed');
-        }
-
-        let initRes;
-        try {
-            initRes = await initializeTransaction({
-                email,
-                amountMinor: preview.grossAmountMinor,
-                reference,
-                callbackUrl: input.callbackUrl,
-                metadata: { purchase_order_id: po.id, customer_id: input.customerId },
-                channels: ['card', 'bank', 'ussd', 'bank_transfer'],
-            });
-        } catch (error: any) {
-            const now = new Date().toISOString();
-            const message = error?.message ?? 'Paystack checkout could not be initialized.';
-            await Promise.all([
-                adminClient.from('payment_transactions').update({
-                    status: PAYMENT_STATUS.FAILED,
-                    metadata: {
-                        ...(((pt as any).metadata ?? {}) as Record<string, unknown>),
-                        purchase_order_id: po.id,
-                        checkout_init_failed_at: now,
-                        checkout_init_error: message,
-                    },
-                    updated_at: now,
-                }).eq('id', (pt as { id: string }).id),
-                adminClient.from('purchase_orders').update({
-                    status: 'failed',
-                    failure_reason: `payment_init_failed: ${message}`.slice(0, 500),
-                }).eq('id', po.id),
-            ]);
-            await logAction({
-                actorUserId: input.customerUserId,
-                actorType: 'customer',
-                action: 'customer.purchase.direct_pay_failed',
-                targetType: 'purchase_order',
-                targetId: po.id,
-                after: { meterId: meter.meterId, amountMinor: preview.grossAmountMinor, reference, reason: message },
-            }).catch(() => undefined);
-            throw new CustomerPurchaseError(message, 'payment_init_failed');
-        }
-
-        await adminClient.from('purchase_orders').update({
-            payment_transaction_id: (pt as { id: string } | null)?.id ?? null,
-            status: 'hold_active',
-            delivery_state: 'awaiting_payment',
-        }).eq('id', po.id);
-        po = { ...po, status: 'hold_active', delivery_state: 'awaiting_payment' };
-
-        await logAction({
-            actorUserId: input.customerUserId,
-            actorType: 'customer',
-            action: 'customer.purchase.direct_pay.init',
-            targetType: 'purchase_order',
-            targetId: po.id,
-        after: { meterId: meter.meterId, amountMinor: preview.grossAmountMinor, reference },
-        });
-
-        return {
-            purchaseOrder: po,
-            token: null,
-            units: preview.units,
-            receiptId: null,
-            authorizationUrl: initRes.authorization_url,
-            reference,
-        };
     }
 }
 
@@ -800,14 +720,21 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
     const meterType = meterTypeFromInfo(meter);
     assertRequestedMeterType(meterType, requestedMeterType);
 
-    // Check not already linked
-    const { data: existing } = await adminClient
+    // A rejected claim is historical, not an active link. Keep its row so the
+    // lifecycle remains stable, then reset it to a fresh pending review below.
+    const { data: existing, error: existingError } = await adminClient
         .from('customer_meters')
-        .select('id')
+        .select('id, status')
         .eq('customer_id', customerId)
         .eq('meter_id', meterId)
         .maybeSingle();
-    if (existing) throw new CustomerPurchaseError('Meter already linked.', 'already_linked');
+    if (existingError) throw new CustomerPurchaseError(existingError.message, 'link_failed');
+    if (existing?.status === 'pending') {
+        throw new CustomerPurchaseError('This meter link is already awaiting review.', 'already_pending');
+    }
+    if (existing?.status === 'approved') {
+        throw new CustomerPurchaseError('This meter is already linked and approved.', 'already_linked');
+    }
 
     // Cap by KYC tier — higher-verified customers may link more meters.
     const { data: customerRow } = await adminClient
@@ -820,12 +747,13 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
     const { count } = await adminClient
         .from('customer_meters')
         .select('id', { count: 'exact', head: true })
-        .eq('customer_id', customerId);
+        .eq('customer_id', customerId)
+        .not('status', 'eq', 'rejected');
     if ((count ?? 0) >= meterCap) {
         throw new CustomerPurchaseError(`Maximum ${meterCap} meters per account at your verification level.`, 'meter_limit');
     }
 
-    const { data, error } = await adminClient.from('customer_meters').insert({
+    const linkValues = {
         customer_id: customerId,
         meter_id: meterId,
         meter_type: meterType,
@@ -834,8 +762,19 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         nickname: nickname ?? null,
         meter_name: meter.customerName,
         status: 'pending',
-    }).select('*').single();
+    } as const;
+    const linkMutation = existing?.status === 'rejected'
+        ? adminClient.from('customer_meters').update({
+            ...linkValues,
+            reviewed_by: null,
+            reviewed_at: null,
+            review_note: null,
+            rejection_reason: null,
+        }).eq('id', existing.id).eq('status', 'rejected')
+        : adminClient.from('customer_meters').insert(linkValues);
+    const { data, error } = await linkMutation.select('*').maybeSingle();
     if (error) throw new CustomerPurchaseError(error.message, 'link_failed');
+    if (!data) throw new CustomerPurchaseError('This meter link is already awaiting review.', 'already_pending');
 
     await logAction({
         actorUserId: customerUserId,
@@ -843,10 +782,11 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         action: 'customer.meter.link',
         targetType: 'customer_meter',
         targetId: (data as { id: string }).id,
-        after: { meterId, meterType, stationId: meter.stationId, status: 'pending' },
+        before: existing ? { status: existing.status } : undefined,
+        after: { meterId, meterType, stationId: meter.stationId, status: 'pending', resubmitted: Boolean(existing) },
     });
 
-    return data;
+    return { ...(data as Record<string, unknown>), resubmitted: Boolean(existing) };
 }
 
 export async function unlinkMeter(customerId: string, customerUserId: string, meterRowId: string) {
@@ -875,8 +815,23 @@ export async function listCustomerMeters(customerId: string) {
         .from('customer_meters')
         .select('*')
         .eq('customer_id', customerId)
+        .not('status', 'eq', 'rejected')
         .order('created_at', { ascending: false });
     return data ?? [];
+}
+
+export async function listCustomerMeterLinkHistory(customerId: string, limit = 100, offset = 0) {
+    const pageSize = Math.min(Math.max(Math.trunc(limit) || 25, 1), 100);
+    const pageOffset = Math.max(Math.trunc(offset) || 0, 0);
+    const { data, error, count } = await adminClient
+        .from('customer_meter_link_history')
+        .select('id, customer_meter_id, meter_id, station_id, event_type, previous_status, new_status, reason, note, created_at', { count: 'exact' })
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(pageOffset, pageOffset + pageSize - 1);
+    if (error) throw new CustomerPurchaseError(error.message, 'history_unavailable');
+    return { history: data ?? [], total: count ?? 0, limit: pageSize, offset: pageOffset };
 }
 
 export async function listCustomerPurchases(customerId: string, limit = 100) {

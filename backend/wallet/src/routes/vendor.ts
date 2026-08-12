@@ -7,6 +7,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { adminClient } from '../db/supabase.js';
 import { env } from '../config/env.js';
+import { resolveFundingCallbackUrl } from '../config/funding-callbacks.js';
 import { findWalletByOwner, getOrCreateWallet } from '../services/wallets.js';
 import { getBalance, getEntries, getActivitySummary } from '../services/ledger.js';
 import {
@@ -119,6 +120,8 @@ function sendVendCredentialError(reply: FastifyReply, error: unknown) {
     if (error instanceof VendorVendCredentialError) {
         const status = error.code === 'vend_credential_required'
             ? 428
+            : error.code === 'vend_credential_locked'
+                ? 429
             : error.code === 'vendor_user_not_found'
                 ? 404
                 : error.code.endsWith('_failed')
@@ -419,16 +422,16 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
-    fastify.get('/vend-credential/status', { preHandler: fastify.requireVendor() }, async (req) => {
+    fastify.get('/vend-credential/status', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req) => {
         return vendorVendCredentialStatus(req.actor!.actorId);
     });
 
-    fastify.post('/vend-credential', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+    fastify.post('/vend-credential', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
         const actor = req.actor!;
         if (!assertVendorEmailVerified(actor, reply)) return reply;
         const schema = z.object({
-            type: z.enum(['pin', 'password']),
-            credential: z.string().min(4).max(80),
+              type: z.literal('pin'),
+              credential: z.string().regex(/^\d{4}$/),
         });
         const body = schema.parse(req.body);
         try {
@@ -777,7 +780,9 @@ const route: FastifyPluginAsync = async (fastify) => {
                 amountMinor: body.amountMinor,
                 submittedBy: req.actor!.userId,
                 email,
-                callbackUrl: `${env.VENDOR_PORTAL_URL.replace(/\/+$/, '')}/wallet/fund?payment=return`,
+                callbackUrl: resolveFundingCallbackUrl(
+                    'vendor', env.VENDOR_FUNDING_CALLBACK_URL, env.VENDOR_PORTAL_URL,
+                ),
             });
             await completeWalletIdempotency(scope, idempotencyKey, result).catch((error) => {
                 req.log.error({ error, scope }, 'Paystack initialization idempotency completion failed');
@@ -850,7 +855,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── vending: preview ──
-    fastify.post('/vend/preview', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+    fastify.post('/vend/preview', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
         const schema = z.object({
             meterId: z.string().min(1),
             amountMinor: z.number().int().min(10000),
@@ -870,7 +875,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // Safe live integration planner. It resolves the meter and returns the exact
     // upstream payloads without creating wallet holds, purchase orders, tokens, or tasks.
-    fastify.post('/vend/live-plan', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+    fastify.post('/vend/live-plan', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
         const schema = z.object({
             meterId: z.string().min(1),
             amountMinor: z.number().int().min(10000),
@@ -930,18 +935,12 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── vending: token ──
-    fastify.post('/vend', { preHandler: fastify.requireVendor() }, async (req, reply) => {
-        if (!req.actor?.mfaVerified) {
-            return reply.code(403).send({
-                error: 'mfa_required',
-                message: 'Verify two-factor authentication before vending.',
-            });
-        }
+    fastify.post('/vend', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
         const schema = z.object({
             meterId: z.string().min(1),
             amountMinor: z.number().int().min(10000),
             mode: z.enum(['wallet', 'remote_send']).default('wallet'),
-            authorization: z.string().min(4).max(80),
+            authorization: z.string().regex(/^\d{4}$/),
         });
         const body = schema.parse(req.body);
         const clientKey = requireIdempotencyKey(req, reply);
@@ -1006,7 +1005,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.post('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+    fastify.post('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
         const params = z.object({
             purchaseOrderId: z.string().uuid(),
         }).parse(req.params);

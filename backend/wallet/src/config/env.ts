@@ -48,6 +48,7 @@ const schema = z.object({
     ENERGY_BACKEND_URL: z.string().url().optional(),
     ENERGY_BEARER_TOKEN: z.string().optional(),
     UPSTREAM_API_URL: z.string().url().optional(),
+    UPSTREAM_PASSWORD: z.string().optional(),
     UPSTREAM_BEARER_TOKEN: z.string().optional(),
     ENERGY_AUTHORIZATION_PASSWORD: z.string().optional(),
     ENERGY_ENABLE_ARCHIVED_METER_FALLBACK: z.preprocess((value) => {
@@ -58,7 +59,6 @@ const schema = z.object({
 
     PAYSTACK_SECRET_KEY: z.string().regex(/^sk_(test|live)_[A-Za-z0-9]+$/).optional(),
     PAYSTACK_PUBLIC_KEY: z.string().regex(/^pk_(test|live)_[A-Za-z0-9]+$/).optional(),
-    PAYSTACK_CALLBACK_URL: z.string().url().optional(),
     PAYSTACK_WEBHOOK_URL: z.string().url().optional(),
 
     TWILIO_ACCOUNT_SID: z.string().optional(),
@@ -90,6 +90,9 @@ const schema = z.object({
     CUSTOMER_APP_URL: z.string().url(),
     VENDOR_PORTAL_URL: z.string().url(),
     STAFF_PORTAL_URL: z.string().url(),
+    CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
+    VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
+    CUSTOMER_METER_ORDER_CALLBACK_URL: z.string().url().optional(),
 
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
@@ -134,6 +137,20 @@ const schema = z.object({
                 code: z.ZodIssueCode.custom,
                 path: ['PAYSTACK_WEBHOOK_URL'],
                 message: 'Required when production money writes are enabled.',
+            });
+        }
+        if ((values.FEATURE_METER_PURCHASE || values.FEATURE_VENDOR_VENDING) && !values.ENERGY_AUTHORIZATION_PASSWORD) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['ENERGY_AUTHORIZATION_PASSWORD'],
+                message: 'Required when production vending writes are enabled.',
+            });
+        }
+        if (values.UPSTREAM_PASSWORD && values.ENERGY_AUTHORIZATION_PASSWORD === values.UPSTREAM_PASSWORD) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['ENERGY_AUTHORIZATION_PASSWORD'],
+                message: 'Must use the separate upstream write-authorization secret.',
             });
         }
     }

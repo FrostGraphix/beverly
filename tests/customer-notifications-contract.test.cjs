@@ -51,6 +51,7 @@ for (const eventType of [
   "low_balance",
   "payment_failed",
   "meter_order_update",
+  "meter_link_update",
 ]) {
   assert(view.includes(eventType), `${eventType} missing from preferences UI`);
   assert(routes.includes(eventType) || service.includes(eventType), `${eventType} missing from backend`);
@@ -58,6 +59,7 @@ for (const eventType of [
 
 assert(service.includes("adminClient.from('notifications').insert"), "in-app write missing");
 assert(service.includes("notifyMeterOrderUpdate"), "meter order notifier missing");
+assert(service.includes("writeInAppForCustomer(customerId, payload)"), "in-app notifications must be written before queue delivery");
 assert(migration.includes("create table if not exists public.notifications"), "notifications table migration missing");
 assert(migration.includes("notification_preferences jsonb"), "preferences column migration missing");
 assert(migration.includes("information_schema.columns"), "legacy column guards missing");

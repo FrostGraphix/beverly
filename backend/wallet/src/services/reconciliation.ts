@@ -12,7 +12,7 @@ import { PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
 
 const MISMATCH_ALERT_THRESHOLD_MINOR = 10_000_00; // ₦10,000
 
-export async function runDailyReconciliation(runDate?: string): Promise<void> {
+export async function runDailyReconciliation(runDate?: string, options: { force?: boolean } = {}): Promise<void> {
     const date = runDate ?? new Date().toISOString().slice(0, 10);
 
     // Idempotent: skip if already ran today successfully
@@ -21,7 +21,7 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
         .select('id, status')
         .eq('run_date', date)
         .single();
-    if (existing && (existing as any).status === 'ok') return;
+    if (!options.force && existing && (existing as any).status === 'ok') return;
 
     const { data: runRow } = await adminClient
         .from('reconciliation_runs')
@@ -68,7 +68,10 @@ export async function runDailyReconciliation(runDate?: string): Promise<void> {
                     const ps: any = await res.json();
                     if (!ps.status || !Array.isArray(ps.data)) break;
                     for (const t of ps.data as any[]) {
-                        sum += Number(t.amount);
+                        const requested = Number(t.requested_amount);
+                        sum += Number.isSafeInteger(requested) && requested > 0
+                            ? requested
+                            : Number(t.amount);
                         if (t.reference) gatewayRefs.add(String(t.reference));
                     }
                     if (ps.data.length < perPage) {

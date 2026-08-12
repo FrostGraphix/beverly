@@ -13,6 +13,20 @@ interface Meter {
     rejection_reason?: string | null;
 }
 
+type MeterLinkEventType = 'submitted' | 'approved' | 'rejected' | 'unlinked';
+interface MeterLinkHistoryEvent {
+    id: string;
+    customer_meter_id: string | null;
+    meter_id: string;
+    station_id: string | null;
+    event_type: MeterLinkEventType;
+    previous_status: Meter['status'];
+    new_status: Meter['status'];
+    reason: string | null;
+    note: string | null;
+    created_at: string;
+}
+
 function statusLabel(status?: string | null) {
     if (status === 'pending') return 'Pending review';
     if (status === 'rejected') return 'Rejected';
@@ -29,6 +43,9 @@ const meters = ref<Meter[]>([]);
 const loading = ref(false);
 const confirm = ref<string | null>(null);
 const deleting = ref(false);
+const history = ref<MeterLinkHistoryEvent[]>([]);
+const historyLoading = ref(false);
+const historyError = ref('');
 
 function meterTypeLabel(type?: string | null) {
     if (type === 'three_phase') return 'Three Phase';
@@ -36,12 +53,27 @@ function meterTypeLabel(type?: string | null) {
     return 'Phase Unknown';
 }
 
-onMounted(async () => {
+async function loadMeters() {
     loading.value = true;
     try {
         const response = await api.get<{ meters: Meter[] }>('/api/v1/customer/meters');
         meters.value = response.meters ?? [];
     } catch { /* noop */ } finally { loading.value = false; }
+}
+
+async function loadHistory() {
+    historyLoading.value = true;
+    historyError.value = '';
+    try {
+        const response = await api.get<{ history: MeterLinkHistoryEvent[] }>('/api/v1/customer/meters/history?limit=100');
+        history.value = response.history ?? [];
+    } catch (error: unknown) {
+        historyError.value = error instanceof Error ? error.message : 'Linking history could not be loaded.';
+    } finally { historyLoading.value = false; }
+}
+
+onMounted(() => {
+    void Promise.all([loadMeters(), loadHistory()]);
 });
 
 async function unlink(id: string) {
@@ -50,7 +82,31 @@ async function unlink(id: string) {
         await api.del(`/api/v1/customer/meters/${id}`);
         meters.value = meters.value.filter((meter) => meter.id !== id);
         confirm.value = null;
+        await loadHistory();
     } catch { /* noop */ } finally { deleting.value = false; }
+}
+
+function historyLabel(event: MeterLinkEventType) {
+    return {
+        submitted: 'Submitted for review',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        unlinked: 'Unlinked',
+    }[event];
+}
+
+function historyBadgeClass(event: MeterLinkEventType) {
+    return {
+        submitted: 'warn',
+        approved: 'success',
+        rejected: 'danger',
+        unlinked: 'neutral',
+    }[event];
+}
+
+function formatHistoryDate(value: string) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
 }
 </script>
 
@@ -159,6 +215,40 @@ async function unlink(id: string) {
         </div>
       </div>
     </div>
+
+    <section id="link-history" class="bw-card meter-history" aria-labelledby="link-history-title">
+      <div class="meter-history-head">
+        <div>
+          <p class="meter-history-kicker">Account record</p>
+          <h2 id="link-history-title">Linking history</h2>
+          <p>Every meter request and decision stays here, including rejected links you submit again.</p>
+        </div>
+        <button class="bw-btn" type="button" :disabled="historyLoading" @click="loadHistory">
+          {{ historyLoading ? 'Refreshing…' : 'Refresh' }}
+        </button>
+      </div>
+
+      <div v-if="historyError" class="bw-alert danger" role="alert">{{ historyError }}</div>
+      <div v-if="historyLoading && !history.length" class="bw-muted meter-history-empty">Loading linking history…</div>
+      <div v-else-if="!history.length" class="bw-muted meter-history-empty">No meter linking activity yet.</div>
+      <ol v-else class="meter-history-list">
+        <li v-for="event in history" :key="event.id" class="meter-history-event">
+          <span :class="['meter-history-marker', historyBadgeClass(event.event_type)]" aria-hidden="true"></span>
+          <div class="meter-history-event-copy">
+            <div class="meter-history-event-head">
+              <strong>{{ historyLabel(event.event_type) }}</strong>
+              <time :datetime="event.created_at">{{ formatHistoryDate(event.created_at) }}</time>
+            </div>
+            <span class="bw-mono">{{ event.meter_id }}</span>
+            <p v-if="event.reason">{{ event.reason }}</p>
+            <p v-else-if="event.note">{{ event.note }}</p>
+            <router-link v-if="event.event_type === 'rejected'" to="/onboard-meter" class="meter-history-action">
+              Submit this meter again
+            </router-link>
+          </div>
+        </li>
+      </ol>
+    </section>
   </AppShell>
 </template>
 
@@ -266,10 +356,99 @@ async function unlink(id: string) {
     background: color-mix(in srgb, var(--brand) 14%, transparent);
     color: var(--brand);
 }
+.meter-history {
+    margin-top: var(--s-5);
+    scroll-margin-top: var(--s-6);
+}
+.meter-history-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s-4);
+    padding-bottom: var(--s-4);
+    border-bottom: 1px solid var(--border);
+}
+.meter-history-kicker {
+    margin: 0 0 var(--s-1);
+    color: var(--brand);
+    font-size: var(--t-2xs);
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+.meter-history-head h2 {
+    margin: 0;
+    font-size: var(--t-xl);
+}
+.meter-history-head p:last-child {
+    margin: var(--s-1) 0 0;
+    color: var(--text-muted);
+    font-size: var(--t-sm);
+}
+.meter-history-empty {
+    padding: var(--s-6) 0;
+    text-align: center;
+}
+.meter-history-list {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.meter-history-event {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: var(--s-3);
+    padding: var(--s-4) 0;
+    border-bottom: 1px solid var(--border);
+}
+.meter-history-event:last-child { border-bottom: 0; }
+.meter-history-marker {
+    width: 10px;
+    height: 10px;
+    margin-top: 5px;
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+    background: var(--surface-1);
+    box-shadow: 0 0 0 4px var(--surface-2);
+}
+.meter-history-marker.warn { border-color: var(--warn); }
+.meter-history-marker.success { border-color: var(--success); }
+.meter-history-marker.danger { border-color: var(--danger); }
+.meter-history-event-copy { min-width: 0; }
+.meter-history-event-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-3);
+}
+.meter-history-event-head time,
+.meter-history-event-copy > .bw-mono {
+    color: var(--text-muted);
+    font-size: var(--t-xs);
+}
+.meter-history-event-copy p {
+    margin: var(--s-2) 0 0;
+    color: var(--text-2);
+    font-size: var(--t-sm);
+}
+.meter-history-action {
+    display: inline-block;
+    margin-top: var(--s-2);
+    color: var(--brand);
+    font-size: var(--t-sm);
+    font-weight: 700;
+}
 @media (max-width: 420px) {
     .meter-install-card,
     .meter-install-actions {
         grid-template-columns: 1fr;
+    }
+    .meter-history-head,
+    .meter-history-event-head {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
 </style>

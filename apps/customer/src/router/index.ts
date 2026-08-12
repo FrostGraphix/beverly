@@ -19,6 +19,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/kyc',        name: 'kyc',      component: () => import('../views/Kyc.vue'),       meta: { auth: true } },
     { path: '/onboard-meter', name: 'onboard-meter', component: () => import('../views/OnboardMeter.vue'), meta: { auth: true } },
     { path: '/buy-token',  name: 'buy-token', component: () => import('../views/BuyToken.vue'), meta: { auth: true, kyc: 1 } },
+    { path: '/vend-pin', name: 'vend-pin', component: () => import('../views/VendPin.vue'), meta: { auth: true } },
     { path: '/buy-meter',    name: 'buy-meter',    component: () => import('../views/BuyMeter.vue'),    meta: { auth: true, kyc: 1 } },
     { path: '/meter-orders', name: 'meter-orders', component: () => import('../views/MeterOrders.vue'), meta: { auth: true } },
     { path: '/wallet',     name: 'wallet',   component: () => import('../views/Wallet.vue'),    meta: { auth: true } },
@@ -57,6 +58,9 @@ router.beforeEach(async (to) => {
     const requiredKyc = Number(to.meta.kyc ?? 0);
     if (requiredKyc > 0 && (auth.customer?.kyc_tier ?? 0) < requiredKyc) {
         return { name: 'kyc', query: { reason: `tier_${requiredKyc}` } };
+    }
+    if (to.name === 'buy-token' && !auth.customer?.vend_pin_configured) {
+        return { name: 'vend-pin', query: { redirect: to.fullPath } };
     }
     return true;
 });

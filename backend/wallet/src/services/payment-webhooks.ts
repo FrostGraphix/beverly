@@ -1,9 +1,13 @@
 import { verifyTransaction } from '../adapters/paystack.js';
 import { adminClient } from '../db/supabase.js';
-import { fulfillSuccessfulPaystackTransaction, type PaystackFulfillmentSource } from './payment-transactions.js';
+import {
+    fulfillSuccessfulPaystackTransaction,
+    markUnsuccessfulPaystackTransaction,
+    type PaystackFulfillmentSource,
+} from './payment-transactions.js';
 
 export interface PaystackWebhookProcessingResult {
-    status: 'ignored' | 'fulfilled' | 'already_fulfilled' | 'blocked';
+    status: 'ignored' | 'fulfilled' | 'already_fulfilled' | 'blocked' | 'failed';
     reason?: string;
 }
 
@@ -53,10 +57,6 @@ export async function processPaystackChargeSuccess(
     source: PaystackFulfillmentSource,
 ): Promise<PaystackWebhookProcessingResult> {
     const verified = await verifyTransaction(reference);
-    if (verified.status !== 'success') {
-        return { status: 'ignored', reason: `verify_status=${verified.status}` };
-    }
-
     const { data: tx, error: txError } = await adminClient
         .from('payment_transactions')
         .select('*')
@@ -66,6 +66,13 @@ export async function processPaystackChargeSuccess(
     if (txError) throw txError;
     if (!tx) {
         return { status: 'ignored', reason: 'no_local_tx' };
+    }
+    if (verified.status !== 'success') {
+        if (verified.status === 'failed' || verified.status === 'abandoned') {
+            await markUnsuccessfulPaystackTransaction({ tx: tx as any, verified, source });
+            return { status: 'failed', reason: `verify_status=${verified.status}` };
+        }
+        return { status: 'ignored', reason: `verify_status=${verified.status}` };
     }
 
     const result = await fulfillSuccessfulPaystackTransaction({ tx: tx as any, verified, source });

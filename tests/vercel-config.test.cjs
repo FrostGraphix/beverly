@@ -31,6 +31,22 @@ assert(!vercelJson.env?.ALLOW_LIVE_WRITES, "vercel must not enable live writes")
 assert(!vercelJson.env?.APPROVED_LIVE_WRITES, "vercel must not approve live writes");
 assert(!vercelJson.env?.VITE_ALLOW_LIVE_WRITES, "vercel must not expose live write flags");
 assert(
+  vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://customer-acob-beverly.vercel.app/wallet/fund?payment=return",
+  "customer funding must return to the customer portal"
+);
+assert(
+  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://vendor-acob-beverly.vercel.app/wallet/fund?payment=return",
+  "vendor funding must return to the vendor portal"
+);
+assert(
+  vercelJson.env?.CUSTOMER_METER_ORDER_CALLBACK_URL === "https://customer-acob-beverly.vercel.app/meter-orders",
+  "meter payments must return to customer meter orders"
+);
+assert(
+  vercelJson.env?.PAYSTACK_WEBHOOK_URL === "https://acob-beverly.vercel.app/api/v1/webhook/paystack",
+  "Paystack webhooks must target the canonical API host"
+);
+assert(
   vercelJson.rewrites.some((entry) => entry.source === "/api/:path*" && entry.destination === "/api/reference?__pathname=/api/:path*"),
   "vercel.json must forward api paths to api/reference"
 );

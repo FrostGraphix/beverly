@@ -1,9 +1,10 @@
 ﻿<script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
+import { useStaffAuthStore } from '../stores/auth';
 
 interface Purchase {
     id: string;
@@ -25,21 +26,44 @@ interface Purchase {
 }
 
 interface Station { stationId: string; name: string; }
+interface RecoveryPayment {
+    id: string;
+    reference: string;
+    amountMinor: number;
+    gatewayChargedMinor: number;
+    gatewayFeeMinor: number;
+    blockedReason: string | null;
+    blockedDetail: string | null;
+    attempts: number;
+    createdAt: string;
+    meterId: string | null;
+    customerName: string | null;
+    tokenGenerated: boolean;
+}
 
+const auth = useStaffAuthStore();
 const items      = ref<Purchase[]>([]);
 const stations   = ref<Station[]>([]);
 const status     = ref('');
 const station    = ref('');
 const meterType  = ref('');
 const q          = ref('');
+const filtersOpen = ref(false);
 const loading    = ref(false);
 const error      = ref('');
 const nextCursor = ref<string | null>(null);
 const loadingMore = ref(false);
 const cardView = ref<'table' | 'list'>('table');
+const recoveryItems = ref<RecoveryPayment[]>([]);
+const recoveryLoading = ref(false);
+const retryingId = ref<string | null>(null);
+const recoveryNotice = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const canRetryRecovery = computed(() => auth.hasPermission('wallet.funding.approve'));
+const activeFilterCount = computed(() => [q.value.trim(), status.value, station.value, meterType.value].filter(Boolean).length);
 const PAGE = 100;
 const POLL_INTERVAL_MS = 5_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 function statusBadge(s: string) {
     if (s === 'delivered') return 'success';
@@ -47,6 +71,14 @@ function statusBadge(s: string) {
     if (s === 'dispatching' || s === 'hold_active') return 'info';
     if (s === 'delivery_pending_review' || s === 'reversed') return 'warn';
     return 'neutral';
+}
+
+function statusLabel(p: Purchase) {
+    if (p.status === 'delivered') return 'Token ready';
+    if (p.failure_reason?.includes('payment_amount_mismatch')) return 'Payment needs review';
+    if (p.delivery_state === 'token_generated_needs_reconciliation') return 'Token generated; reconciling';
+    if (p.delivery_state === 'awaiting_payment') return 'Payment awaiting confirmation';
+    return p.status.replace(/_/g, ' ');
 }
 
 function meterTypeLabel(type?: string | null) {
@@ -108,13 +140,63 @@ async function loadStations() {
     } catch { /* use empty */ }
 }
 
+function clearFilters() {
+    q.value = '';
+    status.value = '';
+    station.value = '';
+    meterType.value = '';
+    void load();
+}
+
+async function loadRecovery() {
+    recoveryLoading.value = true;
+    try {
+        const response = await api.get<{ payments: RecoveryPayment[] }>('/api/v1/admin/vending/payment-recovery');
+        recoveryItems.value = response.payments ?? [];
+    } catch (e: any) {
+        recoveryNotice.value = { tone: 'error', text: e?.message ?? 'Recovery queue failed to load.' };
+    } finally {
+        recoveryLoading.value = false;
+    }
+}
+
+async function retryRecovery(payment: RecoveryPayment) {
+    if (!canRetryRecovery.value || retryingId.value) return;
+    retryingId.value = payment.id;
+    recoveryNotice.value = null;
+    try {
+        const result = await api.post<{ fulfillmentStatus: string; reason?: string }>(
+            `/api/v1/admin/payments/${payment.id}/retry-fulfillment`,
+            {},
+        );
+        recoveryNotice.value = result.fulfillmentStatus === 'fulfilled'
+            ? { tone: 'success', text: `Token delivery recovered for ${payment.reference}.` }
+            : { tone: 'error', text: `Recovery remains held: ${result.reason ?? result.fulfillmentStatus}.` };
+        await Promise.all([load(), loadRecovery()]);
+    } catch (e: any) {
+        recoveryNotice.value = { tone: 'error', text: e?.message ?? 'Recovery failed.' };
+    } finally {
+        retryingId.value = null;
+    }
+}
+
 watch([status, station, meterType], () => load());
+watch(q, () => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => void load(), 300);
+});
 
 onMounted(async () => {
-    await Promise.all([load(), loadStations()]);
-    pollTimer = setInterval(() => { if (!loading.value) void load(); }, POLL_INTERVAL_MS);
+    await Promise.all([load(), loadStations(), loadRecovery()]);
+    pollTimer = setInterval(() => {
+        if (!loading.value) void load();
+        if (!recoveryLoading.value) void loadRecovery();
+    }, POLL_INTERVAL_MS);
 });
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
+onUnmounted(() => {
+    if (pollTimer) clearInterval(pollTimer);
+    if (searchTimer) clearTimeout(searchTimer);
+});
 </script>
 
 <template>
@@ -133,34 +215,41 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
       </div>
     </div>
 
-    <!-- Filters -->
-    <div class="bw-card" style="padding: var(--s-3) var(--s-4); display:flex; flex-wrap:wrap; gap: var(--s-2); margin-bottom: var(--s-4)">
-      <input
-        class="bw-input bw-mono"
-        v-model="q"
-        placeholder="Search meter / customerâ€¦"
-        style="flex:1; min-width:180px"
-        @keyup.enter="load"
-      />
-      <select class="bw-select" v-model="status" style="min-width:150px">
-        <option value="">All statuses</option>
-        <option value="delivered">Delivered</option>
-        <option value="failed">Failed</option>
-        <option value="dispatching">Dispatching</option>
-        <option value="hold_active">Hold active</option>
-        <option value="delivery_pending_review">Pending review</option>
-        <option value="reversed">Reversed</option>
-      </select>
-      <select class="bw-select" v-model="station" style="min-width:140px">
-        <option value="">All stations</option>
-        <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name || s.stationId }}</option>
-      </select>
-      <select class="bw-select" v-model="meterType" style="min-width:140px">
-        <option value="">All phases</option>
-        <option value="single_phase">Single Phase</option>
-        <option value="three_phase">Three Phase</option>
-      </select>
-    </div>
+    <section v-if="recoveryItems.length || recoveryLoading" class="bw-card recovery-panel" aria-labelledby="recovery-title">
+      <div class="recovery-head">
+        <div>
+          <p id="recovery-title" class="recovery-title">Token payment recovery</p>
+          <p class="bw-muted recovery-copy">Paystack confirmed payment. Token delivery remains incomplete.</p>
+        </div>
+        <span class="bw-badge warn">{{ recoveryItems.length }} held</span>
+      </div>
+      <div v-if="recoveryNotice" :class="recoveryNotice.tone === 'success' ? 'bw-success-banner' : 'bw-error-banner'" role="status">
+        {{ recoveryNotice.text }}
+      </div>
+      <div class="recovery-grid">
+        <article v-for="payment in recoveryItems" :key="payment.id" class="recovery-item">
+          <div>
+            <strong class="bw-mono">{{ payment.meterId || payment.reference }}</strong>
+            <p class="bw-muted recovery-meta">{{ payment.customerName || 'Customer payment' }} · {{ shortDate(payment.createdAt) }}</p>
+            <p v-if="payment.blockedDetail" class="recovery-error">{{ payment.blockedDetail }}</p>
+          </div>
+          <dl class="recovery-amounts">
+            <div><dt>Principal</dt><dd>{{ naira(payment.amountMinor) }}</dd></div>
+            <div><dt>Gateway fee</dt><dd>{{ naira(payment.gatewayFeeMinor) }}</dd></div>
+            <div><dt>Charged</dt><dd>{{ naira(payment.gatewayChargedMinor) }}</dd></div>
+          </dl>
+          <div class="recovery-action">
+            <span class="bw-badge warn">{{ payment.tokenGenerated ? 'Token saved' : 'Token not generated' }}</span>
+            <button
+              v-if="canRetryRecovery"
+              class="bw-btn sm primary"
+              :disabled="Boolean(retryingId)"
+              @click="retryRecovery(payment)"
+            >{{ retryingId === payment.id ? 'Recovering…' : 'Retry delivery' }}</button>
+          </div>
+        </article>
+      </div>
+    </section>
 
     <div v-if="error" class="bw-error-banner" role="alert" style="margin-bottom: var(--s-4)">{{ error }}</div>
 
@@ -168,7 +257,50 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
     <div class="bw-card bw-data-region" :data-view="cardView" style="padding:0">
       <div class="vending-layout-bar">
         <span>Purchase results</span>
-        <WalletDataViewSwitch v-model="cardView" label="Vending display view" />
+        <div class="vending-toolbar-actions">
+          <button
+            type="button"
+            class="bw-btn sm vending-filter-button"
+            :class="{ active: filtersOpen || activeFilterCount }"
+            :aria-expanded="filtersOpen"
+            aria-controls="vending-filters"
+            @click="filtersOpen = !filtersOpen"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z" />
+            </svg>
+            <span>Filters</span>
+            <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
+          </button>
+          <WalletDataViewSwitch v-model="cardView" label="Vending display view" />
+        </div>
+      </div>
+      <div v-if="filtersOpen" id="vending-filters" class="vending-filter-panel">
+        <input
+          v-model="q"
+          class="bw-input bw-mono"
+          placeholder="Search meter or customer"
+          aria-label="Search purchases"
+        />
+        <select v-model="status" class="bw-select" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="delivered">Delivered</option>
+          <option value="failed">Failed</option>
+          <option value="dispatching">Dispatching</option>
+          <option value="hold_active">Hold active</option>
+          <option value="delivery_pending_review">Pending review</option>
+          <option value="reversed">Reversed</option>
+        </select>
+        <select v-model="station" class="bw-select" aria-label="Filter by station">
+          <option value="">All stations</option>
+          <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name || s.stationId }}</option>
+        </select>
+        <select v-model="meterType" class="bw-select" aria-label="Filter by phase">
+          <option value="">All phases</option>
+          <option value="single_phase">Single Phase</option>
+          <option value="three_phase">Three Phase</option>
+        </select>
+        <button v-if="activeFilterCount" type="button" class="bw-btn sm" @click="clearFilters">Clear filters</button>
       </div>
       <div class="bw-t-wrap vending-table-wrap">
         <table class="bw-table">
@@ -208,7 +340,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td>
-                <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status.replace(/_/g, ' ') }}</span>
+                <span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span>
                 <div v-if="p.failure_reason" class="bw-muted" style="font-size: 10px; margin-top: 2px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ p.failure_reason }}</div>
               </td>
               <td>
@@ -239,7 +371,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Status</span>
-              <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status.replace(/_/g, ' ') }}</span>
+              <span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span>
             </div>
             <div class="bw-tc-pair" v-if="p.station_id">
               <span class="bw-tc-pair-label">Station</span>
@@ -318,7 +450,32 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
   gap: 4px;
   white-space: nowrap;
 }
-.vending-layout-bar { display: none; }
+.recovery-panel { margin-bottom: var(--s-4); padding: var(--s-4); }
+.recovery-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-3); }
+.recovery-title { margin: 0; font-size: var(--t-lg); font-weight: 800; }
+.recovery-copy { margin: 4px 0 0; }
+.recovery-grid { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
+.recovery-item { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(280px, 1fr) auto; align-items: center; gap: var(--s-4); padding: var(--s-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.recovery-meta { margin: 4px 0 0; font-size: var(--t-xs); }
+.recovery-error { margin: 6px 0 0; color: var(--danger); font-size: var(--t-xs); }
+.recovery-amounts { display: grid; grid-template-columns: repeat(3, minmax(80px, 1fr)); gap: var(--s-3); margin: 0; }
+.recovery-amounts dt { color: var(--text-muted); font-size: var(--t-xs); }
+.recovery-amounts dd { margin: 3px 0 0; font-weight: 700; }
+.recovery-action { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); flex-wrap: wrap; }
+.vending-layout-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+}
+.vending-toolbar-actions { display: flex; align-items: center; gap: var(--s-2); }
+.vending-filter-button svg { width: 17px; height: 17px; }
+.vending-filter-button.active { color: var(--brand); border-color: var(--brand); }
+.filter-count { min-width: 20px; height: 20px; display: inline-grid; place-items: center; padding: 0 5px; border-radius: var(--r-pill); background: var(--brand); color: var(--surface-1); font-size: var(--t-xs); }
+.vending-filter-panel { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(140px, auto)) auto; gap: var(--s-2); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .vending-view-toggle {
   display: inline-flex;
   gap: 2px;
@@ -344,6 +501,9 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 .vending-view-toggle svg { width: 17px; height: 17px; }
 
 @media (max-width: 640px) {
+  .recovery-item { grid-template-columns: 1fr; gap: var(--s-3); }
+  .recovery-amounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .recovery-action { justify-content: space-between; }
   .vm-head {
     align-items: flex-start;
   }
@@ -355,15 +515,9 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
     overflow: hidden;
   }
 
-  .vending-layout-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--s-3);
-    padding: var(--s-3) var(--s-4);
-    border-bottom: 1px solid var(--border);
-    font-weight: 700;
-  }
+  .vending-layout-bar { align-items: center; }
+  .vending-filter-panel { grid-template-columns: 1fr; }
+  .vending-filter-button span:not(.filter-count) { display: none; }
 
   .vending-cards--grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
