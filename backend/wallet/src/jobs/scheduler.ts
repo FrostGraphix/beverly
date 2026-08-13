@@ -16,8 +16,12 @@ import { adminClient } from '../db/supabase.js';
 import { refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { reconcileRemoteSendOrders } from '../services/vending.js';
 import { verifyTransaction } from '../adapters/paystack.js';
-import { PAYMENT_RECONCILABLE_STATUSES, PAYMENT_STATUS } from '../services/payment-status.js';
-import { fulfillSuccessfulPaystackTransaction } from '../services/payment-transactions.js';
+import {
+    PAYMENT_AUTORETRY_REVIEW_REASONS,
+    PAYMENT_RECONCILABLE_STATUSES,
+    PAYMENT_STATUS,
+} from '../services/payment-status.js';
+import { fulfillSuccessfulPaystackTransaction, markUnsuccessfulPaystackTransaction } from '../services/payment-transactions.js';
 
 // ── Hold expiry sweeper ────────────────────────────────────────────────────────
 export async function sweepExpiredHolds(): Promise<void> {
@@ -68,32 +72,17 @@ export async function sweepPendingPayments(): Promise<void> {
 
     for (const txn of stuck as any[]) {
         try {
+            if (txn.status === PAYMENT_STATUS.REQUIRES_REVIEW) {
+                const reason = String(txn.metadata?.fulfillment_blocked_reason ?? '');
+                if (!PAYMENT_AUTORETRY_REVIEW_REASONS.has(reason) || Number(txn.fulfillment_attempts ?? 0) >= 5) continue;
+            }
             const reference = String(txn.gateway_reference ?? '');
             if (!reference) continue;
             const verified = await verifyTransaction(reference);
             if (verified.status === 'success') {
                 await fulfillSuccessfulPaystackTransaction({ tx: txn, verified, source: 'scheduler' });
             } else if (['failed', 'abandoned'].includes(verified.status)) {
-                const now = new Date().toISOString();
-                await adminClient.from('payment_transactions')
-                    .update({
-                        status: PAYMENT_STATUS.FAILED,
-                        metadata: {
-                            ...((txn.metadata ?? {}) as Record<string, unknown>),
-                            paystack: verified,
-                            reconciled_at: now,
-                            reconciliation_status: verified.status,
-                        },
-                        updated_at: now,
-                    })
-                    .eq('id', txn.id);
-                if (txn.actor_type === 'customer' && txn.actor_id) {
-                    const { notifyPaymentFailed } = await import('../services/notifications.js');
-                    notifyPaymentFailed(txn.actor_id, {
-                        amountMinor: Number(txn.amount_minor ?? 0),
-                        reason: verified.status === 'abandoned' ? 'The payment was not completed.' : undefined,
-                    }).catch(() => undefined);
-                }
+                await markUnsuccessfulPaystackTransaction({ tx: txn, verified, source: 'scheduler' });
             }
         } catch (error) {
             const attempts = Number(txn.fulfillment_attempts ?? 0) + 1;

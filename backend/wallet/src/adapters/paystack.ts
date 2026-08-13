@@ -75,6 +75,8 @@ export interface VerifyResult {
     status: 'success' | 'failed' | 'abandoned' | 'pending';
     reference: string;
     amount: number;        // kobo
+    requestedAmount?: number;
+    fees?: number | null;
     currency: string;
     paid_at: string | null;
     channel: string;
@@ -92,7 +94,20 @@ export interface VerifyResult {
 }
 
 export async function verifyTransaction(reference: string): Promise<VerifyResult> {
-    return call<VerifyResult>(`/transaction/verify/${encodeURIComponent(reference)}`, { method: 'GET' });
+    const result = await call<VerifyResult & { requested_amount?: number }>(
+        `/transaction/verify/${encodeURIComponent(reference)}`,
+        { method: 'GET' },
+    );
+    return {
+        ...result,
+        requestedAmount: Number.isSafeInteger(result.requested_amount) && Number(result.requested_amount) > 0
+            ? Number(result.requested_amount)
+            : undefined,
+    };
+}
+
+export function verifiedPrincipalAmount(result: VerifyResult): number {
+    return result.requestedAmount ?? result.amount;
 }
 
 export function verifyWebhookSignature(rawBody: Buffer | string, signature: string | undefined): boolean {

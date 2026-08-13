@@ -16,10 +16,13 @@ test('canonical route policy replaces regex financial classification', () => {
     assert.match(policy, /\/api\/v1\/vendor\/vend/);
     assert.match(policy, /\/api\/v1\/admin\/funding\/:id\/approve/);
     assert.match(policy, /\/api\/v1\/admin\/access\/users\/:userId\/station/);
+    assert.match(policy, /\/api\/v1\/admin\/customer-meters\/:id\/approve/);
+    assert.match(policy, /\/api\/v1\/admin\/customer-meters\/:id\/reject/);
+    assert.match(policy, /\/api\/v1\/admin\/customer-meters\/:id\/unlink/);
     assert.match(policy, /cacheable: false/);
     const gateway = fs.readFileSync(path.join(root, 'api/reference.js'), 'utf8');
     assert.match(gateway, /isCanonicalMoneyMutation/);
-    const gatewayClassifier = gateway.match(/function isCanonicalFinancialMutation[\s\S]*?\n}\n/);
+    const gatewayClassifier = gateway.match(/function isCanonicalFinancialMutation[\s\S]*?\r?\n}\r?\n/);
     assert.ok(gatewayClassifier, 'gateway classifier must exist');
     assert.doesNotMatch(gatewayClassifier[0], /RegExp|\.some\(/);
 });
@@ -27,12 +30,13 @@ test('canonical route policy replaces regex financial classification', () => {
 test('developer console remains disabled by default', () => {
     const server = fs.readFileSync(serverPath, 'utf8');
     const admin = fs.readFileSync(adminPath, 'utf8');
+    const adminDev = fs.readFileSync(path.join(root, 'backend/wallet/src/routes/admin-dev.ts'), 'utf8');
     const env = fs.readFileSync(path.join(root, 'backend/wallet/src/config/env.ts'), 'utf8');
-    assert.match(env, /DEV_CONSOLE_ENABLED: z\.coerce\.boolean\(\)\.default\(false\)/);
+    assert.match(env, /DEV_CONSOLE_ENABLED: envBoolean\.default\(false\)/);
     assert.match(server, /env\.NODE_ENV === 'production' \|\| !env\.DEV_CONSOLE_ENABLED/);
     assert.match(admin, /x-break-glass-token/);
     assert.match(admin, /reauth_required/);
-    assert.match(admin, /z\.literal\('test'\)/);
+    assert.match(adminDev, /z\.literal\('test'\)/);
 });
 
 test('mutation policy inventory covers wallet route modules', () => {

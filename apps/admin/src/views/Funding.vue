@@ -192,7 +192,7 @@ const retryingId = ref<string | null>(null);
 async function loadHeldPayments() {
     heldLoading.value = true;
     try {
-        const r = await api.get<{ payments: HeldPayment[] }>('/api/v1/admin/payments/requires-review?limit=50');
+        const r = await api.get<{ payments: HeldPayment[] }>('/api/v1/admin/payments/requires-review?limit=50&purpose=wallet_funding');
         heldPayments.value = r.payments ?? [];
     } catch {
         // The approvals queue must still render if this panel fails.
@@ -225,7 +225,7 @@ async function retryHeldPayment(payment: HeldPayment) {
 function blockedReasonLabel(reason: string | null): string {
     if (!reason) return 'Unknown';
     return ({
-        payment_amount_mismatch: 'Paid less than requested',
+        payment_amount_mismatch: 'Amount verification mismatch',
         payment_overpaid: 'Paid more than a fee can explain',
         payment_currency_mismatch: 'Wrong currency',
         payment_reference_mismatch: 'Reference mismatch',

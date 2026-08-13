@@ -31,7 +31,8 @@ export type NotificationType =
     | 'admin_announcement'
     | 'low_balance'
     | 'payment_failed'
-    | 'meter_order_update';
+    | 'meter_order_update'
+    | 'meter_link_update';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -64,8 +65,8 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     // (sendTokenSmsToCustomer) already delivers the actual token code via SMS.
     // The notification service handles in-app + email for this event.
     sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
-    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, meter_order_update: true },
-    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
+    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, meter_order_update: true, meter_link_update: true },
+    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
 };
 
 function prefEnabled(prefs: PreferencesShape | null, channel: 'sms' | 'email' | 'in_app', type: NotificationType): boolean {
@@ -80,8 +81,11 @@ export async function sendNotification(
     customerId: string,
     payload: NotificationPayload,
 ): Promise<void> {
+    // Inbox parity is synchronous: once the business action completes, the
+    // customer's in-app notification no longer depends on a running worker.
+    await writeInAppForCustomer(customerId, payload);
     try {
-        await notificationsQueue.add('deliver', { customerId, payload }, {
+        await notificationsQueue.add('deliver', { customerId, payload, inAppWritten: true }, {
             jobId: `notification:${customerId}:${payload.type}:${Date.now()}`,
             attempts: 5,
             backoff: { type: 'exponential', delay: 30_000 },
@@ -90,13 +94,14 @@ export async function sendNotification(
         });
     } catch (error) {
         if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') throw error;
-        await deliverNotification(customerId, payload);
+        await deliverNotification(customerId, payload, { includeInApp: false });
     }
 }
 
 export async function deliverNotification(
     customerId: string,
     payload: NotificationPayload,
+    options: { includeInApp?: boolean } = {},
 ): Promise<void> {
     // Fetch customer in one query
     const { data: customer } = await adminClient
@@ -111,16 +116,28 @@ export async function deliverNotification(
     const prefs = cu.notification_preferences as PreferencesShape | null;
 
     await Promise.allSettled([
-        writeInApp(cu, payload, prefs),
+        ...(options.includeInApp === false ? [] : [writeInApp(cu, payload, prefs)]),
         sendSmsNotification(cu, payload, prefs),
         sendEmailNotification(cu, payload, prefs),
     ]);
 }
 
+async function writeInAppForCustomer(customerId: string, payload: NotificationPayload): Promise<void> {
+    const { data: customer } = await adminClient
+        .from('customers')
+        .select('id, phone, email, full_name, notification_preferences')
+        .eq('id', customerId)
+        .maybeSingle();
+    if (!customer) return;
+    const cu = customer as CustomerRow;
+    await writeInApp(cu, payload, cu.notification_preferences as PreferencesShape | null);
+}
+
 // ── In-app inbox ──────────────────────────────────────────────────────────────
 
 async function writeInApp(cu: CustomerRow, payload: NotificationPayload, prefs: PreferencesShape | null): Promise<void> {
-    if (!prefEnabled(prefs, 'in_app', payload.type)) return;
+    // Ownership decisions change access and are always recorded in the inbox.
+    if (payload.type !== 'meter_link_update' && !prefEnabled(prefs, 'in_app', payload.type)) return;
     try {
         await adminClient.from('notifications').insert({
             customer_id: cu.id,
@@ -310,5 +327,24 @@ export function notifyMeterOrderUpdate(customerId: string, opts: {
         title: 'Meter order update',
         body:  messages[opts.status] ?? `Your meter order status has changed to ${opts.status}.`,
         metadata: { orderId: opts.orderId, status: opts.status },
+    });
+}
+
+export function notifyMeterLinkUpdate(customerId: string, opts: {
+    meterId: string;
+    status: 'approved' | 'rejected' | 'unlinked';
+    reason?: string;
+}): Promise<void> {
+    const approved = opts.status === 'approved';
+    const unlinked = opts.status === 'unlinked';
+    return sendNotification(customerId, {
+        type: 'meter_link_update',
+        title: approved ? 'Meter approved' : unlinked ? 'Meter unlinked' : 'Meter link rejected',
+        body: approved
+            ? `Meter ${opts.meterId} is approved. You can now use it for token purchases.`
+            : unlinked
+                ? `Meter ${opts.meterId} was unlinked from your wallet. ${opts.reason ?? 'Contact support if you need help.'}`
+                : `Meter ${opts.meterId} was not approved. ${opts.reason ?? 'Contact support if you need help.'}`,
+        metadata: { meterId: opts.meterId, status: opts.status, reason: opts.reason ?? null, path: '/meters#link-history' },
     });
 }

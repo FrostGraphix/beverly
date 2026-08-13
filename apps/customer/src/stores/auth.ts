@@ -22,6 +22,7 @@ export interface CustomerProfile {
     primary_phone?: string | null;
     kyc_approved_date?: string | null;
     kyc_expiry?: string | null;
+    vend_pin_configured?: boolean;
 }
 
 interface State {

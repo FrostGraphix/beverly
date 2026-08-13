@@ -59,8 +59,8 @@ const exportWorker = new Worker('privacy-exports', async (job) => {
 });
 
 const notificationWorker = new Worker('notifications', async (job) => {
-    const payload = job.data as { customerId: string; payload: NotificationPayload };
-    await deliverNotification(payload.customerId, payload.payload);
+    const payload = job.data as { customerId: string; payload: NotificationPayload; inAppWritten?: boolean };
+    await deliverNotification(payload.customerId, payload.payload, { includeInApp: !payload.inAppWritten });
 }, {
     connection: redisConnection,
     concurrency: 5,

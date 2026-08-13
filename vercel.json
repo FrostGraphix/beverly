@@ -3,6 +3,14 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "env": {
+    "CUSTOMER_APP_URL": "https://customer-acob-beverly.vercel.app",
+    "VENDOR_PORTAL_URL": "https://vendor-acob-beverly.vercel.app",
+    "CUSTOMER_FUNDING_CALLBACK_URL": "https://customer-acob-beverly.vercel.app/wallet/fund?payment=return",
+    "VENDOR_FUNDING_CALLBACK_URL": "https://vendor-acob-beverly.vercel.app/wallet/fund?payment=return",
+    "CUSTOMER_METER_ORDER_CALLBACK_URL": "https://customer-acob-beverly.vercel.app/meter-orders",
+    "PAYSTACK_WEBHOOK_URL": "https://acob-beverly.vercel.app/api/v1/webhook/paystack"
+  },
   "functions": {
     "api/reference.js": {
       "maxDuration": 300,

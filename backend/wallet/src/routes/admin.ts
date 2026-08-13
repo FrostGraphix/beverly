@@ -10,12 +10,8 @@ import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { assertClientIdempotencyKey } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
-import {
-    createVendorOrganization, setVendorStatus,
-} from '../services/vendor-onboarding.js';
-import {
-    approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls,
-} from '../services/funding.js';
+import { createVendorOrganization, setVendorStatus } from '../services/vendor-onboarding.js';
+import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls } from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { logAction } from '../services/audit.js';
@@ -45,14 +41,9 @@ import adminVendorTransferRoutes from './admin-vendor-transfers.js';
 import adminDevRoutes from './admin-dev.js';
 import adminReportsRoutes from './admin-reports.js';
 import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
+import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
-import {
-    DEFAULT_ROLE_PERMISSIONS,
-    PERMISSION_CATALOG,
-    ROLE_LABELS,
-    ROLE_LEGACY_NAMES,
-    SYSTEM_ROLE_KEYS,
-} from './admin-access-constants.js';
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
@@ -316,6 +307,9 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vendors/:id/staff': 'wallet.vendors.review',
     'GET /funding/pending': 'wallet.funding.view',
     'GET /funding/history': 'wallet.funding.view',
+    'GET /payments/requires-review': 'wallet.funding.view',
+    'GET /vending/payment-recovery': 'wallet.vending.monitor',
+    'POST /payments/:id/retry-fulfillment': 'wallet.funding.approve',
     'POST /funding/reconcile-approved': 'wallet.funding.approve',
     'POST /funding/:id/approve': 'wallet.funding.approve',
     'POST /funding/:id/reject': 'wallet.funding.approve',
@@ -353,6 +347,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /customer-meters': 'wallet.meters.approve',
     'POST /customer-meters/:id/approve': 'wallet.meters.approve',
     'POST /customer-meters/:id/reject': 'wallet.meters.approve',
+    'POST /customer-meters/:id/unlink': 'wallet.meters.approve',
     'GET /fraud': 'wallet.fraud.review',
     'PATCH /fraud/:id/resolve': 'wallet.fraud.review',
     'GET /disputes': 'wallet.disputes.manage',
@@ -1645,6 +1640,8 @@ const route: FastifyPluginAsync = async (fastify) => {
         const { vendors } = await stationOwnerIds(assignedStations);
         return { funding: list.filter((row) => vendors.has(row.vendor_organization_id)) };
     });
+
+    await fastify.register(adminPaymentRecoveryRoutes);
 
     // ── funding history (all statuses, filterable) ──
     fastify.get('/funding/history', async (req) => {
@@ -3197,7 +3194,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/reconciliation/run', async (_req, reply) => {
         try {
-            await runDailyReconciliation();
+            await runDailyReconciliation(undefined, { force: true });
             const runs = await listReconciliationRuns(1);
             return { ok: true, run: runs[0] ?? null };
         } catch (e: any) {

@@ -9,7 +9,7 @@ const router = useRouter();
 const route = useRoute();
 const auth = useVendorAuthStore();
 
-const type = ref<'pin' | 'password'>('pin');
+const type = 'pin' as const;
 const credential = ref('');
 const confirm = ref('');
 const loading = ref(false);
@@ -33,15 +33,9 @@ const valid = computed(() => {
 const credentialProblem = computed(() => {
     const value = credential.value;
     if (!value) return '';
-    if (type.value === 'pin') {
-        if (!/^\d{4,6}$/.test(value)) return 'Use a 4 to 6 digit PIN.';
-        if (/^(\d)\1+$/.test(value) || ['1234', '12345', '123456', '0000'].includes(value)) {
-            return 'Choose a less predictable PIN.';
-        }
-        return '';
-    }
-    if (value.length < 10 || !/[A-Za-z]/.test(value) || !/\d/.test(value)) {
-        return 'Use at least 10 characters with letters and numbers.';
+    if (!/^\d{4}$/.test(value)) return 'Use exactly four digits.';
+    if (/^(\d)\1+$/.test(value) || value === '1234') {
+        return 'Choose a less predictable PIN.';
     }
     return '';
 });
@@ -52,12 +46,12 @@ async function submit() {
     error.value = null;
     try {
         await api.post('/api/v1/vendor/vend-credential', {
-            type: type.value,
+            type,
             credential: credential.value,
         });
         if (auth.user) {
             auth.user.vend_credential_configured = true;
-            auth.user.vend_credential_type = type.value;
+            auth.user.vend_credential_type = type;
         }
         await auth.refreshMe();
         await router.push(redirectTarget.value);
@@ -80,26 +74,18 @@ async function submit() {
           It protects wallet debits.
         </p>
 
-        <div class="bw-row" style="gap: var(--s-2); margin-top: var(--s-5)">
-          <button type="button" class="bw-btn" :class="{ primary: type === 'pin' }" @click="type = 'pin'; credential = ''; confirm = ''">
-            PIN
-          </button>
-          <button type="button" class="bw-btn" :class="{ primary: type === 'password' }" @click="type = 'password'; credential = ''; confirm = ''">
-            Password
-          </button>
-        </div>
-
         <div style="margin-top: var(--s-5)">
-          <label class="bw-label" for="vend-credential">{{ type === 'pin' ? 'Vend PIN' : 'Vend password' }}</label>
+          <label class="bw-label" for="vend-credential">Four-digit vending PIN</label>
           <input
             id="vend-credential"
             class="bw-input bw-mono"
             v-model="credential"
-            :type="type === 'pin' ? 'password' : 'password'"
-            :inputmode="type === 'pin' ? 'numeric' : 'text'"
-            :maxlength="type === 'pin' ? 6 : 80"
+            type="password"
+            inputmode="numeric"
+            maxlength="4"
+            pattern="[0-9]{4}"
             autocomplete="new-password"
-            :placeholder="type === 'pin' ? '4 to 6 digits' : 'Letters and numbers'"
+            placeholder="••••"
           />
         </div>
 
@@ -110,15 +96,15 @@ async function submit() {
             class="bw-input bw-mono"
             v-model="confirm"
             type="password"
-            :inputmode="type === 'pin' ? 'numeric' : 'text'"
-            :maxlength="type === 'pin' ? 6 : 80"
+            inputmode="numeric"
+            maxlength="4"
+            pattern="[0-9]{4}"
             autocomplete="new-password"
           />
         </div>
 
         <p class="bw-muted" style="margin-top: var(--s-3); font-size: var(--t-sm)">
-          PIN: 4-6 digits.
-          Password: 10+ characters.
+          Used only for vending.
         </p>
         <p v-if="credentialProblem" class="bw-alert danger" style="margin-top: var(--s-3)">
           {{ credentialProblem }}

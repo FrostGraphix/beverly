@@ -64,11 +64,15 @@ function confirm() {
 function onKeydown(e: KeyboardEvent) {
     if (!props.open) return;
     if (e.key === 'Escape') { e.preventDefault(); close(); }
-    if (e.key === 'Enter' && !props.disableConfirm && !props.loading) {
-        // Only confirm on Enter if the focused element is the dialog body
-        // (not a textarea — those need newlines).
-        const tag = (e.target as HTMLElement)?.tagName;
-        if (tag !== 'TEXTAREA') { e.preventDefault(); confirm(); }
+    if (e.key === 'Tab' && dialogEl.value) {
+        const focusable = Array.from(dialogEl.value.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+        ));
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
 }
 
@@ -110,6 +114,7 @@ onBeforeUnmount(() => {
           role="alertdialog"
           aria-modal="true"
           :aria-labelledby="`cd-title-${title}`"
+          :aria-describedby="description ? `cd-description-${title}` : undefined"
         >
           <div class="cd-icon" :class="toneClass" aria-hidden="true">
             <svg v-if="tone === 'danger'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -129,7 +134,7 @@ onBeforeUnmount(() => {
           </div>
 
           <h2 :id="`cd-title-${title}`" class="cd-title">{{ title }}</h2>
-          <p v-if="description" class="cd-desc">{{ description }}</p>
+          <p v-if="description" :id="`cd-description-${title}`" class="cd-desc">{{ description }}</p>
 
           <div v-if="$slots.default" class="cd-body">
             <slot />
@@ -180,6 +185,9 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: blur(36px) saturate(200%);
   box-shadow: var(--glass-shine), var(--glass-shadow-float);
   position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: min(720px, calc(100dvh - (var(--s-5) * 2)));
   overflow: hidden;
 }
 .cd-dialog::before {
@@ -219,6 +227,10 @@ onBeforeUnmount(() => {
 }
 .cd-body {
   margin-top: var(--s-4);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .cd-actions {
@@ -226,6 +238,7 @@ onBeforeUnmount(() => {
   gap: var(--s-2);
   justify-content: flex-end;
   margin-top: var(--s-5);
+  flex: 0 0 auto;
 }
 .cd-btn {
   padding: 10px 18px;
@@ -270,8 +283,28 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 480px) {
-  .cd-dialog { padding: var(--s-5); max-width: 100%; }
-  .cd-actions { flex-direction: column-reverse; }
+  .cd-scrim { place-items: end center; padding: var(--s-3) 0 0; }
+  .cd-dialog {
+    padding: var(--s-4);
+    padding-bottom: max(var(--s-4), env(safe-area-inset-bottom));
+    max-width: 100%;
+    max-height: calc(100dvh - var(--s-3));
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+  }
+  .cd-icon { width: 34px; height: 34px; margin-bottom: var(--s-2); }
+  .cd-body { margin-top: var(--s-3); }
+  .cd-actions {
+    flex-direction: column-reverse;
+    margin-top: var(--s-3);
+    padding-top: var(--s-3);
+    border-top: 1px solid var(--border);
+    background: var(--glass-bg-strong);
+  }
   .cd-actions .cd-btn { width: 100%; justify-content: center; }
+  .cd-enter-active .cd-dialog { animation: cd-sheet 0.24s var(--ease-out); }
+  @keyframes cd-sheet {
+    0% { transform: translateY(100%); opacity: 0.8; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
 }
 </style>

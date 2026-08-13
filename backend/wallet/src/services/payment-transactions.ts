@@ -1,10 +1,11 @@
 import type { VerifyResult } from '../adapters/paystack.js';
+import { verifiedPrincipalAmount } from '../adapters/paystack.js';
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { postEntry } from './ledger.js';
 import { logAction } from './audit.js';
 import { sendTokenSmsToCustomer } from './customer-purchase.js';
-import { notifyTokenPurchased, notifyWalletFunded } from './notifications.js';
+import { notifyPaymentFailed, notifyTokenPurchased, notifyWalletFunded } from './notifications.js';
 import { assertWalletCanTransact, findWalletByOwner, type Wallet } from './wallets.js';
 import { PAYMENT_STATUS, PAYMENT_SUCCEEDED_STATUSES } from './payment-status.js';
 
@@ -92,15 +93,20 @@ async function blockSuccessfulPaymentFulfillment(
     tx: PaymentTransaction,
     verified: VerifyResult,
     source: PaystackFulfillmentSource,
-    error: { code?: string },
+    error: { code?: string; detail?: string },
 ): Promise<PaystackFulfillmentResult> {
     const code = error?.code ?? 'wallet_inactive';
     const prefix = code === 'payment_amount_mismatch'
         ? 'paystack_amount_mismatch'
+        : code.startsWith('token_')
+            ? 'token_delivery_failed'
         : code.startsWith('payment_')
             ? 'paystack_verification_mismatch'
             : 'wallet_inactive_on_paystack_success';
     const blockedAt = new Date().toISOString();
+    const attempts = Number(tx.fulfillment_attempts ?? 0) + 1;
+    const retryable = ['payment_amount_mismatch', 'token_delivery_failed'].includes(code) && attempts < 5;
+    const retryDelayMinutes = Math.min(60, 2 ** Math.min(attempts, 5));
 
     if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
         const purchaseOrderId = tx.metadata?.purchase_order_id;
@@ -109,8 +115,8 @@ async function blockSuccessfulPaymentFulfillment(
                 .from('purchase_orders')
                 .update({
                     status: 'delivery_pending_review',
-                    failure_reason: `${prefix}: ${code}`.slice(0, 500),
-                    delivery_state: 'wallet_state_blocked_needs_review',
+                    failure_reason: `${prefix}: ${error.detail ?? code}`.slice(0, 500),
+                    delivery_state: `${code}_needs_review`.slice(0, 100),
                 })
                 .eq('id', purchaseOrderId);
             if (purchaseUpdateError) throw purchaseUpdateError;
@@ -141,6 +147,7 @@ async function blockSuccessfulPaymentFulfillment(
             metadata: verifiedMetadata(tx, verified, source, {
                 fulfillment_blocked: true,
                 fulfillment_blocked_reason: code,
+                fulfillment_blocked_detail: error.detail ?? null,
                 fulfillment_blocked_at: blockedAt,
                 requires_ops_review: true,
             }),
@@ -148,7 +155,9 @@ async function blockSuccessfulPaymentFulfillment(
             fulfillment_claimed_at: null,
             fulfillment_lease_token: null,
             fulfillment_last_error: code,
-            fulfillment_next_retry_at: null,
+            fulfillment_next_retry_at: retryable
+                ? new Date(Date.now() + retryDelayMinutes * 60_000).toISOString()
+                : null,
         })
         .eq('id', tx.id);
     if (paymentUpdateError) throw paymentUpdateError;
@@ -161,6 +170,64 @@ async function blockSuccessfulPaymentFulfillment(
         after: { reason: code, source },
     });
     return { status: 'blocked', reason: code };
+}
+
+export async function markUnsuccessfulPaystackTransaction(input: {
+    tx: PaymentTransaction;
+    verified: VerifyResult;
+    source: PaystackFulfillmentSource;
+}): Promise<void> {
+    const { tx, verified, source } = input;
+    const now = new Date().toISOString();
+    const gatewayStatus = verified.status === 'abandoned' ? 'abandoned' : 'failed';
+    const { error: paymentError } = await adminClient
+        .from('payment_transactions')
+        .update({
+            status: PAYMENT_STATUS.FAILED,
+            metadata: verifiedMetadata(tx, verified, source, {
+                reconciled_at: now,
+                reconciliation_status: gatewayStatus,
+            }),
+            updated_at: now,
+            fulfillment_claimed_at: null,
+            fulfillment_lease_token: null,
+            fulfillment_next_retry_at: null,
+        })
+        .eq('id', tx.id);
+    if (paymentError) throw paymentError;
+
+    if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
+        const purchaseOrderId = tx.metadata?.purchase_order_id as string | undefined;
+        if (purchaseOrderId) {
+            const { error: purchaseError } = await adminClient
+                .from('purchase_orders')
+                .update({
+                    status: 'failed',
+                    delivery_state: `payment_${gatewayStatus}`,
+                    failure_reason: `paystack_payment_${gatewayStatus}`,
+                    updated_at: now,
+                })
+                .eq('id', purchaseOrderId)
+                .neq('status', 'delivered');
+            if (purchaseError) throw purchaseError;
+        }
+    }
+
+    if (tx.actor_type === 'customer' && tx.actor_id) {
+        notifyPaymentFailed(tx.actor_id, {
+            amountMinor: Number(tx.amount_minor ?? 0),
+            reason: gatewayStatus === 'abandoned' ? 'The payment was not completed.' : undefined,
+        }).catch(() => undefined);
+    }
+    await logAction({
+        actorUserId: null,
+        actorType: sourceActor(source),
+        action: 'paystack.payment.failed',
+        targetType: 'payment_transaction',
+        targetId: tx.id,
+        before: { status: tx.status },
+        after: { status: PAYMENT_STATUS.FAILED, gatewayStatus, source },
+    });
 }
 
 async function fulfillVendorFunding(
@@ -256,7 +323,7 @@ async function fulfillCustomerWalletFunding(
     await postEntry({
         walletId: wallet.id,
         direction: 'credit',
-        amountMinor: verified.amount,
+        amountMinor: verifiedPrincipalAmount(verified),
         entryType: 'payment_credit',
         referenceType: 'payment_transaction',
         referenceId: tx.id,
@@ -268,7 +335,7 @@ async function fulfillCustomerWalletFunding(
 
     if (!alreadyCredited && !tx.metadata?.wallet_funded_notified_at) {
         notifyWalletFunded(tx.actor_id, {
-            amountMinor: verified.amount,
+            amountMinor: verifiedPrincipalAmount(verified),
             reference: tx.gateway_reference,
         }).catch(() => undefined);
         return { metadata: { wallet_funded_notified_at: new Date().toISOString() } };
@@ -327,17 +394,33 @@ async function fulfillCustomerTokenPurchase(
         const declared = await declaredMeterType((po as any).customer_id, meter.meterId);
         const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
         const meterType = isThreePhase ? 'three_phase' : 'single_phase';
-        const tokenRes = await generateCreditToken({
-            meterId: meter.meterId,
-            customerId: meter.customerId,
-            amountMinor: energyAmountMinor,
-            units,
-            tariffId: meter.tariffId,
-            isThreePhase,
-            sgc: meter.sgc,
-            reference: purchaseOrderId,
-        });
+        const existingToken = typeof (po as any).token === 'string' && (po as any).token.trim()
+            ? (po as any).token.trim()
+            : null;
+        const tokenRes = existingToken
+            ? { token: existingToken, generatedAt: String((po as any).updated_at ?? new Date().toISOString()) }
+            : await generateCreditToken({
+                meterId: meter.meterId,
+                customerId: meter.customerId,
+                amountMinor: energyAmountMinor,
+                units,
+                tariffId: meter.tariffId,
+                isThreePhase,
+                sgc: meter.sgc,
+                reference: purchaseOrderId,
+            });
         issuedToken = tokenRes.token;
+        if (!existingToken) {
+            const { error: tokenPersistError } = await adminClient
+                .from('purchase_orders')
+                .update({
+                    token: tokenRes.token,
+                    status: 'delivery_pending_review',
+                    delivery_state: 'token_generated_needs_receipt',
+                })
+                .eq('id', purchaseOrderId);
+            if (tokenPersistError) throw tokenPersistError;
+        }
         const receipt = await createReceipt({
             purchaseOrderId,
             payload: {
@@ -407,6 +490,7 @@ async function fulfillCustomerTokenPurchase(
         return {
             blocked: await blockSuccessfulPaymentFulfillment(tx, verified, source, {
                 code: issuedToken ? 'token_delivery_record_failed' : 'token_delivery_failed',
+                detail: error instanceof Error ? error.message : String(error),
             }),
         };
     }
@@ -451,7 +535,7 @@ async function fulfillClaimedPaystackTransaction(input: {
     if ((PAYMENT_SUCCEEDED_STATUSES as readonly string[]).includes(tx.status) && tx.metadata?.fulfillment_completed_at) {
         return { status: 'already_fulfilled' };
     }
-    if (Number(tx.amount_minor) !== Number(verified.amount)) {
+    if (Number(tx.amount_minor) !== verifiedPrincipalAmount(verified)) {
         return blockSuccessfulPaymentFulfillment(
             tx,
             verified,

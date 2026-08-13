@@ -11,19 +11,21 @@ const meterType = ref<'single_phase' | 'three_phase'>('single_phase');
 const loading  = ref(false);
 const error    = ref<string | null>(null);
 const done     = ref(false);
+const resubmitted = ref(false);
 
 async function submit() {
     if (!meterId.value.trim()) return;
     loading.value = true; error.value = null;
     try {
-        await api.post('/api/v1/customer/meters', {
+        const response = await api.post<{ meter: { resubmitted?: boolean } }>('/api/v1/customer/meters', {
             meter_id: meterId.value.trim().toUpperCase(),
             nickname: nickname.value.trim() || undefined,
             meter_type: meterType.value,
         });
+        resubmitted.value = Boolean(response.meter?.resubmitted);
         done.value = true;
-    } catch (e: any) {
-        error.value = e?.message ?? 'Could not link meter. Check the number and try again.';
+    } catch (cause: unknown) {
+        error.value = cause instanceof Error ? cause.message : 'Could not link meter. Check the number and try again.';
     } finally { loading.value = false; }
 }
 </script>
@@ -96,9 +98,9 @@ async function submit() {
         <div style="width:56px; height:56px; border-radius:50%; background: oklch(70% 0.19 145 / 0.15); display:grid; place-items:center; margin: 0 auto var(--s-4)">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <p class="bw-page-title" style="margin-bottom: var(--s-2)">Submitted for review</p>
+        <p class="bw-page-title" style="margin-bottom: var(--s-2)">{{ resubmitted ? 'Resubmitted for review' : 'Submitted for review' }}</p>
         <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-6)">
-          <span class="bw-mono">{{ meterId.toUpperCase() }}</span> is linked to your account and awaiting admin approval.
+          <span class="bw-mono">{{ meterId.toUpperCase() }}</span> is awaiting a new ownership review.
           You'll be able to buy tokens for it once it's approved.
         </p>
         <div class="bw-row" style="gap: var(--s-3)">
