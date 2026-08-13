@@ -19,6 +19,9 @@ interface ReportOverview {
         settlementGrossMinor: number; settlementBatches: number; refundApprovedMinor: number;
         refundCount: number; disputesOpened: number; newCustomers: number; newVendors: number;
         auditLogsCount?: number; securityEventsCount?: number; securityAlertsHigh?: number;
+        ledgerNetMinor?: number; ledgerCreditMinor?: number; ledgerDebitMinor?: number; ledgerEntryCount?: number;
+        activeHoldsMinor?: number; activeHoldsCount?: number;
+        reconciliationRunCount?: number; reconciliationMismatches?: number; reconciliationMismatchMinor?: number;
     };
     series: { daily: DailyPoint[] };
     breakdowns: {
@@ -32,6 +35,8 @@ interface ReportOverview {
         disputesByStatus?: Record<string, number>;
         refundsByStatus?: Record<string, number>;
         settlementByStatus?: Record<string, number>;
+        ledgerByEntryType?: Record<string, number>;
+        reconciliationByStatus?: Record<string, number>;
     };
     sources?: Record<string, number>;
 }
@@ -191,6 +196,15 @@ function moneyRows(obj: Record<string, number> | undefined): MoneyRow[] {
     return rows.sort((a, b) => b.minor - a.minor).map((row) => ({ ...row, pct: Math.round((row.minor / total) * 100) }));
 }
 
+const ledgerTypeRows = computed(() => {
+    const obj = report.value?.breakdowns.ledgerByEntryType ?? {};
+    return Object.entries(obj)
+        .map(([key, minor]) => ({ key, minor: Number(minor) }))
+        .sort((a, b) => Math.abs(b.minor) - Math.abs(a.minor));
+});
+
+const reconciliationStatusRows = computed(() => countRows(report.value?.breakdowns.reconciliationByStatus));
+
 const actorRows = computed(() => {
     const obj = report.value?.breakdowns.revenueByActorType ?? {};
     const total = Object.values(obj).reduce((s, n) => s + n, 0) || 1;
@@ -249,6 +263,8 @@ function exportPdf() {
             { label: 'Success rate', value: `${kp.successRate}%`, note: `${fmtNum(kp.failedCount)} failed` },
             { label: 'Settlement net', value: naira(kp.settlementNetMinor), note: `${fmtNum(kp.settlementBatches)} batches` },
             { label: 'Disputes opened', value: fmtNum(kp.disputesOpened), note: `${fmtNum(kp.refundCount)} refunds` },
+            { label: 'Ledger net flow', value: naira(kp.ledgerNetMinor ?? 0), note: `${fmtNum(kp.ledgerEntryCount ?? 0)} entries` },
+            { label: 'Active holds', value: naira(kp.activeHoldsMinor ?? 0), note: `${fmtNum(kp.activeHoldsCount ?? 0)} open` },
         ],
         series: report.value.series.daily,
         statusRows: statusRows.value,
@@ -402,6 +418,21 @@ onMounted(() => applyPreset(30, '30d'));
         <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(audience === 'vendor' ? (k?.newVendors ?? 0) : audience === 'customer' ? (k?.newCustomers ?? 0) : (k?.newCustomers ?? 0) + (k?.newVendors ?? 0)) }}</strong>
         <span class="rp-kpi-sub">in range</span>
       </div>
+      <div class="rp-kpi">
+        <span class="rp-kpi-label">Ledger net flow</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.ledgerNetMinor ?? 0) }}</strong>
+        <span class="rp-kpi-sub">{{ fmtNum(k?.ledgerEntryCount ?? 0) }} ledger entries</span>
+      </div>
+      <div class="rp-kpi">
+        <span class="rp-kpi-label">Active holds</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtMoney(k?.activeHoldsMinor ?? 0) }}</strong>
+        <span class="rp-kpi-sub">{{ fmtNum(k?.activeHoldsCount ?? 0) }} open</span>
+      </div>
+      <div class="rp-kpi">
+        <span class="rp-kpi-label">Reconciliation</span>
+        <strong :class="['rp-kpi-value', loading && 'rp-skeleton']">{{ loading ? '' : fmtNum(k?.reconciliationMismatches ?? 0) }}</strong>
+        <span class="rp-kpi-sub">mismatched of {{ fmtNum(k?.reconciliationRunCount ?? 0) }} runs</span>
+      </div>
     </div>
 
     <!-- Trend chart -->
@@ -467,6 +498,33 @@ onMounted(() => applyPreset(30, '30d'));
           <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
           <span class="rp-bar-val">{{ fmtMoney(r.minor) }}</span>
         </div>
+      </section>
+
+      <section class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Ledger</p>
+        <h2 class="bw-h2">Movement by entry type</h2>
+        <div v-if="!ledgerTypeRows.length" class="bw-empty">No ledger activity.</div>
+        <table v-else class="bw-table rp-station-table">
+          <thead><tr><th>Entry type</th><th>Net amount</th></tr></thead>
+          <tbody>
+            <tr v-for="r in ledgerTypeRows" :key="r.key">
+              <td class="bw-text-sm">{{ r.key }}</td>
+              <td :style="{ color: r.minor < 0 ? 'var(--danger)' : 'var(--brand)' }">{{ fmtMoney(r.minor) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="bw-card">
+        <p class="bw-label" style="color: var(--brand)">Integrity</p>
+        <h2 class="bw-h2">Reconciliation runs</h2>
+        <div v-if="!reconciliationStatusRows.length" class="bw-empty">No reconciliation runs in range.</div>
+        <div v-for="r in reconciliationStatusRows" :key="r.key" class="rp-bar-row">
+          <span class="rp-bar-key">{{ r.key }}</span>
+          <div class="rp-bar-track"><div class="rp-bar-fill" :style="{ width: r.pct + '%' }" /></div>
+          <span class="rp-bar-val">{{ fmtNum(r.count) }} &middot; {{ r.pct }}%</span>
+        </div>
+        <p v-if="k?.reconciliationMismatchMinor" class="rp-kpi-sub" style="margin-top:8px">Total mismatch: {{ fmtMoney(k.reconciliationMismatchMinor) }}</p>
       </section>
 
       <section class="bw-card">

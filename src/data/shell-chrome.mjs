@@ -60,6 +60,7 @@ export const routeIconOverrides = {
   "#/prepay-report/daily-data-meter": "M5 3v3m14-3v3M4 8h16M5 5h14v16H5zM8 12h3m2 0h3m-8 4h3",
   "#/prepay-report/abnormal-alarm": "M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4m0 4h.01",
   "#/prepay-report/station-consumption": "M4 21V7l8-4 8 4v14M8 21v-5h8v5M8 10h.01M12 10h.01M16 10h.01",
+  "#/prepay-report/archive-reports": "M4 5h16v4H4zM5 9h14v11H5zM9 13h6M9 16h4",
   "#/token-generate/credit-token": "M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
   "#/token-generate/change-meter-key": "M15.5 7.5a4 4 0 1 1-5.7 5.6L3 20v1h5l1-1v-2h2l1-1v-2l3.5-3.5z",
   "#/token-generate/clear-tamper-token": "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",

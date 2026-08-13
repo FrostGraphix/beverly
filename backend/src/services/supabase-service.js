@@ -578,6 +578,40 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
+/**
+ * Mint a short-lived signed URL for a private Storage object.
+ *
+ * Archive buckets are created private (ensureStorageBuckets passes public: false), so
+ * this is the only read path. Storage returns a root-relative `signedURL`; we return it
+ * absolute so callers can hand it straight to a browser.
+ */
+async function createSignedStorageUrl(bucket, objectPath, expiresIn = 300, downloadAs = "") {
+  const key = serviceRoleKey();
+  if (!storageEnabled() || !supabaseUrl() || !key) return null;
+  const encodedPath = objectPath.split("/").map(encodeURIComponent).join("/");
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodedPath}`, {
+    method: "POST",
+    headers: jsonHeaders(key),
+    body: JSON.stringify({ expiresIn: Math.max(1, Number(expiresIn) || 300) })
+  }));
+  if (!response.ok) throw new Error(body.message || body.msg || body.error || "Supabase signed URL failed");
+  const relative = body.signedURL || body.signedUrl || "";
+  if (!relative) return null;
+  // `download` makes Storage answer with Content-Disposition: attachment and this
+  // filename, instead of the object's own last path segment. Without it every archive
+  // saves as its bare period ("2026-06.csv.gz") regardless of station or report type.
+  const suffix = downloadAs
+    ? `${relative.includes("?") ? "&" : "?"}download=${encodeURIComponent(downloadAs)}`
+    : "";
+  return {
+    bucket,
+    path: objectPath,
+    signedUrl: `${supabaseUrl()}/storage/v1${relative.startsWith("/") ? "" : "/"}${relative}${suffix}`,
+    downloadAs: downloadAs || null,
+    expiresIn
+  };
+}
+
 
 module.exports = {
   authEnabled,
@@ -590,6 +624,7 @@ module.exports = {
   emailFromLogin,
   getAuthUserByIdentifier,
   getAuthUserByUserId,
+  createSignedStorageUrl,
   ensureStorageBuckets,
   restRequest,
   restRequestWithResponse,

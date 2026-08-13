@@ -948,3 +948,38 @@ export async function loadConsumptionData(filters, callbacks) {
 }
 
 export { buildCustomerRechargeHistory };
+
+// ── Cold archive catalogue ───────────────────────────────────────────────────
+// Reads the index of raw-reading months that have been exported to Supabase Storage.
+// These are the periods that have aged out of the hot retention window, so they are
+// no longer answerable by the consumption endpoints above.
+
+async function archiveJson(path, payload) {
+  const response = await authedFetch(path, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try { const body = await response.json(); detail = body?.error || body?.reason || body?.msg || ""; } catch { detail = ""; }
+    throw new Error(`${path} failed (${response.status})${detail ? `: ${detail}` : ""}`);
+  }
+  const data = await response.json();
+  return data?.result || data?.data || data;
+}
+
+export async function fetchArchiveReportsSummary() {
+  return archiveJson("/api/local/archive/reports/summary", {});
+}
+
+export async function fetchArchiveReports(filters = {}) {
+  return archiveJson("/api/local/archive/reports/list", filters);
+}
+
+/**
+ * Exchange an archive report id for a short-lived signed Storage URL.
+ * The URL expires in minutes, so it is requested at click time and never cached.
+ */
+export async function requestArchiveDownloadUrl(reportId) {
+  return archiveJson("/api/local/archive/reports/download", { id: reportId });
+}
