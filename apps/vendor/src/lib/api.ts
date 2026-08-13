@@ -177,9 +177,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const headers: Record<string, string> = {
             ...(init.headers as Record<string, string> ?? {}),
         };
-        if (hasBody || (method !== 'GET' && method !== 'HEAD')) {
-            headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
-        }
+        if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
         if (token) headers['Authorization'] = `Bearer ${token}`;
         if (idempotencyKey) {
             headers['Idempotency-Key'] = idempotencyKey;
