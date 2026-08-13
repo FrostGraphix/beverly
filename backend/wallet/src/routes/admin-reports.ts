@@ -63,7 +63,17 @@ async function gatherReportData(sinceIso: string, untilIso: string, audience: Re
     let disputesQuery = inRange(adminClient.from('disputes').select('status, created_at, raised_by_actor_type'));
     if (audience !== 'all') disputesQuery = disputesQuery.eq('raised_by_actor_type', audience);
 
-    const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements, auditLogs, securityEvents] = await Promise.all([
+    let ledgerQuery = inRange(adminClient.from('wallet_ledger_entries').select('amount_minor, direction, entry_type, created_at, wallets!inner(owner_type)'));
+    if (audience !== 'all') ledgerQuery = ledgerQuery.eq('wallets.owner_type', audience);
+
+    let holdsQuery = adminClient.from('wallet_holds').select('amount_minor, status, wallets!inner(owner_type)').eq('status', 'active');
+    if (audience !== 'all') holdsQuery = holdsQuery.eq('wallets.owner_type', audience);
+
+    const reconciliationQuery = adminClient.from('reconciliation_runs')
+        .select('status, total_purchases, total_amount_minor, gateway_total_minor, mismatch_minor, run_date, checked_at')
+        .gte('run_date', sinceIso.slice(0, 10)).lte('run_date', untilIso.slice(0, 10));
+
+    const [purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements, auditLogs, securityEvents, ledgerEntries, activeHolds, reconciliationRuns] = await Promise.all([
         readRows('Purchases', purchasesQuery.limit(50_000)),
         readRows('Funding', fundingQuery.limit(50_000)),
         family !== 'vendors-wallets' || audience === 'customer' ? Promise.resolve([]) : readRows('Funding requests', inRange(adminClient.from('funding_requests').select('amount_minor, channel, status, created_at')).limit(50_000)),
@@ -74,8 +84,14 @@ async function gatherReportData(sinceIso: string, untilIso: string, audience: Re
         audience === 'customer' ? Promise.resolve([]) : readRows('Settlements', inRange(adminClient.from('settlement_batches').select('gross_amount_minor, fee_minor, net_amount_minor, status, created_at')).limit(50_000)),
         family === 'audit' ? readRows('Audit logs', inRange(adminClient.from('wallet_audit_log').select('action, actor_type, created_at')).limit(50_000)) : Promise.resolve([]),
         family === 'audit' ? readRows('Security events', inRange(adminClient.from('wallet_security_events').select('event_type, severity, created_at')).limit(50_000)) : Promise.resolve([]),
+        readRows('Ledger entries', ledgerQuery.limit(50_000)),
+        readRows('Active holds', holdsQuery.limit(50_000)),
+        readRows('Reconciliation runs', reconciliationQuery.limit(1000)),
     ]);
-    return { purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements, auditLogs, securityEvents } as Record<string, any[]>;
+    return {
+        purchases, funding, fundingRequests, refunds, disputes, newCustomers, newVendors, settlements,
+        auditLogs, securityEvents, ledgerEntries, activeHolds, reconciliationRuns,
+    } as Record<string, any[]>;
 }
 
 function buildReport(sinceIso: string, untilIso: string, days: number, audience: ReportAudience, d: Record<string, any[]>) {
@@ -92,6 +108,14 @@ function buildReport(sinceIso: string, untilIso: string, days: number, audience:
     const settlementNetMinor = d.settlements.reduce((s, b) => s + num(b.net_amount_minor), 0);
     const settlementGrossMinor = d.settlements.reduce((s, b) => s + num(b.gross_amount_minor), 0);
     const processed = delivered.length + failed.length;
+
+    const ledgerCreditMinor = (d.ledgerEntries || []).filter((e) => e.direction === 'credit').reduce((s, e) => s + num(e.amount_minor), 0);
+    const ledgerDebitMinor = (d.ledgerEntries || []).filter((e) => e.direction === 'debit').reduce((s, e) => s + num(e.amount_minor), 0);
+    const ledgerNetMinor = ledgerCreditMinor - ledgerDebitMinor;
+    const activeHoldsMinor = (d.activeHolds || []).reduce((s, h) => s + num(h.amount_minor), 0);
+    const activeHoldsCount = (d.activeHolds || []).length;
+    const reconciliationMismatches = (d.reconciliationRuns || []).filter((r) => r.status !== 'ok').length;
+    const reconciliationMismatchMinor = (d.reconciliationRuns || []).reduce((s, r) => s + Math.abs(num(r.mismatch_minor)), 0);
 
     // Daily buckets (zero-filled across the range)
     const buckets = new Map<string, { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount: number; securityEventsCount: number }>();
@@ -157,6 +181,18 @@ function buildReport(sinceIso: string, untilIso: string, days: number, audience:
         securitySeveritiesBreakdown[e.severity] = (securitySeveritiesBreakdown[e.severity] ?? 0) + 1;
     }
 
+    const ledgerByEntryType: Record<string, number> = {};
+    for (const entry of (d.ledgerEntries || [])) {
+        const key = entry.entry_type ?? 'unknown';
+        const signed = entry.direction === 'debit' ? -num(entry.amount_minor) : num(entry.amount_minor);
+        ledgerByEntryType[key] = (ledgerByEntryType[key] ?? 0) + signed;
+    }
+
+    const reconciliationByStatus: Record<string, number> = {};
+    for (const run of (d.reconciliationRuns || [])) {
+        reconciliationByStatus[run.status ?? 'unknown'] = (reconciliationByStatus[run.status ?? 'unknown'] ?? 0) + 1;
+    }
+
     return {
         audience,
         range: { since: sinceIso, until: untilIso, days },
@@ -183,6 +219,15 @@ function buildReport(sinceIso: string, untilIso: string, days: number, audience:
             auditLogsCount: (d.auditLogs || []).length,
             securityEventsCount: (d.securityEvents || []).length,
             securityAlertsHigh: (d.securityEvents || []).filter((e: any) => e.severity === 'high' || e.severity === 'critical').length,
+            ledgerNetMinor,
+            ledgerCreditMinor,
+            ledgerDebitMinor,
+            ledgerEntryCount: (d.ledgerEntries || []).length,
+            activeHoldsMinor,
+            activeHoldsCount,
+            reconciliationRunCount: (d.reconciliationRuns || []).length,
+            reconciliationMismatches,
+            reconciliationMismatchMinor,
         },
         series: { daily: [...buckets.values()] },
         breakdowns: {
@@ -196,6 +241,8 @@ function buildReport(sinceIso: string, untilIso: string, days: number, audience:
             disputesByStatus,
             refundsByStatus,
             settlementByStatus,
+            ledgerByEntryType,
+            reconciliationByStatus,
         },
         sources: {
             purchases: d.purchases.length,
@@ -208,6 +255,9 @@ function buildReport(sinceIso: string, untilIso: string, days: number, audience:
             settlements: d.settlements.length,
             auditLogs: (d.auditLogs || []).length,
             securityEvents: (d.securityEvents || []).length,
+            ledgerEntries: (d.ledgerEntries || []).length,
+            activeHolds: (d.activeHolds || []).length,
+            reconciliationRuns: (d.reconciliationRuns || []).length,
         },
     };
 }

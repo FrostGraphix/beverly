@@ -303,6 +303,7 @@
           <WalletFundingPage v-else-if="route.customComponent === 'WalletFundingPage'" :route="route" />
           <VendingMonitorPage v-else-if="route.customComponent === 'VendingMonitorPage'" :route="route" />
           <StationConsumptionPage v-else-if="route.customComponent === 'StationConsumptionPage'" :route="route" :hash="hash" :role-id="currentRoleId" />
+          <ArchiveReportsPage v-else-if="route.customComponent === 'ArchiveReportsPage'" :route="route" />
           <TablePage v-else :route="route" />
         </main>
     </section>
@@ -353,6 +354,7 @@ import LoginPage from "./components/LoginPage.vue";
 import AutomationCommandPage from "./components/AutomationCommandPage.vue";
 import ConsumptionStatisticsPage from "./components/ConsumptionStatisticsPage.vue";
 import AbnormalAlarmPage from "./components/AbnormalAlarmPage.vue";
+import ArchiveReportsPage from "./components/ArchiveReportsPage.vue";
 import DailyDataMeterPage from "./components/DailyDataMeterPage.vue";
 import OnboardingStudioPage from "./components/OnboardingStudioPage.vue";
 import StationConsumptionPage from "./components/StationConsumptionPage.vue";
@@ -411,7 +413,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AbnormalAlarmPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AbnormalAlarmPage, ArchiveReportsPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",

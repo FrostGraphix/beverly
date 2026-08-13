@@ -69,6 +69,13 @@ const {
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
+const { syncOemDimensions } = require("../backend/src/services/oem-dimension-sync-service");
+const {
+  listReports: listArchiveReports,
+  reportsSummary: archiveReportsSummary,
+  runArchiveSweep,
+  signedDownloadUrl: archiveSignedDownloadUrl
+} = require("../backend/src/services/reading-archive-service");
 const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
 const { acknowledgeAlert, refreshGatewayHealth, silenceGateway } = require("../backend/src/services/gateway-health-service");
 const { syncReferenceRead } = require("../backend/src/services/tariff-snapshot-service");
@@ -2599,6 +2606,65 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       mode: "backfill"
     }));
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/sync-oem-dimensions") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const oemSlug = String(cronQuery(request.url).oem || "") || undefined;
+    const summary = await syncOemDimensions({
+      oemSlug,
+      log: (message) => console.log(`[cron:sync-oem-dimensions] ${message}`)
+    });
+    return localJobResponse(summary);
+  }
+  // Exports settled months of raw readings to Storage ahead of the retention boundary.
+  // Never deletes; only writes objects and index rows.
+  //
+  // ORDERING SAFETY does not depend on the schedule. Vercel Hobby crons have +/-59 min
+  // scheduling precision, so the 01:00 UTC entry can actually fire any time before
+  // 02:00 -- and pg_cron job 18 prunes at 03:00. What actually guarantees we never
+  // delete an unarchived month is the archiver's own 35-day grace window, which keeps
+  // it roughly two months ahead of anything job 18 is eligible to touch. The clock
+  // ordering is belt to that braces.
+  //
+  // ?limit=  caps partitions per invocation so a sweep cannot run past the function's
+  //          maxDuration (300s on every plan incl. Hobby) -- it resumes next run.
+  //          Backfill is bounded: 63 partitions across 6 stations as measured
+  //          2026-08-11, so the default clears it in ~3 daily runs, or immediately if
+  //          the endpoint is curl'd a few times with CRON_SECRET.
+  // ?dryRun= plan only, touches neither Storage nor the index.
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/archive-readings") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const query = cronQuery(request.url);
+    const summary = await runArchiveSweep({
+      limit: Number(query.limit || 24),
+      dryRun: String(query.dryRun || "") === "true",
+      log: (message) => console.log(`[cron:archive-readings] ${message}`)
+    });
+    return localJobResponse(summary);
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
     if (!cronAuthorized(request)) {
       return {
@@ -2833,6 +2899,48 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if (pathname === "/api/local/consumption/meter-analysis") {
     return readMeterConsumptionAnalysis({ requestPayload: requestData.parsedBody });
+  }
+  // ── Archive catalogue ───────────────────────────────────────────────────────
+  // Deliberately shaped like SparkMeter's /reports/summary, /reports/list and /report:
+  // browse a catalogue of pre-generated partitions, then fetch one by key. There is no
+  // query-over-cold-data endpoint here, and that is intentional -- see
+  // reading-archive-service.js. Downloads hand back a short-lived signed URL rather
+  // than streaming bytes through the function.
+  if (pathname === "/api/local/archive/reports/summary") {
+    try {
+      return localJobResponse(await archiveReportsSummary());
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
+  if (pathname === "/api/local/archive/reports/list") {
+    try {
+      const query = cronQuery(request.url);
+      const payload = requestData.parsedBody || {};
+      return localJobResponse(await listArchiveReports({
+        stationId: payload.stationId || query.stationId || null,
+        reportType: payload.reportType || query.reportType || null,
+        granularity: payload.granularity || query.granularity || null,
+        oemId: payload.oemId || query.oemId || null,
+        year: payload.year || query.year || null,
+        month: payload.month || query.month || null,
+        limit: payload.limit || query.limit || 200
+      }));
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
+  if (pathname === "/api/local/archive/reports/download") {
+    const query = cronQuery(request.url);
+    const reportId = String((requestData.parsedBody || {}).id || query.id || "");
+    if (!reportId) return { status: 400, body: { ok: false, error: "id is required" } };
+    try {
+      const result = await archiveSignedDownloadUrl(reportId);
+      if (!result.ok) return { status: 404, body: result };
+      return localJobResponse(result);
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
   }
   if (pathname === "/api/local/consumption/refresh-aggregates") {
     try {

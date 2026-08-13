@@ -875,6 +875,35 @@ function addDaysIso(day, offset) {
   return date.toISOString().slice(0, 10);
 }
 
+// Raw daily_meter_readings retention, kept in sync with pg_cron job 18 as last rewritten
+// by supabase/migrations/20260812170000_raw_retention_120d.sql. Overridable so a
+// deployment that chooses a different window does not have to patch code.
+//
+// If you change job 18's INTERVAL, change this too -- they are two halves of one policy,
+// and a mismatch makes the drill-down either claim data is archived when it is still
+// live, or silently return a short series with no explanation.
+const RAW_HOT_WINDOW_DAYS = Number(process.env.RAW_HOT_WINDOW_DAYS || 120);
+
+/**
+ * Describes how much of a requested range falls outside the raw hot window.
+ * Returns null when the whole range is live, so callers can treat presence as
+ * "part of this answer is incomplete, and here is where the rest lives".
+ */
+function coldRangeNotice(from) {
+  const cutoff = addDaysIso(new Date().toISOString().slice(0, 10), -RAW_HOT_WINDOW_DAYS);
+  const requested = normalizeDate(from);
+  if (!requested || requested >= cutoff) return null;
+  return {
+    hotWindowDays: RAW_HOT_WINDOW_DAYS,
+    hotFrom: cutoff,
+    requestedFrom: requested,
+    // Daily granularity and telemetry only; monthly/yearly totals are unaffected and
+    // remain queryable live from meter_consumption_aggregates.
+    message: `Daily readings before ${cutoff} are archived. Download the station-month CSV from Archive Reports for ${requested} to ${cutoff}.`,
+    archiveRouteHash: "#/prepay-report/archive-reports"
+  };
+}
+
 function weekdayIndex(day) {
   // 0 = Monday … 6 = Sunday
   const date = new Date(`${String(day).slice(0, 10)}T00:00:00.000Z`);
@@ -1706,6 +1735,13 @@ async function readMeterConsumptionAnalysis({ requestPayload: payload }) {
         customerId,
         customerName,
         range: { from, to, baselineFrom },
+        // Raw readings are retained for RAW_HOT_WINDOW_DAYS (Phase 2 cut this from
+        // 12 months to 90 days, gated on the month being archived first). A request
+        // reaching further back is not an error and not an empty meter -- the data
+        // exists as a downloadable station-month CSV on the Archive Reports page.
+        // Saying so explicitly is the whole point: the old behaviour was to silently
+        // return a short series and let the reader assume the meter went quiet.
+        coldRange: coldRangeNotice(from),
         totals: {
           consumedKwh,
           readingDays: days.size,

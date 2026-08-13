@@ -367,6 +367,14 @@
           </div>
 
           <template v-if="meterData && !meterLoading">
+            <!-- Part of the requested range predates the raw hot window. Say so rather
+                 than letting a truncated series read as "this meter went quiet". -->
+            <div v-if="meterData.coldRange" class="scc-cold-notice">
+              <strong>Partial range.</strong>
+              {{ meterData.coldRange.message }}
+              <a :href="meterData.coldRange.archiveRouteHash">Open Archive Reports</a>
+            </div>
+
             <!-- Meter KPIs -->
             <div class="scc-kpis scc-kpis--sm">
               <div v-for="k in meterKpis" :key="k.label" class="scc-kpi">
@@ -1668,6 +1676,9 @@ export default {
 .scc-drawer-eyebrow { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--primary); display: block; margin-bottom: 2px; }
 .scc-drawer-title { margin: 0 0 3px; font-size: 20px; font-weight: 800; color: var(--text-main); font-family: var(--bev-font-mono); letter-spacing: -0.01em; }
 .scc-drawer-meta { margin: 0; font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.scc-cold-notice { margin-bottom: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted, rgba(127, 127, 127, 0.06)); color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.scc-cold-notice strong { color: var(--text); }
+.scc-cold-notice a { margin-left: 6px; color: var(--accent, #2563eb); text-decoration: underline; }
 .scc-drawer-close {
   display: grid;
   place-items: center;
