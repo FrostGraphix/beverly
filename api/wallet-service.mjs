@@ -18,6 +18,14 @@ function targetUrl(rawUrl = "/") {
   return query ? `${target}?${query}` : target;
 }
 
+function clientAddress(request) {
+  const vercelAddress = request.headers?.["x-vercel-forwarded-for"];
+  const forwardedAddress = request.headers?.["x-forwarded-for"];
+  return String(vercelAddress || forwardedAddress || request.socket?.remoteAddress || "127.0.0.1")
+    .split(",")[0]
+    .trim();
+}
+
 export async function injectWallet(request) {
   const app = await getApp();
   const method = String(request.method || "GET").toUpperCase();
@@ -31,6 +39,7 @@ export async function injectWallet(request) {
     url: targetUrl(request.url),
     headers: request.headers,
     payload,
+    remoteAddress: clientAddress(request),
   });
 }
 

@@ -28,7 +28,8 @@ function main() {
   const announcementRls = readMigration("20260622160000_announcement_rls.sql");
   const liveWriteControl = readMigration("20260702120000_crm_live_write_control.sql");
   const environmentLiveWriteControl = readMigration("20260702143000_environment_live_write_control.sql");
-  const fullRls = readMigration("20260702150000_full_rls_permissions.sql");
+  const vendorTransfers = readMigration("20260812145901_admin_vendor_balance_transfers.sql");
+  const fullRls = readMigration("20260702150000_full_rls_permissions.sql") + vendorTransfers;
   const staffMultiStation = readMigration("20260714150000_staff_multi_station_scope.sql");
   const liveWriteActivation = readMigration("20260703100000_enable_live_writes.sql");
 

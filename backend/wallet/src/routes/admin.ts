@@ -41,6 +41,7 @@ import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/m
 import { revokePortalSession } from '../services/portal-session.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
+import adminVendorTransferRoutes from './admin-vendor-transfers.js';
 import adminDevRoutes from './admin-dev.js';
 import adminReportsRoutes from './admin-reports.js';
 import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
@@ -324,6 +325,11 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /wallets/:id/ledger': 'wallet.funding.view',
     'PATCH /wallets/:id/status': 'wallet.funding.approve',
     'PATCH /wallets/:id/limits': 'wallet.funding.approve',
+    'GET /vendor-transfers/vendors': 'wallet.vendor_transfers.manage',
+    'POST /vendor-transfers/preview': 'wallet.vendor_transfers.manage',
+    'GET /vendor-transfers': 'wallet.vendor_transfers.manage',
+    'GET /vendor-transfers/:id': 'wallet.vendor_transfers.manage',
+    'POST /vendor-transfers': 'wallet.vendor_transfers.manage',
     'GET /customers': 'wallet.customers.view',
     'GET /customers/summary': 'wallet.customers.view',
     'GET /customers/:id': 'wallet.customers.view',
@@ -3574,6 +3580,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     await fastify.register(adminVendorAnalyticsRoutes);
+    await fastify.register(adminVendorTransferRoutes);
     await fastify.register(adminDevRoutes);
     await fastify.register(adminReportsRoutes);
 
