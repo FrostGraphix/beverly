@@ -125,7 +125,9 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
     const headers: Record<string, string> = {
         ...(init.headers as Record<string, string> ?? {}),
     };
-    if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+    if (hasBody || (method !== 'GET' && method !== 'HEAD')) {
+        headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+    }
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (method !== 'GET' && method !== 'HEAD') {
