@@ -21,6 +21,7 @@ export type SecurityEventType =
     | 'impersonation_start' | 'impersonation_end' | 'session_revoked'
     | 'session_timeout' | 'temp_password_issued' | 'temp_password_used'
     | 'vend_credential_set' | 'vend_credential_failure'
+    | 'vend_pin_set' | 'vend_pin_failure'
     | 'sms_allowed' | 'sms_blocked';
 
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
@@ -121,7 +122,7 @@ export function auditFromRequest(req: FastifyRequest): {
 } {
     const cid = (req.headers['x-correlation-id'] as string | undefined) ?? req.id;
     return {
-        ip:            (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.ip,
+        ip:            req.ip,
         userAgent:     (req.headers['user-agent'] as string | undefined) ?? null,
         correlationId: cid ?? null,
         actorUserId:   req.actor?.userId ?? null,

@@ -36,6 +36,14 @@ function statusBadge(s: string) {
     return 'neutral';
 }
 
+function statusLabel(p: any) {
+    if (p.status === 'delivered') return 'Token ready';
+    if (p.failure_reason?.includes('payment_amount_mismatch')) return 'Payment needs review';
+    if (p.delivery_state === 'token_generated_needs_reconciliation') return 'Token generated; reconciling';
+    if (p.delivery_state === 'awaiting_payment') return 'Payment awaiting confirmation';
+    return String(p.status ?? '').replace(/_/g, ' ');
+}
+
 function canReceipt(p: any) {
     return p.status === 'delivered' && !!p.receipt_id;
 }
@@ -84,7 +92,7 @@ function printPurchaseReceipt(p: any) {
               <td class="bw-mono">{{ p.meter_id }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
-              <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
+              <td><span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span></td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0,12) + '...' : '-' }}</td>
               <td>
                 <div v-if="canReceipt(p)" class="receipt-actions">
@@ -114,7 +122,7 @@ function printPurchaseReceipt(p: any) {
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Status</span>
-              <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
+              <span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span>
             </div>
             <div class="bw-tc-pair" v-if="p.units_kwh">
               <span class="bw-tc-pair-label">Units</span>

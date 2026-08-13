@@ -317,10 +317,13 @@ onBeforeUnmount(() => {
           <span v-if="unreadCount > 0" class="bw-bell-badge" aria-hidden="true">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
         </RouterLink>
 
-        <!-- Theme toggle -->
-        <button class="bw-icon-btn" @click="toggleTheme" title="Toggle theme" style="border: none">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        </button>
+        <RouterLink to="/help" class="bw-icon-btn" title="Help" aria-label="Help" style="border: none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
+            <path d="M5 13h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Z" />
+            <path d="M19 13h-2a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1" />
+          </svg>
+        </RouterLink>
 
         <!-- User chip -->
         <div class="bw-account-menu" ref="accountMenuWrap">

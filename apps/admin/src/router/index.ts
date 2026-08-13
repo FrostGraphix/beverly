@@ -18,6 +18,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/funding', name: 'funding', component: () => import('../views/Funding.vue'), meta: { auth: true, permission: 'wallet.funding.view' } },
     { path: '/funding/history', name: 'funding-history', component: () => import('../views/FundingHistory.vue'), meta: { auth: true, permission: 'wallet.funding.view' } },
     { path: '/wallets', name: 'wallets', component: () => import('../views/Wallets.vue'), meta: { auth: true, permission: 'wallet.funding.view' } },
+    { path: '/vendor-transfers', name: 'vendor-transfers', component: () => import('../views/VendorTransfers.vue'), meta: { auth: true, permission: 'wallet.vendor_transfers.manage' } },
     { path: '/purchases', name: 'purchases', component: () => import('../views/Purchases.vue'), meta: { auth: true, permission: 'wallet.vending.monitor' } },
     { path: '/customers', name: 'customers', component: () => import('../views/Customers.vue'), meta: { auth: true, permission: 'wallet.customers.view' } },
     { path: '/customers/:id', name: 'customer-detail', component: () => import('../views/CustomerDetail.vue'), meta: { auth: true, permission: 'wallet.customers.view' } },

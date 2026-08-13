@@ -175,7 +175,6 @@ jobs:
         env:
           API_BASE: ${{ secrets.STAGING_API_BASE }}
           STAFF_TOKEN: ${{ secrets.STAGING_STAFF_TOKEN }}
-        continue-on-error: true
 
   # ── Acceptance criteria checklist ────────────────────────────────────
   acceptance-criteria:

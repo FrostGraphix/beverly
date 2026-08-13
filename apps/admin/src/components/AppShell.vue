@@ -78,6 +78,7 @@ const navGroups = computed(() => [
             { to: '/funding', text: 'Funding', permission: 'wallet.funding.view', icon: 'funding' },
             { to: '/funding/history', text: 'Funding History', permission: 'wallet.funding.view', icon: 'history' },
             { to: '/wallets', text: 'Wallets', permission: 'wallet.funding.view', icon: 'wallets' },
+            { to: '/vendor-transfers', text: 'Vendor Transfers', permission: 'wallet.vendor_transfers.manage', icon: 'transfer' },
             { to: '/purchases', text: 'Purchases', permission: 'wallet.vending.monitor', icon: 'purchases' },
             { to: '/vending', text: 'Vending Monitor', permission: 'wallet.vending.monitor', icon: 'vending' },
         ],
@@ -172,6 +173,7 @@ const navIconPath: Record<string, string> = {
     funding: 'M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
     history: 'M12 8v4l3 3M12 21a9 9 0 100-18 9 9 0 000 18',
     wallets: 'M2 6h20v14H2zM2 10h20M16 14h2',
+    transfer: 'M7 7h12M15 3l4 4-4 4M17 17H5M9 13l-4 4 4 4',
     purchases: 'M3 17l6-6 4 4 8-8M14 7h7v7',
     vending: 'M5 12h14M12 5l7 7-7 7',
     meter: 'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
@@ -353,10 +355,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
           </svg>
         </RouterLink>
 
-        <!-- Theme toggle -->
-        <button class="bw-icon-btn" @click="toggleTheme" title="Toggle theme" style="border: none">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        </button>
+        <RouterLink to="/support" class="bw-icon-btn" title="Support" aria-label="Support" style="border: none">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
+            <path d="M5 13h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Z" />
+            <path d="M19 13h-2a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1" />
+          </svg>
+        </RouterLink>
 
         <!-- User chip -->
         <div class="bw-account-menu" ref="accountMenuWrap">

@@ -159,7 +159,7 @@ function describeApiError(e: unknown, fallback: string) {
             return {
                 title: 'Vendor authorization required',
                 message: e.message,
-                action: 'Create your vendor PIN or password, then retry this remote send.',
+                action: 'Create your four-digit vending PIN, then retry.',
                 code: e.code,
             };
         }
@@ -167,7 +167,7 @@ function describeApiError(e: unknown, fallback: string) {
             return {
                 title: 'Invalid authorization',
                 message: e.message,
-                action: 'Enter the PIN or password created on Vendor Authorization.',
+                action: 'Enter your four-digit vending PIN.',
                 code: e.code,
             };
         }
@@ -231,7 +231,7 @@ function confirm() {
 }
 
 async function submitAuthorization() {
-    if (!meter.value || !preview.value || !authorization.value) return;
+    if (!meter.value || !preview.value || !/^\d{4}$/.test(authorization.value)) return;
     if (isLocked.value) {
         authError.value = `Too many incorrect attempts. Try again in ${lockSecondsLeft.value}s.`;
         return;
@@ -473,11 +473,11 @@ function downloadResultReceipt() {
     <ConfirmDialog
       v-model:open="authOpen"
       title="Authorize remote send"
-      description="Enter your vendor PIN or password before dispatching a token to the meter."
+      description="Enter your four-digit vending PIN."
       confirm-label="Dispatch token"
       tone="warn"
       :loading="loading"
-      :disable-confirm="!authorization || isLocked"
+      :disable-confirm="!/^\d{4}$/.test(authorization) || isLocked"
       @confirm="submitAuthorization"
     >
       <label class="bw-label">Vendor authorization</label>
@@ -485,9 +485,12 @@ function downloadResultReceipt() {
         class="bw-input bw-mono cd-input-target"
         v-model="authorization"
         type="password"
-        autocomplete="off"
+        inputmode="numeric"
+        maxlength="4"
+        pattern="[0-9]{4}"
+        autocomplete="one-time-code"
         :disabled="isLocked"
-        placeholder="PIN or password"
+        placeholder="••••"
       />
       <p v-if="isLocked" class="bw-alert danger" style="margin-top: var(--s-2)">
         Too many incorrect attempts. Try again in {{ lockSecondsLeft }}s.

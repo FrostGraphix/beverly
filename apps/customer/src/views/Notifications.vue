@@ -22,6 +22,16 @@ interface Preferences {
     email:  Record<string, boolean>;
     in_app: Record<string, boolean>;
 }
+interface PreferenceChannel {
+    channel: 'sms' | 'email' | 'in_app';
+    label: string;
+    required?: boolean;
+}
+interface PreferenceGroup {
+    label: string;
+    key: string;
+    channels: PreferenceChannel[];
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -46,7 +56,7 @@ const filteredItems = computed(() => items.value.filter((item) =>
 const prefs       = ref<Preferences>({
     sms:    { token_purchased: false, wallet_funded: true, admin_announcement: false },
     email:  { token_purchased: false, wallet_funded: false, admin_announcement: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
 });
 const savingPrefs = ref(false);
 const prefsError  = ref('');
@@ -63,6 +73,7 @@ const NOTIF_ICON: Record<string, string> = {
     low_balance:       'M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
     payment_failed:    'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M12 3C6.48 3 2 7.48 2 12s4.48 9 10 9 10-4.48 10-10S17.52 3 12 3z',
     meter_order_update:'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
+    meter_link_update: 'M13 2 4 14h7l-1 8 10-13h-7l1-9z',
     wallet_activity:    'M2 6h20v14H2zM2 10h20M16 14h2',
 };
 
@@ -75,6 +86,7 @@ const NOTIF_COLOR: Record<string, string> = {
     low_balance:       'oklch(78% 0.16 75)',
     payment_failed:    'oklch(60% 0.22 25)',
     meter_order_update:'oklch(70% 0.15 220)',
+    meter_link_update: 'var(--brand)',
     wallet_activity:    'var(--brand)',
 };
 
@@ -88,7 +100,7 @@ function fmtDate(iso: string) {
     return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
 }
 
-const PREF_GROUPS = [
+const PREF_GROUPS: PreferenceGroup[] = [
     {
         label: 'Token purchases',
         key: 'token_purchased',
@@ -144,6 +156,14 @@ const PREF_GROUPS = [
         channels: [
             { channel: 'in_app' as const, label: 'In-app' },
             { channel: 'sms'    as const, label: 'SMS'    },
+        ],
+    },
+    {
+        label: 'Meter link decisions',
+        key: 'meter_link_update',
+        channels: [
+            { channel: 'in_app' as const, label: 'In-app · required', required: true },
+            { channel: 'email'  as const, label: 'Email'  },
         ],
     },
     {
@@ -373,7 +393,8 @@ onMounted(async () => {
               <span class="pref-toggle-label">{{ ch.label }}</span>
               <input
                 type="checkbox"
-                :checked="prefs[ch.channel][group.key] ?? false"
+                :checked="ch.required || (prefs[ch.channel][group.key] ?? false)"
+                :disabled="ch.required"
                 @change="prefs[ch.channel][group.key] = ($event.target as HTMLInputElement).checked"
               />
             </label>

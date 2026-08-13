@@ -1,27 +1,11 @@
 "use strict";
 
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const accepted = new Map([
-  ["@vitejs/plugin-vue2", "Vue 2 bridge is required until framework migration."],
-  ["vue", "Vue 2 migration is tracked separately."],
-  ["vuex", "Vuex 3 remains coupled to Vue 2."],
-  ["vite", "Patched fix requires Vite major upgrade."],
-  ["esbuild", "Transitive Vite dev-server advisory."],
-  ["echarts", "The affected Lines-series tooltip path is prohibited by the source guard."],
-  ["exceljs", "The current upstream release retains a transitive uuid advisory; npm offers only an incompatible downgrade."],
-  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."],
-  ["archiver", "Transitive build packaging utility dependency."],
-  ["archiver-utils", "Transitive build packaging utility dependency."],
-  ["brace-expansion", "Transitive glob tooling dependency."],
-  ["glob", "Transitive build tooling dependency."],
-  ["minimatch", "Transitive glob tooling dependency."],
-  ["postcss", "Transitive CSS bundler tool dependency."],
-  ["readdir-glob", "Transitive file scanner dependency."],
-  ["rimraf", "Transitive build cleanup utility dependency."],
-  ["zip-stream", "Transitive build packaging utility dependency."]
+  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."]
 ]);
 
 function sourceFiles(root) {
@@ -44,17 +28,27 @@ function assertNoVulnerableEchartsLinesSeries() {
 
 function readAudit() {
   try {
-    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-    return JSON.parse(execSync(`${npm} audit --json`, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+    const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const command = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : pnpm;
+    const args = process.platform === "win32"
+      ? ["/d", "/s", "/c", "pnpm audit --prod --json"]
+      : ["audit", "--prod", "--json"];
+    return JSON.parse(execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }));
   } catch (error) {
-    if (error.stdout) return JSON.parse(error.stdout);
+    if (error.stdout) return JSON.parse(String(error.stdout));
     throw error;
   }
 }
 
 assertNoVulnerableEchartsLinesSeries();
 const report = readAudit();
-const vulnerabilities = Object.values(report.vulnerabilities || {});
+const vulnerabilities = Object.values(report.advisories || {}).map((item) => ({
+  name: item.module_name,
+  severity: item.severity
+}));
 const unknown = vulnerabilities.filter((item) => !accepted.has(item.name));
 const severe = unknown.filter((item) => ["high", "critical"].includes(item.severity));
 

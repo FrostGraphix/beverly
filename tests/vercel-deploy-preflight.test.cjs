@@ -9,15 +9,22 @@ const root = path.join(__dirname, "..");
 const importScript = fs.readFileSync(path.join(root, "tools", "import-vercel-env.ps1"), "utf8");
 
 const teamId = "team_QaH3UbO8a73beiWz5LmJc5k4";
-const result = checkVercelDeployPreflight({ env: { VERCEL_TEAM_ID: teamId } });
+const linkedProject = { orgId: teamId };
+const result = checkVercelDeployPreflight({
+  env: { VERCEL_TEAM_ID: teamId },
+  vercelProject: linkedProject
+});
 assert.strictEqual(result.ok, true, result.failures.join("; "));
 
-const missingTeam = checkVercelDeployPreflight({ env: {} });
+const missingTeam = checkVercelDeployPreflight({ env: {}, vercelProject: linkedProject });
 assert.strictEqual(missingTeam.ok, false);
 assert.match(missingTeam.failures.join("\n"), /July 2 failed because a non-member actor/);
 assert.match(missingTeam.failures.join("\n"), new RegExp(teamId));
 
-const wrongScope = checkVercelDeployPreflight({ env: { VERCEL_SCOPE: "frostgraphix" } });
+const wrongScope = checkVercelDeployPreflight({
+  env: { VERCEL_SCOPE: "frostgraphix" },
+  vercelProject: linkedProject
+});
 assert.strictEqual(wrongScope.ok, false);
 assert.match(wrongScope.failures.join("\n"), new RegExp(teamId));
 

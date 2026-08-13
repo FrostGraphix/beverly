@@ -22,8 +22,12 @@ function checkVercelDeployPreflight(options = {}) {
   const env = options.env || process.env;
   const packageJson = readJson("package.json", {});
   const vercelJson = readJson("vercel.json", {});
-  const vercelProject = readJson(".vercel/project.json", null);
-  const vercelRepo = readJson(".vercel/repo.json", null);
+  const vercelProject = Object.hasOwn(options, "vercelProject")
+    ? options.vercelProject
+    : readJson(".vercel/project.json", null);
+  const vercelRepo = Object.hasOwn(options, "vercelRepo")
+    ? options.vercelRepo
+    : readJson(".vercel/repo.json", null);
   const failures = [];
   const warnings = [];
 

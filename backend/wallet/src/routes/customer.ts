@@ -41,6 +41,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { env } from '../config/env.js';
+import { resolveFundingCallbackUrl, resolveMeterOrderCallbackUrl } from '../config/funding-callbacks.js';
 import { adminClient } from '../db/supabase.js';
 import {
     requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
@@ -50,7 +51,7 @@ import {
 } from '../services/customer-kyc.js';
 import {
     customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
-    linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases, sendTokenSmsToCustomer,
+    linkMeter, unlinkMeter, listCustomerMeters, listCustomerMeterLinkHistory, listCustomerPurchases, sendTokenSmsToCustomer,
     CustomerPurchaseError,
 } from '../services/customer-purchase.js';
 import { findWalletByOwner } from '../services/wallets.js';
@@ -85,6 +86,12 @@ import {
     sendPasswordRecoveryEmail, confirmPasswordReset,
     EmailOtpError,
 } from '../services/customer-email-otp.js';
+import {
+    customerVendPinStatus,
+    setCustomerVendPin,
+    verifyCustomerVendPin,
+    CustomerVendPinError,
+} from '../services/customer-vend-pin.js';
 
 function customerAuthStatus(code: string): number {
     return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
@@ -168,6 +175,7 @@ function verifiedAt(kycData: any): string | null {
 async function shapeCustomerProfile(row: any) {
     const customerId = row?.id ?? null;
     const wallet = customerId ? await findWalletByOwner('customer', customerId).catch(() => null) : null;
+    const pinStatus = customerId ? await customerVendPinStatus(customerId).catch(() => ({ configured: false })) : { configured: false };
     return {
         ...row,
         customer_code: profileCode('CUS', customerId),
@@ -179,6 +187,7 @@ async function shapeCustomerProfile(row: any) {
         site: row?.kyc_data?.tier1?.state ?? null,
         kyc_approved_date: verifiedAt(row?.kyc_data),
         kyc_expiry: null,
+        vend_pin_configured: pinStatus.configured,
     };
 }
 
@@ -537,6 +546,51 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { meters };
     });
 
+    fastify.get('/vend-pin/status', { preHandler: fastify.requireCustomer() }, async (req) => {
+        return customerVendPinStatus(req.actor!.customerId!);
+    });
+
+    fastify.post('/vend-pin', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const parsed = z.object({ pin: z.string().regex(/^\d{4}$/) }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({ error: 'invalid_vend_pin', message: 'Use exactly four digits.' });
+        }
+        try {
+            return await setCustomerVendPin({
+                customerId: req.actor!.customerId!,
+                authUserId: req.actor!.userId,
+                pin: parsed.data.pin,
+                ip: req.ip,
+                userAgent: req.headers['user-agent'] as string | undefined,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code.endsWith('_failed') ? 500 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
+    fastify.get('/meters/history', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const parsed = z.object({
+            limit: z.coerce.number().int().min(1).max(100).default(25),
+            offset: z.coerce.number().int().min(0).default(0),
+        }).safeParse(req.query ?? {});
+        if (!parsed.success) return reply.code(400).send({ error: 'validation_error', message: parsed.error.message });
+        try {
+            return await listCustomerMeterLinkHistory(
+                req.actor!.customerId!, parsed.data.limit, parsed.data.offset,
+            );
+        } catch (error) {
+            if (error instanceof CustomerPurchaseError) {
+                return reply.code(error.code === 'history_unavailable' ? 503 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
     fastify.post('/meters', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
         const { meter_id, nickname, meter_type } = req.body as {
             meter_id: string;
@@ -548,7 +602,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname, meter_type);
             return { meter };
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'meter_approval_unavailable' ? 503 : 422).send({ error: e.code, message: e.message });
             throw e;
         }
     });
@@ -638,7 +692,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerUserId: req.actor!.userId,
                 customerEmail: (cu as any).email,
                 amountMinor: amount_minor,
-                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/wallet/fund?payment=return`,
+                callbackUrl: resolveFundingCallbackUrl(
+                    'customer', env.CUSTOMER_FUNDING_CALLBACK_URL, env.CUSTOMER_APP_URL,
+                ),
             });
             await completeWalletIdempotency(scope, idempotencyKey, result).catch((error) => {
                 req.log.error({ error, scope }, 'Paystack initialization idempotency completion failed');
@@ -679,27 +735,50 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const preview = await previewCustomerPurchase(meter_id, amount_minor, req.actor!.customerId!);
             return preview;
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'meter_approval_unavailable' ? 503 : 422).send({ error: e.code, message: e.message });
             throw e;
         }
     });
 
     fastify.post('/purchase', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { meter_id, amount_minor, mode, idempotency_key } = req.body as {
-            meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
-        };
-        if (!meter_id || !amount_minor || !mode || !idempotency_key) {
-            return reply.code(400).send({ error: 'missing_fields' });
+        if (!/^\d{4}$/.test(String((req.body as { pin?: unknown } | null)?.pin ?? ''))) {
+            return reply.code(409).send({ error: 'vend_pin_required', message: 'Enter your four-digit vending PIN.' });
         }
-        if (!['wallet', 'direct_pay'].includes(mode)) {
-            return reply.code(400).send({ error: 'invalid_mode', message: 'mode must be wallet or direct_pay.' });
+        const parsed = z.object({
+            meter_id: z.string().trim().min(1),
+            amount_minor: z.number().int().min(50000),
+            mode: z.literal('wallet').default('wallet'),
+            idempotency_key: z.string().uuid(),
+            pin: z.string().regex(/^\d{4}$/),
+        }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({
+                error: 'wallet_funding_required',
+                message: 'Token purchases use wallet funds. Fund your wallet before buying.',
+            });
         }
+        const { meter_id, amount_minor, mode, idempotency_key, pin } = parsed.data;
 
         const customerId = req.actor!.customerId!;
         const clientIp   = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
                          ?? req.ip ?? null;
         const userAgent  = req.headers['user-agent'] ?? null;
+
+        try {
+            await verifyCustomerVendPin({
+                customerId,
+                authUserId: req.actor!.userId,
+                pin,
+                ip: clientIp,
+                userAgent,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code === 'vend_pin_required' ? 409 : error.code === 'vend_pin_locked' ? 429 : 401)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
 
         // ── Fraud assessment ──────────────────────────────────────────────────
         const assessment = await assessPurchase({
@@ -739,12 +818,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerId,
                 customerUserId: req.actor!.userId,
                 customerName:   (cu as any)?.full_name ?? null,
-                customerEmail:  (cu as any)?.email ?? null,
                 meterId:        meter_id.trim().toUpperCase(),
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
-                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/buy-token?payment=return`,
             });
             // Link assessment to the resulting purchase order
             if (result.purchaseOrder?.id) {
@@ -757,6 +834,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
+                    : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -765,13 +843,40 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase/step-up-verify', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key } = req.body as {
-            challenge_id: string; otp: string;
-            meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
-        };
-        if (!challenge_id || !otp || !meter_id || !amount_minor || !mode || !idempotency_key) {
-            return reply.code(400).send({ error: 'missing_fields' });
+        if (!/^\d{4}$/.test(String((req.body as { pin?: unknown } | null)?.pin ?? ''))) {
+            return reply.code(409).send({ error: 'vend_pin_required', message: 'Enter your four-digit vending PIN.' });
+        }
+        const parsed = z.object({
+            challenge_id: z.string().uuid(),
+            otp: z.string().trim().min(6).max(12),
+            meter_id: z.string().trim().min(1),
+            amount_minor: z.number().int().min(50000),
+            mode: z.literal('wallet').default('wallet'),
+            idempotency_key: z.string().uuid(),
+            pin: z.string().regex(/^\d{4}$/),
+        }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({
+                error: 'wallet_funding_required',
+                message: 'Token purchases use wallet funds. Fund your wallet before buying.',
+            });
+        }
+        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key, pin } = parsed.data;
+
+        try {
+            await verifyCustomerVendPin({
+                customerId: req.actor!.customerId!,
+                authUserId: req.actor!.userId,
+                pin,
+                ip: req.ip,
+                userAgent: req.headers['user-agent'] as string | undefined,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code === 'vend_pin_required' ? 409 : error.code === 'vend_pin_locked' ? 429 : 401)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
         }
 
         try {
@@ -800,12 +905,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerId,
                 customerUserId: req.actor!.userId,
                 customerName:   (cu as any)?.full_name ?? null,
-                customerEmail:  (cu as any)?.email ?? null,
                 meterId:        meter_id.trim().toUpperCase(),
                 amountMinor:    amount_minor,
                 mode,
                 clientIdempotencyKey: idempotency_key,
-                callbackUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/buy-token?payment=return`,
             });
             void refreshCustomerBaseline(customerId);
             return result;
@@ -814,6 +917,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
+                    : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -922,7 +1026,10 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
-                callbackBaseUrl: `${env.CUSTOMER_APP_URL.replace(/\/+$/, '')}/meter-orders`,
+                callbackBaseUrl: resolveMeterOrderCallbackUrl(
+                    env.CUSTOMER_METER_ORDER_CALLBACK_URL,
+                    env.CUSTOMER_APP_URL,
+                ),
                 idempotencyKey,
             });
             await logAction({
@@ -1472,7 +1579,8 @@ const customer: FastifyPluginAsync = async (fastify) => {
             adminClient
                 .from('customer_meters')
                 .select('meter_id')
-                .eq('customer_id', customerId),
+                .eq('customer_id', customerId)
+                .eq('status', 'approved'),
             adminClient
                 .from('purchase_orders')
                 .select('meter_id')

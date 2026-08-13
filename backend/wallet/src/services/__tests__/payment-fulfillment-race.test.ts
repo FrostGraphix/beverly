@@ -76,10 +76,13 @@ vi.mock('../../db/supabase.js', () => ({
 }));
 
 vi.mock('../../adapters/paystack.js', () => ({
+    verifiedPrincipalAmount: (result: { amount: number; requestedAmount?: number }) => result.requestedAmount ?? result.amount,
     verifyTransaction: async (reference: string) => ({
-        status: reference.includes('pending') ? 'pending' : 'success',
+        status: reference.includes('abandoned') ? 'abandoned' : reference.includes('pending') ? 'pending' : 'success',
         reference: reference.includes('wrong-reference') ? 'different-reference' : reference,
-        amount: 500_00,
+        amount: reference.includes('fee-bearing') ? 507_62 : 500_00,
+        requestedAmount: reference.includes('fee-bearing') ? 500_00 : undefined,
+        fees: reference.includes('fee-bearing') ? 7_62 : undefined,
         currency: reference.includes('wrong-currency') ? 'USD' : 'NGN',
         channel: 'card',
         paid_at: '2026-07-15T10:00:00.000Z',
@@ -113,6 +116,7 @@ vi.mock('../audit.js', () => ({ logAction: async () => undefined }));
 vi.mock('../notifications.js', () => ({
     notifyWalletFunded: async () => undefined,
     notifyTokenPurchased: async () => undefined,
+    notifyPaymentFailed: async () => undefined,
 }));
 vi.mock('../customer-purchase.js', () => ({
     sendTokenSmsToCustomer: async () => undefined,
@@ -183,6 +187,24 @@ describe('paystack fulfillment race safety', () => {
         expect(store.ledgerKeys.size).toBe(0);
         expect(store.txs['tx-1'].status).toBe('requires_review');
         expect(store.txs['tx-1'].metadata?.fulfillment_completed_at).toBeUndefined();
+    });
+
+    it('fulfills when Paystack adds payer fees above the requested principal', async () => {
+        store.txs['tx-1'].gateway_reference = 'ref-fee-bearing';
+        const result = await processPaystackChargeSuccess('ref-fee-bearing', 'webhook');
+        expect(result.status).toBe('fulfilled');
+        expect(store.ledgerKeys.get('customer_fund.tx-1.paystack.credit')).toBe(1);
+        expect(store.txs['tx-1'].status).toBe('succeeded');
+        expect(store.txs['tx-1'].metadata?.paystack?.amount).toBe(507_62);
+        expect(store.txs['tx-1'].metadata?.paystack?.requestedAmount).toBe(500_00);
+    });
+
+    it('closes an abandoned payment', async () => {
+        store.txs['tx-1'].gateway_reference = 'ref-abandoned';
+        const result = await processPaystackChargeSuccess('ref-abandoned', 'callback');
+        expect(result.status).toBe('failed');
+        expect(store.txs['tx-1'].status).toBe('failed');
+        expect(store.ledgerKeys.size).toBe(0);
     });
 
     it('blocks on reference mismatch without touching the ledger', async () => {

@@ -1,0 +1,10 @@
+# Default ownership for production changes.
+* @FrostGraphix
+
+# Security-critical financial and identity boundaries.
+/backend/wallet/ @FrostGraphix
+/supabase/migrations/ @FrostGraphix
+/apps/admin/ @FrostGraphix
+/.github/workflows/ @FrostGraphix
+/vercel.json @FrostGraphix
+/ARCHITECTURE.md @FrostGraphix

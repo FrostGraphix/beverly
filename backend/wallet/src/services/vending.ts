@@ -557,6 +557,15 @@ export interface CreateReceiptInput {
 
 export async function createReceipt(input: CreateReceiptInput) {
     const receiptNumber = (input.payload.receiptNumber as string) ?? shortReceipt(input.purchaseOrderId);
+    const { data: existing, error: lookupError } = await adminClient
+        .from('receipts')
+        .select('*')
+        .eq('purchase_order_id', input.purchaseOrderId)
+        .maybeSingle();
+    if (lookupError) throw new VendingError(lookupError.message, 'receipt_lookup_failed');
+    if (existing) {
+        return existing as { id: string; receipt_number: string; payload: Record<string, unknown> };
+    }
     const { data, error } = await adminClient.from('receipts').insert({
         purchase_order_id: input.purchaseOrderId,
         receipt_number: receiptNumber,

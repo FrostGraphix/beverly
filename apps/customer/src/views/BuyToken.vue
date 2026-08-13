@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
-import { api, ApiError, redirectToPayment } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useAuthStore } from '../stores/auth';
@@ -21,7 +21,6 @@ const amountMinor = computed(() => Math.round(parseFloat(amountRaw.value || '0')
 
 // Step 3 — preview
 const preview  = ref<any>(null);
-const mode     = ref<'wallet' | 'direct_pay'>('wallet');
 const walletBal = ref(0);
 const loadingPreview = ref(false);
 
@@ -32,6 +31,7 @@ const error    = ref<{ title: string; message: string; action?: string; code?: s
 const notice   = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const copied   = ref(false);
 const remoteSending = ref(false);
+const vendPin = ref('');
 
 // Step-up auth
 const stepUpRequired  = ref(false);
@@ -45,8 +45,9 @@ let pendingPurchaseParams: {
     meter_id: string;
     meter_type?: 'single_phase' | 'three_phase';
     amount_minor: number;
-    mode: 'wallet' | 'direct_pay';
+    mode: 'wallet';
     idempotency_key: string;
+    pin: string;
 } | null = null;
 
 function meterTypeLabel(type?: string | null) {
@@ -71,12 +72,15 @@ const remoteSendLabel = computed(() => {
 function describeApiError(e: unknown, fallback: string) {
     if (e instanceof ApiError) {
         if (e.code === 'amount_too_low') return { title: 'Amount too low', message: e.message, action: 'Choose at least ₦500.', code: e.code };
-        if (e.code === 'insufficient_balance') return { title: 'Insufficient wallet balance', message: e.message, action: 'Top up or pay with card.', code: e.code };
+        if (e.code === 'insufficient_balance') return { title: 'Insufficient wallet balance', message: e.message, action: 'Fund your wallet before buying a token.', code: e.code };
         if (['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(String(e.code))) {
             return { title: 'Wallet cannot buy token', message: e.message, action: 'Contact Beverly support.', code: e.code };
         }
         if (e.code === 'meter_not_approved') return { title: 'Meter awaiting approval', message: e.message, action: 'You can buy a token once an admin approves this meter.', code: e.code };
         if (e.code === 'meter_not_linked' || e.code === 'meter_rejected') return { title: 'Meter not available', message: e.message, action: 'Check My Meters for this meter\'s status.', code: e.code };
+        if (e.code === 'vend_pin_required') return { title: 'Vending PIN required', message: e.message, action: 'Create your four-digit PIN.', code: e.code };
+        if (e.code === 'invalid_vend_pin') return { title: 'Incorrect vending PIN', message: e.message, action: 'Check your PIN and retry.', code: e.code };
+        if (e.code === 'vend_pin_locked') return { title: 'Vending PIN locked', message: e.message, action: 'Wait fifteen minutes before retrying.', code: e.code };
         if (e.code === 'remote_token_rejected') return { title: 'Remote send rejected', message: e.message, action: 'The token remains visible. Enter it manually.', code: e.code };
         if (e.code === 'remote_send_metadata_missing') return { title: 'Remote send unavailable', message: e.message, action: 'The token remains valid for manual entry.', code: e.code };
         if (e.code === 'request_timeout') return { title: 'Request timed out', message: e.message, action: 'Check your network and retry.', code: e.code };
@@ -130,7 +134,6 @@ async function goToPreview() {
             meter_id: selMeter.value.meter_id,
             amount_minor: amountMinor.value,
         });
-        mode.value = walletBal.value >= Number(preview.value.amountMinor ?? 0) ? 'wallet' : 'direct_pay';
         step.value = 3;
     } catch (e: any) {
         error.value = describeApiError(e, e?.message ?? 'Could not load preview.');
@@ -138,14 +141,15 @@ async function goToPreview() {
 }
 
 async function purchase() {
-    if (!selMeter.value || !preview.value) return;
+    if (!selMeter.value || !preview.value || !/^\d{4}$/.test(vendPin.value)) return;
     loading.value = true; error.value = null; notice.value = null;
     const params = {
         meter_id:        selMeter.value.meter_id,
         meter_type:      selMeter.value.meter_type,
         amount_minor:    amountMinor.value,
-        mode:            mode.value as 'wallet' | 'direct_pay',
+        mode:            'wallet' as const,
         idempotency_key: crypto.randomUUID(),
+        pin: vendPin.value,
     };
     try {
         const r = await api.post<any>('/api/v1/customer/purchase', params);
@@ -161,10 +165,6 @@ async function purchase() {
             return;
         }
 
-        if (mode.value === 'direct_pay' && r.authorizationUrl) {
-            redirectToPayment(r.authorizationUrl);
-            return;
-        }
         result.value = r;
         notice.value = {
             tone: 'success',
@@ -188,10 +188,6 @@ async function submitStepUp() {
         });
         stepUpRequired.value = false;
         pendingPurchaseParams = null;
-        if (pendingPurchaseParams === null && r.authorizationUrl) {
-            redirectToPayment(r.authorizationUrl);
-            return;
-        }
         result.value = r;
         notice.value = {
             tone: 'success',
@@ -229,6 +225,7 @@ function reset() {
     step.value = 1; result.value = null; preview.value = null;
     amountRaw.value = ''; error.value = null; notice.value = null;
     remoteSending.value = false; copied.value = false;
+    vendPin.value = '';
 }
 
 function resultReceiptRow() {
@@ -444,20 +441,28 @@ async function remoteSendGeneratedToken() {
           </div>
           <hr style="border:none; border-top:1px solid var(--border)">
           <div class="bw-row" style="justify-content:space-between">
-            <span class="bw-muted" style="font-size: var(--t-sm)">Pay with</span>
-            <div class="bw-row" style="gap: var(--s-2)">
-              <button :class="['bw-badge', mode === 'wallet' ? 'success' : 'neutral']"
-                      style="cursor:pointer; border:none"
-                      :disabled="walletBal < preview.amountMinor"
-                      @click="mode = 'wallet'">Wallet ({{ naira(walletBal) }})</button>
-              <button :class="['bw-badge', mode === 'direct_pay' ? 'info' : 'neutral']"
-                      style="cursor:pointer; border:none"
-                      @click="mode = 'direct_pay'">Card</button>
-            </div>
+            <span class="bw-muted" style="font-size: var(--t-sm)">Wallet balance</span>
+            <strong class="bw-money">{{ naira(walletBal) }}</strong>
           </div>
-          <div v-if="mode === 'wallet' && walletBal < preview.amountMinor" class="bw-alert warn" style="font-size: var(--t-xs)">
-            Insufficient wallet balance.
-            <router-link to="/wallet/fund" style="color:var(--brand); font-weight:600">Top up →</router-link>
+          <div v-if="walletBal < preview.amountMinor" class="bw-alert warn" style="font-size: var(--t-xs)">
+            Fund wallet before purchasing.
+            <span class="bw-muted">Add {{ naira(preview.amountMinor - walletBal) }} more.</span>
+          </div>
+          <div v-else class="vend-pin-confirm">
+            <label class="bw-label" for="purchase-vend-pin">Vending PIN</label>
+            <input
+              id="purchase-vend-pin"
+              v-model="vendPin"
+              class="bw-input bw-mono"
+              type="password"
+              inputmode="numeric"
+              maxlength="4"
+              pattern="[0-9]{4}"
+              autocomplete="one-time-code"
+              placeholder="••••"
+              @keyup.enter="purchase"
+            />
+            <small class="bw-muted">Four digits confirm payment.</small>
           </div>
         </div>
       </div>
@@ -469,10 +474,13 @@ async function remoteSendGeneratedToken() {
       </div>
       <div class="bw-row" style="gap: var(--s-3)">
         <button class="bw-btn" style="flex:1; justify-content:center" @click="step = 2">Back</button>
-        <button class="bw-btn primary" style="flex:2; justify-content:center"
-                :disabled="loading || (mode === 'wallet' && walletBal < preview.amountMinor)"
-                @click="purchase">
-          {{ loading ? 'Processing…' : mode === 'direct_pay' ? 'Pay with Card →' : 'Buy Token' }}
+        <router-link v-if="walletBal < preview.amountMinor" to="/wallet/fund"
+                     class="bw-btn primary" style="flex:2; justify-content:center">
+          Fund wallet first
+        </router-link>
+        <button v-else class="bw-btn primary" style="flex:2; justify-content:center"
+                :disabled="loading || !/^\d{4}$/.test(vendPin)" @click="purchase">
+          {{ loading ? 'Processing…' : 'Buy Token' }}
         </button>
       </div>
     </template>
@@ -574,6 +582,16 @@ async function remoteSendGeneratedToken() {
 .buy-token-actions .bw-btn {
   min-width: 0;
   justify-content: center;
+}
+.vend-pin-confirm {
+  display: grid;
+  gap: var(--s-2);
+  padding-top: var(--s-2);
+}
+.vend-pin-confirm .bw-input {
+  text-align: center;
+  font-size: var(--t-xl);
+  letter-spacing: 0.35em;
 }
 
 @media (max-width: 520px) {

@@ -10,7 +10,13 @@ export const PAYMENT_STATUS = {
 export const PAYMENT_RECONCILABLE_STATUSES = [
     PAYMENT_STATUS.INITIATED,
     PAYMENT_STATUS.PENDING,
+    PAYMENT_STATUS.REQUIRES_REVIEW,
 ] as const;
+
+export const PAYMENT_AUTORETRY_REVIEW_REASONS = new Set([
+    'payment_amount_mismatch',
+    'token_delivery_failed',
+]);
 
 export const PAYMENT_SUCCEEDED_STATUSES = [
     PAYMENT_STATUS.SUCCEEDED,
