@@ -457,30 +457,38 @@ async function permissionsForRole(role: string): Promise<Set<string>> {
 async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     const key = adminRouteKey(req);
     if (OPEN_ADMIN_ROUTES.has(key)) return true;
-    const permission = ADMIN_ROUTE_PERMISSIONS[key];
-    if (!permission) {
-        reply.code(403).send({
-            error: 'permission_not_mapped',
-            message: `No access policy is mapped for ${key}.`,
-        });
+    if (!req.actor) {
+        if (!reply.sent) reply.code(401).send({ error: 'unauthorized', message: 'Bearer token required.' });
         return false;
     }
-    const grants = await permissionsForRole(req.actor!.role);
+    const permission = ADMIN_ROUTE_PERMISSIONS[key];
+    if (!permission) {
+        if (!reply.sent) {
+            reply.code(403).send({
+                error: 'permission_not_mapped',
+                message: `No access policy is mapped for ${key}.`,
+            });
+        }
+        return false;
+    }
+    const grants = await permissionsForRole(req.actor.role);
     if (!grants.has(permission)) {
         await logAction({
-            actorUserId: req.actor!.userId,
+            actorUserId: req.actor.userId,
             actorType: 'staff',
-            actorRole: req.actor!.role,
+            actorRole: req.actor.role,
             action: 'access.permission_denied',
             targetType: 'admin_route',
             targetId: key,
             metadata: { permission },
         }).catch(() => undefined);
-        reply.code(403).send({
-            error: 'permission_denied',
-            message: `Missing permission: ${permission}.`,
-            details: { permission },
-        });
+        if (!reply.sent) {
+            reply.code(403).send({
+                error: 'permission_denied',
+                message: `Missing permission: ${permission}.`,
+                details: { permission },
+            });
+        }
         return false;
     }
     return true;
@@ -654,6 +662,7 @@ function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
     fastify.addHook('preHandler', async (req, reply) => {
+        if (reply.sent) return undefined;
         const pathname = req.routeOptions?.url ?? req.url.split('?')[0] ?? '';
         if (pathname.startsWith('/dev/')) {
             if (!env.DEV_CONSOLE_ENABLED) {
@@ -821,7 +830,9 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/logout', async (req) => {
-        await revokePortalSession(req.portalSessionKey);
+        await revokePortalSession(req.portalSessionKey).catch((err) => {
+            req.log.warn({ err }, 'failed to revoke portal session during logout');
+        });
         return { ok: true };
     });
 
