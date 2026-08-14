@@ -71,6 +71,7 @@ function customerAuthStatus(code: string): number {
         : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
         : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
         : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
+        : code === 'auth_not_configured' || code === 'auth_upstream_unreachable' ? 503
         : code === 'customer_not_found' ? 404
         : code === 'email_in_use' || code === 'phone_in_use' ? 409
         : code === 'invalid_credentials' ? 401

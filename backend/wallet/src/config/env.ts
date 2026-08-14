@@ -88,7 +88,14 @@ const parsed = schema.safeParse(process.env);
 
 if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  • ${i.path.join('.')}: ${i.message}`).join('\n');
-    console.error(`Env validation failed:\n${issues}`);
+    const message = `Env validation failed:\n${issues}`;
+    console.error(message);
+    // In a serverless invocation (Vercel), a hard process.exit silently kills the
+    // instance and produces an opaque 500. Throw instead so the misconfiguration
+    // is surfaced in the function logs. A long-running server still fails fast.
+    if (process.env.VERCEL || process.env.SERVERLESS === '1' || process.env.SERVERLESS === 'true') {
+        throw new Error(message);
+    }
     process.exit(1);
 }
 

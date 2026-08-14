@@ -366,14 +366,23 @@ export async function requestOtp(
 }
 
 async function emailPasswordToken(email: string, password: string): Promise<{ accessToken: string; userId: string }> {
-    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-    });
+    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+        throw new AuthError('Authentication is not configured. Contact support.', 'auth_not_configured');
+    }
+    let res: Response;
+    try {
+        res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: {
+                apikey: env.SUPABASE_ANON_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+        });
+    } catch {
+        // Network / DNS failure reaching Supabase — surface a clean 503 instead of a raw 500.
+        throw new AuthError('Authentication service is temporarily unavailable. Try again shortly.', 'auth_upstream_unreachable');
+    }
     const body = await res.json().catch(() => ({})) as {
         access_token?: unknown;
         user?: { id?: unknown };
