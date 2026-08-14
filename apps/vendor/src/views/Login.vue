@@ -2,13 +2,10 @@
 import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useVendorAuthStore } from '../stores/auth';
-import { API_BASE } from '../lib/api';
-import { PORTAL_URLS } from '../lib/portals';
+import { api, ApiError } from '../lib/api';
 import VendorAuthShell from '../components/VendorAuthShell.vue';
 
 const REMEMBERED_VENDOR_EMAIL_KEY = 'beverly.vendor.remembered_email';
-const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const router = useRouter();
 const route  = useRoute();
@@ -37,50 +34,33 @@ async function submit() {
         error.value = 'Email and password are required.';
         return;
     }
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        error.value = 'Authentication is not configured. Contact Beverly support.';
-        return;
-    }
     loading.value = true;
     error.value   = null;
     try {
-        const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY },
-            body: JSON.stringify({ email: normalizedEmail, password: password.value }),
-        });
-        const tokData = await tokRes.json();
-        if (!tokRes.ok) {
-            error.value = tokData.error_description ?? tokData.msg ?? 'Sign-in failed.';
-            return;
-        }
-        const accessToken: string = tokData.access_token;
-        if (!accessToken) {
-            error.value = 'Sign-in response was incomplete. Try again.';
-            return;
-        }
+        const r = await api.post<{ access_token: string; vendor: any }>(
+            '/api/v1/vendor/auth/email/login',
+            { email: normalizedEmail, password: password.value },
+        );
 
-        const meRes = await fetch(`${API_BASE}/api/v1/vendor/me`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (!meRes.ok) {
-            const j = await meRes.json().catch(() => ({}));
-            error.value =
-                meRes.status === 403 ? 'Access denied. This is not a vendor account.'
-                : meRes.status === 401 ? 'Session invalid or not linked to a vendor account.'
-                : (j?.message ?? 'Vendor lookup failed.');
-            return;
-        }
-        const me = await meRes.json();
-
-        auth.setSession(accessToken, me, rememberEmail.value);
+        auth.setSession(r.access_token, r.vendor, rememberEmail.value);
         if (rememberEmail.value) localStorage.setItem(REMEMBERED_VENDOR_EMAIL_KEY, normalizedEmail);
         else localStorage.removeItem(REMEMBERED_VENDOR_EMAIL_KEY);
-        await router.push(me.password_reset_required
+        await router.push(r.vendor.password_reset_required
             ? { path: '/password-change', query: { redirect: redirectTarget.value } }
             : redirectTarget.value);
-    } catch {
-        error.value = 'Network error. Please try again.';
+    } catch (e: any) {
+        if (e instanceof ApiError) {
+            error.value =
+                e.code === 'invalid_credentials' ? 'Invalid email or password.'
+                : e.code === 'not_vendor' ? 'Access denied. This is not a vendor account.'
+                : e.code === 'account_inactive' ? 'This vendor account is not active. Contact support.'
+                : e.code === 'org_not_approved' ? 'Your vendor organization is not approved yet.'
+                : e.code === 'auth_not_configured' || e.code === 'auth_upstream_unreachable'
+                    ? 'Authentication is temporarily unavailable. Try again shortly.'
+                : (e.message ?? 'Sign-in failed.');
+        } else {
+            error.value = 'Network error. Please try again.';
+        }
     } finally {
         loading.value = false;
     }
