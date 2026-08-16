@@ -3,9 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import LandingNav from './components/LandingNav.vue';
 import HeroSection from './components/HeroSection.vue';
+import PartnersStrip from './components/PartnersStrip.vue';
 import PortalChooser from './components/PortalChooser.vue';
 import FeatureGrid from './components/FeatureGrid.vue';
 import HowItWorks from './components/HowItWorks.vue';
+import TestimonialsSection from './components/TestimonialsSection.vue';
 import TrustSection from './components/TrustSection.vue';
 import CoverageSection from './components/CoverageSection.vue';
 import FaqSection from './components/FaqSection.vue';
@@ -67,9 +69,11 @@ watch(launchOpen, (v) => {
     <CompanyPage v-else-if="companyKind" :key="companyKind" :kind="companyKind" />
     <main v-else>
       <HeroSection @launch="launchOpen = true" />
+      <PartnersStrip />
       <PortalChooser />
       <FeatureGrid />
       <HowItWorks />
+      <TestimonialsSection />
       <TrustSection />
       <CoverageSection />
       <FaqSection />

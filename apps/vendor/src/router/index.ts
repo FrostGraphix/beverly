@@ -8,8 +8,10 @@ function portalHistoryBase(configuredBase: string): string {
 }
 
 const routes: RouteRecordRaw[] = [
-    { path: '/login',           name: 'login',          component: () => import('../views/Login.vue'),         meta: { guest: true } },
-    { path: '/password-change', name: 'password-change',component: () => import('../views/PasswordChange.vue'),meta: { auth: true, allowReset: true } },
+    { path: '/login',            name: 'login',           component: () => import('../views/Login.vue'),          meta: { guest: true } },
+    { path: '/forgot-password', name: 'forgot-password', component: () => import('../views/ForgotPassword.vue'), meta: { guest: true } },
+    { path: '/reset-password',  name: 'reset-password',  component: () => import('../views/ResetPassword.vue'),  meta: { guest: true } },
+    { path: '/password-change', name: 'password-change', component: () => import('../views/PasswordChange.vue'), meta: { auth: true, allowReset: true } },
     { path: '/vend-access',     name: 'vend-access',    component: () => import('../views/VendAccess.vue'),    meta: { auth: true } },
     { path: '/',                name: 'dashboard',      component: () => import('../views/Dashboard.vue'),     meta: { auth: true } },
     { path: '/wallet',          name: 'wallet',         component: () => import('../views/Wallet.vue'),        meta: { auth: true } },
@@ -28,6 +30,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/security',        name: 'security',       component: () => import('../views/Security.vue'),      meta: { auth: true } },
     { path: '/disputes',        name: 'disputes',       component: () => import('../views/Disputes.vue'),     meta: { auth: true } },
     { path: '/help',            name: 'help',           component: () => import('../views/Help.vue'),          meta: { auth: true } },
+    { path: '/error',           name: 'error',           component: () => import('../views/Error.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found',      component: () => import('../views/NotFound.vue') },
 ];
 

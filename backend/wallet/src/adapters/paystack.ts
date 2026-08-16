@@ -122,6 +122,82 @@ export function verifyWebhookSignature(rawBody: Buffer | string, signature: stri
     return crypto.timingSafeEqual(expected, received);
 }
 
+// ── Dedicated Virtual Accounts (DVA) ──
+
+export interface DvaBank {
+    name: string;
+    id: number;
+    slug: string;
+}
+
+export interface DvaResult {
+    bank: DvaBank;
+    account_name: string;
+    account_number: string;
+    assigned: boolean;
+    currency: string;
+    id: number;
+    integration: number;
+    active: boolean;
+    assignment?: {
+        integration: number;
+        assignee_id: number;
+        assignee_type: string;
+        expired: boolean;
+        account_type: string;
+    };
+}
+
+export interface CreateDvaOptions {
+    customerId: string;      // Paystack customer code or ID
+    preferredBank?: string;  // 'wema-bank' | 'titan-paystack' | 'access-bank' etc.
+}
+
+export async function createDedicatedAccount(opts: CreateDvaOptions): Promise<DvaResult> {
+    return call<DvaResult>('/dedicated_account', {
+        method: 'POST',
+        body: JSON.stringify({
+            customer:       opts.customerId,
+            preferred_bank: opts.preferredBank ?? 'wema-bank',
+        }),
+    });
+}
+
+export async function getDedicatedAccount(customerId: string): Promise<DvaResult[]> {
+    return call<DvaResult[]>(`/dedicated_account?customer=${encodeURIComponent(customerId)}`, {
+        method: 'GET',
+    });
+}
+
+export interface PaystackCustomerResult {
+    id: number;
+    customer_code: string;
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+    phone: string | null;
+    dedicated_account?: DvaResult | null;
+}
+
+export async function createPaystackCustomer(opts: {
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    metadata?: Record<string, unknown>;
+}): Promise<PaystackCustomerResult> {
+    return call<PaystackCustomerResult>('/customer', {
+        method: 'POST',
+        body: JSON.stringify({
+            email:      opts.email,
+            first_name: opts.firstName,
+            last_name:  opts.lastName,
+            phone:      opts.phone,
+            metadata:   opts.metadata,
+        }),
+    });
+}
+
 // ── Identity API ──
 export interface NinResult { first_name: string; last_name: string; phone: string; gender: string; date_of_birth: string; }
 export async function resolveNin(nin: string): Promise<NinResult> {

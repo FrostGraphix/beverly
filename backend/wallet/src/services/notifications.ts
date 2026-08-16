@@ -69,6 +69,31 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
 };
 
+export interface NotificationJobData {
+    notificationId?: string;
+    customerId: string;
+    type?: NotificationType;
+    title?: string;
+    body?: string;
+    subject?: string;
+    metadata?: Record<string, unknown>;
+    channels?: { sms?: boolean; email?: boolean; pushTokens?: string[] };
+    phone?: string;
+    email?: string;
+    firstName?: string;
+    pushTokens?: string[];
+    payload?: NotificationPayload;
+    inAppWritten?: boolean;
+}
+
+export function isSmsEnabled(prefs: PreferencesShape | null, type: NotificationType): boolean {
+    return prefEnabled(prefs, 'sms', type);
+}
+
+export function isEmailEnabled(prefs: PreferencesShape | null, type: NotificationType): boolean {
+    return prefEnabled(prefs, 'email', type);
+}
+
 function prefEnabled(prefs: PreferencesShape | null, channel: 'sms' | 'email' | 'in_app', type: NotificationType): boolean {
     const channelPrefs = prefs?.[channel] ?? PREF_DEFAULTS[channel];
     const key = type as string;

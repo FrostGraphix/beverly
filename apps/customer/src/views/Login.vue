@@ -140,7 +140,7 @@ async function submit() {
         <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
         <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Your session timed out for security. Please sign in again.
+      <span>Your session timed out for security. Please sign in again.</span>
     </div>
 
     <div v-if="passwordReset" class="success-banner" role="status">
@@ -236,6 +236,9 @@ async function submit() {
               {{ showPassword ? 'Hide' : 'Show' }}
             </button>
           </div>
+          <div class="forgot-row">
+            <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
+          </div>
         </div>
       </template>
 
@@ -284,6 +287,7 @@ async function submit() {
   border-radius: var(--r-md);
   font-size: var(--t-sm);
 }
+.session-banner span { flex: 1; }
 
 .success-banner {
   display: flex;
@@ -338,8 +342,10 @@ async function submit() {
   border: 0;
   background: transparent;
   color: var(--brand);
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
+  padding: 4px 6px;
 }
 .remember-row {
   display: inline-flex;
@@ -350,12 +356,11 @@ async function submit() {
 }
 
 .field-label {
-  font-size: var(--t-sm);
-  font-weight: 600;
-  color: var(--text-2);
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
   font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .phone-wrap {
@@ -405,16 +410,17 @@ async function submit() {
   display: flex;
   align-items: flex-start;
   gap: var(--s-2);
-  padding: var(--s-3) var(--s-3);
+  padding: var(--s-3);
   background: oklch(from var(--danger) l c h / 0.10);
   border: 1px solid oklch(from var(--danger) l c h / 0.25);
   border-radius: var(--r-md);
   font-size: var(--t-sm);
   color: var(--danger);
   line-height: 1.5;
+  flex-wrap: wrap;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
-.auth-error span { flex: 1; }
+.auth-error span { flex: 1; min-width: 0; }
 .error-link {
   display: block;
   margin-top: 4px;
@@ -431,6 +437,8 @@ async function submit() {
   gap: var(--s-2);
   height: 48px;
   font-size: var(--t-md);
+  display: inline-flex;
+  align-items: center;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -461,4 +469,8 @@ async function submit() {
   text-decoration: none;
 }
 .auth-inline-link:hover { text-decoration: underline; }
+
+.forgot-row { text-align: right; margin-top: var(--s-1); }
+.forgot-link { font-size: var(--t-xs); color: var(--brand); text-decoration: none; font-weight: 600; }
+.forgot-link:hover { text-decoration: underline; }
 </style>

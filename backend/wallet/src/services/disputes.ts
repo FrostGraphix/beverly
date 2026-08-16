@@ -94,8 +94,8 @@ export async function getDispute(disputeId: string) {
         .from('disputes')
         .select('*, dispute_messages(* order by created_at asc)')
         .eq('id', disputeId)
-        .single();
-    return data ? (await withPurchaseContext(data)) : data;
+        .maybeSingle();
+    return data ? (await withPurchaseContext(data)) : null;
 }
 
 export async function listDisputes(opts: {

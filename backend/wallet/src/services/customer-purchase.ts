@@ -10,7 +10,7 @@
 import { adminClient } from '../db/supabase.js';
 import { createHold, captureHold, releaseHold } from './ledger.js';
 import {
-    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus, assertEnergyVendReady,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
@@ -268,6 +268,13 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
             authorizationUrl: null,
             reference: null,
         };
+    }
+
+    try {
+        assertEnergyVendReady();
+    } catch (error) {
+        if (error instanceof TokenEngineError) throw new CustomerPurchaseError(error.message, error.code);
+        throw error;
     }
 
     // Resolve meter

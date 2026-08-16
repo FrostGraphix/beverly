@@ -24,6 +24,7 @@ import {
     previewPurchaseWithPolicy,
     lookupMeter,
     TokenEngineError,
+    assertEnergyVendReady,
     buildCreditTokenPreviewPlan,
     buildRemoteTokenTaskPayload,
 } from '../services/token-engine.js';
@@ -31,6 +32,9 @@ import { logSecurityEvent } from '../services/audit.js';
 import { logAction } from '../services/audit.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
+import {
+    requestPasswordReset, confirmPasswordReset, PasswordResetError,
+} from '../services/password-reset.js';
 import {
     createTicket, listTickets, getTicket, addTicketMessage,
     getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
@@ -45,6 +49,7 @@ import {
     vendorMfaStatus,
     verifyVendorMfaChallenge,
     verifyVendorMfaEnrollment,
+    vendorMfaSessionVerified,
 } from '../services/vendor-mfa.js';
 import {
     hasVendorVendCredential,
@@ -133,8 +138,12 @@ function sendVendCredentialError(reply: FastifyReply, error: unknown) {
 }
 
 function sendTokenEngineError(reply: FastifyReply, error: TokenEngineError) {
-    const status = error.code === 'meter_not_found' ? 404 : error.retryable ? 503 : 400;
+    const configurationUnavailable = ['energy_authorization_missing', 'energy_authorization_misconfigured', 'energy_authorization_rejected'].includes(error.code);
+    const status = error.code === 'meter_not_found' ? 404 : error.retryable || configurationUnavailable ? 503 : 400;
     const messages: Record<string, string> = {
+        energy_authorization_missing: 'Vending authorization is not configured. Beverly support must restore the token service.',
+        energy_authorization_misconfigured: 'Vending authorization is misconfigured. Beverly support must restore the token service.',
+        energy_authorization_rejected: 'Vending authorization was rejected upstream. Beverly support must restore the token service.',
         meter_lookup_unavailable:
             'Meter lookup is temporarily unavailable. No wallet was touched and no vend was attempted; retry shortly or bind this meter in the account catalog.',
         energy_query_failed:
@@ -526,6 +535,117 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    // ── email + password login (unauthenticated) ───────────────────────────
+    // Backend-mediated so the vendor SPA does not need Supabase keys at build
+    // time. Performs the Supabase password grant, verifies the vendor account,
+    // and returns the access token plus the canonical vendor profile.
+    fastify.post('/auth/email/login', async (req, reply) => {
+        const schema = z.object({
+            email:    z.string().trim().min(3).max(200),
+            password: z.string().min(1).max(200),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body ?? {}); }
+        catch { return reply.code(400).send({ error: 'missing_fields', message: 'Email and password are required.' }); }
+        const email = body.email.trim().toLowerCase();
+
+        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+            return reply.code(503).send({ error: 'auth_not_configured', message: 'Authentication is not configured. Contact support.' });
+        }
+
+        let tokRes: Response;
+        try {
+            tokRes = await fetch(`${process.env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', apikey: process.env.SUPABASE_ANON_KEY },
+                body: JSON.stringify({ email, password: body.password }),
+            });
+        } catch {
+            return reply.code(503).send({ error: 'auth_upstream_unreachable', message: 'Authentication service is temporarily unavailable. Try again shortly.' });
+        }
+        const tokData = await tokRes.json().catch(() => ({})) as { access_token?: string; user?: { id?: string } };
+        if (!tokRes.ok || !tokData.access_token || !tokData.user?.id) {
+            return reply.code(401).send({ error: 'invalid_credentials', message: 'Invalid email or password.' });
+        }
+        const accessToken = tokData.access_token;
+        const userId = tokData.user.id;
+
+        const { data: vu } = await adminClient
+            .from('vendor_users')
+            .select('id, vendor_organization_id, role, full_name, phone, email, profile_picture_url, mfa_enrolled, password_reset_required, vend_credential_type, vend_credential_set_at, status, vendor_organizations(legal_name, trading_name, status)')
+            .eq('auth_user_id', userId)
+            .maybeSingle();
+        if (!vu) {
+            return reply.code(403).send({ error: 'not_vendor', message: 'This account is not linked to a vendor.' });
+        }
+        if ((vu as any).status !== 'active') {
+            return reply.code(403).send({ error: 'account_inactive', message: 'This vendor account is not active.' });
+        }
+        const org = (vu as any).vendor_organizations;
+        if (org?.status !== 'approved') {
+            return reply.code(403).send({ error: 'org_not_approved', message: 'Your vendor organization is not approved yet.' });
+        }
+
+        const mfaEnrolled = (vu as any).mfa_enrolled === true;
+        const mfaVerified = mfaEnrolled ? await vendorMfaSessionVerified(userId, accessToken) : true;
+
+        await logAction({
+            actorUserId: userId,
+            actorType: 'vendor_user',
+            action: 'vendor.email_login',
+            targetType: 'vendor_user',
+            targetId: (vu as any).id,
+            after: { email },
+        }).catch(() => undefined);
+
+        return {
+            access_token: accessToken,
+            vendor: {
+                id: (vu as any).id,
+                vendor_organization_id: (vu as any).vendor_organization_id,
+                role: (vu as any).role,
+                full_name: (vu as any).full_name,
+                phone: (vu as any).phone,
+                email: (vu as any).email,
+                profile_picture_url: (vu as any).profile_picture_url ?? null,
+                mfa_enrolled: mfaEnrolled,
+                mfa_verified: mfaVerified,
+                password_reset_required: (vu as any).password_reset_required,
+                vend_credential_configured: Boolean((vu as any).vend_credential_set_at),
+                vend_credential_type: (vu as any).vend_credential_type ?? null,
+                organization_name: org?.trading_name ?? org?.legal_name,
+                organization_status: org?.status,
+            },
+        };
+    });
+
+    // ── password reset (self-service, unauthenticated) ──────────────────────
+    fastify.post('/auth/reset-request', async (req, reply) => {
+        const { email } = req.body as { email?: string };
+        if (!email?.trim()) {
+            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
+        }
+        await requestPasswordReset(email.trim().toLowerCase(), 'vendor_user').catch(() => null);
+        return { ok: true };
+    });
+
+    fastify.post('/auth/reset-confirm', async (req, reply) => {
+        const { token, new_password } = req.body as { token?: string; new_password?: string };
+        if (!token || !new_password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
+        }
+        try {
+            await confirmPasswordReset(token, new_password, 'vendor_user');
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof PasswordResetError) {
+                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
     // ── password change ──
     fastify.post('/password-change', { preHandler: fastify.requireAuth() }, async (req, reply) => {
         const actor = req.actor!;
@@ -862,6 +982,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const body = schema.parse(req.body);
         try {
+            assertEnergyVendReady();
             const meter = await lookupMeter(body.meterId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             return { meter, preview };
@@ -945,6 +1066,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = schema.parse(req.body);
         const clientKey = requireIdempotencyKey(req, reply);
         if (!clientKey) return reply;
+        try {
+            assertEnergyVendReady();
+        } catch (error) {
+            if (error instanceof TokenEngineError) return sendTokenEngineError(reply, error);
+            throw error;
+        }
         try {
             await verifyVendorVendCredential({
                 vendorUserId: req.actor!.actorId,

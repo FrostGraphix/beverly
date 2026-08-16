@@ -22,7 +22,7 @@ import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
 import {
-    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus, assertEnergyVendReady,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
@@ -156,6 +156,13 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
             receiptId: po.receipt_id,
             ledgerEntryId: null,
         };
+    }
+
+    try {
+        assertEnergyVendReady();
+    } catch (error) {
+        if (error instanceof TokenEngineError) throw new VendingError(error.message, error.code);
+        throw error;
     }
 
     const wallet = await findWalletByOwner('vendor', input.vendorOrganizationId);

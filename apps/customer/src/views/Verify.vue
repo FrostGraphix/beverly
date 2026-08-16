@@ -244,7 +244,7 @@ async function resend() {
         <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
         <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      {{ error }}
+      <span>{{ error }}</span>
     </div>
 
     <!-- Expiry -->
@@ -390,6 +390,7 @@ async function resend() {
   line-height: 1.5;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-error span { flex: 1; }
 
 /* Submit */
 .auth-btn {
@@ -398,6 +399,8 @@ async function resend() {
   gap: var(--s-2);
   height: 48px;
   font-size: var(--t-md);
+  display: inline-flex;
+  align-items: center;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }

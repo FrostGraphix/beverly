@@ -478,15 +478,17 @@ function handleError(e: any) {
   border: 0;
   background: transparent;
   color: var(--brand);
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
+  padding: 4px 6px;
 }
 
 .field-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-2);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -565,6 +567,7 @@ function handleError(e: any) {
   line-height: 1.5;
 }
 .error-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-error span { flex: 1; }
 
 .auth-btn {
   width: 100%;
@@ -572,6 +575,8 @@ function handleError(e: any) {
   gap: var(--s-2);
   height: 48px;
   font-size: var(--t-md);
+  display: inline-flex;
+  align-items: center;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
