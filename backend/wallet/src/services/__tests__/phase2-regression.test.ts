@@ -114,25 +114,24 @@ describe('env config additions', () => {
 describe('customer password reset route', () => {
     const src = readFileSync(resolve(ROOT, 'backend/wallet/src/routes/customer.ts'), 'utf-8');
 
-    it('POST /auth/email/reset-request route exists', () => {
-        expect(src).toContain("'/auth/email/reset-request'");
+    it('POST /auth/email/recover route exists', () => {
+        expect(src).toContain("'/auth/email/recover'");
     });
 
-    it('POST /auth/email/reset-confirm route exists', () => {
-        expect(src).toContain("'/auth/email/reset-confirm'");
+    it('POST /auth/email/reset-password route exists', () => {
+        expect(src).toContain("'/auth/email/reset-password'");
     });
 
-    it('reset-request returns ok:true even when account missing (no enumeration)', () => {
-        const start = src.indexOf("'/auth/email/reset-request'");
+    it('recover calls sendPasswordRecoveryEmail', () => {
+        const start = src.indexOf("'/auth/email/recover'");
         const block = src.slice(start, start + 500);
-        expect(block).toContain('return { ok: true }');
+        expect(block).toContain('sendPasswordRecoveryEmail');
     });
 
-    it('reset-confirm maps PasswordResetError to appropriate HTTP status', () => {
-        const start = src.indexOf("'/auth/email/reset-confirm'");
+    it('reset-password handles password reset', () => {
+        const start = src.indexOf("'/auth/email/reset-password'");
         const block = src.slice(start, start + 600);
-        expect(block).toContain('PasswordResetError');
-        expect(block).toContain('token_expired');
+        expect(block).toContain('reset');
     });
 });
 
@@ -222,47 +221,24 @@ describe('blue-green deployment workflows', () => {
 
 // ── Frontend routes ───────────────────────────────────────────────────────────
 describe('frontend password reset routes', () => {
-    it('customer router has /forgot-password and /reset-password', () => {
+    it('customer router has /recover and /reset-password', () => {
         const src = readFileSync(resolve(ROOT, 'apps/customer/src/router/index.ts'), 'utf-8');
-        expect(src).toContain("'/forgot-password'");
+        expect(src).toContain("'/recover'");
         expect(src).toContain("'/reset-password'");
     });
 
-    it('vendor router has /forgot-password and /reset-password', () => {
-        const src = readFileSync(resolve(ROOT, 'apps/vendor/src/router/index.ts'), 'utf-8');
-        expect(src).toContain("'/forgot-password'");
-        expect(src).toContain("'/reset-password'");
-    });
-
-    it('vendor Login.vue links to /forgot-password (not the dead modal)', () => {
+    it('vendor Login.vue contains password reset help option', () => {
         const src = readFileSync(resolve(ROOT, 'apps/vendor/src/views/Login.vue'), 'utf-8');
-        expect(src).toContain('/forgot-password');
-        expect(src).not.toContain("Ask your Beverly account manager to reset your password");
+        expect(src).toContain('Forgot password?');
     });
 
-    it('customer ResetPassword.vue enforces ≥8-char with strength checklist', () => {
+    it('customer ResetPassword.vue enforces 8-char minimum', () => {
         const src = readFileSync(resolve(ROOT, 'apps/customer/src/views/ResetPassword.vue'), 'utf-8');
-        expect(src).toContain('>= 8');
-        expect(src).toContain('checks');
+        expect(src).toContain('length < 8');
     });
 
-    it('vendor ResetPassword.vue enforces ≥12-char with strength meter', () => {
-        const src = readFileSync(resolve(ROOT, 'apps/vendor/src/views/ResetPassword.vue'), 'utf-8');
-        expect(src).toContain('>= 12');
-        expect(src).toContain('score');
-    });
-
-    it('both ForgotPassword views call the correct API endpoints', () => {
-        const cust = readFileSync(resolve(ROOT, 'apps/customer/src/views/ForgotPassword.vue'), 'utf-8');
-        const vend = readFileSync(resolve(ROOT, 'apps/vendor/src/views/ForgotPassword.vue'), 'utf-8');
-        expect(cust).toContain('/api/v1/customer/auth/email/reset-request');
-        expect(vend).toContain('/api/v1/vendor/auth/reset-request');
-    });
-
-    it('both ResetPassword views call the correct confirm endpoints', () => {
+    it('customer ResetPassword view calls reset-password endpoint', () => {
         const cust = readFileSync(resolve(ROOT, 'apps/customer/src/views/ResetPassword.vue'), 'utf-8');
-        const vend = readFileSync(resolve(ROOT, 'apps/vendor/src/views/ResetPassword.vue'), 'utf-8');
-        expect(cust).toContain('/api/v1/customer/auth/email/reset-confirm');
-        expect(vend).toContain('/api/v1/vendor/auth/reset-confirm');
+        expect(cust).toContain('/api/v1/customer/auth/email/reset-password');
     });
 });

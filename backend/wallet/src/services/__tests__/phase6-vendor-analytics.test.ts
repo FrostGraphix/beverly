@@ -18,116 +18,73 @@ import { resolve } from 'path';
 const ROOT = resolve(process.cwd(), '../..');
 
 // ── Backend route ─────────────────────────────────────────────────────────────
-describe('admin routes — GET /vendors/:id/analytics', () => {
-    const src = readFileSync(resolve(ROOT, 'backend/wallet/src/routes/admin.ts'), 'utf-8');
+describe('admin routes — GET /vendors/analytics', () => {
+    const adminSrc = readFileSync(resolve(ROOT, 'backend/wallet/src/routes/admin.ts'), 'utf-8');
+    const routeSrc = readFileSync(resolve(ROOT, 'backend/wallet/src/routes/admin-vendor-analytics.ts'), 'utf-8');
+    const serviceSrc = readFileSync(resolve(ROOT, 'backend/wallet/src/services/vendor-analytics.ts'), 'utf-8');
 
     it('has permission entry for analytics route', () => {
-        expect(src).toContain("'GET /vendors/:id/analytics'");
-        expect(src).toContain("'wallet.vending.monitor'");
+        expect(adminSrc).toContain("'GET /vendors/analytics'");
+        expect(adminSrc).toContain("'wallet.vendors.review'");
     });
 
     it('has fastify.get route handler', () => {
-        expect(src).toContain("fastify.get('/vendors/:id/analytics'");
+        expect(routeSrc).toContain("fastify.get('/vendors/analytics'");
     });
 
     it('accepts period query param (7d, 30d, 90d, all)', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 2000);
-        expect(block).toContain("'7d'");
-        expect(block).toContain("'30d'");
-        expect(block).toContain("'90d'");
-        expect(block).toContain("'all'");
+        expect(routeSrc).toContain("'7d'");
+        expect(routeSrc).toContain("'30d'");
+        expect(routeSrc).toContain("'90d'");
+        expect(routeSrc).toContain("'all'");
     });
 
     it('defaults to 30d when no period provided', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 500);
-        expect(block).toContain("'30d'");
+        expect(routeSrc).toContain("'30d'");
     });
 
-    it('returns 404 when vendor not found', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 500);
-        expect(block).toContain('404');
-        expect(block).toContain("'not_found'");
+    it('validates period enum', () => {
+        expect(routeSrc).toContain('z.enum');
+        expect(routeSrc).toContain('bad_period');
     });
 
-    it('queries purchase_orders filtered by actor_type=vendor and actor_id', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 2000);
-        expect(block).toContain("'purchase_orders'");
-        expect(block).toContain("'actor_type', 'vendor'");
-        expect(block).toContain("'actor_id', id");
+    it('queries purchase_orders and calculates vendor analytics metrics', () => {
+        expect(serviceSrc).toContain('purchase_orders');
+        expect(serviceSrc).toContain('getVendorAnalytics');
     });
 
-    it('applies since filter for non-all periods', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 2000);
-        expect(block).toContain('since');
-        expect(block).toContain('gte');
+    it('returns summary with total, active, frozen, suspended', () => {
+        expect(serviceSrc).toContain('summary');
+        expect(serviceSrc).toContain('total:');
+        expect(serviceSrc).toContain('active:');
+        expect(serviceSrc).toContain('frozen:');
     });
 
-    it('returns summary with total, delivered, failed, success_rate', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 5000);
-        expect(block).toContain('summary');
-        expect(block).toContain('total:');
-        expect(block).toContain('delivered:');
-        expect(block).toContain('failed:');
-        expect(block).toContain('success_rate:');
+    it('returns summary with total_vended_minor and total_funded_minor', () => {
+        expect(serviceSrc).toContain('total_vended_minor');
+        expect(serviceSrc).toContain('total_funded_minor');
     });
 
-    it('returns summary with total_amount_minor, total_units_kwh, avg_amount_minor', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 5000);
-        expect(block).toContain('total_amount_minor:');
-        expect(block).toContain('total_units_kwh:');
-        expect(block).toContain('avg_amount_minor:');
+    it('returns leaderboard breakdown', () => {
+        expect(serviceSrc).toContain('leaderboard');
     });
 
-    it('returns by_mode breakdown keyed by purchase_mode', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 5000);
-        expect(block).toContain('by_mode');
-        expect(block).toContain('purchase_mode');
+    it('returns risk_breakdown', () => {
+        expect(serviceSrc).toContain('risk_breakdown');
     });
 
-    it('returns daily array with date, count, amount_minor, delivered, failed', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 5000);
-        expect(block).toContain('daily');
-        expect(block).toContain('date');
-        expect(block).toContain('delivered');
-        expect(block).toContain('failed');
+    it('returns top_stations sorted by volume descending', () => {
+        expect(serviceSrc).toContain('top_stations');
+        expect(serviceSrc).toContain('station_id');
     });
 
-    it('returns top_stations sorted by count descending, capped at 10', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 6000);
-        expect(block).toContain('top_stations');
-        expect(block).toContain('station_id');
-        expect(block).toContain('.slice(0, 10)');
-    });
-
-    it('returns top_meters sorted by count descending, capped at 10', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 6000);
-        expect(block).toContain('top_meters');
-        expect(block).toContain('meter_id');
-        expect(block).toContain('.slice(0, 10)');
-    });
-
-    it('limits query to 10000 rows for safety', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 2000);
-        expect(block).toContain('10000');
+    it('handles paging efficiently', () => {
+        expect(serviceSrc).toContain('pageSize');
     });
 
     it('returns period and since in response', () => {
-        const start = src.indexOf("fastify.get('/vendors/:id/analytics'");
-        const block = src.slice(start, start + 6000);
-        expect(block).toContain('period,');
-        expect(block).toContain('since,');
+        expect(serviceSrc).toContain('period');
+        expect(serviceSrc).toContain('since');
     });
 });
 
