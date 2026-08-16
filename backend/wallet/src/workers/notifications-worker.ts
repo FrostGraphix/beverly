@@ -17,9 +17,10 @@ import { Worker, type Job, type ConnectionOptions } from 'bullmq';
 import { redisConnection } from '../queue/index.js';
 import { adminClient } from '../db/supabase.js';
 import { sendSms } from '../adapters/twilio.js';
-import { sendEmail } from '../adapters/postmark.js';
+import { sendEmail } from '../adapters/resend.js';
 import { sendPush, FcmError } from '../adapters/fcm.js';
-import { isSmsEnabled, isEmailEnabled, type NotificationJobData } from '../services/notifications.js';
+import { isFlagEnabled } from '../services/feature-flags.js';
+import { type NotificationJobData } from '../services/notifications.js';
 import { env } from '../config/env.js';
 
 const CONCURRENCY = Number(process.env.NOTIFICATION_WORKER_CONCURRENCY ?? 5);
@@ -78,20 +79,20 @@ async function storeReceipt(opts: {
 // ── Channel processors ────────────────────────────────────────────────────────
 
 async function processSms(data: NotificationJobData, attempt: number): Promise<boolean> {
-    if (!data.channels.sms || !data.phone) return true;
-    if (await isDelivered(data.notificationId, 'sms')) return true;
+    if (!data.channels?.sms || !data.phone) return true;
+    if (await isDelivered(data.notificationId ?? '', 'sms')) return true;
 
-    const smsOn = await isSmsEnabled();
+    const smsOn = await isFlagEnabled('sms_notifications_enabled');
     if (!smsOn) return true; // flag off — skip silently
 
     try {
         const result = await sendSms({
-            to:   data.phone,
-            body: `Beverly: ${data.body}`,
+            to:   data.phone!,
+            body: `Beverly: ${data.body ?? data.payload?.body}`,
             messagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
         });
         await storeReceipt({
-            notificationId: data.notificationId,
+            notificationId: data.notificationId ?? '',
             channel:        'sms',
             status:         'delivered',
             providerRef:    result.sid,
@@ -100,7 +101,7 @@ async function processSms(data: NotificationJobData, attempt: number): Promise<b
         return true;
     } catch (err: any) {
         await storeReceipt({
-            notificationId: data.notificationId,
+            notificationId: data.notificationId ?? '',
             channel:        'sms',
             status:         'failed',
             errorMessage:   err?.message ?? String(err),
@@ -111,23 +112,25 @@ async function processSms(data: NotificationJobData, attempt: number): Promise<b
 }
 
 async function processEmail(data: NotificationJobData, attempt: number): Promise<boolean> {
-    if (!data.channels.email || !data.email) return true;
-    if (await isDelivered(data.notificationId, 'email')) return true;
+    if (!data.channels?.email || !data.email) return true;
+    if (await isDelivered(data.notificationId ?? '', 'email')) return true;
 
-    const emailOn = await isEmailEnabled();
+    const emailOn = await isFlagEnabled('email_notifications_enabled');
     if (!emailOn) return true;
 
     try {
         const firstName = data.firstName ?? 'there';
+        const title = data.title ?? data.payload?.title ?? 'Notification';
+        const body = data.body ?? data.payload?.body ?? '';
         const result = await sendEmail({
             to:      data.email,
-            subject: data.subject ?? data.title,
-            text:    `Hi ${firstName},\n\n${data.body}\n\n— The Beverly Team`,
-            html:    buildEmailHtml(firstName, data.title, data.body),
-            tag:     data.type,
+            subject: data.subject ?? title,
+            text:    `Hi ${firstName},\n\n${body}\n\n— The Beverly Team`,
+            html:    buildEmailHtml(firstName, title, body),
+            tag:     data.type ?? data.payload?.type,
         });
         await storeReceipt({
-            notificationId: data.notificationId,
+            notificationId: data.notificationId ?? '',
             channel:        'email',
             status:         'delivered',
             providerRef:    result.messageId,
@@ -136,7 +139,7 @@ async function processEmail(data: NotificationJobData, attempt: number): Promise
         return true;
     } catch (err: any) {
         await storeReceipt({
-            notificationId: data.notificationId,
+            notificationId: data.notificationId ?? '',
             channel:        'email',
             status:         'failed',
             errorMessage:   err?.message ?? String(err),
@@ -147,21 +150,22 @@ async function processEmail(data: NotificationJobData, attempt: number): Promise
 }
 
 async function processPush(data: NotificationJobData, attempt: number): Promise<boolean> {
-    if (!data.channels.push || !data.pushTokens?.length) return true;
+    const tokens = data.pushTokens ?? data.channels?.pushTokens;
+    if (!tokens?.length) return true;
 
     let allOk = true;
-    for (const token of data.pushTokens) {
-        if (await isDelivered(data.notificationId, 'push', token)) continue;
+    for (const token of tokens) {
+        if (await isDelivered(data.notificationId ?? '', 'push', token)) continue;
 
         try {
             const result = await sendPush({
                 token,
-                title: data.title,
-                body:  data.body,
-                data:  stringifyMetadata(data.metadata),
+                title: data.title ?? data.payload?.title ?? '',
+                body:  data.body ?? data.payload?.body ?? '',
+                data:  stringifyMetadata(data.metadata ?? data.payload?.metadata),
             });
             await storeReceipt({
-                notificationId: data.notificationId,
+                notificationId: data.notificationId ?? '',
                 channel:        'push',
                 status:         'delivered',
                 providerRef:    result.messageId,
@@ -172,7 +176,7 @@ async function processPush(data: NotificationJobData, attempt: number): Promise<
             const isStale = err instanceof FcmError && err.code === 'invalid_token';
 
             await storeReceipt({
-                notificationId: data.notificationId,
+                notificationId: data.notificationId ?? '',
                 channel:        'push',
                 status:         'failed',
                 errorMessage:   err?.message ?? String(err),
@@ -201,7 +205,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
     const data    = job.data;
     const attempt = (job.attemptsMade ?? 0) + 1;
 
-    console.info(`[notifications-worker] job=${job.id} notif=${data.notificationId} attempt=${attempt}`);
+    console.info(`[notifications-worker] job=${job.id} notif=${data.notificationId ?? ''} attempt=${attempt}`);
 
     const [smsOk, emailOk, pushOk] = await Promise.all([
         processSms(data, attempt),

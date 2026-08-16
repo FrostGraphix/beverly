@@ -24,6 +24,7 @@ import {
     previewPurchaseWithPolicy,
     lookupMeter,
     TokenEngineError,
+    assertEnergyVendReady,
     buildCreditTokenPreviewPlan,
     buildRemoteTokenTaskPayload,
 } from '../services/token-engine.js';
@@ -137,8 +138,12 @@ function sendVendCredentialError(reply: FastifyReply, error: unknown) {
 }
 
 function sendTokenEngineError(reply: FastifyReply, error: TokenEngineError) {
-    const status = error.code === 'meter_not_found' ? 404 : error.retryable ? 503 : 400;
+    const configurationUnavailable = ['energy_authorization_missing', 'energy_authorization_misconfigured', 'energy_authorization_rejected'].includes(error.code);
+    const status = error.code === 'meter_not_found' ? 404 : error.retryable || configurationUnavailable ? 503 : 400;
     const messages: Record<string, string> = {
+        energy_authorization_missing: 'Vending authorization is not configured. Beverly support must restore the token service.',
+        energy_authorization_misconfigured: 'Vending authorization is misconfigured. Beverly support must restore the token service.',
+        energy_authorization_rejected: 'Vending authorization was rejected upstream. Beverly support must restore the token service.',
         meter_lookup_unavailable:
             'Meter lookup is temporarily unavailable. No wallet was touched and no vend was attempted; retry shortly or bind this meter in the account catalog.',
         energy_query_failed:
@@ -977,6 +982,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         });
         const body = schema.parse(req.body);
         try {
+            assertEnergyVendReady();
             const meter = await lookupMeter(body.meterId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             return { meter, preview };
@@ -1060,6 +1066,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = schema.parse(req.body);
         const clientKey = requireIdempotencyKey(req, reply);
         if (!clientKey) return reply;
+        try {
+            assertEnergyVendReady();
+        } catch (error) {
+            if (error instanceof TokenEngineError) return sendTokenEngineError(reply, error);
+            throw error;
+        }
         try {
             await verifyVendorVendCredential({
                 vendorUserId: req.actor!.actorId,

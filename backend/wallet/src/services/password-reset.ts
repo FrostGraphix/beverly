@@ -12,7 +12,7 @@
  */
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
-import { sendEmail } from '../adapters/postmark.js';
+import { sendEmail } from '../adapters/resend.js';
 import { env } from '../config/env.js';
 
 export type ResetUserType = 'customer' | 'vendor_user';

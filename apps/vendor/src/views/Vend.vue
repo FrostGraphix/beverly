@@ -155,6 +155,11 @@ const normalizedMeterId = computed(() => meterId.value.trim());
 const meterIdValid = computed(() => normalizedMeterId.value.length >= 4 && normalizedMeterId.value.length <= 80);
 const amountMinor = computed(() => Math.max(0, Math.round(amountNaira.value * 100)));
 const canVend = computed(() => meter.value?.liveVerified !== false);
+const vendingConfigurationBlocked = computed(() => [
+    'energy_authorization_missing',
+    'energy_authorization_misconfigured',
+    'energy_authorization_rejected',
+].includes(String(error.value?.code ?? '')));
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
 const canRemoteSendToken = computed(() => {
     if (!result.value?.token || !result.value.purchaseOrder?.id || remoteSending.value) return false;
@@ -175,6 +180,7 @@ const flowSteps = computed(() => [
 ]);
 const confirmLabel = computed(() => {
     if (loading.value) return 'Generating token...';
+    if (vendingConfigurationBlocked.value) return 'Vending unavailable';
     if (!canVend.value) return 'Bind meter before vend';
     return `Confirm - ${naira(preview.value?.amountMinor)}`;
 });
@@ -214,6 +220,14 @@ function describeApiError(e: unknown, fallback: string) {
                 title: 'Wallet cannot vend',
                 message: e.message,
                 action: 'Contact Beverly admin before retrying this sale.',
+                code: e.code,
+            };
+        }
+        if (['energy_authorization_missing', 'energy_authorization_misconfigured', 'energy_authorization_rejected'].includes(String(e.code))) {
+            return {
+                title: 'Vending temporarily unavailable',
+                message: e.message,
+                action: 'No wallet hold, debit, or token request occurred. Contact Beverly support.',
                 code: e.code,
             };
         }
@@ -609,7 +623,7 @@ async function remoteSendGeneratedToken() {
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
         </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
-                @click="confirm" :disabled="loading || !canVend">
+                @click="confirm" :disabled="loading || !canVend || vendingConfigurationBlocked">
           {{ confirmLabel }}
         </button>
       </div>

@@ -89,7 +89,6 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    CUSTOMER_APP_URL: z.string().url(),
     VENDOR_PORTAL_URL: z.string().url(),
     STAFF_PORTAL_URL: z.string().url(),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
