@@ -4,7 +4,7 @@
 -- customer_push_tokens: FCM device tokens registered by customers
 
 -- ── Delivery receipts ─────────────────────────────────────────────────────────
-create table notification_delivery_receipts (
+create table if not exists notification_delivery_receipts (
     id               uuid        primary key default gen_random_uuid(),
     notification_id  uuid        not null references notifications(id) on delete cascade,
     channel          text        not null check (channel in ('sms', 'email', 'push')),
@@ -31,7 +31,7 @@ alter table notification_delivery_receipts enable row level security;
 -- Service role only — no customer policy needed
 
 -- ── Customer push tokens ──────────────────────────────────────────────────────
-create table customer_push_tokens (
+create table if not exists customer_push_tokens (
     id           uuid        primary key default gen_random_uuid(),
     customer_id  uuid        not null references customers(id) on delete cascade,
     token        text        not null unique,

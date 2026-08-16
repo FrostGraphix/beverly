@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "npm run build && corepack pnpm --filter @beverly/wallet-backend build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
     "CUSTOMER_APP_URL": "https://customer-acob-beverly.vercel.app",

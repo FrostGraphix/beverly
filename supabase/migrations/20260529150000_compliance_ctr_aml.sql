@@ -8,7 +8,7 @@
 create sequence if not exists ctr_reference_seq start 1;
 
 -- ── Currency Transaction Reports ───────────────────────────────────────────────
-create table currency_transaction_reports (
+create table if not exists currency_transaction_reports (
     id                      uuid        primary key default gen_random_uuid(),
     reference               text        not null unique,  -- CTR-YYYYMMDD-NNNNN
     ledger_entry_id         uuid,                         -- originating ledger entry
@@ -53,7 +53,7 @@ alter table currency_transaction_reports enable row level security;
 -- No policies — service role only; staff access via admin API
 
 -- ── AML Screening Results ──────────────────────────────────────────────────────
-create table aml_screening_results (
+create table if not exists aml_screening_results (
     id                   uuid    primary key default gen_random_uuid(),
     -- Screened entity
     entity_type          text    not null check (entity_type in ('customer', 'vendor_organization', 'vendor_user')),
@@ -83,7 +83,7 @@ alter table aml_screening_results enable row level security;
 -- ── Sanctions List ─────────────────────────────────────────────────────────────
 create extension if not exists pg_trgm;
 
-create table sanctions_list_entries (
+create table if not exists sanctions_list_entries (
     id               uuid    primary key default gen_random_uuid(),
     full_name        text    not null,
     aliases          text[]  not null default '{}',

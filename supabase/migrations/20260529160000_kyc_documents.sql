@@ -4,7 +4,7 @@
 -- Supabase storage bucket: wallet-kyc-documents (private, service-role managed)
 
 -- ── KYC Documents table ────────────────────────────────────────────────────────
-create table kyc_documents (
+create table if not exists kyc_documents (
     id             uuid    primary key default gen_random_uuid(),
     customer_id    uuid    not null,
     -- Document identity
