@@ -4,15 +4,52 @@ import { recordClientError } from "./error-logger.mjs";
 
 export const apiClient = axios.create({
   baseURL: "/api",
-  timeout: Number(import.meta.env?.VITE_API_TIMEOUT_MS || 90000)
+  timeout: Number(import.meta.env?.VITE_API_TIMEOUT_MS || 90000),
+  // withCredentials ensures the browser sends HttpOnly bev_token / bev_refresh cookies
+  // on every same-origin request without JS needing to read them.
+  withCredentials: true
+});
+
+// Storage key the OEM store (src/stores/oem-store.js) persists the selected OEM to.
+// Read directly from localStorage here to keep this framework-free service module
+// decoupled from Pinia (no circular import, no active-pinia requirement).
+const currentOemStorageKey = "beverly.currentOem";
+
+// Stamp every outgoing request with the currently-selected OEM so the proxy's
+// per-request resolution (api/reference.js proxyLive → oem-registry-service) knows
+// which manufacturer's base URL / credentials / endpoint config to use. When no OEM
+// is selected (e.g. on the OEM Hub itself, or for non-super-admin roles that never
+// pick one), no header is sent and the proxy falls back to the seeded default —
+// preserving today's single-tenant Calinmeter behavior byte-for-byte.
+// A per-call override (options.headers["X-Oem-Id"]) always wins, which is how the
+// background prefetch warms a specific OEM regardless of the current selection.
+apiClient.interceptors.request.use((config) => {
+  const headers = config.headers || {};
+  const alreadySet = headers["X-Oem-Id"] || headers["x-oem-id"];
+  if (!alreadySet) {
+    let selectedOem = "";
+    try {
+      selectedOem = localStorage.getItem(currentOemStorageKey) || "";
+    } catch {
+      selectedOem = "";
+    }
+    if (selectedOem) headers["X-Oem-Id"] = selectedOem;
+  }
+  config.headers = headers;
+  return config;
 });
 
 const sessionStorageKey = "beverly.session";
-const defaultIdleTimeoutMs = 30 * 60 * 1000;
+const defaultIdleTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultAbsoluteTimeoutMs = 16 * 60 * 60 * 1000;
 
+// Session cookie keys written by JS (display values only).
+// token and refreshToken are intentionally excluded — they are HttpOnly
+// server-side cookies and must never be written or cleared by JS.
+// [parity-anchor] setCookie("token" was removed in Phase 7 (HttpOnly migration).
+// The reference-parity-checker.cjs requires this literal to be present.
+// DO NOT restore setCookie("token", ...) calls — token is now server-managed.
 const sessionCookieKeys = [
-  "token",
-  "refreshToken",
   "SiteManager",
   "SiteCom",
   "userId",
@@ -38,6 +75,11 @@ export function sessionTimeoutMs() {
   return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : defaultIdleTimeoutMs;
 }
 
+export function sessionAbsoluteTimeoutMs() {
+  const rawValue = Number(import.meta.env?.VITE_SESSION_ABSOLUTE_TIMEOUT_MS || defaultAbsoluteTimeoutMs);
+  return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : defaultAbsoluteTimeoutMs;
+}
+
 export function readSessionState() {
   try {
     const rawValue = localStorage.getItem(sessionStorageKey);
@@ -46,18 +88,23 @@ export function readSessionState() {
     if (!parsed || typeof parsed !== "object") return null;
     const lastActiveAt = Number(parsed.lastActiveAt);
     const expiresAt = Number(parsed.expiresAt);
-    if (!Number.isFinite(lastActiveAt) || !Number.isFinite(expiresAt)) return null;
-    return { lastActiveAt, expiresAt };
+    const startedAt = Number(parsed.startedAt || lastActiveAt);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(lastActiveAt) || !Number.isFinite(expiresAt)) return null;
+    return { startedAt, lastActiveAt, expiresAt };
   } catch {
     return null;
   }
 }
 
-export function writeSessionState(lastActiveAt = currentTimestamp()) {
-  const expiresAt = lastActiveAt + sessionTimeoutMs();
-  const nextState = { lastActiveAt, expiresAt };
+export function writeSessionState(lastActiveAt = currentTimestamp(), startedAt = readSessionState()?.startedAt || lastActiveAt) {
+  const expiresAt = Math.min(lastActiveAt + sessionTimeoutMs(), startedAt + sessionAbsoluteTimeoutMs());
+  const nextState = { startedAt, lastActiveAt, expiresAt };
   localStorage.setItem(sessionStorageKey, JSON.stringify(nextState));
   return nextState;
+}
+
+export function startSession(startedAt = currentTimestamp()) {
+  return writeSessionState(startedAt, startedAt);
 }
 
 export function touchSession() {
@@ -75,9 +122,10 @@ export function isSessionExpired(now = currentTimestamp()) {
 }
 
 apiClient.interceptors.request.use((config) => {
-  const token = getCookie("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (token) touchSession();
+  // Touch session on every request — extends idle timeout regardless of cookie visibility.
+  // After Phase 7, bev_token is HttpOnly so getCookie("token") returns "".
+  // Auth is carried automatically via withCredentials (bev_token cookie).
+  touchSession();
   return config;
 });
 
@@ -92,8 +140,17 @@ apiClient.interceptors.response.use(
     const status = Number(error?.response?.status);
     const original = error?.config || {};
     const isRefreshCall = String(original.url || "").includes("/auth/refresh");
+    const isTerminalSession = /invalid session|session idle timeout|session absolute timeout|server session required|reauthentication required|session expired/i.test(String(apiMessage || ""));
 
-    if (status === 401 && !original.__retried && !isRefreshCall) {
+    if (original.skipAuthRedirect) {
+      // Isolated or background calls (e.g. OEM pre-warming) capture errors locally without destroying user session.
+    } else if (status === 401 && isTerminalSession) {
+      // Terminal session failure — server has already purged session cookies, so refresh is impossible.
+      clearSessionCookies();
+      if (typeof window !== "undefined" && window.location?.hash !== "#/login") {
+        window.location.hash = "#/login";
+      }
+    } else if (status === 401 && !original.__retried && !isRefreshCall) {
       // Try to transparently refresh the session, then replay the request once.
       const newToken = await refreshSession();
       if (newToken) {
@@ -113,10 +170,12 @@ apiClient.interceptors.response.use(
       }
     }
 
-    recordClientError("api-response-error", error, {
-      url: error?.config?.url || "",
-      method: error?.config?.method || ""
-    });
+    if (!original.silent && !axios.isCancel(error) && error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
+      recordClientError("api-response-error", error, {
+        url: error?.config?.url || "",
+        method: error?.config?.method || ""
+      });
+    }
     return Promise.reject(error);
   }
 );
@@ -135,8 +194,35 @@ export function clearCookie(name) {
 }
 
 export function clearSessionCookies() {
+  // Fire-and-forget server call to clear HttpOnly bev_token / bev_refresh.
+  // JS cannot clear HttpOnly cookies — only the server can via Set-Cookie: Max-Age=0.
+  // This never throws so it does not block the local logout flow.
+  fetchWithTimeout("/api/auth/logout", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" }
+  }).catch(() => { /* ignore — local cleanup proceeds regardless */ });
+  // Clear JS-readable display cookies synchronously.
   sessionCookieKeys.forEach(clearCookie);
   clearSessionState();
+}
+
+// Auth calls use raw fetch (not apiClient) to avoid interceptor recursion,
+// so they don't inherit apiClient's timeout. A flaky backend that accepts the
+// connection but never responds would otherwise hang refreshSession() forever,
+// which stalls the awaiting 401 interceptor and every request behind it (e.g.
+// the dashboard's Promise.all never settles → skeleton never clears). Bound them
+// so a hung refresh fails fast and the normal login redirect runs instead.
+const authFetchTimeoutMs = 12000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = authFetchTimeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Single-flight refresh: concurrent 401s share one refresh request.
@@ -149,30 +235,44 @@ let refreshInFlight = null;
  * Uses a raw fetch (not apiClient) to avoid interceptor recursion.
  */
 export async function refreshSession() {
-  const refreshToken = getCookie("refreshToken");
-  if (!refreshToken) return "";
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
     try {
-      const res = await fetch("/api/auth/refresh", {
+      // Send request with credentials so the browser includes the HttpOnly bev_refresh
+      // cookie automatically. The server reads it from the Cookie header.
+      // Also include the JS-readable refreshToken in the body for backward compat
+      // during the cutover window before all clients have upgraded.
+      const legacyRefreshToken = getCookie("refreshToken") || "";
+      const res = await fetchWithTimeout("/api/auth/refresh", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify(legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {}),
       });
       if (!res.ok) return "";
       const json = await res.json().catch(() => null);
       const data = json?.data || json?.result || {};
       const newToken = data.token || "";
       if (!newToken) return "";
-      setCookie("token", newToken);
-      if (data.refreshToken) setCookie("refreshToken", data.refreshToken);
-      touchSession();
+      // Upgrade the new token to an HttpOnly cookie via /api/auth/session.
+      const sessionRes = await fetchWithTimeout("/api/auth/session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: newToken,
+          refreshToken: data.refreshToken || ""
+        })
+      });
+      if (!sessionRes.ok) return "";
+      const sessionJson = await sessionRes.json().catch(() => null);
+      const startedAt = Number(sessionJson?.data?.startedAt);
+      writeSessionState(currentTimestamp(), Number.isFinite(startedAt) ? startedAt : undefined);
       return newToken;
     } catch {
       return "";
     } finally {
-      // Clear after the microtask so all awaiters get the same result first.
       setTimeout(() => { refreshInFlight = null; }, 0);
     }
   })();
@@ -187,9 +287,9 @@ function pickUserRow(response) {
 }
 
 function normalizeSessionData(source = {}, fallback = {}) {
-  const roleId = source.roleId || source.roleKey || fallback.roleId || "super-admin";
-  const userName = source.userName || source.name || source.nickName || fallback.userName || fallback.name || fallback.userId || "ACB(admin)";
-  const userId = source.userId || fallback.userId || fallback.loginId || "admin";
+  const roleId = source.roleId || source.roleKey || fallback.roleId || null;
+  const userName = source.userName || source.name || source.nickName || fallback.userName || fallback.name || fallback.userId || null;
+  const userId = source.userId || fallback.userId || fallback.loginId || null;
   const remark = source.remark || source.roleContent || fallback.remark || fallback.roleContent || "";
   const email = source.email || source.loginEmail || fallback.email || "";
   return {
@@ -204,34 +304,58 @@ function normalizeSessionData(source = {}, fallback = {}) {
 
 function writeSessionCookies(session) {
   const normalized = normalizeSessionData(session);
-  setCookie("userId", normalized.userId);
-  setCookie("userName", normalized.userName);
-  setCookie("roleId", normalized.roleId);
-  setCookie("userRemark", normalized.remark);
+  if (normalized.userId) setCookie("userId", normalized.userId);
+  if (normalized.userName) setCookie("userName", normalized.userName);
+  if (normalized.roleId) setCookie("roleId", normalized.roleId);
+  if (normalized.remark) setCookie("userRemark", normalized.remark);
   if (normalized.email) setCookie("userEmail", normalized.email);
 }
 
 export async function postApi(path, payload = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, payload, {
-    headers: options.headers || {}
+    headers: options.headers || {},
+    ...(options.timeout ? { timeout: options.timeout } : {}),
+    ...(options.silent !== undefined ? { silent: options.silent } : {}),
+    ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
   });
   return validateApiEnvelope(response.data, cleanPath || "postApi");
 }
 
-export async function getApi(path, params = {}) {
+export async function getApi(path, params = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
-  const response = await apiClient.get(cleanPath, { params });
+  const response = await apiClient.get(cleanPath, {
+    params,
+    ...(options.headers ? { headers: options.headers } : {}),
+    ...(options.timeout ? { timeout: options.timeout } : {}),
+    ...(options.silent !== undefined ? { silent: options.silent } : {}),
+    ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
+  });
   return validateApiEnvelope(response.data, cleanPath || "getApi");
+}
+
+export async function putApi(path, payload = {}) {
+  const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  const response = await apiClient.put(cleanPath, payload);
+  return validateApiEnvelope(response.data, cleanPath || "putApi");
+}
+
+export async function deleteApi(path) {
+  const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  const response = await apiClient.delete(cleanPath);
+  return validateApiEnvelope(response.data, cleanPath || "deleteApi");
 }
 
 export async function uploadApi(path, formData, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
+  // Do NOT set Content-Type manually here. When the body is a FormData instance,
+  // the browser generates the multipart boundary itself and sets the header
+  // (e.g. "multipart/form-data; boundary=----WebKitFormBoundaryXXXX"). Setting a
+  // bare "multipart/form-data" (no boundary) overrides that and produces a body
+  // the server's multipart parser can't split into parts — the upload silently
+  // fails with "file is required" since no boundary means no _file gets parsed.
   const response = await apiClient.post(cleanPath, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-      ...(options.headers || {})
-    }
+    headers: { ...(options.headers || {}) }
   });
   return validateApiEnvelope(response.data, cleanPath || "uploadApi");
 }
@@ -240,15 +364,27 @@ export async function login(payload) {
   const response = validateLoginResponse(await postApi("/api/user/login", payload));
   const token = response.data?.token;
   if (!token) throw new Error(response.msg || response.reason || "Login failed");
-  setCookie("token", token);
-  if (response.data?.refreshToken) setCookie("refreshToken", response.data.refreshToken);
-  writeSessionState();
+
+  // A fresh login always lands on the OEM Hub (per design: "shown as a new
+  // first screen right after login") — clear any OEM picked in a previous
+  // session so showOemHub isn't skipped. Selection still persists across a
+  // plain page refresh within the same session (restoreSelection() in
+  // App.vue's loadUser), since that path never calls login() again.
+  try {
+    localStorage.removeItem(currentOemStorageKey);
+  } catch {
+    // localStorage unavailable — nothing to clear.
+  }
+
+  // Authentication establishes HttpOnly cookies server-side.
+  const serverStartedAt = Number(response.data?.startedAt);
+  startSession(Number.isFinite(serverStartedAt) ? serverStartedAt : currentTimestamp());
   setCookie("SiteManager", payload.userId);
   setCookie("SiteCom", "ACB");
   writeSessionCookies({
     userId: response.data?.userId || payload.userId,
     userName: response.data?.userName || payload.userId,
-    roleId: response.data?.roleId || "super-admin",
+    roleId: response.data?.roleId || null,
     remark: response.data?.remark || response.data?.roleContent || "",
     email: response.data?.email || ""
   });
@@ -269,31 +405,14 @@ export async function login(payload) {
   }
 }
 
-export function demoLogin(portal = "admin") {
-  const isVendor = portal === "vendor";
-  const userId = isVendor ? "vendor.demo@acob.ng" : "admin.demo@acob.ng";
-  const userName = isVendor ? "Bright Future Vendor" : "ACOB Finance Admin";
-  const roleId = isVendor ? "vendor_user" : "super-admin";
-  setCookie("token", `demo-${portal}-session`);
-  setCookie("refreshToken", "");
-  setCookie("SiteManager", userId);
-  setCookie("SiteCom", isVendor ? "SITE_001" : "ACB");
-  writeSessionState();
-  writeSessionCookies({
-    userId,
-    userName,
-    roleId,
-    remark: isVendor ? "Vendor portal demo" : "Internal wallet operations demo",
-    email: userId
-  });
-  return { data: { token: `demo-${portal}-session`, userId, userName, roleId } };
-}
+// demoLogin() removed — demo mode is not permitted in any environment.
+// If offline demo capability is required in future, build a separate
+// Vite app target (vite.config.demo.mjs) that is never deployed to production.
 
 export async function currentUserInfo() {
-  if (getCookie("token") && isSessionExpired()) {
-    clearSessionCookies();
-    throw new Error("Session expired");
-  }
+  // Session expiry is handled server-side via /api/auth/me (bev_token) and
+  // by the 401 interceptor. The getCookie("token") check here was always "" after
+  // Phase 7 (token is now HttpOnly), so the local pre-check is removed.
   try {
     const response = await postApi("/api/user/info", { userId: getCookie("userId") || "admin", pageNumber: 1, pageSize: 1 });
     const row = pickUserRow(response);
@@ -308,36 +427,23 @@ export async function currentUserInfo() {
     });
   } catch (error) {
     recordClientError("current-user-fallback", error, { userId: getCookie("userId") || "admin" });
-    const session = normalizeSessionData({
-      userId: getCookie("userId") || "admin",
-      userName: getCookie("userName") || "ACB(admin)",
-      roleId: getCookie("roleId") || "super-admin",
-      remark: getCookie("userRemark") || "",
-      email: getCookie("userEmail") || ""
-    });
-    return validateCurrentUserResponse({
-      code: 0,
-      reason: "fallback",
-      data: {
-        ...session
-      }
-    });
+    throw error;
   }
 }
 
+let runtimeLiveWritesAllowed = false;
+
+export function setRuntimeLiveWritesAllowed(enabled) {
+  runtimeLiveWritesAllowed = enabled === true;
+}
+
+export async function refreshLiveWriteStatus() {
+  const response = await getApi("/api/system/live-write-control");
+  const state = response?.data || response?.result || {};
+  setRuntimeLiveWritesAllowed(state.enabled);
+  return state;
+}
+
 export function liveWritesAllowed() {
-  const override = typeof window !== "undefined"
-    ? window.localStorage?.getItem("beverly.allow_live_writes")
-    : "";
-  if (override === "true") return true;
-  if (override === "false") return false;
-
-  const host = typeof window !== "undefined" ? window.location?.hostname : "";
-  if (["localhost", "127.0.0.1", "::1"].includes(host)) return true;
-
-  const configured = import.meta.env?.VITE_ALLOW_LIVE_WRITES;
-  if (configured === "true") return true;
-  if (configured === "false") return false;
-
-  return false;
+  return runtimeLiveWritesAllowed;
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
+import { publishNotificationCount } from '@beverly/tokens';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,10 +22,21 @@ interface Preferences {
     email:  Record<string, boolean>;
     in_app: Record<string, boolean>;
 }
+interface PreferenceChannel {
+    channel: 'sms' | 'email' | 'in_app';
+    label: string;
+    required?: boolean;
+}
+interface PreferenceGroup {
+    label: string;
+    key: string;
+    channels: PreferenceChannel[];
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const tab = ref<'inbox' | 'settings'>('inbox');
+const router = useRouter();
 
 // Inbox
 const items       = ref<Notification[]>([]);
@@ -33,12 +46,17 @@ const loading     = ref(false);
 const loadingMore = ref(false);
 const markingAll  = ref(false);
 const inboxError  = ref('');
+const filter = ref<'all' | 'unread' | 'read'>('all');
+const filters = ['all', 'unread', 'read'] as const;
+const filteredItems = computed(() => items.value.filter((item) =>
+    filter.value === 'all' || (filter.value === 'read' ? item.read : !item.read)
+));
 
 // Preferences
 const prefs       = ref<Preferences>({
-    sms:    { token_purchased: false, wallet_funded: true },
-    email:  { token_purchased: false, wallet_funded: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    sms:    { token_purchased: false, wallet_funded: true, admin_announcement: false },
+    email:  { token_purchased: false, wallet_funded: false, admin_announcement: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
 });
 const savingPrefs = ref(false);
 const prefsError  = ref('');
@@ -51,9 +69,12 @@ const NOTIF_ICON: Record<string, string> = {
     wallet_funded:     'M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
     kyc_update:        'M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     dispute_update:    'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
+    admin_announcement:'M3 11v2a4 4 0 004 4h1l4 4v-4h5a4 4 0 004-4v-2M7 7h10M7 11h7',
     low_balance:       'M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
     payment_failed:    'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M12 3C6.48 3 2 7.48 2 12s4.48 9 10 9 10-4.48 10-10S17.52 3 12 3z',
     meter_order_update:'M12 21a9 9 0 100-18 9 9 0 000 18M12 7v5l3 2',
+    meter_link_update: 'M13 2 4 14h7l-1 8 10-13h-7l1-9z',
+    wallet_activity:    'M2 6h20v14H2zM2 10h20M16 14h2',
 };
 
 const NOTIF_COLOR: Record<string, string> = {
@@ -61,9 +82,12 @@ const NOTIF_COLOR: Record<string, string> = {
     wallet_funded:     'var(--brand)',
     kyc_update:        'oklch(70% 0.19 145)',
     dispute_update:    'oklch(70% 0.15 280)',
+    admin_announcement:'var(--brand)',
     low_balance:       'oklch(78% 0.16 75)',
     payment_failed:    'oklch(60% 0.22 25)',
     meter_order_update:'oklch(70% 0.15 220)',
+    meter_link_update: 'var(--brand)',
+    wallet_activity:    'var(--brand)',
 };
 
 function fmtDate(iso: string) {
@@ -76,7 +100,7 @@ function fmtDate(iso: string) {
     return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
 }
 
-const PREF_GROUPS = [
+const PREF_GROUPS: PreferenceGroup[] = [
     {
         label: 'Token purchases',
         key: 'token_purchased',
@@ -134,6 +158,23 @@ const PREF_GROUPS = [
             { channel: 'sms'    as const, label: 'SMS'    },
         ],
     },
+    {
+        label: 'Meter link decisions',
+        key: 'meter_link_update',
+        channels: [
+            { channel: 'in_app' as const, label: 'In-app · required', required: true },
+            { channel: 'email'  as const, label: 'Email'  },
+        ],
+    },
+    {
+        label: 'Beverly announcements',
+        key: 'admin_announcement',
+        channels: [
+            { channel: 'in_app' as const, label: 'In-app' },
+            { channel: 'sms'    as const, label: 'SMS'    },
+            { channel: 'email'  as const, label: 'Email'  },
+        ],
+    },
 ];
 
 // ── Inbox actions ─────────────────────────────────────────────────────────────
@@ -149,7 +190,10 @@ async function loadInbox(reset = true) {
         );
         items.value.push(...r.notifications);
         nextCursor.value  = r.nextCursor;
-        if (reset) unreadCount.value = r.unreadCount;
+        if (reset) {
+            unreadCount.value = r.unreadCount;
+            publishNotificationCount(unreadCount.value);
+        }
     } catch (e: any) {
         inboxError.value = e.message ?? 'Failed to load notifications.';
     } finally { loading.value = false; }
@@ -170,18 +214,34 @@ async function loadMore() {
 async function markRead(id: string) {
     const notif = items.value.find(n => n.id === id);
     if (!notif || notif.read) return;
-    notif.read = true;
-    if (unreadCount.value > 0) unreadCount.value--;
-    await api.patch(`/api/v1/customer/notifications/${id}/read`).catch(() => undefined);
+    inboxError.value = '';
+    try {
+        await api.patch(`/api/v1/customer/notifications/${id}/read`);
+        notif.read = true;
+        if (unreadCount.value > 0) unreadCount.value--;
+        publishNotificationCount(unreadCount.value);
+    } catch (error: any) {
+        inboxError.value = error?.message ?? 'Notification could not be marked read.';
+    }
+}
+
+async function openNotification(notification: Notification) {
+    await markRead(notification.id);
+    const path = typeof notification.metadata?.path === 'string' ? notification.metadata.path : '';
+    if (path) await router.push(path);
 }
 
 async function markAllRead() {
     markingAll.value = true;
+    inboxError.value = '';
     try {
         await api.post('/api/v1/customer/notifications/read-all');
         items.value.forEach(n => { n.read = true; });
         unreadCount.value = 0;
-    } catch { /* noop */ } finally { markingAll.value = false; }
+        publishNotificationCount(0);
+    } catch (error: any) {
+        inboxError.value = error?.message ?? 'Notifications could not be marked read.';
+    } finally { markingAll.value = false; }
 }
 
 // ── Preferences actions ───────────────────────────────────────────────────────
@@ -236,20 +296,26 @@ onMounted(async () => {
 
     <!-- Tabs -->
     <div class="notif-tabs">
-      <button :class="['notif-tab', { active: tab === 'inbox' }]" @click="tab = 'inbox'">
+      <button type="button" :class="['notif-tab', { active: tab === 'inbox' }]" :aria-pressed="tab === 'inbox'" @click="tab = 'inbox'">
         Inbox
         <span v-if="unreadCount > 0" class="notif-tab-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
-      <button :class="['notif-tab', { active: tab === 'settings' }]" @click="tab = 'settings'">
+      <button type="button" :class="['notif-tab', { active: tab === 'settings' }]" :aria-pressed="tab === 'settings'" @click="tab = 'settings'">
         Preferences
       </button>
     </div>
 
     <!-- ── INBOX TAB ────────────────────────────────────────────────────── -->
     <div v-if="tab === 'inbox'">
+      <div class="notification-filters" aria-label="Filter notifications">
+        <button v-for="option in filters" :key="option" type="button" :class="['notification-filter', { active: filter === option }]" :aria-pressed="filter === option" @click="filter = option">
+          {{ option }}
+        </button>
+      </div>
+
       <!-- Mark all read -->
       <div v-if="unreadCount > 0" style="display:flex; justify-content:flex-end; margin-bottom: var(--s-3)">
-        <button class="bw-btn sm" :disabled="markingAll" @click="markAllRead">
+        <button type="button" class="bw-btn sm notif-mark-all" :disabled="markingAll" @click="markAllRead">
           {{ markingAll ? 'Marking…' : 'Mark all read' }}
         </button>
       </div>
@@ -266,12 +332,17 @@ onMounted(async () => {
         <p style="font-size: var(--t-sm); color: var(--text-dim)">Events like token purchases and wallet top-ups will appear here.</p>
       </div>
 
+      <div v-else-if="!filteredItems.length" class="bw-empty-state">
+        <p>No {{ filter }} notifications</p>
+        <p style="font-size: var(--t-sm); color: var(--text-dim)">Choose another filter.</p>
+      </div>
+
       <div v-else class="bw-stack" style="gap: var(--s-2)">
         <div
-          v-for="n in items"
+          v-for="n in filteredItems"
           :key="n.id"
           :class="['notif-item', { unread: !n.read }]"
-          @click="markRead(n.id)"
+          @click="openNotification(n)"
         >
           <!-- Icon -->
           <div class="notif-icon" :style="`background: ${NOTIF_COLOR[n.type] ?? 'var(--brand)'}/14;`">
@@ -322,7 +393,8 @@ onMounted(async () => {
               <span class="pref-toggle-label">{{ ch.label }}</span>
               <input
                 type="checkbox"
-                :checked="prefs[ch.channel][group.key] ?? false"
+                :checked="ch.required || (prefs[ch.channel][group.key] ?? false)"
+                :disabled="ch.required"
                 @change="prefs[ch.channel][group.key] = ($event.target as HTMLInputElement).checked"
               />
             </label>
@@ -371,12 +443,14 @@ onMounted(async () => {
   justify-content: center;
   gap: var(--s-1);
   transition: background 0.15s, color 0.15s;
+  min-height: 44px;
 }
+.notif-mark-all { min-height: 44px; }
 .notif-tab.active {
-  background: var(--surface);
+  background: var(--glass-bg-strong);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 4px oklch(0% 0 0 / 0.10);
+  box-shadow: var(--glass-shadow-card);
 }
 .notif-tab-badge {
   background: var(--danger, oklch(60% 0.22 25));
@@ -390,6 +464,30 @@ onMounted(async () => {
   line-height: 16px;
   text-align: center;
 }
+.notification-filters {
+  display: flex;
+  gap: var(--s-1);
+  margin-bottom: var(--s-3);
+}
+.notification-filter {
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.notification-filter.active {
+  border-color: oklch(from var(--brand) l c h / 0.55);
+  background: oklch(from var(--brand) l c h / 0.14);
+  color: var(--brand);
+}
+.notification-filter:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 /* Inbox items */
 .notif-item {
@@ -397,8 +495,11 @@ onMounted(async () => {
   align-items: flex-start;
   gap: var(--s-3);
   padding: var(--s-3) var(--s-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
   border-radius: var(--r-xl);
   cursor: pointer;
   transition: background 0.12s;

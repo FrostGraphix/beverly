@@ -25,7 +25,7 @@
               <th>Status</th>
               <th>Requested</th>
               <th>Scheduled For</th>
-              <th></th>
+              <th class="privacy-actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -38,9 +38,15 @@
               <td><span :class="statusClass(r.status)" class="bw-badge">{{ r.status }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(r.requested_at) }}</td>
               <td class="bw-text-sm">{{ fmtDate(r.scheduled_for) }}</td>
-              <td v-if="r.status === 'pending'" class="bw-action-cell">
-                <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
-                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
+              <td v-if="r.status === 'pending'" class="bw-action-cell privacy-actions-col">
+                <div class="privacy-row-actions">
+                  <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
+                  <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
+                </div>
+                <MobileActionMenu label="Privacy actions">
+                  <button class="mobile-action-item danger" @click="openReview(r, true)">Approve</button>
+                  <button class="mobile-action-item" @click="openReview(r, false)">Reject</button>
+                </MobileActionMenu>
               </td>
               <td v-else></td>
             </tr>
@@ -65,8 +71,10 @@
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Scheduled</span><span class="bw-tc-pair-val">{{ fmtDate(r.scheduled_for) }}</span></div>
           </div>
           <div v-if="r.status === 'pending'" class="bw-tc-foot">
-            <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReview(r, true)">Approve</button>
-            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openReview(r, false)">Reject</button>
+            <MobileActionMenu label="Privacy actions">
+              <button class="mobile-action-item danger" @click="openReview(r, true)">Approve</button>
+              <button class="mobile-action-item" @click="openReview(r, false)">Reject</button>
+            </MobileActionMenu>
           </div>
         </div>
       </div>
@@ -105,6 +113,7 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 
 const requests     = ref<any[]>([]);
 const loading      = ref(false);
@@ -170,5 +179,23 @@ onMounted(load);
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .bw-alert-warning { background: oklch(90% 0.12 80); border-radius: var(--r-md); padding: .5rem .75rem; border-left: 3px solid oklch(70% 0.18 80); }
-.bw-tc-foot { display: flex; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.bw-tc-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
+.privacy-row-actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.privacy-actions-col { min-width: 150px; }
+
+@media (max-width: 720px) {
+  .privacy-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .privacy-row-actions {
+    display: none;
+  }
+}
 </style>

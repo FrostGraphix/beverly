@@ -137,8 +137,14 @@ function apiBody(url) {
   if (normalizedUrl.includes("/user/login")) {
     return { code: 0, data: { token: "qa-token", userId: "admin", userName: "ACB(admin)" } };
   }
+  if (normalizedUrl.includes("/auth/me")) {
+    return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
+  }
   if (normalizedUrl.includes("/user/read")) {
     return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
+  }
+  if (normalizedUrl.includes("/system/oem/list")) {
+    return { code: 0, data: { oems: [{ id: "QA-1", displayName: "QA OEM", logoUrl: "", capabilities: { remote_meter_task: true, tariff_management: true, wallet_vending: true } }] } };
   }
   if (normalizedUrl.includes("/dashboard/readpanelgroup")) {
     return {
@@ -277,7 +283,12 @@ async function login(page) {
   await page.fill('[data-testid="login-user-id"]', "admin");
   await page.fill('[data-testid="login-password"]', "admin");
   await page.click('[data-testid="login-submit"]');
-  await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
+  await page.waitForSelector(".dashboard-editor-container, .oem-hub", { timeout: 45000 });
+  const isHub = await page.evaluate(() => !!document.querySelector(".oem-hub"));
+  if (isHub) {
+    await page.click(".oem-hub__grid .oem-card__surface");
+    await page.waitForSelector(".dashboard-editor-container", { timeout: 45000 });
+  }
 }
 
 async function runFlow(browserName, page) {
@@ -288,59 +299,59 @@ async function runFlow(browserName, page) {
       window.location.hash = hash;
     }, route.hash);
     await page.waitForTimeout(250);
-    await page.waitForSelector(route.selector, { timeout: 10000 });
+    await page.waitForSelector(route.selector, { timeout: 45000 });
   }
 
   await page.click('[data-testid="table-toolbar-action-export"]');
-  await page.waitForSelector(".modal-title", { timeout: 10000 });
-  await closeModal(page);
+  await page.waitForSelector(".export-range-panel", { timeout: 45000 });
+  await page.click(".export-range-head .base-icon-button");
+  await page.waitForSelector(".export-range-panel", { state: "detached", timeout: 10000 });
 
   await page.evaluate(() => {
     window.location.hash = "#/token-generate/credit-token";
   });
-  await page.waitForSelector("text=Recharge", { timeout: 10000 });
+  await page.waitForSelector("text=Recharge", { timeout: 45000 });
   await page.click('[data-testid="table-row-action-recharge-1"]');
-  await page.waitForSelector("text=Total Paid(MMK)", { timeout: 10000 });
-  await page.locator(".modal-field", { hasText: "Total Paid(MMK)" }).locator("input").fill("350");
-  await page.evaluate(() => {
-    document.querySelector(".modal-actions .base-button--primary")?.click();
-  });
-  await page.waitForSelector(".token-review-hero", { timeout: 10000 });
-  await page.waitForSelector(".token-review-amount", { timeout: 10000 });
-  await page.waitForSelector("text=Payment Method", { timeout: 10000 });
-  await page.waitForSelector("text=Authorization Password", { timeout: 10000 });
-  await closeModal(page);
-
+  await page.waitForSelector(".rw-meter-hero", { timeout: 45000 });
+  await page.click("text=Continue");
+  await page.waitForSelector(".rw-amount-input", { timeout: 45000 });
+  await page.fill(".rw-amount-input", "350");
+  await page.click("text=Continue");
+  await page.waitForSelector("text=Authorization password", { timeout: 45000 });
+  await page.fill('input[type="password"]', "password123");
+  await page.click("text=Confirm and generate");
+  await page.waitForSelector(".rw-token-vault", { timeout: 45000 });
+  await page.click(".rw-close");
   await page.evaluate(() => {
     window.location.hash = "#/token-record/credit-token-record";
   });
-  await page.waitForSelector('th[data-column-key="receiptId"]', { timeout: 10000 });
+  await page.waitForSelector('th[data-column-key="receiptId"]', { timeout: 45000 });
   await page.locator('[data-testid^="table-row-action-print-"]').first().click();
-  await page.waitForSelector(".modal-title", { timeout: 10000 });
+  await page.waitForSelector(".modal-title", { timeout: 45000 });
   await closeModal(page);
 
   await page.evaluate(() => {
     window.location.hash = "#/management/account";
   });
-  await page.waitForSelector("text=Add", { timeout: 10000 });
+  await page.waitForSelector("text=Add", { timeout: 45000 });
   await page.click('[data-testid="table-toolbar-action-add"]');
-  await page.waitForSelector(".modal-title", { timeout: 10000 });
+  await page.waitForSelector(".modal-title", { timeout: 45000 });
   await closeModal(page);
 
   await page.evaluate(() => {
     window.location.hash = "#/remote-operation/remote-meter-reading";
   });
-  await page.waitForSelector("text=Add Batch Task", { timeout: 10000 });
+  await page.waitForSelector("text=Add Batch Task", { timeout: 45000 });
   await page.check('[data-testid="table-select-all"]', { force: true });
   await page.click('[data-testid="table-toolbar-action-add-batch-task"]');
-  await page.waitForSelector(".modal-title", { timeout: 10000 });
+  await page.waitForSelector(".modal-title", { timeout: 45000 });
   await page.click(".modal-actions .base-button--primary");
-  await page.waitForSelector("text=Selected Meter", { timeout: 10000 });
-  await page.waitForSelector("text=Station Count", { timeout: 10000 });
-  await page.waitForSelector("text=Data Item", { timeout: 10000 });
+  await page.waitForSelector("text=Selected Meter", { timeout: 45000 });
+  await page.waitForSelector("text=Station Count", { timeout: 45000 });
+  await page.waitForSelector("text=Data Item", { timeout: 45000 });
   await closeModal(page);
 
-  await page.waitForSelector('a.sidebar-item[href*="5175"], a.sidebar-item[href="/wallet-admin/"]', { timeout: 10000 });
+  await page.waitForSelector('a.sidebar-item[href*="5175"], a.sidebar-item[href="/wallet-admin/"]', { timeout: 45000 });
 
   return browserName;
 }

@@ -9,6 +9,7 @@ const requiredProductionKeys = [
   "LIVE_API_BASE_URL",
   "LIVE_API_BEARER_TOKEN",
   "JWT_SECRET",
+  "APP_ENCRYPTION_KEY",
   "CORS_ORIGINS"
 ];
 

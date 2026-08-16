@@ -9,6 +9,7 @@ const targetUrl = String(
 ).replace(/\/+$/, "");
 const protectionBypass = String(
   process.env.VERCEL_PROTECTION_BYPASS ||
+  process.env.VERCEL_AUTOMATION_BYPASS ||
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   ""
 ).trim();
@@ -84,12 +85,19 @@ async function authenticateSmoke() {
 
 async function main() {
   if (!targetUrl) {
-    throw new Error("TARGET_URL is required");
+    throw new Error("TARGET_URL, PREVIEW_TARGET_URL, PRODUCTION_TARGET_URL, or argv[2] is required");
+  }
+  if (!protectionBypass) {
+    throw new Error("VERCEL_PROTECTION_BYPASS is required for the protected Beverly preview");
+  }
+  if (!smokeToken && (!process.env.SMOKE_USER_ID || !process.env.SMOKE_PASSWORD)) {
+    throw new Error("SMOKE_AUTH_TOKEN or SMOKE_USER_ID and SMOKE_PASSWORD are required");
   }
 
   await authenticateSmoke();
 
   const health = await getJson(`${targetUrl}/api/system/health`);
+  const liveWriteControl = await getJson(`${targetUrl}/api/system/live-write-control`);
   const dashboard = await postJson(`${targetUrl}/api/dashboard/readPanelGroup`, {});
   const chart = await postJson(`${targetUrl}/api/dashboard/readLineChart`, { type: 3 });
   const accountRead = await postJson(`${targetUrl}/api/account/read`, { pageNumber: 1, pageSize: 20 });
@@ -97,9 +105,14 @@ async function main() {
   const tariffRead = await postJson(`${targetUrl}/api/tariff/read`, { pageNumber: 1, pageSize: 20 });
   const customerRead = await postJson(`${targetUrl}/api/customer/read`, { pageNumber: 1, pageSize: 20 });
   const gatewayRead = await postJson(`${targetUrl}/api/gateway/read`, { pageNumber: 1, pageSize: 20 });
-  const blockedWrite = await postJson(`${targetUrl}/api/account/create`, [{ customerId: "phase12-smoke" }]);
+  const liveWritesEnabled = liveWriteControl.body?.data?.enabled === true;
+  const blockedWrite = liveWritesEnabled
+    ? { status: "skipped", body: { reason: "live_writes_enabled" } }
+    : await postJson(`${targetUrl}/api/account/create`, [{ customerId: "phase12-smoke" }]);
 
   if (health.status !== 200 || !health.body?.data?.ok) throw new Error("health failed");
+  if (liveWriteControl.status !== 200 || !liveWriteControl.body?.data) throw new Error("live-write control read failed");
+  if (Boolean(health.body.data.allowLiveWrites) !== liveWritesEnabled) throw new Error("live-write health/control mismatch");
   if (dashboard.status === 401) throw new Error("dashboard read unauthorized; set SMOKE_AUTH_TOKEN or SMOKE_USER_ID/SMOKE_PASSWORD");
   if (dashboard.status !== 200 || !dashboard.body?.data) throw new Error("dashboard read failed");
   if (chart.status !== 200 || !chart.body?.data) throw new Error("chart read failed");
@@ -108,7 +121,7 @@ async function main() {
   if (tariffRead.status !== 200 || !tariffRead.body?.data) throw new Error("tariff read failed");
   if (customerRead.status !== 200 || !customerRead.body?.data) throw new Error("customer read failed");
   if (gatewayRead.status !== 200 || !gatewayRead.body?.data) throw new Error("gateway read failed");
-  if (![200, 403].includes(blockedWrite.status)) throw new Error("write check failed");
+  if (!liveWritesEnabled && ![200, 403].includes(blockedWrite.status)) throw new Error("write check failed");
 
   console.log(JSON.stringify({
     targetUrl,
@@ -118,6 +131,7 @@ async function main() {
     readMode: health.body.data.readMode,
     liveProxyEnabled: health.body.data.liveProxyEnabled,
     allowLiveWrites: health.body.data.allowLiveWrites,
+    liveWriteControl: liveWriteControl.body.data,
     dashboardStatus: dashboard.status,
     chartStatus: chart.status,
     accountReadStatus: accountRead.status,
@@ -127,6 +141,7 @@ async function main() {
     gatewayReadStatus: gatewayRead.status,
     writeStatus: blockedWrite.status,
     writeGuarded: blockedWrite.status === 403,
+    mutationCheckSkipped: liveWritesEnabled,
     status: "vercel smoke passed"
   }, null, 2));
 }

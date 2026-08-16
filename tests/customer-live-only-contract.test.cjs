@@ -10,7 +10,12 @@ assert.match(reference, /function requiresLiveRead\(pathname\) \{/);
 assert.match(reference, /\/\\\/api\\\/customer\\\/read\$\/i\.test\(normalizedPath\)/);
 assert.match(reference, /\/\\\/api\\\/account\\\/read\$\/i\.test\(normalizedPath\)/);
 assert.match(reference, /\/\\\/api\\\/RemoteMeterTask\\\/Get\(\?:Reading\|Control\)Task\$\/i\.test\(normalizedPath\)/);
-assert.match(reference, /function canUseSampleFallback\(pathname\) \{\s*return \/\\\/api\\\/RemoteMeterTask\\\/Get\(\?:Reading\|Control\|Token\)Task\$\/i\.test\(String\(pathname \|\| ""\)\);\s*\}/s);
+assert.match(reference, /\/\\\/api\\\/dashboard\\\/read\(\?:PanelGroup\|LineChart\)\$\/i\.test\(normalizedPath\)/);
+// station/read is intentionally EXCLUDED from the sample-fallback whitelist:
+// it is a mutable admin CRUD table, and silently serving a frozen fixture on
+// a live failure would hide real edits from the admin. See
+// tests/station-live-fallback-contract.test.cjs for the full fix contract.
+assert.doesNotMatch(reference, /\/\\\/api\\\/station\\\/read\$\/i\.test\(normalizedPath\)/);
 assert.match(reference, /function sampleReadResponse\(pathname, requestData\) \{\s*if \(requiresLiveRead\(pathname\) && !canUseSampleFallback\(pathname\)\) return null;/s);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/customer\/read"/);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/account\/read"/);

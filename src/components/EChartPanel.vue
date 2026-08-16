@@ -1,16 +1,6 @@
 <template>
   <div class="echart-panel dashboard-svg-chart">
     <div ref="chart" class="echart-canvas" role="img" :aria-label="title"></div>
-    <div v-if="showRisingAvatars" class="dashboard-avatar-rise" aria-hidden="true">
-      <span
-        v-for="avatar in risingAvatars"
-        :key="avatar.label"
-        class="dashboard-rise-avatar"
-        :style="avatar.style"
-      >
-        {{ avatar.label }}
-      </span>
-    </div>
   </div>
 </template>
 
@@ -26,16 +16,6 @@ export default {
   computed: {
     title() {
       return this.option?.title?.text || this.option?.series?.[0]?.name || "Chart";
-    },
-    showRisingAvatars() {
-      return /purchase money/i.test(this.title);
-    },
-    risingAvatars() {
-      return [
-        { label: "AA", style: { "--rise-left": "12%", "--rise-delay": "0s", "--rise-size": "30px" } },
-        { label: "BE", style: { "--rise-left": "44%", "--rise-delay": "1.15s", "--rise-size": "36px" } },
-        { label: "AC", style: { "--rise-left": "78%", "--rise-delay": "2.3s", "--rise-size": "28px" } }
-      ];
     }
   },
   watch: {
@@ -52,9 +32,17 @@ export default {
       if (this.chart) this.chart.resize();
     };
     window.addEventListener("resize", this.resizeHandler, { passive: true });
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(this.resizeHandler);
+      this.resizeObserver.observe(this.$refs.chart);
+    }
   },
   beforeUnmount() {
     window.removeEventListener("resize", this.resizeHandler);
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
     if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
     if (this.animationTimer) clearTimeout(this.animationTimer);
     if (this.chart) {
@@ -124,10 +112,21 @@ export default {
       // Only clamp the yAxis max when the chart actually HAS a cartesian yAxis.
       // Injecting a yAxis into axis-less charts (pie/donut/radar/gauge) makes
       // ECharts try to resolve a coordinate system that doesn't exist → crash.
+      const safeMax = maxValue > 0 ? Math.max(1, parseFloat((maxValue * 1.15).toFixed(2))) : 1;
       if (option.yAxis !== undefined) {
-        baseline.yAxis = Array.isArray(option.yAxis)
-          ? option.yAxis  // keep dual-axis array as-is; don't clamp max on dual-axis
-          : { ...(option.yAxis || {}), max: option.yAxis?.max ?? Math.ceil(maxValue * 1.1) };
+        const isCategoryY = !Array.isArray(option.yAxis) && option.yAxis?.type === "category";
+        if (!isCategoryY) {
+          baseline.yAxis = Array.isArray(option.yAxis)
+            ? option.yAxis  // keep dual-axis array as-is; don't clamp max on dual-axis
+            : { ...(option.yAxis || {}), max: option.yAxis?.max ?? safeMax };
+        }
+      }
+      if (option.xAxis !== undefined) {
+        const isCategoryY = !Array.isArray(option.yAxis) && option.yAxis?.type === "category";
+        const isValueX = !Array.isArray(option.xAxis) && (option.xAxis?.type === "value" || (!option.xAxis?.type && !option.xAxis?.data));
+        if (isCategoryY && isValueX) {
+          baseline.xAxis = { ...(option.xAxis || {}), max: option.xAxis?.max ?? safeMax };
+        }
       }
       return baseline;
     },

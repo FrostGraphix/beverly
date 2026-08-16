@@ -12,7 +12,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "allowJs": true,
+    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/vue"],
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src/**/*", "src/**/*.vue"]

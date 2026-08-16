@@ -7,6 +7,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const viteConfig = fs.readFileSync(path.join(root, "vite.config.mjs"), "utf8");
 const devStack = fs.readFileSync(path.join(root, "tools/run-dev-stack.cjs"), "utf8");
+const apiProxy = fs.readFileSync(path.join(root, "tools/run-api-proxy.cjs"), "utf8");
 
 assert.match(
   viteConfig,
@@ -20,7 +21,31 @@ assert.match(
   "Dev stack should keep the local API port at 9310"
 );
 
+assert.match(
+  viteConfig,
+  /response\.status = [\s\S]*loadReferenceHandler\(\)\(request, response\)/,
+  "Vite should preserve the native response stream for CSV exports"
+);
+
+assert.match(
+  viteConfig,
+  /server\.watcher\.on\("change", onServerFileChange\)/,
+  "Vite should re-require the API handler when server-side files change"
+);
+
+assert.match(
+  devStack,
+  /decorateResponse\(response\)[\s\S]*referenceHandler\(request, decorateResponse\(response\)\)/,
+  "Dev stack should preserve the native response stream for CSV exports"
+);
+
+assert.match(
+  apiProxy,
+  /decorateResponse\(response\)[\s\S]*referenceHandler\(request, decorateResponse\(response\)\)/,
+  "Standalone API should preserve the native response stream for CSV exports"
+);
+
 console.log(JSON.stringify({
   status: "dev proxy config passed",
-  checks: 2
+  checks: 5
 }, null, 2));

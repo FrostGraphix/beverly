@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import OnboardingChecklist from '../components/OnboardingChecklist.vue';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
+import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 
 const auth    = useAuthStore();
 const wallet  = ref<any>(null);
 const ledger  = ref<any[]>([]);
 const loading = ref(false);
+const customerName = computed(() => auth.customer?.full_name?.split(' ')[0] || 'there');
 
 onMounted(async () => {
     loading.value = true;
@@ -23,17 +25,20 @@ onMounted(async () => {
     } catch { /* noop */ } finally { loading.value = false; }
 });
 
-function greeting() {
-    const h = new Date().getHours();
-    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-}
 </script>
 
 <template>
   <AppShell>
+    <WalletGreeting
+      audience="Customer wallet"
+      :name="customerName"
+      detail="for top-ups, meters, and token purchases."
+    />
+
     <!-- Balance hero -->
-    <div class="bw-balance-hero">
-      <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">{{ greeting() }}, {{ auth.customer?.full_name?.split(' ')[0] || 'there' }}</p>
+    <div v-if="loading" class="bw-balance-hero bw-skeleton customer-balance-skeleton" role="status" aria-label="Loading dashboard"></div>
+    <div v-else class="bw-balance-hero">
+      <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">Wallet balance</p>
       <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-1)">
         {{ naira(wallet?.balance_minor) }}
       </div>
@@ -65,6 +70,9 @@ function greeting() {
       </div>
 
       <div class="bw-t-cards" style="display:block">
+        <template v-if="loading">
+          <div v-for="n in 3" :key="`customer-ledger-skeleton-${n}`" class="bw-tc bw-skeleton customer-ledger-skeleton" aria-hidden="true"></div>
+        </template>
         <div v-for="e in ledger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
@@ -85,3 +93,8 @@ function greeting() {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.customer-balance-skeleton { min-height: 190px; }
+.customer-ledger-skeleton { min-height: 76px; margin: var(--s-2) var(--s-3); }
+</style>

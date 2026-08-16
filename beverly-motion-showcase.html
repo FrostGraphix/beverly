@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beverly — Violent Camera, Serene UI</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@700;800;900&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/CustomEase.min.js"></script>
+
+<style>
+:root {
+  --beverly-green: #2FC34A;
+  --near-black: #030504;
+  --clean-white: #FFFFFF;
+  --neutral-grey: #66736D;
+  --ui-bg: rgba(7, 10, 9, 0.95);
+  --ui-border: rgba(47,195,74,0.15);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--near-black); color: var(--clean-white); font-family: 'Inter', sans-serif; overflow: hidden; }
+
+/* ----------------------------------------------------
+   THE UNIVERSE (3D SPATIAL RIG)
+   ---------------------------------------------------- */
+#viewport { position: fixed; inset: 0; perspective: 1200px; display: flex; align-items: center; justify-content: center; background: #000; }
+#camera-rig { position: absolute; width: 100vw; height: 100vh; transform-style: preserve-3d; }
+#universe { position: absolute; left: 50%; top: 50%; transform-style: preserve-3d; }
+
+.cluster { position: absolute; transform-style: preserve-3d; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; will-change: filter, transform; }
+
+/* Cinematic Overlays */
+.volumetric { position: fixed; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(47,195,74,0.05) 0%, transparent 70%); pointer-events: none; }
+.vignette { position: fixed; inset: 0; box-shadow: inset 0 0 250px #000; pointer-events: none; z-index: 100; }
+#bg-canvas { position: fixed; inset: 0; z-index: -1; opacity: 0.4; }
+
+/* ----------------------------------------------------
+   TYPOGRAPHY
+   ---------------------------------------------------- */
+.headline { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 110px; font-weight: 900; letter-spacing: -4px; text-align: center; white-space: nowrap; }
+.subtext { font-size: 24px; color: var(--neutral-grey); text-align: center; margin-top: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 4px; }
+.highlight { color: var(--beverly-green); text-shadow: 0 0 40px rgba(47,195,74,0.6); }
+
+/* ----------------------------------------------------
+   SERENE UI ELEMENTS (MECHANICAL, NO BOUNCE)
+   ---------------------------------------------------- */
+.panel { background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 12px; padding: 40px; box-shadow: 0 50px 100px rgba(0,0,0,1), 0 20px 40px rgba(47,195,74,0.05); transform-style: preserve-3d; }
+.panel-glow { box-shadow: 0 50px 100px rgba(0,0,0,1), 0 0 60px rgba(47,195,74,0.15); border: 1px solid rgba(47,195,74,0.4); }
+.ui-val { font-family: 'JetBrains Mono', monospace; font-size: 42px; font-weight: 900; color: var(--beverly-green); text-shadow: 0 0 20px rgba(47,195,74,0.4); }
+.ui-label { font-family: 'JetBrains Mono'; font-size: 11px; color: var(--neutral-grey); letter-spacing: 3px; text-transform: uppercase; font-weight: 800; margin-bottom: 12px; }
+.svg-chart { width: 100%; height: 80px; margin-top: 20px; overflow: visible; }
+.chart-path { fill: none; stroke: var(--beverly-green); stroke-width: 3; filter: drop-shadow(0 5px 15px rgba(47,195,74,0.5)); stroke-dasharray: 1000; stroke-dashoffset: 1000; stroke-linecap: square; }
+
+.table-row { display: flex; justify-content: space-between; padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: 'JetBrains Mono'; font-size: 14px; opacity: 0; background: rgba(255,255,255,0.02); margin-bottom: 4px; }
+.table-header { display: flex; justify-content: space-between; padding: 10px 20px; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--neutral-grey); letter-spacing: 2px; border-bottom: 1px solid var(--beverly-green); margin-bottom: 10px; }
+
+.virtual-mouse { position: absolute; width: 24px; height: 24px; z-index: 9999; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.8)); transform: translateZ(50px); opacity:0; pointer-events:none; }
+
+/* ----------------------------------------------------
+   MOBILE DEVICE (RIGID)
+   ---------------------------------------------------- */
+.phone { width: 380px; height: 760px; background: #000; border-radius: 40px; border: 6px solid #111; padding: 12px; position: relative; transform-style: preserve-3d; box-shadow: 0 50px 100px rgba(0,0,0,1), 0 0 50px rgba(47,195,74,0.1); overflow:hidden; }
+.phone-inner { background: #030504; height: 100%; border-radius: 28px; padding: 24px; display: flex; flex-direction: column; position: relative; }
+.glare { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 40%); pointer-events: none; transform: rotate(30deg) translateX(-100%); z-index:100; }
+
+@keyframes spin-ps { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Controls */
+#cinema-controls { position: fixed; bottom: 0; left: 0; right: 0; height: 80px; background: rgba(0,0,0,0.9); border-top: 1px solid #222; display: flex; align-items: center; padding: 0 40px; z-index: 200; }
+.play-btn { width: 40px; height: 40px; background: var(--clean-white); color: #000; border: none; font-size: 16px; cursor: pointer; display: grid; place-items: center; font-weight:900; }
+.timeline { flex: 1; margin: 0 30px; position: relative; height: 2px; background: #222; }
+.timeline-fill { position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: var(--beverly-green); box-shadow: 0 0 10px var(--beverly-green); }
+.time-display { color: var(--neutral-grey); font-family: 'JetBrains Mono'; font-size: 12px; margin-right: 20px; }
+.export-btn { background: #111; color: #fff; padding: 10px 20px; border: 1px solid #333; font-family: 'JetBrains Mono'; font-size: 12px; cursor: pointer; }
+.export-btn:hover { background: #ef4444; border-color: #ef4444; }
+</style>
+</head>
+<body>
+
+<audio id="bg-audio" src="file:///C:/Users/ACOB/Downloads/ElevenLabs_2026-07-21T08_28_50_Freya - Conversational, approachable_pvc_sp88_s50_sb75_se11_b_m2.mp3" preload="auto"></audio>
+
+<div class="volumetric"></div>
+<canvas id="bg-canvas"></canvas>
+<div class="vignette"></div>
+
+<!-- VIRTUAL MOUSE -->
+<svg class="virtual-mouse" id="v-mouse" viewBox="0 0 24 24"><path d="M7 2l12 11.2-5.8.5 3.3 7.3-2.25 1-3.2-7.4-4.4 4.8z" fill="#FFF"/></svg>
+
+<div id="viewport">
+  <div id="camera-rig">
+    <div id="universe">
+      
+      <!-- CLUSTER 1: The Ignition (Z: 0) -->
+      <div class="cluster" id="c1" style="transform: translate(-50%, -50%) translateZ(0px); filter: blur(50px);">
+        <img src="file:///C:/Users/ACOB/Documents/Beverly Logo B white.png" id="c1-logo" style="width:250px; opacity:0;" onerror="this.src='public/brand/beverly-wordmark.png'">
+        <h1 class="headline" id="c1-t1" style="position:absolute; opacity:0; font-family:'JetBrains Mono'; letter-spacing:-8px;">SYSTEM ONLINE</h1>
+        <h1 class="headline highlight" id="c1-t3" style="position:absolute; opacity:0;">Beverly.</h1>
+      </div>
+
+      <!-- CLUSTER 2: Admin Command Center (Z: -2500px) -->
+      <div class="cluster" id="c2" style="transform: translate(-50%, -50%) translateZ(-2500px); filter: blur(20px);">
+        <div class="panel panel-glow" id="admin-panel" style="width: 1400px; opacity:0;">
+          <h2 style="font-family:'JetBrains Mono'; font-size:18px; margin-bottom:40px; letter-spacing:4px; text-transform:uppercase; color:var(--neutral-grey);">// Global Operations</h2>
+          <div style="display:flex; gap:20px;">
+            <div class="panel" style="flex:1; background:#000;" id="admin-c1">
+              <div class="ui-label">Wallet Float</div>
+              <div class="ui-val" id="val-float">₦0.00</div>
+              <svg class="svg-chart"><path class="chart-path" d="M0,70 L40,60 L80,65 L120,40 L160,45 L200,20 L250,25 L300,5" id="path1"/></svg>
+            </div>
+            <div class="panel" style="flex:1; background:#000;" id="admin-c2">
+              <div class="ui-label">Active Settlements</div>
+              <div class="ui-val" style="color:#FFF;">₦284.5M</div>
+              <svg class="svg-chart"><path class="chart-path" d="M0,70 L50,40 L100,50 L200,10 L300,20" id="path2"/></svg>
+            </div>
+            <div class="panel" style="flex:1; background:#000;" id="admin-c3">
+               <div class="ui-label">System Health</div>
+               <div class="ui-val" style="color:#3b82f6;">OPTIMAL</div>
+               <div style="font-family:'JetBrains Mono'; font-size:12px; margin-top:20px; color:#666;">LATENCY: 12ms<br>UPTIME: 99.999%</div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLUSTER 2.5: The Infinite Ledger (Z: -5000px) -->
+      <div class="cluster" id="c25" style="transform: translate(-50%, -50%) translateZ(-5000px); filter: blur(20px);">
+         <div class="panel" id="ledger-panel" style="width: 1200px; opacity:0;">
+            <div class="table-header">
+               <div style="width:150px;">TX_HASH</div>
+               <div style="width:150px;">METER_ID</div>
+               <div style="width:100px;">AMOUNT</div>
+               <div style="width:100px; text-align:right;">STATUS</div>
+            </div>
+            <div id="ledger-rows">
+               <!-- Populated via JS -->
+            </div>
+         </div>
+      </div>
+
+      <!-- CLUSTER 3: Vendor Morph (Z: -7500px) -->
+      <div class="cluster" id="c3" style="transform: translate(-50%, -50%) translateZ(-7500px); filter: blur(20px);">
+        <div class="panel" id="vendor-list" style="width: 1000px; opacity:0; background:#000;">
+          <div class="table-header">
+             <div>VENDOR_NAME</div>
+             <div>STATUS</div>
+          </div>
+          <div id="v-rows">
+            <div class="table-row"><div>Bushrat Akindele</div><div>APPROVED</div></div>
+            <div class="table-row" id="row-loleko"><div>Elegbon Loleko</div><div style="color:var(--beverly-green);">APPROVED</div></div>
+            <div class="table-row"><div>Wallet Smoke Vendor</div><div>APPROVED</div></div>
+            <div class="table-row"><div>Danmusa Abdulsamad</div><div>APPROVED</div></div>
+          </div>
+        </div>
+        <div class="panel panel-glow" id="vendor-detail" style="width: 1000px; opacity:0; position:absolute; z-index:10; background:#020403;">
+          <div class="ui-label">VENDOR INSPECTOR</div>
+          <div style="font-size:48px; font-family:'Plus Jakarta Sans'; font-weight:900; letter-spacing:-2px;">Elegbon Loleko</div>
+          <div style="font-family:'JetBrains Mono'; font-size:14px; color:var(--neutral-grey); margin-bottom:40px;">ID: VND-883921-A</div>
+          <div style="display:flex; gap:20px;">
+             <div class="panel" style="flex:1; background:#000;"><div class="ui-label">Balance</div><div class="ui-val">₦50,000.00</div></div>
+             <div class="panel" style="flex:1; background:#000;"><div class="ui-label">Total Vended</div><div class="ui-val" style="color:#FFF;">₦5,100.00</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLUSTER 4.5: Customer Phone Journey (Z: -10000px) -->
+      <div class="cluster" id="c45" style="transform: translate(-50%, -50%) translateZ(-10000px); filter: blur(20px);">
+        <div class="phone" id="cust-phone" style="opacity:0;">
+          <div class="glare" id="c45-glare"></div>
+          
+          <!-- Email Notification -->
+          <div id="email-notif" style="position:absolute; top:-150px; left:12px; right:12px; background:#fff; border-radius:16px; padding:16px; color:#000; z-index:100; box-shadow:0 20px 40px rgba(0,0,0,0.9);">
+            <div style="font-family:'JetBrains Mono'; font-size:10px; font-weight:800; color:var(--beverly-green); letter-spacing:2px; margin-bottom:8px;">SECURE COMMS</div>
+            <div style="font-family:'Plus Jakarta Sans'; font-size:15px; font-weight:800;">Receipt: Token Generated</div>
+            <div style="font-size:13px; color:#444; margin-top:4px;">Token 4509-8812-3901 transmitted.</div>
+          </div>
+          
+          <div class="phone-inner" id="cp-inner">
+            <div class="ui-label" style="display:flex; justify-content:space-between; margin-bottom:30px;">
+              <span>Home_Port</span>
+              <span style="color:var(--beverly-green);">● LIVE</span>
+            </div>
+            
+            <div class="panel" style="padding:20px; background:#000; border:1px solid #111; margin-bottom:20px; box-shadow:none;" id="cp-consump">
+              <div class="ui-label">Usage_24H</div>
+              <div class="ui-val" style="font-size:28px;">14.2 <span style="font-size:12px; color:var(--neutral-grey);">kWh</span></div>
+              <div style="display:flex; align-items:flex-end; gap:4px; height:40px; margin-top:15px;">
+                 <div class="bar c-bar" style="height:20%; background:#222; flex:1;"></div>
+                 <div class="bar c-bar" style="height:40%; background:#222; flex:1;"></div>
+                 <div class="bar c-bar" style="height:30%; background:#222; flex:1;"></div>
+                 <div class="bar c-bar" style="height:70%; background:#222; flex:1;"></div>
+                 <div class="bar c-bar" style="height:50%; background:#222; flex:1;"></div>
+                 <div class="bar c-bar active" style="height:90%; background:var(--beverly-green); flex:1; box-shadow:0 0 10px var(--beverly-green);"></div>
+              </div>
+            </div>
+
+            <div class="panel" style="padding:20px; background:#000; border:1px solid #111; box-shadow:none;" id="cp-wallet">
+               <div class="ui-label">Wallet_Balance</div>
+               <div class="ui-val" style="font-size:28px; color:#FFF;">₦2,500</div>
+               <div id="btn-fund" style="background:var(--beverly-green); color:#000; padding:12px; text-align:center; border-radius:6px; font-family:'JetBrains Mono'; font-weight:800; font-size:12px; margin-top:20px; letter-spacing:1px;">FUND_WALLET</div>
+            </div>
+          </div>
+          
+          <!-- Paystack Modal (Hard, flat, mechanical) -->
+          <div id="paystack-modal" style="position:absolute; bottom:-400px; left:0; right:0; height:320px; background:#fff; color:#000; padding:30px; z-index:40; display:flex; flex-direction:column; align-items:center;">
+             <div style="font-weight:900; font-family:'Plus Jakarta Sans'; font-size:20px; color:#0ba4db; letter-spacing:1px; margin-bottom:10px;">paystack</div>
+             <div style="font-size:36px; font-weight:900; font-family:'JetBrains Mono';">₦10,000</div>
+             <div id="ps-spinner" style="width:30px; height:30px; border:3px solid #eee; border-top:3px solid #0ba4db; border-radius:50%; animation:spin-ps 0.6s linear infinite; margin-top:30px;"></div>
+             <div id="ps-success" style="display:none; font-size:36px; color:var(--beverly-green); margin-top:20px; font-weight:900;">✔</div>
+          </div>
+
+          <!-- Direct-to-Meter Overaly -->
+          <div id="cp-meter" style="position:absolute; inset:0; background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; z-index:50;">
+             <div id="meter-status" style="font-weight:900; font-family:'JetBrains Mono'; font-size:14px; text-align:center; color:var(--beverly-green); letter-spacing:4px; line-height:2;">UPLINK_ESTABLISHED<br><br><span style="font-size:24px;" id="meter-prog">0%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLUSTER 5: Vendor Mobile Whip-Pan (Z: -12500px) -->
+      <div class="cluster" id="c5" style="transform: translate(-50%, -50%) translateZ(-12500px); filter: blur(20px);">
+        <div class="phone" id="vendor-phone" style="opacity:0;">
+          <div class="glare" id="m-glare"></div>
+          <div class="phone-inner">
+             <div class="ui-label" style="margin-bottom:30px;">Vendor_Terminal</div>
+             <div class="panel" style="padding:15px; margin-bottom:15px; background:#000; box-shadow:none; border:1px solid #111;">
+               <div class="ui-label">METER_ID</div>
+               <div class="ui-val" style="font-size:20px;" id="m-meter">_</div>
+             </div>
+             <div class="panel" style="padding:15px; background:#000; box-shadow:none; border:1px solid #111; margin-bottom:auto;">
+               <div class="ui-label">VALUE</div>
+               <div class="ui-val" style="font-size:20px; color:#FFF;" id="m-amt">_</div>
+             </div>
+             <div style="background:var(--beverly-green); color:#000; padding:15px; text-align:center; border-radius:6px; font-weight:800; font-family:'JetBrains Mono'; letter-spacing:2px;" id="m-btn">EXECUTE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLUSTER 6: The Surge Finale (Z: -15000px) -->
+      <div class="cluster" id="c6" style="transform: translate(-50%, -50%) translateZ(-15000px); filter: blur(20px);">
+         <h1 class="headline" id="c6-t1" style="opacity:0; color:#ef4444; font-family:'JetBrains Mono'; letter-spacing:10px;">GRID_LOCKED</h1>
+         <img src="file:///C:/Users/ACOB/Documents/Beverly Logo B white.png" id="c6-logo" style="width:300px; opacity:0; position:absolute;" onerror="this.src='public/brand/beverly-wordmark.png'">
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<footer id="cinema-controls">
+  <button class="play-btn" id="play-pause" onclick="togglePlay()">▶</button>
+  <div class="timeline" id="tl-click"><div class="timeline-fill" id="progress-bar"></div></div>
+  <div class="time-display" id="time-disp">00:00 / 01:00</div>
+  <button class="export-btn" onclick="exportVideo()">RENDER VIDEO</button>
+</footer>
+
+<script>
+/* =======================================================================
+   GENERATING INFINITE LEDGER ROWS
+   ======================================================================= */
+const ledger = document.getElementById('ledger-rows');
+for(let i=0; i<15; i++) {
+   const hash = Math.random().toString(36).substring(2, 10).toUpperCase();
+   const meter = "4509" + Math.floor(1000+Math.random()*9000);
+   const amt = "₦" + Math.floor(1000+Math.random()*20000) + ".00";
+   const stat = Math.random() > 0.1 ? "<span style='color:var(--beverly-green)'>SUCCESS</span>" : "<span style='color:#ef4444'>FAILED</span>";
+   ledger.innerHTML += `<div class="table-row l-row"><div>0x${hash}</div><div>${meter}</div><div>${amt}</div><div style="text-align:right;">${stat}</div></div>`;
+}
+
+/* =======================================================================
+   PARTICLE ENGINE (MECHANICAL/FAST)
+   ======================================================================= */
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let surgeMode = false;
+let transmitMode = false;
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+class Particle {
+  constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.z = Math.random() * 2000; }
+  update() {
+    let speed = 4;
+    if(surgeMode) speed = 30;
+    if(transmitMode) speed = 80;
+    this.z -= speed; 
+    if(this.z < 0) { this.z = 2000; this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; }
+  }
+}
+for(let i=0; i<150; i++) particles.push(new Particle());
+
+function drawCanvas() {
+  ctx.fillStyle = transmitMode ? 'rgba(3, 5, 4, 0.1)' : 'rgba(3, 5, 4, 0.5)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  for(let i=0; i<particles.length; i++){
+    particles[i].update();
+    let p = particles[i];
+    let scale = 1500 / (1500 + p.z);
+    let px = (p.x - canvas.width/2) * scale + canvas.width/2;
+    let py = (p.y - canvas.height/2) * scale + canvas.height/2;
+    
+    ctx.beginPath();
+    ctx.rect(px, py, scale * (transmitMode ? 8 : 2), scale * 2); // Square particles for mechanical feel
+    ctx.fillStyle = transmitMode ? '#FFF' : '#333';
+    ctx.fill();
+    
+    if(surgeMode && Math.random() > 0.95) {
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + 100);
+      ctx.strokeStyle = '#2FC34A'; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+  requestAnimationFrame(drawCanvas);
+}
+drawCanvas();
+
+/* =======================================================================
+   VIOLENT CAMERA, SERENE UI: 60-SECOND TIMELINE
+   ======================================================================= */
+const masterTL = gsap.timeline({
+  paused: true,
+  onUpdate: function() {
+    let prog = this.progress();
+    document.getElementById('progress-bar').style.width = (prog * 100) + '%';
+    let secs = Math.floor(prog * 60);
+    document.getElementById('time-disp').innerText = `00:${secs.toString().padStart(2,'0')} / 01:00`;
+  }
+});
+
+// TOTAL DURATION TARGET: 60 SECONDS.
+// Aggressive mechanical easings
+const UI_EASE = "power4.out";
+const CAM_EASE = "expo.inOut";
+
+// ----------------------------------------------------
+// 0-4s: Violent Ignition
+// ----------------------------------------------------
+masterTL.to('#c1-logo', {opacity:1, duration:0.1}, 0);
+masterTL.fromTo('#c1', {filter:'blur(50px)', scale:2}, {filter:'blur(0px)', scale:1, duration:1, ease:CAM_EASE}, 0);
+masterTL.to('#c1-logo', {opacity:0, duration:0.1}, 1.5);
+masterTL.to('#c1-t1', {opacity:1, duration:0.1}, 1.6);
+masterTL.to('#c1-t1', {opacity:0, duration:0.1}, 2.5);
+masterTL.to('#c1-t3', {opacity:1, duration:0.1}, 2.6);
+masterTL.to('#c1', {filter:'blur(40px)', opacity:0, duration:0.4, ease:"power2.in"}, 4);
+
+// CRASH ZOOM TO C2
+masterTL.to('#camera-rig', {z: 2500, duration: 0.6, ease:CAM_EASE}, 4);
+masterTL.to('#c2', {filter:'blur(0px)', duration:0.4, ease:CAM_EASE}, 4.2);
+
+// ----------------------------------------------------
+// 4.5-9s: Admin Command Center (Instant resolves)
+// ----------------------------------------------------
+masterTL.to('#admin-panel', {opacity:1, duration:0.1}, 4.6);
+masterTL.to('#path1', {strokeDashoffset: 0, duration: 0.8, ease:"none"}, 5);
+masterTL.to('#path2', {strokeDashoffset: 0, duration: 0.8, ease:"none"}, 5);
+masterTL.to({val:0}, {val: 50000, duration: 0.5, ease:"none", onUpdate: function() {
+  document.getElementById('val-float').innerText = '₦' + Math.floor(this.targets()[0].val).toLocaleString() + '.00';
+}}, 5);
+masterTL.to('#c2', {filter:'blur(30px)', opacity:0, duration:0.5, ease:"power2.in"}, 9.5);
+
+// DOLLY ZOOM TO C2.5 (Infinite Ledger)
+masterTL.to('#camera-rig', {z: 5000, duration: 1.5, ease:CAM_EASE}, 9.5);
+masterTL.to('#viewport', {perspective: 300, duration: 1.5, ease:CAM_EASE}, 9.5); // Narrow FOV
+masterTL.to('#c25', {filter:'blur(0px)', duration:0.5, ease:CAM_EASE}, 10);
+
+// ----------------------------------------------------
+// 10-15s: Infinite Ledger Scroll
+// ----------------------------------------------------
+masterTL.to('#ledger-panel', {opacity:1, duration:0.1}, 10.5);
+masterTL.to('.l-row', {opacity:1, stagger:0.02, duration:0.1}, 10.6);
+// The Dolly Zoom push
+masterTL.to('#c25', {y: -300, duration:4, ease:"power1.inOut"}, 11);
+masterTL.to('#c25', {filter:'blur(50px)', opacity:0, duration:0.4, ease:"power2.in"}, 14.5);
+
+// Restore Perspective & CRASH ZOOM TO C3
+masterTL.to('#viewport', {perspective: 1200, duration: 0.1}, 14.9);
+masterTL.to('#camera-rig', {z: 7500, duration: 0.6, ease:CAM_EASE}, 14.9);
+masterTL.to('#c3', {filter:'blur(0px)', duration:0.4, ease:CAM_EASE}, 15.1);
+
+// ----------------------------------------------------
+// 15-20s: Vendor Morph
+// ----------------------------------------------------
+masterTL.to('#vendor-list', {opacity:1, duration:0.1}, 15.5);
+masterTL.to('.table-row', {opacity:1, stagger: 0.05, duration:0.1}, 15.6);
+masterTL.to('#v-mouse', {opacity:1, x: window.innerWidth/2, y: window.innerHeight/2 + 20, duration: 0.3, ease:UI_EASE}, 17);
+// Instant Morph
+masterTL.to('#vendor-list', {opacity:0, duration:0.1}, 17.5);
+masterTL.to('#vendor-detail', {opacity:1, duration:0.1}, 17.5);
+masterTL.to('#c3', {filter:'blur(40px)', opacity:0, duration:0.4, ease:"power2.in"}, 21.5);
+
+// CRASH ZOOM TO C4.5 (Customer Phone)
+masterTL.to('#camera-rig', {z: 10000, duration: 0.8, ease:CAM_EASE}, 21.5);
+masterTL.to('#c45', {filter:'blur(0px)', duration:0.5, ease:CAM_EASE}, 21.8);
+
+// ----------------------------------------------------
+// 22-38s: Customer Mobile Journey
+// ----------------------------------------------------
+masterTL.to('#cust-phone', {opacity:1, duration:0.1}, 22.5);
+masterTL.to('.c-bar', {background:'var(--beverly-green)', stagger:0.05, duration:0.1}, 23); // Data flashing in
+
+// Paystack Funding (Mechanical)
+masterTL.to('#v-mouse', {x: window.innerWidth/2, y: window.innerHeight/2 + 150, duration:0.4, ease:UI_EASE}, 25);
+masterTL.to('#btn-fund', {background:'#fff', duration:0.1, yoyo:true, repeat:1}, 25.5);
+masterTL.to('#cp-inner', {filter: 'blur(10px)', duration:0.1}, 25.6);
+masterTL.to('#paystack-modal', {bottom: 0, duration: 0.3, ease:UI_EASE}, 25.6);
+
+// Spinner to Check
+masterTL.to('#ps-spinner', {display:'none', duration:0}, 28);
+masterTL.to('#ps-success', {display:'block', duration:0}, 28);
+masterTL.to('#paystack-modal', {bottom: -400, duration: 0.2, ease:UI_EASE}, 29.5);
+masterTL.to('#cp-inner', {filter: 'blur(0px)', duration:0.1}, 29.6);
+
+// Email Notification
+masterTL.to('#email-notif', {top: 12, duration: 0.2, ease:UI_EASE}, 31);
+masterTL.to('#email-notif', {top: -150, duration: 0.2, ease:UI_EASE}, 33.5);
+
+// Meter Transmission
+masterTL.to('#cp-meter', {opacity: 1, duration: 0.1}, 34);
+masterTL.call(() => { transmitMode = true; }, null, 34); 
+masterTL.to({val:0}, {val:100, duration:2.5, ease:"none", onUpdate:function(){ document.getElementById('meter-prog').innerText = Math.floor(this.targets()[0].val) + "%"; }}, 34.1);
+masterTL.call(() => { document.getElementById('meter-status').innerHTML = "UPLINK_SUCCESS<br><br><span style='color:#fff; font-size:24px;'>✔</span>"; transmitMode = false; }, null, 36.6);
+
+// WHIP PAN TO C5 (Vendor Phone)
+masterTL.to('#camera-rig', {rotateY: 180, z: 12500, duration: 0.5, ease:"power3.inOut"}, 39);
+masterTL.to('#c45', {filter:'blur(50px)', opacity:0, duration:0.2}, 39);
+masterTL.to('#c5', {filter:'blur(0px)', rotateY: 180, duration:0.1}, 39.3); // Pre-rotate phone to match rig
+
+// ----------------------------------------------------
+// 40-50s: Vendor Mobile Vending
+// ----------------------------------------------------
+masterTL.to('#vendor-phone', {opacity:1, duration:0.1}, 40);
+
+// Mono Typewriter
+const mNum2 = "4509-8812-3901";
+masterTL.to({}, {duration: 1.5, ease:"steps(14)", onUpdate: function() {
+  document.getElementById('m-meter').innerText = mNum2.substring(0, Math.floor(this.progress() * mNum2.length)) + "_";
+}}, 41);
+masterTL.to({}, {duration: 0.5, ease:"steps(7)", onUpdate: function() {
+  document.getElementById('m-amt').innerText = "₦15,000" + "_";
+}}, 43.5);
+
+masterTL.to('#v-mouse', {opacity:1, rotateY:180, x: window.innerWidth/2, y: window.innerHeight/2 + 250, duration:0.4, ease:UI_EASE}, 45);
+masterTL.to('#m-btn', {background: '#fff', duration: 0.1, yoyo: true, repeat: 1}, 45.6);
+masterTL.to('#v-mouse', {opacity:0, duration:0.1}, 46);
+masterTL.to('#c5', {filter:'blur(40px)', opacity:0, duration:0.3, ease:"power2.in"}, 49.5);
+
+// CRASH ZOOM TO C6 (Surge Finale)
+masterTL.to('#camera-rig', {z: 15000, duration: 0.5, ease:CAM_EASE}, 49.5);
+masterTL.to('#c6', {filter:'blur(0px)', rotateY:180, duration:0.2}, 49.8); // Maintain rig rotation
+
+// ----------------------------------------------------
+// 50-60s: The Surge Finale
+// ----------------------------------------------------
+masterTL.call(() => { surgeMode = true; }, null, 50);
+masterTL.to('#c6-t1', {opacity:1, duration: 0.1}, 50.5);
+masterTL.to('#c6-t1', {opacity:0, duration:0.1}, 52.5);
+masterTL.to('#c6-logo', {opacity:1, duration: 0.1}, 53);
+masterTL.call(() => { surgeMode = false; }, null, 57);
+
+// Force 60 seconds mapping
+masterTL.to({}, {duration: 0.1}, 59.9);
+
+// Media Control
+const audio = document.getElementById('bg-audio');
+let isPlaying = false;
+function togglePlay() {
+  if(!isPlaying) { masterTL.play(); audio.play().catch(e=>console.log(e)); document.getElementById('play-pause').innerText = '⏸'; }
+  else { masterTL.pause(); audio.pause(); document.getElementById('play-pause').innerText = '▶'; }
+  isPlaying = !isPlaying;
+}
+
+document.getElementById('tl-click').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const prog = (e.clientX - rect.left) / rect.width;
+  masterTL.progress(prog); audio.currentTime = prog * 60;
+});
+
+// MP4 Export
+let mediaRecorder; let recordedChunks = []; let isRecording = false;
+function exportVideo() {
+  if(!isRecording) {
+    alert("BULLETPROOF RENDER: Select 'This Tab' in the dialog to capture the cinematic DOM render.");
+    navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 60, displaySurface: 'browser' }, audio: true }).then(stream => {
+      recordedChunks = [];
+      let options = {mimeType: 'video/webm;codecs=vp9'};
+      if (MediaRecorder.isTypeSupported('video/mp4')) { options = {mimeType: 'video/mp4'}; }
+      
+      mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const ext = options.mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(recordedChunks, {type: options.mimeType});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `Beverly-Cinematic-60s.${ext}`; a.click();
+        isRecording = false; document.querySelector('.export-btn').innerText = "RENDER VIDEO";
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start(); isRecording = true; document.querySelector('.export-btn').innerText = "RECORDING... (AUTO-STOPS)";
+      masterTL.restart(); audio.currentTime = 0; audio.play(); isPlaying = true; document.getElementById('play-pause').innerText = '⏸';
+      
+      masterTL.eventCallback("onComplete", () => { if(isRecording) mediaRecorder.stop(); });
+    }).catch(e => { console.error(e); alert("Render canceled. Tab sharing required."); });
+  } else { mediaRecorder.stop(); }
+}
+</script>
+</body>
+</html>

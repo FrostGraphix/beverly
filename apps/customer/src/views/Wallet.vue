@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 
 const wallet  = ref<any>(null);
 const entries = ref<any[]>([]);
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 
 onMounted(async () => {
     loading.value = true;
@@ -53,12 +57,13 @@ onMounted(async () => {
     </div>
 
     <!-- Ledger -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <div>
           <div class="bw-card-title">Ledger</div>
           <div class="bw-card-sub">{{ entries.length }} entries</div>
         </div>
+        <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
       </div>
 
       <!-- Desktop table -->

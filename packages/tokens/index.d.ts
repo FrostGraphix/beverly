@@ -30,6 +30,53 @@ export declare const fontStacks: {
     mono: string;
 };
 
+export declare const VENDING_VAT_BASIS_POINTS: number;
+
+export interface VendingVatBreakdown {
+    grossAmountMinor: number;
+    energyAmountMinor: number;
+    vatAmountMinor: number;
+    vatRateBasisPoints: number;
+}
+
+export declare function calculateVendingVatBreakdown(
+    grossAmountMinor: number,
+    vatRateBasisPoints?: number,
+): VendingVatBreakdown;
+
+export type WalletGreetingPeriod = 'morning' | 'afternoon' | 'night';
+
+export interface WalletGreeting {
+    period: WalletGreetingPeriod;
+    english: string;
+    yoruba: string;
+    hausa: string;
+    igbo: string;
+    pulse: string;
+}
+
+export declare function getWalletGreeting(date?: Date): WalletGreeting;
+
+export declare function publishNotificationCount(count: number): void;
+export declare function onNotificationCountChange(callback: (count: number) => void): () => void;
+
 export declare function setTheme(name: 'dark' | 'light' | string): void;
 export declare function initTheme(defaultName?: string): void;
 export declare function toggleTheme(): void;
+
+export declare const DEFAULT_PAGE_SIZE: number;
+export declare function pageCount(total: number, pageSize?: number): number;
+export declare function clampPage(page: number, total: number, pageSize?: number): number;
+export declare function paginate<T>(rows: T[], page: number, pageSize?: number): T[];
+export declare function pageRange(page: number, total: number, pageSize?: number): { first: number; last: number };
+
+export declare function isInstallDismissed(): boolean;
+export declare function dismissInstallPrompt(days?: number): void;
+export declare function clearInstallDismissal(): void;
+export declare function isStandalone(): boolean;
+export declare function isIos(): boolean;
+export declare function isIosInstallable(): boolean;
+
+export declare function getDeferredInstallPrompt(): any | null;
+export declare function onInstallPromptChange(callback: (event: any | null) => void): () => void;
+export declare function triggerInstallPrompt(): Promise<{ outcome: 'accepted' | 'dismissed'; platform: string } | null>;

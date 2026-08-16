@@ -37,6 +37,7 @@ export function validateLoginResponse(value) {
   return {
     ...envelope,
     data: {
+      ...envelope.data,
       token: optionalString(envelope.data.token),
       userId: optionalString(envelope.data.userId),
       userName: optionalString(envelope.data.userName || envelope.data.name),
@@ -67,7 +68,8 @@ export function validateProfileState(value) {
   return {
     name: optionalString(source.name),
     email: optionalString(source.email),
-    phone: optionalString(source.phone)
+    phone: optionalString(source.phone),
+    profilePictureUrl: optionalString(source.profilePictureUrl || source.profile_picture_url)
   };
 }
 

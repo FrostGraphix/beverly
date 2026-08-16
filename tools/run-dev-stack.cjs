@@ -46,6 +46,15 @@ function writeJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function decorateResponse(response) {
+  response.status = (statusCode) => ({
+    json(body) {
+      writeJson(response, statusCode, body);
+    }
+  });
+  return response;
+}
+
 function createApiServer() {
   return http.createServer(async (request, response) => {
     if (request.method === "OPTIONS") {
@@ -53,11 +62,7 @@ function createApiServer() {
       return;
     }
     try {
-      await referenceHandler(request, {
-        status(statusCode) {
-          return { json(body) { writeJson(response, statusCode, body); } };
-        }
-      });
+      await referenceHandler(request, decorateResponse(response));
     } catch (error) {
       writeJson(response, 500, {
         code: 500,

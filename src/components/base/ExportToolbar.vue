@@ -1,10 +1,10 @@
 <template>
-  <div class="export-toolbar" ref="toolbarRef">
+  <div class="export-toolbar" :class="{ 'export-toolbar--open': open }" ref="toolbarRef">
     <BaseButton
       class="export-trigger"
       size="sm"
-      :disabled="disabled || !rows.length"
-      @click="open = !open"
+      :disabled="disabled || (!rows.length && !pdfExporter)"
+      @click="toggleMenu"
       :aria-expanded="String(open)"
       aria-haspopup="menu"
     >
@@ -14,9 +14,15 @@
     </BaseButton>
 
     <transition name="export-drop">
-      <div v-show="open" class="export-menu" role="menu" aria-label="Export formats">
+      <div
+        v-show="open"
+        class="export-menu"
+        :class="{ 'export-menu--up': dropUp }"
+        role="menu"
+        aria-label="Export formats"
+      >
         <button
-          v-for="fmt in formats"
+          v-for="fmt in visibleFormats"
           :key="fmt.id"
           type="button"
           class="export-option"
@@ -50,11 +56,17 @@ export default {
     columns: { type: Array, required: true },
     title: { type: String, default: "Export" },
     filename: { type: String, default: "beverly-export" },
-    disabled: { type: Boolean, default: false }
+    disabled: { type: Boolean, default: false },
+    pdfExporter: { type: Function, default: null },
+    allowedFormats: {
+      type: Array,
+      default: () => ["csv", "excel", "pdf", "json", "print"]
+    }
   },
   data() {
     return {
       open: false,
+      dropUp: false,
       exporting: false,
       successFeedback: false,
       formats: [
@@ -66,6 +78,11 @@ export default {
       ]
     };
   },
+  computed: {
+    visibleFormats() {
+      return this.formats.filter((format) => this.allowedFormats.includes(format.id));
+    }
+  },
   mounted() {
     document.addEventListener("pointerdown", this.handleOutside, true);
     document.addEventListener("keydown", this.handleEsc);
@@ -75,6 +92,19 @@ export default {
     document.removeEventListener("keydown", this.handleEsc);
   },
   methods: {
+    toggleMenu() {
+      if (this.open) {
+        this.open = false;
+        return;
+      }
+
+      const rect = this.$refs.toolbarRef?.getBoundingClientRect();
+      const menuHeight = Math.min((this.visibleFormats.length * 44) + 8, 300);
+      const roomBelow = rect ? window.innerHeight - rect.bottom : menuHeight;
+      const roomAbove = rect?.top ?? 0;
+      this.dropUp = roomBelow < menuHeight + 12 && roomAbove > roomBelow;
+      this.open = true;
+    },
     handleOutside(e) {
       if (this.open && this.$refs.toolbarRef && !this.$refs.toolbarRef.contains(e.target)) {
         this.open = false;
@@ -84,7 +114,7 @@ export default {
       if (e.key === "Escape" && this.open) this.open = false;
     },
     async doExport(format) {
-      if (!this.rows.length) return;
+      if (!this.rows.length && !(format === "pdf" && this.pdfExporter)) return;
       this.exporting = true;
       this.open = false;
 
@@ -99,8 +129,12 @@ export default {
           const xml = exportReportExcelXml(this.title, this.columns, this.rows);
           downloadTextFile(`${base}.xls`, xml, "application/vnd.ms-excel");
         } else if (format === "pdf") {
-          const pdf = exportReportPdfText(this.title, this.columns, this.rows);
-          downloadTextFile(`${base}.pdf`, pdf, "application/pdf");
+          if (this.pdfExporter) {
+            await this.pdfExporter();
+          } else {
+            const pdf = exportReportPdfText(this.title, this.columns, this.rows);
+            downloadTextFile(`${base}.pdf`, pdf, "application/pdf");
+          }
         } else if (format === "json") {
           const json = JSON.stringify(this.rows, null, 2);
           downloadTextFile(`${base}.json`, json, "application/json");
@@ -160,7 +194,8 @@ export default {
 </script>
 
 <style scoped>
-.export-toolbar { position: relative; display: inline-flex; }
+.export-toolbar { position: relative; display: inline-flex; max-width: 100%; }
+.export-toolbar--open { z-index: var(--z-popover, 1200); }
 
 .export-trigger { display: inline-flex; align-items: center; gap: 6px; }
 .export-icon { width: 14px; height: 14px; flex-shrink: 0; }
@@ -171,7 +206,12 @@ export default {
   top: calc(100% + 4px);
   right: 0;
   z-index: 120;
-  min-width: 180px;
+  width: max-content;
+  min-width: min(180px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(300px, calc(100dvh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-card, #fff);
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: var(--bev-radius-lg, 12px);
@@ -179,6 +219,11 @@ export default {
   padding: 4px;
   display: flex;
   flex-direction: column;
+}
+
+.export-menu--up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .export-option {
@@ -207,4 +252,26 @@ export default {
 
 .export-drop-enter-active, .export-drop-leave-active { transition: opacity 0.15s, transform 0.15s; }
 .export-drop-enter-from, .export-drop-leave-to { opacity: 0; transform: translateY(-4px); }
+
+@media (max-width: 640px) {
+  .export-toolbar,
+  .export-trigger {
+    width: 100%;
+  }
+
+  .export-trigger {
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .export-menu {
+    right: 0;
+    left: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .export-option { min-height: 44px; }
+}
 </style>

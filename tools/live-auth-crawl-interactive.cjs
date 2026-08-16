@@ -2,9 +2,15 @@ const fs = require("fs");
 const path = require("path");
 require("module").Module._initPaths();
 const { chromium } = require("playwright");
+const { loadEnvFile } = require("./env-loader.cjs");
+
+loadEnvFile();
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const outDir = path.resolve("source-crawl/authenticated");
+const sourceUrl = String(process.env.SOURCE_SITE_URL || "").replace(/\/+$/, "");
+const sourceUsername = String(process.env.SOURCE_USERNAME || "");
+const sourcePassword = String(process.env.SOURCE_PASSWORD || "");
 const viewports = [
   { name: "desktop", width: 1365, height: 768 },
   { name: "tablet", width: 768, height: 1024 },
@@ -12,6 +18,9 @@ const viewports = [
 ];
 
 async function main() {
+  if (!sourceUrl || !sourceUsername || !sourcePassword) {
+    throw new Error("Set SOURCE_SITE_URL, SOURCE_USERNAME, and SOURCE_PASSWORD.");
+  }
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({
     headless: false,
@@ -35,9 +44,9 @@ async function main() {
   });
   page.on("console", (message) => consoleLogs.push({ type: message.type(), text: message.text() }));
 
-  await page.goto("http://8.208.16.168:9311/#/dashboard", { waitUntil: "networkidle", timeout: 30000 });
-  await page.locator('input[placeholder="Username"]').fill("admin");
-  await page.locator('input[placeholder="Password"]').fill("ACOB_ADMIN");
+  await page.goto(`${sourceUrl}/#/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
+  await page.locator('input[placeholder="Username"]').fill(sourceUsername);
+  await page.locator('input[placeholder="Password"]').fill(sourcePassword);
   console.log("Browser is ready. Enter the CAPTCHA in the visible browser and click Login.");
 
   await page.waitForFunction(() => {
@@ -48,7 +57,7 @@ async function main() {
   const shots = [];
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.goto("http://8.208.16.168:9311/#/dashboard", { waitUntil: "networkidle", timeout: 30000 });
+    await page.goto(`${sourceUrl}/#/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
     await page.waitForTimeout(1000);
     const visiblePath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}.png`);
     const fullPath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}-full.png`);

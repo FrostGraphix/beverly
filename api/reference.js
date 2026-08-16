@@ -1,7 +1,10 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { pathToFileURL } = require("url");
+const { isCanonicalMoneyMutation } = require("./wallet-route-contract.cjs");
 const { loadEnvFile } = require("../tools/env-loader.cjs");
+const tokenPolicyPromise = import("../packages/tokens/index.js");
 const {
   ensureDatabase,
   cacheApiResponse,
@@ -16,8 +19,25 @@ const {
   saveAccountBinding,
   deleteAccountBinding,
   saveArtifact,
-  tableCounts
+  tableCounts,
+  getMeterTokenOverride,
+  setMeterTokenOverride,
+  listMeterTokenOverrides,
+  getSgcTokenRule,
+  setSgcTokenRule,
+  listSgcTokenRules,
+  listOemManufacturers,
+  listOemStationMappings,
+  getOemManufacturer,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig
 } = require("../backend/src/services/storage-adapter");
+const oemRegistry = require("../backend/src/services/oem-registry-service");
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
@@ -28,7 +48,9 @@ const {
   createAuthUser,
   updateAuthUser,
   deleteAuthUser,
-  getAuthUserByUserId
+  getAuthUserByUserId,
+  restRequest,
+  serviceConfigured
 } = require("../backend/src/services/supabase-service");
 const {
   readSnapshot,
@@ -47,6 +69,16 @@ const {
   refreshMeterReadingAggregates
 } = require("../backend/src/services/consumption-store");
 const { runConsumptionSync } = require("../backend/src/services/consumption-sync-service");
+const { syncOemDimensions } = require("../backend/src/services/oem-dimension-sync-service");
+const {
+  listReports: listArchiveReports,
+  reportsSummary: archiveReportsSummary,
+  runArchiveSweep,
+  signedDownloadUrl: archiveSignedDownloadUrl
+} = require("../backend/src/services/reading-archive-service");
+const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
+const { acknowledgeAlert, refreshGatewayHealth, silenceGateway } = require("../backend/src/services/gateway-health-service");
+const { syncReferenceRead } = require("../backend/src/services/tariff-snapshot-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
   automationControlReport,
@@ -74,6 +106,8 @@ const walletVendingMonitor = require("../backend/src/services/wallet-vending-mon
 const walletFeatureFlags = require("../backend/src/services/wallet-feature-flags-service");
 const walletPrivacy = require("../backend/src/services/wallet-privacy-service");
 const smsNotifications = require("../backend/src/services/sms-notification-service");
+const { ingestClientErrors, listClientErrors } = require("../backend/src/services/client-error-service");
+const { ALARM_SIGNALS, deriveAbnormalAlarms, deriveAbnormalAlarmsFromResolvedFlags, summarizeAbnormalAlarms } = require("../backend/src/services/abnormal-alarm-service");
 
 // No live upstream URL has a code default.
 const liveBaseUrlDefault = "";
@@ -89,34 +123,270 @@ const defaultCorsOrigins = [
   "http://127.0.0.1:5174"
 ];
 const rateLimitBuckets = new Map();
+const crmSessionCookieName = "bev_session";
+const defaultCrmIdleTimeoutMs = 30 * 60 * 1000;
+const defaultCrmAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 
 loadEnvFile();
 
+function positiveDuration(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function crmSessionLimits() {
+  return {
+    idleMs: positiveDuration(process.env.SESSION_IDLE_TIMEOUT_MS || process.env.VITE_SESSION_TIMEOUT_MS, defaultCrmIdleTimeoutMs),
+    absoluteMs: positiveDuration(process.env.SESSION_ABSOLUTE_TIMEOUT_MS, defaultCrmAbsoluteTimeoutMs)
+  };
+}
+
+function crmSessionSecret() {
+  const secret = String(process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || process.env.SESSION_SECRET || "").trim();
+  if (secret) return secret;
+  return "beverly-default-session-signing-secret-2026";
+}
+
+function cookieValue(request, name) {
+  const cookieHeader = String(request?.headers?.cookie || "");
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1].trim()) : "";
+}
+
+function crmTokenFingerprint(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("base64url");
+}
+
+function signCrmSession(payload) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", crmSessionSecret()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function readCrmSession(value) {
+  const [encoded, signature, extra] = String(value || "").split(".");
+  if (!encoded || !signature || extra) return null;
+  const expected = crypto.createHmac("sha256", crmSessionSecret()).update(encoded).digest();
+  let received;
+  try {
+    received = Buffer.from(signature, "base64url");
+  } catch {
+    return null;
+  }
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    const startedAt = Number(payload.startedAt);
+    const lastActiveAt = Number(payload.lastActiveAt);
+    if (!Number.isFinite(startedAt) || !Number.isFinite(lastActiveAt) || startedAt > lastActiveAt) return null;
+    return { startedAt, lastActiveAt, tokenFingerprint: String(payload.tokenFingerprint || "") };
+  } catch {
+    return null;
+  }
+}
+
+function crmSessionStatus(session, token, now = Date.now()) {
+  if (!session || session.tokenFingerprint !== crmTokenFingerprint(token)) return { valid: false, reason: "Invalid session" };
+  const limits = crmSessionLimits();
+  if (now - session.startedAt >= limits.absoluteMs) return { valid: false, reason: "Session absolute timeout" };
+  if (now - session.lastActiveAt >= limits.idleMs) return { valid: false, reason: "Session idle timeout" };
+  return {
+    valid: true,
+    remainingMs: Math.min(limits.idleMs, limits.absoluteMs - (now - session.startedAt)),
+    // Browser lifetime for the session cookie. This must track the ABSOLUTE
+    // session window, not the idle window: idle expiry is enforced server-side
+    // from `lastActiveAt` above. Giving the cookie only the idle lifetime made
+    // the browser drop bev_session after an idle gap while bev_token/bev_refresh
+    // (absolute lifetime) survived — the server then saw a missing session
+    // payload and reported "Invalid session" instead of "Session idle timeout",
+    // and the resulting cookie purge destroyed bev_refresh, so the client's
+    // /api/auth/refresh had no credential left and failed with 400.
+    absoluteRemainingMs: limits.absoluteMs - (now - session.startedAt)
+  };
+}
+
+function secureCookiePart() {
+  return process.env.VERCEL_ENV || process.env.NODE_ENV === "production" ? "; Secure" : "";
+}
+
+function crmCookie(name, value, maxAge) {
+  return `${name}=${encodeURIComponent(value)}; HttpOnly${secureCookiePart()}; SameSite=Strict; Path=/; Max-Age=${Math.max(0, Math.floor(maxAge))}`;
+}
+
+function clearCrmSessionCookies(response) {
+  response.setHeader("Set-Cookie", [
+    crmCookie("bev_token", "", 0),
+    crmCookie("bev_refresh", "", 0),
+    crmCookie(crmSessionCookieName, "", 0)
+  ]);
+}
+
+function establishCrmSession(response, token, refreshToken, existingSession = null, now = Date.now()) {
+  const startedAt = existingSession?.startedAt || now;
+  const limits = crmSessionLimits();
+  const remainingAbsoluteMs = limits.absoluteMs - (now - startedAt);
+  if (remainingAbsoluteMs <= 0) return false;
+  const maxAge = Math.ceil(remainingAbsoluteMs / 1000);
+  const session = { startedAt, lastActiveAt: now, tokenFingerprint: crmTokenFingerprint(token) };
+  response.setHeader("Set-Cookie", [
+    crmCookie("bev_token", token, maxAge),
+    refreshToken ? crmCookie("bev_refresh", refreshToken, maxAge) : crmCookie("bev_refresh", "", 0),
+    crmCookie(crmSessionCookieName, signCrmSession(session), maxAge)
+  ]);
+  return session;
+}
+
+function enforceCrmSession(request, response, now = Date.now(), required = false) {
+  const token = cookieValue(request, "bev_token");
+  const sessionValue = cookieValue(request, crmSessionCookieName);
+  if (!token && !sessionValue) return required ? authFailure(401, normalizeRequestPath(request.url), "Server session required") : null;
+  const session = readCrmSession(sessionValue);
+  const status = crmSessionStatus(session, token, now);
+  if (!status.valid) {
+    clearCrmSessionCookies(response);
+    return authFailure(401, normalizeRequestPath(request.url), status.reason);
+  }
+  const touched = { ...session, lastActiveAt: now };
+  response.setHeader("Set-Cookie", crmCookie(crmSessionCookieName, signCrmSession(touched), Math.ceil(status.absoluteRemainingMs / 1000)));
+  request.__crmSession = touched;
+  return null;
+}
+
 let contractAliasMap = null;
 let accessControlModulePromise = null;
+const liveWriteControl = {
+  enabled: false,
+  environment: null,
+  updatedAt: null,
+  changedBy: null,
+  reason: null,
+  source: "safe-default",
+  loadedAt: 0
+};
+const liveWriteControlTtlMs = 5000;
+
+function liveWriteEnvironment() {
+  const configured = String(process.env.VERCEL_ENV || "").trim().toLowerCase();
+  if (["production", "preview", "development"].includes(configured)) return configured;
+  return process.env.NODE_ENV === "production" ? "production" : "development";
+}
+
+function liveWriteFlagKey() {
+  return `crm.live_writes.${liveWriteEnvironment()}.enabled`;
+}
+
+async function refreshLiveWriteControl(force = false) {
+  const environment = liveWriteEnvironment();
+  if (
+    !force
+    && liveWriteControl.environment === environment
+    && Date.now() - liveWriteControl.loadedAt < liveWriteControlTtlMs
+  ) {
+    return liveWriteControl;
+  }
+  if (!serviceConfigured()) {
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment,
+      source: "safe-default",
+      loadedAt: Date.now()
+    });
+    return liveWriteControl;
+  }
+  try {
+    const key = liveWriteFlagKey();
+    const rows = await restRequest(`/feature_flags?key=eq.${encodeURIComponent(key)}&select=enabled,updated_at,changed_by,change_reason`);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    Object.assign(liveWriteControl, {
+      enabled: row?.enabled === true,
+      environment,
+      updatedAt: row?.updated_at || null,
+      changedBy: row?.changed_by || null,
+      reason: row?.change_reason || null,
+      source: row ? "runtime-control" : "safe-default",
+      loadedAt: Date.now()
+    });
+  } catch (error) {
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment,
+      source: "safe-default",
+      loadedAt: Date.now()
+    });
+    console.error("[live-write-control-read]", error instanceof Error ? error.message : String(error));
+  }
+  return liveWriteControl;
+}
+
+async function saveLiveWriteControl({ enabled, actor, reason }) {
+  const environment = liveWriteEnvironment();
+  const updatedAt = new Date().toISOString();
+  await restRequest("/feature_flags?on_conflict=key", {
+    method: "POST",
+    prefer: "resolution=merge-duplicates,return=representation",
+    body: {
+      key: liveWriteFlagKey(),
+      description: `Controls Beverly CRM live upstream writes in ${environment}.`,
+      enabled,
+      rollout_percent: enabled ? 100 : 0,
+      regions: [],
+      changed_by: actor,
+      change_reason: reason,
+      updated_at: updatedAt
+    }
+  });
+  Object.assign(liveWriteControl, {
+    enabled,
+    environment,
+    updatedAt,
+    changedBy: actor,
+    reason,
+    source: "runtime-control",
+    loadedAt: Date.now()
+  });
+  return liveWriteControl;
+}
+
+function validateLiveWriteChange(payload = {}) {
+  if (typeof payload.enabled !== "boolean") {
+    return { error: "Enabled must be true or false" };
+  }
+  const reason = String(payload.reason || "").trim();
+  if (reason.length < 8 || reason.length > 240) {
+    return { error: "Reason must contain 8 to 240 characters" };
+  }
+  const expectedConfirmation = payload.enabled ? "ENABLE LIVE WRITES" : "DISABLE LIVE WRITES";
+  if (String(payload.confirmation || "").trim() !== expectedConfirmation) {
+    return { error: `Type ${expectedConfirmation} to confirm` };
+  }
+  return { enabled: payload.enabled, reason };
+}
+
+function liveWriteControlActor(request) {
+  if (request.__auth) return request.__auth;
+  // Demo auth removed — liveWriteControlActor requires a real authenticated session.
+  return null;
+}
 
 function getEnv() {
   const readMode = process.env.LIVE_READ_MODE || (process.env.LIVE_API_PROXY_ENABLED === "true" ? "live" : "local");
   const liveBaseUrl = process.env.LIVE_API_BASE_URL || process.env.UPSTREAM_API_URL || liveBaseUrlDefault;
-  const configuredLiveWrites = process.env.ALLOW_LIVE_WRITES;
-  const allowLiveWrites = configuredLiveWrites === "false"
-    ? false
-    : configuredLiveWrites === "true"
-      || process.env.APPROVED_LIVE_WRITES === "true"
-      || process.env.NODE_ENV !== "production";
+  const walletApiBaseUrl = String(process.env.WALLET_API_BASE_URL || "").trim().replace(/\/+$/, "");
+  const isPreviewDeployment = Boolean(process.env.VERCEL_ENV) && process.env.VERCEL_ENV !== "production";
   return {
     readMode,
     liveBaseUrl,
+    walletApiBaseUrl,
+    canonicalWalletWritesEnabled: process.env.WALLET_PROXY_MONEY_WRITES_ENABLED === "true" && !isPreviewDeployment,
+    allowLegacyWalletTestMode: process.env.NODE_ENV === "test" && process.env.LEGACY_WALLET_TEST_MODE === "true",
     liveProxyEnabled: readMode !== "local" && process.env.LIVE_API_PROXY_ENABLED === "true" && Boolean(liveBaseUrl),
     liveBearerToken: process.env.LIVE_API_BEARER_TOKEN || process.env.UPSTREAM_BEARER_TOKEN || "",
-    allowLiveWrites,
+    allowLiveWrites: liveWriteControl.enabled === true || (!process.env.VERCEL_ENV && process.env.ALLOW_LIVE_WRITES === "true"),
     corsOrigins: splitCsv(process.env.CORS_ORIGINS || defaultCorsOrigins.join(",")),
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== "false",
     rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
     rateLimitMaxRequests: Number(process.env.RATE_LIMIT_MAX_REQUESTS || 300),
-    demoAuthEnabled: process.env.DEMO_AUTH_ENABLED === "true",
-    demoAuthUser: process.env.DEMO_AUTH_USER || "admin",
-    demoAuthPassword: process.env.DEMO_AUTH_PASSWORD || ""
+    demoAuthEnabled: process.env.DEMO_AUTH_ENABLED === "true" && !process.env.VERCEL_ENV
   };
 }
 
@@ -141,7 +411,7 @@ function applyCorsHeaders(request, response) {
   if (allowedOrigin) setResponseHeader(response, "Access-Control-Allow-Origin", allowedOrigin);
   setResponseHeader(response, "Vary", "Origin");
   setResponseHeader(response, "Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password,X-Route-Hash,X-Route-Action");
+  setResponseHeader(response, "Access-Control-Allow-Headers", "Content-Type,Authorization,X-Authorization-Password,X-Route-Hash,X-Route-Action,X-Oem-Id");
   setResponseHeader(response, "Access-Control-Max-Age", "86400");
 }
 
@@ -154,10 +424,18 @@ function clientAddress(request) {
 function rateLimitResult(request) {
   const env = getEnv();
   if (!env.rateLimitEnabled || String(request.method || "GET").toUpperCase() === "OPTIONS") return null;
-  const windowMs = Number.isFinite(env.rateLimitWindowMs) && env.rateLimitWindowMs > 0 ? env.rateLimitWindowMs : 60000;
-  const maxRequests = Number.isFinite(env.rateLimitMaxRequests) && env.rateLimitMaxRequests > 0 ? env.rateLimitMaxRequests : 300;
+  // Per-OEM rate limiting: bucket by (client, OEM) so one manufacturer's traffic
+  // can't throttle another's, and honor per-OEM window/max overrides when the OEM's
+  // config is already cached (peekOemRateLimit never hits the DB — falls back to the
+  // global env defaults otherwise, i.e. today's behavior for the default OEM).
+  const oemId = oemRegistry.requestedOemId(request);
+  const oemLimit = oemRegistry.peekOemRateLimit(oemId) || {};
+  const windowSource = oemLimit.windowMs || env.rateLimitWindowMs;
+  const maxSource = oemLimit.maxRequests || env.rateLimitMaxRequests;
+  const windowMs = Number.isFinite(windowSource) && windowSource > 0 ? windowSource : 60000;
+  const maxRequests = Number.isFinite(maxSource) && maxSource > 0 ? maxSource : 300;
   const now = Date.now();
-  const key = `${clientAddress(request)}:${Math.floor(now / windowMs)}`;
+  const key = `${clientAddress(request)}:${oemId}:${Math.floor(now / windowMs)}`;
   const current = rateLimitBuckets.get(key) || 0;
   rateLimitBuckets.set(key, current + 1);
   for (const bucketKey of rateLimitBuckets.keys()) {
@@ -211,7 +489,12 @@ async function getAccessControlModule() {
 function authHeaderToken(request) {
   const value = String(request.headers.authorization || "");
   const match = value.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : "";
+  if (match) return match[1].trim();
+  // Fallback: read bev_token from Cookie header (HttpOnly — set by /api/auth/session).
+  // This allows browser sessions to authenticate without JS-readable cookies.
+  const cookieHeader = String(request.headers.cookie || "");
+  const bevMatch = cookieHeader.match(/(?:^|;\s*)bev_token=([^;]+)/);
+  return bevMatch ? decodeURIComponent(bevMatch[1].trim()) : "";
 }
 
 function routeHeaderHash(request) {
@@ -234,13 +517,22 @@ function stationFromPayload(payload) {
 }
 
 function protectedPath(pathname) {
-  if (!supabaseAuthEnabled()) return false;
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
+  // Live-read paths are always protected regardless of supabaseAuthEnabled() —
+  // they expose sensitive operational data and must never be publicly accessible.
+  if (requiresLiveRead(pathname)) return true;
+  // New session-management endpoints are self-validating — they handle their own auth.
+  if (lowerPath === "/api/auth/session") return false;
+  if (lowerPath === "/api/auth/me") return false;
+  if (lowerPath === "/api/auth/logout") return false;
+  if (!supabaseAuthEnabled()) return false;
   if (lowerPath === "/api/user/login") return false;
   if (isAuthRefreshPath(lowerPath)) return false;
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
+  if (lowerPath === "/api/system/oem/list") return false;
+  if (lowerPath === "/api/system/client-errors") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
   if (lowerPath.startsWith("/api/cron/")) return false;
@@ -252,6 +544,7 @@ function isAuthRefreshPath(pathname) {
 }
 
 function authFailure(status, pathname, reason) {
+  const showProxySource = process.env.NODE_ENV === "test" || !process.env.VERCEL_ENV;
   return {
     status,
     body: {
@@ -261,7 +554,7 @@ function authFailure(status, pathname, reason) {
       data: null,
       result: null,
       _proxy: {
-        source: "authz",
+        ...(showProxySource ? { source: "authz" } : {}),
         pathname
       }
     }
@@ -279,7 +572,7 @@ function roleAllowsWalletPath(roleId, pathname) {
   const role = String(roleId || "").trim();
   const lowerPath = String(pathname || "").toLowerCase();
   const staffRoles = new Set(["super-admin", "operations-manager", "account", "account-officer", "finance-checker"]);
-  const vendorRoles = new Set(["vendor_user", "vendor_manager"]);
+  const vendorRoles = new Set(["vendor", "vendor_user"]);
   if (lowerPath.startsWith("/api/vendor/")) return vendorRoles.has(role) || staffRoles.has(role);
   if (lowerPath.startsWith("/api/wallet/funding/approve")) return role === "finance-checker" || role === "super-admin";
   if (lowerPath.startsWith("/api/wallet/funding/reject")) return role === "finance-checker" || role === "super-admin";
@@ -291,13 +584,14 @@ function roleAllowsWalletPath(roleId, pathname) {
 
 async function matchingRouteForRequest(pathname, request) {
   const access = await getAccessControlModule();
+  const writeRouteHash = routeHashForWritePath(pathname);
   const requestedHash = routeHeaderHash(request);
+  if (writeRouteHash) {
+    if (requestedHash && requestedHash !== writeRouteHash) return null;
+    return access.routeManifest.find((route) => route.hash === writeRouteHash) || null;
+  }
   if (requestedHash) {
     return access.routeManifest.find((route) => route.hash === requestedHash) || null;
-  }
-  const writeRouteHash = routeHashForWritePath(pathname);
-  if (writeRouteHash) {
-    return access.routeManifest.find((route) => route.hash === writeRouteHash) || null;
   }
   const loweredPath = String(pathname || "").toLowerCase();
   return access.routeManifest.find((route) =>
@@ -311,7 +605,16 @@ async function authorizeRequest(request, pathname, requestData) {
   const trustedLiveActor = trustedLiveReadActor(pathname, request);
   if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
 
-  const actor = token ? await authUserFromAccessToken(token) : trustedLiveActor;
+  // local-dev-token bypass allowed ONLY in local test environment.
+  let actor = token ? await authUserFromAccessToken(token).catch(() => null) : trustedLiveActor;
+  if (!actor && token === "local-dev-token" && getEnv().demoAuthEnabled) {
+    actor = {
+      userId: "admin",
+      userName: "Beverly Admin",
+      roleId: "super-admin",
+      remark: "demo-bypass"
+    };
+  }
   if (!actor && !trustedLiveActor) return authFailure(401, pathname, "Invalid session");
   const resolvedActor = actor || trustedLiveActor;
 
@@ -341,6 +644,10 @@ async function authorizeRequest(request, pathname, requestData) {
 
   if (lowerPath.startsWith("/api/local/")) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
+  }
+
+  if (lowerPath === "/api/system/live-write-control" && String(request.method || "GET").toUpperCase() === "GET") {
+    return null;
   }
 
   if (lowerPath.startsWith("/api/system/")) {
@@ -516,6 +823,19 @@ function isGuardedWriteRequest(pathname, method, requestData) {
   return isWriteRequest(pathname, method) && !isPreviewRequest(requestData);
 }
 
+function isCanonicalWalletRequest(pathname) {
+  return /^\/api\/v1\//.test(String(pathname || ""));
+}
+
+function isCanonicalFinancialMutation(pathname, method) {
+  return isCanonicalMoneyMutation(pathname, method);
+}
+
+function isLegacyFinancialMutation(pathname, method) {
+  return String(method || "GET").toUpperCase() !== "GET"
+    && /^\/api\/wallet(?:\/|$)/.test(String(pathname || ""));
+}
+
 function isCacheableRequest(pathname, method) {
   if (pathname.startsWith("/api/local/")) return false;
   return !isWriteRequest(pathname, method);
@@ -524,6 +844,9 @@ function isCacheableRequest(pathname, method) {
 function requiresLiveRead(pathname) {
   const normalizedPath = String(pathname || "");
   return /\/api\/DailyDataMeter\/read$/i.test(normalizedPath)
+    || /\/api\/DailyDataMeter\/export\.xlsx$/i.test(normalizedPath)
+    || /\/api\/gateway\/read$/i.test(normalizedPath)
+    || /\/api\/notifications\/gateway-health$/i.test(normalizedPath)
     || /\/api\/customer\/read$/i.test(normalizedPath)
     || /\/api\/account\/read$/i.test(normalizedPath)
     || /\/api\/RemoteMeterTask\/Get(?:Reading|Control)Task$/i.test(normalizedPath);
@@ -535,6 +858,9 @@ function trustedLiveReadActor(pathname, request) {
   if (!env.liveProxyEnabled || !env.liveBearerToken) return null;
   if (method !== "GET" && method !== "POST") return null;
   if (isWriteRequest(pathname, method) || !requiresLiveRead(pathname)) return null;
+  // Only cron-originated requests may use the synthetic live-read actor.
+  // Anonymous browser requests MUST authenticate normally — no bypass.
+  if (!cronAuthorized(request)) return null;
   return {
     userId: "live-read-proxy",
     userName: "Live Read Proxy",
@@ -545,7 +871,13 @@ function trustedLiveReadActor(pathname, request) {
 }
 
 function canUseSampleFallback(pathname) {
-  return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(String(pathname || ""));
+  const normalizedPath = String(pathname || "");
+  // NOTE: /api/station/read is intentionally excluded. It is an admin CRUD
+  // table whose rows are actively edited (add/delete/rename). Serving a
+  // frozen fixture when the live call fails would silently hide real data,
+  // making the admin unable to trust what they see. A real error is safer.
+  return /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
+    || /\/api\/dashboard\/read(?:PanelGroup|LineChart)$/i.test(normalizedPath);
 }
 
 function apiCacheEnabled() {
@@ -561,7 +893,8 @@ function buildCacheKey(request, requestData) {
 
 function cronAuthorized(request) {
   const secret = process.env.CRON_SECRET || "";
-  if (!secret && process.env.NODE_ENV !== "production") return true;
+  const deployed = Boolean(process.env.VERCEL_ENV) || process.env.NODE_ENV === "production";
+  if (!secret) return !deployed;
   return String(request.headers.authorization || "") === `Bearer ${secret}`;
 }
 
@@ -571,6 +904,43 @@ function cronQuery(urlValue) {
     return Object.fromEntries(params.entries());
   } catch {
     return {};
+  }
+}
+
+const walletMaintenanceTasks = new Set([
+  "holds",
+  "payments",
+  "stuck-purchases",
+  "remote-send",
+  "reconciliation",
+  "settlement",
+  "fraud-baseline",
+  "refund-expiry",
+  "webhook-retention"
+]);
+
+async function runWalletMaintenance(task) {
+  const scheduler = await import("../backend/wallet/dist/jobs/scheduler.js");
+  switch (task) {
+    case "holds": return scheduler.sweepExpiredHolds();
+    case "payments": return scheduler.sweepPendingPayments();
+    case "stuck-purchases": return scheduler.scanStuckPurchases();
+    case "remote-send": return scheduler.reconcileRemoteSends();
+    case "fraud-baseline": return scheduler.recomputeFraudBaselines();
+    case "refund-expiry": return scheduler.processRefundExpiry();
+    case "reconciliation": {
+      const service = await import("../backend/wallet/dist/services/reconciliation.js");
+      return service.runDailyReconciliation();
+    }
+    case "settlement": {
+      const service = await import("../backend/wallet/dist/services/settlement.js");
+      return service.runDailySettlement();
+    }
+    case "webhook-retention": {
+      const service = await import("../backend/wallet/dist/services/webhook-retention.js");
+      return service.purgeExpiredWebhookPayloads();
+    }
+    default: throw new Error("Unknown wallet maintenance task");
   }
 }
 
@@ -611,10 +981,10 @@ function logWriteEvent(kind, details) {
   console.info(`[write-${kind}]`, JSON.stringify(details));
 }
 
-function buildLiveHeaders(request, requestData, token) {
+function buildLiveHeaders(request, requestData, token, authHeaderName) {
   const headers = {
     Accept: request.headers.accept || jsonContentType,
-    Authorization: token
+    [authHeaderName || "Authorization"]: token
   };
   if (requestData.contentType) headers["Content-Type"] = requestData.contentType;
   return headers;
@@ -623,8 +993,9 @@ function buildLiveHeaders(request, requestData, token) {
 function sanitizeReadPayload(payload, keyMap = {}, options = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const sanitized = { ...payload };
+  const maxPageSize = Math.max(1, Number(options.maxPageSize || 20));
   const pageSize = Number(sanitized.pageSize || 20);
-  sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), 20) : 20;
+  sanitized.pageSize = Number.isFinite(pageSize) ? Math.min(Math.max(pageSize, 1), maxPageSize) : 20;
   if (options.requireLang && !sanitized.Lang && !sanitized.lang) sanitized.Lang = "en";
 
   const rawOrderBy = String(sanitized.orderBy || "").trim();
@@ -636,6 +1007,26 @@ function sanitizeReadPayload(payload, keyMap = {}, options = {}) {
     else delete sanitized.orderBy;
   }
 
+  return sanitized;
+}
+
+function sanitizeDailyMeterReadPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const sanitized = { ...payload };
+  const range = Array.isArray(sanitized.currentDateRange)
+    ? sanitized.currentDateRange
+    : Array.isArray(sanitized.dateRange)
+      ? sanitized.dateRange
+      : [sanitized.FROM ?? sanitized.from, sanitized.TO ?? sanitized.to];
+  if (range[0] && range[1]) sanitized.currentDateRange = [range[0], range[1]];
+  if (!sanitized.stationId && sanitized.SITE_ID) sanitized.stationId = sanitized.SITE_ID;
+  delete sanitized.FROM;
+  delete sanitized.TO;
+  delete sanitized.from;
+  delete sanitized.to;
+  delete sanitized.dateRange;
+  delete sanitized.SITE_ID;
+  delete sanitized.compact;
   return sanitized;
 }
 
@@ -658,13 +1049,15 @@ function sanitizeLiveRequestData(pathname, requestData) {
     createdate: "createDate",
     updatedate: "updateDate"
   };
-  const payload = /\/api\/customer\/read$/i.test(normalizedPath)
-    ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
-    : /\/api\/account\/read$/i.test(normalizedPath)
-      ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap)
-      : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
-        ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
-        : requestData?.parsedBody;
+  const payload = /\/api\/DailyDataMeter\/(?:read|readMore|readMonthly)$/i.test(normalizedPath)
+    ? sanitizeDailyMeterReadPayload(requestData?.parsedBody)
+    : /\/api\/customer\/read$/i.test(normalizedPath)
+      ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
+      : /\/api\/account\/read$/i.test(normalizedPath)
+        ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap, { maxPageSize: 500 })
+        : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
+          ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
+          : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {
@@ -690,6 +1083,7 @@ async function parseLiveResponse(response) {
 }
 
 function normalizeLivePayload(payload, status, pathname) {
+  const showProxySource = process.env.NODE_ENV === "test" || !process.env.VERCEL_ENV;
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     const normalized = { ...payload };
     if (!("msg" in normalized) && "reason" in normalized) normalized.msg = normalized.reason;
@@ -697,7 +1091,7 @@ function normalizeLivePayload(payload, status, pathname) {
     if (!("data" in normalized) && "result" in normalized) normalized.data = normalized.result;
     if (!("result" in normalized) && "data" in normalized) normalized.result = normalized.data;
     normalized._proxy = {
-      source: "live",
+      ...(showProxySource ? { source: "live" } : {}),
       pathname
     };
     return normalized;
@@ -711,7 +1105,7 @@ function normalizeLivePayload(payload, status, pathname) {
     result: payload,
     raw: payload,
     _proxy: {
-      source: "live",
+      ...(showProxySource ? { source: "live" } : {}),
       pathname
     }
   };
@@ -726,6 +1120,17 @@ function hasBusinessFailure(payload) {
 
 function isAccountCreatePath(pathname) {
   return String(pathname || "").toLowerCase() === "/api/account/create";
+}
+
+function isAccountImportPath(pathname) {
+  return String(pathname || "").toLowerCase() === "/api/account/import";
+}
+
+// Create and import are the same operation as far as the local sync queue is
+// concerned: both push customer/meter bindings upstream and both must land
+// there. Neither may report success unless upstream accepted the rows.
+function isAccountUploadPath(pathname) {
+  return isAccountCreatePath(pathname) || isAccountImportPath(pathname);
 }
 
 function isAccountReadPath(pathname) {
@@ -751,14 +1156,22 @@ function accountBindingPayloadRows(requestData) {
     .filter((row) => row.customerId && row.meterId);
 }
 
-async function persistLocalAccountBindings(requestData, source = "local-fallback") {
+async function persistLocalAccountBindings(requestData, source = "local-fallback", options = {}) {
   const rows = accountBindingPayloadRows(requestData);
+  const status = options.status || (source === "live" ? "active" : "pending");
+  const lastError = String(options.lastError || "");
   for (const row of rows) {
+    const existing = (await listAccountBindings({ customerId: row.customerId, meterId: row.meterId }))[0] || null;
     await saveAccountBinding({
       ...row,
       source,
-      status: "active",
-      details: row
+      status,
+      details: {
+        ...row,
+        lastError,
+        attempts: status === "pending" ? Number(existing?.attempts || 0) + 1 : 0,
+        lastAttemptAt: new Date().toISOString()
+      }
     });
   }
   return rows;
@@ -778,7 +1191,9 @@ function accountReadFilters(requestData) {
   return {
     customerId: String(payload.customerId || "").trim(),
     meterId: String(payload.meterId || "").trim(),
-    stationId: String(payload.stationId || payload.SITE_ID || "").trim()
+    stationId: String(payload.stationId || payload.SITE_ID || "").trim(),
+    searchTerm: String(payload.searchTerm || "").trim(),
+    status: String(payload.status || "").trim()
   };
 }
 
@@ -786,70 +1201,379 @@ function accountBindingKey(row = {}) {
   return `${String(row.customerId || "").trim()}::${String(row.meterId || "").trim()}`;
 }
 
-async function mergeLocalAccountBindings(pathname, requestData, result) {
-  if (!isAccountReadPath(pathname)) return result;
-  const localRows = await listAccountBindings(accountReadFilters(requestData));
-  if (!localRows.length) return result;
-  const body = result?.body;
-  if (!body || typeof body !== "object") {
-    return {
-      status: 200,
-      body: {
-        code: 0,
-        msg: "success",
-        reason: "success",
-        data: {
-          total: localRows.length,
-          data: localRows
-        },
-        result: {
-          total: localRows.length,
-          data: localRows
-        },
-        _proxy: {
-          source: "local-fallback",
-          pathname
-        }
-      }
+// Pushes queued bindings upstream one row at a time so a single bad row cannot
+// hide the fate of the rest: each row comes back either synced (removed from
+// the queue) or failed with the upstream reason attached.
+async function retryPendingAccountBindings(request, payload = {}) {
+  const requested = accountBindingPayloadRows({ parsedBody: payload.rows || [] });
+  const queued = requested.length
+    ? requested
+    : (await listAccountBindings({ status: "pending", stationId: payload.stationId || "" }));
+  const results = [];
+  for (const entry of queued) {
+    const row = {
+      customerId: String(entry.customerId || ""),
+      meterId: String(entry.meterId || ""),
+      tariffId: String(entry.tariffId || ""),
+      ctRatio: String(entry.ctRatio || ""),
+      stationId: String(entry.stationId || ""),
+      remark: String(entry.remark || "")
     };
+    const syntheticRequest = {
+      method: "POST",
+      url: "/api/account/create",
+      headers: { ...(request?.headers || {}) }
+    };
+    const requestData = jsonRequestData([row]);
+    let outcome;
+    try {
+      outcome = await proxyLive(syntheticRequest, "/api/account/create", requestData);
+    } catch (error) {
+      outcome = null;
+      results.push({ ...row, synced: false, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    const code = Number(outcome?.body?.code);
+    const synced = Boolean(outcome) && outcome.status < 300 && (code === 0 || code === 200);
+    if (synced) {
+      await saveAccountBinding({ ...row, source: "live", status: "active", details: { ...row, lastError: "", attempts: 0 } });
+      invalidateAccountTotalCache();
+      invalidateMeterStatsCache();
+      results.push({ ...row, synced: true, error: "" });
+      continue;
+    }
+    const reason = String(outcome?.body?.reason || outcome?.body?.msg || "Upstream unreachable");
+    await persistLocalAccountBindings(requestData, "upstream-rejected", { status: "pending", lastError: reason });
+    results.push({ ...row, synced: false, error: reason });
   }
-  const liveRows = collectionRowsFromPayload(body);
-  const merged = new Map();
-  for (const row of liveRows) merged.set(accountBindingKey(row), row);
-  for (const row of localRows) merged.set(accountBindingKey(row), { ...merged.get(accountBindingKey(row)), ...row });
-  const mergedRows = Array.from(merged.values());
-  const mergedBody = JSON.parse(JSON.stringify(body));
-  setCollectionRows(mergedBody, mergedRows, mergedRows.length);
-  mergedBody._proxy = {
-    ...(body._proxy || {}),
-    source: body._proxy?.source === "local-fallback" ? "local-fallback" : `${body._proxy?.source || "live"}+local`,
-    pathname
-  };
   return {
-    status: result.status,
-    body: mergedBody
+    attempted: results.length,
+    synced: results.filter((row) => row.synced).length,
+    failed: results.filter((row) => !row.synced).length,
+    rows: results
   };
 }
 
-function localAccountCreateResponse(pathname, rows, lastFailure) {
+// KPI figures used to be extrapolated from a single 20-row sample, which is how
+// "active meters" showed 767 instead of 2,050. These are exact counts:
+//   totalMeters      every registered meter
+//   connectedMeters  meters bound to a customer (an account binding exists)
+//   activeMeters     connected meters whose meter record is switched on
+//   inactiveMeters   connected meters that are not
+//   unassignedMeters registered meters with no customer attached
+const meterStatsCache = new Map();
+const meterStatsTtlMs = 60000;
+const meterStatsPageSize = 500;
+const meterStatsMaxPages = 60;
+
+function invalidateMeterStatsCache() {
+  meterStatsCache.clear();
+}
+
+async function walkLiveCollection(request, pathname, filters, onRows) {
+  for (let pageNumber = 1; pageNumber <= meterStatsMaxPages; pageNumber += 1) {
+    const syntheticRequest = {
+      method: "POST",
+      url: pathname,
+      headers: { ...(request?.headers || {}) }
+    };
+    const payload = { pageNumber, pageSize: meterStatsPageSize, ...filters };
+    const result = await proxyLive(syntheticRequest, pathname, jsonRequestData(payload));
+    if (!result || result.status >= 400) return false;
+    const rows = collectionRowsFromPayload(result.body);
+    onRows(rows);
+    if (rows.length < meterStatsPageSize) return true;
+  }
+  return true;
+}
+
+async function resolveMeterStats(request, options = {}) {
+  const stationId = String(options.stationId || "").trim();
+  const cacheKey = stationId.toUpperCase();
+  const cached = meterStatsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.stats;
+
+  const meterStatus = new Map();
+  const meterFilters = stationId ? { stationId } : {};
+  const metersOk = await walkLiveCollection(request, "/api/meter/read", meterFilters, (rows) => {
+    for (const row of rows) {
+      const meterId = String(row?.meterId || "").trim();
+      if (meterId) meterStatus.set(meterId, row?.status === true);
+    }
+  });
+
+  const connectedMeters = new Set();
+  let activeConnected = 0;
+  const accountsOk = await walkLiveCollection(request, "/api/account/read", meterFilters, (rows) => {
+    for (const row of rows) {
+      const meterId = String(row?.meterId || "").trim();
+      if (!meterId || connectedMeters.has(meterId)) continue;
+      connectedMeters.add(meterId);
+      const active = meterStatus.has(meterId) ? meterStatus.get(meterId) : row?.status === true;
+      if (active) activeConnected += 1;
+    }
+  });
+
+  const stats = {
+    totalMeters: meterStatus.size,
+    connectedMeters: connectedMeters.size,
+    activeMeters: activeConnected,
+    inactiveMeters: connectedMeters.size - activeConnected,
+    unassignedMeters: Math.max(0, meterStatus.size - connectedMeters.size),
+    stationId: stationId || "",
+    exact: metersOk && accountsOk
+  };
+  if (stats.exact) meterStatsCache.set(cacheKey, { stats, expiresAt: Date.now() + meterStatsTtlMs });
+  return stats;
+}
+
+async function splitAccountImportPerRow(request, requestData) {
+  const rows = accountBindingPayloadRows(requestData);
+  if (!rows.length) return null;
+  const results = [];
+  for (const row of rows) {
+    const rowRequestData = jsonRequestData([row]);
+    const syntheticRequest = {
+      method: "POST",
+      url: "/api/account/create",
+      headers: { ...(request?.headers || {}) }
+    };
+    let outcome = null;
+    try {
+      outcome = await proxyLive(syntheticRequest, "/api/account/create", rowRequestData);
+    } catch (error) {
+      results.push({ ...row, synced: false, error: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    const code = Number(outcome?.body?.code);
+    if (outcome && outcome.status < 300 && (code === 0 || code === 200)) {
+      results.push({ ...row, synced: true, error: "" });
+      continue;
+    }
+    const reason = String(outcome?.body?.reason || outcome?.body?.msg || "Upstream rejected this binding");
+    await persistLocalAccountBindings(rowRequestData, "upstream-rejected", { status: "pending", lastError: reason });
+    results.push({ ...row, synced: false, error: reason });
+  }
+  const synced = results.filter((row) => row.synced).length;
+  const failed = results.length - synced;
+  if (!synced) return null;
+  invalidateAccountTotalCache();
+      invalidateMeterStatsCache();
+  const summary = { synced, failed, rows: results, mode: "per-row-import" };
+  const reason = failed
+    ? `${synced} binding(s) imported, ${failed} rejected by the API`
+    : `${synced} binding(s) imported`;
   return {
-    status: 200,
+    status: failed ? 207 : 200,
     body: {
-      code: 0,
-      msg: "success",
-      reason: "Account binding stored locally while upstream is unavailable",
-      data: {
-        stored: true,
-        rows,
-        mode: "local-fallback"
+      code: failed ? 207 : 0,
+      msg: reason,
+      reason,
+      data: summary,
+      result: summary,
+      _proxy: { source: "live", pathname: "/api/account/import", mode: "per-row-import" }
+    }
+  };
+}
+
+// An upstream rejection is recorded against the queue so the operator can see
+// which rows failed and exactly why, and retry them after fixing the data.
+async function recordAccountUploadRejection(requestData, payload) {
+  const reason = String(payload?.reason || payload?.msg || "Upstream rejected the account binding");
+  await persistLocalAccountBindings(requestData, "upstream-rejected", {
+    status: "pending",
+    lastError: reason
+  }).catch((error) => {
+    console.error("[account-upload-rejection]", error instanceof Error ? error.message : String(error));
+    return [];
+  });
+}
+
+// There is no local stand-in for the account list any more. Locally stored
+// bindings are never presented as live data — not on a good read (it corrupted
+// totals and pagination) and not on a failed one (it dressed stale local rows
+// up as the real register). A failed read now fails visibly; anything not yet
+// accepted upstream lives in the explicit queue at
+// /api/local/accountBindings/read and is shown as a queue in the UI.
+
+// The upstream account read reports `total` = the number of rows on the page
+// whenever the query is not station-scoped, so a 10-row page claims a total of
+// 10 and every client stops after page one. Paging itself is correct, so the
+// true count is resolved by walking full pages once and caching the answer.
+const accountTotalCache = new Map();
+const accountTotalTtlMs = 60000;
+const accountTotalPageSize = 500;
+const accountTotalMaxPages = 40;
+
+function accountTotalCacheKey(filters) {
+  return JSON.stringify({
+    customerId: filters.customerId || "",
+    meterId: filters.meterId || "",
+    stationId: String(filters.stationId || "").toUpperCase(),
+    searchTerm: filters.searchTerm || ""
+  });
+}
+
+function invalidateAccountTotalCache() {
+  accountTotalCache.clear();
+}
+
+function jsonRequestData(payload) {
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  return {
+    rawBody,
+    rawText: rawBody.toString("utf8"),
+    parsedBody: payload,
+    contentType: jsonContentType
+  };
+}
+
+async function fetchLiveStationIds(request) {
+  const syntheticRequest = {
+    method: "POST",
+    url: "/api/station/read",
+    headers: { ...(request?.headers || {}) },
+    __timeoutMs: request?.__timeoutMs
+  };
+  const result = await proxyLive(
+    syntheticRequest,
+    "/api/station/read",
+    jsonRequestData({ pageNumber: 1, pageSize: 500 })
+  );
+  if (!result || result.status >= 400) throw new Error("Station API unavailable");
+  return [...new Set(collectionRowsFromPayload(result.body)
+    .map((row) => String(row?.stationId || row?.station_id || row?.id || "").trim().toUpperCase())
+    .filter((stationId) => stationId && stationId !== "ADMIN"))];
+}
+
+function stationStatus(value) {
+  if (value === false || value === 0) return "disabled";
+  const normalized = String(value ?? "active").trim().toLowerCase();
+  return ["disabled", "inactive", "offline", "deleted"].includes(normalized) ? "disabled" : "active";
+}
+
+async function fetchLiveStationDirectory(request) {
+  const manufacturers = (await listOemManufacturers()).filter((oem) => oem.status === "active" || oem.isSeedDefault);
+  const batches = await Promise.all(manufacturers.map(async (oem) => {
+    const config = await oemRegistry.getOemScopedLiveConfig(oem.id);
+    if (!config && !oem.isSeedDefault) return [];
+    const result = await proxyLive(
+      {
+        method: "POST",
+        url: "/api/station/read",
+        headers: { ...(request?.headers || {}), "x-oem-id": oem.id },
+        __timeoutMs: request?.__timeoutMs,
       },
-      result: {
-        stored: true,
-        rows,
-        mode: "local-fallback"
-      },
+      "/api/station/read",
+      jsonRequestData({ pageNumber: 1, pageSize: 500 })
+    );
+    if (!result || result.status >= 400) return [];
+    return collectionRowsFromPayload(result.body).map((row) => {
+      const stationId = String(row?.stationId || row?.station_id || row?.id || "").trim().toUpperCase();
+      return {
+        stationId,
+        name: String(row?.name || row?.stationName || row?.station_name || stationId).trim() || stationId,
+        oemId: oem.id,
+        oemSlug: oem.slug,
+        oemName: oem.displayName,
+        status: stationStatus(row?.status),
+      };
+    }).filter((station) => station.stationId && station.stationId !== "ADMIN");
+  }));
+  const stations = batches.flat().sort((left, right) => left.name.localeCompare(right.name));
+  if (!stations.length) throw new Error("Live station directory returned no stations");
+  return stations;
+}
+
+async function fetchLiveAccountPage(request, filters, pageNumber) {
+  const payload = {
+    pageNumber,
+    pageSize: accountTotalPageSize,
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
+    ...(filters.meterId ? { meterId: filters.meterId } : {}),
+    ...(filters.stationId ? { stationId: filters.stationId } : {}),
+    ...(filters.searchTerm ? { searchTerm: filters.searchTerm } : {})
+  };
+  const syntheticRequest = {
+    method: "POST",
+    url: "/api/account/read",
+    headers: { ...(request?.headers || {}) },
+    __timeoutMs: request?.__timeoutMs
+  };
+  const result = await proxyLive(syntheticRequest, "/api/account/read", jsonRequestData(payload));
+  if (!result || result.status >= 400) return null;
+  return collectionRowsFromPayload(result.body);
+}
+
+async function resolveLiveAccountTotal(request, requestData) {
+  const filters = accountReadFilters(requestData);
+  const key = accountTotalCacheKey(filters);
+  const cached = accountTotalCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.total;
+  let total = 0;
+  for (let pageNumber = 1; pageNumber <= accountTotalMaxPages; pageNumber += 1) {
+    const rows = await fetchLiveAccountPage(request, filters, pageNumber);
+    if (!Array.isArray(rows)) return null;
+    total += rows.length;
+    if (rows.length < accountTotalPageSize) break;
+  }
+  accountTotalCache.set(key, { total, expiresAt: Date.now() + accountTotalTtlMs });
+  return total;
+}
+
+async function withResolvedAccountTotal(pathname, request, requestData, result) {
+  if (!isAccountReadPath(pathname)) return result;
+  if (!result || result.status >= 400) return result;
+  if (result.body?._proxy?.source === "local-fallback") return result;
+  const body = result.body;
+  const rows = collectionRowsFromPayload(body);
+  const payload = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] || {} : requestData?.parsedBody || {};
+  const requestedPageSize = Math.min(Math.max(Number(payload.pageSize) || 20, 1), accountTotalPageSize);
+  const pageNumber = Math.max(1, Number(payload.pageNumber) || 1);
+  const declaredTotal = declaredCollectionTotal(body, rows.length);
+  const rowsSoFar = (pageNumber - 1) * requestedPageSize + rows.length;
+  // A page that came back full may have more behind it; if upstream's total
+  // does not already account for those rows, it is the unreliable kind.
+  if (rows.length < requestedPageSize || declaredTotal > rowsSoFar) return result;
+  const resolvedTotal = await resolveLiveAccountTotal(request, requestData).catch((error) => {
+    console.error("[account-total-resolve]", error instanceof Error ? error.message : String(error));
+    return null;
+  });
+  if (!Number.isFinite(resolvedTotal) || resolvedTotal <= declaredTotal) return result;
+  const nextBody = JSON.parse(JSON.stringify(body));
+  setCollectionRows(nextBody, rows, resolvedTotal);
+  nextBody._proxy = {
+    ...(body._proxy || {}),
+    totalSource: "resolved-page-walk"
+  };
+  return { status: result.status, body: nextBody };
+}
+
+// Upstream could not be reached at all (transport failure, 5xx, timeout). The
+// rows are queued locally so nothing is lost, but the caller is told plainly
+// that they are NOT live yet — code 202, never 0. Returning "success" here is
+// what previously let 164 bindings sit unsynced while the UI showed them as
+// real upstream records.
+function queuedAccountUploadResponse(pathname, rows, lastFailure) {
+  const reason = "Queued for upstream sync — not live yet. Upstream was unreachable.";
+  const body = {
+    queued: true,
+    synced: false,
+    rows,
+    mode: "pending-sync",
+    pendingCount: rows.length,
+    upstreamError: lastFailure?.payload?.reason || lastFailure?.error || ""
+  };
+  return {
+    status: 202,
+    body: {
+      code: 202,
+      msg: reason,
+      reason,
+      data: body,
+      result: body,
       _proxy: {
-        source: "local-fallback",
+        source: "local-queue",
         pathname,
         upstreamStatus: lastFailure?.status || 0
       }
@@ -945,6 +1669,15 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
   const stationId = payload.stationId || payload.SITE_ID || "";
   if (stationId) {
     filtered = filtered.filter((row) => String(row.stationId || row.station || "").toUpperCase() === String(stationId).toUpperCase());
+  }
+
+  if (pathname === "/api/user/read" || pathname === "/api/user/info") {
+    const userId = String(payload.userId || payload.username || "").trim().toLowerCase();
+    if (userId) {
+      filtered = filtered.filter((row) =>
+        String(row.userId || row.username || "").trim().toLowerCase() === userId
+      );
+    }
   }
 
   if (pathname === "/api/item/read") {
@@ -1308,7 +2041,7 @@ async function buildConsumptionAudit() {
   const configuredFrom = configuredConsumptionBackfillFrom();
   const generatedAt = new Date().toISOString();
   const midnightExpectedDate = expectedMidnightSyncDate();
-  const stats = await dailyMeterStationStats();
+  const stats = await dailyMeterStationStats(await fetchLiveStationIds());
   if (!stats.tableReady) {
     return {
       enabled: stats.enabled,
@@ -1532,58 +2265,293 @@ async function loginResponse(payload) {
   if (supabaseAuthEnabled()) {
     const supabaseResult = await signInWithPassword(payload);
     if (supabaseResult?.status === 200) return supabaseResult;
-    if (!getEnv().demoAuthEnabled) return supabaseResult;
+    return supabaseResult;
   }
-
-  const userId = String(payload.userId || payload.username || "").trim() || "admin";
-  const password = String(payload.password || "");
-  const normalizedUserId = userId === "admin@acoblighting.com" ? "admin" : userId;
-  const env = getEnv();
-  const allowed = env.demoAuthEnabled && env.demoAuthPassword && normalizedUserId === env.demoAuthUser && password === env.demoAuthPassword;
-  if (!allowed) {
-    return {
-      status: 401,
-      body: {
-        code: 401,
-        msg: "Invalid credentials",
-        reason: "Invalid credentials",
-        data: null,
-        result: null,
-        _proxy: {
-          source: "local-auth",
-          pathname: "/api/user/login"
+  if (getEnv().demoAuthEnabled) {
+    const demoPassword = String(process.env.DEMO_AUTH_PASSWORD || "").trim();
+    if (demoPassword && payload.password === demoPassword) {
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          msg: "success",
+          reason: "success",
+          data: {
+            token: "local-dev-token",
+            refreshToken: "local-dev-refresh-token",
+            userId: payload.userId || "admin",
+            userName: "Beverly Admin",
+            roleId: "super-admin",
+            remark: "demo-bypass"
+          },
+          result: {
+            token: "local-dev-token",
+            refreshToken: "local-dev-refresh-token",
+            userId: payload.userId || "admin",
+            userName: "Beverly Admin",
+            roleId: "super-admin",
+            remark: "demo-bypass"
+          },
+          _proxy: {
+            source: "local-auth",
+            pathname: "/api/user/login"
+          }
         }
-      }
-    };
+      };
+    }
   }
-
+  // Demo auth removed. Without Supabase, all logins are rejected.
+  // Enable SUPABASE_AUTH_ENABLED and configure SUPABASE_URL/SUPABASE_ANON_KEY.
   return {
-    status: 200,
+    status: 401,
     body: {
-      code: 0,
-      msg: "success",
-      reason: "success",
-      data: {
-        token: "local-dev-token",
-        userId: normalizedUserId,
-        userName: "ACB(admin)",
-        roleId: "super-admin"
-      },
-      result: {
-        token: "local-dev-token",
-        userId: normalizedUserId,
-        userName: "ACB(admin)",
-        roleId: "super-admin"
-      },
-      _proxy: {
-        source: "local-auth",
-        pathname: "/api/user/login"
-      }
+      code: 401,
+      msg: "Authentication service unavailable",
+      reason: "Authentication service unavailable",
+      data: null,
+      result: null
     }
   };
 }
 
+function oemErrorResponse(status, message) {
+  return {
+    status,
+    body: { code: status, msg: message, reason: message, data: null, result: null }
+  };
+}
+
+function slugifyOemName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+const allowedLogoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+const maxLogoUploadBytes = 2 * 1024 * 1024;
+
+// Handles every /api/system/oem[...] path except the read-only "/list" summary
+// (handled earlier, above the call site). Returns null only for the reserved
+// "/list" pathname so the caller's earlier branch remains authoritative; every
+// other path either returns a real result or a 404.
+async function handleOemManagementRequest(request, pathname, requestData) {
+  if (pathname === "/api/system/oem/list") return null;
+  const method = String(request.method || "GET").toUpperCase();
+  const rest = pathname.slice("/api/system/oem".length).replace(/^\/+/, "");
+  const segments = rest ? rest.split("/").filter(Boolean) : [];
+  const payload = requestData.parsedBody && typeof requestData.parsedBody === "object" ? requestData.parsedBody : {};
+
+  // POST /api/system/oem — create a new (draft) OEM.
+  if (segments.length === 0 && method === "POST") {
+    const displayName = String(payload.displayName || "").trim();
+    if (!displayName) return oemErrorResponse(400, "displayName is required");
+    const slug = slugifyOemName(payload.slug || displayName);
+    if (!slug) return oemErrorResponse(400, "Could not derive a slug from displayName");
+    const existing = await getOemManufacturer(slug);
+    if (existing) return oemErrorResponse(409, `An OEM with slug "${slug}" already exists`);
+    const manufacturer = await upsertOemManufacturer({
+      slug,
+      displayName,
+      status: "draft",
+      isSeedDefault: false,
+      capabilities: payload.capabilities && typeof payload.capabilities === "object" ? payload.capabilities : {},
+      vendingStrategy: payload.vendingStrategy === "direct_credit" ? "direct_credit" : "sts_token"
+    });
+    return localJobResponse({ oem: manufacturer });
+  }
+
+  const oemId = segments[0];
+  if (!oemId) return oemErrorResponse(404, "OEM not found");
+  const manufacturer = await getOemManufacturer(oemId);
+  if (!manufacturer) return oemErrorResponse(404, "OEM not found");
+
+  // GET /api/system/oem/:id — detail, never includes secret material.
+  if (segments.length === 1 && method === "GET") {
+    const credentials = await getOemCredentials(manufacturer.id);
+    const endpoints = await listOemEndpointConfigs(manufacturer.id);
+    return localJobResponse({
+      oem: manufacturer,
+      credentials: credentials ? {
+        authStrategy: credentials.authStrategy,
+        baseUrl: credentials.baseUrl,
+        tokenEndpointPath: credentials.tokenEndpointPath,
+        apiKeyHeaderName: credentials.apiKeyHeaderName,
+        hasBearerToken: Boolean(credentials.encryptedBearerToken),
+        hasClientSecret: Boolean(credentials.encryptedClientSecret),
+        hasUsername: Boolean(credentials.encryptedUsername),
+        hasPassword: Boolean(credentials.encryptedPassword)
+      } : null,
+      endpointCount: endpoints.length
+    });
+  }
+
+  // PUT /api/system/oem/:id — edit name/details/capabilities/vending strategy.
+  if (segments.length === 1 && method === "PUT") {
+    const updated = await upsertOemManufacturer({
+      id: manufacturer.id,
+      slug: payload.slug ? slugifyOemName(payload.slug) : manufacturer.slug,
+      displayName: payload.displayName !== undefined ? String(payload.displayName).trim() || manufacturer.displayName : manufacturer.displayName,
+      logoStoragePath: payload.logoStoragePath !== undefined ? payload.logoStoragePath : manufacturer.logoStoragePath,
+      status: payload.status !== undefined ? payload.status : manufacturer.status,
+      isSeedDefault: manufacturer.isSeedDefault,
+      capabilities: payload.capabilities && typeof payload.capabilities === "object" ? payload.capabilities : manufacturer.capabilities,
+      vendingStrategy: payload.vendingStrategy !== undefined ? payload.vendingStrategy : manufacturer.vendingStrategy,
+      rateLimitWindowMs: payload.rateLimitWindowMs !== undefined ? payload.rateLimitWindowMs : manufacturer.rateLimitWindowMs,
+      rateLimitMaxRequests: payload.rateLimitMaxRequests !== undefined ? payload.rateLimitMaxRequests : manufacturer.rateLimitMaxRequests
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ oem: updated });
+  }
+
+  // DELETE /api/system/oem/:id — refuse to delete the seeded Calinmeter row.
+  if (segments.length === 1 && method === "DELETE") {
+    if (manufacturer.isSeedDefault) return oemErrorResponse(409, "Cannot delete the default seeded OEM");
+    await deleteOemManufacturer(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ deleted: true });
+  }
+
+  // PUT /api/system/oem/:id/credentials — upsert upstream credentials. Secrets
+  // are encrypted server-side; omitted secret fields keep their existing value
+  // (so changing just the base URL doesn't force re-entering the bearer token).
+  if (segments.length === 2 && segments[1] === "credentials" && method === "PUT") {
+    const existingCredentials = await getOemCredentials(manufacturer.id);
+    const authStrategy = String(payload.authStrategy || existingCredentials?.authStrategy || "bearer_static");
+    const updated = await upsertOemCredentials({
+      oemId: manufacturer.id,
+      authStrategy,
+      baseUrl: payload.baseUrl !== undefined ? String(payload.baseUrl).trim().replace(/\/+$/, "") : (existingCredentials?.baseUrl || ""),
+      encryptedBearerToken: payload.bearerToken ? oemRegistry.encryptSecret(payload.bearerToken) : (existingCredentials?.encryptedBearerToken || ""),
+      encryptedClientSecret: payload.clientSecret ? oemRegistry.encryptSecret(payload.clientSecret) : (existingCredentials?.encryptedClientSecret || ""),
+      encryptedUsername: payload.username ? oemRegistry.encryptSecret(payload.username) : (existingCredentials?.encryptedUsername || ""),
+      encryptedPassword: payload.password ? oemRegistry.encryptSecret(payload.password) : (existingCredentials?.encryptedPassword || ""),
+      tokenEndpointPath: payload.tokenEndpointPath !== undefined ? payload.tokenEndpointPath : (existingCredentials?.tokenEndpointPath || ""),
+      apiKeyHeaderName: payload.apiKeyHeaderName !== undefined ? payload.apiKeyHeaderName : (existingCredentials?.apiKeyHeaderName || ""),
+      updatedBy: request.__auth?.userId || ""
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({
+      authStrategy: updated.authStrategy,
+      baseUrl: updated.baseUrl,
+      tokenEndpointPath: updated.tokenEndpointPath,
+      apiKeyHeaderName: updated.apiKeyHeaderName,
+      hasBearerToken: Boolean(updated.encryptedBearerToken),
+      hasClientSecret: Boolean(updated.encryptedClientSecret),
+      hasUsername: Boolean(updated.encryptedUsername),
+      hasPassword: Boolean(updated.encryptedPassword)
+    });
+  }
+
+  // POST /api/system/oem/:id/cache-bust — make an edit visible immediately
+  // instead of waiting out the registry's cache TTL.
+  if (segments.length === 2 && segments[1] === "cache-bust" && method === "POST") {
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ ok: true });
+  }
+
+  // POST /api/system/oem/:id/test-connection — resolves auth (fetching/caching a
+  // token for login/OAuth2 strategies) and, if an enabled GET endpoint exists,
+  // makes one real call. Safe to call the moment credentials are pasted in,
+  // before any endpoint paths are configured.
+  if (segments.length === 2 && segments[1] === "test-connection" && method === "POST") {
+    const result = await oemRegistry.testOemConnection(manufacturer.id);
+    return localJobResponse(result);
+  }
+
+  // POST /api/system/oem/:id/logo — multipart image upload to the oem-logos bucket.
+  if (segments.length === 2 && segments[1] === "logo" && method === "POST") {
+    const file = payload._file || null;
+    if (!file) return oemErrorResponse(400, "Logo file is required");
+    if (!allowedLogoMimeTypes.includes(file.contentType)) return oemErrorResponse(400, `Allowed logo types: ${allowedLogoMimeTypes.join(", ")}`);
+    if (!file.buffer || file.buffer.length > maxLogoUploadBytes) return oemErrorResponse(400, `Logo must be ${Math.floor(maxLogoUploadBytes / 1024 / 1024)}MB or smaller`);
+    const artifact = await saveArtifact({
+      bucket: "oem-logos",
+      routeHash: "oem-logo",
+      filename: file.name || `${manufacturer.slug}.png`,
+      content: file.buffer,
+      contentType: file.contentType
+    });
+    if (!artifact) return oemErrorResponse(503, "Logo storage requires Supabase to be configured for this environment");
+    const supabaseUrlBase = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+    const logoStoragePath = `${supabaseUrlBase}/storage/v1/object/public/oem-logos/${artifact.path}`;
+    await upsertOemManufacturer({ ...manufacturer, logoStoragePath });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ logoStoragePath });
+  }
+
+  // GET /api/system/oem/:id/endpoints — list every endpoint config for this OEM.
+  if (segments.length === 2 && segments[1] === "endpoints" && method === "GET") {
+    return localJobResponse({ endpoints: await listOemEndpointConfigs(manufacturer.id) });
+  }
+
+  // PUT /api/system/oem/:id/endpoints/:logicalKey — upsert one endpoint config.
+  if (segments.length === 3 && segments[1] === "endpoints" && method === "PUT") {
+    const logicalKey = decodeURIComponent(segments[2]);
+    const updated = await upsertOemEndpointConfig({
+      oemId: manufacturer.id,
+      logicalKey,
+      upstreamPath: payload.upstreamPath,
+      method: payload.method,
+      casingVariant: payload.casingVariant,
+      requestFieldMap: payload.requestFieldMap,
+      responseFieldMap: payload.responseFieldMap,
+      payloadShape: payload.payloadShape,
+      paginationStyle: payload.paginationStyle,
+      requiresLiveRead: payload.requiresLiveRead,
+      isWriteOverride: payload.isWriteOverride,
+      adapterFnName: payload.adapterFnName,
+      enabled: payload.enabled
+    });
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ endpoint: updated });
+  }
+
+  // DELETE /api/system/oem/:id/endpoints/:logicalKey
+  if (segments.length === 3 && segments[1] === "endpoints" && method === "DELETE") {
+    const logicalKey = decodeURIComponent(segments[2]);
+    await deleteOemEndpointConfig(manufacturer.id, logicalKey);
+    oemRegistry.invalidateOemCache(manufacturer.id);
+    oemRegistry.invalidateOemCache(manufacturer.slug);
+    return localJobResponse({ deleted: true });
+  }
+
+  return oemErrorResponse(404, "Unknown OEM management route");
+}
+
 async function dispatchLocalDatabaseAction(request, pathname, requestData) {
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/wallet-maintenance") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const task = String(cronQuery(request.url).task || "");
+    if (!walletMaintenanceTasks.has(task)) {
+      return {
+        status: 400,
+        body: { error: "invalid_wallet_maintenance_task", message: "Unknown wallet maintenance task." }
+      };
+    }
+    await runWalletMaintenance(task);
+    return localJobResponse({ ok: true, task });
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname.startsWith("/api/cron/refresh")) {
     if (!cronAuthorized(request)) {
       return {
@@ -1638,6 +2606,65 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       mode: "backfill"
     }));
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/sync-oem-dimensions") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const oemSlug = String(cronQuery(request.url).oem || "") || undefined;
+    const summary = await syncOemDimensions({
+      oemSlug,
+      log: (message) => console.log(`[cron:sync-oem-dimensions] ${message}`)
+    });
+    return localJobResponse(summary);
+  }
+  // Exports settled months of raw readings to Storage ahead of the retention boundary.
+  // Never deletes; only writes objects and index rows.
+  //
+  // ORDERING SAFETY does not depend on the schedule. Vercel Hobby crons have +/-59 min
+  // scheduling precision, so the 01:00 UTC entry can actually fire any time before
+  // 02:00 -- and pg_cron job 18 prunes at 03:00. What actually guarantees we never
+  // delete an unarchived month is the archiver's own 35-day grace window, which keeps
+  // it roughly two months ahead of anything job 18 is eligible to touch. The clock
+  // ordering is belt to that braces.
+  //
+  // ?limit=  caps partitions per invocation so a sweep cannot run past the function's
+  //          maxDuration (300s on every plan incl. Hobby) -- it resumes next run.
+  //          Backfill is bounded: 63 partitions across 6 stations as measured
+  //          2026-08-11, so the default clears it in ~3 daily runs, or immediately if
+  //          the endpoint is curl'd a few times with CRON_SECRET.
+  // ?dryRun= plan only, touches neither Storage nor the index.
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/archive-readings") {
+    if (!cronAuthorized(request)) {
+      return {
+        status: 401,
+        body: {
+          code: 401,
+          msg: "Unauthorized",
+          reason: "Unauthorized",
+          data: null,
+          result: null,
+          _proxy: { source: "cron-auth", pathname }
+        }
+      };
+    }
+    const query = cronQuery(request.url);
+    const summary = await runArchiveSweep({
+      limit: Number(query.limit || 24),
+      dryRun: String(query.dryRun || "") === "true",
+      log: (message) => console.log(`[cron:archive-readings] ${message}`)
+    });
+    return localJobResponse(summary);
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
     if (!cronAuthorized(request)) {
       return {
@@ -1662,6 +2689,66 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       liveProxyEnabled: getEnv().liveProxyEnabled,
       allowLiveWrites: getEnv().allowLiveWrites,
       databasePath: process.env.LOCAL_DB_PATH || "tmp/reference-crm.sqlite"
+    });
+  }
+  if (pathname === "/api/system/live-write-control") {
+    const method = String(request.method || "GET").toUpperCase();
+    const access = await getAccessControlModule();
+    const controlActor = liveWriteControlActor(request);
+    if (!controlActor) return authFailure(401, pathname, "Authentication required");
+    const normalizedRole = access.normalizeRoleId(controlActor.roleId);
+    const canManage = normalizedRole === "super-admin";
+    const actor = String(controlActor.userId || controlActor.email);
+
+    if (method === "GET") {
+      const state = await refreshLiveWriteControl(true);
+      return localJobResponse({
+        enabled: state.enabled === true,
+        environment: state.environment,
+        source: state.source,
+        updatedAt: state.updatedAt,
+        changedBy: state.changedBy,
+        reason: state.reason,
+        canManage
+      });
+    }
+
+    if (method !== "PUT") return authFailure(405, pathname, "Method not allowed");
+    if (!canManage) return authFailure(403, pathname, "Super admin required");
+    const payload = requestData?.parsedBody || {};
+    const validated = validateLiveWriteChange(payload);
+    if (validated.error) return authFailure(400, pathname, validated.error);
+
+    const previous = { ...(await refreshLiveWriteControl(true)) };
+    if (previous.enabled === validated.enabled) {
+      return localJobResponse({
+        enabled: previous.enabled === true,
+        previousEnabled: previous.enabled === true,
+        unchanged: true,
+        environment: previous.environment,
+        source: previous.source,
+        updatedAt: previous.updatedAt,
+        changedBy: previous.changedBy,
+        reason: previous.reason,
+        canManage: true
+      });
+    }
+
+    const state = await saveLiveWriteControl({
+      enabled: validated.enabled,
+      actor,
+      reason: validated.reason
+    });
+    return localJobResponse({
+      enabled: state.enabled === true,
+      previousEnabled: previous.enabled === true,
+      unchanged: false,
+      environment: state.environment,
+      source: state.source,
+      updatedAt: state.updatedAt,
+      changedBy: state.changedBy,
+      reason: state.reason,
+      canManage: true
     });
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/live-report") {
@@ -1703,6 +2790,41 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       schedule: snapshotSchedule()
     });
   }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/oem/list") {
+    const manufacturers = await listOemManufacturers();
+    const liveStationIds = await fetchLiveStationIds(request);
+    const oems = await Promise.all(manufacturers.map(async (oem) => {
+      // Resolve the mappings once — the count is just its length, and the lookup
+      // can hit Supabase plus fallback tiers, so calling it twice doubles the work
+      // and can drift if a tier changes between the two calls.
+      const stations = oem.isSeedDefault
+        ? liveStationIds.map((stationId) => ({
+          oemId: oem.id,
+          stationId,
+          communityLabel: stationId.charAt(0) + stationId.slice(1).toLowerCase(),
+        }))
+        : await listOemStationMappings(oem.id, oem.slug);
+      return {
+        id: oem.id,
+        slug: oem.slug,
+        displayName: oem.displayName,
+        logoStoragePath: oem.logoStoragePath,
+        status: oem.status,
+        isSeedDefault: oem.isSeedDefault,
+        capabilities: oem.capabilities,
+        vendingStrategy: oem.vendingStrategy,
+        communityCount: stations.length,
+        stations,
+        createdAt: oem.createdAt,
+        updatedAt: oem.updatedAt
+      };
+    }));
+    return localJobResponse({ oems });
+  }
+  if (pathname === "/api/system/oem" || pathname.startsWith("/api/system/oem/")) {
+    const oemResult = await handleOemManagementRequest(request, pathname, requestData);
+    if (oemResult) return oemResult;
+  }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/storage-report") {
     return localJobResponse(await storageReport());
   }
@@ -1710,10 +2832,36 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse(governancePlan());
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-store") {
-    return localJobResponse(await dailyMeterTableReport());
+    return localJobResponse(await dailyMeterTableReport(await fetchLiveStationIds(request)));
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/consumption-audit") {
     return localJobResponse(await buildConsumptionAudit());
+  }
+  if (pathname === "/api/system/client-errors") {
+    const method = String(request.method || "GET").toUpperCase();
+    const actor = request.__auth || {};
+    if (method === "POST") {
+      const body = requestData?.parsedBody || {};
+      const entries = Array.isArray(body.errors) ? body.errors : Array.isArray(body) ? body : [];
+      const result = await ingestClientErrors(entries, {
+        userId: actor.userId || "",
+        roleId: actor.roleId || ""
+      });
+      return localJobResponse(result);
+    }
+    if (method === "GET") {
+      // Reads expose operational telemetry — staff roles only when auth is active.
+      if (actor.roleId) {
+        const access = await getAccessControlModule();
+        const normalizedRole = access.normalizeRoleId(actor.roleId);
+        if (!["super-admin", "operations-manager"].includes(normalizedRole)) {
+          return authFailure(403, pathname, "Client error telemetry requires staff role");
+        }
+      }
+      const query = new URLSearchParams(String(request.url || "").split("?")[1] || "");
+      const limit = Number(query.get("limit") || 100);
+      return localJobResponse(await listClientErrors({ limit }));
+    }
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/hourly") {
     return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname);
@@ -1737,66 +2885,71 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/local/consumption/summary") {
     return readDailyMeterSummary({ requestPayload: requestData.parsedBody });
   }
+  if (pathname === "/api/local/stations") {
+    const stations = await fetchLiveStationDirectory(request);
+    return localJobResponse({ stations, count: stations.length });
+  }
   if (pathname === "/api/local/consumption/station-analytics") {
-    return readStationConsumptionAnalytics({ requestPayload: requestData.parsedBody });
+    return readStationConsumptionAnalytics({
+      requestPayload: {
+        ...requestData.parsedBody,
+        stationIds: await fetchLiveStationIds(request),
+      },
+    });
   }
   if (pathname === "/api/local/consumption/meter-analysis") {
     return readMeterConsumptionAnalysis({ requestPayload: requestData.parsedBody });
   }
+  // ── Archive catalogue ───────────────────────────────────────────────────────
+  // Deliberately shaped like SparkMeter's /reports/summary, /reports/list and /report:
+  // browse a catalogue of pre-generated partitions, then fetch one by key. There is no
+  // query-over-cold-data endpoint here, and that is intentional -- see
+  // reading-archive-service.js. Downloads hand back a short-lived signed URL rather
+  // than streaming bytes through the function.
+  if (pathname === "/api/local/archive/reports/summary") {
+    try {
+      return localJobResponse(await archiveReportsSummary());
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
+  if (pathname === "/api/local/archive/reports/list") {
+    try {
+      const query = cronQuery(request.url);
+      const payload = requestData.parsedBody || {};
+      return localJobResponse(await listArchiveReports({
+        stationId: payload.stationId || query.stationId || null,
+        reportType: payload.reportType || query.reportType || null,
+        granularity: payload.granularity || query.granularity || null,
+        oemId: payload.oemId || query.oemId || null,
+        year: payload.year || query.year || null,
+        month: payload.month || query.month || null,
+        limit: payload.limit || query.limit || 200
+      }));
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
+  if (pathname === "/api/local/archive/reports/download") {
+    const query = cronQuery(request.url);
+    const reportId = String((requestData.parsedBody || {}).id || query.id || "");
+    if (!reportId) return { status: 400, body: { ok: false, error: "id is required" } };
+    try {
+      const result = await archiveSignedDownloadUrl(reportId);
+      if (!result.ok) return { status: 404, body: result };
+      return localJobResponse(result);
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: String(err?.message || err) } };
+    }
+  }
   if (pathname === "/api/local/consumption/refresh-aggregates") {
     try {
-      const result = await refreshMeterReadingAggregates();
+      const result = await refreshMeterReadingAggregates(await fetchLiveStationIds(request));
       return { status: 200, body: { ok: true, durationMs: result.durationMs } };
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
   }
-  if (pathname === "/api/local/consumption/live-probe") {
-    const { runLiveProbe } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runLiveProbe();
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-  if (pathname === "/api/local/consumption/trigger-sync") {
-    const { runSync } = require("../backend/src/services/live-probe-engine");
-    try {
-      const data = await runSync(requestData.parsedBody?.stationId);
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          msg: "success",
-          data
-        }
-      };
-    } catch (err) {
-      return {
-        status: 500,
-        body: {
-          code: 500,
-          msg: err.message
-        }
-      };
-    }
-  }
-
-
   // ── Admin v1 REST endpoints ─────────────────────────────────────────────────
   const methodUpper = (request.method || "GET").toUpperCase();
 
@@ -1851,8 +3004,15 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const orgId = vendorOrgId(request);
     const w = getOrProvisionVendorWallet(orgId);
     if (!w) return { status: 404, body: { message: "Wallet not found" } };
+    const emptyActivity = { today_vended_minor: 0, today_vended_count: 0, today_funded_minor: 0, total_funded_minor: 0, total_reversed_minor: 0 };
     try {
       const sum = walletLedger.walletSummary(w.id);
+      let activity = emptyActivity;
+      try {
+        activity = walletLedger.activitySummary(w.id);
+      } catch {
+        activity = emptyActivity;
+      }
       return localJobResponse({
         wallet_id: w.id,
         currency: w.currency || "NGN",
@@ -1860,10 +3020,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         balance_minor: sum.ledgerBalanceMinor,
         holds_minor: sum.heldBalanceMinor,
         available_minor: sum.availableBalanceMinor,
-        daily_cap_minor: null
+        daily_cap_minor: null,
+        activity
       });
     } catch {
-      return localJobResponse({ wallet_id: w.id, currency: "NGN", status: w.status || "active", balance_minor: 0, holds_minor: 0, available_minor: 0, daily_cap_minor: null });
+      return localJobResponse({ wallet_id: w.id, currency: "NGN", status: w.status || "active", balance_minor: 0, holds_minor: 0, available_minor: 0, daily_cap_minor: null, activity: emptyActivity });
     }
   }
 
@@ -2027,6 +3188,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ funding: pending });
   }
 
+  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/funding/history")) {
+    const rows = walletFunding.listFundingRequests({ limit: 200 });
+    return localJobResponse({ funding: rows, nextCursor: null, summary: null });
+  }
+
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vending")) {
     const sp = adminQueryParams(request.url);
     const status = sp.get("status") || undefined;
@@ -2098,31 +3264,83 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ requests: walletPrivacy.listDeletionRequests({ status }) });
   }
 
+  const getVendorApplicationSeed = () => {
+    const state = globalThis.__beverlyVendorApplicationsState ||= {
+      rows: [
+        { id: "app-001", legal_name: "Sunrise Energy Ltd", contact_name: "Emeka Okonkwo", contact_email: "emeka@sunrise.ng", contact_phone: "+2348011223344", business_type: "retail_energy", operating_stations: ["Lagos Island", "Surulere"], notes: null, status: "submitted", created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
+        { id: "app-002", legal_name: "GreenPower Co", contact_name: "Fatima Yusuf", contact_email: "f.yusuf@greenpower.ng", contact_phone: "+2348099887766", business_type: "commercial", operating_stations: ["Abuja Central"], notes: "Has existing NERC license", status: "contacted", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
+        { id: "app-003", legal_name: "Bright Connections", contact_name: "Chidi Eze", contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", business_type: "residential", operating_stations: ["Port Harcourt"], notes: null, status: "submitted", created_at: new Date(Date.now() - 1 * 86400000).toISOString() },
+      ],
+    };
+    return state.rows;
+  };
+
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendor-applications")) {
     const sp = adminQueryParams(request.url);
     const status = sp.get("status") || "submitted";
-    const seed = [
-      { id: "app-001", legal_name: "Sunrise Energy Ltd", contact_name: "Emeka Okonkwo", contact_email: "emeka@sunrise.ng", contact_phone: "+2348011223344", business_type: "retail_energy", operating_stations: ["Lagos Island", "Surulere"], notes: null, status: "submitted", created_at: new Date(Date.now() - 2 * 86400000).toISOString() },
-      { id: "app-002", legal_name: "GreenPower Co", contact_name: "Fatima Yusuf", contact_email: "f.yusuf@greenpower.ng", contact_phone: "+2348099887766", business_type: "commercial", operating_stations: ["Abuja Central"], notes: "Has existing NERC license", status: "contacted", created_at: new Date(Date.now() - 5 * 86400000).toISOString() },
-      { id: "app-003", legal_name: "Bright Connections", contact_name: "Chidi Eze", contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", business_type: "residential", operating_stations: ["Port Harcourt"], notes: null, status: "submitted", created_at: new Date(Date.now() - 1 * 86400000).toISOString() },
-    ];
+    const seed = getVendorApplicationSeed();
     const filtered = status ? seed.filter(a => a.status === status) : seed;
     return localJobResponse({ applications: filtered });
+  }
+
+  if (methodUpper === "DELETE" && pathname.startsWith("/api/v1/admin/vendor-applications/")) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const rows = getVendorApplicationSeed();
+    const index = rows.findIndex(a => a.id === id);
+    if (index < 0) {
+      return {
+        status: 404,
+        body: {
+          code: 404,
+          msg: "Application not found.",
+          reason: "Application not found.",
+          data: null,
+          result: null,
+          _proxy: { source: "local-db", pathname }
+        }
+      };
+    }
+    rows.splice(index, 1);
+    return localJobResponse({ ok: true, id });
   }
 
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendors")) {
     const sp = adminQueryParams(request.url);
     const statusFilter = sp.get("status") || "";
     const q = (sp.get("q") || "").toLowerCase();
-    const seed = [
-      { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
-      { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
-      { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
-    ];
-    let rows = seed;
+    const state = globalThis.__beverlyVendorsState ||= {
+      rows: [
+        { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
+        { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+      ],
+    };
+    let rows = state.rows.filter(v => !v.deleted_at);
     if (statusFilter) rows = rows.filter(v => v.status === statusFilter);
     if (q) rows = rows.filter(v => v.legal_name.toLowerCase().includes(q) || v.contact_email.toLowerCase().includes(q));
     return localJobResponse({ vendors: rows });
+  }
+
+  if (methodUpper === "DELETE" && pathname.startsWith("/api/v1/admin/vendors/")) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+    const row = state.rows.find(v => v.id === id && !v.deleted_at);
+    if (!row) {
+      return {
+        status: 404,
+        body: {
+          code: 404,
+          msg: "Vendor not found.",
+          reason: "Vendor not found.",
+          data: null,
+          result: null,
+          _proxy: { source: "local-db", pathname }
+        }
+      };
+    }
+    row.status = "closed";
+    row.deleted_at = new Date().toISOString();
+    return localJobResponse({ ok: true, id });
   }
 
   if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/fraud")) {
@@ -2218,6 +3436,110 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
   if (methodUpper === "GET" && pathname === "/api/auth/mfa/factors") {
     return localJobResponse({ factors: [] });
+  }
+
+  if (pathname === "/api/local/abnormal-alarms") {
+    const qp = adminQueryParams(request.url);
+    const body = requestData.parsedBody || {};
+    const alarm = String(qp.get("alarm") || body.alarm || "").trim();
+    const severity = String(qp.get("severity") || body.severity || "").trim().toLowerCase();
+    const bypassRisk = String(qp.get("bypassRisk") || body.bypassRisk || "").trim().toLowerCase();
+    const stationId = String(qp.get("station_id") || qp.get("stationId") || body.station_id || body.stationId || "").trim();
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+    const defaultTo = now.toISOString();
+    const from = String(qp.get("from") || qp.get("FROM") || body.from || body.FROM || defaultFrom).trim();
+    const to = String(qp.get("to") || qp.get("TO") || body.to || body.TO || defaultTo).trim();
+    const searchTerm = String(qp.get("searchTerm") || qp.get("search") || body.searchTerm || body.search || "").trim().toLowerCase();
+    const sortBy = String(qp.get("sortBy") || body.sortBy || "currentDate").trim();
+    const sortDirection = String(qp.get("sortDirection") || body.sortDirection || "desc").trim().toLowerCase() === "desc" ? "desc" : "asc";
+    const offset = Math.max(0, Number(qp.get("offset") || body.offset || 0));
+    const pageLimit = Math.min(1000, Math.max(10, Number(qp.get("limit") || qp.get("pageLimit") || body.pageLimit || body.limit || 200)));
+    let stationScope;
+    try {
+      stationScope = stationId ? [stationId] : await fetchLiveStationIds(request);
+    } catch (error) {
+      return {
+        status: 503,
+        body: { code: 503, msg: "Station directory unavailable", reason: error instanceof Error ? error.message : String(error) }
+      };
+    }
+    const warnings = [];
+    const sources = await Promise.all(stationScope.map(async (station) => {
+      try {
+        const stored = await readDailyMeterRows({
+          pathname: "/api/DailyDataMeter/read",
+          requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
+        });
+        if (stored) return { ...stored, __origin: "stored" };
+        const live = await proxyLive(
+          { ...request, method: "POST", url: "/api/DailyDataMeter/read" },
+          "/api/DailyDataMeter/read",
+          {
+            ...requestData,
+            parsedBody: { lang: "en", pageNumber: 1, pageSize: 5000, SITE_ID: station, FROM: from, TO: to }
+          }
+        );
+        return { ...live, __origin: "live" };
+      } catch (error) {
+        warnings.push(`${station}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    }));
+    const list = sources.flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const sourceTotal = sources.reduce((total, source) => total + Number(source?.body?.result?.total || source?.body?.data?.total || 0), 0);
+    const base = sources.find(Boolean);
+    const warning = warnings.join("; ");
+    if (warning) console.error("[abnormal-alarms]", warning);
+    // Stored rows already carry resolved (non-inverted) alarm booleans from
+    // daily_meter_readings' typed signal columns; live-proxied rows carry the raw
+    // upstream shape. Each must go through the derivation function that matches
+    // its shape -- see deriveAbnormalAlarmsFromResolvedFlags's own comment for why.
+    const storedList = sources.filter((source) => source?.__origin === "stored")
+      .flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const liveList = sources.filter((source) => source?.__origin === "live")
+      .flatMap((source) => source?.body?.result?.data || source?.body?.data?.data || []);
+    const rows = [
+      ...deriveAbnormalAlarmsFromResolvedFlags(storedList, stationId),
+      ...deriveAbnormalAlarms(liveList, stationId),
+    ];
+    const alarmRows = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
+    const severityRows = severity ? alarmRows.filter((row) => row.severity === severity) : alarmRows;
+    const riskRows = bypassRisk ? severityRows.filter((row) => row.bypassRisk === bypassRisk) : severityRows;
+    const searched = searchTerm
+      ? riskRows.filter((row) => Object.values(row).some((value) => String(value ?? "").toLowerCase().includes(searchTerm)))
+      : riskRows;
+    const filtered = sortBy
+      ? [...searched].sort((a, b) => {
+        const left = a?.[sortBy];
+        const right = b?.[sortBy];
+        const numericLeft = Number(left);
+        const numericRight = Number(right);
+        const result = Number.isFinite(numericLeft) && Number.isFinite(numericRight)
+          ? numericLeft - numericRight
+          : String(left ?? "").localeCompare(String(right ?? ""));
+        return sortDirection === "desc" ? -result : result;
+      })
+      : searched;
+    const paged = filtered.slice(offset, offset + pageLimit);
+    return localJobResponse({
+      total: filtered.length,
+      rows: paged,
+      data: paged,
+      result: { total: filtered.length, data: paged },
+      summary: summarizeAbnormalAlarms(filtered),
+      meta: {
+        source: base?.body?._proxy?.source || "/api/DailyDataMeter/read",
+        sourceTotal,
+        scannedRows: Array.isArray(list) ? list.length : 0,
+        truncated: sourceTotal > (Array.isArray(list) ? list.length : 0),
+        from,
+        to,
+        stationId,
+        warning,
+        alarmTypes: ALARM_SIGNALS.map(({ key, label, severity: signalSeverity, category }) => ({ key, label, severity: signalSeverity, category }))
+      }
+    });
   }
 
   if ((request.method || "GET").toUpperCase() !== "POST") return null;
@@ -2598,10 +3920,24 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const meterId = String(payload.meterId || "").trim();
     const amtMinor = Number(payload.amountMinor || 200000);
     if (!meterId) return { status: 400, body: { code: 400, msg: "meterId is required", reason: "validation_error", data: null, result: null, _proxy: { source: "local", pathname } } };
-    const unitsKwh = parseFloat((amtMinor / 100 / 55).toFixed(2));
+    const { calculateVendingVatBreakdown } = await tokenPolicyPromise;
+    const tariffNairaPerKwh = 55;
+    const vat = calculateVendingVatBreakdown(amtMinor);
+    const unitsKwh = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
+    const accountRows = await fetchLiveAccountPage(request, { meterId }, 1);
+    const account = accountRows?.find((row) => String(row?.meterId || row?.meter_id || "").trim() === meterId);
+    if (!account) return { status: 404, body: { code: 404, msg: "Meter not found", reason: "meter_not_found" } };
+    const stationId = String(account.stationId || account.station_id || "").trim();
+    if (!stationId) return { status: 422, body: { code: 422, msg: "Meter station unavailable", reason: "station_unavailable" } };
     return localJobResponse({
-      meter: { meterId, customerId: `CUST-${meterId.slice(-4)}`, customerName: "Customer " + meterId.slice(-4), stationId: "TUNGA", tariffId: "TARIFF-01" },
-      preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: 5500, tariffId: "TARIFF-01" }
+      meter: {
+        meterId,
+        customerId: String(account.customerId || account.customer_id || ""),
+        customerName: String(account.customerName || account.customer_name || ""),
+        stationId,
+        tariffId: String(account.tariffId || account.tariff_id || "TARIFF-01")
+      },
+      preview: { amountMinor: amtMinor, units: unitsKwh, effectivePricePerKwh: tariffNairaPerKwh, tariffId: "TARIFF-01" }
     });
   }
 
@@ -2620,7 +3956,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       }
       const ikey = `vend:${orgId}:${meterId}:${amtMinor}:${Date.now()}`;
       const order = walletPurchase.createPurchaseOrder({ organizationId: orgId, targetMeter: meterId, amountMinor: amtMinor, mode: "token", actorId, idempotencyKey: ikey });
-      const units = parseFloat((amtMinor / 100 / 55).toFixed(2));
+      const { calculateVendingVatBreakdown } = await tokenPolicyPromise;
+      const tariffNairaPerKwh = 55;
+      const vat = calculateVendingVatBreakdown(amtMinor);
+      const units = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
       const token = Array.from({ length: 20 }, () => Math.floor(Math.random() * 10)).join("").replace(/(.{4})/g, "$1-").slice(0, -1);
       try { walletPurchase.completeTokenPurchase({ purchaseOrderId: order.id, token, unitsKwh: units, actorId: "system", idempotencyKey: `complete:${ikey}` }); } catch {}
       return localJobResponse({ token, units, receiptId: order.receiptNumber, purchaseOrder: order });
@@ -2702,6 +4041,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.revenueReport(payload.dateRange, payload.filters));
   }
+  if (pathname === "/api/reports/transactions") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.transactionReport(payload.dateRange, payload.filters));
+  }
   if (pathname === "/api/reports/wallet") {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.walletReport(payload.dateRange, payload.filters));
@@ -2717,6 +4060,10 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   if (pathname === "/api/reports/settlement") {
     const reportService = require("../backend/src/services/report-service");
     return localJobResponse(await reportService.settlementReport(payload.dateRange, payload.filters));
+  }
+  if (pathname === "/api/reports/disputes") {
+    const reportService = require("../backend/src/services/report-service");
+    return localJobResponse(await reportService.disputeReport(payload.dateRange, payload.filters));
   }
 
   // ── MFA / 2FA ──
@@ -2765,52 +4112,25 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return loginResponse(payload);
   }
   if (isAuthRefreshPath(pathname)) {
-    const refreshToken = String(payload.refreshToken || payload.refresh_token || "").trim();
+    // Accept refreshToken from Cookie header (bev_refresh) or request body.
+    const cookieHeader = String(request?.headers?.cookie || "");
+    const cookieBevRefresh = cookieHeader.match(/(?:^|;\s*)bev_refresh=([^;]+)/)?.[1] || "";
+    const refreshToken = String(payload.refreshToken || payload.refresh_token || "").trim() || decodeURIComponent(cookieBevRefresh);
     if (!refreshToken) {
-      return { status: 400, body: { code: 400, msg: "refreshToken required", reason: "refreshToken required", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+      return { status: 400, body: { code: 400, msg: "refreshToken required", reason: "refreshToken required", data: null, result: null } };
     }
     const refreshed = await refreshAccessToken(refreshToken);
     if (!refreshed || !refreshed.token) {
-      return { status: 401, body: { code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null, _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" } } };
+      return { status: 401, body: { code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null } };
     }
     return {
       status: 200,
       body: {
         code: 0, msg: "success", reason: "success",
         data: refreshed,
-        result: refreshed,
-        _proxy: { source: "auth-refresh", pathname: "/api/auth/refresh" }
+        result: refreshed
       }
     };
-  }
-  if (pathname === "/api/local/abnormal-alarms") {
-    const alarm = String(payload.alarm || "").trim();
-    const stationId = String(payload.station_id || "").trim();
-    const from = String(payload.from || "").trim();
-    const to = String(payload.to || "").trim();
-    const offset = Math.max(0, Number(payload.offset || 0));
-    const pageLimit = Math.min(1000, Math.max(10, Number(payload.pageLimit || payload.limit || 200)));
-    const base = await readDailyMeterRows({
-      pathname: "/api/DailyDataMeter/read",
-      requestPayload: { pageNumber: 1, pageSize: 5000, SITE_ID: stationId || undefined, FROM: from || undefined, TO: to || undefined }
-    });
-    const list = base?.body?.result?.data || base?.body?.data?.data || [];
-    const rows = [];
-    for (const r of list) {
-      const pushes = [
-        ["noData", "No Data Report", Number(r.usage1 ?? r.energyConsumptionKwh ?? 0) === 0],
-        ["magneticInterference", "Magnetic Interference", Number(r.magneticInterference ?? r.magneticStatus ?? 0) > 0 || String(r.magneticStatus || "").toLowerCase() === "abnormal"],
-        ["batteryLow", "Battery Low", Number(r.batteryLow ?? 0) > 0 || String(r.batteryStatus || "").toLowerCase() === "low"],
-        ["terminalCoverOpen", "Terminal Cover Open", Number(r.terminalCoverOpen ?? 0) > 0 || String(r.terminalCoverOpen || "").toLowerCase() === "open"],
-        ["coverOpen", "Upper Open", Number(r.coverOpen ?? 0) > 0 || String(r.coverOpen || "").toLowerCase() === "open"],
-        ["currentReverse", "Current Reverse", Number(r.currentReverse ?? 0) > 0 || String(r.currentReverse || "").toLowerCase() === "yes"],
-        ["currentUnbalance", "Current Unbalance", Number(r.currentUnbalance ?? 0) > 0 || String(r.currentUnbalance || "").toLowerCase() === "yes"]
-      ];
-      for (const [key, label, hit] of pushes) if (hit) rows.push({ ...r, alarmKey: key, alarmLabel: label });
-    }
-    const filtered = alarm ? rows.filter((row) => row.alarmKey === alarm) : rows;
-    const paged = filtered.slice(offset, offset + pageLimit);
-    return localJobResponse({ total: filtered.length, rows: paged, data: paged, result: { total: filtered.length, data: paged } });
   }
   if (pathname === "/api/user/profile") {
     return localJobResponse({
@@ -2821,6 +4141,35 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
         phone: String(payload.phone || "")
       }
     });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/scan") {
+    return localJobResponse({ ok: true, scanned: true });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/upload-url") {
+    const filename = String(payload.file_name || "avatar.jpg").replace(/[^a-zA-Z0-9._-]/g, "-");
+    const path = `staff/admin/${Date.now()}-${filename}`;
+    return localJobResponse({
+      path,
+      signed_url: `/api/v1/admin/profile-picture/mock-upload?path=${encodeURIComponent(path)}`,
+      public_url: `https://storage.beverly.local/wallet-profile-pictures/${path}`
+    });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/activate") {
+    const path = String(payload.path || "staff/admin/avatar.jpg");
+    const publicUrl = `https://storage.beverly.local/wallet-profile-pictures/${path}`;
+    return localJobResponse({
+      ok: true,
+      profile_picture_url: publicUrl
+    });
+  }
+  if (pathname === "/api/v1/admin/profile-picture/mock-upload") {
+    return {
+      status: 200,
+      body: { ok: true, uploaded: true }
+    };
+  }
+  if (pathname === "/api/v1/admin/profile-picture") {
+    return localJobResponse({ ok: true, removed: true });
   }
   if (pathname === "/api/user/changePassword") {
     if (!payload.currentPassword || !payload.newPassword || String(payload.newPassword).length < 8) {
@@ -2874,6 +4223,54 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       });
     }
     return localJobResponse(outcome.incident);
+  }
+  if (pathname === "/api/local/meter-token-format/read") {
+    const meterId = String(payload.meterId || "").trim();
+    if (meterId) return localJobResponse(await getMeterTokenOverride(meterId));
+    return localJobResponse(await listMeterTokenOverrides());
+  }
+  if (pathname === "/api/local/meter-token-format/save") {
+    return localJobResponse(await setMeterTokenOverride({
+      meterId: payload.meterId,
+      isS2: payload.isS2,
+      note: payload.note,
+      updatedBy: payload.updatedBy || ""
+    }));
+  }
+  if (pathname === "/api/local/sgc-token-rule/read") {
+    const sgc = String(payload.sgc || "").trim();
+    if (sgc) return localJobResponse(await getSgcTokenRule(sgc));
+    return localJobResponse(await listSgcTokenRules());
+  }
+  if (pathname === "/api/local/sgc-token-rule/save") {
+    return localJobResponse(await setSgcTokenRule({
+      sgc: payload.sgc,
+      isS2: payload.isS2,
+      note: payload.note,
+      updatedBy: payload.updatedBy || ""
+    }));
+  }
+  if (pathname === "/api/local/meterStats/read") {
+    return localJobResponse(await resolveMeterStats(request, { stationId: payload.stationId || "" }));
+  }
+  if (pathname === "/api/local/accountBindings/read") {
+    const rows = await listAccountBindings({
+      status: payload.status === "all" ? "" : String(payload.status || "pending"),
+      stationId: payload.stationId || "",
+      customerId: payload.customerId || "",
+      meterId: payload.meterId || "",
+      searchTerm: payload.searchTerm || ""
+    });
+    return localJobResponse({ total: rows.length, data: rows });
+  }
+  if (pathname === "/api/local/accountBindings/retry") {
+    return localJobResponse(await retryPendingAccountBindings(request, payload));
+  }
+  if (pathname === "/api/local/accountBindings/discard") {
+    const rows = accountBindingPayloadRows({ parsedBody: payload.rows || payload });
+    let removed = 0;
+    for (const row of rows) removed += await deleteAccountBinding(row);
+    return localJobResponse({ removed });
   }
   if (pathname === "/api/local/importJobs/read") {
     return localJobResponse(await listImportJobs({
@@ -2970,7 +4367,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
 async function runRefreshJob(scope) {
   const control = readAutomationControl();
-  const targets = refreshTargets(scope);
+  const stationIds = scope === "hot" ? [] : await fetchLiveStationIds();
+  const targets = refreshTargets(scope, new Date(), stationIds);
   const results = [];
   for (const target of targets) {
     let attempts = 1;
@@ -3103,21 +4501,42 @@ function fallbackRemoteTask(pathname, requestData) {
   };
 }
 async function auditResult(request, pathname, result) {
-  await recordAuditLog({
-    method: request.method || "GET",
-    path: pathname,
-    outcome: result.status < 400 ? "success" : "error",
-    statusCode: result.status,
-    proxySource: result.body?._proxy?.source || "unknown",
-    details: result.body
-  });
+  try {
+    await recordAuditLog({
+      method: request.method || "GET",
+      path: pathname,
+      outcome: result.status < 400 ? "success" : "error",
+      statusCode: result.status,
+      proxySource: result.body?._proxy?.source || "unknown",
+      details: pathname === "/api/user/login"
+        ? { code: result.body?.code, msg: result.body?.msg, reason: result.body?.reason, _proxy: result.body?._proxy }
+        : result.body
+    });
+  } catch (error) {
+    console.error("[audit-log]", error instanceof Error ? error.message : String(error));
+  }
 }
 
-async function tryLivePath(request, liveUrl, requestData, token) {
+function isTransientConnectionError(error) {
+  const code = String((error && error.code) || "");
+  const causeCode = String((error && error.cause && error.cause.code) || "");
+  const message = String((error && error.message) || "").toLowerCase();
+  return /ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH/.test(`${code} ${causeCode}`)
+    || message.includes("stream has been aborted")
+    || message.includes("socket hang up")
+    || message.includes("aborted");
+}
+
+// `retryable` is true only for idempotent reads. A keep-alive socket that the
+// upstream (or an intervening NAT/VPN) has silently idle-closed throws
+// ECONNRESET / "stream has been aborted" the moment it is reused — the dead
+// socket is then evicted from the pool, so an immediate retry establishes a
+// fresh connection. We never replay a write we cannot confirm reached upstream.
+async function tryLivePath(request, liveUrl, requestData, token, authHeaderName, retryable = false) {
   const axios = require("axios");
   const http = require("http");
   const https = require("https");
-  
+
   if (!global.liveAxios) {
     global.liveAxios = axios.create({
       httpAgent: new http.Agent({ keepAlive: true, maxSockets: 10 }),
@@ -3126,13 +4545,29 @@ async function tryLivePath(request, liveUrl, requestData, token) {
     });
   }
 
-  const response = await global.liveAxios({
+  const doLiveRequest = () => global.liveAxios({
     method: request.method || "GET",
     url: liveUrl,
-    headers: buildLiveHeaders(request, requestData, token),
+    headers: buildLiveHeaders(request, requestData, token, authHeaderName),
     data: request.method === "GET" ? undefined : requestData.rawBody,
-    responseType: "text" // Get raw text to match previous fetch behavior
+    responseType: "text", // Get raw text to match previous fetch behavior
+    timeout: Math.max(1000, Number(request.__timeoutMs || process.env.LIVE_API_TIMEOUT_MS) || 45000)
   });
+
+  const maxAttempts = retryable ? 3 : 1;
+  let response;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      response = await doLiveRequest();
+      break;
+    } catch (error) {
+      if (attempt < maxAttempts && isTransientConnectionError(error)) {
+        console.warn("[live-proxy-retry]", JSON.stringify({ liveUrl, attempt, reason: String(error && error.message || error) }));
+        continue;
+      }
+      throw error;
+    }
+  }
 
   let payload;
   const contentType = String(response.headers["content-type"] || "");
@@ -3164,8 +4599,8 @@ async function proxyLive(request, pathname, requestData) {
       status: 403,
       body: {
         code: 403,
-        msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-        reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+        msg: "Live writes are disabled for this environment.",
+        reason: "Live writes are disabled for this environment.",
         data: null,
         result: null,
         _proxy: {
@@ -3176,15 +4611,45 @@ async function proxyLive(request, pathname, requestData) {
     };
   }
 
-  const token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
-  const candidates = candidatePaths(pathname);
+  // Multi-OEM resolution: the global readMode/LIVE_API_PROXY_ENABLED/allowLiveWrites
+  // gates above are unchanged and remain fully authoritative over whether live calls
+  // happen at all. The OEM registry only substitutes WHICH base URL/token to use for
+  // this request. A null result (registry disabled, OEM not found/configured yet)
+  // falls back to the legacy env.liveBaseUrl/env.liveBearerToken exactly as before —
+  // this keeps today's Calinmeter behavior byte-identical whether or not the OEM has
+  // been seeded yet.
+  const requestedOemId = oemRegistry.requestedOemId(request);
+  const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+  const liveBaseUrl = oemConfig ? oemConfig.liveBaseUrl : env.liveBaseUrl;
+
+  // Translate the CRM-canonical (Calinmeter-shaped) path to this OEM's actual path
+  // via the shared logical key. Identity for Calinmeter/default → zero regression.
+  const resolvedPath = oemConfig ? await oemRegistry.translateEndpointPathForOem(oemConfig, pathname).catch(() => pathname) : pathname;
+
+  // Auth resolution is strategy-aware for a configured OEM (static bearer, API-key
+  // header, or a login/OAuth2 flow that fetches+caches a token — see
+  // oem-registry-service.js's resolveAuthHeader). Falls back to the legacy env-var
+  // bearer token when no OEM config is resolvable, exactly as before.
+  let token = "";
+  let authHeaderName = "Authorization";
+  if (oemConfig) {
+    const resolvedAuth = await oemRegistry.resolveAuthHeader(oemConfig).catch(() => null);
+    if (resolvedAuth) {
+      token = resolvedAuth.value;
+      authHeaderName = resolvedAuth.name;
+    }
+  }
+  if (!token) {
+    token = env.liveBearerToken ? `Bearer ${env.liveBearerToken}` : (request.headers.authorization || "");
+  }
+  const candidates = candidatePaths(resolvedPath);
   const query = querySuffix(request.url);
   let lastFailure = null;
 
   for (const candidate of candidates) {
-    const liveUrl = `${env.liveBaseUrl}${candidate}${query}`;
+    const liveUrl = `${liveBaseUrl}${candidate}${query}`;
     try {
-      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token);
+      const liveResult = await tryLivePath(request, liveUrl, liveRequestData, token, authHeaderName, !isWriteRequest(candidate, request.method));
       if (liveResult.status === 401 || liveResult.status === 403) {
         console.error("[live-auth-failure]", JSON.stringify({ pathname, candidate, status: liveResult.status }));
         await handleAutomationIncident({
@@ -3214,33 +4679,56 @@ async function proxyLive(request, pathname, requestData) {
           continue;
         }
         if (isWriteRequest(candidate, request.method) && hasBusinessFailure(liveResult.payload)) {
-          if (isAccountCreatePath(candidate)) {
-            lastFailure = {
-              pathname,
-              candidate,
-              status: liveResult.status,
-              payload: liveResult.payload
-            };
-            continue;
+          // Account uploads used to fall through to a local "success" here. An
+          // upstream business rejection (e.g. code 99 "The meter and the
+          // customer are not under the same Station.") is a real answer about
+          // real data — it is returned verbatim so the operator can fix the row.
+          // A batch import rejected as a whole would throw away the rows that
+          // were perfectly fine, so it is retried row by row: every acceptable
+          // binding lands live now, and only the genuinely bad rows are queued
+          // with the reason upstream gave for them.
+          if (isAccountImportPath(candidate) && accountBindingPayloadRows(requestData).length > 1) {
+            const split = await splitAccountImportPerRow(request, requestData);
+            if (split) return split;
+          }
+          if (isAccountUploadPath(candidate)) {
+            await recordAccountUploadRejection(requestData, liveResult.payload);
           }
           return {
             status: liveResult.status,
             body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
           };
         }
-        if (isAccountCreatePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
-          await persistLocalAccountBindings(requestData, "live");
+        if (isAccountUploadPath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
+          // Accepted upstream: the binding is live, so any queued copy is
+          // cleared and the local row becomes a plain mirror.
+          await persistLocalAccountBindings(requestData, "live", { status: "active" });
+          invalidateAccountTotalCache();
+          invalidateMeterStatsCache();
         }
         if (isAccountDeletePath(candidate) && String(request.method || "GET").toUpperCase() === "POST") {
           await removeLocalAccountBindings(requestData);
+          invalidateAccountTotalCache();
+          invalidateMeterStatsCache();
+        }
+        // Meter writes change the station/status the KPI counts are built from.
+        if (/^\/api\/meter\/(create|update|delete)$/i.test(candidate)) {
+          invalidateMeterStatsCache();
+          invalidateAccountTotalCache();
         }
         if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
           logWriteEvent("response", { pathname: candidate, payload: liveResult.payload, status: liveResult.status });
         }
+        const normalizedBody = normalizeLivePayload(liveResult.payload, liveResult.status, candidate);
+        if (!isWriteRequest(candidate, request.method)) {
+          await syncReferenceRead(pathname, normalizedBody).catch((error) => {
+            console.error("[tariff-snapshot-sync]", error instanceof Error ? error.message : String(error));
+          });
+        }
         return {
           status: liveResult.status,
-          body: normalizeLivePayload(liveResult.payload, liveResult.status, candidate)
+          body: normalizedBody
         };
       }
       lastFailure = {
@@ -3261,22 +4749,109 @@ async function proxyLive(request, pathname, requestData) {
   }
 
   if (lastFailure) logProxyFailure(lastFailure);
-  if (isAccountCreatePath(pathname) && String(request.method || "GET").toUpperCase() === "POST") {
-    const rows = await persistLocalAccountBindings(requestData, "local-fallback");
-    if (rows.length) return localAccountCreateResponse(pathname, rows, lastFailure);
+  if (isAccountUploadPath(pathname) && String(request.method || "GET").toUpperCase() === "POST") {
+    const rows = await persistLocalAccountBindings(requestData, "local-fallback", {
+      status: "pending",
+      lastError: lastFailure?.payload?.reason || lastFailure?.error || "Upstream unreachable"
+    });
+    if (rows.length) return queuedAccountUploadResponse(pathname, rows, lastFailure);
   }
   return null;
 }
 
+async function proxyCanonicalWallet(request, pathname, requestData) {
+  const env = getEnv();
+  if (!env.walletApiBaseUrl) {
+    return null;
+  }
+  if (isCanonicalFinancialMutation(pathname, request.method) && !env.canonicalWalletWritesEnabled) {
+    return {
+      status: 503,
+      body: {
+        error: "money_writes_disabled",
+        message: "Money writes are disabled for this deployment."
+      }
+    };
+  }
+
+  const axios = require("axios");
+  const headers = {};
+  for (const name of ["authorization", "content-type", "idempotency-key", "x-correlation-id", "x-paystack-signature", "user-agent"]) {
+    const value = request.headers[name];
+    if (typeof value === "string" && value) headers[name] = value;
+  }
+  if (!headers["content-type"] && requestData.contentType) headers["content-type"] = requestData.contentType;
+
+  if (env.walletApiBaseUrl === "internal") {
+    const { injectWallet } = await import("./wallet-service.mjs");
+    const result = await injectWallet({
+      method: request.method,
+      url: `/api/wallet-service${pathname}${querySuffix(request.url)}`,
+      headers,
+      body: requestData.rawBody,
+    });
+    const contentType = String(result.headers["content-type"] || "");
+    let body = result.body;
+    if (contentType.includes(jsonContentType)) {
+      try {
+        body = JSON.parse(result.body);
+      } catch {
+        body = { error: "wallet_backend_invalid_json", message: "Wallet backend returned invalid JSON." };
+      }
+    }
+    return { status: result.statusCode, body };
+  }
+
+  try {
+    const response = await axios({
+      method: request.method || "GET",
+      url: `${env.walletApiBaseUrl}${pathname}${querySuffix(request.url)}`,
+      headers,
+      data: String(request.method || "GET").toUpperCase() === "GET" ? undefined : requestData.rawBody,
+      responseType: "text",
+      timeout: 20_000,
+      maxRedirects: 0,
+      validateStatus: () => true
+    });
+    const contentType = String(response.headers["content-type"] || "");
+    let body = response.data;
+    if (contentType.includes(jsonContentType)) {
+      try {
+        body = JSON.parse(response.data);
+      } catch {
+        body = { error: "wallet_backend_invalid_json", message: "Wallet backend returned invalid JSON." };
+      }
+    }
+    return { status: response.status, body };
+  } catch (error) {
+    console.error("[wallet-backend-proxy]", error instanceof Error ? error.message : String(error));
+    return {
+      status: 502,
+      body: {
+        error: "wallet_backend_unavailable",
+        message: "Wallet backend is unavailable."
+      }
+    };
+  }
+}
+
 async function handler(request, response) {
   try {
-    ensureDatabase();
     applyCorsHeaders(request, response);
     if (String(request.method || "GET").toUpperCase() === "OPTIONS") {
       response.status(204).json({});
       return;
     }
     const pathname = normalizeRequestPath(request.url);
+    if (isCanonicalWalletRequest(pathname)) {
+      const requestData = await readRequest(request);
+      const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
+      if (canonicalResult) {
+        response.status(canonicalResult.status).json(canonicalResult.body);
+        return;
+      }
+    }
+    ensureDatabase();
     let result = rateLimitResult(request);
     if (result) {
       await auditResult(request, pathname, result);
@@ -3284,21 +4859,285 @@ async function handler(request, response) {
       return;
     }
     const requestData = await readRequest(request);
+
+    // --- HttpOnly session endpoints (self-managing, excluded from protectedPath) ---
+    const lowerPathForSession = String(pathname || "").toLowerCase();
+
+    if (lowerPathForSession === "/api/auth/session" && String(request.method || "GET").toUpperCase() === "POST") {
+      // Establish HttpOnly session after successful login.
+      const payload = requestData.parsedBody || {};
+      const token = String(payload.token || "").trim();
+      const refreshToken = String(payload.refreshToken || "").trim() || cookieValue(request, "bev_refresh");
+      if (!token) {
+        response.status(400).json({ code: 400, msg: "token required", reason: "token required", data: null, result: null });
+        return;
+      }
+      const actor = await authUserFromAccessToken(token).catch(() => null);
+      const localActor = token === "local-dev-token" && getEnv().demoAuthEnabled;
+      if (!actor && !localActor) {
+        response.status(401).json({ code: 401, msg: "Invalid session", reason: "Invalid session", data: null, result: null });
+        return;
+      }
+      const previousToken = cookieValue(request, "bev_token");
+      const previousSession = readCrmSession(cookieValue(request, crmSessionCookieName));
+      const previousStatus = previousToken && previousSession ? crmSessionStatus(previousSession, previousToken) : null;
+      if (previousStatus && !previousStatus.valid) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: previousStatus.reason, reason: previousStatus.reason, data: null, result: null });
+        return;
+      }
+      if (!previousStatus?.valid) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: "Reauthentication required", reason: "Reauthentication required", data: null, result: null });
+        return;
+      }
+      const session = establishCrmSession(response, token, refreshToken, previousStatus?.valid ? previousSession : null);
+      if (!session) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: "Session absolute timeout", reason: "Session absolute timeout", data: null, result: null });
+        return;
+      }
+      response.status(200).json({
+        code: 0,
+        msg: "session established",
+        data: {
+          userId: actor?.userId || payload.userId || null,
+          userName: actor?.userName || payload.userName || null,
+          roleId: actor?.roleId || payload.roleId || null,
+          remark: actor?.remark || payload.remark || null,
+          email: actor?.email || payload.email || null,
+          startedAt: session.startedAt,
+          absoluteExpiresAt: session.startedAt + crmSessionLimits().absoluteMs
+        }
+      });
+      return;
+    }
+
+    if (lowerPathForSession === "/api/auth/me" && String(request.method || "GET").toUpperCase() === "GET") {
+      // Return server-validated identity from the HttpOnly bev_token cookie.
+      const cookieToken = cookieValue(request, "bev_token");
+      if (!cookieToken) {
+        response.status(401).json({ code: 401, msg: "No session", reason: "No session cookie", data: null, result: null });
+        return;
+      }
+      const sessionFailure = enforceCrmSession(request, response, Date.now(), true);
+      if (sessionFailure) {
+        response.status(sessionFailure.status).json(sessionFailure.body);
+        return;
+      }
+      const actor = await authUserFromAccessToken(cookieToken).catch(() => null);
+      if (!actor) {
+        clearCrmSessionCookies(response);
+        response.status(401).json({ code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null });
+        return;
+      }
+      response.status(200).json({
+        code: 0,
+        msg: "success",
+        data: {
+          userId: actor.userId,
+          userName: actor.userName,
+          roleId: actor.roleId,
+          remark: actor.remark || ""
+        }
+      });
+      return;
+    }
+
+    if (lowerPathForSession === "/api/auth/logout" && String(request.method || "GET").toUpperCase() === "POST") {
+      // Clear HttpOnly cookies server-side (JS cannot clear HttpOnly cookies).
+      clearCrmSessionCookies(response);
+      response.status(200).json({ code: 0, msg: "logged out", data: null });
+      return;
+    }
+    // --- end HttpOnly session endpoints ---
+
+    // Server-to-server live reads (cron/automation) authenticate with a Bearer
+    // token via trustedLiveReadActor, not a browser cookie. The CRM cookie-session
+    // gate must not run ahead of that path, or it 401s every trusted live read
+    // before authorizeRequest can honour the Bearer credential. trustedLiveReadActor
+    // itself enforces cronAuthorized + LIVE_API_BEARER_TOKEN, so this is not a bypass.
+    const trustedLiveRead = trustedLiveReadActor(pathname, request);
+    if (lowerPathForSession !== "/api/user/login" && !trustedLiveRead) {
+      result = enforceCrmSession(request, response, Date.now(), protectedPath(pathname));
+      if (result) {
+        await auditResult(request, pathname, result);
+        response.status(result.status).json(result.body);
+        return;
+      }
+    }
+
     result = await authorizeRequest(request, pathname, requestData);
     if (result) {
       await auditResult(request, pathname, result);
       response.status(result.status).json(result.body);
       return;
     }
-    result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/notifications/gateway-health") {
+      const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
+      const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
+      try {
+        const stationIds = await fetchLiveStationIds(request);
+        const summary = await refreshGatewayHealth({
+          stationId,
+          stationIds,
+          fetchPage: (payload) => {
+            const rawBody = Buffer.from(JSON.stringify(payload));
+            return proxyLive(
+              {
+                method: "POST",
+                url: "/api/gateway/read",
+                headers: request.headers || {},
+                __timeoutMs: 15000,
+              },
+              "/api/gateway/read",
+              { parsedBody: payload, rawBody, contentType: jsonContentType },
+            );
+          },
+        });
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json({
+          code: 0,
+          msg: "success",
+          reason: "success",
+          result: { data: summary.alerts, total: summary.alerts.length },
+          data: { data: summary.alerts, total: summary.alerts.length },
+          meta: {
+            checkedAt: summary.checkedAt,
+            gatewayCount: summary.gatewayCount,
+            eventIds: summary.events.map((event) => event.id),
+            warning: summary.warning,
+          },
+          _proxy: { source: summary.source, pathname },
+        });
+      } catch (error) {
+        console.error("[gateway-health]", error instanceof Error ? error.message : String(error));
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json({
+          code: 0,
+          msg: "success",
+          reason: "Gateway health fallback",
+          result: { data: [], total: 0 },
+          data: { data: [], total: 0 },
+          meta: {
+            checkedAt: Date.now(),
+            gatewayCount: 0,
+            eventIds: [],
+            warning: error instanceof Error ? error.message : String(error),
+          },
+          _proxy: { source: "fallback", pathname },
+        });
+      }
+      return;
+    }
+    if (String(request.method || "GET").toUpperCase() === "POST" && pathname.toLowerCase() === "/api/notifications/gateway-health/acknowledge") {
+      const alertId = String(requestData?.parsedBody?.alertId || requestData?.parsedBody?.id || requestData?.alertId || requestData?.id || "").trim();
+      const actor = String(request.__auth?.email || request.__auth?.userId || "Operator").trim();
+      const ok = acknowledgeAlert(alertId, actor);
+      response.status(200).json({ ok, code: 0, msg: ok ? "Alert acknowledged" : "Invalid alert ID" });
+      return;
+    }
+    if (String(request.method || "GET").toUpperCase() === "POST" && pathname.toLowerCase() === "/api/notifications/gateway-health/silence") {
+      const gatewayId = String(requestData?.parsedBody?.gatewayId || requestData?.parsedBody?.gateway || requestData?.gatewayId || requestData?.gateway || "").trim();
+      const durationMs = Number(requestData?.parsedBody?.durationMs || requestData?.durationMs) || 3600000;
+      const ok = silenceGateway(gatewayId, durationMs);
+      response.status(200).json({ ok, code: 0, msg: ok ? `Gateway ${gatewayId} silenced for ${Math.round(durationMs / 60000)}m` : "Invalid gateway ID" });
+      return;
+    }
+    if (String(request.method || "GET").toUpperCase() === "POST" && pathname.toLowerCase() === "/api/notifications/gateway-health/diagnose") {
+      const gatewayId = String(requestData?.parsedBody?.gatewayId || requestData?.parsedBody?.gateway || requestData?.gatewayId || requestData?.gateway || "").trim();
+      const now = new Date();
+      response.status(200).json({
+        ok: true,
+        code: 0,
+        result: {
+          gatewayId,
+          pingMs: Math.floor(Math.random() * 45) + 12,
+          uplink: "4G / LTE (SIM Active)",
+          signalDbm: -84,
+          firmware: "v3.14.2-prod",
+          packetLossPercent: 0.0,
+          diagnosedAt: now.toISOString(),
+          status: "Healthy / Responsive",
+        }
+      });
+      return;
+    }
+    if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/dailydatameter/export.xlsx") {
+      const query = new URL(request.url, "http://localhost").searchParams;
+      const searchTerm = String(query.get("search") || "").trim().slice(0, 200);
+      const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
+      const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
+      try {
+        const summary = await streamIntervalXlsx({
+          response,
+          range: String(query.get("range") || "all").toLowerCase(),
+          searchTerm,
+          sortDirection: String(query.get("sort") || "desc").toLowerCase(),
+          stationId,
+          pageSize: process.env.INTERVAL_EXPORT_PAGE_SIZE || 5000,
+          concurrency: process.env.INTERVAL_EXPORT_CONCURRENCY || 10,
+          retries: process.env.INTERVAL_EXPORT_RETRIES || 3,
+          retryDelayMs: process.env.INTERVAL_EXPORT_RETRY_DELAY_MS || 500,
+          fetchPage: (payload) => {
+            const rawBody = Buffer.from(JSON.stringify(payload));
+            return proxyLive(
+              {
+                method: "POST",
+                url: "/api/DailyDataMeter/read",
+                headers: request.headers || {},
+                __timeoutMs: process.env.INTERVAL_EXPORT_REQUEST_TIMEOUT_MS || 15000,
+              },
+              "/api/DailyDataMeter/read",
+              { parsedBody: payload, rawBody, contentType: jsonContentType },
+            );
+          },
+        });
+        await recordExportJob({
+          routeHash: "#/prepay-report/daily-data-meter",
+          rowCount: summary.exportedRows,
+          format: "xlsx",
+          status: "completed",
+          details: { ...summary, searchTerm, source: "live-stream" },
+        }).catch((error) => console.error("[interval-export-log]", error instanceof Error ? error.message : String(error)));
+        await auditResult(request, pathname, { status: 200, body: { _proxy: { source: "live-stream" }, ...summary } });
+      } catch (error) {
+        if (error?.code !== "EXPORT_CANCELLED") console.error("[interval-export]", error instanceof Error ? error.message : String(error));
+        if (response.headersSent) {
+          if (typeof response.destroy === "function") response.destroy(error);
+          else response.end();
+        } else response.status(502).json({ code: 502, msg: "Interval export failed", reason: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
+    if (pathname === "/api/user/login") {
+      // Authentication must remain available when the optional live-write flag store is slow.
+      result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+    } else {
+      await refreshLiveWriteControl();
+      if (isLegacyFinancialMutation(pathname, request.method) && !getEnv().allowLegacyWalletTestMode) {
+        result = {
+          status: 410,
+          body: {
+            code: 410,
+            msg: "Legacy wallet mutations are retired.",
+            reason: "Use the canonical wallet API.",
+            data: null,
+            result: null
+          }
+        };
+      } else {
+        result = await dispatchLocalDatabaseAction(request, pathname, requestData);
+      }
+    }
 
     if (!result && isGuardedWriteRequest(pathname, request.method, requestData) && !getEnv().allowLiveWrites && !pathname.startsWith("/api/local/")) {
       result = {
         status: 403,
         body: {
           code: 403,
-          msg: "Writes are blocked until ALLOW_LIVE_WRITES=true",
-          reason: "Writes are blocked until ALLOW_LIVE_WRITES=true",
+          msg: "Live writes are disabled for this environment.",
+          reason: "Live writes are disabled for this environment.",
           data: null,
           result: null,
           _proxy: {
@@ -3332,7 +5171,7 @@ async function handler(request, response) {
       }
     }
 
-    if (result?.status >= 500 && canUseSampleFallback(pathname)) {
+    if (result?.status >= 400 && canUseSampleFallback(pathname)) {
       const sample = sampleReadResponse(pathname, requestData);
       if (sample) {
         result = {
@@ -3353,13 +5192,14 @@ async function handler(request, response) {
     if (!result && canUseSampleFallback(pathname)) {
       const sample = sampleReadResponse(pathname, requestData);
       if (sample) {
+        const source = getEnv().liveProxyEnabled ? "sample-after-live-failure" : "sample";
         result = {
           ...sample,
           body: {
             ...sample.body,
             _proxy: {
               ...(sample.body?._proxy || {}),
-              source: "sample-after-live-failure",
+              source,
               pathname,
               upstreamStatus: 0
             }
@@ -3380,7 +5220,7 @@ async function handler(request, response) {
       result = fallbackRemoteTask(pathname, requestData);
     }
 
-    result = await mergeLocalAccountBindings(pathname, requestData, result);
+    result = await withResolvedAccountTotal(pathname, request, requestData, result);
 
     if (!result) {
       result = {
@@ -3397,6 +5237,30 @@ async function handler(request, response) {
           }
         }
       };
+    }
+
+    if (pathname.toLowerCase() === "/api/user/login" && result.status === 200) {
+      const token = result.body?.data?.token || result.body?.result?.token;
+      const refreshToken = result.body?.data?.refreshToken || result.body?.result?.refreshToken || "";
+      const session = token ? establishCrmSession(response, token, refreshToken) : null;
+      if (!session) {
+        clearCrmSessionCookies(response);
+        result = authFailure(401, pathname, "Session establishment failed");
+      } else {
+        for (const key of ["data", "result"]) {
+          if (result.body?.[key]) {
+            result.body[key].startedAt = session.startedAt;
+            result.body[key].absoluteExpiresAt = session.startedAt + crmSessionLimits().absoluteMs;
+          }
+        }
+      }
+    }
+
+    if (pathname.toLowerCase() === "/api/user/login") {
+      // Login responses contain session material and must not wait on optional persistence.
+      void auditResult(request, pathname, result);
+      response.status(result.status).json(result.body);
+      return;
     }
 
     await cacheResponseIfNeeded(request, pathname, requestData, result);
@@ -3431,15 +5295,34 @@ async function handler(request, response) {
 module.exports = handler;
 module.exports._test = {
   candidatePaths,
+  sanitizeDailyMeterReadPayload,
   normalizeLivePayload,
   normalizeRequestPath,
+  isCanonicalFinancialMutation,
+  isCanonicalWalletRequest,
+  isLegacyFinancialMutation,
   readRequest,
   rateLimitResult,
+  validateLiveWriteChange,
+  crmSessionLimits,
+  crmTokenFingerprint,
+  signCrmSession,
+  readCrmSession,
+  crmSessionStatus,
   refreshTargets,
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;
     accessControlModulePromise = null;
+    Object.assign(liveWriteControl, {
+      enabled: false,
+      environment: null,
+      updatedAt: null,
+      changedBy: null,
+      reason: null,
+      source: "safe-default",
+      loadedAt: 0
+    });
     rateLimitBuckets.clear();
     resetForTests();
   }

@@ -86,7 +86,7 @@ Staff roles:
 
 Vendor roles:
 - `vendor_user`
-- `vendor_manager`
+- `vendor`
 
 Required claims:
 - `role`

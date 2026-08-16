@@ -23,6 +23,10 @@ const cursor = ref<string | null>(null);
 const loading = ref(false);
 const filter = ref<'all' | 'success' | 'pending' | 'failed'>('all');
 
+function isSuccessfulStatus(status: string) {
+    return ['succeeded', 'success'].includes(status);
+}
+
 async function load(reset = true) {
     loading.value = true;
     try {
@@ -37,17 +41,17 @@ async function load(reset = true) {
 
 const filtered = computed(() => {
     if (filter.value === 'all') return items.value;
-    if (filter.value === 'success') return items.value.filter((f) => f.status === 'success');
+    if (filter.value === 'success') return items.value.filter((f) => isSuccessfulStatus(f.status));
     if (filter.value === 'failed') return items.value.filter((f) => ['failed', 'abandoned'].includes(f.status));
     return items.value.filter((f) => ['initiated', 'pending'].includes(f.status));
 });
 
 const totalFunded = computed(() =>
-    items.value.filter((f) => f.status === 'success').reduce((s, f) => s + f.amount_minor, 0),
+    items.value.filter((f) => isSuccessfulStatus(f.status)).reduce((s, f) => s + f.amount_minor, 0),
 );
 
 function statusBadge(s: string) {
-    return ({ success: 'success', initiated: 'warn', pending: 'warn', failed: 'danger', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
+    return ({ succeeded: 'success', success: 'success', initiated: 'warn', pending: 'warn', failed: 'danger', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
 }
 
 onMounted(() => load());

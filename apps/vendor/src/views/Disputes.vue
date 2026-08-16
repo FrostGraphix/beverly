@@ -1,8 +1,8 @@
 <template>
   <AppShell title="Disputes">
-    <template #topbar-end>
+    <div class="bw-page-actions">
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ Raise Dispute</button>
-    </template>
+    </div>
 
     <div v-if="loading" class="bw-loading">Loading…</div>
     <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
@@ -111,7 +111,9 @@
           <div v-if="detail?.purchase_order" class="bw-dispute-purchase">
             <span>Meter</span><strong class="bw-mono">{{ detail.purchase_order.meter_id }}</strong>
             <span>Phase</span><strong>{{ meterTypeLabel(detail.purchase_order.meter_type) }}</strong>
-            <span>Amount</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Amount paid</span><strong>{{ fmtMoney(detail.purchase_order.amount_minor) }}</strong>
+            <span>Energy value</span><strong>{{ fmtMoney(detail.purchase_order.energy_amount_minor ?? detail.purchase_order.amount_minor) }}</strong>
+            <span>VAT</span><strong>{{ fmtMoney(detail.purchase_order.vat_amount_minor ?? 0) }}</strong>
             <span>Status</span><strong>{{ detail.purchase_order.status }}</strong>
           </div>
 
@@ -139,9 +141,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
+import { naira } from '../lib/format';
 
 const disputes = ref<any[]>([]);
 const loading  = ref(false);
@@ -243,20 +246,25 @@ function statusClass(s: string) {
 }
 
 function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
-
-function fmtMoney(minor?: number | null) { return typeof minor === 'number' ? (minor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' }) : 'â€”'; }
+function fmtMoney(minor?: number | null) { return naira(minor); }
 function meterTypeLabel(type?: string | null) {
   if (type === 'three_phase') return 'Three Phase';
   if (type === 'single_phase') return 'Single Phase';
   return 'Unknown';
 }
 
-onMounted(load);
+function onEsc(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  if (selected.value) { selected.value = null; return; }
+  if (showNew.value)  { showNew.value  = false;  return; }
+}
+onMounted(() => { load(); window.addEventListener('keydown', onEsc); });
+onUnmounted(() => window.removeEventListener('keydown', onEsc));
 </script>
 
 <style scoped>
 .bw-messages { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 1rem; max-height: 240px; overflow-y: auto; }
-.bw-message { background: var(--surface); border-radius: var(--r-md); padding: .5rem .75rem; }
+.bw-message { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: .5rem .75rem; }
 .bw-message-staff { background: oklch(from var(--brand) l c h / 0.10); }
 .bw-message-actor { font-size: .7rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: block; }
 .bw-message-body { margin: .25rem 0; font-size: .875rem; }

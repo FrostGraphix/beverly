@@ -24,6 +24,28 @@ export class WalletStateError extends Error {
     }
 }
 
+async function ownerStatus(ownerType: OwnerType, ownerId: string): Promise<string | null> {
+    const table = ownerType === 'vendor' ? 'vendor_organizations' : 'customers';
+    const { data, error } = await adminClient
+        .from(table)
+        .select('status')
+        .eq('id', ownerId)
+        .maybeSingle();
+    if (error) throw new WalletStateError(error.message, 'owner_lookup_failed', 400);
+    return String((data as any)?.status ?? '').trim().toLowerCase() || null;
+}
+
+async function assertOwnerWalletTransitionAllowed(ownerType: OwnerType, ownerId: string, status: 'active' | 'frozen' | 'closed') {
+    const currentOwnerStatus = await ownerStatus(ownerType, ownerId);
+    if (currentOwnerStatus === 'closed' && status !== 'closed') {
+        throw new WalletStateError(
+            `Closed ${ownerType} accounts cannot be reactivated. Create a replacement account instead.`,
+            `${ownerType}_closed_final`,
+            409,
+        );
+    }
+}
+
 export function assertWalletCanTransact(wallet: Pick<Wallet, 'status'> | null | undefined, action = 'transact'): asserts wallet is Wallet {
     if (!wallet) {
         throw new WalletStateError('Wallet not found.', 'wallet_missing', 404);
@@ -91,6 +113,7 @@ export async function setWalletStatus(
     if ((before as Wallet).status === 'closed' && status !== 'closed') {
         throw new WalletStateError('Closed wallets cannot be reactivated. Create a replacement wallet instead.', 'wallet_closed_final', 409);
     }
+    await assertOwnerWalletTransitionAllowed((before as Wallet).owner_type, (before as Wallet).owner_id, status);
 
     const { data, error } = await adminClient
         .from('wallets')
@@ -107,6 +130,7 @@ export async function setOwnerWalletStatus(
     ownerId: string,
     status: 'active' | 'frozen' | 'closed',
 ): Promise<Wallet[]> {
+    await assertOwnerWalletTransitionAllowed(ownerType, ownerId, status);
     const { data, error } = await adminClient
         .from('wallets')
         .select('id')

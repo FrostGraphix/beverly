@@ -110,7 +110,8 @@ async function main() {
       LOCAL_DB_PATH: dbPath,
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true"
     }, async () => {
       const liveRead = await request(proxyPort, "POST", "/api/cache-only/read?scope=test", { page: 1 });
       assert.strictEqual(liveRead.status, 200);
@@ -121,7 +122,8 @@ async function main() {
       LOCAL_DB_PATH: dbPath,
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: "http://127.0.0.1:1",
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true"
     }, async () => {
       const cachedRead = await request(proxyPort, "POST", "/api/cache-only/read?scope=test", { page: 1 });
       assert.strictEqual(cachedRead.status, 502);

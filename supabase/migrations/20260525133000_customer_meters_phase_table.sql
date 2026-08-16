@@ -32,6 +32,12 @@ create trigger customer_meters_updated_at
   for each row execute function public.fn_set_updated_at();
 
 alter table public.customer_meters enable row level security;
+alter table public.customer_meters force row level security;
+
+revoke insert, update, delete, truncate, references, trigger
+  on public.customer_meters from authenticated;
+grant select on public.customer_meters to authenticated;
+grant all on public.customer_meters to service_role;
 
 drop policy if exists "service role manages customer meters" on public.customer_meters;
 create policy "service role manages customer meters"

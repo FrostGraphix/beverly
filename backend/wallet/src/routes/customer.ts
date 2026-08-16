@@ -5,11 +5,15 @@
  *   POST /auth/signup   — send OTP for new account
  *   POST /auth/login    — send OTP for existing account
  *   POST /auth/verify   — verify OTP, get access_token
+ *   POST /auth/email/recover        — send password reset code (email/password accounts)
+ *   POST /auth/email/reset-password — confirm code + set new password
  *
  * Authenticated (requireCustomer):
  *   GET    /me
  *   PATCH  /me
  *   POST   /logout
+ *   POST   /auth/email/verify/send    — (re)send email verification code
+ *   POST   /auth/email/verify/confirm — confirm email verification code
  *
  *   POST   /kyc/tier1
  *   POST   /kyc/tier2/nin
@@ -36,25 +40,23 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { env } from '../config/env.js';
+import { resolveFundingCallbackUrl, resolveMeterOrderCallbackUrl } from '../config/funding-callbacks.js';
 import { adminClient } from '../db/supabase.js';
 import {
-    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, AuthError,
+    requestOtp, verifyOtp, signupWithEmail, loginWithEmail, signupWithPhone, loginWithPhone, AuthError,
 } from '../services/customer-auth.js';
-import {
-    requestPasswordReset, confirmPasswordReset, PasswordResetError,
-} from '../services/password-reset.js';
 import {
     submitKycTier1, submitKycTier2Nin, KycError,
 } from '../services/customer-kyc.js';
 import {
-    customerPurchase, previewCustomerPurchase, initiateCustomerFunding,
-    linkMeter, unlinkMeter, listCustomerMeters, listCustomerPurchases, sendTokenSmsToCustomer,
+    customerPurchase, previewCustomerPurchase, initiateCustomerFunding, dispatchGeneratedCustomerToken,
+    linkMeter, unlinkMeter, listCustomerMeters, listCustomerMeterLinkHistory, listCustomerPurchases, sendTokenSmsToCustomer,
     CustomerPurchaseError,
 } from '../services/customer-purchase.js';
 import { findWalletByOwner } from '../services/wallets.js';
 import { getReceiptByOrder } from '../services/vending.js';
 import { logAction } from '../services/audit.js';
-import { initializeTransaction } from '../adapters/paystack.js';
 import { assessPurchase, linkAssessmentToPurchase, refreshCustomerBaseline } from '../services/fraud-engine.js';
 import { issueStepUpChallenge, verifyStepUpChallenge, StepUpError } from '../services/step-up-auth.js';
 import { raiseDispute, listDisputes, getDispute, addMessage } from '../services/disputes.js';
@@ -63,19 +65,69 @@ import {
     getOrCreateChatSession, sendChatMessage, getChatMessages, getChatSession, endChatSession, escalateChatToTicket,
 } from '../services/support.js';
 import { requestDataExport, getDataExportStatus, buildDataExport, requestAccountDeletion, cancelDeletionRequest } from '../services/data-privacy.js';
-import { assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import {
+    activateDisputeEvidence, assertDisputeEvidenceSop, DISPUTE_EVIDENCE_BUCKET,
+    signDisputeEvidencePaths, toDisputeEvidencePath, DisputeEvidenceError,
+} from '../services/dispute-evidence.js';
 import { runMalwareScan } from '../services/file-scan.js';
+import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
+import {
+    abandonWalletIdempotency,
+    assertClientIdempotencyKey,
+    claimWalletIdempotency,
+    completeWalletIdempotency,
+    hashIdempotency,
+} from '../services/idempotency.js';
+import { revokePortalSession } from '../services/portal-session.js';
+import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
+import {
+    sendEmailVerification, confirmEmailVerification,
+    sendPasswordRecoveryEmail, confirmPasswordReset,
+    EmailOtpError,
+} from '../services/customer-email-otp.js';
+import {
+    customerVendPinStatus,
+    setCustomerVendPin,
+    verifyCustomerVendPin,
+    CustomerVendPinError,
+} from '../services/customer-vend-pin.js';
 
 function customerAuthStatus(code: string): number {
-    return code === 'rate_limit' ? 429
+    return code === 'rate_limit' || code === 'rate_limit_exceeded' ? 429
         : code === 'sms_otp_rate_limited' || code === 'sms_otp_resend_limited' ? 429
         : code === 'sms_country_blocked' || code === 'sms_country_not_allowed' ? 403
         : code === 'otp_storage_missing' || code === 'otp_send_failed' ? 503
-        : code === 'auth_not_configured' || code === 'auth_upstream_unreachable' ? 503
         : code === 'customer_not_found' ? 404
         : code === 'email_in_use' || code === 'phone_in_use' ? 409
         : code === 'invalid_credentials' ? 401
         : code === 'invalid_otp' || code === 'otp_expired' || code === 'max_attempts' ? 401
+        : 400;
+}
+
+const publicAuthIpAttempts = new Map<string, { count: number; resetAt: number }>();
+const PUBLIC_AUTH_RATE_LIMIT_MAX = 20;
+const PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function assertPublicAuthIpRateLimited(ip: string): void {
+    if (env.NODE_ENV === 'test') return;
+    const now = Date.now();
+    const entry = publicAuthIpAttempts.get(ip);
+    if (!entry || entry.resetAt < now) {
+        publicAuthIpAttempts.set(ip, { count: 1, resetAt: now + PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS });
+        return;
+    }
+    if (entry.count >= PUBLIC_AUTH_RATE_LIMIT_MAX) {
+        throw new AuthError('Too many auth requests from this IP. Please wait a few minutes.', 'rate_limit_exceeded');
+    }
+    entry.count += 1;
+}
+
+function emailOtpStatus(code: string): number {
+    return code === 'otp_rate_limited' ? 429
+        : code === 'otp_storage_missing' ? 503
+        : code === 'customer_not_found' ? 404
+        : code === 'otp_not_found' || code === 'otp_expired' || code === 'otp_locked' || code === 'otp_incorrect' ? 401
         : 400;
 }
 
@@ -88,9 +140,9 @@ function customerAuthPayload(result: { challengeId: string; expiresAt: string; r
 }
 
 const NOTIFICATION_PREF_DEFAULTS = {
-    sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false },
-    email: { token_purchased: false, wallet_funded: false, promotions: false, kyc_update: false, dispute_update: false, payment_failed: false },
-    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true },
+    sms: { token_purchased: false, wallet_funded: true, login_otp: true, low_balance: false, meter_order_update: false, admin_announcement: false },
+    email: { token_purchased: false, wallet_funded: true, promotions: false, kyc_update: true, dispute_update: true, payment_failed: true, admin_announcement: false },
+    in_app: { token_purchased: true, wallet_funded: true, kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, admin_announcement: true },
 };
 
 function mergeNotificationPrefs(existing: any, incoming: any = {}) {
@@ -106,6 +158,39 @@ function isMissingNotificationsStorage(error: any) {
     return /notifications|notification_preferences/i.test(text) && /exist|schema cache|column|relation/i.test(text);
 }
 
+function profileCode(prefix: string, id: string | null | undefined): string | null {
+    if (!id) return null;
+    return `${prefix}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+}
+
+function walletNumber(prefix: string, id: string | null | undefined): string | null {
+    const code = profileCode(prefix, id);
+    return code ? code.replace(`${prefix}-`, `WLT-${prefix}-`) : null;
+}
+
+function verifiedAt(kycData: any): string | null {
+    return kycData?.tier2?.verified_at ?? kycData?.tier1?.verified_at ?? null;
+}
+
+async function shapeCustomerProfile(row: any) {
+    const customerId = row?.id ?? null;
+    const wallet = customerId ? await findWalletByOwner('customer', customerId).catch(() => null) : null;
+    const pinStatus = customerId ? await customerVendPinStatus(customerId).catch(() => ({ configured: false })) : { configured: false };
+    return {
+        ...row,
+        customer_code: profileCode('CUS', customerId),
+        wallet_number: walletNumber('CUS', customerId),
+        wallet_status: wallet?.status ?? null,
+        account_status: row?.status ?? null,
+        contact_person: row?.full_name ?? null,
+        primary_phone: row?.phone ?? null,
+        site: row?.kyc_data?.tier1?.state ?? null,
+        kyc_approved_date: verifiedAt(row?.kyc_data),
+        kyc_expiry: null,
+        vend_pin_configured: pinStatus.configured,
+    };
+}
+
 function shapeReceipt(row: any, purchase?: any) {
     const payload = row?.payload ?? {};
     return {
@@ -115,6 +200,10 @@ function shapeReceipt(row: any, purchase?: any) {
         meter_id: payload.meterId ?? payload.meter_id ?? purchase?.meter_id ?? null,
         meter_type: payload.meterType ?? payload.meter_type ?? purchase?.meter_type ?? null,
         amount_minor: payload.amountMinor ?? payload.amount_minor ?? purchase?.amount_minor ?? null,
+        gross_amount_minor: payload.grossAmountMinor ?? payload.gross_amount_minor ?? purchase?.amount_minor ?? null,
+        energy_amount_minor: payload.energyAmountMinor ?? payload.energy_amount_minor ?? purchase?.energy_amount_minor ?? null,
+        vat_amount_minor: payload.vatAmountMinor ?? payload.vat_amount_minor ?? purchase?.vat_amount_minor ?? null,
+        vat_rate_basis_points: payload.vatRateBasisPoints ?? payload.vat_rate_basis_points ?? purchase?.vat_rate_basis_points ?? null,
         units_kwh: payload.units ?? payload.units_kwh ?? purchase?.units_kwh ?? null,
         tariff_id: payload.tariffId ?? payload.tariff_id ?? purchase?.tariff_id ?? null,
         station_id: payload.stationId ?? payload.station_id ?? purchase?.station_id ?? null,
@@ -151,6 +240,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email, password, and full_name required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await signupWithEmail({ email, password, full_name, phone });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
@@ -167,7 +257,44 @@ const customer: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_fields', message: 'email and password required.' });
         }
         try {
+            assertPublicAuthIpRateLimited(req.ip);
             const { access_token, customer, isNew } = await loginWithEmail({ email, password });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/signup', async (req, reply) => {
+        const { phone, password, full_name, email } = req.body as {
+            phone: string; password: string; full_name: string; email?: string;
+        };
+        if (!phone || !password || !full_name) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone, password, and full_name required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await signupWithPhone({ phone, password, full_name, email });
+            return { access_token, customer, is_new: isNew };
+        } catch (e: any) {
+            if (e instanceof AuthError) {
+                return reply.code(customerAuthStatus(e.code)).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/auth/phone/login', async (req, reply) => {
+        const { phone, password } = req.body as { phone: string; password: string };
+        if (!phone || !password) {
+            return reply.code(400).send({ error: 'missing_fields', message: 'phone and password required.' });
+        }
+        try {
+            assertPublicAuthIpRateLimited(req.ip);
+            const { access_token, customer, isNew } = await loginWithPhone({ phone, password });
             return { access_token, customer, is_new: isNew };
         } catch (e: any) {
             if (e instanceof AuthError) {
@@ -222,31 +349,61 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    // ── PASSWORD RESET (email-auth customers only) ────────────────────────────
+    // ── EMAIL VERIFICATION (email/password accounts) ────────────────────────────
 
-    fastify.post('/auth/email/reset-request', async (req, reply) => {
-        const { email } = req.body as { email?: string };
-        if (!email?.trim()) {
-            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
+    fastify.post('/auth/email/verify/send', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { data } = await adminClient.from('customers').select('email, full_name').eq('id', req.actor!.customerId!).maybeSingle();
+        const email = (data as any)?.email;
+        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
+        try {
+            await sendEmailVerification(email, (data as any)?.full_name ?? 'there');
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            throw e;
         }
-        // Always returns ok to avoid user enumeration.
-        await requestPasswordReset(email.trim().toLowerCase(), 'customer').catch(() => null);
+    });
+
+    fastify.post('/auth/email/verify/confirm', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { code } = z.object({ code: z.string().trim().length(6) }).parse(req.body);
+        const { data } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).maybeSingle();
+        const email = (data as any)?.email;
+        if (!email) return reply.code(400).send({ error: 'no_email_on_file', message: 'This account has no email address.' });
+        try {
+            await confirmEmailVerification(email, code);
+            return { ok: true };
+        } catch (e: any) {
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
+            throw e;
+        }
+    });
+
+    // ── PASSWORD RECOVERY (email/password accounts) ──────────────────────────────
+
+    fastify.post('/auth/email/recover', async (req, reply) => {
+        const { email } = z.object({ email: z.string().email() }).parse(req.body);
+        try {
+            await sendPasswordRecoveryEmail(email);
+        } catch (e: any) {
+            if (e instanceof EmailOtpError && e.code === 'otp_rate_limited') {
+                return reply.code(429).send({ error: e.code, message: e.message });
+            }
+            // Never leak account existence on unexpected errors either.
+        }
         return { ok: true };
     });
 
-    fastify.post('/auth/email/reset-confirm', async (req, reply) => {
-        const { token, new_password } = req.body as { token?: string; new_password?: string };
-        if (!token || !new_password) {
-            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
-        }
+    fastify.post('/auth/email/reset-password', async (req, reply) => {
+        const { email, code, new_password } = z.object({
+            email: z.string().email(),
+            code: z.string().trim().length(6),
+            new_password: z.string().min(8),
+        }).parse(req.body);
         try {
-            await confirmPasswordReset(token, new_password, 'customer');
+            await confirmPasswordReset(email, code, new_password);
             return { ok: true };
         } catch (e: any) {
-            if (e instanceof PasswordResetError) {
-                const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
-                return reply.code(status).send({ error: e.code, message: e.message });
-            }
+            if (e instanceof EmailOtpError) return reply.code(emailOtpStatus(e.code)).send({ error: e.code, message: e.message });
             throw e;
         }
     });
@@ -256,29 +413,33 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { data } = await adminClient
             .from('customers')
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status, created_at')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
             .eq('id', req.actor!.customerId!)
             .single();
         if (!data) return reply.code(404).send({ error: 'not_found' });
-        return data;
+        return shapeCustomerProfile(data);
     });
 
     fastify.patch('/me', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const { full_name, email, profile_picture_url } = req.body as { full_name?: string; email?: string; profile_picture_url?: string | null };
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
+            return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
+        }
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'email')) {
+            return reply.code(400).send({ error: 'email_change_forbidden', message: 'Registration email cannot be changed.' });
+        }
+        const { full_name } = req.body as { full_name?: string };
         const updates: Record<string, unknown> = {};
         if (full_name !== undefined) updates.full_name = full_name.trim();
-        if (email !== undefined) updates.email = email.trim().toLowerCase() || null;
-        if (profile_picture_url !== undefined) updates.profile_picture_url = (profile_picture_url ?? '').trim() || null;
         if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
 
         const { data, error } = await adminClient
             .from('customers')
             .update(updates)
             .eq('id', req.actor!.customerId!)
-            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, status')
+            .select('id, phone, email, full_name, profile_picture_url, kyc_tier, kyc_status, kyc_data, status, email_verified_at, created_at')
             .single();
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
-        return data;
+        return shapeCustomerProfile(data);
     });
 
     fastify.post('/profile-picture/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -327,6 +488,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/logout', { preHandler: fastify.requireCustomer() }, async (req) => {
+        await revokePortalSession(req.portalSessionKey);
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'customer',
@@ -384,6 +546,51 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { meters };
     });
 
+    fastify.get('/vend-pin/status', { preHandler: fastify.requireCustomer() }, async (req) => {
+        return customerVendPinStatus(req.actor!.customerId!);
+    });
+
+    fastify.post('/vend-pin', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const parsed = z.object({ pin: z.string().regex(/^\d{4}$/) }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({ error: 'invalid_vend_pin', message: 'Use exactly four digits.' });
+        }
+        try {
+            return await setCustomerVendPin({
+                customerId: req.actor!.customerId!,
+                authUserId: req.actor!.userId,
+                pin: parsed.data.pin,
+                ip: req.ip,
+                userAgent: req.headers['user-agent'] as string | undefined,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code.endsWith('_failed') ? 500 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
+    fastify.get('/meters/history', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const parsed = z.object({
+            limit: z.coerce.number().int().min(1).max(100).default(25),
+            offset: z.coerce.number().int().min(0).default(0),
+        }).safeParse(req.query ?? {});
+        if (!parsed.success) return reply.code(400).send({ error: 'validation_error', message: parsed.error.message });
+        try {
+            return await listCustomerMeterLinkHistory(
+                req.actor!.customerId!, parsed.data.limit, parsed.data.offset,
+            );
+        } catch (error) {
+            if (error instanceof CustomerPurchaseError) {
+                return reply.code(error.code === 'history_unavailable' ? 503 : 422)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
+    });
+
     fastify.post('/meters', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
         const { meter_id, nickname, meter_type } = req.body as {
             meter_id: string;
@@ -395,7 +602,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname, meter_type);
             return { meter };
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'meter_approval_unavailable' ? 503 : 422).send({ error: e.code, message: e.message });
             throw e;
         }
     });
@@ -450,13 +657,34 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/wallet/fund', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { amount_minor, callback_url } = req.body as { amount_minor: number; callback_url?: string };
-        if (!amount_minor || amount_minor < 50000) {
-            return reply.code(400).send({ error: 'amount_too_low', message: 'Minimum ₦500.' });
+        let idempotencyKey: string;
+        try { idempotencyKey = assertClientIdempotencyKey(req.headers['idempotency-key']); }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'A valid Idempotency-Key header is required.';
+            return reply.code(400).send({ error: 'invalid_idempotency_key', message });
         }
+        const { amount_minor } = z.object({
+            amount_minor: z.number().int().min(50_000).max(1_000_000_000),
+        }).parse(req.body);
         const { data: cu } = await adminClient.from('customers').select('email').eq('id', req.actor!.customerId!).single();
         if (!(cu as any)?.email) {
             return reply.code(422).send({ error: 'email_required', message: 'Add an email address to fund via card.' });
+        }
+        const scope = `customer.wallet.fund.${req.actor!.customerId!}`;
+        const fingerprint = hashIdempotency([req.actor!.customerId!, amount_minor]);
+        let claim;
+        try {
+            claim = await claimWalletIdempotency(scope, idempotencyKey, fingerprint);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Could not claim idempotency key.';
+            if (/idempotency key payload mismatch/i.test(message)) {
+                return reply.code(409).send({ error: 'idempotency_payload_mismatch', message });
+            }
+            throw error;
+        }
+        if (claim.state === 'replay') return claim.responsePayload;
+        if (claim.state === 'pending') {
+            return reply.code(409).send({ error: 'idempotency_in_progress', message: 'This payment request is still initializing.' });
         }
         try {
             const result = await initiateCustomerFunding({
@@ -464,10 +692,16 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerUserId: req.actor!.userId,
                 customerEmail: (cu as any).email,
                 amountMinor: amount_minor,
-                callbackUrl: callback_url,
+                callbackUrl: resolveFundingCallbackUrl(
+                    'customer', env.CUSTOMER_FUNDING_CALLBACK_URL, env.CUSTOMER_APP_URL,
+                ),
+            });
+            await completeWalletIdempotency(scope, idempotencyKey, result).catch((error) => {
+                req.log.error({ error, scope }, 'Paystack initialization idempotency completion failed');
             });
             return result;
         } catch (e: any) {
+            await abandonWalletIdempotency(scope, idempotencyKey, fingerprint).catch(() => undefined);
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403 : 400,
@@ -479,6 +713,19 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── PURCHASE ──────────────────────────────────────────────────────────────
 
+    fastify.post('/payments/:reference/verify', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { reference } = z.object({
+            reference: z.string().min(1).max(100).regex(/^[A-Za-z0-9.=-]+$/),
+        }).parse(req.params);
+        const result = await verifyOwnedPaystackPayment({
+            reference,
+            actorType: 'customer',
+            actorId: req.actor!.customerId!,
+        });
+        if (!result) return reply.code(404).send({ error: 'payment_not_found', message: 'Payment was not found.' });
+        return result;
+    });
+
     fastify.post('/purchase/preview', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
         const { meter_id, amount_minor } = req.body as { meter_id: string; amount_minor: number };
         if (!meter_id || !amount_minor) {
@@ -488,37 +735,50 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const preview = await previewCustomerPurchase(meter_id, amount_minor, req.actor!.customerId!);
             return preview;
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'meter_approval_unavailable' ? 503 : 422).send({ error: e.code, message: e.message });
             throw e;
         }
     });
 
     fastify.post('/purchase', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { meter_id, amount_minor, mode, idempotency_key } = req.body as {
-            meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
-        };
-        if (!meter_id || !amount_minor || !mode || !idempotency_key) {
-            return reply.code(400).send({ error: 'missing_fields' });
+        if (!/^\d{4}$/.test(String((req.body as { pin?: unknown } | null)?.pin ?? ''))) {
+            return reply.code(409).send({ error: 'vend_pin_required', message: 'Enter your four-digit vending PIN.' });
         }
-        if (!['wallet', 'direct_pay'].includes(mode)) {
-            return reply.code(400).send({ error: 'invalid_mode', message: 'mode must be wallet or direct_pay.' });
+        const parsed = z.object({
+            meter_id: z.string().trim().min(1),
+            amount_minor: z.number().int().min(50000),
+            mode: z.literal('wallet').default('wallet'),
+            idempotency_key: z.string().uuid(),
+            pin: z.string().regex(/^\d{4}$/),
+        }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({
+                error: 'wallet_funding_required',
+                message: 'Token purchases use wallet funds. Fund your wallet before buying.',
+            });
         }
+        const { meter_id, amount_minor, mode, idempotency_key, pin } = parsed.data;
 
-        const customerId     = req.actor!.customerId!;
-        const clientIp       = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-                             ?? req.ip ?? null;
-        const userAgent      = req.headers['user-agent'] ?? null;
-        const clientCountry  = (req.headers['cf-ipcountry'] as string)
-                             ?? (req.headers['x-vercel-ip-country'] as string)
-                             ?? null;
-        // Richer fingerprint: UA + Accept-Language + client hints
-        const deviceFingerprint = [
-            userAgent ?? '',
-            (req.headers['accept-language'] as string) ?? '',
-            (req.headers['sec-ch-ua'] as string) ?? '',
-            (req.headers['sec-ch-ua-platform'] as string) ?? '',
-        ].join('|') || null;
+        const customerId = req.actor!.customerId!;
+        const clientIp   = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+                         ?? req.ip ?? null;
+        const userAgent  = req.headers['user-agent'] ?? null;
+
+        try {
+            await verifyCustomerVendPin({
+                customerId,
+                authUserId: req.actor!.userId,
+                pin,
+                ip: clientIp,
+                userAgent,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code === 'vend_pin_required' ? 409 : error.code === 'vend_pin_locked' ? 429 : 401)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
+        }
 
         // ── Fraud assessment ──────────────────────────────────────────────────
         const assessment = await assessPurchase({
@@ -527,9 +787,6 @@ const customer: FastifyPluginAsync = async (fastify) => {
             amountMinor: amount_minor,
             clientIp,
             userAgent,
-            deviceFingerprint,
-            clientCountry,
-            mode,
         });
 
         if (assessment.action === 'block') {
@@ -561,7 +818,6 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerId,
                 customerUserId: req.actor!.userId,
                 customerName:   (cu as any)?.full_name ?? null,
-                customerEmail:  (cu as any)?.email ?? null,
                 meterId:        meter_id.trim().toUpperCase(),
                 amountMinor:    amount_minor,
                 mode,
@@ -578,6 +834,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
+                    : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -586,13 +843,40 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/purchase/step-up-verify', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
-        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key } = req.body as {
-            challenge_id: string; otp: string;
-            meter_id: string; amount_minor: number;
-            mode: 'wallet' | 'direct_pay'; idempotency_key: string;
-        };
-        if (!challenge_id || !otp || !meter_id || !amount_minor || !mode || !idempotency_key) {
-            return reply.code(400).send({ error: 'missing_fields' });
+        if (!/^\d{4}$/.test(String((req.body as { pin?: unknown } | null)?.pin ?? ''))) {
+            return reply.code(409).send({ error: 'vend_pin_required', message: 'Enter your four-digit vending PIN.' });
+        }
+        const parsed = z.object({
+            challenge_id: z.string().uuid(),
+            otp: z.string().trim().min(6).max(12),
+            meter_id: z.string().trim().min(1),
+            amount_minor: z.number().int().min(50000),
+            mode: z.literal('wallet').default('wallet'),
+            idempotency_key: z.string().uuid(),
+            pin: z.string().regex(/^\d{4}$/),
+        }).safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({
+                error: 'wallet_funding_required',
+                message: 'Token purchases use wallet funds. Fund your wallet before buying.',
+            });
+        }
+        const { challenge_id, otp, meter_id, amount_minor, mode, idempotency_key, pin } = parsed.data;
+
+        try {
+            await verifyCustomerVendPin({
+                customerId: req.actor!.customerId!,
+                authUserId: req.actor!.userId,
+                pin,
+                ip: req.ip,
+                userAgent: req.headers['user-agent'] as string | undefined,
+            });
+        } catch (error) {
+            if (error instanceof CustomerVendPinError) {
+                return reply.code(error.code === 'vend_pin_required' ? 409 : error.code === 'vend_pin_locked' ? 429 : 401)
+                    .send({ error: error.code, message: error.message });
+            }
+            throw error;
         }
 
         try {
@@ -621,7 +905,6 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerId,
                 customerUserId: req.actor!.userId,
                 customerName:   (cu as any)?.full_name ?? null,
-                customerEmail:  (cu as any)?.email ?? null,
                 meterId:        meter_id.trim().toUpperCase(),
                 amountMinor:    amount_minor,
                 mode,
@@ -634,6 +917,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
+                    : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
                 ).send({ error: e.code, message: e.message });
             }
@@ -642,6 +926,38 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── TRANSACTIONS & RECEIPTS ───────────────────────────────────────────────
+
+    fastify.post('/purchase/:purchaseOrderId/remote-send', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+        const params = z.object({
+            purchaseOrderId: z.string().uuid(),
+        }).parse(req.params);
+        try {
+            return await dispatchGeneratedCustomerToken(
+                req.actor!.customerId!,
+                req.actor!.userId,
+                params.purchaseOrderId,
+            );
+        } catch (e: any) {
+            if (e instanceof CustomerPurchaseError) {
+                const status = e.code === 'purchase_not_found' ? 404
+                    : e.code === 'token_missing' || e.code === 'purchase_not_delivered' ? 409
+                    : 422;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
+            throw e;
+        }
+    });
+
+    fastify.post('/profile-picture/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
+        try {
+            const profilePictureUrl = await activateProfilePicture('customer', req.actor!.customerId!, path);
+            await adminClient.from('customers').update({ profile_picture_url: profilePictureUrl }).eq('id', req.actor!.customerId!);
+            return { profile_picture_url: profilePictureUrl };
+        } catch {
+            return reply.code(422).send({ error: 'profile_picture_activation_failed' });
+        }
+    });
 
     fastify.get('/transactions', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { limit = 100 } = req.query as { limit?: number };
@@ -670,8 +986,9 @@ const customer: FastifyPluginAsync = async (fastify) => {
     fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
         const { data: purchaseRows } = await adminClient
             .from('purchase_orders')
-            .select('id, meter_id, meter_type, amount_minor, units_kwh, tariff_id, station_id, status')
+            .select('id, meter_id, meter_type, amount_minor, energy_amount_minor, vat_amount_minor, vat_rate_basis_points, units_kwh, tariff_id, station_id, status')
             .eq('customer_id', req.actor!.customerId!);
+        if (!purchaseRows?.length) return { receipts: [] };
         const purchaseById = new Map((purchaseRows ?? []).map((p: any) => [p.id, p]));
         const { data } = await adminClient
             .from('receipts')
@@ -689,54 +1006,46 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const schema = z.object({
-            meter_type:      z.enum(['single_phase', 'three_phase']),
+            meter_type: z.enum(['single_phase', 'three_phase']),
             property_address: z.string().min(5),
-            service_area:    z.string().min(2),
-            contact_phone:   z.string().min(8),
+            service_area: z.string().min(2),
+            contact_phone: z.string().min(8),
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+        let idempotencyKey: string;
+        try { idempotencyKey = assertClientIdempotencyKey(req.headers['idempotency-key']); }
+        catch (error: any) { return reply.code(400).send({ error: 'idempotency_key_required', message: error.message }); }
 
-        const amount_minor = body.meter_type === 'three_phase' ? 7_500_000 : 5_000_000; // ₦75k / ₦50k
-        const reference    = `mord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        const { data: user } = await adminClient
-            .from('users')
-            .select('email, full_name')
-            .eq('id', req.actor!.userId)
-            .single();
-
-        // Initialize Paystack transaction
-        const ps = await initializeTransaction({
-            email:     (user as any)?.email ?? '',
-            amountMinor: amount_minor,
-            reference,
-            metadata:  { customer_id: req.actor!.customerId, order_type: 'meter_purchase' },
-            callbackUrl: `${process.env.CUSTOMER_APP_URL ?? 'http://localhost:5173'}/meter-orders?ref=${reference}`,
-        });
-        if (!ps.authorization_url) {
-            return reply.code(502).send({ error: 'paystack_error', message: 'Could not initialize payment' });
+        try {
+            const result = await createCustomerPortalMeterOrder({
+                customerId: req.actor!.customerId!,
+                customerUserId: req.actor!.userId,
+                meterType: body.meter_type,
+                propertyAddress: body.property_address,
+                serviceArea: body.service_area,
+                contactPhone: body.contact_phone,
+                callbackBaseUrl: resolveMeterOrderCallbackUrl(
+                    env.CUSTOMER_METER_ORDER_CALLBACK_URL,
+                    env.CUSTOMER_APP_URL,
+                ),
+                idempotencyKey,
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'customer',
+                action: 'meter_order.created',
+                targetId: result.order.id,
+                metadata: { meter_type: body.meter_type, source_channel: 'customer_portal' },
+            });
+            return { order: result.order, authorization_url: result.authorizationUrl };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({
+                error: error?.code ?? 'meter_order_create_failed',
+                message: error?.message ?? 'Could not create meter order.',
+            });
         }
-
-        const { data: order, error } = await adminClient
-            .from('meter_purchase_orders')
-            .insert({
-                customer_id:      req.actor!.customerId!,
-                meter_type:       body.meter_type,
-                property_address: body.property_address,
-                service_area:     body.service_area,
-                contact_phone:    body.contact_phone,
-                amount_minor,
-                payment_reference: reference,
-                status:           'pending_payment',
-            })
-            .select()
-            .single();
-        if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
-
-        await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.created', targetId: (order as any).id, metadata: { meter_type: body.meter_type } });
-        return { order, authorization_url: ps.authorization_url };
     });
 
     fastify.get('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req) => {
@@ -777,13 +1086,35 @@ const customer: FastifyPluginAsync = async (fastify) => {
             headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
         });
         const ps: any = await res.json();
+        if (ps.data?.status === 'success' && Number(ps.data?.amount) !== Number((order as any).amount_minor)) {
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'customer',
+                action: 'meter_order.payment_amount_mismatch',
+                targetId: id,
+                metadata: {
+                    reference: (order as any).payment_reference,
+                    expectedAmountMinor: (order as any).amount_minor,
+                    verifiedAmountMinor: ps.data?.amount ?? null,
+                },
+            });
+            return reply.code(409).send({ error: 'payment_amount_mismatch', message: 'Verified payment amount does not match this meter order.' });
+        }
         if (ps.data?.status === 'success') {
-            await adminClient
+            const { data: paidOrder, error: paidError } = await adminClient
                 .from('meter_purchase_orders')
                 .update({ status: 'paid', updated_at: new Date().toISOString() })
-                .eq('id', id);
+                .eq('id', id)
+                .eq('status', 'pending_payment')
+                .select('*')
+                .maybeSingle();
+            if (paidError) return reply.code(500).send({ error: 'payment_update_failed', message: paidError.message });
+            if (!paidOrder) {
+                const { data: latest } = await adminClient.from('meter_purchase_orders').select('*').eq('id', id).maybeSingle();
+                return latest ?? order;
+            }
             await logAction({ actorUserId: req.actor!.userId, actorType: 'customer', action: 'meter_order.payment_confirmed', targetId: id });
-            return { ...(order as any), status: 'paid' };
+            return paidOrder;
         }
         return order;
     });
@@ -823,7 +1154,50 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!d || (d as any).customer_id !== req.actor!.customerId!) {
             return reply.code(404).send({ error: 'not_found' });
         }
-        return d;
+        const evidencePaths: string[] = Array.isArray((d as any).evidence_paths) ? (d as any).evidence_paths : [];
+        const evidence = await signDisputeEvidencePaths(evidencePaths);
+        return { ...d, evidence };
+    });
+
+    fastify.post('/disputes/:id/evidence/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const customerId = req.actor!.customerId!;
+        const d = await getDispute(id);
+        if (!d || (d as any).customer_id !== customerId) return reply.code(404).send({ error: 'not_found' });
+
+        let sop;
+        try {
+            sop = assertDisputeEvidenceSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: error?.code ?? 'invalid_evidence', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toDisputeEvidencePath(customerId, id, sop.file_name);
+        const { data, error } = await adminClient.storage.from(DISPUTE_EVIDENCE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        return {
+            bucket: DISPUTE_EVIDENCE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            sop: { max_bytes: 5 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] },
+        };
+    });
+
+    fastify.post('/disputes/:id/evidence/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const customerId = req.actor!.customerId!;
+        const { path } = z.object({ path: z.string().min(1) }).parse(req.body ?? {});
+        try {
+            const paths = await activateDisputeEvidence(customerId, id, path);
+            const evidence = await signDisputeEvidencePaths(paths);
+            return { evidence };
+        } catch (error: any) {
+            if (error instanceof DisputeEvidenceError) {
+                const status = error.code === 'not_found' ? 404 : 422;
+                return reply.code(status).send({ error: error.code, message: error.message });
+            }
+            return reply.code(422).send({ error: 'evidence_activation_failed', message: 'Could not attach evidence.' });
+        }
     });
 
     fastify.post('/disputes/:id/messages', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
@@ -887,6 +1261,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
         const { body: msgBody } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
         const t = await getTicket(id);
         if (!t || (t as any).customer_id !== req.actor!.customerId!) return reply.code(404).send({ error: 'not_found' });
+        if ((t as any).status === 'closed') return reply.code(409).send({ error: 'ticket_closed', message: 'Closed tickets cannot receive new customer replies.' });
         await addTicketMessage({
             ticketId: id, senderActorType: 'customer', senderActorId: req.actor!.customerId!,
             senderName: await customerName(req.actor!.customerId!), body: msgBody,
@@ -1040,6 +1415,20 @@ const customer: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    // ── PWA INSTALL TELEMETRY ────────────────────────────────────────────────
+    // Fired once by the customer app's `appinstalled` event. Best-effort —
+    // reuses the existing audit log rather than a dedicated table.
+    fastify.post('/pwa-installed', { preHandler: fastify.requireCustomer() }, async (req) => {
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'customer',
+            action: 'pwa.installed',
+            targetType: 'customer',
+            targetId: req.actor!.customerId!,
+        });
+        return { ok: true };
+    });
+
     // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
 
     // ── Notifications inbox ───────────────────────────────────────────────────
@@ -1049,11 +1438,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
             limit?: string; cursor?: string; unread_only?: string;
         };
         const pageSize = Math.min(Number(limit ?? 30), 100);
+        const customerId = req.actor!.customerId!;
+        const customerRecipientScope = `customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`;
 
         let query = adminClient
             .from('notifications')
             .select('*')
-            .eq('customer_id', req.actor!.customerId!)
+            .or(customerRecipientScope)
             .order('created_at', { ascending: false })
             .limit(pageSize);
 
@@ -1068,7 +1459,35 @@ const customer: FastifyPluginAsync = async (fastify) => {
             }
             throw error;
         }
-        const rows = data ?? [];
+        const deliveryQuery = adminClient
+            .from('admin_announcement_deliveries')
+            .select('id, notification_id, created_at, admin_announcements(id, title, body, audience, created_at)')
+            .eq('recipient_type', 'customer')
+            .eq('recipient_id', customerId)
+            .order('created_at', { ascending: false })
+            .limit(pageSize);
+        if (cursor) deliveryQuery.lt('created_at', cursor);
+        const { data: deliveryRows } = await deliveryQuery;
+        const syntheticRows = (deliveryRows ?? []).map((row: any) => {
+            const announcement = Array.isArray(row.admin_announcements) ? row.admin_announcements[0] : row.admin_announcements;
+            return {
+                id: row.notification_id ?? row.id,
+                customer_id: customerId,
+                recipient_type: 'customer',
+                recipient_id: customerId,
+                type: 'admin_announcement',
+                title: announcement?.title ?? 'Beverly announcement',
+                body: announcement?.body ?? '',
+                metadata: { announcement_id: announcement?.id ?? null, delivery_id: row.id },
+                read: true,
+                created_at: announcement?.created_at ?? row.created_at,
+            };
+        });
+        const byId = new Map<string, any>();
+        for (const row of [...(data ?? []), ...syntheticRows]) byId.set(row.id, row);
+        const rows = Array.from(byId.values())
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, pageSize);
         const nextCursor = rows.length === pageSize ? rows[rows.length - 1].created_at : null;
 
         // Unread count (only on first page, no cursor)
@@ -1077,7 +1496,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const { count, error: countError } = await adminClient
                 .from('notifications')
                 .select('id', { count: 'exact', head: true })
-                .eq('customer_id', req.actor!.customerId!)
+                .or(customerRecipientScope)
                 .eq('read', false);
             if (countError && !isMissingNotificationsStorage(countError)) throw countError;
             unreadCount = countError ? 0 : count ?? 0;
@@ -1087,10 +1506,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/notifications/read-all', { preHandler: fastify.requireCustomer() }, async (req) => {
+        const customerId = req.actor!.customerId!;
         const { error } = await adminClient
             .from('notifications')
             .update({ read: true })
-            .eq('customer_id', req.actor!.customerId!)
+            .or(`customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`)
             .eq('read', false);
         if (error && !isMissingNotificationsStorage(error)) throw error;
         return { ok: true };
@@ -1098,48 +1518,14 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     fastify.patch('/notifications/:id/read', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const id = (req.params as { id: string }).id;
+        const customerId = req.actor!.customerId!;
         const { error } = await adminClient
             .from('notifications')
             .update({ read: true })
             .eq('id', id)
-            .eq('customer_id', req.actor!.customerId!);
+            .or(`customer_id.eq.${customerId},and(recipient_type.eq.customer,recipient_id.eq.${customerId})`);
         if (isMissingNotificationsStorage(error)) return { ok: true };
         if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
-        return { ok: true };
-    });
-
-    // ── Push token registration ───────────────────────────────────────────────
-
-    fastify.post('/notifications/push-token', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const schema = z.object({
-            token:    z.string().min(10).max(512),
-            platform: z.enum(['ios', 'android', 'web']),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-
-        // Upsert: same token might belong to different customers across re-installs
-        await adminClient
-            .from('customer_push_tokens')
-            .upsert(
-                { customer_id: req.actor!.customerId!, token: body.token, platform: body.platform, active: true },
-                { onConflict: 'token' },
-            );
-        return { ok: true };
-    });
-
-    fastify.delete('/notifications/push-token', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const schema = z.object({ token: z.string().min(10).max(512) });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-
-        await adminClient
-            .from('customer_push_tokens')
-            .update({ active: false })
-            .eq('token', body.token)
-            .eq('customer_id', req.actor!.customerId!);
         return { ok: true };
     });
 
@@ -1160,7 +1546,6 @@ const customer: FastifyPluginAsync = async (fastify) => {
             sms:    z.record(z.boolean()).optional(),
             email:  z.record(z.boolean()).optional(),
             in_app: z.record(z.boolean()).optional(),
-            push:   z.record(z.boolean()).optional(),
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
@@ -1183,41 +1568,66 @@ const customer: FastifyPluginAsync = async (fastify) => {
         return { ok: true, preferences: merged };
     });
 
-    // ── KYC document upload ───────────────────────────────────────────────────
+    // ── Consumption ─────────────────────────────────────────────────────────
+    // A customer sees only their own meters. "Own" is the union of meters they
+    // registered and meters they have actually bought tokens for — a customer
+    // who paid for a meter but never registered it still sees its usage.
 
-    fastify.post('/kyc/documents/upload-url', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
-        const schema = z.object({
-            doc_type:       z.enum(['national_id', 'voters_card', 'passport', 'drivers_license', 'utility_bill', 'bank_statement', 'selfie', 'signature']),
-            kyc_tier:       z.literal(1).or(z.literal(2)),
-            mime_type:      z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
-            size_bytes:     z.number().int().positive().max(10 * 1024 * 1024),
-            doc_expires_at: z.string().optional(),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+    /** Meter ids this customer is entitled to. Empty array means "no meters". */
+    async function customerMeterIds(customerId: string): Promise<string[]> {
+        const [registered, purchased] = await Promise.all([
+            adminClient
+                .from('customer_meters')
+                .select('meter_id')
+                .eq('customer_id', customerId)
+                .eq('status', 'approved'),
+            adminClient
+                .from('purchase_orders')
+                .select('meter_id')
+                .eq('actor_type', 'customer')
+                .eq('actor_id', customerId),
+        ]);
+        if (registered.error) throw registered.error;
+        if (purchased.error) throw purchased.error;
 
-        const { generateUploadUrl, KycDocumentError } = await import('../services/kyc-documents.js');
-        try {
-            const result = await generateUploadUrl({
-                customerId:   req.actor!.customerId!,
-                docType:      body.doc_type,
-                kycTier:      body.kyc_tier,
-                mimeType:     body.mime_type,
-                sizeBytes:    body.size_bytes,
-                docExpiresAt: body.doc_expires_at,
-            });
-            return result;
-        } catch (e: any) {
-            const code = e instanceof KycDocumentError ? 400 : 500;
-            return reply.code(code).send({ error: e.code ?? 'upload_url_failed', message: e.message });
+        return [...new Set([...(registered.data ?? []), ...(purchased.data ?? [])]
+            .map((row: any) => String(row.meter_id ?? '').trim())
+            .filter(Boolean))];
+    }
+
+    fastify.get('/consumption', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
+        const qs = req.query as Record<string, string>;
+        const period = (qs.period ?? 'month') as 'day' | 'week' | 'month' | 'year';
+        if (!['day', 'week', 'month', 'year'].includes(period)) {
+            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
-    });
+        const meterId = String(qs.meter_id ?? '').trim().toUpperCase();
+        if (meterId && !/^[A-Z0-9_-]{3,64}$/.test(meterId)) {
+            return reply.code(400).send({
+                error: 'invalid_meter_id',
+                message: 'Enter a valid meter number.',
+            });
+        }
 
-    fastify.get('/kyc/documents', { preHandler: fastify.requireCustomer() }, async (req) => {
-        const { listDocuments } = await import('../services/kyc-documents.js');
-        const docs = await listDocuments(req.actor!.customerId!);
-        return { documents: docs };
+        const customerId = req.actor!.customerId!;
+        const meterIds = await customerMeterIds(customerId);
+
+        const { queryConsumption, metersAuthority } = await import('../services/consumption.js');
+        // metersAuthority([]) resolves to "see nothing", so a customer with no
+        // meters gets an empty series rather than the whole estate.
+        const rows = await queryConsumption(
+            {
+                scope: 'meter',
+                scope_id: meterId || undefined,
+                period_type: period,
+                from: qs.from ?? undefined,
+                to: qs.to ?? undefined,
+                limit: Math.min(Number(qs.limit ?? 120), 500),
+                withSpend: qs.spend !== 'false',
+            },
+            metersAuthority(meterIds),
+        );
+        return { rows, count: rows.length, meters: meterIds };
     });
 };
 

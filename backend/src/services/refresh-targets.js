@@ -1,7 +1,5 @@
 "use strict";
 
-const stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-
 function todayRange(now = new Date()) {
   const end = now.toISOString().slice(0, 10);
   const startDate = new Date(now);
@@ -52,7 +50,10 @@ function pagedDailyMeterPayload(extra = {}) {
   });
 }
 
-function refreshTargets(scope = "hot", now = new Date()) {
+function refreshTargets(scope = "hot", now = new Date(), stationIds = []) {
+  const stations = Array.from(new Set((Array.isArray(stationIds) ? stationIds : [])
+    .map((stationId) => String(stationId || "").trim().toUpperCase())
+    .filter(Boolean)));
   const daily = todayRange(now);
   const monthly = monthlyRange(now);
   const midnight = previousDayRange(now);
@@ -60,11 +61,11 @@ function refreshTargets(scope = "hot", now = new Date()) {
     { name: "dashboard-panels", path: "/api/dashboard/readPanelGroup", payload: {}, cadence: "5m" },
     { name: "dashboard-line", path: "/api/dashboard/readLineChart", payload: {}, cadence: "5m" },
     { name: "stations", path: "/api/station/read", payload: basePayload(), cadence: "15m" },
-    { name: "tariffs", path: "/api/tariff/read", payload: basePayload(), cadence: "15m" },
+    { name: "tariffs", path: "/api/tariff/read", payload: basePayload({ pageSize: 500 }), cadence: "15m", paginate: true },
     { name: "token-records", path: "/api/token/creditTokenRecord/read", payload: basePayload({ from: monthly.from, to: monthly.to }), cadence: "15m" }
   ];
   const hourly = [
-    { name: "accounts", path: "/api/account/read", payload: basePayload(), cadence: "1h" },
+    { name: "accounts", path: "/api/account/read", payload: basePayload({ pageSize: 500 }), cadence: "1h", paginate: true },
     { name: "customers", path: "/api/customer/read", payload: basePayload(), cadence: "1h" },
     { name: "meters", path: "/api/meter/read", payload: basePayload(), cadence: "1h" },
     ...stations.map((stationId) => ({
@@ -115,6 +116,5 @@ module.exports = {
   localDateKey,
   previousDayRange,
   refreshTargets,
-  stations,
   todayRange
 };

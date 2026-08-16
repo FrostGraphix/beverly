@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import StationMultiSelect from '../components/StationMultiSelect.vue';
 import { api, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -18,14 +20,20 @@ interface StaffRow {
     id?: string; auth_user_id: string | null; user_id: string | null;
     user_name: string; email: string | null; role_key: string;
     last_sign_in_at: string | null; confirmed_at: string | null; updated_at?: string | null;
+    station_id?: string | null;
+    station_ids?: string[];
+    suspended?: boolean;
 }
 interface AccessResponse {
     catalog: PermissionCatalogItem[]; roles: RoleRow[];
     permissions: PermissionRow[]; staff: StaffRow[];
+    /** role_key → default permissions. Its keys are the system roles. */
+    defaults?: Record<string, string[]>;
 }
 
 /* ─── State ───────────────────────────────────────────────────────────── */
 const auth        = useStaffAuthStore();
+const router      = useRouter();
 const loading     = ref(true);
 const saving      = ref(false);
 const catalog     = ref<PermissionCatalogItem[]>([]);
@@ -40,7 +48,11 @@ const expandedStaff = ref<string[]>([]);
 
 /* invite */
 const inviteOpen = ref(false);
-const draft = ref({ email: '', fullName: '', roleKey: 'account', tempPassword: '' });
+const inviteStep = ref(1);
+const draft = ref({ email: '', fullName: '', roleKey: 'account', stationIds: [] as string[], tempPassword: '' });
+
+/* custom role editor */
+const roleEditor = ref({ open: false, creating: true, roleKey: '', name: '', description: '', permissions: [] as string[] });
 
 /* confirm */
 const confirm = ref<{ title: string; body: string; label: string; danger: boolean; fn: () => Promise<void> } | null>(null);
@@ -82,9 +94,23 @@ const staffByRole = computed(() => {
     for (const u of staff.value) m.set(u.role_key, (m.get(u.role_key) ?? 0) + 1);
     return m;
 });
+/*
+ * System roles come from the server payload (GET /access → defaults) rather than
+ * a second hardcoded list that can drift from SYSTEM_ROLE_KEYS on the backend.
+ * The literal is only a pre-load fallback.
+ */
+const systemRoleKeys = ref<string[]>(['super-admin', 'operations-manager', 'finance-checker', 'account']);
+const isSystemRole = (roleKey: string) => systemRoleKeys.value.includes(roleKey);
+
+/* Permissions the backend refuses to grant to a custom role — mirrors
+   RESTRICTED_TO_SYSTEM_ROLES in backend/wallet/src/services/role-identity.ts. */
+const RESTRICTED_TO_SYSTEM_ROLES = ['dev.console'];
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
 const ROLE_COLORS: Record<string, string> = { 'super-admin': 'sa', 'operations-manager': 'om', 'finance-checker': 'fc', account: 'ac' };
+/* Custom roles get a stable colour derived from their key, so two custom roles
+   are visually distinguishable instead of all inheriting the amber of Account. */
+const CUSTOM_ROLE_COLORS = ['c1', 'c2', 'c3', 'c4'];
 const ROLE_DESCS: Record<string, string> = {
     'super-admin':          'Full system access. Can change roles, permissions, and all financial controls.',
     'operations-manager':   'Monitors vending activity, resolves disputes, reviews vendors, and runs reconciliation.',
@@ -92,7 +118,12 @@ const ROLE_DESCS: Record<string, string> = {
     account:                'Day-to-day account officer — views funding queue, monitors vending, and reads settlements.',
 };
 
-function rc(key: string) { return ROLE_COLORS[key] ?? 'ac'; }
+function rc(key: string) {
+    if (ROLE_COLORS[key]) return ROLE_COLORS[key];
+    let hash = 5381;
+    for (let i = 0; i < key.length; i++) hash = ((hash << 5) + hash + key.charCodeAt(i)) & 0x7fffffff;
+    return CUSTOM_ROLE_COLORS[hash % CUSTOM_ROLE_COLORS.length];
+}
 function initials(key: string) {
     const label = roles.value.find(r => r.role_key === key)?.role_name ?? key;
     return label.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -134,9 +165,10 @@ async function load() {
     try {
         const d = await api.get<AccessResponse>('/api/v1/admin/access');
         catalog.value     = d.catalog;
-        roles.value       = d.roles.filter(r => ['super-admin', 'operations-manager', 'finance-checker', 'account'].includes(r.role_key));
+        roles.value       = d.roles;
         permissions.value = d.permissions;
         staff.value       = d.staff;
+        if (d.defaults && Object.keys(d.defaults).length) systemRoleKeys.value = Object.keys(d.defaults);
         if (!roles.value.some(r => r.role_key === selectedRole.value)) selectedRole.value = roles.value[0]?.role_key ?? 'super-admin';
     } catch (e: any) { toast(e?.message ?? 'Failed to load access policy', 'err'); }
     finally { loading.value = false; }
@@ -192,6 +224,176 @@ async function doRoleChange(user: StaffRow, roleKey: string) {
     finally { saving.value = false; }
 }
 
+function openRoleEditor(role?: RoleRow) {
+    if (!canManage.value || loading.value) return;
+    const existingPermissions = role ? permissions.value.filter(p => p.role_key === role.role_key).map(p => p.route_hash) : [];
+    roleEditor.value = {
+        open: true, creating: !role, roleKey: role?.role_key ?? '', name: role?.role_name ?? '',
+        description: role?.description ?? '', permissions: existingPermissions,
+    };
+}
+function toggleEditorPermission(key: string) {
+    roleEditor.value.permissions = roleEditor.value.permissions.includes(key)
+        ? roleEditor.value.permissions.filter(p => p !== key)
+        : [...roleEditor.value.permissions, key];
+}
+
+function isGrantableToRole(key: string, roleKey: string) {
+    return !RESTRICTED_TO_SYSTEM_ROLES.includes(key) || isSystemRole(roleKey);
+}
+
+/* Critical grants selected in the editor — surfaced before save, mirroring the
+   confirmation the matrix already demands for a single critical toggle. */
+const editorCriticalPermissions = computed(() =>
+    catalog.value.filter(i => i.risk === 'critical' && roleEditor.value.permissions.includes(i.key)),
+);
+const editorNameValid = computed(() => roleEditor.value.name.trim().length >= 2);
+const editorCanSave = computed(() =>
+    editorNameValid.value && roleEditor.value.permissions.length > 0 && !saving.value,
+);
+
+function requestSaveRole() {
+    if (!canManage.value || !editorCanSave.value) return;
+    const critical = editorCriticalPermissions.value;
+    if (!critical.length) { void saveRole(); return; }
+    confirm.value = {
+        title: roleEditor.value.creating ? 'Create role with critical permissions' : 'Save critical permissions',
+        body: `${roleEditor.value.name.trim()} will hold ${critical.length} critical permission${critical.length > 1 ? 's' : ''}:\n\n${critical.map(i => `• ${i.label}`).join('\n')}\n\nStaff in this role gain these abilities immediately. The change is audit-logged.`,
+        label: roleEditor.value.creating ? 'Yes, create role' : 'Yes, save role',
+        danger: true,
+        fn: () => saveRole(),
+    };
+}
+
+async function saveRole() {
+    if (!canManage.value || !editorNameValid.value || !roleEditor.value.permissions.length) return;
+    saving.value = true;
+    try {
+        if (roleEditor.value.creating) {
+            const res = await api.post<{ role: RoleRow }>('/api/v1/admin/access/roles', {
+                name: roleEditor.value.name, description: roleEditor.value.description, permissions: roleEditor.value.permissions,
+            });
+            selectedRole.value = res.role.role_key;
+            toast('Custom role created.');
+        } else {
+            await api.patch(`/api/v1/admin/access/roles/${roleEditor.value.roleKey}`, {
+                name: roleEditor.value.name, description: roleEditor.value.description,
+            });
+            await api.put(`/api/v1/admin/access/roles/${roleEditor.value.roleKey}/permissions`, { permissions: roleEditor.value.permissions });
+            toast('Custom role updated.');
+        }
+        roleEditor.value.open = false;
+        await load();
+    } catch (e: any) {
+        // Zod rejections carry field-level detail the bare message drops.
+        const details = Array.isArray(e?.details)
+            ? e.details.map((d: any) => `${d.path}: ${d.message}`).join('; ')
+            : (Array.isArray(e?.details?.permissions) ? e.details.permissions.join(', ') : '');
+        toast(details ? `${e?.message ?? 'Could not save custom role'} (${details})` : (e?.message ?? 'Could not save custom role'), 'err');
+    }
+    finally { saving.value = false; }
+}
+function requestDeleteRole(role?: RoleRow) {
+    if (!role || !canManage.value || isSystemRole(role.role_key)) return;
+    confirm.value = {
+        title: 'Delete custom role', body: `Delete ${role.role_name}? Staff must be reassigned first.`,
+        label: 'Delete role', danger: true, fn: () => deleteRole(role),
+    };
+}
+async function deleteRole(role: RoleRow) {
+    saving.value = true;
+    try {
+        await api.del(`/api/v1/admin/access/roles/${role.role_key}`);
+        selectedRole.value = 'super-admin';
+        toast('Custom role deleted.');
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not delete role', 'err'); }
+    finally { saving.value = false; }
+}
+
+function requestSuspension(user: StaffRow) {
+    if (!canManage.value || !user.auth_user_id || saving.value) return;
+    const suspended = !user.suspended;
+    confirm.value = {
+        title: suspended ? 'Suspend staff user' : 'Reactivate staff user',
+        body: `${suspended ? 'Suspend' : 'Reactivate'} ${user.user_name || user.email}? ${suspended ? 'Their active sessions will be ended immediately.' : 'They can sign in again immediately.'}`,
+        label: suspended ? 'Suspend user' : 'Reactivate user', danger: suspended,
+        fn: () => doSuspension(user, suspended),
+    };
+}
+async function doSuspension(user: StaffRow, suspended: boolean) {
+    saving.value = true;
+    try {
+        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/suspension`, { suspended });
+        toast(`${user.user_name || user.email} ${suspended ? 'suspended' : 'reactivated'}.`);
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not update user status', 'err'); }
+    finally { saving.value = false; }
+}
+function requestPasswordReset(user: StaffRow) {
+    if (!canManage.value || !user.auth_user_id || saving.value) return;
+    confirm.value = {
+        title: 'Reset staff password',
+        body: `Reset ${user.user_name || user.email}'s password? All current sessions will end.`,
+        label: 'Reset password', danger: true,
+        fn: () => doPasswordReset(user),
+    };
+}
+async function doPasswordReset(user: StaffRow) {
+    saving.value = true;
+    try {
+        const res = await api.post<{ temporaryPassword: string }>(`/api/v1/admin/access/users/${user.auth_user_id}/reset-password`, {});
+        revealTempPw(res.temporaryPassword);
+        toast('Password reset.');
+    } catch (e: any) { toast(e?.message ?? 'Could not reset password', 'err'); }
+    finally { saving.value = false; }
+}
+function requestSessionRevocation(user: StaffRow) {
+    if (!canManage.value || !user.auth_user_id || saving.value) return;
+    confirm.value = {
+        title: 'Revoke active sessions', body: `End every active session for ${user.user_name || user.email}?`,
+        label: 'Revoke sessions', danger: true, fn: () => doSessionRevocation(user),
+    };
+}
+async function doSessionRevocation(user: StaffRow) {
+    saving.value = true;
+    try {
+        await api.post(`/api/v1/admin/access/users/${user.auth_user_id}/revoke-sessions`, {});
+        toast('Active sessions revoked.');
+    } catch (e: any) { toast(e?.message ?? 'Could not revoke sessions', 'err'); }
+    finally { saving.value = false; }
+}
+function viewAuditTrail(user: StaffRow) {
+    router.push({ path: '/audit', query: { actor: user.auth_user_id ?? undefined } });
+}
+
+function openInvite() {
+    inviteStep.value = 1;
+    inviteOpen.value = true;
+}
+
+function closeInvite() {
+    inviteOpen.value = false;
+    inviteStep.value = 1;
+}
+
+function continueInvite() {
+    if (inviteStep.value === 1 && (!draft.value.fullName.trim() || !draft.value.email.trim())) return;
+    if (inviteStep.value === 2 && !draft.value.stationIds.length) return;
+    inviteStep.value = Math.min(3, inviteStep.value + 1);
+}
+
+async function updateStaffStations(user: StaffRow, stationIds: string[]) {
+    if (!canManage.value || !user.auth_user_id || !stationIds.length) return;
+    saving.value = true;
+    try {
+        await api.patch(`/api/v1/admin/access/users/${user.auth_user_id}/station`, { stationIds });
+        toast(`${user.user_name || user.email} assigned to ${stationIds.length} stations.`);
+        await load();
+    } catch (e: any) { toast(e?.message ?? 'Could not update station', 'err'); }
+    finally { saving.value = false; }
+}
+
 /* ─── Create staff ────────────────────────────────────────────────────── */
 async function createStaff() {
     if (!canManage.value) return;
@@ -199,10 +401,11 @@ async function createStaff() {
     try {
         const res = await api.post<{ temporaryPassword: string }>('/api/v1/admin/access/users', {
             email: draft.value.email, fullName: draft.value.fullName,
-            roleKey: draft.value.roleKey, temporaryPassword: draft.value.tempPassword || undefined,
+            roleKey: draft.value.roleKey, stationIds: draft.value.stationIds,
+            temporaryPassword: draft.value.tempPassword || undefined,
         });
-        inviteOpen.value = false;
-        draft.value = { email: '', fullName: '', roleKey: 'account', tempPassword: '' };
+        closeInvite();
+        draft.value = { email: '', fullName: '', roleKey: 'account', stationIds: [], tempPassword: '' };
         await load();
         revealTempPw(res.temporaryPassword);
         toast('Staff user created.');
@@ -233,7 +436,7 @@ async function runConfirm() {
 }
 
 onUnmounted(() => { if (countdown) clearInterval(countdown); });
-onMounted(load);
+onMounted(() => { void load(); });
 </script>
 
 <template>
@@ -254,7 +457,10 @@ onMounted(load);
     <!-- ══ CONFIRM ══════════════════════════════════════════════════════ -->
     <teleport to="body">
       <transition name="ac-overlay">
-        <div v-if="confirm" class="ac-overlay" @click.self="confirm = null">
+        <!-- Above every other overlay: the role editor stays open behind this
+             dialog, and all .ac-overlay share a z-index, so without the bump
+             the later-teleported editor would paint over the confirmation. -->
+        <div v-if="confirm" class="ac-overlay ac-overlay--top" @click.self="confirm = null">
           <div :class="['ac-dialog', confirm.danger && 'ac-dialog--danger']">
             <div class="ac-dialog-glyph">
               <svg v-if="confirm.danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
@@ -302,23 +508,109 @@ onMounted(load);
       </transition>
     </teleport>
 
+    <teleport to="body">
+      <transition name="ac-overlay">
+        <div v-if="roleEditor.open" class="ac-overlay" @click.self="roleEditor.open = false" @keydown.esc="roleEditor.open = false">
+          <form
+            class="ac-role-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ac-role-editor-title"
+            @submit.prevent="requestSaveRole"
+          >
+            <div class="ac-invite-head">
+              <div>
+                <p class="ac-overline">Custom access role</p>
+                <h3 id="ac-role-editor-title">{{ roleEditor.creating ? 'Create custom role' : 'Edit custom role' }}</h3>
+              </div>
+              <button type="button" class="bw-icon-btn" aria-label="Close role editor" @click="roleEditor.open = false">×</button>
+            </div>
+            <div class="ac-fields">
+              <div class="ac-field">
+                <label class="bw-label" for="ac-role-name">Role name</label>
+                <input
+                  id="ac-role-name"
+                  ref="roleNameInput"
+                  v-model="roleEditor.name"
+                  class="bw-input"
+                  placeholder="Compliance Reviewer"
+                  required
+                  minlength="2"
+                  maxlength="64"
+                />
+              </div>
+              <div class="ac-field">
+                <label class="bw-label">Description</label>
+                <input v-model="roleEditor.description" class="bw-input" placeholder="Reviews compliance exceptions" maxlength="240" />
+              </div>
+            </div>
+            <div class="ac-editor-permissions">
+              <div class="ac-editor-label">
+                <label class="bw-label">Permissions</label>
+                <span>{{ roleEditor.permissions.length }} selected</span>
+              </div>
+              <div v-for="grp in grouped" :key="grp.g" class="ac-editor-group">
+                <p>{{ grp.g }}</p>
+                <label
+                  v-for="item in grp.items"
+                  :key="item.key"
+                  :class="['ac-editor-permission', !isGrantableToRole(item.key, roleEditor.roleKey) && 'is-blocked']"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="roleEditor.permissions.includes(item.key)"
+                    :disabled="!isGrantableToRole(item.key, roleEditor.roleKey)"
+                    @change="toggleEditorPermission(item.key)"
+                  />
+                  <span>{{ item.label }}</span>
+                  <em v-if="!isGrantableToRole(item.key, roleEditor.roleKey)" class="ac-editor-blocked">system roles only</em>
+                  <em v-else :class="`risk-${item.risk}`">{{ item.risk }}</em>
+                </label>
+              </div>
+            </div>
+
+            <!-- Critical grants are called out before save, not after. -->
+            <div v-if="editorCriticalPermissions.length" class="ac-editor-warning" role="status">
+              <strong>{{ editorCriticalPermissions.length }} critical permission{{ editorCriticalPermissions.length > 1 ? 's' : '' }} selected</strong>
+              <span>{{ editorCriticalPermissions.map(i => i.label).join(', ') }}</span>
+            </div>
+            <p v-if="!roleEditor.permissions.length" class="ac-editor-hint">
+              Select at least one permission — a role with none can sign in but reach nothing.
+            </p>
+
+            <div class="ac-invite-actions">
+              <button type="button" class="bw-btn ghost" @click="roleEditor.open = false">Cancel</button>
+              <button class="bw-btn primary" :disabled="!editorCanSave">
+                {{ saving ? 'Saving…' : (roleEditor.creating ? 'Create role' : 'Save role') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </transition>
+    </teleport>
+
     <!-- ══ INVITE MODAL ══════════════════════════════════════════════════ -->
     <teleport to="body">
       <transition name="ac-overlay">
-        <div v-if="inviteOpen" class="ac-overlay" @click.self="inviteOpen = false">
+        <div v-if="inviteOpen" class="ac-overlay" @click.self="closeInvite">
           <div class="ac-invite">
             <div class="ac-invite-head">
               <div>
                 <p class="ac-overline">New staff member</p>
                 <h3>Create wallet admin user</h3>
               </div>
-              <button class="bw-icon-btn" @click="inviteOpen = false">
+              <button class="bw-icon-btn" aria-label="Close staff setup" @click="closeInvite">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
 
             <form @submit.prevent="createStaff">
-              <div class="ac-fields">
+              <ol class="ac-steps" aria-label="Staff setup progress">
+                <li v-for="(label, index) in ['Identity', 'Access', 'Review']" :key="label" :class="{ 'is-active': inviteStep === index + 1, 'is-done': inviteStep > index + 1 }">
+                  <span>{{ index + 1 }}</span>{{ label }}
+                </li>
+              </ol>
+              <div v-if="inviteStep === 1" class="ac-fields">
                 <div class="ac-field">
                   <label class="bw-label">Full name</label>
                   <input v-model="draft.fullName" class="bw-input" placeholder="Ada Okonkwo" required />
@@ -329,7 +621,7 @@ onMounted(load);
                 </div>
               </div>
 
-              <div class="ac-invite-grid">
+              <div v-else-if="inviteStep === 2" class="ac-invite-grid">
                 <!-- Role picker -->
                 <div class="ac-field ac-field--full">
                   <label class="bw-label">Assign role</label>
@@ -348,6 +640,14 @@ onMounted(load);
                   </div>
                 </div>
 
+                <div class="ac-field ac-field--full">
+                  <label class="bw-label">Assigned stations</label>
+                  <StationMultiSelect v-model="draft.stationIds" placeholder="Search stations" />
+                  <p class="ac-field-help">This staff member only sees assigned stations.</p>
+                </div>
+              </div>
+
+              <div v-else class="ac-invite-grid">
                 <div class="ac-stack-col">
                   <!-- Permission preview for picked role -->
                   <div class="ac-perm-preview">
@@ -367,11 +667,18 @@ onMounted(load);
                     <input v-model="draft.tempPassword" class="bw-input bw-mono" minlength="12" placeholder="Leave blank to auto-generate" />
                   </div>
                 </div>
+                <dl class="ac-invite-review">
+                  <div><dt>Staff</dt><dd>{{ draft.fullName }}</dd></div>
+                  <div><dt>Email</dt><dd>{{ draft.email }}</dd></div>
+                  <div><dt>Role</dt><dd>{{ roles.find(r => r.role_key === draft.roleKey)?.role_name }}</dd></div>
+                  <div><dt>Stations</dt><dd>{{ draft.stationIds.join(', ') }}</dd></div>
+                </dl>
               </div>
 
               <div class="ac-invite-actions">
-                <button type="button" class="bw-btn ghost" @click="inviteOpen = false">Cancel</button>
-                <button class="bw-btn primary" :disabled="saving || !draft.email || !draft.fullName">
+                <button type="button" class="bw-btn ghost" @click="inviteStep > 1 ? inviteStep-- : closeInvite()">{{ inviteStep > 1 ? 'Back' : 'Cancel' }}</button>
+                <button v-if="inviteStep < 3" type="button" class="bw-btn primary" :disabled="inviteStep === 1 ? !draft.email || !draft.fullName : !draft.stationIds.length" @click="continueInvite">Continue</button>
+                <button v-else class="bw-btn primary" :disabled="saving">
                   {{ saving ? 'Creating…' : 'Create staff user' }}
                 </button>
               </div>
@@ -393,6 +700,7 @@ onMounted(load);
             <h1 class="ac-header-title">Roles &amp; Permissions</h1>
             <p class="ac-header-sub">Define exactly who can move money, approve refunds, run reconciliation, and control launch gates.</p>
           </div>
+          <button v-if="canManage" class="bw-btn primary" :disabled="loading" @click="openRoleEditor()">Create role</button>
           <div class="ac-kpi-strip">
             <div class="ac-kpi">
               <span class="ac-kpi-num">{{ roles.length }}</span>
@@ -480,6 +788,10 @@ onMounted(load);
                 <h2>{{ selRoleRow?.role_name }}</h2>
                 <p class="ac-matrix-desc">{{ selRoleRow?.description || ROLE_DESCS[selectedRole] || 'Operational role for the Beverly wallet workspace.' }}</p>
               </div>
+            </div>
+            <div v-if="canManage && !isSystemRole(selectedRole)" class="ac-role-management">
+              <button class="bw-btn ghost" @click="openRoleEditor(selRoleRow)">Edit role</button>
+              <button class="bw-btn danger" @click="requestDeleteRole(selRoleRow)">Delete role</button>
             </div>
 
             <div class="ac-matrix-gauges">
@@ -614,9 +926,13 @@ onMounted(load);
             </button>
           </div>
 
-          <button class="bw-btn primary" :disabled="!canManage" @click="inviteOpen = true">
+          <button class="bw-btn primary" :disabled="!canManage" @click="openInvite">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add staff
+          </button>
+          <button class="bw-btn ghost ac-add-role" :disabled="!canManage || loading" @click="activeTab = 'matrix'; openRoleEditor()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/><circle cx="12" cy="12" r="8"/></svg>
+            Add role
           </button>
         </div>
 
@@ -629,7 +945,7 @@ onMounted(load);
         <div v-else-if="!filteredStaff.length" class="ac-empty">
           <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="32" cy="22" r="10"/><path d="M10 54c0-12.15 9.85-22 22-22s22 9.85 22 22"/><line x1="50" y1="40" x2="50" y2="54"/><line x1="43" y1="47" x2="57" y2="47"/></svg>
           <p>{{ staffSearch || staffRole ? 'No staff match your filters.' : 'No staff users yet.' }}</p>
-          <button v-if="canManage && !staffSearch && !staffRole" class="bw-btn primary" @click="inviteOpen = true">Add first staff user</button>
+          <button v-if="canManage && !staffSearch && !staffRole" class="bw-btn primary" @click="openInvite">Add first staff user</button>
         </div>
 
         <!-- Grid -->
@@ -661,11 +977,15 @@ onMounted(load);
               </div>
               <div>
                 <dt>Account</dt>
-                <dd>{{ u.confirmed_at ? 'Confirmed' : 'Pending invite' }}</dd>
+                <dd>{{ u.suspended ? 'Suspended' : (u.confirmed_at ? 'Confirmed' : 'Pending invite') }}</dd>
               </div>
               <div>
                 <dt>Permissions</dt>
                 <dd>{{ catalog.filter(i => permissions.some(p => p.role_key === u.role_key && p.route_hash === i.key)).length }} grants</dd>
+              </div>
+              <div>
+                <dt>Stations</dt>
+                <dd>{{ (u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []).join(', ') || 'Unassigned' }}</dd>
               </div>
             </dl>
 
@@ -696,6 +1016,24 @@ onMounted(load);
                 </select>
               </div>
             </div>
+
+            <div v-if="isStaffExpanded(u)" class="ac-staff-role">
+              <label class="bw-label" style="margin-bottom:5px">Stations</label>
+              <StationMultiSelect
+                :model-value="u.station_ids?.length ? u.station_ids : u.station_id ? [u.station_id] : []"
+                :disabled="saving || !canManage || !u.auth_user_id || u.role_key === 'super-admin'"
+                @update:model-value="updateStaffStations(u, $event)"
+              />
+            </div>
+
+            <div v-if="isStaffExpanded(u)" class="ac-staff-actions">
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="viewAuditTrail(u)">Audit trail</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestSessionRevocation(u)">Revoke sessions</button>
+              <button class="bw-btn ghost" :disabled="!canManage || saving || !u.auth_user_id" @click="requestPasswordReset(u)">Reset password</button>
+              <button :class="['bw-btn', u.suspended ? 'primary' : 'danger']" :disabled="!canManage || saving || !u.auth_user_id || u.auth_user_id === auth.user?.id" @click="requestSuspension(u)">
+                {{ u.suspended ? 'Reactivate user' : 'Suspend user' }}
+              </button>
+            </div>
           </article>
         </div>
       </div>
@@ -712,6 +1050,11 @@ onMounted(load);
 .rc-om { --rc: 59 130 246; --rc-fg: #60a5fa; }    /* blue    */
 .rc-fc { --rc: 16 185 129; --rc-fg: #34d399; }    /* emerald */
 .rc-ac { --rc: 245 158 11; --rc-fg: #fbbf24; }    /* amber   */
+/* Custom-role palette — distinct from the four system-role hues above. */
+.rc-c1 { --rc: 236 72 153; --rc-fg: #f472b6; }    /* pink    */
+.rc-c2 { --rc: 6 182 212;  --rc-fg: #22d3ee; }    /* cyan    */
+.rc-c3 { --rc: 132 204 22; --rc-fg: #a3e635; }    /* lime    */
+.rc-c4 { --rc: 168 85 247; --rc-fg: #c084fc; }    /* purple  */
 
 /* ═══════════════════════════════════════════════════════════════════════
    RISK PALETTE
@@ -748,6 +1091,10 @@ onMounted(load);
   background: oklch(0% 0 0 / .72);
   backdrop-filter: blur(6px) saturate(120%);
 }
+/* Confirmations stack above the dialog that raised them. Teleport anchors are
+   created in template order, so at equal z-index the role editor (declared
+   later) would paint over the confirmation and hide it entirely. */
+.ac-overlay--top { z-index: 260; }
 .ac-overlay-enter-active, .ac-overlay-leave-active { transition: opacity .22s var(--ease-out); }
 .ac-overlay-enter-from, .ac-overlay-leave-to { opacity: 0; }
 .ac-overlay-enter-active > *, .ac-overlay-leave-active > * { transition: transform .22s var(--ease-out), opacity .22s var(--ease-out); }
@@ -756,10 +1103,12 @@ onMounted(load);
 /* Confirm dialog */
 .ac-dialog {
   width: min(480px, 100%);
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-2xl); padding: 2rem;
   display: flex; flex-direction: column; gap: 1rem;
-  box-shadow: 0 24px 80px rgba(0,0,0,.5);
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
 }
 .ac-dialog--danger { border-color: oklch(from var(--danger) l c h / .3); }
 .ac-dialog-glyph {
@@ -776,10 +1125,12 @@ onMounted(load);
 /* Temp-password card */
 .ac-pwcard {
   width: min(520px, 100%);
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-2xl); padding: 2rem;
   display: flex; flex-direction: column; gap: 1.5rem;
-  box-shadow: 0 24px 80px rgba(0,0,0,.5);
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
 }
 .ac-pwcard-top { display: flex; gap: 1.25rem; align-items: flex-start; }
 .ac-pwcard-lock {
@@ -815,12 +1166,14 @@ onMounted(load);
 .ac-invite {
   width: min(780px, 100%);
   max-height: min(92vh, 860px);
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border-strong);
   border-radius: var(--r-2xl);
   overflow: auto;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,.5);
+  backdrop-filter: blur(36px) saturate(200%);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
 }
 .ac-invite-head {
   display: flex; justify-content: space-between; align-items: flex-start;
@@ -838,6 +1191,14 @@ onMounted(load);
 .ac-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .ac-field { display: flex; flex-direction: column; gap: 4px; }
 .ac-field--full { grid-column: 1 / -1; }
+.ac-field-help { margin: 4px 0 0; color: var(--text-muted); font-size: var(--t-xs); }
+.ac-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ac-steps li { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: var(--t-xs); font-weight: 700; }
+.ac-steps li::after { content: ''; height: 1px; flex: 1; background: var(--border); }
+.ac-steps li:last-child::after { display: none; }
+.ac-steps span { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; }
+.ac-steps .is-active { color: var(--text); }
+.ac-steps .is-active span, .ac-steps .is-done span { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
 
 .ac-invite-grid {
   display: grid;
@@ -875,6 +1236,10 @@ onMounted(load);
   text-transform: capitalize;
 }
 .ac-empty-chips { font-size: var(--t-sm); color: var(--text-muted); }
+.ac-invite-review { margin: 0; padding: .75rem; display: grid; gap: .65rem; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); }
+.ac-invite-review div { display: grid; gap: 2px; }
+.ac-invite-review dt { color: var(--text-muted); font-size: var(--t-2xs); font-weight: 700; text-transform: uppercase; }
+.ac-invite-review dd { margin: 0; color: var(--text); font-size: var(--t-sm); overflow-wrap: anywhere; }
 .ac-invite-actions { display: flex; justify-content: flex-end; gap: .6rem; padding-top: .25rem; }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -983,9 +1348,12 @@ onMounted(load);
 
 /* Matrix panel */
 .ac-matrix {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
   border-radius: var(--r-2xl); overflow: hidden;
   display: flex; flex-direction: column;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
 .ac-matrix-head {
   padding: 1rem 1.1rem; display: flex; justify-content: space-between;
@@ -1015,7 +1383,7 @@ onMounted(load);
 .ac-ring-center span   { font-size: 8px; color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
 
 /* Risk grid */
-.ac-risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.ac-risk-grid { display: grid; grid-template-columns: repeat(4, minmax(36px, 1fr)); gap: 5px; }
 .ac-risk-tile {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 5px 7px; border-radius: 8px;
@@ -1150,8 +1518,10 @@ onMounted(load);
 .ac-staff-wrap { display: flex; flex-direction: column; gap: var(--s-4); }
 .ac-staff-bar {
   display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
   border-radius: var(--r-xl); padding: .75rem 1rem;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
 .ac-filters { display: flex; gap: .4rem; flex-wrap: wrap; }
 .ac-filter {
@@ -1171,9 +1541,12 @@ onMounted(load);
 
 .ac-staff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s-3); }
 .ac-staff-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl);
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-xl);
   padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;
   position: relative; overflow: hidden;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
   transition: border-color var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast);
 }
 .ac-staff-card:hover { border-color: rgba(var(--rc), .4); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,.2); }
@@ -1275,6 +1648,44 @@ onMounted(load);
 .ac-skel--label { height: 12px; width: 70px; }
 .ac-skel--perm  { height: 52px; border-radius: var(--r-lg); }
 .ac-skel--staff { height: 240px; border-radius: var(--r-xl); }
+
+.ac-role-editor {
+  width: min(760px, calc(100vw - 2rem)); max-height: min(760px, calc(100vh - 2rem));
+  overflow: auto; padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--r-xl);
+  background: var(--surface); box-shadow: var(--shadow-xl);
+}
+.ac-editor-permissions { margin-top: 1rem; border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.ac-editor-label { display: flex; justify-content: space-between; padding: .75rem 1rem; background: var(--surface-2); }
+.ac-editor-label span { color: var(--text-muted); font-size: var(--t-xs); }
+.ac-editor-group { padding: .75rem 1rem; border-top: 1px solid var(--border); }
+.ac-editor-group p { margin: 0 0 .45rem; font-size: var(--t-xs); font-weight: 800; color: var(--text-muted); }
+.ac-editor-permission { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; cursor: pointer; font-size: var(--t-sm); }
+.ac-editor-permission input { accent-color: var(--green); }
+.ac-editor-permission em { margin-left: auto; font-style: normal; font-size: var(--t-2xs); text-transform: uppercase; }
+.ac-editor-permission.is-blocked { opacity: .55; cursor: not-allowed; }
+.ac-editor-blocked {
+  margin-left: auto; font-style: normal; font-size: var(--t-2xs);
+  text-transform: uppercase; color: var(--text-faint);
+}
+.ac-editor-warning {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: .75rem; padding: .6rem .8rem;
+  border: 1px solid oklch(from var(--danger) l c h / .35);
+  border-radius: var(--r-md);
+  background: oklch(from var(--danger) l c h / .10);
+  font-size: var(--t-xs);
+}
+.ac-editor-warning strong { color: var(--danger); }
+.ac-editor-warning span { color: var(--text-muted); }
+.ac-editor-hint { margin: .6rem 0 0; font-size: var(--t-xs); color: var(--text-muted); }
+.ac-role-management { display: flex; gap: .5rem; margin-left: auto; }
+.ac-role-management .bw-btn { white-space: nowrap; }
+
+.ac-staff-actions {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  padding: .9rem 1rem 1rem; border-top: 1px solid var(--border);
+}
+.ac-staff-actions .bw-btn { font-size: var(--t-xs); padding: .45rem .65rem; }
 
 /* Empty state */
 .ac-empty {

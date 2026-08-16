@@ -17,8 +17,10 @@ import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
+import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
 
 const router = useRouter();
 const auth = useStaffAuthStore();
@@ -55,6 +57,9 @@ const repairing = ref(false);
 const busyId = ref<string | null>(null);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const canApproveFunding = computed(() => auth.hasPermission('wallet.funding.approve'));
+const pendingAmountMinor = computed(() => items.value.reduce((total, item) => total + item.amount_minor, 0));
+const pendingVendorCount = computed(() => new Set(items.value.map((item) => item.vendor_organization_id)).size);
+const proofCount = computed(() => items.value.filter((item) => item.proof_view_url || item.proof_file_path).length);
 
 // ─ Approve modal ──────────────────────────────────────────────
 const approveOpen = ref(false);
@@ -164,6 +169,74 @@ async function repairApprovedCredits() {
     }
 }
 
+// ── Payments held for review ────────────────────────────────────────────────
+// The gateway confirmed these but the reconciler could not apply them, so the
+// money is real and unapplied. Retrying re-runs verification and fulfillment;
+// the ledger key makes it safe even if the payment did partly apply.
+interface HeldPayment {
+    id: string;
+    reference: string;
+    actorType: string;
+    purpose: string;
+    amountMinor: number;
+    blockedReason: string | null;
+    verifiedAmountMinor: number | null;
+    attempts: number;
+    createdAt: string;
+}
+
+const heldPayments = ref<HeldPayment[]>([]);
+const heldLoading = ref(false);
+const retryingId = ref<string | null>(null);
+
+async function loadHeldPayments() {
+    heldLoading.value = true;
+    try {
+        const r = await api.get<{ payments: HeldPayment[] }>('/api/v1/admin/payments/requires-review?limit=50&purpose=wallet_funding');
+        heldPayments.value = r.payments ?? [];
+    } catch {
+        // The approvals queue must still render if this panel fails.
+    } finally {
+        heldLoading.value = false;
+    }
+}
+
+async function retryHeldPayment(payment: HeldPayment) {
+    if (!canApproveFunding.value || retryingId.value) return;
+    retryingId.value = payment.id;
+    banner.value = null;
+    try {
+        const result = await api.post<{ status: string; fulfillmentStatus: string; reason?: string }>(
+            `/api/v1/admin/payments/${payment.id}/retry-fulfillment`, {},
+        );
+        const applied = ['fulfilled', 'already_fulfilled'].includes(result.fulfillmentStatus);
+        banner.value = applied
+            ? { tone: 'success', text: `Payment ${payment.reference} applied. Wallet updated.` }
+            : { tone: 'error', text: `Payment ${payment.reference} still held: ${result.reason ?? result.fulfillmentStatus}.` };
+        await Promise.all([load(), loadHeldPayments()]);
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Retry failed.';
+        banner.value = { tone: 'error', text: msg };
+    } finally {
+        retryingId.value = null;
+    }
+}
+
+function blockedReasonLabel(reason: string | null): string {
+    if (!reason) return 'Unknown';
+    return ({
+        payment_amount_mismatch: 'Amount verification mismatch',
+        payment_overpaid: 'Paid more than a fee can explain',
+        payment_currency_mismatch: 'Wrong currency',
+        payment_reference_mismatch: 'Reference mismatch',
+        wallet_inactive: 'Wallet inactive',
+        wallet_frozen: 'Wallet frozen',
+        funding_request_rejected: 'Funding request already rejected',
+        funding_request_expired: 'Funding request expired',
+        meter_order_cancelled: 'Meter order cancelled',
+    } as Record<string, string>)[reason] ?? reason;
+}
+
 function channelBadge(c: string) {
     return ({ paystack: 'info', bank_transfer: 'neutral', manual: 'warn' } as Record<string, string>)[c] ?? 'neutral';
 }
@@ -184,7 +257,18 @@ function vendorEmail(f: FundingRequest) {
     return f.vendor_organizations?.contact_email || 'No email on file';
 }
 
-onMounted(load);
+function viewFundingReceipt(f: FundingRequest) {
+    viewReceipt(fundingReceipt(f));
+}
+
+function printFundingReceipt(f: FundingRequest) {
+    printReceipt(fundingReceipt(f));
+}
+
+onMounted(() => {
+    void load();
+    void loadHeldPayments();
+});
 </script>
 
 <template>
@@ -198,11 +282,86 @@ onMounted(load);
       </div>
     </transition>
 
+    <section class="bw-kpi-grid bw-mobile-kpi-grid funding-kpis" aria-label="Funding approval summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Pending requests</span>
+        <strong class="bw-kpi-value">{{ items.length }}</strong>
+        <span class="bw-kpi-note">awaiting review</span>
+      </article>
+      <article class="bw-kpi">
+        <span class="bw-kpi-label">Pending value</span>
+        <strong class="bw-kpi-value funding-money">{{ naira(pendingAmountMinor) }}</strong>
+        <span class="bw-kpi-note">requested funding</span>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Vendors</span>
+        <strong class="bw-kpi-value">{{ pendingVendorCount }}</strong>
+        <span class="bw-kpi-note">unique organizations</span>
+      </article>
+      <article class="bw-kpi warn-tone">
+        <span class="bw-kpi-label">Proof supplied</span>
+        <strong class="bw-kpi-value">{{ proofCount }}</strong>
+        <span class="bw-kpi-note">requests with evidence</span>
+      </article>
+    </section>
+
+    <!-- Payments held for review -->
+    <div v-if="heldPayments.length" class="bw-card held-card" style="padding: 0">
+      <div class="bw-table-head-bar">
+        <div>
+          <h2 class="bw-h2" style="margin: 0">Payments held for review</h2>
+          <p class="bw-muted fund-sub">
+            Confirmed at Paystack but not applied. The money is real — resolve the reason, then retry.
+          </p>
+        </div>
+        <span class="bw-spacer"></span>
+        <button class="bw-btn sm" :disabled="heldLoading" @click="loadHeldPayments">
+          {{ heldLoading ? 'Loading…' : 'Refresh' }}
+        </button>
+      </div>
+      <div class="bw-t-wrap">
+        <table class="bw-table fund-table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Purpose</th>
+              <th class="bw-num">Requested</th>
+              <th class="bw-num">Paid</th>
+              <th>Reason held</th>
+              <th class="bw-actions-col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in heldPayments" :key="p.id">
+              <td class="bw-mono">{{ p.reference }}</td>
+              <td>{{ p.purpose }} <span class="bw-muted">· {{ p.actorType }}</span></td>
+              <td class="bw-num funding-money">{{ naira(p.amountMinor) }}</td>
+              <td class="bw-num funding-money">
+                {{ p.verifiedAmountMinor === null ? '—' : naira(p.verifiedAmountMinor) }}
+              </td>
+              <td><span class="bw-badge warn">{{ blockedReasonLabel(p.blockedReason) }}</span></td>
+              <td class="bw-actions-col">
+                <button
+                  v-if="canApproveFunding"
+                  class="bw-btn sm primary"
+                  :disabled="retryingId !== null"
+                  @click="retryHeldPayment(p)"
+                >
+                  {{ retryingId === p.id ? 'Retrying…' : 'Retry' }}
+                </button>
+                <span v-else class="bw-muted">No permission</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Queue -->
     <div class="bw-card" style="padding: 0">
       <div class="bw-table-head-bar">
         <div>
-          <h2 class="bw-h2" style="margin: 0">Pending funding · {{ items.length }}</h2>
+          <h2 class="bw-h2" style="margin: 0">Funding queue</h2>
           <p class="bw-muted fund-sub">
             Maker-checker · approver must differ from submitter. Backend enforces this server-side.
           </p>
@@ -230,6 +389,7 @@ onMounted(load);
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
+              <th>Receipt</th>
               <th v-if="canApproveFunding" class="actions-col"></th>
             </tr>
           </thead>
@@ -248,6 +408,12 @@ onMounted(load);
               </td>
               <td class="bw-money" style="text-align: right">{{ naira(f.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span></td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+                  <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+                </div>
+              </td>
               <td v-if="canApproveFunding" class="actions-col">
                 <div class="action-cluster">
                   <button class="bw-btn sm primary" :disabled="busyId === f.id" @click="askApprove(f)">
@@ -257,10 +423,14 @@ onMounted(load);
                     Reject
                   </button>
                 </div>
+                <MobileActionMenu label="Funding actions">
+                  <button class="mobile-action-item primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
+                  <button class="mobile-action-item danger" :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+                </MobileActionMenu>
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td :colspan="canApproveFunding ? 7 : 6" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
+              <td :colspan="canApproveFunding ? 8 : 7" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
             </tr>
           </tbody>
         </table>
@@ -287,9 +457,13 @@ onMounted(load);
             <span v-else-if="f.proof_file_path" class="bw-muted bw-mono" style="font-size: var(--t-xs)">stored</span>
             <span v-else class="bw-muted">—</span>
           </div>
-          <div v-if="canApproveFunding" class="fc-actions">
-            <button class="bw-btn primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
-            <button class="bw-btn danger"  :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+          <div class="fc-actions">
+            <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
+            <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
+            <MobileActionMenu v-if="canApproveFunding" label="Funding actions">
+              <button class="mobile-action-item primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
+              <button class="mobile-action-item danger" :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
+            </MobileActionMenu>
           </div>
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty-card">Queue clear.</div>
@@ -337,6 +511,8 @@ onMounted(load);
 </template>
 
 <style scoped>
+.funding-kpis { margin-bottom: var(--s-3); }
+.funding-money { font-size: clamp(var(--t-xl), 2.5vw, var(--t-3xl)); overflow-wrap: anywhere; }
 .fund-sub { font-size: var(--t-xs); margin: 2px 0 0; }
 
 /* Banner */
@@ -399,6 +575,11 @@ onMounted(load);
   justify-content: flex-end;
   flex-wrap: nowrap;
 }
+.receipt-actions {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
 .row-busy { opacity: 0.55; pointer-events: none; }
 
 /* Mobile cards (shown by .bw-t-cards at <=640px from wallet.css) */
@@ -441,12 +622,29 @@ onMounted(load);
 .fc-actions {
   display: flex;
   gap: var(--s-2);
+  justify-content: flex-end;
   margin-top: var(--s-3);
 }
 .fc-actions .bw-btn {
   flex: 1;
   justify-content: center;
   min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  .fund-table .actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 3;
+  }
+
+  .action-cluster {
+    display: none;
+  }
 }
 .empty-card { text-align: center; padding: var(--s-6); }
 

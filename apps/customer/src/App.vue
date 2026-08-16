@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue';
+import { onMounted, computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import BeverlyLoader from '@beverly/tokens/BeverlyLoader.vue';
 import { useAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
 import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
+import UpdateAvailableToast from './components/UpdateAvailableToast.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
 
+// The initial route (including auth-hydration guards in router/index.ts)
+// resolves asynchronously — router-view renders nothing until then. Gate
+// on router.isReady() so that gap shows the loader instead of a blank screen.
+const routeReady = ref(false);
+router.isReady().then(() => { routeReady.value = true; });
+
 onMounted(() => { void auth.hydrate(); });
 
-// SOP: Customer 60 min idle, 30 day absolute. Warn at T-2min.
+// SOP: Customer 8 h idle, 24 h absolute. Warn at T-2min.
 const isAuthed = computed(() => auth.isAuthenticated);
 const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
-    idleMs:     60 * 60 * 1000,
+    idleMs:     8 * 60 * 60 * 1000,
     warningMs:  2  * 60 * 1000,
-    absoluteMs: 30 * 24 * 60 * 60 * 1000,
+    absoluteMs: 24 * 60 * 60 * 1000,
     onTimeout: async () => {
         if (!auth.isAuthenticated) return;
         await auth.logout();
@@ -25,7 +33,8 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
 </script>
 
 <template>
-  <router-view />
+  <BeverlyLoader v-if="!routeReady" label="Verifying session" />
+  <router-view v-else />
   <SessionTimeoutWarning
     v-if="isAuthed"
     :visible="warningVisible"
@@ -33,4 +42,5 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
     @stay="stayActive"
     @logout="auth.logout(); $router.push({ name: 'login' })"
   />
+  <UpdateAvailableToast />
 </template>

@@ -6,26 +6,26 @@
         <p>Approve or reject vendor wallet funding requests</p>
       </div>
       <div class="ops-head-actions">
-        <BaseButton @click="load">Refresh</BaseButton>
+        <BaseButton :loading="loading" :disabled="loading" @click="load">Refresh</BaseButton>
       </div>
     </header>
 
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total Requests</span>
-        <span class="kpi-value">{{ summary.total ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.total ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Pending Review</span>
-        <span class="kpi-value">{{ summary.pendingReview ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.pendingReview ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-info">
         <span class="kpi-label">Proof Uploaded</span>
-        <span class="kpi-value">{{ summary.proofUploaded ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.proofUploaded ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Approved</span>
-        <span class="kpi-value">{{ summary.approved ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.approved ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Total Approved</span>
@@ -33,7 +33,7 @@
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Rejected</span>
-        <span class="kpi-value">{{ summary.rejected ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.rejected ?? '-' }}</span>
       </div>
     </div>
 
@@ -47,18 +47,18 @@
         <option value="rejected">Rejected</option>
         <option value="expired">Expired</option>
       </BaseSelect>
-      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization ID…" aria-label="Search funding requests" />
+      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization ID..." aria-label="Search funding requests" />
       <ExportToolbar :rows="filteredRows" :columns="exportColumns" title="Funding Requests Report" filename="beverly-funding" :disabled="!filteredRows.length" />
     </div>
 
     <div v-if="error" class="ops-error" role="alert">{{ error }} <BaseButton size="sm" @click="load">Retry</BaseButton></div>
     <div v-if="actionSuccess" class="ops-success" role="status">{{ actionSuccess }}</div>
 
-    <div v-if="loading" class="ops-loading">
+    <div v-if="initialLoading" class="ops-loading" role="status" :aria-busy="initialLoading" aria-live="polite">
       <div v-for="n in 5" :key="n" class="skeleton-row-strip"></div>
     </div>
 
-    <div v-else-if="!filteredRows.length" class="ops-empty">No funding requests found.</div>
+    <div v-else-if="!filteredRows.length && !refreshing" class="ops-empty">No funding requests found.</div>
 
     <div v-else class="ops-table-wrap">
       <table class="ops-table" aria-label="Funding requests">
@@ -76,14 +76,17 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
+            <td colspan="9"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
+          </tr>
+          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ row.referenceCode || shortId(row.id) }}</code></td>
-            <td>{{ row.organizationId || '—' }}</td>
+            <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
-            <td>{{ row.verifiedAmountMinor ? formatMoney(row.verifiedAmountMinor) : '—' }}</td>
+            <td>{{ row.verifiedAmountMinor ? formatMoney(row.verifiedAmountMinor) : '-' }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
-            <td>{{ row.requestedBy || '—' }}</td>
-            <td>{{ row.expiresAt ? formatDate(row.expiresAt) : '—' }}</td>
+            <td>{{ row.requestedBy || '-' }}</td>
+            <td>{{ row.expiresAt ? formatDate(row.expiresAt) : '-' }}</td>
             <td>{{ formatDate(row.createdAt) }}</td>
             <td class="action-cell">
               <BaseButton v-if="canApprove(row)" size="sm" variant="primary" @click.stop="openApprove(row)">Approve</BaseButton>
@@ -98,18 +101,18 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Funding request detail">
       <div class="drawer-head">
         <strong>{{ selected.referenceCode || shortId(selected.id) }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <dl class="drawer-fields">
         <dt>Status</dt><dd><span :class="['status-pill', statusTone(selected.status)]">{{ statusLabel(selected.status) }}</span></dd>
         <dt>Organization</dt><dd>{{ selected.organizationId }}</dd>
         <dt>Wallet ID</dt><dd><code class="mono-id">{{ shortId(selected.walletId) }}</code></dd>
         <dt>Requested Amount</dt><dd>{{ formatMoney(selected.amountMinor) }}</dd>
-        <dt>Verified Amount</dt><dd>{{ selected.verifiedAmountMinor ? formatMoney(selected.verifiedAmountMinor) : '—' }}</dd>
+        <dt>Verified Amount</dt><dd>{{ selected.verifiedAmountMinor ? formatMoney(selected.verifiedAmountMinor) : '-' }}</dd>
         <dt>Requested By</dt><dd>{{ selected.requestedBy }}</dd>
-        <dt>Reviewed By</dt><dd>{{ selected.reviewedBy || '—' }}</dd>
-        <dt>Review Note</dt><dd>{{ selected.reviewerNote || '—' }}</dd>
-        <dt>Expires</dt><dd>{{ selected.expiresAt ? formatDate(selected.expiresAt) : '—' }}</dd>
+        <dt>Reviewed By</dt><dd>{{ selected.reviewedBy || '-' }}</dd>
+        <dt>Review Note</dt><dd>{{ selected.reviewerNote || '-' }}</dd>
+        <dt>Expires</dt><dd>{{ selected.expiresAt ? formatDate(selected.expiresAt) : '-' }}</dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
       </dl>
       <div v-if="canApprove(selected)" class="drawer-actions">
@@ -118,37 +121,37 @@
       </div>
     </aside>
 
-    <!-- Approve modal -->
-    <div v-if="approveModal.open" class="ops-modal-bg" @click.self="approveModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Approve funding">
-        <h2>Approve Funding</h2>
-        <p class="modal-sub">{{ approveModal.row?.referenceCode }} · Requested {{ formatMoney(approveModal.row?.amountMinor) }}</p>
-        <label>Verified Amount (NGN)<BaseInput v-model.number="approveModal.verifiedNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
-        <label>Review Note<textarea v-model="approveModal.note" class="ops-textarea" rows="3"></textarea></label>
-        <div class="modal-actions">
-          <BaseButton @click="approveModal.open = false">Cancel</BaseButton>
-          <BaseButton variant="primary" :disabled="submitting" @click="submitApprove">Approve</BaseButton>
-        </div>
-      </div>
-    </div>
+    <BaseConfirmDialog
+      :open="approveModal.open"
+      title="Approve funding?"
+      :description="`Credit ${formatMoney(approveModal.row?.amountMinor)} to this wallet?`"
+      confirm-label="Approve funding"
+      :loading="submitting"
+      @cancel="approveModal.open = false"
+      @confirm="submitApprove"
+    >
+      <label>Verified Amount (NGN)<BaseInput v-model.number="approveModal.verifiedNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
+      <label>Review Note<textarea v-model="approveModal.note" class="ops-textarea" rows="3"></textarea></label>
+    </BaseConfirmDialog>
 
-    <!-- Reject modal -->
-    <div v-if="rejectModal.open" class="ops-modal-bg" @click.self="rejectModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Reject funding">
-        <h2>Reject Funding</h2>
-        <p class="modal-sub">{{ rejectModal.row?.referenceCode }}</p>
-        <label>Rejection Reason<textarea v-model="rejectModal.note" class="ops-textarea" rows="3"></textarea></label>
-        <div class="modal-actions">
-          <BaseButton @click="rejectModal.open = false">Cancel</BaseButton>
-          <BaseButton variant="danger" :disabled="submitting" @click="submitReject">Reject</BaseButton>
-        </div>
-      </div>
-    </div>
+    <BaseConfirmDialog
+      :open="rejectModal.open"
+      title="Reject funding?"
+      :description="`Reject request ${rejectModal.row?.referenceCode || ''}?`"
+      confirm-label="Reject funding"
+      :loading="submitting"
+      :disabled="!rejectModal.note.trim()"
+      @cancel="rejectModal.open = false"
+      @confirm="submitReject"
+    >
+      <label>Rejection Reason<textarea v-model="rejectModal.note" class="ops-textarea" rows="3"></textarea></label>
+    </BaseConfirmDialog>
   </section>
 </template>
 
 <script>
 import BaseButton from "../base/BaseButton.vue";
+import BaseConfirmDialog from "../base/BaseConfirmDialog.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
@@ -161,7 +164,7 @@ function formatMoney(amountMinor = 0) {
 
 export default {
   name: "WalletFundingPage",
-  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar },
   data() {
     return {
       rows: [],
@@ -170,6 +173,8 @@ export default {
       search: "",
       selected: null,
       loading: false,
+      initialLoading: true,
+      refreshing: false,
       submitting: false,
       error: "",
       actionSuccess: "",
@@ -192,7 +197,7 @@ export default {
         { key: "referenceCode", label: "Ref Code" },
         { key: "organizationId", label: "Organization" },
         { key: "amountMinor", label: "Requested", value: r => formatMoney(r.amountMinor) },
-        { key: "verifiedAmountMinor", label: "Verified", value: r => r.verifiedAmountMinor ? formatMoney(r.verifiedAmountMinor) : "—" },
+        { key: "verifiedAmountMinor", label: "Verified", value: r => r.verifiedAmountMinor ? formatMoney(r.verifiedAmountMinor) : "-" },
         { key: "status", label: "Status" },
         { key: "requestedBy", label: "Requested By" },
         { key: "expiresAt", label: "Expires", value: r => r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : "" },
@@ -203,6 +208,11 @@ export default {
   mounted() { this.load(); },
   methods: {
     async load() {
+      if (this.initialLoading) {
+        // First paint: show full skeleton
+      } else {
+        this.refreshing = true;
+      }
       this.loading = true;
       this.error = "";
       this.actionSuccess = "";
@@ -227,6 +237,8 @@ export default {
         this.error = e?.message || "Failed to load funding requests";
       } finally {
         this.loading = false;
+        this.initialLoading = false;
+        this.refreshing = false;
       }
     },
     canApprove(row) {
@@ -277,7 +289,7 @@ export default {
     },
     formatMoney,
     shortId: (id) => String(id || "").slice(0, 8).toUpperCase(),
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"; },
     statusLabel(s) {
       const map = { initiated: "Initiated", proof_uploaded: "Proof Uploaded", under_review: "Under Review", approved: "Approved", rejected: "Rejected", expired: "Expired", cancelled: "Cancelled" };
       return map[s] || s;
@@ -320,8 +332,11 @@ export default {
 .ops-success { background: var(--bev-color-green-50); border: 1px solid var(--bev-color-green-100); color: var(--bev-color-green-700); border-radius: 8px; padding: 12px 16px; font-size: 13px; }
 .ops-empty { padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
 .ops-loading { display: flex; flex-direction: column; gap: 8px; }
-.skeleton-row-strip { height: 44px; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-page) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-row-strip { height: 44px; background: var(--bg-card); border-radius: 6px; position: relative; overflow: hidden; }
+.skeleton-row-strip::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, var(--bg-page) 50%, transparent 100%); animation: skeleton-sweep 1.5s ease-in-out infinite; }
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.ops-refresh-row td { padding: 8px 16px; color: var(--text-muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.ops-refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: bev-button-spin 0.7s linear infinite; flex-shrink: 0; }
 
 .ops-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
 .ops-table { width: 100%; border-collapse: collapse; font-size: 13px; }

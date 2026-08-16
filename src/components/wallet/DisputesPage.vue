@@ -14,19 +14,19 @@
     <div class="kpi-strip">
       <div class="kpi-cell">
         <span class="kpi-label">Total</span>
-        <span class="kpi-value">{{ summary.total ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.total ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-warn">
         <span class="kpi-label">Open</span>
-        <span class="kpi-value">{{ summary.open ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.open ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-info">
         <span class="kpi-label">Under Review</span>
-        <span class="kpi-value">{{ summary.underReview ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.underReview ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-danger">
         <span class="kpi-label">Escalated</span>
-        <span class="kpi-value">{{ summary.escalated ?? '—' }}</span>
+        <span class="kpi-value">{{ summary.escalated ?? '-' }}</span>
       </div>
       <div class="kpi-cell tone-good">
         <span class="kpi-label">Resolved</span>
@@ -40,21 +40,21 @@
         <option value="open">Open</option>
         <option value="under_review">Under Review</option>
         <option value="escalated">Escalated</option>
-        <option value="resolved_approved">Resolved — Approved</option>
-        <option value="resolved_rejected">Resolved — Rejected</option>
+        <option value="resolved_approved">Resolved - Approved</option>
+        <option value="resolved_rejected">Resolved - Rejected</option>
         <option value="withdrawn">Withdrawn</option>
       </BaseSelect>
-      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization or ID…" aria-label="Search disputes" />
+      <BaseInput v-model="search" class="ops-search" type="search" placeholder="Search organization or ID..." aria-label="Search disputes" />
       <ExportToolbar :rows="filteredRows" :columns="exportColumns" title="Disputes Report" filename="beverly-disputes" :disabled="!filteredRows.length" />
     </div>
 
     <div v-if="error" class="ops-error" role="alert">{{ error }} <BaseButton size="sm" @click="load">Retry</BaseButton></div>
 
-    <div v-if="loading" class="ops-loading" aria-live="polite">
+    <div v-if="initialLoading" class="ops-loading" role="status" :aria-busy="initialLoading" aria-live="polite">
       <div v-for="n in 5" :key="n" class="skeleton-row-strip"></div>
     </div>
 
-    <div v-else-if="!filteredRows.length" class="ops-empty">No disputes found.</div>
+    <div v-else-if="!filteredRows.length && !refreshing" class="ops-empty">No disputes found.</div>
 
     <div v-else class="ops-table-wrap">
       <table class="ops-table" aria-label="Disputes table">
@@ -70,10 +70,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" @click="selected = row">
+          <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
+            <td colspan="7"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
+          </tr>
+          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td>{{ disputeTypeLabel(row.disputeType) }}</td>
-            <td>{{ row.organizationId || '—' }}</td>
+            <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatDate(row.createdAt) }}</td>
@@ -92,28 +95,28 @@
     <aside v-if="selected" class="ops-drawer" aria-label="Dispute detail">
       <div class="drawer-head">
         <strong>Dispute {{ shortId(selected.id) }}</strong>
-        <BaseButton size="sm" variant="ghost" @click="selected = null">✕</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="selected = null">x</BaseButton>
       </div>
       <dl class="drawer-fields">
         <dt>Type</dt><dd>{{ disputeTypeLabel(selected.disputeType) }}</dd>
         <dt>Status</dt><dd><span :class="['status-pill', statusTone(selected.status)]">{{ statusLabel(selected.status) }}</span></dd>
         <dt>Organization</dt><dd>{{ selected.organizationId }}</dd>
-        <dt>Purchase Order</dt><dd>{{ selected.purchaseOrderId || '—' }}</dd>
+        <dt>Purchase Order</dt><dd>{{ selected.purchaseOrderId || '-' }}</dd>
         <dt>Amount</dt><dd>{{ formatMoney(selected.amountMinor) }}</dd>
-        <dt>Description</dt><dd>{{ selected.description || '—' }}</dd>
-        <dt>Resolution</dt><dd>{{ selected.resolutionNote || '—' }}</dd>
+        <dt>Description</dt><dd>{{ selected.description || '-' }}</dd>
+        <dt>Resolution</dt><dd>{{ selected.resolutionNote || '-' }}</dd>
         <dt>Opened by</dt><dd>{{ selected.actorId }}</dd>
         <dt>Created</dt><dd>{{ formatDate(selected.createdAt) }}</dd>
       </dl>
       <div class="drawer-note-area">
-        <textarea v-model="noteText" class="ops-textarea" placeholder="Add a note…" rows="3"></textarea>
+        <textarea v-model="noteText" class="ops-textarea" placeholder="Add a note..." rows="3"></textarea>
         <BaseButton size="sm" :disabled="!noteText.trim()" @click="submitNote">Add Note</BaseButton>
       </div>
     </aside>
 
     <!-- Create modal -->
     <div v-if="createOpen" class="ops-modal-bg" @click.self="createOpen = false">
-      <div class="ops-modal" role="dialog" aria-label="Open dispute">
+      <div class="ops-modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="Open dispute">
         <h2>Open Dispute</h2>
         <label>Organization ID<BaseInput v-model="createForm.organizationId" class="ops-input" /></label>
         <label>Purchase Order ID<BaseInput v-model="createForm.purchaseOrderId" class="ops-input" /></label>
@@ -130,7 +133,7 @@
         <label>Amount (NGN)<BaseInput v-model.number="createForm.amountNgn" class="ops-input" type="number" min="0" step="0.01" /></label>
         <label>Description<textarea v-model="createForm.description" class="ops-textarea" rows="3"></textarea></label>
         <div class="modal-actions">
-          <BaseButton @click="createOpen = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="createOpen = false">Cancel</BaseButton>
           <BaseButton variant="primary" :disabled="submitting" @click="submitCreate">Open</BaseButton>
         </div>
       </div>
@@ -138,12 +141,12 @@
 
     <!-- Resolve modal -->
     <div v-if="resolveModal.open" class="ops-modal-bg" @click.self="resolveModal.open = false">
-      <div class="ops-modal" role="dialog" aria-label="Resolve dispute">
+      <div class="ops-modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="Resolve dispute">
         <h2>{{ resolveModal.nextStatus === 'resolved_approved' ? 'Approve' : 'Reject' }} Dispute</h2>
         <p>Dispute {{ shortId(resolveModal.row?.id) }}</p>
         <label>Resolution Note<textarea v-model="resolveModal.note" class="ops-textarea" rows="3"></textarea></label>
         <div class="modal-actions">
-          <BaseButton @click="resolveModal.open = false">Cancel</BaseButton>
+          <BaseButton variant="danger" @click="resolveModal.open = false">Cancel</BaseButton>
           <BaseButton :variant="resolveModal.nextStatus === 'resolved_approved' ? 'primary' : 'danger'" :disabled="submitting" @click="submitResolve">Confirm</BaseButton>
         </div>
       </div>
@@ -170,6 +173,8 @@ export default {
       selected: null,
       noteText: "",
       loading: false,
+      initialLoading: true,
+      refreshing: false,
       error: "",
       submitting: false,
       createOpen: false,
@@ -201,6 +206,11 @@ export default {
   mounted() { this.load(); },
   methods: {
     async load() {
+      if (this.initialLoading) {
+        // First paint: show full skeleton
+      } else {
+        this.refreshing = true;
+      }
       this.loading = true;
       this.error = "";
       try {
@@ -214,6 +224,8 @@ export default {
         this.error = e?.message || "Failed to load disputes";
       } finally {
         this.loading = false;
+        this.initialLoading = false;
+        this.refreshing = false;
       }
     },
     async setStatus(row, status) {
@@ -282,13 +294,13 @@ export default {
     },
     formatMoney,
     shortId(id) { return String(id || "").slice(0, 8).toUpperCase(); },
-    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+    formatDate(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "-"; },
     disputeTypeLabel(t) {
       const map = { vend_failure: "Vend Failure", token_not_received: "Token Missing", overcharge: "Overcharge", underdelivery: "Underdelivery", double_charge: "Double Charge", other: "Other" };
       return map[t] || t;
     },
     statusLabel(s) {
-      const map = { open: "Open", under_review: "Under Review", resolved_approved: "Resolved ✓", resolved_rejected: "Resolved ✗", escalated: "Escalated", withdrawn: "Withdrawn" };
+      const map = { open: "Open", under_review: "Under Review", resolved_approved: "Resolved OK", resolved_rejected: "Resolved No", escalated: "Escalated", withdrawn: "Withdrawn" };
       return map[s] || s;
     },
     statusTone(s) {
@@ -327,8 +339,11 @@ export default {
 .ops-error { background: var(--bev-color-red-50, #fef2f2); border: 1px solid var(--bev-color-red-100, #fee2e2); color: var(--bev-color-red-600, #dc2626); border-radius: var(--bev-radius-md, 8px); padding: 12px 16px; display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .ops-empty { padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
 .ops-loading { display: flex; flex-direction: column; gap: 8px; }
-.skeleton-row-strip { height: 44px; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-page) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--bev-radius-sm, 6px); }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-row-strip { height: 44px; background: var(--bg-card); border-radius: var(--bev-radius-sm, 6px); position: relative; overflow: hidden; }
+.skeleton-row-strip::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, var(--bg-page) 50%, transparent 100%); animation: skeleton-sweep 1.5s ease-in-out infinite; }
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.ops-refresh-row td { padding: 8px 16px; color: var(--text-muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.ops-refresh-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: bev-button-spin 0.7s linear infinite; flex-shrink: 0; }
 
 .ops-table-wrap { overflow-x: auto; border-radius: var(--bev-radius-lg, 12px); border: 1px solid var(--border-color); }
 .ops-table { width: 100%; border-collapse: collapse; font-size: 13px; }

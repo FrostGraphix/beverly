@@ -7,6 +7,7 @@ import { onMounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
+import { exportCsv, type Column } from '../lib/export';
 
 interface Funding {
     id: string;
@@ -53,6 +54,20 @@ function channelBadge(c: string) {
     return ({ paystack: 'info', bank_transfer: 'neutral', manual: 'warn' } as Record<string, string>)[c] ?? 'neutral';
 }
 
+const CSV_COLUMNS: Column<Funding>[] = [
+    { key: 'created_at', header: 'Date', value: (row) => row.created_at },
+    { key: 'channel', header: 'Channel', value: (row) => row.channel },
+    { key: 'reference', header: 'Reference', value: (row) => row.funding_reference ?? '' },
+    { key: 'amount', header: 'Amount (NGN)', value: (row) => (row.amount_minor / 100).toFixed(2) },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+    { key: 'approved_at', header: 'Approved At', value: (row) => row.approved_at ?? '' },
+    { key: 'rejection_reason', header: 'Rejection Reason', value: (row) => row.rejection_reason ?? '' },
+];
+
+function exportFunding() {
+    exportCsv('beverly-vendor-funding-history', filtered.value, CSV_COLUMNS);
+}
+
 onMounted(load);
 </script>
 
@@ -64,10 +79,13 @@ onMounted(load);
       <p class="bw-muted" style="font-size: var(--t-xs); margin: var(--s-1) 0 0">{{ items.length }} requests all-time</p>
     </div>
 
-    <div class="bw-segmented" style="margin-bottom: var(--s-3)">
-      <button v-for="f in (['all','approved','pending','rejected'] as const)" :key="f"
-              :class="['bw-seg', filter === f ? 'active' : '']"
-              @click="filter = f">{{ f }}</button>
+    <div class="funding-toolbar">
+      <div class="bw-segmented funding-filters">
+        <button v-for="f in (['all','approved','pending','rejected'] as const)" :key="f"
+                :class="['bw-seg', filter === f ? 'active' : '']"
+                @click="filter = f">{{ f }}</button>
+      </div>
+      <button class="bw-btn sm" :disabled="!filtered.length" @click="exportFunding">Export CSV</button>
     </div>
 
     <div class="bw-card flush">
@@ -144,6 +162,16 @@ onMounted(load);
   border-color: oklch(70% 0.19 145 / 0.22);
   margin-bottom: var(--s-3);
 }
+.funding-toolbar { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-3); }
+.funding-filters { flex: 1 1 auto; min-width: 0; }
+.funding-filters .bw-seg { flex: 1 1 0; min-width: 0; letter-spacing: 0; }
+.funding-toolbar .bw-btn { flex: 0 0 auto; white-space: nowrap; }
 .proof-link { color: var(--brand); font-family: var(--font-mono); font-size: var(--t-xs); text-decoration: underline; }
 .reject-reason { font-size: 10px; color: var(--danger); margin-top: 2px; max-width: 220px; }
+
+@media (max-width: 480px) {
+  .funding-toolbar { align-items: stretch; }
+  .funding-filters .bw-seg { padding-inline: 5px; font-size: var(--t-xs); }
+  .funding-toolbar .bw-btn { padding-inline: var(--s-3); }
+}
 </style>

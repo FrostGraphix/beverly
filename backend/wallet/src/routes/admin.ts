@@ -7,39 +7,54 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { env } from '../config/env.js';
+import { assertClientIdempotencyKey } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
-import {
-    createVendorOrganization, setVendorStatus,
-} from '../services/vendor-onboarding.js';
-import {
-    approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls,
-} from '../services/funding.js';
+import { createVendorOrganization, setVendorStatus } from '../services/vendor-onboarding.js';
+import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls } from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
-import { listStations, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
+import { listStationDirectory, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
 import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
 import {
     listFaqCategories, listFaqs, upsertFaqCategory, deleteFaqCategory, upsertFaq, deleteFaq,
     listTickets, getTicket, addTicketMessage, updateTicket, ticketStats,
     listChatSessions, getChatSession, getChatMessages, sendChatMessage, endChatSession, assignChatSession,
 } from '../services/support.js';
-import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund } from '../services/refunds.js';
+import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, getRefundSummary } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
+import { notifyStaffInvitation, notifyRoleAssignment, notifyStationAssignment, notifyAdminAnnouncement } from '../services/admin-notifications.js';
+import { approveVatPolicy, listVatPolicies, submitVatPolicy } from '../services/vat-policy.js';
 import { listDeletionRequests, reviewDeletionRequest } from '../services/data-privacy.js';
-import {
-    PERMISSION_CATALOG, DEFAULT_ROLE_PERMISSIONS,
-    ensureAccessDefaults, permissionsForRole,
-} from '../services/rbac.js';
-
+import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
+import { runMalwareScan } from '../services/file-scan.js';
+import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
+import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
+import { revokePortalSession } from '../services/portal-session.js';
+import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
+import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
+import adminVendorTransferRoutes from './admin-vendor-transfers.js';
+import adminDevRoutes from './admin-dev.js';
+import adminReportsRoutes from './admin-reports.js';
+import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
+import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
+import { isCorporateStaffEmail } from '../services/email-validation.js';
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 function csvEscape(v: unknown): string {
     if (v === null || v === undefined) return '';
     const s = typeof v === 'string' ? v : JSON.stringify(v);
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
+}
+function toCsv<T extends object>(rows: T[], columns: string[]): string {
+    return [
+        columns.map(csvEscape).join(','),
+        ...rows.map((row) => columns.map((column) => csvEscape((row as Record<string, unknown>)[column])).join(',')),
+    ].join('\n');
 }
 
 function isUuid(value: string): boolean {
@@ -50,28 +65,251 @@ function cleanSearchTerm(value: unknown): string {
     return String(value ?? '').trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ').slice(0, 80);
 }
 
-const OPEN_ADMIN_ROUTES = new Set(['GET /me']);
+function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string | null {
+    try {
+        return assertClientIdempotencyKey(req.headers['idempotency-key']);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'A valid Idempotency-Key header is required.';
+        reply.code(400).send({ error: 'invalid_idempotency_key', message });
+        return null;
+    }
+}
+
+type AnnouncementRecipientType = 'customer' | 'vendor';
+
+interface AnnouncementRecipient {
+    key: string;
+    type: AnnouncementRecipientType;
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    status: string | null;
+}
+
+interface WalletOwnerRow {
+    owner_id: string | null;
+}
+
+function recipientKey(type: AnnouncementRecipientType, id: string): string {
+    return `${type}:${id}`;
+}
+
+function normalizeAnnouncementRecipient(row: any, type: AnnouncementRecipientType): AnnouncementRecipient {
+    if (type === 'customer') {
+        const name = row.full_name || row.email || row.phone || 'Unnamed customer';
+        return {
+            key: recipientKey('customer', row.id),
+            type: 'customer',
+            id: row.id,
+            name,
+            email: row.email ?? null,
+            phone: row.phone ?? null,
+            status: row.status ?? null,
+        };
+    }
+    const name = row.trading_name || row.legal_name || row.contact_email || 'Unnamed vendor';
+    return {
+        key: recipientKey('vendor', row.id),
+        type: 'vendor',
+        id: row.id,
+        name,
+        email: row.contact_email ?? null,
+        phone: row.contact_phone ?? null,
+        status: row.status ?? null,
+    };
+}
+
+async function listWalletCustomerIds(): Promise<string[]> {
+    const { data, error } = await adminClient
+        .from('wallets')
+        .select('owner_id')
+        .eq('owner_type', 'customer');
+    if (error) throw error;
+    return Array.from(new Set(((data ?? []) as WalletOwnerRow[]).map((wallet) => wallet.owner_id).filter((id): id is string => Boolean(id))));
+}
+
+async function listWalletVendorIds(): Promise<string[]> {
+    const { data, error } = await adminClient
+        .from('wallets')
+        .select('owner_id')
+        .eq('owner_type', 'vendor');
+    if (error) throw error;
+    return Array.from(new Set(((data ?? []) as WalletOwnerRow[]).map((wallet) => wallet.owner_id).filter((id): id is string => Boolean(id))));
+}
+
+async function listAnnouncementRecipients(opts: {
+    audiences: AnnouncementRecipientType[];
+    search?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<AnnouncementRecipient[]> {
+    const limit = Math.min(Math.max(opts.limit ?? 100, 1), 1_000);
+    const offset = Math.max(opts.offset ?? 0, 0);
+    const term = cleanSearchTerm(opts.search);
+    const recipients: AnnouncementRecipient[] = [];
+
+    if (opts.audiences.includes('customer')) {
+        const walletCustomerIds = await listWalletCustomerIds();
+        if (walletCustomerIds.length) {
+            let query = adminClient
+                .from('customers')
+                .select('id, full_name, email, phone, status')
+                .in('id', walletCustomerIds)
+                .neq('status', 'deleted')
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'customer')));
+        }
+    }
+
+    if (opts.audiences.includes('vendor')) {
+        const walletVendorIds = await listWalletVendorIds();
+        if (walletVendorIds.length) {
+            let query = adminClient
+                .from('vendor_organizations')
+                .select('id, legal_name, trading_name, contact_email, contact_phone, status')
+                .in('id', walletVendorIds)
+                .neq('status', 'deleted')
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
+            if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            recipients.push(...(data ?? []).map((row: any) => normalizeAnnouncementRecipient(row, 'vendor')));
+        }
+    }
+
+    return recipients;
+}
+
+async function countAnnouncementRecipients(opts: { audiences: AnnouncementRecipientType[]; search?: string }) {
+    const term = cleanSearchTerm(opts.search);
+    let customers = 0;
+    let vendors = 0;
+    if (opts.audiences.includes('customer')) {
+        const walletCustomerIds = await listWalletCustomerIds();
+        if (walletCustomerIds.length) {
+            let query = adminClient.from('customers').select('id', { count: 'exact', head: true }).in('id', walletCustomerIds).neq('status', 'deleted');
+            if (term) query = query.or(`full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
+            const { count, error } = await query;
+            if (error) throw error;
+            customers = count ?? 0;
+        }
+    }
+    if (opts.audiences.includes('vendor')) {
+        const walletVendorIds = await listWalletVendorIds();
+        if (walletVendorIds.length) {
+            let query = adminClient.from('vendor_organizations').select('id', { count: 'exact', head: true }).in('id', walletVendorIds).neq('status', 'deleted');
+            if (term) query = query.or(`legal_name.ilike.%${term}%,trading_name.ilike.%${term}%,contact_email.ilike.%${term}%,contact_phone.ilike.%${term}%`);
+            const { count, error } = await query;
+            if (error) throw error;
+            vendors = count ?? 0;
+        }
+    }
+    return { customers, vendors, total: customers + vendors };
+}
+
+async function listAllAnnouncementRecipients(audiences: AnnouncementRecipientType[]): Promise<AnnouncementRecipient[]> {
+    const pageSize = 1_000;
+    const byKey = new Map<string, AnnouncementRecipient>();
+    for (const audience of audiences) {
+        for (let offset = 0; ; offset += pageSize) {
+            const rows = await listAnnouncementRecipients({ audiences: [audience], limit: pageSize, offset });
+            for (const row of rows) byKey.set(row.key, row);
+            if (rows.length < pageSize) break;
+        }
+    }
+    return Array.from(byKey.values());
+}
+
+async function insertAnnouncementNotifications(rows: any[]) {
+    const inserted: any[] = [];
+    const chunkSize = 500;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        let { data, error } = await adminClient
+            .from('notifications')
+            .insert(chunk)
+            .select('id, recipient_type, recipient_id');
+        const errorText = [error?.message, error?.details].filter(Boolean).join(' ');
+        if (error && /notifications/i.test(errorText) && /column "?message"?/i.test(errorText) && /not-null|null value/i.test(errorText)) {
+            ({ data, error } = await adminClient
+                .from('notifications')
+                .insert(chunk.map((row) => ({ ...row, message: row.body })))
+                .select('id, recipient_type, recipient_id'));
+        }
+        if (error) throw error;
+        inserted.push(...(data ?? []));
+    }
+    return inserted;
+}
+
+async function insertAnnouncementDeliveries(rows: any[]) {
+    const chunkSize = 500;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+        const { error } = await adminClient
+            .from('admin_announcement_deliveries')
+            .insert(rows.slice(i, i + chunkSize));
+        if (error) throw error;
+    }
+}
+
+
+const OPEN_ADMIN_ROUTES = new Set([
+    'GET /me',
+    'PATCH /me',
+    'POST /logout',
+    'POST /profile-picture/upload-url',
+    'POST /profile-picture/scan',
+    'POST /profile-picture/activate',
+    'DELETE /profile-picture',
+    'GET /notifications',
+    'POST /notifications/read-all',
+    'PATCH /notifications/:id/read',
+    'GET /push/config',
+    'POST /push/subscription',
+    'DELETE /push/subscription',
+    'POST /push/test',
+]);
 
 const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /access': 'wallet.access.manage',
+    'POST /access/roles': 'wallet.access.manage',
+    'PATCH /access/roles/:roleKey': 'wallet.access.manage',
+    'DELETE /access/roles/:roleKey': 'wallet.access.manage',
     'PUT /access/roles/:roleKey/permissions': 'wallet.access.manage',
     'POST /access/users': 'wallet.access.manage',
     'PATCH /access/users/:userId/role': 'wallet.access.manage',
+    'PATCH /access/users/:userId/station': 'wallet.access.manage',
+    'PATCH /access/users/:userId/suspension': 'wallet.access.manage',
+    'POST /access/users/:userId/reset-password': 'wallet.access.manage',
+    'POST /access/users/:userId/revoke-sessions': 'wallet.access.manage',
     'GET /stations': 'wallet.vending.monitor',
     'POST /stations/refresh': 'wallet.vending.monitor',
     'GET /vendor-applications': 'wallet.vendors.review',
+    'DELETE /vendor-applications/:id': 'wallet.vendors.manage',
     'POST /vendors': 'wallet.vendors.manage',
     'GET /vendors': 'wallet.vendors.review',
+    'GET /vendors/summary': 'wallet.vendors.review',
+    'GET /vendors/analytics': 'wallet.vendors.review',
+    'DELETE /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
+    'PATCH /vendors/:id/station': 'wallet.vendors.manage',
     'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
     'GET /vendors/:id': 'wallet.vendors.review',
     'GET /vendors/:id/wallet': 'wallet.vendors.review',
     'GET /vendors/:id/transactions': 'wallet.vending.monitor',
     'GET /vendors/:id/funding': 'wallet.funding.view',
     'GET /vendors/:id/staff': 'wallet.vendors.review',
-    'GET /vendors/:id/analytics': 'wallet.vending.monitor',
     'GET /funding/pending': 'wallet.funding.view',
     'GET /funding/history': 'wallet.funding.view',
+    'GET /payments/requires-review': 'wallet.funding.view',
+    'GET /vending/payment-recovery': 'wallet.vending.monitor',
+    'POST /payments/:id/retry-fulfillment': 'wallet.funding.approve',
     'POST /funding/reconcile-approved': 'wallet.funding.approve',
     'POST /funding/:id/approve': 'wallet.funding.approve',
     'POST /funding/:id/reject': 'wallet.funding.approve',
@@ -81,24 +319,35 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /wallets/:id/ledger': 'wallet.funding.view',
     'PATCH /wallets/:id/status': 'wallet.funding.approve',
     'PATCH /wallets/:id/limits': 'wallet.funding.approve',
+    'GET /vendor-transfers/vendors': 'wallet.vendor_transfers.manage',
+    'POST /vendor-transfers/preview': 'wallet.vendor_transfers.manage',
+    'GET /vendor-transfers': 'wallet.vendor_transfers.manage',
+    'GET /vendor-transfers/:id': 'wallet.vendor_transfers.manage',
+    'POST /vendor-transfers': 'wallet.vendor_transfers.manage',
     'GET /customers': 'wallet.customers.view',
     'GET /customers/summary': 'wallet.customers.view',
     'GET /customers/:id': 'wallet.customers.view',
     'GET /customers/:id/wallet': 'wallet.customers.view',
     'GET /customers/:id/purchases': 'wallet.vending.monitor',
     'GET /customers/:id/funding': 'wallet.funding.view',
+    'DELETE /customers/:id': 'wallet.funding.approve',
     'PATCH /customers/:id/status': 'wallet.funding.approve',
     'PATCH /customers/:id/profile-picture': 'wallet.funding.approve',
     'GET /purchases': 'wallet.vending.monitor',
     'GET /vending': 'wallet.vending.monitor',
     'GET /purchases/summary': 'wallet.vending.monitor',
     'GET /purchases/:id': 'wallet.vending.monitor',
-    'POST /purchases/:id/resend-sms':    'wallet.vending.monitor',
-    'POST /purchases/:id/resend-remote': 'wallet.vending.monitor',
+    'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
+    'GET /meter-orders/customer-search': 'wallet.vendors.manage',
     'GET /meter-orders/:id': 'wallet.vendors.review',
+    'POST /meter-orders': 'wallet.vendors.manage',
     'PATCH /meter-orders/:id': 'wallet.vendors.manage',
+    'GET /customer-meters': 'wallet.meters.approve',
+    'POST /customer-meters/:id/approve': 'wallet.meters.approve',
+    'POST /customer-meters/:id/reject': 'wallet.meters.approve',
+    'POST /customer-meters/:id/unlink': 'wallet.meters.approve',
     'GET /fraud': 'wallet.fraud.review',
     'PATCH /fraud/:id/resolve': 'wallet.fraud.review',
     'GET /disputes': 'wallet.disputes.manage',
@@ -123,7 +372,12 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /support/chat/:id/messages': 'wallet.support.manage',
     'POST /support/chat/:id/assign': 'wallet.support.manage',
     'POST /support/chat/:id/end': 'wallet.support.manage',
+    'GET /announcements': 'wallet.announcements.manage',
+    'GET /announcements/recipients': 'wallet.announcements.manage',
+    'GET /announcements/recipients/export.csv': 'wallet.announcements.manage',
+    'POST /announcements': 'wallet.announcements.manage',
     'GET /refunds': 'wallet.refunds.manage',
+    'GET /refunds/summary': 'wallet.refunds.manage',
     'POST /refunds': 'wallet.refunds.manage',
     'POST /refunds/:id/approve': 'wallet.refunds.manage',
     'POST /refunds/:id/reject': 'wallet.refunds.manage',
@@ -140,46 +394,101 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',
+    'GET /vat-policies': 'wallet.vat.manage',
+    'POST /vat-policies': 'wallet.vat.manage',
+    'POST /vat-policies/:id/approve': 'wallet.vat.manage',
     'GET /privacy/deletions': 'wallet.privacy.review',
     'PATCH /privacy/deletions/:id': 'wallet.privacy.review',
     'GET /consumption': 'wallet.consumption.view',
     'GET /consumption/meters': 'wallet.consumption.view',
     'GET /abnormal-alarms': 'wallet.consumption.view',
     'POST /consumption/refresh': 'wallet.consumption.view',
+    'GET /dev/api-keys': 'dev.console',
+    'POST /dev/api-keys': 'dev.console',
+    'DELETE /dev/api-keys/:id': 'dev.console',
+    'POST /dev/api-keys/:id/rotate': 'dev.console',
+    'GET /dev/webhooks': 'dev.console',
+    'POST /dev/webhooks': 'dev.console',
+    'PATCH /dev/webhooks/:id': 'dev.console',
+    'DELETE /dev/webhooks/:id': 'dev.console',
+    'GET /dev/webhooks/deliveries': 'dev.console',
+    'POST /dev/webhooks/deliveries/:id/replay': 'dev.console',
+    'GET /dev/api-log': 'dev.console',
+    'GET /dev/sandbox/status': 'dev.console',
+    'GET /dev/sandbox/activity': 'dev.console',
+    'POST /dev/sandbox/mode': 'dev.console',
+    'POST /dev/sandbox/seed-wallet': 'dev.console',
+    'POST /dev/sandbox/mock-vend': 'dev.console',
+    'GET /dev/health': 'dev.console',
+    'GET /dev/health/incidents': 'dev.console',
+    'GET /dev/queues': 'dev.console',
+    'GET /dev/queues/jobs': 'dev.console',
+    'POST /dev/queues/jobs/:id/retry': 'dev.console',
+    'DELETE /dev/queues/jobs/:id': 'dev.console',
+    'POST /dev/queues/retry-all-failed': 'dev.console',
+    'GET /dev/errors': 'dev.console',
+    'POST /dev/errors/:fingerprint/resolve': 'dev.console',
+    'GET /dev/slow-queries': 'dev.console',
+    'POST /dev/toolkit/simulate-vend': 'dev.console',
+    'POST /dev/toolkit/eih-inspect': 'dev.console',
+    'GET /dev/toolkit/ledger/:id': 'dev.console',
+    'GET /dev/migrations': 'dev.console',
+    'POST /dev/migrations/dry-run': 'dev.console',
+    'GET /dev/sys-config': 'dev.console',
+    'PUT /dev/sys-config/:key': 'dev.console',
+    'GET /dev/notif-templates': 'dev.console',
+    'PUT /dev/notif-templates/:id': 'dev.console',
+    'POST /dev/notif-templates/:id/test-send': 'dev.console',
+    'GET /dev/schema': 'dev.console',
+    'GET /dev/role-matrix': 'dev.console',
+    'GET /dev/deploy-log': 'dev.console',
 };
-
 function adminRouteKey(req: FastifyRequest): string {
     const routeUrl = (req.routeOptions?.url ?? req.url.split('?')[0] ?? '').replace(/^\/api\/v1\/admin/, '') || '/';
     return `${req.method.toUpperCase()} ${routeUrl}`;
 }
 
+async function permissionsForRole(role: string): Promise<Set<string>> {
+    await ensureAccessDefaults();
+    const { data } = await adminClient.from('permissions').select('route_hash').eq('role_key', role);
+    return new Set((data ?? []).map((p: any) => p.route_hash));
+}
+
 async function requireAdminPermission(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     const key = adminRouteKey(req);
     if (OPEN_ADMIN_ROUTES.has(key)) return true;
-    const permission = ADMIN_ROUTE_PERMISSIONS[key];
-    if (!permission) {
-        reply.code(403).send({
-            error: 'permission_not_mapped',
-            message: `No access policy is mapped for ${key}.`,
-        });
+    if (!req.actor) {
+        if (!reply.sent) reply.code(401).send({ error: 'unauthorized', message: 'Bearer token required.' });
         return false;
     }
-    const grants = await permissionsForRole(req.actor!.role);
+    const permission = ADMIN_ROUTE_PERMISSIONS[key];
+    if (!permission) {
+        if (!reply.sent) {
+            reply.code(403).send({
+                error: 'permission_not_mapped',
+                message: `No access policy is mapped for ${key}.`,
+            });
+        }
+        return false;
+    }
+    const grants = await permissionsForRole(req.actor.role);
     if (!grants.has(permission)) {
         await logAction({
-            actorUserId: req.actor!.userId,
+            actorUserId: req.actor.userId,
             actorType: 'staff',
-            actorRole: req.actor!.role,
+            actorRole: req.actor.role,
             action: 'access.permission_denied',
             targetType: 'admin_route',
             targetId: key,
             metadata: { permission },
         }).catch(() => undefined);
-        reply.code(403).send({
-            error: 'permission_denied',
-            message: `Missing permission: ${permission}.`,
-            details: { permission },
-        });
+        if (!reply.sent) {
+            reply.code(403).send({
+                error: 'permission_denied',
+                message: `Missing permission: ${permission}.`,
+                details: { permission },
+            });
+        }
         return false;
     }
     return true;
@@ -196,6 +505,103 @@ function requireAccessManager(req: any, reply: any): boolean {
     return true;
 }
 
+function staffStations(req: FastifyRequest): string[] | null {
+    if (req.actor?.role === 'super-admin') return null;
+    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .filter(Boolean))];
+}
+
+function scopeStations(query: any, stationIds: string[] | null, column = 'station_id') {
+    return stationIds ? query.in(column, stationIds) : query;
+}
+
+/**
+ * staffStations() returns `[]` (not null) for a non-super-admin with no
+ * station assigned. `[]` is truthy, so callers that just check
+ * `if (assignedStations)` silently scope every list query to zero rows
+ * instead of explaining why. This makes that case an explicit 403,
+ * matching the id-scoped behavior in enforceResourceStation().
+ */
+function requireStationScope(reply: FastifyReply, assignedStations: string[] | null): boolean {
+    if (assignedStations && !assignedStations.length) {
+        reply.code(403).send({ error: 'station_required', message: 'Your staff account needs a station assignment.' });
+        return false;
+    }
+    return true;
+}
+
+function missingColumn(error: { message?: string } | null, column: string) {
+    const message = String(error?.message ?? '').toLowerCase();
+    return message.includes(column.toLowerCase())
+        && (message.includes('schema cache') || message.includes('does not exist'));
+}
+
+async function stationOwnerIds(stationIds: string[]): Promise<{ vendors: Set<string>; customers: Set<string> }> {
+    const [{ data: vendors }, { data: meters }] = await Promise.all([
+        adminClient.from('vendor_organizations').select('id').overlaps('operating_stations', stationIds),
+        adminClient.from('customer_meters').select('customer_id').in('station_id', stationIds),
+    ]);
+    return {
+        vendors: new Set((vendors ?? []).map((row: any) => row.id)),
+        customers: new Set((meters ?? []).map((row: any) => row.customer_id)),
+    };
+}
+
+async function enforceResourceStation(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+    if (OPEN_ADMIN_ROUTES.has(adminRouteKey(req))) return true;
+    const stationIds = staffStations(req);
+    if (stationIds === null) return true;
+    if (!stationIds.length) {
+        reply.code(403).send({ error: 'station_required', message: 'Your staff account needs a station assignment.' });
+        return false;
+    }
+
+    const routeUrl = req.routeOptions?.url ?? '';
+    const id = (req.params as { id?: string })?.id;
+    if (!id) return true;
+
+    if (routeUrl.startsWith('/wallets/:id')) {
+        const [{ data: wallet }, owners] = await Promise.all([
+            adminClient.from('wallets').select('owner_type, owner_id').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        const allowed = wallet?.owner_type === 'vendor' ? owners.vendors.has(wallet.owner_id) : owners.customers.has(wallet?.owner_id);
+        if (allowed) return true;
+        reply.code(404).send({ error: 'not_found', message: 'Wallet not found for your assigned station.' });
+        return false;
+    }
+
+    if (routeUrl.startsWith('/funding/:id')) {
+        const [{ data: funding }, owners] = await Promise.all([
+            adminClient.from('funding_requests').select('vendor_organization_id').eq('id', id).maybeSingle(),
+            stationOwnerIds(stationIds),
+        ]);
+        if (funding && owners.vendors.has(funding.vendor_organization_id)) return true;
+        reply.code(404).send({ error: 'not_found', message: 'Funding request not found for your assigned station.' });
+        return false;
+    }
+
+    let query: any = null;
+    if (routeUrl.startsWith('/vendors/:id')) {
+        query = adminClient.from('vendor_organizations').select('id').eq('id', id).overlaps('operating_stations', stationIds);
+    } else if (routeUrl.startsWith('/customers/:id')) {
+        query = adminClient.from('customer_meters').select('id').eq('customer_id', id).in('station_id', stationIds);
+    } else if (routeUrl.startsWith('/purchases/:id')) {
+        query = adminClient.from('purchase_orders').select('id').eq('id', id).in('station_id', stationIds);
+    } else if (routeUrl.startsWith('/meter-orders/:id')) {
+        query = adminClient.from('meter_purchase_orders').select('id').eq('id', id).in('station_id', stationIds);
+    }
+    if (!query) return true;
+
+    const { data, error } = await query.limit(1).maybeSingle();
+    if (error || !data) {
+        reply.code(404).send({ error: 'not_found', message: 'Record not found for your assigned station.' });
+        return false;
+    }
+    return true;
+}
+
 function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): boolean {
     if (req.actor?.role !== 'super-admin') {
         reply.code(403).send({
@@ -207,42 +613,358 @@ function requireWalletStatusManager(req: FastifyRequest, reply: FastifyReply): b
     return true;
 }
 
+// Seed flag — runs once per server lifetime, not on every request.
+let _accessDefaultsSeeded = false;
+let _accessDefaultsPromise: Promise<void> | null = null;
+
+async function ensureAccessDefaults() {
+    if (_accessDefaultsSeeded) return;
+    // Deduplicate concurrent calls during startup (e.g. multiple requests arriving before the first finishes).
+    if (_accessDefaultsPromise) return _accessDefaultsPromise;
+    _accessDefaultsPromise = (async () => {
+        for (const [roleKey, label] of Object.entries(ROLE_LABELS)) {
+            await adminClient.from('roles').upsert({
+                name: ROLE_LEGACY_NAMES[roleKey] ?? roleKey,
+                role_key: roleKey,
+                role_name: label,
+                label,
+                description: roleKey === 'super-admin'
+                    ? 'Full wallet administration and access control.'
+                    : 'Wallet administration role managed by Beverly access policy.',
+            }, { onConflict: 'role_key' });
+        }
+        for (const [roleKey, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+            for (const permission of permissions) {
+                await adminClient.from('permissions').upsert({
+                    role_key: roleKey,
+                    route_hash: permission,
+                }, { onConflict: 'role_key,route_hash' });
+            }
+        }
+        _accessDefaultsSeeded = true;
+    })();
+    return _accessDefaultsPromise;
+}
+
+function shapeStaffProfile(actor: FastifyRequest['actor'], staff: any) {
+    return {
+        id: actor!.userId,
+        email: staff?.email ?? actor!.email,
+        full_name: staff?.user_name ?? null,
+        role: staff?.role_key ?? actor!.role,
+        station_id: staff?.station_id ?? actor!.stationId ?? null,
+        station_ids: staff?.station_ids ?? actor!.stationIds ?? [],
+        profile_picture_url: staff?.profile_picture_url ?? null,
+        updated_at: staff?.updated_at ?? null,
+    };
+}
+
 const route: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.requireStaff());
     fastify.addHook('preHandler', async (req, reply) => {
+        if (reply.sent) return undefined;
+        const pathname = req.routeOptions?.url ?? req.url.split('?')[0] ?? '';
+        if (pathname.startsWith('/dev/')) {
+            if (!env.DEV_CONSOLE_ENABLED) {
+                return reply.code(404).send({ error: 'not_found', message: 'Route not found.' });
+            }
+            if (!req.actor?.mfaVerified) {
+                return reply.code(403).send({ error: 'reauth_required', message: 'Reauthenticate with two-factor authentication before using developer tools.' });
+            }
+            if (env.NODE_ENV !== 'development') {
+                const token = req.headers['x-break-glass-token'];
+                if (!env.DEV_CONSOLE_BREAK_GLASS_TOKEN || token !== env.DEV_CONSOLE_BREAK_GLASS_TOKEN) {
+                    return reply.code(403).send({ error: 'break_glass_required', message: 'Break-glass authorization is required.' });
+                }
+            }
+            await logAction({
+                actorUserId: req.actor.userId,
+                actorType: 'staff',
+                actorRole: req.actor.role,
+                action: 'dev_console.accessed',
+                targetType: 'admin_route',
+                targetId: `${req.method.toUpperCase()} ${pathname}`,
+                metadata: { environment: env.NODE_ENV },
+            });
+        }
         // ensureAccessDefaults() is called inside requireAdminPermission → permissionsForRole
         // and is cached after the first run — no need to call it again here.
         if (!(await requireAdminPermission(req, reply))) return undefined;
+        if (reply.sent || !(await enforceResourceStation(req, reply))) return undefined;
         return undefined;
     });
 
     fastify.get('/me', async (req) => {
         const permissions = Array.from(await permissionsForRole(req.actor!.role));
-        const { data: staff } = await adminClient
+        let staffResult = await adminClient
             .from('users')
-            .select('id, auth_user_id, user_id, user_name, email, role_key, updated_at')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, profile_picture_url, updated_at')
             .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
             .maybeSingle();
+        if (missingColumn(staffResult.error, 'station_ids')) {
+            staffResult = await adminClient
+                .from('users')
+                .select('id, auth_user_id, user_id, user_name, email, role_key, station_id, profile_picture_url, updated_at')
+                .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+                .maybeSingle();
+        }
         return {
-            user: {
-                id: req.actor!.userId,
-                email: staff?.email ?? req.actor!.email,
-                full_name: staff?.user_name ?? null,
-                role: staff?.role_key ?? req.actor!.role,
-            },
+            user: shapeStaffProfile(req.actor, staffResult.data),
             permissions,
             catalog: PERMISSION_CATALOG,
         };
     });
 
+    fastify.get('/notifications', async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(100).default(20),
+            cursor: z.string().datetime().optional(),
+        }).parse(req.query ?? {});
+        let rowsQuery = adminClient
+            .from('notifications')
+            .select('id, type, title, body, metadata, read, created_at')
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .order('created_at', { ascending: false })
+            .limit(query.limit);
+        if (query.cursor) rowsQuery = rowsQuery.lt('created_at', query.cursor);
+        const [{ data, error }, { count, error: countError }] = await Promise.all([
+            rowsQuery,
+            adminClient
+                .from('notifications')
+                .select('id', { count: 'exact', head: true })
+                .eq('recipient_type', 'staff')
+                .eq('recipient_id', req.actor!.userId)
+                .eq('read', false),
+        ]);
+        if (error) throw error;
+        if (countError) throw countError;
+        const notifications = data ?? [];
+        return {
+            notifications,
+            nextCursor: notifications.length === query.limit ? notifications.at(-1)?.created_at ?? null : null,
+            unreadCount: count ?? 0,
+        };
+    });
+
+    fastify.post('/notifications/read-all', async (req) => {
+        const { error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .eq('read', false);
+        if (error) throw error;
+        return { ok: true };
+    });
+
+    fastify.patch('/notifications/:id/read', async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { data, error } = await adminClient
+            .from('notifications')
+            .update({ read: true })
+            .eq('id', id)
+            .eq('recipient_type', 'staff')
+            .eq('recipient_id', req.actor!.userId)
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return reply.code(404).send({ error: 'not_found', message: 'Notification not found.' });
+        return { ok: true };
+    });
+
+    fastify.get('/push/config', async () => pushConfig());
+
+    fastify.post('/push/subscription', async (req) => {
+        const body = z.object({
+            portal: z.enum(['admin', 'crm']),
+            endpoint: z.string().url().max(2048),
+            keys: z.object({
+                p256dh: z.string().min(20).max(512),
+                auth: z.string().min(8).max(256),
+            }),
+        }).parse(req.body ?? {});
+        await savePushSubscription({
+            actorType: 'staff',
+            actorId: req.actor!.userId,
+            portal: body.portal,
+            subscription: body,
+            userAgent: req.headers['user-agent'],
+        });
+        return { ok: true };
+    });
+
+    fastify.delete('/push/subscription', async (req) => {
+        const { endpoint } = z.object({ endpoint: z.string().url().max(2048) }).parse(req.query ?? {});
+        await removePushSubscription({ actorType: 'staff', actorId: req.actor!.userId, endpoint });
+        return { ok: true };
+    });
+
+    fastify.post('/push/test', async (req, reply) => {
+        const { portal } = z.object({ portal: z.enum(['admin', 'crm']) }).parse(req.body ?? {});
+        if (!pushConfig().available) {
+            return reply.code(503).send({ error: 'push_unavailable', message: 'Push notifications are not configured.' });
+        }
+        const now = new Date().toISOString();
+        await insertAnnouncementNotifications([{
+            customer_id: null,
+            recipient_type: 'staff',
+            recipient_id: req.actor!.userId,
+            type: 'push_test',
+            title: 'Beverly notifications enabled',
+            body: 'This device can receive operational updates.',
+            metadata: { path: '/notifications', portal },
+            read: false,
+            created_at: now,
+        }]);
+        const delivery = await sendWebPush('staff', req.actor!.userId, {
+            title: 'Beverly notifications enabled',
+            body: 'This device can receive operational updates.',
+            url: portal === 'admin' ? './notifications' : './',
+            tag: `beverly-${portal}-push-test`,
+        }, portal);
+        if (!delivery.sent) {
+            return reply.code(409).send({ error: 'push_subscription_missing', message: 'No active subscription exists for this device.' });
+        }
+        return { ok: true, delivery };
+    });
+
+    fastify.post('/logout', async (req) => {
+        await revokePortalSession(req.portalSessionKey).catch((err) => {
+            req.log.warn({ err }, 'failed to revoke portal session during logout');
+        });
+        return { ok: true };
+    });
+
+    fastify.patch('/me', async (req, reply) => {
+        if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'profile_picture_url')) {
+            return reply.code(400).send({ error: 'profile_picture_url_forbidden', message: 'Use the verified profile-picture upload flow.' });
+        }
+        const schema = z.object({
+            full_name: z.string().trim().min(1).max(120).optional(),
+        });
+        const body = schema.parse(req.body ?? {});
+        const updates: Record<string, unknown> = {};
+        if (body.full_name !== undefined) updates.user_name = body.full_name;
+        if (!Object.keys(updates).length) {
+            return reply.code(400).send({ error: 'no_fields', message: 'Nothing to update.' });
+        }
+
+        const { data: existing } = await adminClient
+            .from('users')
+            .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`)
+            .maybeSingle();
+
+        let data: any = null;
+        let error: any = null;
+        if (existing?.id) {
+            const result = await adminClient
+                .from('users')
+                .update(updates)
+                .eq('id', existing.id)
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .single();
+            data = result.data;
+            error = result.error;
+        } else {
+            const result = await adminClient
+                .from('users')
+                .insert({
+                    auth_user_id: req.actor!.userId,
+                    user_id: req.actor!.userId,
+                    user_name: body.full_name ?? null,
+                    email: req.actor!.email,
+                    role_key: req.actor!.role,
+                    profile_picture_url: null,
+                })
+                .select('id, auth_user_id, user_id, user_name, email, role_key, profile_picture_url, updated_at')
+                .single();
+            data = result.data;
+            error = result.error;
+        }
+        if (error) return reply.code(500).send({ error: 'update_failed', message: error.message });
+        return {
+            user: shapeStaffProfile(req.actor, data),
+            permissions: Array.from(await permissionsForRole(req.actor!.role)),
+        };
+    });
+
+    fastify.post('/profile-picture/upload-url', async (req, reply) => {
+        let sop;
+        try {
+            sop = assertProfilePictureSop(req.body ?? {});
+        } catch (error: any) {
+            return reply.code(400).send({ error: 'invalid_profile_picture', message: error?.message ?? 'Invalid upload payload.' });
+        }
+        const path = toProfilePicturePath('staff', req.actor!.userId, sop.file_name);
+        const { data, error } = await adminClient.storage.from(PROFILE_PICTURE_BUCKET).createSignedUploadUrl(path);
+        if (error) return reply.code(500).send({ error: 'upload_url_failed', message: error.message });
+        const { data: pub } = adminClient.storage.from(PROFILE_PICTURE_BUCKET).getPublicUrl(path);
+        return {
+            bucket: PROFILE_PICTURE_BUCKET,
+            path,
+            token: data?.token,
+            signed_url: data?.signedUrl,
+            public_url: pub?.publicUrl ?? null,
+            sop: { max_bytes: 2 * 1024 * 1024, allowed_types: ['image/jpeg', 'image/png', 'image/webp'] },
+        };
+    });
+
+    fastify.post('/profile-picture/scan', async (req, reply) => {
+        const schema = z.object({
+            file_name: z.string().min(1).max(160),
+            content_base64: z.string().min(8),
+        });
+        const body = schema.parse(req.body ?? {});
+        const scan = await runMalwareScan(Buffer.from(body.content_base64, 'base64'), body.file_name);
+        if (!scan.ok) return reply.code(422).send({ error: 'malware_scan_failed', details: scan.output ?? null });
+        return { ok: true, mode: scan.mode };
+    });
+
+    fastify.post('/profile-picture/activate', async (req, reply) => {
+        const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
+        try {
+            const profilePictureUrl = await activateProfilePicture('staff', req.actor!.userId, path);
+            await adminClient.from('users')
+                .update({ profile_picture_url: profilePictureUrl })
+                .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`);
+            return { profile_picture_url: profilePictureUrl };
+        } catch {
+            return reply.code(422).send({ error: 'profile_picture_activation_failed' });
+        }
+    });
+
+    fastify.delete('/profile-picture', async (req) => {
+        await adminClient
+            .from('users')
+            .update({ profile_picture_url: null })
+            .or(`auth_user_id.eq.${req.actor!.userId},user_id.eq.${req.actor!.userId}`);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'staff.profile_picture.deleted',
+            targetType: 'staff_user',
+            targetId: req.actor!.userId,
+        });
+        return { ok: true };
+    });
+
     fastify.get('/access', async () => {
         await ensureAccessDefaults();
-        const [{ data: roles }, { data: permissions }, { data: staffRows }, authUsers] = await Promise.all([
+        const [roleResult, permissionResult, initialStaffResult, authUsers] = await Promise.all([
             adminClient.from('roles').select('*').order('role_key', { ascending: true }),
             adminClient.from('permissions').select('*').order('role_key', { ascending: true }),
-            adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
+            adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, station_ids, created_at, updated_at').order('updated_at', { ascending: false }).limit(300),
             adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 }),
         ]);
+        const staffResult = missingColumn(initialStaffResult.error, 'station_ids')
+            ? await adminClient.from('users').select('id, auth_user_id, user_id, user_name, email, role_key, station_id, created_at, updated_at').order('updated_at', { ascending: false }).limit(300)
+            : initialStaffResult;
+        const roles = roleResult.data;
+        const permissions = permissionResult.data;
+        const staffRows = staffResult.data;
         const authById = new Map((authUsers.data?.users ?? []).map((user) => [user.id, user]));
         const staff = (staffRows ?? []).map((row: any) => {
             const authUser = authById.get(row.auth_user_id ?? row.user_id);
@@ -253,6 +975,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 user_name: row.user_name ?? authUser?.user_metadata?.full_name ?? authUser?.email ?? 'Staff user',
                 last_sign_in_at: authUser?.last_sign_in_at ?? null,
                 confirmed_at: authUser?.confirmed_at ?? null,
+                suspended: Boolean(authUser?.banned_until && new Date(authUser.banned_until).getTime() > Date.now()),
                 auth_role: authUser?.user_metadata?.role_key ?? authUser?.app_metadata?.role_key ?? authUser?.user_metadata?.role ?? null,
             };
         });
@@ -272,6 +995,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             permissions: z.array(z.string()).default([]),
         });
         const body = schema.parse(req.body);
+        const { data: role } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
+        if (!role) return reply.code(404).send({ error: 'role_not_found', message: 'Role was not found.' });
         const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
         const next = Array.from(new Set(body.permissions.filter((p) => valid.has(p))));
         if (roleKey === 'super-admin' && next.length !== PERMISSION_CATALOG.length) {
@@ -300,21 +1025,92 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true, roleKey, permissions: next };
     });
 
+    fastify.post('/access/roles', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const body = z.object({
+            name: z.string().trim().min(2).max(64),
+            description: z.string().trim().max(240).optional().default(''),
+            permissions: z.array(z.string()).max(PERMISSION_CATALOG.length).default([]),
+        }).parse(req.body);
+        const slug = body.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const roleKey = `custom-${slug}`;
+        if (slug.length < 2) {
+            return reply.code(400).send({ error: 'invalid_role_name', message: 'Choose a unique custom role name.' });
+        }
+        const { data: existing } = await adminClient.from('roles').select('role_key').eq('role_key', roleKey).maybeSingle();
+        if (existing) return reply.code(409).send({ error: 'role_exists', message: 'A role with this name already exists.' });
+        const valid = new Set(PERMISSION_CATALOG.map((p) => p.key));
+        const selectedPermissions = [...new Set(body.permissions.filter((p) => valid.has(p)))];
+        const { data: role, error: roleError } = await adminClient.from('roles').insert({
+            name: roleKey, role_key: roleKey, role_name: body.name, label: body.name, description: body.description || null,
+        }).select('role_key, role_name, label, description').single();
+        if (roleError || !role) return reply.code(400).send({ error: 'role_create_failed', message: roleError?.message ?? 'Could not create role.' });
+        if (selectedPermissions.length) {
+            const { error: permissionError } = await adminClient.from('permissions').insert(
+                selectedPermissions.map((route_hash) => ({ role_key: roleKey, route_hash })),
+            );
+            if (permissionError) {
+                await adminClient.from('roles').delete().eq('role_key', roleKey);
+                return reply.code(400).send({ error: 'role_permission_create_failed', message: permissionError.message });
+            }
+        }
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.created', targetType: 'role', targetId: roleKey, after: { name: body.name, permissions: selectedPermissions } });
+        return { ok: true, role, permissions: selectedPermissions };
+    });
+
+    fastify.patch('/access/roles/:roleKey', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const roleKey = (req.params as { roleKey: string }).roleKey;
+        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be renamed.' });
+        const body = z.object({ name: z.string().trim().min(2).max(64), description: z.string().trim().max(240).optional().default('') }).parse(req.body);
+        const { data: role, error } = await adminClient.from('roles').update({ role_name: body.name, label: body.name, description: body.description || null, updated_at: new Date().toISOString() })
+            .eq('role_key', roleKey).select('role_key, role_name, label, description').maybeSingle();
+        if (error || !role) return reply.code(404).send({ error: 'role_not_found', message: error?.message ?? 'Role was not found.' });
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.updated', targetType: 'role', targetId: roleKey, after: body });
+        return { ok: true, role };
+    });
+
+    fastify.delete('/access/roles/:roleKey', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const roleKey = (req.params as { roleKey: string }).roleKey;
+        if (SYSTEM_ROLE_KEYS.has(roleKey)) return reply.code(400).send({ error: 'system_role_locked', message: 'System roles cannot be deleted.' });
+        const { count, error: countError } = await adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role_key', roleKey);
+        if (countError) return reply.code(400).send({ error: 'role_usage_check_failed', message: countError.message });
+        if (count) return reply.code(409).send({ error: 'role_in_use', message: 'Reassign staff before deleting this role.' });
+        const { error } = await adminClient.from('roles').delete().eq('role_key', roleKey);
+        if (error) return reply.code(400).send({ error: 'role_delete_failed', message: error.message });
+        await logAction({ actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.role.deleted', targetType: 'role', targetId: roleKey });
+        return { ok: true, roleKey };
+    });
+
     fastify.post('/access/users', async (req, reply) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const schema = z.object({
             email: z.string().email(),
             fullName: z.string().min(2),
-            roleKey: z.enum(['super-admin', 'operations-manager', 'finance-checker', 'account']),
+            roleKey: z.string().trim().min(2).max(80),
+            stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100),
             temporaryPassword: z.string().min(12).optional(),
         });
         const body = schema.parse(req.body);
+        if (!isCorporateStaffEmail(body.email)) {
+            return reply.code(400).send({
+                error: 'invalid_staff_email_domain',
+                message: 'Staff accounts must use an approved corporate email domain (@acoblighting.com or @org.acoblighting.com).',
+            });
+        }
+        const stationIds = [...new Set(body.stationIds.map((value) => value.toUpperCase()))];
+        const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', body.roleKey).maybeSingle();
+        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const password = body.temporaryPassword ?? `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
         const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
             email: body.email.toLowerCase(),
             password,
             email_confirm: true,
-            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName },
+            user_metadata: { role_key: body.roleKey, role: body.roleKey, full_name: body.fullName, station_id: stationIds[0], station_ids: stationIds },
         });
         if (authErr || !authData.user) {
             return reply.code(400).send({ error: 'user_create_failed', message: authErr?.message ?? 'Could not create staff user.' });
@@ -325,6 +1121,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             user_name: body.fullName,
             email: body.email.toLowerCase(),
             role_key: body.roleKey,
+            station_id: stationIds[0],
+            station_ids: stationIds,
         }, { onConflict: 'user_id' });
         if (rowErr) {
             await adminClient.auth.admin.deleteUser(authData.user.id);
@@ -337,8 +1135,10 @@ const route: FastifyPluginAsync = async (fastify) => {
             action: 'access.user.create',
             targetType: 'staff_user',
             targetId: authData.user.id,
-            after: { email: body.email.toLowerCase(), roleKey: body.roleKey },
+            after: { email: body.email.toLowerCase(), roleKey: body.roleKey, stationIds },
         });
+        await notifyStaffInvitation({ email: body.email.toLowerCase(), fullName: body.fullName, temporaryPassword: password, roleLabel: (assignedRole as any).label ?? (assignedRole as any).role_name ?? body.roleKey });
+
         return { ok: true, userId: authData.user.id, temporaryPassword: password };
     });
 
@@ -346,9 +1146,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!requireAccessManager(req, reply)) return undefined;
         const userId = (req.params as { userId: string }).userId;
         const schema = z.object({
-            roleKey: z.enum(['super-admin', 'operations-manager', 'finance-checker', 'account']),
+            roleKey: z.string().trim().min(2).max(80),
         });
         const { roleKey } = schema.parse(req.body);
+        const { data: assignedRole } = await adminClient.from('roles').select('role_key, role_name, label').eq('role_key', roleKey).maybeSingle();
+        if (!assignedRole) return reply.code(400).send({ error: 'role_not_found', message: 'Choose an existing role.' });
         const { data: authUser } = await adminClient.auth.admin.getUserById(userId);
         const { error: authErr } = await adminClient.auth.admin.updateUserById(userId, {
             user_metadata: {
@@ -371,14 +1173,91 @@ const route: FastifyPluginAsync = async (fastify) => {
             targetId: userId,
             after: { roleKey },
         });
+
+        await notifyRoleAssignment(userId, (assignedRole as any).label ?? (assignedRole as any).role_name ?? roleKey);
+
         return { ok: true, userId, roleKey };
+    });
+
+    fastify.patch('/access/users/:userId/station', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { stationIds } = z.object({ stationIds: z.array(z.string().trim().min(1).max(120)).min(1).max(100) }).parse(req.body);
+        const normalized = [...new Set(stationIds.map((value) => value.toUpperCase()))];
+        const { data: before } = await adminClient.from('users').select('email, user_name, station_ids').or(`auth_user_id.eq.${userId},user_id.eq.${userId}`).maybeSingle();
+        const { error } = await adminClient.from('users')
+            .update({ station_id: normalized[0], station_ids: normalized, updated_at: new Date().toISOString() })
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`);
+        if (error) return reply.code(400).send({ error: 'station_update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'access.user.station_update',
+            targetType: 'staff_user',
+            targetId: userId,
+            after: { stationIds: normalized },
+        });
+
+        await notifyStationAssignment({ email: (before as any)?.email, name: (before as any)?.user_name, stationLabel: normalized.join(', '), previousStationLabel: ((before as any)?.station_ids as string[] | null)?.join(', ') || null });
+
+        return { ok: true, userId, stationIds: normalized };
+    });
+
+    fastify.patch('/access/users/:userId/suspension', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { suspended } = z.object({ suspended: z.boolean() }).parse(req.body);
+        if (userId === req.actor!.userId) return reply.code(400).send({ error: 'self_suspension_denied', message: 'You cannot suspend your own account.' });
+        const { error } = await adminClient.auth.admin.updateUserById(userId, {
+            ban_duration: suspended ? '876000h' : 'none',
+        });
+        if (error) return reply.code(400).send({ error: 'suspension_update_failed', message: error.message });
+        if (suspended) {
+            const { error: signOutError } = await adminClient.auth.admin.signOut(userId, 'global');
+            if (signOutError) return reply.code(400).send({ error: 'session_revocation_failed', message: signOutError.message });
+        }
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: suspended ? 'access.user.suspended' : 'access.user.reactivated',
+            targetType: 'staff_user', targetId: userId, after: { suspended },
+        });
+        return { ok: true, userId, suspended };
+    });
+
+    fastify.post('/access/users/:userId/reset-password', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const password = `Beverly-${crypto.randomUUID().slice(0, 8)}aA1!`;
+        const { error } = await adminClient.auth.admin.updateUserById(userId, { password });
+        if (error) return reply.code(400).send({ error: 'password_reset_failed', message: error.message });
+        await adminClient.auth.admin.signOut(userId, 'global');
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.user.password_reset', targetType: 'staff_user', targetId: userId,
+        });
+        return { ok: true, userId, temporaryPassword: password };
+    });
+
+    fastify.post('/access/users/:userId/revoke-sessions', async (req, reply) => {
+        if (!requireAccessManager(req, reply)) return undefined;
+        const userId = (req.params as { userId: string }).userId;
+        const { error } = await adminClient.auth.admin.signOut(userId, 'global');
+        if (error) return reply.code(400).send({ error: 'session_revocation_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId, actorType: 'staff', actorRole: req.actor!.role,
+            action: 'access.user.sessions_revoked', targetType: 'staff_user', targetId: userId,
+        });
+        return { ok: true, userId };
     });
 
     // ── stations directory (live from energy backend, 5-min cache) ──
     fastify.get('/stations', async (req, reply) => {
         const force = (req.query as { refresh?: string }).refresh === '1';
         try {
-            const stations = await listStations({ force });
+            const assignedStations = staffStations(req);
+            const source = await listStationDirectory({ force });
+            const stations = source.filter((station) => !assignedStations || assignedStations.includes(station.stationId.toUpperCase()));
             return { stations, count: stations.length };
         } catch (e: any) {
             if (e instanceof TokenEngineError) {
@@ -394,7 +1273,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/stations/refresh', async () => {
         invalidateStationsCache();
-        const stations = await listStations({ force: true });
+        const stations = await listStationDirectory({ force: true });
         return { ok: true, count: stations.length };
     });
 
@@ -408,6 +1287,20 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: true })
             .limit(200);
         return { applications: data ?? [] };
+    });
+
+    fastify.delete('/vendor-applications/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { data, error } = await adminClient
+            .from('vendor_applications')
+            .delete()
+            .eq('id', id)
+            .select('id')
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) return reply.code(404).send({ error: 'application_not_found', message: 'Application not found.' });
+        return { ok: true, id };
     });
 
     // ── create vendor organization ──
@@ -439,13 +1332,99 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── vendor list ──
+    fastify.get('/vendors/summary', async (req) => {
+        const assignedStations = staffStations(req);
+        const countVendors = async (status?: string) => {
+            let query = adminClient
+                .from('vendor_organizations')
+                .select('id', { count: 'exact', head: true })
+                .is('deleted_at', null);
+            if (status) query = query.eq('status', status);
+            if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
+            let result = await query;
+            if (result.error && String(result.error.message || '').includes('deleted_at')) {
+                let fallback = adminClient
+                    .from('vendor_organizations')
+                    .select('id', { count: 'exact', head: true });
+                if (status) fallback = fallback.eq('status', status);
+                if (assignedStations) fallback = fallback.overlaps('operating_stations', assignedStations);
+                result = await fallback;
+            }
+            if (result.error) throw result.error;
+            return result.count ?? 0;
+        };
+        const statuses = ['pending', 'approved', 'suspended', 'frozen', 'closed'] as const;
+        const [total, ...counts] = await Promise.all([
+            countVendors(),
+            ...statuses.map((vendorStatus) => countVendors(vendorStatus)),
+        ]);
+        return {
+            total,
+            byStatus: Object.fromEntries(statuses.map((vendorStatus, index) => [vendorStatus, counts[index]])),
+        };
+    });
+
     fastify.get('/vendors', async (req) => {
         const { status, q } = req.query as { status?: string; q?: string };
-        let query = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
+        let query = adminClient
+            .from('vendor_organizations')
+            .select('*')
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(200);
         if (status) query = query.eq('status', status);
         if (q) query = query.ilike('legal_name', `%${q}%`);
-        const { data } = await query;
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.overlaps('operating_stations', assignedStations);
+        let { data, error } = await query;
+        if (error && String(error.message || '').includes('deleted_at')) {
+            let fallback = adminClient.from('vendor_organizations').select('*').order('created_at', { ascending: false }).limit(200);
+            if (status) fallback = fallback.eq('status', status);
+            if (q) fallback = fallback.ilike('legal_name', `%${q}%`);
+            if (assignedStations) fallback = fallback.overlaps('operating_stations', assignedStations);
+            const retry = await fallback;
+            data = retry.data;
+            error = retry.error;
+        }
+        if (error) throw error;
         return { vendors: data ?? [] };
+    });
+
+    fastify.delete('/vendors/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ reason: z.string().trim().max(500).optional() });
+        const body = schema.parse(req.body ?? {});
+        const { data: vendor, error: readError } = await adminClient
+            .from('vendor_organizations')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (readError) throw readError;
+        if (!vendor || (vendor as any).deleted_at) {
+            return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+        }
+
+        let { error } = await adminClient
+            .from('vendor_organizations')
+            .update({
+                status: 'closed',
+                deleted_at: new Date().toISOString(),
+                deleted_by: req.actor!.userId,
+                deletion_reason: body.reason ?? null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+
+        if (error && String(error.message || '').includes('deleted_at')) {
+            const fallback = await adminClient
+                .from('vendor_organizations')
+                .delete()
+                .eq('id', id);
+            error = fallback.error;
+        }
+        if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
+        return { ok: true, id };
     });
 
     // ── freeze / unfreeze ──
@@ -462,6 +1441,64 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'update_failed', message: e.message });
         }
+    });
+
+    // ── vendor station assignment ──
+    // A vendor holds exactly one station; this is the only way to change it.
+    // The trigger on vendor_organizations keeps the legacy station_ids_json
+    // array mirrored, so CRM-side readers stay consistent.
+    fastify.patch('/vendors/:id/station', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            // null clears the assignment; the vendor then sees no consumption.
+            stationId: z.string().trim().min(1).max(64).nullable(),
+            reason: z.string().max(500).optional(),
+        });
+        let body: z.infer<typeof schema>;
+        try { body = schema.parse(req.body); }
+        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
+
+        const stationId = body.stationId ? body.stationId.toUpperCase() : null;
+
+        const { data: vendor } = await adminClient
+            .from('vendor_organizations')
+            .select('id, station_id, contact_email, trading_name, legal_name')
+            .eq('id', id)
+            .maybeSingle();
+        if (!vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+
+        // Reject unknown stations rather than silently assigning a vendor to a
+        // site that does not exist and showing them an empty dashboard.
+        if (stationId) {
+            const { listStations: listKnownStations } = await import('../services/token-engine.js');
+            const known = await listKnownStations();
+            const match = (known as any[]).some((station) =>
+                String(station.stationId ?? station.id ?? station).toUpperCase() === stationId);
+            if (!match) {
+                return reply.code(400).send({ error: 'unknown_station', message: `Station ${stationId} does not exist.` });
+            }
+        }
+
+        const previous = (vendor as any).station_id ?? null;
+        const { error } = await adminClient
+            .from('vendor_organizations')
+            .update({ station_id: stationId, updated_at: new Date().toISOString() })
+            .eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vendor.station_reassigned',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before: { station_id: previous },
+            after: { station_id: stationId, reason: body.reason ?? null },
+        });
+
+        if (stationId) await notifyStationAssignment({ email: (vendor as any).contact_email, name: (vendor as any).trading_name ?? (vendor as any).legal_name, stationLabel: stationId, previousStationLabel: previous });
+        return { ok: true, stationId, previousStationId: previous };
     });
 
     // ── vendor detail ──
@@ -481,7 +1518,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' })
                 .eq('actor_type', 'vendor').eq('actor_id', id),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
-                .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding').eq('status', 'success'),
+                .eq('actor_type', 'vendor').eq('actor_id', id).eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
         const sum = (arr: any[] | null | undefined) =>
             (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
@@ -517,6 +1555,26 @@ const route: FastifyPluginAsync = async (fastify) => {
             actorRole: req.actor!.role,
             action: 'vendor.profile_picture.override',
             targetType: 'vendor_organization',
+            targetId: id,
+            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
+            after: { profile_picture_url: body.profile_picture_url ?? null },
+        });
+        return { ok: true };
+    });
+
+    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
+        const body = schema.parse(req.body);
+        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
+        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.profile_picture.override',
+            targetType: 'customer',
             targetId: id,
             before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
             after: { profile_picture_url: body.profile_picture_url ?? null },
@@ -585,121 +1643,16 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { staff: data ?? [] };
     });
 
-    // ── vendor performance analytics ──
-    fastify.get('/vendors/:id/analytics', async (req, reply) => {
-        const id     = (req.params as { id: string }).id;
-        const period = ((req.query as any).period as string | undefined) ?? '30d';
-
-        const { data: vendor } = await adminClient
-            .from('vendor_organizations').select('id').eq('id', id).maybeSingle();
-        if (!vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
-
-        let since: string | null = null;
-        if (period !== 'all') {
-            const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
-            const d = new Date();
-            d.setDate(d.getDate() - days);
-            since = d.toISOString();
-        }
-
-        let q = adminClient
-            .from('purchase_orders')
-            .select('id, status, purchase_mode, amount_minor, units_kwh, meter_id, station_id, created_at')
-            .eq('actor_type', 'vendor')
-            .eq('actor_id', id)
-            .order('created_at', { ascending: true })
-            .limit(10000);
-        if (since) q = q.gte('created_at', since);
-
-        const { data: rows } = await q;
-        const orders = (rows ?? []) as {
-            id: string; status: string; purchase_mode: string;
-            amount_minor: number; units_kwh: number | null;
-            meter_id: string; station_id: string | null; created_at: string;
-        }[];
-
-        const totalAmount = orders.reduce((s, o) => s + Number(o.amount_minor ?? 0), 0);
-        const totalUnits  = orders.reduce((s, o) => s + Number(o.units_kwh  ?? 0), 0);
-        const nDelivered  = orders.filter((o) => o.status === 'delivered').length;
-        const nFailed     = orders.filter((o) => o.status === 'failed').length;
-
-        // by_mode
-        const byMode: Record<string, { count: number; amount_minor: number; units_kwh: number }> = {};
-        for (const o of orders) {
-            const m = o.purchase_mode ?? 'unknown';
-            byMode[m] ??= { count: 0, amount_minor: 0, units_kwh: 0 };
-            byMode[m].count++;
-            byMode[m].amount_minor += Number(o.amount_minor ?? 0);
-            byMode[m].units_kwh   += Number(o.units_kwh  ?? 0);
-        }
-
-        // daily breakdown
-        const dailyMap: Record<string, { count: number; amount_minor: number; units_kwh: number; delivered: number; failed: number }> = {};
-        for (const o of orders) {
-            const date = o.created_at.slice(0, 10);
-            dailyMap[date] ??= { count: 0, amount_minor: 0, units_kwh: 0, delivered: 0, failed: 0 };
-            dailyMap[date].count++;
-            dailyMap[date].amount_minor += Number(o.amount_minor ?? 0);
-            dailyMap[date].units_kwh   += Number(o.units_kwh  ?? 0);
-            if (o.status === 'delivered') dailyMap[date].delivered++;
-            if (o.status === 'failed')    dailyMap[date].failed++;
-        }
-        const daily = Object.entries(dailyMap)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, v]) => ({ date, ...v }));
-
-        // top stations
-        const stationMap: Record<string, { count: number; amount_minor: number; delivered: number }> = {};
-        for (const o of orders) {
-            const s = o.station_id ?? 'unknown';
-            stationMap[s] ??= { count: 0, amount_minor: 0, delivered: 0 };
-            stationMap[s].count++;
-            stationMap[s].amount_minor += Number(o.amount_minor ?? 0);
-            if (o.status === 'delivered') stationMap[s].delivered++;
-        }
-        const topStations = Object.entries(stationMap)
-            .sort(([, a], [, b]) => b.count - a.count)
-            .slice(0, 10)
-            .map(([station_id, v]) => ({ station_id, ...v }));
-
-        // top meters
-        const meterMap: Record<string, { count: number; amount_minor: number }> = {};
-        for (const o of orders) {
-            const m = o.meter_id ?? 'unknown';
-            meterMap[m] ??= { count: 0, amount_minor: 0 };
-            meterMap[m].count++;
-            meterMap[m].amount_minor += Number(o.amount_minor ?? 0);
-        }
-        const topMeters = Object.entries(meterMap)
-            .sort(([, a], [, b]) => b.count - a.count)
-            .slice(0, 10)
-            .map(([meter_id, v]) => ({ meter_id, ...v }));
-
-        return {
-            period,
-            since,
-            summary: {
-                total:              orders.length,
-                delivered:          nDelivered,
-                failed:             nFailed,
-                pending:            orders.length - nDelivered - nFailed,
-                success_rate:       orders.length ? Math.round((nDelivered / orders.length) * 1000) / 10 : 0,
-                total_amount_minor: totalAmount,
-                total_units_kwh:    Math.round(totalUnits * 100) / 100,
-                avg_amount_minor:   orders.length ? Math.round(totalAmount / orders.length) : 0,
-            },
-            by_mode:      byMode,
-            daily,
-            top_stations: topStations,
-            top_meters:   topMeters,
-        };
-    });
-
     // ── funding approval queue ──
-    fastify.get('/funding/pending', async () => {
+    fastify.get('/funding/pending', async (req) => {
         const list = await listPendingFunding(200);
-        return { funding: list };
+        const assignedStations = staffStations(req);
+        if (!assignedStations) return { funding: list };
+        const { vendors } = await stationOwnerIds(assignedStations);
+        return { funding: list.filter((row) => vendors.has(row.vendor_organization_id)) };
     });
+
+    await fastify.register(adminPaymentRecoveryRoutes);
 
     // ── funding history (all statuses, filterable) ──
     fastify.get('/funding/history', async (req) => {
@@ -707,12 +1660,16 @@ const route: FastifyPluginAsync = async (fastify) => {
             status?: string; channel?: string; from?: string; to?: string;
             limit?: string; cursor?: string;
         };
+        const assignedStations = staffStations(req);
+        const scopedVendors = assignedStations ? (await stationOwnerIds(assignedStations)).vendors : null;
+        if (scopedVendors && !scopedVendors.size) return { funding: [], nextCursor: null, summary: null };
         const pageSize = Math.min(Number(limit ?? 50), 200);
         let query = adminClient
             .from('funding_requests')
             .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
             .order('created_at', { ascending: false })
             .limit(pageSize);
+        if (scopedVendors) query = query.in('vendor_organization_id', [...scopedVendors]);
         if (status === 'pending') query = query.in('status', ['initiated', 'proof_uploaded', 'under_review']);
         else if (status && status !== 'all') query = query.eq('status', status);
         if (channel && channel !== 'all') query = query.eq('channel', channel);
@@ -727,6 +1684,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         let summary: Record<string, number> | null = null;
         if (!cursor) {
             let aggQ = adminClient.from('funding_requests').select('status, amount_minor');
+            if (scopedVendors) aggQ = aggQ.in('vendor_organization_id', [...scopedVendors]);
             if (from)    aggQ = aggQ.gte('created_at', new Date(from).toISOString());
             if (to)      aggQ = aggQ.lte('created_at', new Date(new Date(to).setHours(23, 59, 59, 999)).toISOString());
             if (channel && channel !== 'all') aggQ = aggQ.eq('channel', channel);
@@ -802,9 +1760,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         const {
             ownerType, status, q, minBalance, maxBalance, limit, cursor,
         } = req.query as Record<string, string | undefined>;
+        const assignedStations = staffStations(req);
         const hasComputedFilters = !!(q || minBalance || maxBalance);
         const pageSize = Math.min(Number(limit ?? 100), 500);
-        const fetchSize = hasComputedFilters ? 5000 : pageSize;
+        const fetchSize = hasComputedFilters || assignedStations ? 5000 : pageSize;
 
         let query = adminClient
             .from('wallets')
@@ -816,7 +1775,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (cursor)    query = query.lt('created_at', cursor);
         const { data: wallets, error } = await query;
         if (error) return { wallets: [], error: error.message };
-        const rows = wallets ?? [];
+        let rows = wallets ?? [];
+        if (assignedStations) {
+            const owners = await stationOwnerIds(assignedStations);
+            rows = rows.filter((wallet: any) => wallet.owner_type === 'vendor'
+                ? owners.vendors.has(wallet.owner_id)
+                : owners.customers.has(wallet.owner_id));
+        }
         if (!rows.length) return { wallets: [], nextCursor: null };
 
         // Hydrate owner display name in batch
@@ -870,9 +1835,16 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary across the entire wallet system.
-    fastify.get('/wallets/summary', async () => {
-        const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, status');
-        const wallets = walletsRaw ?? [];
+    fastify.get('/wallets/summary', async (req) => {
+        const { data: walletsRaw } = await adminClient.from('wallets').select('id, owner_type, owner_id, status');
+        let wallets = walletsRaw ?? [];
+        const assignedStations = staffStations(req);
+        if (assignedStations) {
+            const owners = await stationOwnerIds(assignedStations);
+            wallets = wallets.filter((wallet: any) => wallet.owner_type === 'vendor'
+                ? owners.vendors.has(wallet.owner_id)
+                : owners.customers.has(wallet.owner_id));
+        }
         const { getBalance } = await import('../services/ledger.js');
         const balances = await Promise.all(wallets.map((w: any) => getBalance(w.id).catch(() => null)));
 
@@ -893,9 +1865,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         return {
             walletCount: wallets.length,
             totalFloatMinor:    totalFloat,
+            totalBalanceMinor:  totalFloat,
             totalHoldsMinor:    totalHolds,
             vendorFloatMinor:   vendorFloat,
             customerFloatMinor: customerFloat,
+            activeWallets:      byStatus.active ?? 0,
+            suspendedWallets:   byStatus.frozen ?? 0,
+            closedWallets:      byStatus.closed ?? 0,
             byStatus,
             byOwnerType,
         };
@@ -1063,89 +2039,27 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ════════════════════════════════════════════════════════════
-    // MANUAL CREDIT — maker-checker wallet credits
-    // ════════════════════════════════════════════════════════════
-
-    fastify.post('/wallets/:id/manual-credit', async (req, reply) => {
-        const walletId = (req.params as { id: string }).id;
-        const schema = z.object({
-            amount_minor: z.number().int().positive(),
-            reason:       z.string().min(4),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'invalid_request', message: e.message }); }
-
-        const { requestManualCredit } = await import('../services/manual-credits.js');
-        try {
-            const request = await requestManualCredit({
-                walletId,
-                amountMinor:         body.amount_minor,
-                reason:              body.reason,
-                requestedByUserId:   req.actor!.userId,
-            });
-            return { ok: true, request };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'request_failed', message: e.message });
-        }
-    });
-
-    fastify.post('/wallets/:id/manual-credit/:reqId/approve', async (req, reply) => {
-        const { reqId } = req.params as { id: string; reqId: string };
-        const { approveManualCredit } = await import('../services/manual-credits.js');
-        try {
-            const updated = await approveManualCredit({ requestId: reqId, approvedByUserId: req.actor!.userId });
-            return { ok: true, request: updated };
-        } catch (e: any) {
-            const status = e.code === 'not_found' ? 404 : 400;
-            return reply.code(status).send({ error: e.code ?? 'approve_failed', message: e.message });
-        }
-    });
-
-    fastify.post('/wallets/:id/manual-credit/:reqId/reject', async (req, reply) => {
-        const { reqId } = req.params as { id: string; reqId: string };
-        const schema = z.object({ reason: z.string().min(2) });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'invalid_request', message: e.message }); }
-
-        const { rejectManualCredit } = await import('../services/manual-credits.js');
-        try {
-            const updated = await rejectManualCredit({
-                requestId:         reqId,
-                rejectedByUserId:  req.actor!.userId,
-                reason:            body.reason,
-            });
-            return { ok: true, request: updated };
-        } catch (e: any) {
-            const status = e.code === 'not_found' ? 404 : 400;
-            return reply.code(status).send({ error: e.code ?? 'reject_failed', message: e.message });
-        }
-    });
-
-    fastify.get('/wallets/:id/manual-credit', async (req) => {
-        const walletId = (req.params as { id: string }).id;
-        const { status } = req.query as { status?: string };
-        const { listManualCreditRequests } = await import('../services/manual-credits.js');
-        const requests = await listManualCreditRequests({ walletId, status });
-        return { requests };
-    });
-
-    // ════════════════════════════════════════════════════════════
     // CUSTOMERS — admin oversight of customer accounts + wallets
     // ════════════════════════════════════════════════════════════
 
     // List customers with wallet balance + filters.
-    fastify.get('/customers', async (req) => {
+    fastify.get('/customers', async (req, reply) => {
         const { status, kycTier, q, limit, cursor } = req.query as Record<string, string | undefined>;
         const pageSize = Math.min(Number(limit ?? 100), 500);
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         const { data: walletRows, error: walletErr } = await adminClient
             .from('wallets')
             .select('id, owner_id, status')
             .eq('owner_type', 'customer');
         if (walletErr) return { customers: [], error: walletErr.message };
         const walletByOwner = new Map((walletRows ?? []).map((w: any) => [w.owner_id, w]));
-        const walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        let walletOwnerIds = Array.from(walletByOwner.keys()).filter(Boolean);
+        if (assignedStations) {
+            const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
+            const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
+            walletOwnerIds = walletOwnerIds.filter((id) => scopedIds.has(id));
+        }
         if (!walletOwnerIds.length) return { customers: [], nextCursor: null };
 
         let query = adminClient
@@ -1192,9 +2106,16 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // Customer KPI summary.
-    fastify.get('/customers/summary', async () => {
+    fastify.get('/customers/summary', async (req, reply) => {
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         const { data: wallets } = await adminClient.from('wallets').select('id, owner_id').eq('owner_type', 'customer');
-        const walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
+        let walletOwnerIds = Array.from(new Set((wallets ?? []).map((w: any) => w.owner_id).filter(Boolean)));
+        if (assignedStations) {
+            const { data: scopedMeters } = await adminClient.from('customer_meters').select('customer_id').in('station_id', assignedStations);
+            const scopedIds = new Set((scopedMeters ?? []).map((row: any) => row.customer_id));
+            walletOwnerIds = walletOwnerIds.filter((id) => scopedIds.has(id));
+        }
         if (!walletOwnerIds.length) {
             return { total: 0, byTier: {}, byStatus: {}, totalFloatMinor: 0 };
         }
@@ -1208,10 +2129,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
         // Total customer float
         const { getBalance } = await import('../services/ledger.js');
-        const balances = await Promise.all((wallets ?? []).map((w: any) => getBalance(w.id).catch(() => null)));
+        const balances = await Promise.all((wallets ?? []).filter((w: any) => walletOwnerIds.includes(w.owner_id)).map((w: any) => getBalance(w.id).catch(() => null)));
         const totalFloat = balances.reduce((s, b) => s + (b?.ledgerBalanceMinor ?? 0), 0);
         return { total: customers.length, byTier, byStatus, totalFloatMinor: totalFloat };
     });
+
+    // ── Customer meter link review & search routes ── extracted to admin-meter-approvals.ts
+    await fastify.register(adminMeterApprovalsRoutes);
 
     // Single customer profile + aggregates.
     fastify.get('/customers/:id', async (req, reply) => {
@@ -1231,7 +2155,8 @@ const route: FastifyPluginAsync = async (fastify) => {
             adminClient.from('customer_meters').select('id', { count: 'exact', head: true }).eq('customer_id', id),
             adminClient.from('purchase_orders').select('amount_minor', { count: 'exact' }).eq('customer_id', id),
             adminClient.from('payment_transactions').select('amount_minor', { count: 'exact' })
-                .eq('actor_type', 'customer').eq('actor_id', id).eq('purpose', 'wallet_funding').eq('status', 'success'),
+                .eq('actor_type', 'customer').eq('actor_id', id).eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
         const sum = (arr: any[] | null | undefined) => (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
 
@@ -1300,6 +2225,67 @@ const route: FastifyPluginAsync = async (fastify) => {
         const rows = data ?? [];
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { funding: rows, nextCursor };
+    });
+
+    fastify.delete('/customers/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({ reason: z.string().trim().min(4).max(500).optional() });
+        const body = schema.parse(req.body ?? {});
+        const { data: before, error: beforeErr } = await adminClient
+            .from('customers')
+            .select('id, auth_user_id, full_name, phone, email, status')
+            .eq('id', id)
+            .maybeSingle();
+        if (beforeErr) throw beforeErr;
+        if (!before) return reply.code(404).send({ error: 'not_found', message: 'Customer not found.' });
+
+        const { data: wallets } = await adminClient
+            .from('wallets')
+            .select('id')
+            .eq('owner_type', 'customer')
+            .eq('owner_id', id);
+        const walletIds = (wallets ?? []).map((w: any) => w.id).filter(Boolean);
+
+        for (const walletId of walletIds) {
+            await adminClient.from('wallet_holds').delete().eq('wallet_id', walletId);
+            await adminClient.from('wallet_ledger_entries').delete().eq('wallet_id', walletId);
+        }
+
+        await adminClient.from('notifications').delete().eq('customer_id', id);
+        await adminClient.from('customer_meters').delete().eq('customer_id', id);
+        await adminClient.from('customer_risk_baselines').delete().eq('customer_id', id);
+        await adminClient.from('customer_known_ips').delete().eq('customer_id', id);
+        await adminClient.from('customer_known_devices').delete().eq('customer_id', id);
+        await adminClient.from('fraud_assessments').delete().eq('customer_id', id);
+        await adminClient.from('account_deletion_requests').delete().eq('customer_id', id);
+        await adminClient.from('data_export_requests').delete().eq('customer_id', id);
+        await adminClient.from('support_chat_sessions').delete().eq('customer_id', id);
+        await adminClient.from('support_tickets').delete().eq('customer_id', id);
+        await adminClient.from('disputes').delete().eq('customer_id', id);
+        await adminClient.from('payment_transactions').delete().eq('actor_type', 'customer').eq('actor_id', id);
+        await adminClient.from('purchase_orders').delete().eq('customer_id', id);
+        await adminClient.from('wallets').delete().eq('owner_type', 'customer').eq('owner_id', id);
+
+        const { error } = await adminClient.from('customers').delete().eq('id', id);
+        if (error) return reply.code(400).send({ error: 'delete_failed', message: error.message });
+
+        const authUserId = (before as any).auth_user_id;
+        if (authUserId) {
+            await adminClient.auth.admin.deleteUser(authUserId).catch(() => null);
+        }
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'customer.delete',
+            targetType: 'customer',
+            targetId: id,
+            before,
+            after: { deleted: true, reason: body.reason ?? null },
+        });
+
+        return { ok: true, id };
     });
 
     // Suspend / reactivate a customer. Audit-logged.
@@ -1371,7 +2357,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 100), 500));
         if (status)    query = query.eq('status', status);
-        if (station)   query = query.eq('station_id', station);
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.in('station_id', assignedStations);
+        else if (station) query = query.eq('station_id', station);
         if (actorType) query = query.eq('actor_type', actorType);
         if (meterType) query = query.eq('meter_type', meterType);
         if (since)     query = query.gte('created_at', since);
@@ -1400,7 +2388,9 @@ const route: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 200), 500));
         if (status)  query = query.eq('status', status);
-        if (station) query = query.eq('station_id', station);
+        const assignedStations = staffStations(req);
+        if (assignedStations) query = query.in('station_id', assignedStations);
+        else if (station) query = query.eq('station_id', station);
         if (meterType) query = query.eq('meter_type', meterType);
         if (cursor)  query = query.lt('created_at', cursor);
         if (q) {
@@ -1427,28 +2417,61 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // KPI summary for purchases dashboard.
-    fastify.get('/purchases/summary', async () => {
+    fastify.get('/purchases/summary', async (req) => {
         const now = new Date();
         const sod = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
         const dayAgo = new Date(now.getTime() - 24 * 3600_000).toISOString();
 
-        const [today, last24h, failed24h, refunded] = await Promise.all([
-            adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', sod),
-            adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo),
-            adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).gte('created_at', dayAgo).eq('status', 'failed'),
-            adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded'),
+        const assignedStations = staffStations(req);
+        const scope = (query: any) => scopeStations(query, assignedStations);
+        const [todayOrdersRes, last24h, failed24hRes, refunded, succeededFunding] = await Promise.all([
+            scope(adminClient.from('purchase_orders').select('id, amount_minor, units_kwh, status, actor_type').gte('created_at', sod)),
+            scope(adminClient.from('purchase_orders').select('id, amount_minor', { count: 'exact' }).gte('created_at', dayAgo)),
+            scope(adminClient.from('purchase_orders').select('id, actor_type').gte('created_at', dayAgo).eq('status', 'failed')),
+            scope(adminClient.from('purchase_orders').select('id', { count: 'exact', head: true }).eq('status', 'refunded')),
+            adminClient.from('payment_transactions').select('id', { count: 'exact', head: true })
+                .eq('purpose', 'wallet_funding')
+                .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES)),
         ]);
 
         const sumMinor = (arr: any[] | null | undefined) =>
             (arr ?? []).reduce((s, r) => s + Number(r.amount_minor ?? 0), 0);
 
+        const todayRows = (todayOrdersRes.data ?? []) as any[];
+        const deliveredToday = todayRows.filter((r) => r.status === 'delivered');
+        const todayDeliveredKwh = deliveredToday.reduce((sum, r) => sum + Number(r.units_kwh ?? 0), 0);
+        const todayDeliveredValueMinor = deliveredToday.reduce((sum, r) => sum + Number(r.amount_minor ?? 0), 0);
+        const todayDeliveredCount = deliveredToday.length;
+
+        const isVendorActor = (actorType?: string) => actorType === 'vendor' || actorType === 'vendor_staff';
+        const vendorDelivered = deliveredToday.filter((r) => isVendorActor(r.actor_type));
+        const customerDelivered = deliveredToday.filter((r) => !isVendorActor(r.actor_type));
+
+        const failedRows = (failed24hRes.data ?? []) as any[];
+        const vendorFailedCount = failedRows.filter((r) => isVendorActor(r.actor_type)).length;
+        const customerFailedCount = failedRows.filter((r) => !isVendorActor(r.actor_type)).length;
+
         return {
-            todayCount:       today.count ?? 0,
-            todayValueMinor:  sumMinor(today.data),
-            last24hCount:     last24h.count ?? 0,
-            last24hValueMinor: sumMinor(last24h.data),
-            failed24hCount:   failed24h.count ?? 0,
-            refundedCount:    refunded.count ?? 0,
+            todayCount:               todayRows.length,
+            todayValueMinor:          sumMinor(todayRows),
+            todayDeliveredCount,
+            todayDeliveredValueMinor,
+            todayDeliveredKwh,
+            last24hCount:             last24h.count ?? 0,
+            last24hValueMinor:        sumMinor(last24h.data),
+            failed24hCount:           failedRows.length,
+            refundedCount:            refunded.count ?? 0,
+            succeededFundingCount:    succeededFunding.count ?? 0,
+            vendorStats: {
+                successCount:      vendorDelivered.length,
+                successValueMinor: sumMinor(vendorDelivered),
+                failedCount:       vendorFailedCount,
+            },
+            customerStats: {
+                successCount:      customerDelivered.length,
+                successValueMinor: sumMinor(customerDelivered),
+                failedCount:       customerFailedCount,
+            },
         };
     });
 
@@ -1517,58 +2540,104 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    // Resend a stuck remote-send order using its stored token (no re-generation).
-    fastify.post('/purchases/:id/resend-remote', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
+
+    // ── meter purchase orders ──
+    fastify.post('/meter-orders', async (req, reply) => {
+        const body = z.object({
+            customer_id: z.string().uuid(),
+            meter_type: z.enum(['single_phase', 'three_phase']),
+            property_address: z.string().trim().min(5).max(240),
+            service_area: z.string().trim().min(2).max(120),
+            contact_phone: z.string().trim().min(8).max(32),
+            sponsor_mode: z.enum(['manual_paid', 'vendor_wallet']),
+            vendor_organization_id: z.string().uuid().optional(),
+            notes: z.string().trim().max(500).optional(),
+        }).parse(req.body ?? {});
+        const idempotencyKey = requireIdempotencyKey(req, reply);
+        if (!idempotencyKey) return reply;
         try {
-            const { resendRemoteSendOrder } = await import('../services/vending.js');
-            const result = await resendRemoteSendOrder(id, req.actor!.userId);
-            return { ok: true, taskId: result.taskId };
-        } catch (e: any) {
-            const status =
-                e.code === 'not_found'     ? 404 :
-                e.code === 'invalid_state' ? 409 :
-                e.code === 'no_token'      ? 422 : 400;
-            return reply.code(status).send({ error: e.code ?? 'resend_failed', message: e.message ?? 'Could not resend.' });
+            const order = await createAdminMeterOrder({
+                staffUserId: req.actor!.userId,
+                customerId: body.customer_id,
+                meterType: body.meter_type,
+                propertyAddress: body.property_address,
+                serviceArea: body.service_area,
+                contactPhone: body.contact_phone,
+                sponsorMode: body.sponsor_mode,
+                vendorOrganizationId: body.vendor_organization_id ?? null,
+                notes: body.notes,
+                idempotencyKey,
+            });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'meter_order.created',
+                targetType: 'meter_order',
+                targetId: order.id,
+                metadata: {
+                    meter_type: body.meter_type,
+                    sponsor_mode: body.sponsor_mode,
+                    source_channel: 'admin_portal',
+                    vendor_organization_id: body.vendor_organization_id ?? null,
+                },
+            });
+            return { order };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({
+                error: error?.code ?? 'meter_order_create_failed',
+                message: error?.message ?? 'Could not create meter order.',
+            });
         }
     });
 
-
-    // ── meter purchase orders ──
-    fastify.get('/meter-orders/stats', async () => {
-        const { data } = await adminClient
+    fastify.get('/meter-orders/stats', async (req, reply) => {
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
+        let query = adminClient
             .from('meter_purchase_orders')
-            .select('status, amount_minor, updated_at, created_at')
-            .limit(10_000);
-        const rows = (data ?? []) as any[];
-        const count = (s: string) => rows.filter((r) => r.status === s).length;
-        const inProgress = ['paid', 'assigned', 'dispatched'].reduce((n, s) => n + count(s), 0);
+            .select('status, amount_minor, updated_at, created_at, source_channel')
+            .limit(10000);
+        query = scopeStations(query, assignedStations);
+        const { data } = await query;
+        const rows: any[] = data ?? [];
+        const count = (status: string) => rows.filter((row) => row.status === status).length;
+        const bySource = rows.reduce<Record<string, number>>((acc, row: any) => {
+            const key = String(row.source_channel ?? 'customer_portal');
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+        }, {});
+        const inProgress = ['paid', 'assigned', 'dispatched'].reduce((n, status) => n + count(status), 0);
         const todayKey = new Date().toISOString().slice(0, 10);
-        const installedToday = rows.filter((r) =>
-            r.status === 'installed' && String(r.updated_at ?? r.created_at).slice(0, 10) === todayKey
+        const installedToday = rows.filter((row) =>
+            row.status === 'installed' && String(row.updated_at ?? row.created_at).slice(0, 10) === todayKey
         ).length;
         return {
-            total:           rows.length,
+            total: rows.length,
             pending_payment: count('pending_payment'),
-            in_progress:     inProgress,
-            installed:       count('installed'),
+            in_progress: inProgress,
+            installed: count('installed'),
             installed_today: installedToday,
-            cancelled:       count('cancelled'),
+            cancelled: count('cancelled'),
+            by_source: bySource,
         };
     });
 
-    fastify.get('/meter-orders', async (req) => {
+    fastify.get('/meter-orders', async (req, reply) => {
         const { status, q, limit, cursor } = req.query as { status?: string; q?: string; limit?: string; cursor?: string };
         const pageSize = Math.min(Number(limit ?? 100), 200);
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
         let query = adminClient
             .from('meter_purchase_orders')
-            .select('*, customers(users(full_name, email, phone))')
+            .select('*, customers(full_name, email, phone), vendor_organizations(legal_name, trading_name)')
             .order('created_at', { ascending: false })
             .limit(pageSize);
         if (status) query = query.eq('status', status);
+        query = scopeStations(query, assignedStations);
         if (q) {
             const safeQ = cleanSearchTerm(q);
-            if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%`);
+            if (safeQ) query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%,customer_name_snapshot.ilike.%${safeQ}%`);
         }
         if (cursor) query = query.lt('created_at', cursor);
         const { data } = await query;
@@ -1577,11 +2646,12 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { orders: rows, nextCursor };
     });
 
+
     fastify.get('/meter-orders/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const { data, error } = await adminClient
             .from('meter_purchase_orders')
-            .select('*, customers(users(full_name, email, phone))')
+            .select('*, customers(full_name, email, phone), vendor_organizations(legal_name, trading_name)')
             .eq('id', id)
             .single();
         if (error || !data) return reply.code(404).send({ error: 'not_found' });
@@ -1591,18 +2661,38 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.patch('/meter-orders/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const schema = z.object({
-            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']),
+            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']).optional(),
             technician_name: z.string().optional(),
             notes: z.string().optional(),
+        }).refine((value) => value.status || value.technician_name !== undefined || value.notes !== undefined, {
+            message: 'Provide a status, technician, or note.',
         });
         let body: z.infer<typeof schema>;
         try { body = schema.parse(req.body); }
         catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
 
+        const { data: current, error: currentError } = await adminClient
+            .from('meter_purchase_orders')
+            .select('id, status')
+            .eq('id', id)
+            .maybeSingle();
+        if (currentError) return reply.code(500).send({ error: 'db_error', message: currentError.message });
+        if (!current) return reply.code(404).send({ error: 'not_found' });
+        const nextStatus = body.status ?? (current as any).status;
+        try {
+            if (body.status && body.status !== (current as any).status) {
+                assertMeterOrderTransition((current as any).status, body.status);
+            }
+        }
+        catch (transitionError: any) {
+            return reply.code(transitionError?.status ?? 409).send({ error: transitionError?.code ?? 'invalid_status_transition', message: transitionError?.message });
+        }
+
         const { data: order, error } = await adminClient
             .from('meter_purchase_orders')
-            .update({ ...body, updated_at: new Date().toISOString() })
+            .update({ ...body, status: nextStatus, updated_at: new Date().toISOString() })
             .eq('id', id)
+            .eq('status', (current as any).status)
             .select()
             .single();
         if (error) return reply.code(500).send({ error: 'db_error', message: error.message });
@@ -1611,14 +2701,13 @@ const route: FastifyPluginAsync = async (fastify) => {
         await logAction({
             actorUserId: req.actor!.userId,
             actorType: 'staff',
-            action: `meter_order.${body.status}`,
+            action: body.status ? `meter_order.${body.status}` : 'meter_order.updated',
             targetId: id,
             metadata: { technician_name: body.technician_name, notes: body.notes },
         });
 
-        // Notify customer for meaningful status changes
-        if (['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
-            const customerId = (order as any).customer_id as string | null;
+        if (body.status && ['assigned', 'dispatched', 'installed', 'cancelled'].includes(body.status)) {
+            const customerId = order.customer_id;
             if (customerId) {
                 const { notifyMeterOrderUpdate } = await import('../services/notifications.js');
                 notifyMeterOrderUpdate(customerId, {
@@ -1632,7 +2721,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         return order;
     });
 
-    // ── fraud review queue ──
     fastify.get('/fraud', async (req) => {
         const { resolved, min_score, limit } = req.query as { resolved?: string; min_score?: string; limit?: string };
         const minScore = Number(min_score ?? 50);
@@ -1883,7 +2971,167 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { ok: true };
     });
 
+    // ── announcements: admin broadcast console ──
+    fastify.get('/announcements/recipients', async (req) => {
+        const query = z.object({
+            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            search: z.string().optional(),
+            limit: z.coerce.number().int().min(1).max(1000).optional(),
+        }).parse(req.query);
+        const audiences: AnnouncementRecipientType[] =
+            query.audience === 'vendors' ? ['vendor']
+                : query.audience === 'customers' ? ['customer']
+                    : ['customer', 'vendor'];
+        const [recipients, summary] = await Promise.all([
+            listAnnouncementRecipients({
+                audiences,
+                search: query.search,
+                limit: query.limit ?? 100,
+            }),
+            countAnnouncementRecipients({ audiences, search: query.search }),
+        ]);
+        return {
+            recipients,
+            summary: {
+                customers: summary.customers,
+                vendors: summary.vendors,
+                total: summary.total,
+            },
+        };
+    });
+
+    fastify.get('/announcements/recipients/export.csv', async (req, reply) => {
+        const query = z.object({
+            audience: z.enum(['customers', 'vendors', 'system']).optional(),
+            search: z.string().optional(),
+        }).parse(req.query);
+        const audiences: AnnouncementRecipientType[] =
+            query.audience === 'vendors' ? ['vendor']
+                : query.audience === 'customers' ? ['customer']
+                    : ['customer', 'vendor'];
+        const recipients = await listAnnouncementRecipients({
+            audiences,
+            search: query.search,
+            limit: 1000,
+        });
+        reply.header('Content-Type', 'text/csv; charset=utf-8');
+        reply.header('Content-Disposition', 'attachment; filename="announcement-recipients.csv"');
+        return toCsv(recipients, ['type', 'name', 'email', 'phone', 'status', 'id']);
+    });
+
+    fastify.get('/announcements', async (req) => {
+        const query = z.object({
+            limit: z.coerce.number().int().min(1).max(200).optional(),
+        }).parse(req.query);
+        const { data, error } = await adminClient
+            .from('admin_announcements')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(query.limit ?? 50);
+        if (error) throw error;
+        return { announcements: data ?? [] };
+    });
+
+    fastify.post('/announcements', async (req, reply) => {
+        const schema = z.object({
+            title: z.string().trim().min(3).max(120),
+            body: z.string().trim().min(5).max(2000),
+            audiences: z.array(z.enum(['customers', 'vendors'])).min(1),
+            send_to_all: z.boolean().optional(),
+            recipient_keys: z.array(z.string().regex(/^(customer|vendor):[0-9a-f-]{36}$/i)).optional(),
+        });
+        const body = schema.parse(req.body ?? {});
+        const audiences = Array.from(new Set(body.audiences.map((v) => v === 'customers' ? 'customer' : 'vendor'))) as AnnouncementRecipientType[];
+        const requestedKeys = new Set(body.recipient_keys ?? []);
+        let recipients = body.send_to_all
+            ? await listAllAnnouncementRecipients(audiences)
+            : await listAnnouncementRecipients({ audiences, limit: 1000 });
+        if (!body.send_to_all) recipients = recipients.filter((r) => requestedKeys.has(r.key));
+        if (!recipients.length) return reply.code(400).send({ error: 'no_recipients', message: 'Select at least one recipient.' });
+
+        const audienceLabel = audiences.length === 2 ? 'system' : audiences[0] === 'customer' ? 'customers' : 'vendors';
+        const { data: announcement, error: annError } = await adminClient
+            .from('admin_announcements')
+            .insert({
+                title: body.title,
+                body: body.body,
+                audience: audienceLabel,
+                target_mode: body.send_to_all ? 'all' : 'selected',
+                channel: 'in_app',
+                created_by_staff_id: req.actor!.userId,
+                recipient_count: recipients.length,
+            })
+            .select('*')
+            .single();
+        if (annError) throw annError;
+
+        const notificationRows = recipients.map((r) => ({
+            customer_id: r.type === 'customer' ? r.id : null,
+            vendor_organization_id: r.type === 'vendor' ? r.id : null,
+            recipient_type: r.type,
+            recipient_id: r.id,
+            announcement_id: announcement.id,
+            type: 'admin_announcement',
+            title: body.title,
+            body: body.body,
+            metadata: { announcement_id: announcement.id, audience: audienceLabel, recipient_key: r.key },
+            read: false,
+        }));
+        try {
+            const notifications = await insertAnnouncementNotifications(notificationRows);
+            const notificationsByRecipient = new Map(
+                (notifications ?? []).map((n: any) => [`${n.recipient_type}:${n.recipient_id}`, n])
+            );
+
+            const deliveryRows = recipients.map((r) => {
+                const notification = notificationsByRecipient.get(r.key);
+                return {
+                    announcement_id: announcement.id,
+                    recipient_type: r.type,
+                    recipient_id: r.id,
+                    customer_id: r.type === 'customer' ? r.id : null,
+                    vendor_organization_id: r.type === 'vendor' ? r.id : null,
+                    notification_id: notification?.id ?? null,
+                    status: notification?.id ? 'delivered' : 'queued',
+                };
+            });
+            await insertAnnouncementDeliveries(deliveryRows);
+
+            await notifyAdminAnnouncement(recipients, { title: body.title, body: body.body }, (emailError) => req.log.error({ emailError }, 'Announcement email fan-out failed'));
+        } catch (deliveryError) {
+            const { error: notificationCleanupError } = await adminClient
+                .from('notifications')
+                .delete()
+                .eq('announcement_id', announcement.id);
+            const { error: announcementCleanupError } = notificationCleanupError
+                ? { error: null }
+                : await adminClient.from('admin_announcements').delete().eq('id', announcement.id);
+            const cleanupFailed = Boolean(notificationCleanupError || announcementCleanupError);
+            req.log.error({ deliveryError, notificationCleanupError, announcementCleanupError }, 'Announcement delivery failed');
+            return reply.code(503).send({
+                error: 'announcement_delivery_failed',
+                message: cleanupFailed
+                    ? 'Announcement delivery failed and needs administrator review.'
+                    : 'Announcement delivery failed. No recipients were notified. Please retry.',
+            });
+        }
+
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'admin.announcement.sent',
+            targetType: 'admin_announcement',
+            targetId: announcement.id,
+            after: { audience: audienceLabel, target_mode: body.send_to_all ? 'all' : 'selected', recipient_count: recipients.length },
+        }).catch(() => undefined);
+
+        return reply.code(201).send({ ok: true, announcement, delivered: recipients.length });
+    });
+
     // ── refunds ──
+    fastify.get('/refunds/summary', async () => ({ summary: await getRefundSummary() }));
+
     fastify.get('/refunds', async (req) => {
         const { status } = req.query as { status?: string };
         const normalizedStatus = status === 'requested' || status === 'under_review'
@@ -1909,9 +3157,18 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     fastify.post('/refunds/:id/approve', async (req, reply) => {
+        if (env.NODE_ENV !== 'test' && req.actor?.mfaEnrolled && !req.actor?.mfaVerified) {
+            return reply.code(403).send({
+                error: 'mfa_required',
+                message: 'Multi-factor authentication (MFA) verification is required for refund approvals.',
+            });
+        }
         const id = (req.params as { id: string }).id;
+        const { amount_minor } = z.object({
+            amount_minor: z.number().int().positive().optional(),
+        }).parse(req.body ?? {});
         try {
-            await approveRefund(id, req.actor!.userId);
+            await approveRefund(id, req.actor!.userId, amount_minor);
             return { ok: true };
         } catch (e: any) {
             return reply.code(400).send({ error: e.code ?? 'approve_failed', message: e.message });
@@ -1948,7 +3205,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/reconciliation/run', async (_req, reply) => {
         try {
-            await runDailyReconciliation();
+            await runDailyReconciliation(undefined, { force: true });
             const runs = await listReconciliationRuns(1);
             return { ok: true, run: runs[0] ?? null };
         } catch (e: any) {
@@ -2132,124 +3389,6 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { days, total: (data ?? []).length, byAction, byActorType };
     });
 
-    // ════════════════════════════════════════════════════════════
-    // REPORTS — analytics aggregation across the wallet system
-    // ════════════════════════════════════════════════════════════
-
-    function resolveRange(query: Record<string, string | undefined>) {
-        const now = new Date();
-        const until = query.until ? new Date(query.until) : now;
-        const since = query.since
-            ? new Date(query.since)
-            : new Date(until.getTime() - 29 * 86400_000);
-        const sinceIso = new Date(Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), since.getUTCDate())).toISOString();
-        const untilIso = new Date(Date.UTC(until.getUTCFullYear(), until.getUTCMonth(), until.getUTCDate(), 23, 59, 59, 999)).toISOString();
-        const days = Math.max(1, Math.round((new Date(untilIso).getTime() - new Date(sinceIso).getTime()) / 86400_000));
-        return { sinceIso, untilIso, days };
-    }
-
-    function dayKey(iso: string): string {
-        return String(iso).slice(0, 10);
-    }
-
-    async function gatherReportData(sinceIso: string, untilIso: string) {
-        const inRange = (q: any) => q.gte('created_at', sinceIso).lte('created_at', untilIso);
-        const [purchases, funding, refunds, disputes, newCustomers, settlements] = await Promise.all([
-            inRange(adminClient.from('purchase_orders').select('amount_minor, fee_minor, status, created_at, actor_type, station_id')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('payment_transactions').select('amount_minor, created_at').eq('purpose', 'wallet_funding').eq('status', 'success')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('refund_requests').select('amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('disputes').select('status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('customers').select('created_at')).limit(50_000).then((r: any) => r.data ?? []),
-            inRange(adminClient.from('settlement_batches').select('gross_amount_minor, fee_minor, net_amount_minor, status, created_at')).limit(50_000).then((r: any) => r.data ?? []),
-        ]);
-        return { purchases, funding, refunds, disputes, newCustomers, settlements } as Record<string, any[]>;
-    }
-
-    function buildReport(sinceIso: string, untilIso: string, days: number, d: Record<string, any[]>) {
-        const num = (v: unknown) => Number(v ?? 0);
-        const delivered = d.purchases.filter((p) => p.status === 'delivered');
-        const failed = d.purchases.filter((p) => p.status === 'failed');
-        const revenueMinor = delivered.reduce((s, p) => s + num(p.amount_minor), 0);
-        const feeMinor = delivered.reduce((s, p) => s + num(p.fee_minor), 0);
-        const fundingApprovedMinor = d.funding.reduce((s, p) => s + num(p.amount_minor), 0);
-        const approvedRefunds = d.refunds.filter((r) => r.status === 'approved');
-        const refundApprovedMinor = approvedRefunds.reduce((s, r) => s + num(r.amount_minor), 0);
-        const settlementNetMinor = d.settlements.reduce((s, b) => s + num(b.net_amount_minor), 0);
-        const settlementGrossMinor = d.settlements.reduce((s, b) => s + num(b.gross_amount_minor), 0);
-        const processed = delivered.length + failed.length;
-
-        // Daily buckets (zero-filled across the range)
-        const buckets = new Map<string, { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; refundMinor: number }>();
-        const startMs = new Date(sinceIso).getTime();
-        for (let i = 0; i < days; i++) {
-            const key = dayKey(new Date(startMs + i * 86400_000).toISOString());
-            buckets.set(key, { date: key, revenueMinor: 0, purchaseCount: 0, fundingMinor: 0, newCustomers: 0, refundMinor: 0 });
-        }
-        const touch = (iso: string) => buckets.get(dayKey(iso));
-        for (const p of delivered) { const b = touch(p.created_at); if (b) { b.revenueMinor += num(p.amount_minor); b.purchaseCount += 1; } }
-        for (const f of d.funding) { const b = touch(f.created_at); if (b) b.fundingMinor += num(f.amount_minor); }
-        for (const c of d.newCustomers) { const b = touch(c.created_at); if (b) b.newCustomers += 1; }
-        for (const r of approvedRefunds) { const b = touch(r.created_at); if (b) b.refundMinor += num(r.amount_minor); }
-
-        const purchasesByStatus: Record<string, number> = {};
-        for (const p of d.purchases) purchasesByStatus[p.status] = (purchasesByStatus[p.status] ?? 0) + 1;
-
-        const revenueByActorType: Record<string, number> = {};
-        for (const p of delivered) revenueByActorType[p.actor_type ?? 'unknown'] = (revenueByActorType[p.actor_type ?? 'unknown'] ?? 0) + num(p.amount_minor);
-
-        const stationMap = new Map<string, { station_id: string; count: number; revenueMinor: number }>();
-        for (const p of delivered) {
-            const sid = p.station_id ?? 'unknown';
-            const row = stationMap.get(sid) ?? { station_id: sid, count: 0, revenueMinor: 0 };
-            row.count += 1; row.revenueMinor += num(p.amount_minor);
-            stationMap.set(sid, row);
-        }
-        const topStations = [...stationMap.values()].sort((a, b) => b.revenueMinor - a.revenueMinor).slice(0, 8);
-
-        return {
-            range: { since: sinceIso, until: untilIso, days },
-            kpis: {
-                revenueMinor,
-                feeMinor,
-                purchaseCount: d.purchases.length,
-                deliveredCount: delivered.length,
-                failedCount: failed.length,
-                successRate: processed ? Math.round((delivered.length / processed) * 1000) / 10 : 0,
-                avgOrderValueMinor: delivered.length ? Math.round(revenueMinor / delivered.length) : 0,
-                fundingApprovedMinor,
-                fundingCount: d.funding.length,
-                settlementNetMinor,
-                settlementGrossMinor,
-                settlementBatches: d.settlements.length,
-                refundApprovedMinor,
-                refundCount: d.refunds.length,
-                disputesOpened: d.disputes.length,
-                newCustomers: d.newCustomers.length,
-            },
-            series: { daily: [...buckets.values()] },
-            breakdowns: { purchasesByStatus, revenueByActorType, topStations },
-        };
-    }
-
-    fastify.get('/reports/overview', async (req) => {
-        const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso);
-        return buildReport(sinceIso, untilIso, days, data);
-    });
-
-    fastify.get('/reports/export.csv', async (req, reply) => {
-        const { sinceIso, untilIso, days } = resolveRange(req.query as Record<string, string | undefined>);
-        const data = await gatherReportData(sinceIso, untilIso);
-        const report = buildReport(sinceIso, untilIso, days, data);
-        const header = ['date', 'revenue_minor', 'purchase_count', 'funding_minor', 'refund_minor', 'new_customers'];
-        const csv = [
-            header.join(','),
-            ...report.series.daily.map((r) => [r.date, r.revenueMinor, r.purchaseCount, r.fundingMinor, r.refundMinor, r.newCustomers].map(csvEscape).join(',')),
-        ].join('\n');
-        reply.header('Content-Type', 'text/csv; charset=utf-8');
-        reply.header('Content-Disposition', `attachment; filename="report-${sinceIso.slice(0, 10)}_${untilIso.slice(0, 10)}.csv"`);
-        return csv;
-    });
 
     // ── feature flags ──
     fastify.get('/feature-flags', async () => {
@@ -2293,6 +3432,49 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── NDPR: account deletion queue ──
+    fastify.get('/vat-policies', async () => ({
+        policies: await listVatPolicies(),
+    }));
+
+    fastify.post('/vat-policies', async (req, reply) => {
+        const body = z.object({
+            label: z.string().trim().min(3).max(120),
+            rate_basis_points: z.number().int().min(0).max(10_000),
+            effective_at: z.string().datetime(),
+        }).parse(req.body ?? {});
+        const policy = await submitVatPolicy({
+            label: body.label,
+            rateBasisPoints: body.rate_basis_points,
+            effectiveAt: body.effective_at,
+            actorUserId: req.actor!.userId,
+        });
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vat_policy.submitted',
+            targetType: 'vat_policy',
+            targetId: policy.id,
+            after: { ...policy },
+        });
+        return reply.code(201).send({ policy });
+    });
+
+    fastify.post('/vat-policies/:id/approve', async (req, reply) => {
+        const id = z.string().uuid().parse((req.params as { id: string }).id);
+        const policy = await approveVatPolicy(id, req.actor!.userId);
+        await logAction({
+            actorUserId: req.actor!.userId,
+            actorType: 'staff',
+            actorRole: req.actor!.role,
+            action: 'vat_policy.approved',
+            targetType: 'vat_policy',
+            targetId: policy.id,
+            after: { ...policy },
+        });
+        return reply.send({ policy });
+    });
+
     fastify.get('/privacy/deletions', async (req) => {
         const { status } = req.query as { status?: string };
         return { requests: await listDeletionRequests({ status, limit: 200 }) };
@@ -2302,9 +3484,10 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.get('/consumption', async (req, reply) => {
         const qs = req.query as Record<string, string>;
-        const scope      = qs.scope as 'meter' | 'station' | 'cumulative' ?? 'station';
+        const assignedStations = staffStations(req);
+        const scope      = (assignedStations ? 'station' : qs.scope) as 'meter' | 'station' | 'cumulative' ?? 'station';
         const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
-        const scope_id   = qs.scope_id ?? undefined;
+        const scope_id   = qs.scope_id || undefined;
         const from       = qs.from ?? undefined;
         const to         = qs.to ?? undefined;
         const limit      = Math.min(Number(qs.limit ?? 120), 500);
@@ -2316,13 +3499,21 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
 
-        const { queryConsumption } = await import('../services/consumption.js');
-        const rows = await queryConsumption({ scope, scope_id, period_type: period, from, to, limit });
+        // super-admin -> every station; any other staff role -> only their
+        // assignment. staffStations() returns [] for an unassigned staffer,
+        // which stationsAuthority treats as "see nothing".
+        const { queryConsumption, allStations, stationsAuthority } = await import('../services/consumption.js');
+        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
+        const rows = await queryConsumption(
+            { scope, scope_id, period_type: period, from, to, limit, withSpend: qs.spend === 'true' },
+            authority,
+        );
         return { rows, count: rows.length };
     });
 
     fastify.get('/consumption/meters', async (req, reply) => {
         const qs         = req.query as Record<string, string>;
+        const assignedStations = staffStations(req);
         const station_id = qs.station_id;
         const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
         const from       = qs.from ?? undefined;
@@ -2331,19 +3522,24 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!station_id) {
             return reply.code(400).send({ error: 'missing_station_id', message: 'station_id is required' });
         }
+        if (assignedStations && !assignedStations.includes(station_id.toUpperCase())) {
+            return reply.code(404).send({ error: 'not_found', message: 'Station not found for your assignment.' });
+        }
         if (!['day','week','month','year'].includes(period)) {
             return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
         }
 
-        const { queryMeterBreakdown } = await import('../services/consumption.js');
-        const rows = await queryMeterBreakdown(station_id, period, from, to);
+        const { queryMeterBreakdown, allStations, stationsAuthority } = await import('../services/consumption.js');
+        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
+        const rows = await queryMeterBreakdown(station_id, period, authority, from, to);
         return { rows, count: rows.length };
     });
 
     fastify.post('/consumption/refresh', async (req, reply) => {
         try {
             const body = (req.body ?? {}) as { stationId?: string; station_id?: string; stationIds?: string[]; station_ids?: string[] };
-            const stationIds = body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
+            const assignedStations = staffStations(req);
+            const stationIds = assignedStations ?? body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
             const { refreshConsumptionAggregates } = await import('../services/consumption.js');
             const result = await refreshConsumptionAggregates(stationIds);
             return { ...result, ok: true };
@@ -2391,25 +3587,10 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { rows, total: rows.length, count: rows.length };
     });
 
-    fastify.patch('/customers/:id/profile-picture', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        const schema = z.object({ profile_picture_url: z.string().trim().url().max(1000).nullable() });
-        const body = schema.parse(req.body);
-        const { data: before } = await adminClient.from('customers').select('profile_picture_url').eq('id', id).maybeSingle();
-        const { error } = await adminClient.from('customers').update({ profile_picture_url: body.profile_picture_url }).eq('id', id);
-        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
-            action: 'customer.profile_picture.override',
-            targetType: 'customer',
-            targetId: id,
-            before: { profile_picture_url: (before as any)?.profile_picture_url ?? null },
-            after: { profile_picture_url: body.profile_picture_url ?? null },
-        });
-        return { ok: true };
-    });
+    await fastify.register(adminVendorAnalyticsRoutes);
+    await fastify.register(adminVendorTransferRoutes);
+    await fastify.register(adminDevRoutes);
+    await fastify.register(adminReportsRoutes);
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
@@ -2425,285 +3606,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             return { ok: true };
         } catch (e: any) {
             return reply.code(400).send({ error: 'review_failed', message: e.message });
-        }
-    });
-
-    // ── Bulk wallet operations (super-admin only) ───────────────────────────────
-
-    fastify.post('/wallets/bulk-status', async (req, reply) => {
-        if (!requireWalletStatusManager(req, reply)) return undefined;
-        const schema = z.object({
-            walletIds: z.array(z.string().uuid()).min(1).max(100),
-            status:    z.enum(['active', 'frozen', 'closed']),
-            reason:    z.string().min(4),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-
-        const results: Array<{ id: string; ok: boolean; error?: string }> = [];
-        for (const walletId of body.walletIds) {
-            try {
-                await setWalletStatus(walletId, body.status);
-                await logAction({
-                    actorUserId: req.actor!.userId,
-                    actorType:   'staff',
-                    actorRole:   req.actor!.role,
-                    action:      `wallet.bulk.${body.status}`,
-                    targetType:  'wallet',
-                    targetId:    walletId,
-                    metadata:    { reason: body.reason },
-                }).catch(() => undefined);
-                results.push({ id: walletId, ok: true });
-            } catch (e: any) {
-                results.push({ id: walletId, ok: false, error: e.message });
-            }
-        }
-        return { results };
-    });
-
-    fastify.post('/wallets/bulk-limits', async (req, reply) => {
-        if (!requireWalletStatusManager(req, reply)) return undefined;
-        const schema = z.object({
-            walletIds:         z.array(z.string().uuid()).min(1).max(100),
-            dailyCapMinor:     z.number().int().positive().optional(),
-            monthlyCapMinor:   z.number().int().positive().optional(),
-            reason:            z.string().min(4),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        if (!body.dailyCapMinor && !body.monthlyCapMinor) {
-            return reply.code(400).send({ error: 'no_changes', message: 'Provide at least one cap value.' });
-        }
-
-        const patch: Record<string, number> = {};
-        if (body.dailyCapMinor)   patch.daily_debit_cap_minor   = body.dailyCapMinor;
-        if (body.monthlyCapMinor) patch.monthly_debit_cap_minor = body.monthlyCapMinor;
-
-        const { error } = await adminClient
-            .from('wallets')
-            .update(patch)
-            .in('id', body.walletIds);
-
-        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
-        await logAction({
-            actorUserId: req.actor!.userId,
-            actorType:   'staff',
-            actorRole:   req.actor!.role,
-            action:      'wallet.bulk.limits_update',
-            targetType:  'wallet',
-            targetId:    body.walletIds.join(','),
-            metadata:    { ...patch, reason: body.reason, count: body.walletIds.length },
-        }).catch(() => undefined);
-        return { ok: true, updated: body.walletIds.length };
-    });
-
-    // ── Compliance — CTR ────────────────────────────────────────────────────────
-
-    fastify.get('/compliance/ctrs', async (req) => {
-        const q = req.query as Record<string, string>;
-        const { listCtrs } = await import('../services/compliance-ctr.js');
-        const rows = await listCtrs({
-            status:     q.status,
-            walletId:   q.wallet_id,
-            customerId: q.customer_id,
-            since:      q.since,
-            until:      q.until,
-            limit:      q.limit ? Math.min(Number(q.limit), 500) : 100,
-            cursor:     q.cursor,
-        });
-        return { ctrs: rows, count: rows.length };
-    });
-
-    fastify.get('/compliance/ctrs/stats', async () => {
-        const { getCtrStats } = await import('../services/compliance-ctr.js');
-        return getCtrStats();
-    });
-
-    fastify.post('/compliance/ctrs/:id/file', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        const schema = z.object({ filing_reference: z.string().optional() });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { fileCtr } = await import('../services/compliance-ctr.js');
-        try {
-            await fileCtr(id, req.actor!.userId, body.filing_reference);
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType:   'staff',
-                actorRole:   req.actor!.role,
-                action:      'compliance.ctr.file',
-                targetType:  'ctr',
-                targetId:    id,
-                metadata:    { filing_reference: body.filing_reference },
-            }).catch(() => undefined);
-            return { ok: true };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'file_failed', message: e.message });
-        }
-    });
-
-    fastify.get('/compliance/ctrs/report', async (req, reply) => {
-        const q = req.query as Record<string, string>;
-        const since = q.since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const until = q.until ?? new Date().toISOString();
-        const { buildCbnReport } = await import('../services/compliance-ctr.js');
-        const report = await buildCbnReport(since, until);
-        reply.header('Content-Type', 'application/json');
-        reply.header('Content-Disposition', `attachment; filename="cbn-ctr-report-${since.slice(0, 10)}.json"`);
-        return report;
-    });
-
-    // ── Compliance — AML / Sanctions ───────────────────────────────────────────
-
-    fastify.get('/compliance/aml', async (req) => {
-        const q = req.query as Record<string, string>;
-        const { listScreenings } = await import('../services/aml-screening.js');
-        const rows = await listScreenings({
-            entityType: q.entity_type,
-            status:     q.status,
-            since:      q.since,
-            limit:      q.limit ? Math.min(Number(q.limit), 500) : 100,
-        });
-        return { screenings: rows, count: rows.length };
-    });
-
-    fastify.post('/compliance/aml/:id/review', async (req, reply) => {
-        const id = (req.params as { id: string }).id;
-        const schema = z.object({
-            status: z.enum(['whitelisted', 'blocked', 'clear']),
-            note:   z.string().optional(),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { reviewScreening } = await import('../services/aml-screening.js');
-        try {
-            await reviewScreening(id, req.actor!.userId, body.status, body.note);
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType:   'staff',
-                actorRole:   req.actor!.role,
-                action:      'compliance.aml.review',
-                targetType:  'aml_screening',
-                targetId:    id,
-                metadata:    { new_status: body.status, note: body.note },
-            }).catch(() => undefined);
-            return { ok: true };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'review_failed', message: e.message });
-        }
-    });
-
-    fastify.get('/compliance/sanctions', async (req) => {
-        const q = req.query as Record<string, string>;
-        const { listSanctionsEntries } = await import('../services/aml-screening.js');
-        const rows = await listSanctionsEntries({
-            active: q.active !== undefined ? q.active === 'true' : true,
-            limit:  q.limit ? Math.min(Number(q.limit), 500) : 200,
-        });
-        return { entries: rows, count: rows.length };
-    });
-
-    fastify.post('/compliance/sanctions', async (req, reply) => {
-        const schema = z.object({
-            full_name:    z.string().min(2),
-            aliases:      z.array(z.string()).optional(),
-            bvn_partial:  z.string().length(4).optional(),
-            nin_partial:  z.string().length(4).optional(),
-            nationality:  z.string().optional(),
-            source:       z.enum(['EFCC', 'INTERPOL', 'OFAC', 'CBN', 'internal']),
-            list_date:    z.string().optional(),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { addSanctionsEntry } = await import('../services/aml-screening.js');
-        try {
-            const id = await addSanctionsEntry({
-                fullName:        body.full_name,
-                aliases:         body.aliases,
-                bvnPartial:      body.bvn_partial,
-                ninPartial:      body.nin_partial,
-                nationality:     body.nationality,
-                source:          body.source,
-                listDate:        body.list_date,
-                addedByUserId:   req.actor!.userId,
-            });
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType:   'staff',
-                actorRole:   req.actor!.role,
-                action:      'compliance.sanctions.add',
-                targetType:  'sanctions_entry',
-                targetId:    id,
-                metadata:    { full_name: body.full_name, source: body.source },
-            }).catch(() => undefined);
-            return { ok: true, id };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'insert_failed', message: e.message });
-        }
-    });
-
-    // ── KYC document admin ──────────────────────────────────────────────────────
-
-    fastify.get('/kyc/documents/pending', async (req) => {
-        const q = req.query as { limit?: string };
-        const { listPendingDocuments } = await import('../services/kyc-documents.js');
-        const docs = await listPendingDocuments({ limit: q.limit ? Number(q.limit) : 100 });
-        return { documents: docs, count: docs.length };
-    });
-
-    fastify.get('/kyc/documents/:customerId', async (req) => {
-        const customerId = (req.params as { customerId: string }).customerId;
-        const { listDocuments } = await import('../services/kyc-documents.js');
-        const docs = await listDocuments(customerId);
-        return { documents: docs };
-    });
-
-    fastify.get('/kyc/documents/:customerId/:docId/url', async (req, reply) => {
-        const { docId } = req.params as { customerId: string; docId: string };
-        const { getDownloadUrl, KycDocumentError } = await import('../services/kyc-documents.js');
-        try {
-            const url = await getDownloadUrl(docId);
-            return { url };
-        } catch (e: any) {
-            const code = e instanceof KycDocumentError && e.code === 'not_found' ? 404 : 400;
-            return reply.code(code).send({ error: e.code ?? 'url_failed', message: e.message });
-        }
-    });
-
-    fastify.post('/kyc/documents/:docId/review', async (req, reply) => {
-        const docId = (req.params as { docId: string }).docId;
-        const schema = z.object({
-            approve:         z.boolean(),
-            rejection_note:  z.string().optional(),
-        });
-        let body: z.infer<typeof schema>;
-        try { body = schema.parse(req.body); }
-        catch (e: any) { return reply.code(400).send({ error: 'validation_error', message: e.message }); }
-        const { reviewDocument } = await import('../services/kyc-documents.js');
-        try {
-            await reviewDocument({
-                docId,
-                reviewedByUserId: req.actor!.userId,
-                approve:          body.approve,
-                rejectionNote:    body.rejection_note,
-            });
-            await logAction({
-                actorUserId: req.actor!.userId,
-                actorType:   'staff',
-                actorRole:   req.actor!.role,
-                action:      body.approve ? 'kyc.document.approve' : 'kyc.document.reject',
-                targetType:  'kyc_document',
-                targetId:    docId,
-                metadata:    { rejection_note: body.rejection_note },
-            }).catch(() => undefined);
-            return { ok: true };
-        } catch (e: any) {
-            return reply.code(400).send({ error: e.code ?? 'review_failed', message: e.message });
         }
     });
 };

@@ -1,0 +1,63 @@
+import { build } from "../backend/wallet/dist/server.js";
+
+let appPromise;
+
+async function getApp() {
+  if (!appPromise) {
+    appPromise = build().then(async (app) => {
+      await app.ready();
+      return app;
+    });
+  }
+  return appPromise;
+}
+
+function targetUrl(rawUrl = "/") {
+  const [pathname, query] = rawUrl.split("?", 2);
+  const target = pathname.replace(/^\/api\/wallet-service/, "") || "/";
+  return query ? `${target}?${query}` : target;
+}
+
+function clientAddress(request) {
+  const vercelAddress = request.headers?.["x-vercel-forwarded-for"];
+  const forwardedAddress = request.headers?.["x-forwarded-for"];
+  return String(vercelAddress || forwardedAddress || request.socket?.remoteAddress || "127.0.0.1")
+    .split(",")[0]
+    .trim();
+}
+
+export async function injectWallet(request) {
+  const app = await getApp();
+  const method = String(request.method || "GET").toUpperCase();
+  const payload = ["GET", "HEAD"].includes(method)
+    ? undefined
+    : typeof request.body === "string" || Buffer.isBuffer(request.body)
+      ? request.body
+      : JSON.stringify(request.body ?? {});
+  return app.inject({
+    method,
+    url: targetUrl(request.url),
+    headers: request.headers,
+    payload,
+    remoteAddress: clientAddress(request),
+  });
+}
+
+export default async function handler(request, response) {
+  try {
+    const result = await injectWallet(request);
+    for (const [name, value] of Object.entries(result.headers)) {
+      if (value !== undefined) response.setHeader(name, value);
+    }
+    response.statusCode = result.statusCode;
+    response.end(result.body);
+  } catch (error) {
+    console.error("[wallet-serverless]", error);
+    response.statusCode = 500;
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      error: "wallet_backend_failed",
+      message: "Wallet backend failed to start.",
+    }));
+  }
+}

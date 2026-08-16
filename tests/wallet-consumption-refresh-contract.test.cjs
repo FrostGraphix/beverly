@@ -20,12 +20,16 @@ function assertIncludes(source, value, label) {
 
 assertIncludes(service, "refresh_meter_reading_aggregates_for_station", "service");
 assertIncludes(service, "p_station_id", "service");
-assertIncludes(service, "DEFAULT_REFRESH_STATIONS", "service");
+assertIncludes(service, "await listStations()", "service");
 assertIncludes(service, "meter_consumption_aggregates", "service");
 assertIncludes(service, "groupedRows", "service");
 assertIncludes(routes, "stationIds", "admin route");
 assertIncludes(routes, "refreshConsumptionAggregates(stationIds)", "admin route");
-assertIncludes(view, "api.post('/api/v1/admin/consumption/refresh', { stationIds })", "admin view");
+// The view sends a station list only when one is selected; with no selection it
+// posts an empty body so the server resolves the full estate from the database
+// (a station onboarded after page load is then still covered).
+assertIncludes(view, "api.post('/api/v1/admin/consumption/refresh', body)", "admin view");
+assertIncludes(view, "selectedStn.value ? { stationIds: [selectedStn.value] } : {}", "admin view");
 assertIncludes(migration, "create or replace function public.refresh_meter_reading_aggregates_for_station", "migration");
 
 if (service.includes("rpc('refresh_consumption_aggregates'")) {

@@ -85,6 +85,8 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "false",
       LIVE_READ_MODE: "local",
       ALLOW_LIVE_WRITES: "false",
+      API_CACHE_ENABLED: "false",
+      SESSION_STORE_MODE: "local",
       LOCAL_DB_PATH: "./tmp/vercel-production-test.sqlite"
     }, async () => {
       const health = await request(port, "GET", "/api/system/health");
@@ -109,6 +111,38 @@ async function main() {
         status: "vercel production passed"
       }, null, 2));
     });
+
+    const upstream = await startServer((req, res) => {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ code: 500, msg: "upstream unavailable" }));
+    });
+    try {
+      await withEnv({
+        LIVE_API_PROXY_ENABLED: "true",
+        LIVE_READ_MODE: "live",
+        LIVE_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
+        ALLOW_LIVE_WRITES: "false",
+        API_CACHE_ENABLED: "false",
+        SESSION_STORE_MODE: "local",
+        LOCAL_DB_PATH: "./tmp/vercel-production-test.sqlite"
+      }, async () => {
+        const chart = await request(port, "POST", "/api/dashboard/readLineChart", { type: 3 });
+        const stations = await request(port, "POST", "/api/station/read", { pageNumber: 1, pageSize: 10 });
+
+        assert.strictEqual(chart.status, 200);
+        assert.strictEqual(chart.body._proxy.source, "sample-after-live-failure");
+        // station/read is a mutable admin CRUD table (see api/reference.js
+        // canUseSampleFallback): on a live outage it must fail loudly with a
+        // real 502, never mask the outage behind a frozen fixture presented
+        // as success. See tests/station-live-fallback-contract.test.cjs.
+        assert.strictEqual(stations.status, 502);
+        assert.strictEqual(stations.body._proxy.source, "live-required");
+        assert.strictEqual(stations.body.result, null);
+      });
+    } finally {
+      await closeServer(upstream);
+    }
   } finally {
     await closeServer(server);
   }

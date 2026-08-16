@@ -2,12 +2,42 @@
 .env.*
 !.env.example
 node_modules/
+.tools/
 dist/
 backend/data/*.sqlite
+backend/data/*.sqlite-*
 tmp/*.sqlite
+tmp/
+browser_logs.txt
+check_swagger.js
+test_api.js
+test_err.js
+token.txt
+beverly-reveal.html
 .claude/
 tmp-*.log
 tmp-*.err.log
+.codex-*.log
 replica-screenshots/diffs/
 
 .vercel
+.env*
+*.sqlite
+query.js
+test-login.cjs
+test_output.html
+
+# Dev build outputs
+dev-dist/
+*.timestamp-*.mjs
+
+# Audit output folders & QA logs
+audit-*/
+design-qa.md
+
+# Local image crop test files
+input_check.png
+original_seal_crop.png
+reconstructed_emblem_*.png
+reconstructed_seal.png
+seal_*.png

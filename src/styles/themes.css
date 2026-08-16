@@ -5,6 +5,8 @@
 
 [data-theme="light"] {
   color-scheme: light;
+  --brand-mark-url:   url("/brand/beverly-mark.png");
+  --brand-lockup-url: url("/brand/beverly-lockup.png");
 
   /* ── Brand — wallet oklch green palette ── */
   --color-brand:        oklch(70% 0.19 145);
@@ -17,13 +19,19 @@
   --color-text-strong:  oklch(22% 0.020 240);
   --color-text-muted:   oklch(58% 0.015 240);
   --color-text-faint:   oklch(72% 0.010 240);
-  --color-text-inverse: #ffffff;
+  /* Dark ink on brand green passes WCAG AA; white on bright green does not */
+  --color-text-inverse: oklch(8% 0.04 145);
 
   /* ── Surfaces — wallet light surface scale ── */
   --color-surface-page:    oklch(98% 0.004 240);
   --color-surface-card:    oklch(100% 0 0);
   --color-surface-glass:   oklch(100% 0 0 / 0.88);
   --color-surface-overlay: oklch(20% 0.020 240 / 0.55);
+  --glass-surface:         oklch(100% 0 0 / 0.68);
+  --glass-surface-strong:  oklch(100% 0 0 / 0.84);
+  --glass-border:          oklch(100% 0 0 / 0.78);
+  --glass-highlight:       inset 0 1px 0 oklch(100% 0 0 / 0.82);
+  --glass-shadow:          0 18px 46px oklch(22% 0.02 240 / 0.09), 0 2px 8px oklch(22% 0.02 240 / 0.05);
 
   /* ── Borders — wallet light border scale ── */
   --color-border:        oklch(20% 0.020 240 / 0.08);
@@ -58,18 +66,18 @@
   --theme-color-dim:    oklch(70% 0.19 145 / 0.18);
 
   /* ── Sidebar — dark green shell (wallet-aligned oklch) ── */
-  --sidebar-bg-start:      oklch(13% 0.025 145);
-  --sidebar-bg-end:        oklch(17% 0.030 145);
-  --sidebar-text:          oklch(75% 0.010 145 / 0.65);
-  --sidebar-text-hover:    #ffffff;
-  --sidebar-active-bg:     linear-gradient(90deg, oklch(70% 0.19 145 / 0.22) 0%, oklch(70% 0.19 145 / 0.04) 100%);
+  --sidebar-bg-start:      oklch(100% 0 0);
+  --sidebar-bg-end:        oklch(100% 0 0);
+  --sidebar-text:          oklch(36% 0.018 240 / 0.88);
+  --sidebar-text-hover:    oklch(22% 0.020 240);
+  --sidebar-active-bg:     linear-gradient(90deg, oklch(70% 0.19 145 / 0.16) 0%, oklch(70% 0.19 145 / 0.05) 100%);
   --sidebar-active-border: oklch(80% 0.16 145);
-  --sidebar-logo-bg:       oklch(80% 0.16 145);
-  --sidebar-logo-border:   oklch(70% 0.19 145 / 0.18);
-  --sidebar-hover-bg:      oklch(100% 0 0 / 0.07);
-  --sidebar-hover-border:  oklch(100% 0 0 / 0.08);
-  --sidebar-footer-bg:     linear-gradient(180deg, oklch(13% 0.025 145 / 0), oklch(13% 0.025 145 / 0.96));
-  --sidebar-footer-border: oklch(100% 0 0 / 0.06);
+  --sidebar-logo-bg:       oklch(100% 0 0);
+  --sidebar-logo-border:   oklch(20% 0.020 240 / 0.12);
+  --sidebar-hover-bg:      oklch(70% 0.19 145 / 0.08);
+  --sidebar-hover-border:  oklch(70% 0.19 145 / 0.16);
+  --sidebar-footer-bg:     oklch(100% 0 0);
+  --sidebar-footer-border: oklch(20% 0.020 240 / 0.12);
 
   /* ── Shadows — wallet light shadow scale ── */
   --bev-shadow-glow:    0 0 0 1px oklch(70% 0.19 145 / 0.18), 0 14px 38px oklch(70% 0.19 145 / 0.10);
@@ -80,6 +88,8 @@
 
 [data-theme="executive"] {
   color-scheme: dark;
+  --brand-mark-url:   url("/brand/beverly-mark-light.png");
+  --brand-lockup-url: url("/brand/beverly-lockup-light.png");
   --color-brand: #22c55e;
   --color-brand-hover: #4ade80;
   --color-brand-strong: #166534;
@@ -93,6 +103,11 @@
   --color-surface-card: #0b140e;
   --color-surface-glass: rgba(7, 14, 10, 0.94);
   --color-surface-overlay: rgba(1, 6, 3, 0.9);
+  --glass-surface: rgba(9, 22, 14, 0.72);
+  --glass-surface-strong: rgba(9, 22, 14, 0.88);
+  --glass-border: rgba(134, 239, 172, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(220, 252, 231, 0.12);
+  --glass-shadow: 0 20px 52px rgba(0, 0, 0, 0.34), 0 2px 8px rgba(0, 0, 0, 0.22);
   --color-border: rgba(74, 222, 128, 0.34);
   --color-border-strong: rgba(134, 239, 172, 0.62);
   --color-success: #4ade80;
@@ -141,6 +156,11 @@
   --color-surface-card: #0f0f0f;
   --color-surface-glass: rgba(10, 10, 10, 0.92);
   --color-surface-overlay: rgba(0, 0, 0, 0.88);
+  --glass-surface: rgba(12, 12, 12, 0.9);
+  --glass-surface-strong: rgba(12, 12, 12, 0.96);
+  --glass-border: rgba(255, 214, 10, 0.44);
+  --glass-highlight: inset 0 1px 0 rgba(255, 243, 163, 0.2);
+  --glass-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 214, 10, 0.08);
   --color-border: rgba(255, 214, 10, 0.42);
   --color-border-strong: rgba(255, 214, 10, 0.72);
   --color-success: #22c55e;

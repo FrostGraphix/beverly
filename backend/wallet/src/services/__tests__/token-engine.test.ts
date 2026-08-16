@@ -1,46 +1,50 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import {
     previewPurchase, resolveTariffPricing, TokenEngineError,
-    listStations, invalidateStationsCache, buildCreditTokenPayload, buildRemoteTaskConfirmPayload,
+    listStations, listStationDirectory, invalidateStationsCache, buildCreditTokenPayload, buildRemoteTaskConfirmPayload,
     buildRemoteTokenStandbyConfirmPayload, buildRemoteTokenTaskLookupPayload, buildRemoteTokenTaskPayload,
     lookupArchivedMeterSample, createRemoteSendTask,
 } from '../token-engine.js';
 
 describe('token engine pricing', () => {
-    it('resolves residential tariff with no tax', () => {
+    it('resolves residential tariff pricing', () => {
         const t = resolveTariffPricing('RESIDENTIAL');
         expect(t.basePricePerKwh).toBe(350);
-        expect(t.taxRate).toBe(0);
         expect(t.effectivePricePerKwh).toBe(350);
     });
 
-    it('applies KOLO 7.5% tax', () => {
+    it('resolves KOLO base pricing before VAT split', () => {
         const t = resolveTariffPricing('KOLO');
-        expect(t.effectivePricePerKwh).toBeCloseTo(483.75, 4);
+        expect(t.basePricePerKwh).toBe(450);
+        expect(t.effectivePricePerKwh).toBe(450);
     });
 
     it('falls back to residential pricing for unknown legacy tariff ids', () => {
         const t = resolveTariffPricing('UNKNOWN');
         expect(t.basePricePerKwh).toBe(350);
-        expect(t.taxRate).toBe(0);
         expect(t.effectivePricePerKwh).toBe(350);
         expect(t.tariffId).toBe('UNKNOWN');
     });
 
-    it('previewPurchase computes units correctly for residential', () => {
-        // ₦5,000 = 500000 kobo at ₦350/kWh = 14.2857 kWh
+    it('previewPurchase computes inclusive VAT from the gross amount', () => {
+        // ₦5,000 gross: energy = round(500000×10000/10750) = 465116, VAT = 34884.
         const p = previewPurchase(500000, 'RESIDENTIAL');
         expect(p.amountMinor).toBe(500000);
-        expect(p.units).toBeCloseTo(14.2857, 3);
+        expect(p.energyAmountMinor).toBe(465116);
+        expect(p.taxAmountMinor).toBe(34884);
+        expect(p.vatRateBasisPoints).toBe(750);
+        expect(p.units).toBeCloseTo(13.289, 2);
         expect(p.tariffId).toBe('RESIDENTIAL');
-        expect(p.taxAmountMinor).toBe(0);
     });
 
-    it('previewPurchase computes tax embedded in kobo amount for KOLO', () => {
-        // KOLO has 7.5% tax: of ₦1000 paid, ~₦69.77 is tax
-        const p = previewPurchase(100000, 'KOLO');
-        expect(p.taxAmountMinor).toBeGreaterThan(6000);
-        expect(p.taxAmountMinor).toBeLessThan(8000);
+    it('uses inclusive fallback VAT for a NGN 1,000 purchase', () => {
+        // ₦1,000 gross: energy = round(100000×10000/10750) = 93023, VAT = 6977.
+        const p = previewPurchase(100000, 'RESIDENTIAL');
+        expect(p.taxAmountMinor).toBe(6977);
+        expect(p.amountMinor).toBe(100000);
+        expect(p.energyAmountMinor).toBe(93023);
+        expect(p.vatRateBasisPoints).toBe(750);
+        expect(p.units).toBeCloseTo(2.6578, 4);
     });
 
     it('rejects non-positive amounts', () => {
@@ -125,6 +129,31 @@ describe('listStations', () => {
         }) as any;
         await expect(listStations({ force: true })).rejects.toThrow(TokenEngineError);
     });
+
+    it('falls back to default env credentials when OEM resolution produces no config', async () => {
+        globalThis.fetch = vi.fn(async (url: any) => {
+            const urlStr = String(url || '');
+            if (urlStr.includes('/api/station/read')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        code: 0,
+                        result: { total: 1, data: [{ stationId: 'BONDU', name: 'BONDU' }] },
+                    }),
+                } as any;
+            }
+            return {
+                ok: true,
+                status: 200,
+                headers: new Headers({ 'content-type': 'application/json' }),
+                text: async () => '[]',
+                json: async () => [],
+            } as any;
+        }) as any;
+        const stations = await listStationDirectory({ force: true });
+        expect(stations).toHaveLength(1);
+        expect(stations[0].stationId).toBe('BONDU');
+    });
 });
 
 describe('live token integration payloads', () => {
@@ -144,17 +173,8 @@ describe('live token integration payloads', () => {
         expect(payload.isS2).toBe(true);
     });
 
-    it('can resolve archived read-only meter metadata without vending', () => {
-        const meter = lookupArchivedMeterSample('47005373957');
-        expect(meter).toMatchObject({
-            meterId: '47005373957',
-            customerId: '47005373957',
-            customerName: 'JONATHAN AZIGE',
-            stationId: 'KYAKALE',
-            tariffId: 'RESIDENTIAL',
-            resolutionSource: 'archived_contract_sample',
-            liveVerified: false,
-        });
+    it('keeps archived meter samples disabled by default', () => {
+        expect(lookupArchivedMeterSample('47005373957')).toBeNull();
     });
 
     it('builds the upstream CreateTokenTask payload for remote sends', () => {

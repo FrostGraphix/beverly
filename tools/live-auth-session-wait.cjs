@@ -2,11 +2,17 @@ const fs = require("fs");
 const path = require("path");
 require("module").Module._initPaths();
 const { chromium } = require("playwright");
+const { loadEnvFile } = require("./env-loader.cjs");
+
+loadEnvFile();
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const outDir = path.resolve("source-crawl/authenticated");
 const answerFile = path.join(outDir, "captcha-answer.txt");
 const readyFile = path.join(outDir, "captcha-ready.json");
+const sourceUrl = String(process.env.SOURCE_SITE_URL || "").replace(/\/+$/, "");
+const sourceUsername = String(process.env.SOURCE_USERNAME || "");
+const sourcePassword = String(process.env.SOURCE_PASSWORD || "");
 const viewports = [
   { name: "desktop", width: 1365, height: 768 },
   { name: "tablet", width: 768, height: 1024 },
@@ -29,6 +35,9 @@ async function gotoWithRetry(page, url) {
 }
 
 async function main() {
+  if (!sourceUrl || !sourceUsername || !sourcePassword) {
+    throw new Error("Set SOURCE_SITE_URL, SOURCE_USERNAME, and SOURCE_PASSWORD.");
+  }
   fs.mkdirSync(outDir, { recursive: true });
   fs.rmSync(answerFile, { force: true });
   fs.rmSync(readyFile, { force: true });
@@ -54,9 +63,9 @@ async function main() {
   });
   page.on("console", (message) => consoleLogs.push({ type: message.type(), text: message.text() }));
 
-  await gotoWithRetry(page, "http://8.208.16.168:9311/#/dashboard");
-  await page.locator('input[placeholder="Username"]').fill("admin");
-  await page.locator('input[placeholder="Password"]').fill("ACOB_ADMIN");
+  await gotoWithRetry(page, `${sourceUrl}/#/dashboard`);
+  await page.locator('input[placeholder="Username"]').fill(sourceUsername);
+  await page.locator('input[placeholder="Password"]').fill(sourcePassword);
   const captchaShot = path.join(outDir, "live-captcha-session-desktop-1365x768.png");
   await page.screenshot({ path: captchaShot, fullPage: false });
   fs.writeFileSync(readyFile, JSON.stringify({
@@ -98,7 +107,7 @@ async function main() {
 
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await gotoWithRetry(page, "http://8.208.16.168:9311/#/dashboard");
+    await gotoWithRetry(page, `${sourceUrl}/#/dashboard`);
     await sleep(1000);
     const visiblePath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}.png`);
     const fullPath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}-full.png`);

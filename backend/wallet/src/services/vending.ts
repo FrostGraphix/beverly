@@ -10,11 +10,8 @@
  *   6. create purchase_order row + receipt
  *   7. return token
  *
- * Flow (remote-send):
- *   1. same 1-3 as above
- *   2. createRemoteSendTask
- *   3. purchase_order.status = 'dispatching', delivery_state = 'remote_send_pending'
- *   4. async worker polls; on success captures hold + writes receipt
+ * Remote delivery is optional and starts only after the completed token order.
+ * It never holds a vend in a backend queue.
  *
  * Failure recovery:
  *   • Token engine fails → release hold, mark purchase_order failed.
@@ -25,12 +22,18 @@ import {
     createHold, captureHold, releaseHold,
 } from './ledger.js';
 import {
-    lookupMeter, previewPurchase, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner } from './wallets.js';
 import { logAction } from './audit.js';
-import { ledgerKey, hashIdempotency } from './idempotency.js';
+import {
+    abandonWalletIdempotency,
+    claimWalletIdempotency,
+    completeWalletIdempotency,
+    hashIdempotency,
+    ledgerKey,
+} from './idempotency.js';
 
 export class VendingError extends Error {
     constructor(message: string, public code: string) { super(message); this.name = 'VendingError'; }
@@ -48,6 +51,9 @@ export interface PurchaseOrder {
     station_id: string | null;
     tariff_id: string | null;
     amount_minor: number;
+    energy_amount_minor?: number | null;
+    vat_amount_minor?: number | null;
+    vat_rate_basis_points?: number | null;
     units_kwh: number | null;
     purchase_mode: 'wallet' | 'direct_pay' | 'remote_send';
     payment_transaction_id: string | null;
@@ -61,6 +67,8 @@ export interface PurchaseOrder {
     failure_reason: string | null;
     created_by: string;
     created_at: string;
+    /** Phase 6: which OEM this meter/vend belongs to (station/meter identity namespacing). */
+    oem_id?: string | null;
 }
 
 export type MeterType = 'single_phase' | 'three_phase';
@@ -75,7 +83,7 @@ export interface VendorPurchaseInput {
     meterId: string;
     amountMinor: number;
     clientIdempotencyKey: string;
-    mode: 'wallet' | 'remote_send';
+    mode: 'wallet';
 }
 
 export interface VendorPurchaseResult {
@@ -87,7 +95,46 @@ export interface VendorPurchaseResult {
     ledgerEntryId: string | null;
 }
 
+export interface VendorTokenDispatchResult {
+    purchaseOrder: PurchaseOrder;
+    remoteTaskId: string;
+    deliveryState: string;
+    status: 'pending' | 'success' | 'failed' | 'unknown';
+    remark?: string | null;
+}
+
 export async function vendorPurchase(input: VendorPurchaseInput): Promise<VendorPurchaseResult> {
+    const scope = `vendor_purchase:${input.vendorOrganizationId}`;
+    const fingerprint = hashIdempotency([
+        input.meterId,
+        input.amountMinor,
+        input.mode,
+    ]);
+    let claimed = false;
+    try {
+        const claim = await claimWalletIdempotency(scope, input.clientIdempotencyKey, fingerprint);
+        if (claim.state === 'replay') return claim.responsePayload as VendorPurchaseResult;
+        if (claim.state === 'pending') {
+            throw new VendingError('This request is still processing. Retry with the same Idempotency-Key.', 'idempotency_in_progress');
+        }
+        claimed = true;
+        const result = await vendorPurchaseImpl(input);
+        await completeWalletIdempotency(scope, input.clientIdempotencyKey, result);
+        return result;
+    } catch (error) {
+        if (claimed) {
+            await abandonWalletIdempotency(scope, input.clientIdempotencyKey, fingerprint).catch(() => undefined);
+        }
+        if (error instanceof VendingError) throw error;
+        const message = error instanceof Error ? error.message : 'Could not process vend.';
+        if (/idempotency key payload mismatch/i.test(message)) {
+            throw new VendingError(message, 'idempotency_payload_mismatch');
+        }
+        throw new VendingError(message, 'idempotency_claim_failed');
+    }
+}
+
+async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPurchaseResult> {
     const idemKey = hashIdempotency([
         'vendor_purchase', input.vendorOrganizationId, input.meterId,
         input.amountMinor, input.mode, input.clientIdempotencyKey,
@@ -126,7 +173,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
         throw e;
     }
 
-    const preview = previewPurchase(input.amountMinor, meter.tariffId);
+    const preview = await previewPurchaseWithPolicy(input.amountMinor, meter.tariffId);
     const meterType = meterTypeFromInfo(meter);
 
     // create order in 'created' state
@@ -140,7 +187,11 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
         meter_type: meterType,
         station_id: meter.stationId,
         tariff_id: meter.tariffId,
-        amount_minor: input.amountMinor,
+        oem_id: meter.oemId ?? null,
+        amount_minor: preview.grossAmountMinor,
+        energy_amount_minor: preview.energyAmountMinor,
+        vat_amount_minor: preview.taxAmountMinor,
+        vat_rate_basis_points: preview.vatRateBasisPoints,
         units_kwh: preview.units,
         purchase_mode: input.mode,
         status: 'created',
@@ -155,7 +206,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
     try {
         hold = await createHold({
             walletId: wallet.id,
-            amountMinor: input.amountMinor,
+            amountMinor: preview.grossAmountMinor,
             referenceType: 'purchase_order',
             referenceId: po.id,
             idempotencyKey: ledgerKey('purchase', 'debit', po.id, 'hold'),
@@ -177,7 +228,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
     let ledgerEntryId: string | null = null;
     let receiptId: string | null = null;
 
-    if (input.mode === 'wallet') {
+    {
         // instant token generation
         try {
             const tokenRes = await generateCreditToken({
@@ -185,10 +236,12 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                 customerId: meter.customerId,
                 customerName: meter.customerName,
                 stationId: meter.stationId,
-                amountMinor: input.amountMinor,
+                amountMinor: preview.energyAmountMinor,
                 units: preview.units,
                 tariffId: meter.tariffId,
                 isThreePhase: meter.isThreePhase,
+                sgc: meter.sgc,
+                oemId: meter.oemId,
                 reference: po.id,
             });
             token = tokenRes.token;
@@ -215,7 +268,11 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
                     meterType,
                     stationId: meter.stationId,
                     tariffId: meter.tariffId,
-                    amountMinor: input.amountMinor,
+                    amountMinor: preview.grossAmountMinor,
+                    grossAmountMinor: preview.grossAmountMinor,
+                    energyAmountMinor: preview.energyAmountMinor,
+                    vatAmountMinor: preview.taxAmountMinor,
+                    vatRateBasisPoints: preview.vatRateBasisPoints,
                     units: preview.units,
                     token,
                     generatedAt: tokenRes.generatedAt,
@@ -244,57 +301,6 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
             }
             throw new VendingError(e.message, e.code ?? 'token_engine_failed');
         }
-    } else {
-        // remote_send: generate the credit token, then dispatch it to the meter.
-        // The hold stays active until the remote task worker confirms delivery.
-        try {
-            const tokenRes = await generateCreditToken({
-                meterId: meter.meterId,
-                customerId: meter.customerId,
-                customerName: meter.customerName,
-                stationId: meter.stationId,
-                amountMinor: input.amountMinor,
-                units: preview.units,
-                tariffId: meter.tariffId,
-                isThreePhase: meter.isThreePhase,
-                reference: po.id,
-            });
-            token = tokenRes.token;
-
-            // Store token in DB BEFORE network call so it survives a crash.
-            await adminClient.from('purchase_orders').update({
-                token,
-                delivery_state: 'token_generated_remote_send_queued',
-            }).eq('id', po.id);
-
-            const sendRes = await createRemoteSendTask({
-                customerId: meter.customerId,
-                customerName: meter.customerName,
-                meterId: meter.meterId,
-                stationId: meter.stationId,
-                protocolVersion: meter.protocolVersion,
-                token,
-                reference: po.id,
-            });
-            remoteTaskId = sendRes.taskId;
-            await adminClient.from('purchase_orders').update({
-                remote_task_id: remoteTaskId,
-                status: 'dispatching',
-                delivery_state: 'remote_send_pending',
-            }).eq('id', po.id);
-            po = { ...po, token, remote_task_id: remoteTaskId, status: 'dispatching', delivery_state: 'remote_send_pending' };
-        } catch (e: any) {
-            if (token) {
-                await markPendingReview(po.id, e.code ?? 'remote_send_failed', e.message, {
-                    token,
-                    deliveryState: 'token_generated_remote_send_failed',
-                });
-            } else {
-                try { await releaseHold(hold.id); } catch { /* noop */ }
-                await markFailed(po.id, e.code ?? 'remote_send_failed', e.message);
-            }
-            throw new VendingError(e.message, e.code ?? 'remote_send_failed');
-        }
     }
 
     await logAction({
@@ -305,7 +311,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
         targetId: po.id,
         after: {
             meterId: meter.meterId,
-            amountMinor: input.amountMinor,
+            amountMinor: preview.grossAmountMinor,
             units: preview.units,
             status: po.status,
         },
@@ -319,6 +325,122 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
         receiptId,
         ledgerEntryId,
     };
+}
+
+export async function dispatchGeneratedVendorToken(
+    vendorOrganizationId: string,
+    vendorUserId: string,
+    purchaseOrderId: string,
+): Promise<VendorTokenDispatchResult> {
+    const { data, error } = await adminClient
+        .from('purchase_orders')
+        .select('*')
+        .eq('id', purchaseOrderId)
+        .eq('actor_type', 'vendor')
+        .eq('actor_id', vendorOrganizationId)
+        .maybeSingle();
+    if (error) throw new VendingError(error.message, 'purchase_lookup_failed');
+    if (!data) throw new VendingError('Purchase order was not found for this vendor.', 'purchase_not_found');
+
+    const po = data as PurchaseOrder;
+    if (!po.token) throw new VendingError('This purchase has no generated token to send.', 'token_missing');
+    if (po.status !== 'delivered') throw new VendingError('Only delivered token purchases can be remote sent.', 'purchase_not_delivered');
+    if (po.remote_task_id && po.delivery_state === 'remote_send_delivered') {
+        return {
+            purchaseOrder: po,
+            remoteTaskId: po.remote_task_id,
+            deliveryState: 'remote_send_delivered',
+            status: 'success',
+            remark: null,
+        };
+    }
+    if (po.remote_task_id && ['remote_send_pending', 'remote_send_pending_review'].includes(String(po.delivery_state))) {
+        const status = await pollRemoteSendStatus(po.remote_task_id, {
+            meterId: po.meter_id,
+            token: po.token,
+            oemId: po.oem_id,
+        }).catch(() => ({ taskId: po.remote_task_id!, status: 'pending' as const, remark: null }));
+        const deliveryState = status.status === 'success'
+            ? 'remote_send_delivered'
+            : status.status === 'failed'
+                ? 'remote_send_failed_needs_manual_entry'
+                : 'remote_send_pending_review';
+        if (deliveryState !== po.delivery_state) {
+            await adminClient.from('purchase_orders').update({
+                delivery_state: deliveryState,
+                ...(status.status === 'failed'
+                    ? { failure_reason: `remote_send_failed: ${status.remark ?? 'Meter rejected the token.'}`.slice(0, 500) }
+                    : {}),
+            }).eq('id', po.id);
+        }
+        return {
+            purchaseOrder: { ...po, delivery_state: deliveryState },
+            remoteTaskId: status.taskId,
+            deliveryState,
+            status: status.status,
+            remark: status.remark ?? null,
+        };
+    }
+
+    let meter: MeterInfo | null = null;
+    try {
+        meter = await lookupMeter(po.meter_id, {
+            allowArchivedFallback: true,
+            allowHistoricalFallback: true,
+            oemId: po.oem_id,
+        });
+    } catch {
+        meter = null;
+    }
+    const stationId = po.station_id || meter?.stationId;
+    if (!stationId) {
+        throw new VendingError('Remote send needs a station ID for this meter. Enter the token manually and ask admin to bind the meter.', 'remote_send_metadata_missing');
+    }
+
+    try {
+        const task = await createRemoteSendTask({
+            customerId: po.customer_id || meter?.customerId || po.meter_id,
+            customerName: po.customer_name || meter?.customerName,
+            meterId: po.meter_id,
+            stationId,
+            protocolVersion: meter?.protocolVersion,
+            token: po.token,
+            reference: po.id,
+            oemId: po.oem_id ?? meter?.oemId,
+        });
+        const deliveryState = task.status === 'success'
+            ? 'remote_send_delivered'
+            : task.status === 'failed'
+                ? 'remote_send_failed_needs_manual_entry'
+                : 'remote_send_pending_review';
+        await adminClient.from('purchase_orders').update({
+            remote_task_id: task.taskId,
+            delivery_state: deliveryState,
+        }).eq('id', po.id);
+        await logAction({
+            actorUserId: vendorUserId,
+            actorType: 'vendor_user',
+            action: 'vending.wallet_token_remote_send',
+            targetType: 'purchase_order',
+            targetId: po.id,
+            after: { meterId: po.meter_id, remoteTaskId: task.taskId, deliveryState },
+        });
+        return {
+            purchaseOrder: { ...po, remote_task_id: task.taskId, delivery_state: deliveryState },
+            remoteTaskId: task.taskId,
+            deliveryState,
+            status: task.status,
+            remark: task.remark ?? null,
+        };
+    } catch (e: any) {
+        const code = e instanceof TokenEngineError ? e.code : e.code ?? 'remote_send_failed';
+        const message = e instanceof Error ? e.message : 'Remote send failed.';
+        await adminClient.from('purchase_orders').update({
+            delivery_state: 'remote_send_failed_needs_manual_entry',
+            failure_reason: `${code}: ${message}`.slice(0, 500),
+        }).eq('id', po.id);
+        throw new VendingError(message, code);
+    }
 }
 
 async function markFailed(purchaseOrderId: string, code: string, reason: string) {
@@ -360,7 +482,11 @@ export async function reconcileRemoteSendOrders(limit = 25) {
     for (const row of (rows ?? []) as PurchaseOrder[]) {
         checked++;
         try {
-            const status = await pollRemoteSendStatus(row.remote_task_id!);
+            const status = await pollRemoteSendStatus(row.remote_task_id!, {
+                meterId: row.meter_id,
+                token: row.token ?? undefined,
+                oemId: row.oem_id,
+            });
             if (status.status === 'pending' || status.status === 'unknown') continue;
             if (status.status === 'failed') {
                 await markPendingReview(row.id, 'remote_delivery_failed', 'Remote meter task failed.', {
@@ -391,6 +517,10 @@ export async function reconcileRemoteSendOrders(limit = 25) {
                     stationId: row.station_id,
                     tariffId: row.tariff_id,
                     amountMinor: row.amount_minor,
+                    grossAmountMinor: row.amount_minor,
+                    energyAmountMinor: row.energy_amount_minor,
+                    vatAmountMinor: row.vat_amount_minor,
+                    vatRateBasisPoints: row.vat_rate_basis_points,
                     units: row.units_kwh,
                     token: row.token,
                     remoteTaskId: row.remote_task_id,
@@ -416,64 +546,6 @@ export async function reconcileRemoteSendOrders(limit = 25) {
     return { checked, delivered, reviewed };
 }
 
-/**
- * Resend a remote-send order that is stuck in delivery_pending_review.
- * Uses the token already stored in DB — never re-generates.
- */
-export async function resendRemoteSendOrder(
-    purchaseOrderId: string,
-    staffUserId: string,
-): Promise<{ taskId: string }> {
-    const { data: row } = await adminClient
-        .from('purchase_orders')
-        .select('*')
-        .eq('id', purchaseOrderId)
-        .maybeSingle();
-
-    if (!row) throw new VendingError('Purchase order not found.', 'not_found');
-    if ((row as any).status !== 'delivery_pending_review') {
-        throw new VendingError('Order is not in delivery_pending_review status.', 'invalid_state');
-    }
-    if (!(row as any).token) {
-        throw new VendingError('No stored token — cannot resend without re-generating.', 'no_token');
-    }
-
-    const po = row as PurchaseOrder;
-    let protocolVersion: string | null = null;
-    try {
-        const meter = await lookupMeter(po.meter_id);
-        protocolVersion = meter.protocolVersion ?? null;
-    } catch { /* proceed without protocol version */ }
-
-    const sendRes = await createRemoteSendTask({
-        customerId:      po.customer_id ?? '',
-        customerName:    po.customer_name ?? '',
-        meterId:         po.meter_id,
-        stationId:       po.station_id ?? '',
-        protocolVersion,
-        token:           po.token!,
-        reference:       po.id,
-    });
-
-    await adminClient.from('purchase_orders').update({
-        remote_task_id:  sendRes.taskId,
-        status:          'dispatching',
-        delivery_state:  'remote_send_pending',
-        failure_reason:  null,
-    }).eq('id', purchaseOrderId);
-
-    await logAction({
-        actorUserId: staffUserId,
-        actorType:   'staff',
-        action:      'vending.remote_send.resend',
-        targetType:  'purchase_order',
-        targetId:    purchaseOrderId,
-        metadata:    { taskId: sendRes.taskId },
-    });
-
-    return { taskId: sendRes.taskId };
-}
-
 function shortReceipt(orderId: string): string {
     return `BV-${orderId.replace(/-/g, '').slice(0, 12).toUpperCase()}`;
 }
@@ -485,6 +557,15 @@ export interface CreateReceiptInput {
 
 export async function createReceipt(input: CreateReceiptInput) {
     const receiptNumber = (input.payload.receiptNumber as string) ?? shortReceipt(input.purchaseOrderId);
+    const { data: existing, error: lookupError } = await adminClient
+        .from('receipts')
+        .select('*')
+        .eq('purchase_order_id', input.purchaseOrderId)
+        .maybeSingle();
+    if (lookupError) throw new VendingError(lookupError.message, 'receipt_lookup_failed');
+    if (existing) {
+        return existing as { id: string; receipt_number: string; payload: Record<string, unknown> };
+    }
     const { data, error } = await adminClient.from('receipts').insert({
         purchase_order_id: input.purchaseOrderId,
         receipt_number: receiptNumber,
@@ -495,14 +576,17 @@ export async function createReceipt(input: CreateReceiptInput) {
     return data as { id: string; receipt_number: string; payload: Record<string, unknown> };
 }
 
-export async function listVendorPurchases(vendorOrganizationId: string, limit = 100) {
-    const { data } = await adminClient
+export async function listVendorPurchases(vendorOrganizationId: string, limit = 100, offset = 0, since?: string) {
+    let query = adminClient
         .from('purchase_orders')
         .select('*')
         .eq('actor_type', 'vendor')
-        .eq('actor_id', vendorOrganizationId)
+        .eq('actor_id', vendorOrganizationId);
+    if (since) query = query.gte('created_at', since);
+    const { data, error } = await query
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .range(offset, offset + limit - 1);
+    if (error) throw error;
     return (data ?? []) as PurchaseOrder[];
 }
 

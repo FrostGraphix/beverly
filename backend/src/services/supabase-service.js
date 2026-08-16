@@ -2,6 +2,8 @@
 
 const defaultBuckets = ["uploads", "imports", "exports", "receipts"];
 const defaultLoginDomain = "org.acoblighting.com";
+const defaultRequestTimeoutMs = 15000;
+const authRequestTimeoutMs = 45000;
 
 function supabaseUrl() {
   return String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -45,10 +47,44 @@ function restHeaders(prefer) {
   return headers;
 }
 
+function supabaseRequestTimeoutMs(timeoutMs) {
+  const value = Number(timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || defaultRequestTimeoutMs);
+  return Number.isFinite(value) ? Math.min(60000, Math.max(1000, value)) : defaultRequestTimeoutMs;
+}
+
+function isTransientConnectionError(error) {
+  const code = String((error && error.code) || "");
+  const message = String((error && error.message) || "").toLowerCase();
+  return /ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH/.test(code)
+    || message.includes("aborted due to timeout")
+    || message.includes("socket hang up")
+    || message.includes("fetch failed");
+}
+
+// `retryable` must stay opt-in, per call site — a timed-out request may have
+// already reached Supabase, so this is only safe for calls with no mutation
+// side effect (login, read-only RPC). Never set it for token refresh (Supabase
+// refresh tokens rotate/are one-time-use — replaying an already-consumed one
+// on retry would fail) or for REST writes (risk of a duplicate row/update).
+async function supabaseFetch(url, { timeoutMs, retryable = false, ...options } = {}) {
+  const attempt = () => fetch(url, {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(supabaseRequestTimeoutMs(timeoutMs))
+  });
+  try {
+    return await attempt();
+  } catch (error) {
+    if (retryable && isTransientConnectionError(error)) return await attempt();
+    throw error;
+  }
+}
+
 async function restRequest(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/rest/v1${pathname}`, {
-    method: options.method || "GET",
+  const method = options.method || "GET";
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
+    method,
+    retryable: options.retryable ?? method === "GET",
     headers: {
       ...restHeaders(options.prefer),
       ...(options.headers || {})
@@ -63,8 +99,10 @@ async function restRequest(pathname, options = {}) {
 
 async function restRequestWithResponse(pathname, options = {}) {
   if (!serviceConfigured()) throw new Error("Supabase service role is not configured");
-  const result = await readJsonResponse(await fetch(`${supabaseUrl()}/rest/v1${pathname}`, {
-    method: options.method || "GET",
+  const method = options.method || "GET";
+  const result = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/rest/v1${pathname}`, {
+    method,
+    retryable: options.retryable ?? method === "GET",
     headers: {
       ...restHeaders(options.prefer),
       ...(options.headers || {})
@@ -153,7 +191,7 @@ async function staffActorFromAuthUser(user = {}, fallback = {}) {
 async function listAuthUsers() {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return [];
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "GET",
     headers: jsonHeaders(key)
   }));
@@ -190,8 +228,10 @@ async function signInWithPassword({ userId, password }) {
   let body;
   try {
     email = await resolveAuthEmail(userId);
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+    ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=password`, {
+      timeoutMs: authRequestTimeoutMs,
       method: "POST",
+      retryable: true, // login has no server-side mutation to duplicate — safe to retry once on a transient timeout
       headers: jsonHeaders(key),
       body: JSON.stringify({
         email,
@@ -279,7 +319,7 @@ async function refreshAccessToken(refreshToken) {
   let response;
   let body;
   try {
-    ({ response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
+    ({ response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/token?grant_type=refresh_token`, {
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({ refresh_token: token })
@@ -307,7 +347,7 @@ async function authUserFromAccessToken(accessToken) {
   const token = String(accessToken || "").trim();
   const key = anonKey() || serviceRoleKey();
   if (!authEnabled() || !configured() || !token || !key) return null;
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/user`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/user`, {
     method: "GET",
     headers: {
       apikey: key,
@@ -331,7 +371,7 @@ function adminEmailsFallback() {
 async function createAdminUser({ email, password }) {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) throw new Error("Supabase service role is not configured");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "POST",
     headers: jsonHeaders(key),
     body: JSON.stringify({
@@ -384,7 +424,7 @@ async function createAuthUser(payload) {
       data: null
     };
   }
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users`, {
     method: "POST",
     headers: jsonHeaders(key),
     body: JSON.stringify({
@@ -447,7 +487,7 @@ async function updateAuthUser(userId, payload) {
     updateBody.password = payload.password;
   }
   
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
     method: "PUT",
     headers: jsonHeaders(key),
     body: JSON.stringify(updateBody)
@@ -462,7 +502,7 @@ async function deleteAuthUser(userId) {
   const user = await getAuthUserByUserId(userId);
   if (!user) return null; 
   
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/auth/v1/admin/users/${user.id}`, {
     method: "DELETE",
     headers: jsonHeaders(key)
   }));
@@ -475,7 +515,7 @@ async function ensureStorageBuckets(bucketNames = defaultBuckets) {
   if (!storageEnabled() || !supabaseUrl() || !key) return [];
   const results = [];
   for (const name of bucketNames) {
-    const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/bucket`, {
+    const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/bucket`, {
       method: "POST",
       headers: jsonHeaders(key),
       body: JSON.stringify({
@@ -503,7 +543,7 @@ async function storageReport() {
       buckets: []
     };
   }
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/bucket`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/bucket`, {
     method: "GET",
     headers: jsonHeaders(key)
   }));
@@ -519,7 +559,7 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   const payload = Buffer.isBuffer(content) || content instanceof Uint8Array
     ? content
     : Buffer.from(String(content || ""), "utf8");
-  const { response, body } = await readJsonResponse(await fetch(`${supabaseUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, {
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, {
     method: "POST",
     headers: {
       apikey: key,
@@ -538,27 +578,40 @@ async function uploadStorageObject(bucket, objectPath, content, contentType = "a
   };
 }
 
-/* ── MFA / 2FA (production stubs) ── */
-
-async function enrollMFAFactor() {
-  // TODO: Production — call supabase.auth.mfa.enroll({ factorType: 'totp', issuer: 'Beverly' })
-  return { factorId: null, totpUri: null, secret: null };
+/**
+ * Mint a short-lived signed URL for a private Storage object.
+ *
+ * Archive buckets are created private (ensureStorageBuckets passes public: false), so
+ * this is the only read path. Storage returns a root-relative `signedURL`; we return it
+ * absolute so callers can hand it straight to a browser.
+ */
+async function createSignedStorageUrl(bucket, objectPath, expiresIn = 300, downloadAs = "") {
+  const key = serviceRoleKey();
+  if (!storageEnabled() || !supabaseUrl() || !key) return null;
+  const encodedPath = objectPath.split("/").map(encodeURIComponent).join("/");
+  const { response, body } = await readJsonResponse(await supabaseFetch(`${supabaseUrl()}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodedPath}`, {
+    method: "POST",
+    headers: jsonHeaders(key),
+    body: JSON.stringify({ expiresIn: Math.max(1, Number(expiresIn) || 300) })
+  }));
+  if (!response.ok) throw new Error(body.message || body.msg || body.error || "Supabase signed URL failed");
+  const relative = body.signedURL || body.signedUrl || "";
+  if (!relative) return null;
+  // `download` makes Storage answer with Content-Disposition: attachment and this
+  // filename, instead of the object's own last path segment. Without it every archive
+  // saves as its bare period ("2026-06.csv.gz") regardless of station or report type.
+  const suffix = downloadAs
+    ? `${relative.includes("?") ? "&" : "?"}download=${encodeURIComponent(downloadAs)}`
+    : "";
+  return {
+    bucket,
+    path: objectPath,
+    signedUrl: `${supabaseUrl()}/storage/v1${relative.startsWith("/") ? "" : "/"}${relative}${suffix}`,
+    downloadAs: downloadAs || null,
+    expiresIn
+  };
 }
 
-async function verifyMFAFactor(factorId, code) {
-  // TODO: Production — call supabase.auth.mfa.challengeAndVerify({ factorId, code })
-  return { verified: false };
-}
-
-async function listMFAFactors() {
-  // TODO: Production — call supabase.auth.mfa.listFactors()
-  return { factors: [] };
-}
-
-async function unenrollMFAFactor(factorId) {
-  // TODO: Production — call supabase.auth.mfa.unenroll({ factorId })
-  return { success: false };
-}
 
 module.exports = {
   authEnabled,
@@ -569,11 +622,10 @@ module.exports = {
   deleteAuthUser,
   resolveAuthEmail,
   emailFromLogin,
-  enrollMFAFactor,
   getAuthUserByIdentifier,
   getAuthUserByUserId,
+  createSignedStorageUrl,
   ensureStorageBuckets,
-  listMFAFactors,
   restRequest,
   restRequestWithResponse,
   serviceConfigured,
@@ -582,7 +634,5 @@ module.exports = {
   authUserFromAccessToken,
   storageEnabled,
   storageReport,
-  unenrollMFAFactor,
-  uploadStorageObject,
-  verifyMFAFactor
+  uploadStorageObject
 };

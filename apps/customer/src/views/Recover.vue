@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import CustomerAuthShell from '../components/CustomerAuthShell.vue';
@@ -7,14 +7,57 @@ import { isValidNigerianPhone, normaliseNigerianPhone } from '../lib/auth-flow';
 
 const router = useRouter();
 const phoneInput = ref<HTMLInputElement | null>(null);
+const emailInput = ref<HTMLInputElement | null>(null);
+const recoverMode = ref<'email' | 'phone'>('email');
 const phone = ref('');
+const email = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
 
-onMounted(() => phoneInput.value?.focus());
+const subtitle = computed(() => recoverMode.value === 'email'
+    ? "We'll email a code to reset your password"
+    : "We'll send a code to your registered phone number");
+
+onMounted(() => {
+    if (recoverMode.value === 'email') emailInput.value?.focus();
+    else phoneInput.value?.focus();
+});
+
+function switchMode(mode: 'email' | 'phone') {
+    recoverMode.value = mode;
+    error.value = null;
+    errorCode.value = null;
+}
 
 async function submit() {
+    if (recoverMode.value === 'email') {
+        if (!email.value.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+            error.value = 'Enter a valid email address.';
+            return;
+        }
+        loading.value = true;
+        error.value = null;
+        errorCode.value = null;
+        const normalisedEmail = email.value.trim().toLowerCase();
+        try {
+            await api.post('/api/v1/customer/auth/email/recover', { email: normalisedEmail });
+            await router.push({ name: 'reset-password', query: { email: normalisedEmail } });
+        } catch (e: any) {
+            if (e instanceof ApiError) {
+                errorCode.value = e.code;
+                error.value = e.code === 'otp_rate_limited'
+                    ? 'Too many requests. Wait a minute and try again.'
+                    : e.message ?? 'Something went wrong. Please try again.';
+            } else {
+                error.value = 'Could not connect. Check your internet and try again.';
+            }
+        } finally {
+            loading.value = false;
+        }
+        return;
+    }
+
     if (!isValidNigerianPhone(phone.value)) {
         error.value = 'Enter a valid Nigerian phone number.';
         return;
@@ -62,42 +105,72 @@ async function submit() {
 <template>
   <CustomerAuthShell
     title="Recover access"
-    subtitle="We'll send a code to your registered phone number"
+    :subtitle="subtitle"
     back="/login"
   >
     <form class="auth-form" @submit.prevent="submit" novalidate>
-
-      <!-- Info callout -->
-      <div class="info-callout">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
-          <path d="M7 6v4M7 4v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        <span>Beverly uses phone OTP — no password needed. Enter the number on your account.</span>
+      <div class="mode-switch" role="tablist" aria-label="Recovery method">
+        <button type="button" :class="{ active: recoverMode === 'email' }" @click="switchMode('email')">Email</button>
+        <button type="button" :class="{ active: recoverMode === 'phone' }" @click="switchMode('phone')">Phone OTP</button>
       </div>
 
-      <!-- Phone field -->
-      <div class="field">
-        <label class="field-label" for="recovery-phone">Phone number</label>
-        <div class="phone-wrap">
-          <span class="phone-prefix">
-            <span class="flag" aria-hidden="true">NG</span>
-            +234
-          </span>
+      <!-- Email field -->
+      <template v-if="recoverMode === 'email'">
+        <div class="info-callout">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+            <path d="M7 6v4M7 4v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>We'll email a 6-digit code to reset the password on your account.</span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="recovery-email">Email address</label>
           <input
-            id="recovery-phone"
-            ref="phoneInput"
-            v-model="phone"
-            class="bw-input phone-input"
-            type="tel"
-            inputmode="tel"
-            autocomplete="tel"
-            placeholder="080 0000 0000"
+            id="recovery-email"
+            ref="emailInput"
+            v-model="email"
+            class="bw-input"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            placeholder="you@example.com"
             :disabled="loading"
             @input="error = null"
           />
         </div>
-      </div>
+      </template>
+
+      <!-- Phone field -->
+      <template v-else>
+        <div class="info-callout">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
+            <path d="M7 6v4M7 4v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>Beverly uses phone OTP — no password needed. Enter the number on your account.</span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="recovery-phone">Phone number</label>
+          <div class="phone-wrap">
+            <span class="phone-prefix">
+              <span class="flag" aria-hidden="true">NG</span>
+              +234
+            </span>
+            <input
+              id="recovery-phone"
+              ref="phoneInput"
+              v-model="phone"
+              class="bw-input phone-input"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              placeholder="080 0000 0000"
+              :disabled="loading"
+              @input="error = null"
+            />
+          </div>
+        </div>
+      </template>
 
       <!-- Error -->
       <div v-if="error" class="auth-error" role="alert">
@@ -129,6 +202,29 @@ async function submit() {
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.mode-switch button {
+  border: 0;
+  border-radius: calc(var(--r-md) - 3px);
+  padding: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-weight: 700;
+  cursor: pointer;
+}
+.mode-switch button.active {
+  background: var(--glass-bg-strong);
+  color: var(--text);
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }

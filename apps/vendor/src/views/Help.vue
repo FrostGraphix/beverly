@@ -16,11 +16,13 @@ const search = ref('');
 const activeCategory = ref('');
 const openFaq = ref('');
 const voted = ref<Record<string, boolean>>({});
+const faqLoading = ref(false);
 
 const filteredFaqs = computed(() =>
     activeCategory.value ? faqs.value.filter((f) => f.category_id === activeCategory.value) : faqs.value);
 
 async function loadFaqs() {
+    faqLoading.value = true;
     try {
         const [cats, list] = await Promise.all([
             api.get<{ categories: FaqCategory[] }>('/api/v1/public/faqs/categories?audience=vendor'),
@@ -28,7 +30,9 @@ async function loadFaqs() {
         ]);
         categories.value = cats.categories ?? [];
         faqs.value = list.faqs ?? [];
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+        faqLoading.value = false;
+    }
 }
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 function onSearch() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(loadFaqs, 250); }
@@ -44,19 +48,25 @@ async function vote(f: Faq, helpful: boolean) {
 
 // Tickets
 const tickets = ref<Ticket[]>([]);
+const ticketsLoading = ref(false);
 const showNew = ref(false);
 const saving = ref(false);
 const newError = ref('');
 const form = ref({ subject: '', description: '', category: 'general', priority: 'normal' });
 const selected = ref<Ticket | null>(null);
 const detail = ref<any>(null);
+const detailLoading = ref(false);
 const replyText = ref('');
+const ticketError = ref('');
 
 async function loadTickets() {
+    ticketsLoading.value = true;
     try {
         const res = await api.get<{ tickets: Ticket[] }>('/api/v1/vendor/support/tickets');
         tickets.value = res.tickets ?? [];
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally {
+        ticketsLoading.value = false;
+    }
 }
 async function submitNew() {
     newError.value = '';
@@ -75,38 +85,52 @@ async function submitNew() {
     finally { saving.value = false; }
 }
 async function openTicket(t: Ticket) {
-    selected.value = t; detail.value = null; replyText.value = '';
-    try { detail.value = await api.get(`/api/v1/vendor/support/tickets/${t.id}`); } catch { /* ignore */ }
+    selected.value = t;
+    detail.value = null;
+    detailLoading.value = true;
+    replyText.value = '';
+    ticketError.value = '';
+    try { detail.value = await api.get(`/api/v1/vendor/support/tickets/${t.id}`); }
+    catch { /* ignore */ } finally { detailLoading.value = false; }
 }
 async function sendReply() {
     if (!selected.value || !replyText.value.trim()) return;
+    ticketError.value = '';
     saving.value = true;
     try {
         await api.post(`/api/v1/vendor/support/tickets/${selected.value.id}/messages`, { body: replyText.value.trim() });
         replyText.value = '';
         detail.value = await api.get(`/api/v1/vendor/support/tickets/${selected.value.id}`);
+        selected.value = {
+            ...selected.value,
+            status: detail.value?.status ?? selected.value.status,
+            last_message_at: detail.value?.last_message_at ?? selected.value.last_message_at,
+        };
         await loadTickets();
-    } catch { /* ignore */ } finally { saving.value = false; }
+    } catch (e: any) {
+        ticketError.value = e?.code === 'ticket_closed'
+            ? 'This ticket is closed. Open a new ticket if you still need help.'
+            : e?.message ?? 'Could not send reply.';
+    } finally { saving.value = false; }
 }
 
 function statusBadge(s: string) {
-    return ({ open: 'bw-badge-warning', pending: 'bw-badge-brand', awaiting_customer: 'bw-badge-warning', resolved: 'bw-badge-success', closed: 'bw-badge-neutral' } as Record<string, string>)[s] ?? 'bw-badge-neutral';
+    return ({ open: 'success', pending: 'neutral', awaiting_customer: 'warn', resolved: 'success', closed: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
 }
-function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
+function fmtDate(s: string) { return s ? new Date(s).toLocaleString('en-NG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'; }
 function prettyStatus(s: string) { return s.replace(/_/g, ' '); }
 
 onMounted(() => { loadFaqs(); loadTickets(); });
 </script>
 
 <template>
-  <AppShell title="Help & Support">
-    <template #topbar-end>
-      <button class="bw-btn bw-btn-primary" @click="showNew = true">+ New ticket</button>
-    </template>
+  <AppShell title="Help &amp; Support">
 
-    <div class="bw-segmented" style="margin-bottom: var(--s-4)">
+    <div class="bw-segmented help-tabs">
       <button :class="['bw-seg', tab === 'faq' ? 'active' : '']" @click="tab = 'faq'">Help center</button>
-      <button :class="['bw-seg', tab === 'tickets' ? 'active' : '']" @click="tab = 'tickets'">My tickets ({{ tickets.length }})</button>
+      <button :class="['bw-seg', tab === 'tickets' ? 'active' : '']" @click="tab = 'tickets'">
+        My tickets <span v-if="tickets.length" class="help-count">{{ tickets.length }}</span>
+      </button>
     </div>
 
     <!-- FAQ -->
@@ -120,7 +144,11 @@ onMounted(() => { loadFaqs(); loadTickets(); });
         <button v-for="c in categories" :key="c.id" :class="['help-chip', activeCategory === c.id && 'help-chip--on']"
                 @click="activeCategory = activeCategory === c.id ? '' : c.id">{{ c.title }}</button>
       </div>
-      <div class="help-faqs">
+
+      <div v-if="faqLoading && !faqs.length" class="help-loading">
+        <span class="help-spinner" />Loading articles…
+      </div>
+      <div v-else class="help-faqs">
         <div v-for="f in filteredFaqs" :key="f.id" :class="['help-faq', openFaq === f.id && 'help-faq--open']">
           <button class="help-faq-q" @click="toggleFaq(f)">
             <span>{{ f.question }}</span>
@@ -136,58 +164,88 @@ onMounted(() => { loadFaqs(); loadTickets(); });
             </div>
           </div>
         </div>
-        <div v-if="!filteredFaqs.length" class="help-empty">
-          <p>No articles found.</p>
-          <button class="bw-btn bw-btn-primary" @click="showNew = true">Ask our team</button>
+        <div v-if="!filteredFaqs.length && !faqLoading" class="help-empty">
+          <p>No articles found{{ search ? ` for "${search}"` : '' }}.</p>
+          <button class="bw-btn primary" @click="tab = 'tickets'; showNew = true">Ask our team instead</button>
         </div>
+      </div>
+
+      <!-- CTA card -->
+      <div class="help-cta-card">
+        <div>
+          <strong>Still need help?</strong>
+          <p>Open a ticket and our support team will get back to you.</p>
+        </div>
+        <button class="bw-btn primary" @click="tab = 'tickets'; showNew = true">New ticket</button>
       </div>
     </template>
 
     <!-- Tickets -->
     <template v-else>
-      <div class="bw-table-wrapper">
-        <table class="bw-table">
-          <thead><tr><th>Reference</th><th>Subject</th><th>Category</th><th>Status</th><th>Updated</th><th></th></tr></thead>
-          <tbody>
-            <tr v-for="t in tickets" :key="t.id" style="cursor:pointer" @click="openTicket(t)">
-              <td class="bw-mono">{{ t.reference }}</td>
-              <td>{{ t.subject }}</td>
-              <td>{{ t.category }}</td>
-              <td><span :class="['bw-badge', statusBadge(t.status)]">{{ prettyStatus(t.status) }}</span></td>
-              <td class="bw-dim">{{ fmtDate(t.last_message_at) }}</td>
-              <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click.stop="openTicket(t)">Open</button></td>
-            </tr>
-            <tr v-if="!tickets.length"><td colspan="6" class="bw-muted" style="text-align:center; padding: var(--s-6)">No tickets yet.</td></tr>
-          </tbody>
-        </table>
+      <div class="help-tickets-head">
+        <span class="bw-muted bw-text-sm">{{ tickets.length }} ticket{{ tickets.length === 1 ? '' : 's' }}</span>
+        <button class="bw-btn primary" @click="showNew = true">+ New ticket</button>
+      </div>
+
+      <div v-if="ticketsLoading && !tickets.length" class="help-loading">
+        <span class="help-spinner" />Loading tickets…
+      </div>
+      <div v-else class="help-ticket-list">
+        <button v-for="t in tickets" :key="t.id" class="help-ticket" @click="openTicket(t)">
+          <div class="help-ticket-main">
+            <div class="help-ticket-subject">{{ t.subject }}</div>
+            <div class="help-ticket-meta">{{ t.reference }} · {{ fmtDate(t.last_message_at) }}</div>
+          </div>
+          <span :class="['bw-badge', statusBadge(t.status)]">{{ prettyStatus(t.status) }}</span>
+        </button>
+        <div v-if="!tickets.length" class="help-empty">
+          <p>No tickets yet.</p>
+          <button class="bw-btn primary" @click="showNew = true">Open your first ticket</button>
+        </div>
       </div>
     </template>
 
     <!-- New ticket modal -->
     <div v-if="showNew" class="bw-modal-backdrop" @click.self="showNew = false">
       <div class="bw-modal">
-        <div class="bw-modal-header"><h2>New support ticket</h2><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="showNew = false">✕</button></div>
+        <div class="bw-modal-header">
+          <h2>New support ticket</h2>
+          <button class="bw-btn ghost sm" @click="showNew = false">✕</button>
+        </div>
         <div class="bw-modal-body">
-          <div class="bw-form-group"><label class="bw-label">Subject</label><input v-model="form.subject" class="bw-input" placeholder="e.g. Float not credited" /></div>
+          <div class="bw-form-group">
+            <label class="bw-label">Subject</label>
+            <input v-model="form.subject" class="bw-input" placeholder="e.g. Float not credited" />
+          </div>
           <div class="help-form-row">
-            <div class="bw-form-group"><label class="bw-label">Category</label>
+            <div class="bw-form-group">
+              <label class="bw-label">Category</label>
               <select v-model="form.category" class="bw-select">
-                <option value="general">General</option><option value="funding">Funding &amp; float</option>
-                <option value="vending">Vending</option><option value="account">Account</option>
+                <option value="general">General</option>
+                <option value="funding">Funding &amp; float</option>
+                <option value="vending">Vending</option>
+                <option value="account">Account</option>
               </select>
             </div>
-            <div class="bw-form-group"><label class="bw-label">Priority</label>
+            <div class="bw-form-group">
+              <label class="bw-label">Priority</label>
               <select v-model="form.priority" class="bw-select">
-                <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
               </select>
             </div>
           </div>
-          <div class="bw-form-group"><label class="bw-label">Describe the issue</label><textarea v-model="form.description" class="bw-textarea" rows="4" placeholder="Tell us what happened…"></textarea></div>
+          <div class="bw-form-group">
+            <label class="bw-label">Describe the issue</label>
+            <textarea v-model="form.description" class="bw-textarea" rows="4" placeholder="Tell us what happened…"></textarea>
+          </div>
           <div v-if="newError" class="bw-error-banner">{{ newError }}</div>
         </div>
         <div class="bw-modal-footer">
-          <button class="bw-btn bw-btn-ghost" @click="showNew = false">Cancel</button>
-          <button class="bw-btn bw-btn-primary" :disabled="saving" @click="submitNew">{{ saving ? 'Submitting…' : 'Submit ticket' }}</button>
+          <button class="bw-btn ghost" @click="showNew = false">Cancel</button>
+          <button class="bw-btn primary" :disabled="saving" @click="submitNew">{{ saving ? 'Submitting…' : 'Submit ticket' }}</button>
         </div>
       </div>
     </div>
@@ -196,41 +254,61 @@ onMounted(() => { loadFaqs(); loadTickets(); });
     <div v-if="selected" class="bw-modal-backdrop" @click.self="selected = null">
       <div class="bw-modal bw-modal-lg">
         <div class="bw-modal-header">
-          <div><h2>{{ selected.reference }}</h2><span class="bw-muted" style="font-size: var(--t-xs)">{{ selected.subject }}</span></div>
+          <div>
+            <h2>{{ selected.reference }}</h2>
+            <span class="bw-muted" style="font-size: var(--t-xs)">{{ selected.subject }}</span>
+          </div>
           <span :class="['bw-badge', statusBadge(selected.status)]">{{ prettyStatus(selected.status) }}</span>
-          <button class="bw-btn bw-btn-ghost bw-btn-sm" style="margin-left:auto" @click="selected = null">✕</button>
+          <button class="bw-btn ghost sm" style="margin-left:auto" @click="selected = null">✕</button>
         </div>
         <div class="bw-modal-body">
           <div class="help-thread">
-            <div v-for="m in detail?.support_ticket_messages" :key="m.id"
-                 :class="['help-msg', m.sender_actor_type === 'staff' ? 'help-msg--staff' : 'help-msg--mine']">
-              <span class="help-msg-who">{{ m.sender_actor_type === 'staff' ? 'Support' : 'You' }}</span>
-              <p class="help-msg-body">{{ m.body }}</p>
-              <span class="help-msg-time">{{ fmtDate(m.created_at) }}</span>
+            <!-- Loading skeleton -->
+            <div v-if="detailLoading" class="help-thread-loading">
+              <span class="help-spinner" />Loading conversation…
             </div>
-            <p v-if="!detail?.support_ticket_messages?.length" class="bw-muted">Loading…</p>
+            <template v-else>
+              <div v-for="m in detail?.support_ticket_messages" :key="m.id"
+                   :class="['help-msg', m.sender_actor_type === 'staff' ? 'help-msg--staff' : 'help-msg--mine']">
+                <span class="help-msg-who">{{ m.sender_actor_type === 'staff' ? 'Support' : 'You' }}</span>
+                <p class="help-msg-body">{{ m.body }}</p>
+                <span class="help-msg-time">{{ fmtDate(m.created_at) }}</span>
+              </div>
+              <p v-if="detail && !detail.support_ticket_messages?.length" class="bw-muted" style="text-align:center; font-size: var(--t-sm)">No messages yet.</p>
+            </template>
           </div>
-          <textarea v-if="selected.status !== 'closed'" v-model="replyText" class="bw-textarea" rows="3" placeholder="Write a reply…"></textarea>
-          <p v-else class="bw-muted" style="font-size: var(--t-sm)">This ticket is closed.</p>
+          <textarea v-if="selected.status !== 'closed'" v-model="replyText" class="bw-textarea" rows="3" placeholder="Write a reply…" style="margin-top: var(--s-3)"></textarea>
+          <p v-else class="bw-muted" style="font-size: var(--t-sm); margin-top: var(--s-3)">This ticket is closed. Open a new ticket if you still need help.</p>
+          <div v-if="ticketError" class="bw-error-banner" style="margin-top: var(--s-3)">{{ ticketError }}</div>
         </div>
         <div class="bw-modal-footer">
-          <button class="bw-btn bw-btn-ghost" @click="selected = null">Close</button>
-          <button v-if="selected.status !== 'closed'" class="bw-btn bw-btn-primary" :disabled="!replyText.trim() || saving" @click="sendReply">{{ saving ? 'Sending…' : 'Send reply' }}</button>
+          <button class="bw-btn ghost" @click="selected = null">Close</button>
+          <button v-if="selected.status !== 'closed'" class="bw-btn primary" :disabled="!replyText.trim() || saving" @click="sendReply">{{ saving ? 'Sending…' : 'Send reply' }}</button>
         </div>
       </div>
     </div>
+
   </AppShell>
 </template>
 
 <style scoped>
-.help-search { display: flex; align-items: center; gap: var(--s-2); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 0 var(--s-3); height: 44px; max-width: 480px; margin-bottom: var(--s-3); }
+.help-tabs { margin-bottom: var(--s-4); }
+.help-count { background: var(--brand); color: #04140b; border-radius: 999px; padding: 0 6px; font-size: 10px; margin-left: 4px; }
+
+.help-search { display: flex; align-items: center; gap: var(--s-2); background: var(--glass-bg-strong); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: 0 var(--s-3); height: 44px; max-width: 480px; margin-bottom: var(--s-3); }
 .help-search svg { width: 18px; height: 18px; color: var(--text-muted); flex-shrink: 0; }
 .help-search-input { flex: 1; border: 0; background: transparent; color: var(--text); font: inherit; outline: none; }
+
 .help-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--s-4); }
-.help-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: var(--t-sm); font-weight: 600; cursor: pointer; }
+.help-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-2); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: all var(--dur-fast); }
 .help-chip--on { background: var(--brand); border-color: var(--brand); color: #04140b; }
-.help-faqs { display: flex; flex-direction: column; gap: var(--s-2); max-width: 760px; }
-.help-faq { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+
+.help-loading { display: flex; align-items: center; gap: var(--s-2); color: var(--text-muted); font-size: var(--t-sm); padding: var(--s-5); }
+.help-spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: help-spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes help-spin { to { transform: rotate(360deg); } }
+
+.help-faqs { display: flex; flex-direction: column; gap: var(--s-2); max-width: 760px; margin-bottom: var(--s-4); }
+.help-faq { border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); overflow: hidden; transition: border-color var(--dur-base); }
 .help-faq--open { border-color: oklch(70% 0.19 145 / 0.4); }
 .help-faq-q { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-4); background: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--text); text-align: left; }
 .help-faq-caret { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-muted); transition: transform var(--dur-base); }
@@ -241,14 +319,32 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-faq-vote button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 4px 10px; font-size: var(--t-sm); cursor: pointer; color: var(--text); }
 .help-faq-vote button:disabled { opacity: 0.5; cursor: default; }
 .help-faq-thanks { color: var(--brand); font-weight: 600; }
-.help-empty { text-align: center; padding: var(--s-6); color: var(--text-muted); display: flex; flex-direction: column; gap: var(--s-3); align-items: center; }
+
+.help-cta-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding: var(--s-4); border: 1px solid oklch(70% 0.19 145 / 0.28); border-radius: var(--r-lg); background: radial-gradient(120% 100% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
+.help-cta-card strong { display: block; color: var(--text); }
+.help-cta-card p { margin: 2px 0 0; font-size: var(--t-sm); color: var(--text-2); }
+
+.help-tickets-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-3); }
+
+.help-ticket-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.help-ticket { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); cursor: pointer; text-align: left; transition: border-color var(--dur-fast), box-shadow var(--dur-fast); width: 100%; }
+.help-ticket:hover { border-color: var(--brand); }
+.help-ticket-main { flex: 1; min-width: 0; }
+.help-ticket-subject { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.help-ticket-meta { font-size: var(--t-xs); color: var(--text-muted); margin-top: 2px; }
+
+.help-empty { text-align: center; padding: var(--s-6) var(--s-4); color: var(--text-muted); display: flex; flex-direction: column; gap: var(--s-3); align-items: center; }
+
 .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
-.help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; margin-bottom: var(--s-3); }
+
+.help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--s-3); background: var(--glass-bg); }
+.help-thread-loading { display: flex; align-items: center; gap: var(--s-2); color: var(--text-muted); font-size: var(--t-sm); padding: var(--s-4); justify-content: center; }
 .help-msg { border-radius: var(--r-md); padding: var(--s-2) var(--s-3); max-width: 85%; }
-.help-msg--mine { background: var(--brand-glow); align-self: flex-end; }
+.help-msg--mine { background: var(--brand-glow); align-self: flex-end; border: 1px solid oklch(70% 0.19 145 / 0.2); }
 .help-msg--staff { background: var(--surface-2); align-self: flex-start; }
 .help-msg-who { font-size: var(--t-2xs); font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
 .help-msg-body { margin: 2px 0; font-size: var(--t-md); color: var(--text); white-space: pre-wrap; }
 .help-msg-time { font-size: var(--t-2xs); color: var(--text-muted); }
+
 .bw-modal-lg { max-width: 560px; }
 </style>

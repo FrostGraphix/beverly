@@ -18,8 +18,8 @@ assert.match(customerMetersMigration, /service role manages customer meters/);
 
 const customerPurchase = read('backend/wallet/src/services/customer-purchase.ts');
 assert.match(customerPurchase, /meter_type:\s*meterType/);
-assert.match(customerPurchase, /isThreePhase:\s*meter\.isThreePhase/);
-assert.match(customerPurchase, /meterType:\s*meterTypeFromInfo\(meter\)/);
+assert.match(customerPurchase, /effectiveThreePhase\(meter\.isThreePhase, declared\)/);
+assert.match(customerPurchase, /meterTypeFromInfo\(meter\)/);
 assert.match(customerPurchase, /Selected meter phase does not match the live meter record/);
 
 const vending = read('backend/wallet/src/services/vending.ts');
@@ -27,9 +27,9 @@ assert.match(vending, /export function meterTypeFromInfo/);
 assert.match(vending, /meter_type:\s*meterType/);
 assert.match(vending, /meterType:\s*row\.meter_type/);
 
-const webhooks = read('backend/wallet/src/routes/webhooks.ts');
-assert.match(webhooks, /isThreePhase:\s*meter\.isThreePhase/);
-assert.match(webhooks, /meter_type:\s*meterType/);
+const paymentTransactions = read('backend/wallet/src/services/payment-transactions.ts');
+assert.match(paymentTransactions, /effectiveThreePhase\(meter\.isThreePhase, declared\)/);
+assert.match(paymentTransactions, /meter_type:\s*meterType/);
 
 const onboardMeter = read('apps/customer/src/views/OnboardMeter.vue');
 assert.match(onboardMeter, /meter_type:\s*meterType\.value/);

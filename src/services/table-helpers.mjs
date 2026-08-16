@@ -1,6 +1,8 @@
 export const pageSizeOptions = [10, 20, 50, 100];
 
 export function isBatchCheckableRoute(route = {}) {
+  // Manifest override wins; legacy hash check is the fallback (zero regression).
+  if (typeof route.batchCheckable === "boolean") return route.batchCheckable;
   return String(route.hash || "").includes("remote-operation/remote-meter-reading");
 }
 
@@ -182,6 +184,15 @@ const fixedSortPolicies = [
 ];
 
 export function routeSortPolicy(route = {}) {
+  // Manifest override wins: a route may declare sortPolicy: { key, direction, fixed }.
+  // Falls back to the legacy fixed-policy regex table, then to first-column asc.
+  if (route.sortPolicy && route.sortPolicy.key) {
+    return {
+      key: route.sortPolicy.key,
+      direction: route.sortPolicy.direction === "desc" ? "desc" : "asc",
+      fixed: route.sortPolicy.fixed !== false
+    };
+  }
   const hash = String(route.hash || "");
   const match = fixedSortPolicies.find(([pattern]) => pattern.test(hash));
   if (match) return { key: match[1], direction: match[2], fixed: true };
@@ -236,13 +247,19 @@ export function pageNumbers(currentPage, pageCount) {
 }
 
 export function rowActionButtons(route) {
+  // Manifest override wins: a route may declare rowActions: ["Reboot", "Calibrate"]
+  // to render arbitrary per-row action buttons a new OEM needs, with no code change.
+  // Falls back to the legacy recognized-action whitelist for existing routes.
+  if (Array.isArray(route.rowActions)) {
+    return route.rowActions.filter((action) => Array.isArray(route.actions) && route.actions.includes(action));
+  }
   const buttons = [];
   if (route.actions.includes("Recharge")) buttons.push("Recharge");
   if (route.actions.includes("Generate Token")) buttons.push("Generate Token");
+  if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("credit-token-record") && !String(route.hash || "").includes("clear-credit")) buttons.push("Cancel");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("clear-tamper-token-record")) buttons.push("Cancel");
   if (route.actions.includes("Cancel") && String(route.hash || "").includes("set-maximum-power-limit-token-record")) buttons.push("Cancel");
-  if (route.actions.includes("Print")) buttons.push("Print");
   if (route.actions.includes("Edit")) buttons.push("Edit");
   if (route.actions.includes("Delete")) buttons.push("Delete");
   if (route.actions.includes("Add Task") && Array.isArray(route.columns) && route.columns.includes("Actions")) buttons.push("Add Task");

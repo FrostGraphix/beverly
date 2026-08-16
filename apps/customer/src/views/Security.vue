@@ -40,6 +40,41 @@ async function requestOtpLink() {
       </div>
     </div>
 
+    <!-- Email verification -->
+    <div v-if="auth.customer?.email" class="bw-card">
+      <p style="font-weight:700; margin:0 0 var(--s-1)">Email verification</p>
+      <p class="bw-muted" style="font-size: var(--t-sm); margin:0 0 var(--s-4)">
+        A verified email makes sure receipts, alerts, and account changes reach you.
+      </p>
+      <div class="bw-row" style="gap: var(--s-2); flex-wrap:wrap; align-items:center">
+        <div :class="['bw-badge', auth.customer?.email_verified_at ? 'success' : 'warning']" style="font-size: var(--t-xs)">
+          {{ auth.customer?.email_verified_at ? 'Verified' : 'Not verified' }}
+        </div>
+        <div class="bw-badge neutral" style="font-size: var(--t-xs)">{{ auth.customer?.email }}</div>
+      </div>
+      <router-link
+        v-if="!auth.customer?.email_verified_at"
+        to="/verify-email"
+        class="bw-btn primary"
+        style="text-decoration:none; display:inline-flex; margin-top: var(--s-3)"
+      >
+        Verify email
+      </router-link>
+    </div>
+
+    <div class="bw-card">
+      <p style="font-weight:700; margin:0 0 var(--s-1)">Vending PIN</p>
+      <p class="bw-muted" style="font-size: var(--t-sm); margin:0 0 var(--s-4)">
+        Your four-digit PIN confirms wallet purchases.
+      </p>
+      <div :class="['bw-badge', auth.customer?.vend_pin_configured ? 'success' : 'warning']">
+        {{ auth.customer?.vend_pin_configured ? 'PIN configured' : 'PIN required' }}
+      </div>
+      <router-link to="/vend-pin" class="bw-btn" style="text-decoration:none; display:inline-flex; margin-top: var(--s-3)">
+        {{ auth.customer?.vend_pin_configured ? 'Change vending PIN' : 'Create vending PIN' }}
+      </router-link>
+    </div>
+
     <!-- Re-send login link -->
     <div class="bw-card">
       <p style="font-weight:700; margin:0 0 var(--s-1)">Sign in from new device</p>

@@ -9,13 +9,50 @@
   "files": [
     "tokens.css",
     "theme.css",
+    "wallet.css",
+    "WalletGreeting.vue",
+    "WalletGreeting.vue.d.ts",
+    "BeverlyLoader.vue",
+    "BeverlyLoader.vue.d.ts",
+    "WalletPagination.vue",
+    "WalletPagination.vue.d.ts",
+    "WalletDataViewSwitch.vue",
+    "WalletDataViewSwitch.vue.d.ts",
+    "PwaUpdateToast.vue",
+    "PwaUpdateToast.vue.d.ts",
+    "push-notifications.ts",
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "pwaInstall.js"
   ],
   "exports": {
     ".": "./index.js",
     "./tokens.css": "./tokens.css",
     "./theme.css": "./theme.css",
-    "./wallet.css": "./wallet.css"
+    "./wallet.css": "./wallet.css",
+    "./WalletGreeting.vue": {
+      "types": "./WalletGreeting.vue.d.ts",
+      "import": "./WalletGreeting.vue"
+    },
+    "./BeverlyLoader.vue": {
+      "types": "./BeverlyLoader.vue.d.ts",
+      "import": "./BeverlyLoader.vue"
+    },
+    "./WalletPagination.vue": {
+      "types": "./WalletPagination.vue.d.ts",
+      "import": "./WalletPagination.vue"
+    },
+    "./WalletDataViewSwitch.vue": {
+      "types": "./WalletDataViewSwitch.vue.d.ts",
+      "import": "./WalletDataViewSwitch.vue"
+    },
+    "./PwaUpdateToast.vue": {
+      "types": "./PwaUpdateToast.vue.d.ts",
+      "import": "./PwaUpdateToast.vue"
+    },
+    "./push-notifications": {
+      "types": "./push-notifications.ts",
+      "import": "./push-notifications.ts"
+    }
   }
 }

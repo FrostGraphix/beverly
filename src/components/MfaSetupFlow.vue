@@ -1,17 +1,23 @@
 <template>
   <div class="mfa-setup-overlay" @click.self="$emit('cancelled')">
-    <div class="mfa-setup-card" role="dialog" aria-label="Enable two-factor authentication">
+    <div class="mfa-setup-card" role="dialog" aria-modal="true" tabindex="-1" aria-label="Enable two-factor authentication">
+
       <!-- Progress bar -->
       <div class="mfa-progress">
         <div class="mfa-progress-fill" :style="{ width: `${((stepIndex + 1) / steps.length) * 100}%` }"></div>
       </div>
 
-      <button class="mfa-setup-close" type="button" aria-label="Close" @click="$emit('cancelled')">✕</button>
+      <button class="mfa-setup-close" type="button" aria-label="Close" @click="$emit('cancelled')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
 
       <!-- Step 1: Intro -->
       <div v-if="step === 'intro'" class="mfa-step">
         <div class="mfa-step-icon mfa-step-icon--shield">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
         </div>
         <h2 class="mfa-step-title">Secure Your Account</h2>
         <p class="mfa-step-desc">Two-factor authentication adds a second layer of security. You'll need an authenticator app to generate time-based codes.</p>
@@ -30,20 +36,31 @@
 
         <div v-if="enrolling" class="mfa-loading">
           <div class="mfa-spinner-lg"></div>
-          <p>Setting up…</p>
+          <p>Generating secure key...</p>
         </div>
 
         <template v-else>
+          <transition name="mfa-alert-fade">
+            <p v-if="qrError" class="mfa-error" role="alert">{{ qrError }}</p>
+          </transition>
+
           <div class="mfa-qr-area">
-            <div class="mfa-qr-placeholder" v-html="qrSvg"></div>
+            <img
+              v-if="qrUrl"
+              :src="qrUrl"
+              class="mfa-qr-img"
+              alt="Scan this QR code with your authenticator app"
+            />
+            <div v-else class="mfa-qr-placeholder" aria-hidden="true"></div>
           </div>
 
           <div class="mfa-manual-entry">
             <p class="mfa-manual-label">Or enter this code manually:</p>
             <div class="mfa-secret-row">
               <code class="mfa-secret">{{ secret }}</code>
-              <button class="mfa-copy-btn" type="button" @click="copySecret" :title="secretCopied ? 'Copied!' : 'Copy'">
-                {{ secretCopied ? '✓' : '⧉' }}
+              <button class="mfa-copy-btn" type="button" @click="copySecret" :aria-label="secretCopied ? 'Copied' : 'Copy secret'">
+                <svg v-if="secretCopied" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
             </div>
           </div>
@@ -63,10 +80,12 @@
             :key="i"
             :ref="el => { if (el) verifyRefs[i] = el; }"
             class="mfa-digit"
+            :class="{ 'mfa-digit--filled': verifyDigits[i] }"
             type="text"
             inputmode="numeric"
             pattern="[0-9]"
             maxlength="1"
+            autocomplete="one-time-code"
             :aria-label="`Digit ${i + 1}`"
             :value="verifyDigits[i]"
             @input="onVerifyInput(i, $event)"
@@ -80,15 +99,25 @@
           <p v-if="verifyError" class="mfa-error" role="alert">{{ verifyError }}</p>
         </transition>
 
-        <button class="mfa-setup-btn mfa-setup-btn--primary" :disabled="verifying || verifyCode.length < 6" @click="submitVerification">
+        <button
+          class="mfa-setup-btn mfa-setup-btn--primary"
+          :disabled="verifying || verifyCode.length < 6"
+          @click="submitVerification"
+        >
           <span v-if="verifying" class="mfa-spinner-sm"></span>
-          <span v-else>Verify</span>
+          <span v-else>Verify &amp; Enable</span>
         </button>
         <button class="mfa-setup-btn mfa-setup-btn--ghost" @click="step = 'qr'">Back</button>
       </div>
 
       <!-- Step 4: Recovery Codes -->
       <div v-if="step === 'recovery'" class="mfa-step">
+        <div class="mfa-recovery-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
         <h2 class="mfa-step-title">Save Recovery Codes</h2>
         <p class="mfa-step-desc">Store these codes safely. Each can only be used once if you lose access to your authenticator.</p>
 
@@ -98,9 +127,14 @@
 
         <div class="mfa-codes-actions">
           <button class="mfa-setup-btn mfa-setup-btn--secondary" @click="copyAllCodes">
-            {{ codesCopied ? '✓ Copied' : '⧉ Copy All' }}
+            <svg v-if="codesCopied" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            {{ codesCopied ? 'Copied!' : 'Copy All' }}
           </button>
-          <button class="mfa-setup-btn mfa-setup-btn--secondary" @click="downloadCodes">↓ Download</button>
+          <button class="mfa-setup-btn mfa-setup-btn--secondary" @click="downloadCodes">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </button>
         </div>
 
         <label class="mfa-confirm-check">
@@ -114,18 +148,23 @@
       <!-- Step 5: Success -->
       <div v-if="step === 'success'" class="mfa-step">
         <div class="mfa-success-check">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
         </div>
         <h2 class="mfa-step-title">You're Protected</h2>
-        <p class="mfa-step-desc">Two-factor authentication is now enabled on your account. You'll need your authenticator code each time you sign in.</p>
+        <p class="mfa-step-desc">Two-factor authentication is now active. You'll need your authenticator code each time you sign in.</p>
         <button class="mfa-setup-btn mfa-setup-btn--primary" @click="$emit('complete')">Done</button>
       </div>
+
     </div>
   </div>
 </template>
 
 <script>
 import { enrollMFA, verifyEnrollment, generateRecoveryCodesText } from "../services/mfa-service.mjs";
+import qrcode from "qrcode-generator";
 
 export default {
   name: "MfaSetupFlow",
@@ -139,6 +178,7 @@ export default {
       secret: "",
       recoveryCodes: [],
       enrolling: false,
+      qrError: "",
       secretCopied: false,
       codesCopied: false,
       codesConfirmed: false,
@@ -146,77 +186,53 @@ export default {
       verifyRefs: [],
       verifying: false,
       verifyError: "",
-      shaking: false,
-      qrSvg: ""
+      shaking: false
     };
   },
   computed: {
     stepIndex() { return this.steps.indexOf(this.step); },
-    verifyCode() { return this.verifyDigits.join(""); }
+    verifyCode() { return this.verifyDigits.join(""); },
+    qrUrl() {
+      if (!this.totpUri) return "";
+      const model = qrcode(0, "M");
+      model.addData(this.totpUri);
+      model.make();
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(model.createSvgTag({ cellSize: 6, margin: 4, scalable: true }))}`;
+    }
+  },
+  watch: {
+    step(val) {
+      if (val === "verify") {
+        this.verifyError = "";
+        this.$nextTick(() => this.verifyRefs[0]?.focus());
+      }
+    }
   },
   methods: {
     async startEnrollment() {
       this.step = "qr";
       this.enrolling = true;
+      this.qrError = "";
       try {
         const result = await enrollMFA();
         this.factorId = result.factorId;
         this.totpUri = result.totpUri || "";
         this.secret = result.secret || "";
         this.recoveryCodes = result.recoveryCodes || [];
-        this.qrSvg = this.generateQRPlaceholder(this.totpUri);
       } catch (err) {
-        this.verifyError = err?.message || "Enrollment failed.";
+        this.qrError = err?.message || "Enrollment failed. Please try again.";
       } finally {
         this.enrolling = false;
       }
-    },
-    generateQRPlaceholder(uri) {
-      // Generate a visual QR-like SVG placeholder with the TOTP URI
-      const size = 200;
-      const cells = 25;
-      const cellSize = size / cells;
-      let rects = "";
-
-      // Simple hash-based pattern from URI for visual representation
-      let hash = 0;
-      for (let i = 0; i < uri.length; i++) {
-        hash = ((hash << 5) - hash + uri.charCodeAt(i)) | 0;
-      }
-
-      // Generate QR-like pattern
-      for (let y = 0; y < cells; y++) {
-        for (let x = 0; x < cells; x++) {
-          // Finder patterns (top-left, top-right, bottom-left)
-          const isFinderTL = x < 7 && y < 7;
-          const isFinderTR = x >= cells - 7 && y < 7;
-          const isFinderBL = x < 7 && y >= cells - 7;
-          const isFinder = isFinderTL || isFinderTR || isFinderBL;
-
-          let fill = false;
-          if (isFinder) {
-            const fx = isFinderTL ? x : isFinderTR ? x - (cells - 7) : x;
-            const fy = isFinderTL || isFinderTR ? y : y - (cells - 7);
-            fill = (fx === 0 || fx === 6 || fy === 0 || fy === 6) || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
-          } else {
-            // Data area — seeded pseudo-random from URI hash
-            const seed = (hash * (x + 1) * (y + 1)) ^ (hash >> (x % 16));
-            fill = (seed & (1 << (y % 8))) !== 0 && Math.abs(seed % 3) < 2;
-          }
-
-          if (fill) {
-            rects += `<rect x="${x * cellSize}" y="${y * cellSize}" width="${cellSize}" height="${cellSize}" fill="currentColor"/>`;
-          }
-        }
-      }
-
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" class="mfa-qr-svg">${rects}</svg>`;
     },
     onVerifyInput(index, event) {
       const val = (event.target.value || "").replace(/\D/g, "").slice(-1);
       this.verifyDigits[index] = val;
       if (val && index < 5 && this.verifyRefs[index + 1]) {
         this.verifyRefs[index + 1].focus();
+      }
+      if (this.verifyCode.length === 6) {
+        this.submitVerification();
       }
     },
     onVerifyKeydown(index, event) {
@@ -230,6 +246,11 @@ export default {
       event.preventDefault();
       const text = (event.clipboardData?.getData("text") || "").replace(/\D/g, "").slice(0, 6);
       for (let i = 0; i < 6; i++) this.verifyDigits[i] = text[i] || "";
+      if (text.length === 6) {
+        this.$nextTick(() => this.submitVerification());
+      } else if (text.length > 0 && this.verifyRefs[text.length]) {
+        this.verifyRefs[text.length].focus();
+      }
     },
     async submitVerification() {
       if (this.verifying || this.verifyCode.length < 6) return;
@@ -240,7 +261,7 @@ export default {
         if (result?.verified) {
           this.step = "recovery";
         } else {
-          this.verifyError = "Invalid code. Try again.";
+          this.verifyError = "Invalid code. Make sure your app's time is synced.";
           this.triggerShake();
           this.clearVerifyDigits();
         }
@@ -287,8 +308,8 @@ export default {
 <style scoped>
 .mfa-setup-overlay {
   position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
   z-index: 500;
   display: flex; align-items: center; justify-content: center;
   animation: mfa-fade-in 0.2s ease;
@@ -303,76 +324,85 @@ export default {
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
   overflow-y: auto;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.04) inset;
 }
 
 .mfa-progress { height: 3px; background: var(--border-color, #e2e8f0); border-radius: 20px 20px 0 0; overflow: hidden; }
-.mfa-progress-fill { height: 100%; background: var(--bev-color-green-600, #059669); transition: width 0.4s ease; }
+.mfa-progress-fill { height: 100%; background: var(--bev-color-green-600, #059669); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 
 .mfa-setup-close {
-  position: absolute; top: 16px; right: 16px;
+  position: absolute; top: 14px; right: 14px;
   background: none; border: none;
   color: var(--text-muted, #64748b);
-  font-size: 18px; cursor: pointer;
+  cursor: pointer;
   width: 32px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
 }
-.mfa-setup-close:hover { background: var(--bg-page, #f8fafc); }
+.mfa-setup-close:hover { background: var(--bg-page, #f1f5f9); color: var(--text-strong, #0f172a); }
 
 .mfa-step {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   padding: 36px 32px 28px;
 }
 
+/* Intro */
 .mfa-step-icon { width: 64px; height: 64px; color: var(--bev-color-green-600, #059669); }
 .mfa-step-icon svg { width: 100%; height: 100%; }
-.mfa-step-icon--shield { animation: mfa-pulse 2s ease infinite; }
+.mfa-step-icon--shield { animation: mfa-pulse 2.4s ease infinite; }
 
 .mfa-step-title { font-size: 22px; font-weight: 800; color: var(--text-strong, #0f172a); margin: 0; text-align: center; }
 .mfa-step-desc { font-size: 14px; color: var(--text-muted, #64748b); margin: 0; text-align: center; line-height: 1.6; max-width: 360px; }
 
 .mfa-app-icons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .mfa-app-badge {
-  padding: 6px 14px; border-radius: 999px;
+  padding: 5px 13px; border-radius: 999px;
   background: var(--bg-page, #f8fafc);
   border: 1px solid var(--border-color, #e2e8f0);
   font-size: 12px; font-weight: 600; color: var(--text-main, #334155);
 }
 
-.mfa-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px 0; }
+/* Loading */
+.mfa-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 0; color: var(--text-muted, #64748b); font-size: 14px; }
 .mfa-spinner-lg {
   width: 32px; height: 32px;
   border: 3px solid var(--border-color, #e2e8f0);
   border-top-color: var(--bev-color-green-600, #059669);
   border-radius: 50%;
-  animation: mfa-spin 0.6s linear infinite;
+  animation: mfa-spin 0.7s linear infinite;
 }
 .mfa-spinner-sm {
   width: 18px; height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(255,255,255,0.3);
   border-top-color: #fff;
   border-radius: 50%;
-  animation: mfa-spin 0.6s linear infinite;
+  animation: mfa-spin 0.7s linear infinite;
   display: inline-block;
 }
 
+/* QR area */
 .mfa-qr-area {
   width: 200px; height: 200px;
-  background: #fff;
+  background: #ffffff;
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 12px;
   padding: 12px;
   display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
 }
+.mfa-qr-img { width: 176px; height: 176px; display: block; image-rendering: pixelated; }
+.mfa-qr-placeholder { width: 176px; height: 176px; display: flex; align-items: center; justify-content: center; }
+.mfa-qr-placeholder svg { display: block; }
 
+/* Manual entry */
 .mfa-manual-entry { text-align: center; width: 100%; max-width: 360px; }
 .mfa-manual-label { font-size: 12px; color: var(--text-muted, #64748b); margin: 0 0 8px; }
 .mfa-secret-row { display: flex; align-items: center; gap: 8px; justify-content: center; }
 .mfa-secret {
   font-family: var(--bev-font-mono, monospace);
-  font-size: 14px; font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.1em;
   padding: 8px 16px;
   background: var(--bg-page, #f8fafc);
   border: 1px solid var(--border-color, #e2e8f0);
@@ -384,11 +414,12 @@ export default {
 .mfa-copy-btn {
   background: none; border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 6px; width: 32px; height: 32px;
-  cursor: pointer; font-size: 14px;
-  color: var(--text-muted, #64748b);
+  cursor: pointer; color: var(--text-muted, #64748b);
   display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
 }
-.mfa-copy-btn:hover { background: var(--bg-page, #f8fafc); }
+.mfa-copy-btn:hover { background: var(--bg-page, #f1f5f9); color: var(--bev-color-green-600, #059669); border-color: var(--bev-color-green-600, #059669); }
 
 /* Digit inputs */
 .mfa-digits { display: flex; gap: 8px; justify-content: center; margin: 4px 0; }
@@ -401,23 +432,32 @@ export default {
   background: var(--bg-page, #f8fafc);
   color: var(--text-strong, #0f172a);
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  caret-color: var(--bev-color-green-600, #059669);
 }
 .mfa-digit:focus {
   border-color: var(--bev-color-green-600, #059669);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+}
+.mfa-digit--filled {
+  background: var(--bg-card, #fff);
+  border-color: var(--bev-color-green-600, #059669);
+  color: var(--bev-color-green-600, #059669);
 }
 
-.mfa-error { font-size: 13px; color: var(--bev-color-red-600, #dc2626); margin: 0; font-weight: 600; }
+.mfa-error { font-size: 13px; color: var(--bev-color-red-600, #dc2626); margin: 0; font-weight: 600; text-align: center; }
 
 /* Recovery codes */
+.mfa-recovery-icon { width: 56px; height: 56px; color: var(--bev-color-green-600, #059669); }
+.mfa-recovery-icon svg { width: 100%; height: 100%; }
+
 .mfa-codes-grid {
   display: grid; grid-template-columns: repeat(2, 1fr);
   gap: 8px; width: 100%; max-width: 320px;
 }
 .mfa-code-item {
   font-family: var(--bev-font-mono, monospace);
-  font-size: 14px; font-weight: 600;
+  font-size: 13px; font-weight: 600;
   padding: 10px 16px;
   background: var(--bg-page, #f8fafc);
   border: 1px solid var(--border-color, #e2e8f0);
@@ -433,13 +473,13 @@ export default {
   font-size: 13px; font-weight: 500; color: var(--text-main, #334155);
   cursor: pointer;
 }
-.mfa-confirm-check input { accent-color: var(--bev-color-green-600, #059669); }
+.mfa-confirm-check input { accent-color: var(--bev-color-green-600, #059669); width: 15px; height: 15px; }
 
-/* Success animation */
+/* Success */
 .mfa-success-check {
   width: 72px; height: 72px;
   color: var(--bev-color-green-600, #059669);
-  animation: mfa-check-pop 0.5s ease;
+  animation: mfa-check-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .mfa-success-check svg { width: 100%; height: 100%; }
 
@@ -448,24 +488,27 @@ export default {
   width: 100%; max-width: 280px; height: 44px;
   border: none; border-radius: 12px;
   font-size: 14px; font-weight: 700; font-family: inherit;
-  cursor: pointer; transition: background 0.15s, opacity 0.15s;
-  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s, opacity 0.15s, transform 0.1s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
 }
+.mfa-setup-btn:active { transform: scale(0.98); }
 .mfa-setup-btn--primary { background: var(--bev-color-green-600, #059669); color: #fff; }
 .mfa-setup-btn--primary:hover:not(:disabled) { background: var(--bev-color-green-700, #047857); }
-.mfa-setup-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.mfa-setup-btn--primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .mfa-setup-btn--secondary {
   background: var(--bg-page, #f8fafc);
   border: 1px solid var(--border-color, #e2e8f0);
   color: var(--text-main, #334155);
+  max-width: 148px;
 }
 .mfa-setup-btn--secondary:hover { background: var(--border-color, #e2e8f0); }
-.mfa-setup-btn--ghost { background: none; color: var(--text-muted, #64748b); }
+.mfa-setup-btn--ghost { background: none; color: var(--text-muted, #64748b); font-weight: 500; }
 .mfa-setup-btn--ghost:hover { color: var(--text-main, #334155); }
 
+/* Transitions */
 .mfa-shake { animation: shake 0.4s ease; }
-.mfa-alert-fade-enter-active, .mfa-alert-fade-leave-active { transition: opacity 0.2s; }
-.mfa-alert-fade-enter-from, .mfa-alert-fade-leave-to { opacity: 0; }
+.mfa-alert-fade-enter-active, .mfa-alert-fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.mfa-alert-fade-enter-from, .mfa-alert-fade-leave-to { opacity: 0; transform: translateY(-4px); }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -476,11 +519,14 @@ export default {
 }
 @keyframes mfa-spin { to { transform: rotate(360deg); } }
 @keyframes mfa-fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes mfa-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes mfa-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 0.85; }
+}
 @keyframes mfa-check-pop {
   0% { transform: scale(0); opacity: 0; }
-  60% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(1); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 @media (max-width: 480px) {
@@ -488,5 +534,6 @@ export default {
   .mfa-step { padding: 28px 20px 24px; }
   .mfa-digit { width: 40px; height: 48px; font-size: 20px; }
   .mfa-codes-grid { grid-template-columns: 1fr; }
+  .mfa-setup-btn { max-width: 100%; }
 }
 </style>

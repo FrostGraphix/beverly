@@ -6,7 +6,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import { adminClient } from '../db/supabase.js';
-import { redisConnection } from '../queue/index.js';
+import { redisConnection, queuesEnabled } from '../queue/index.js';
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -24,7 +24,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }));
 
     fastify.get('/ready', async (_req, reply) => {
-        const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
+        const checks: Record<string, { ok: boolean; mode?: 'required' | 'disabled'; latencyMs?: number; error?: string }> = {};
 
         // DB
         const dbStart = Date.now();
@@ -38,14 +38,18 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
 
         // Redis
-        const redisStart = Date.now();
-        try {
-            const pong = await withTimeout(redisConnection.ping(), 1500, 'redis ping');
-            checks.redis = pong === 'PONG'
-                ? { ok: true, latencyMs: Date.now() - redisStart }
-                : { ok: false, error: `unexpected ping reply: ${pong}` };
-        } catch (e) {
-            checks.redis = { ok: false, error: (e as Error).message };
+        if (!queuesEnabled) {
+            checks.redis = { ok: true, mode: 'disabled' };
+        } else {
+            const redisStart = Date.now();
+            try {
+                const pong = await withTimeout(redisConnection.ping(), 1500, 'redis ping');
+                checks.redis = pong === 'PONG'
+                    ? { ok: true, mode: 'required', latencyMs: Date.now() - redisStart }
+                    : { ok: false, error: `unexpected ping reply: ${pong}` };
+            } catch (e) {
+                checks.redis = { ok: false, error: (e as Error).message };
+            }
         }
 
         const allOk = Object.values(checks).every((c) => c.ok);
@@ -56,8 +60,7 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/version', async () => ({
         service: 'beverly-wallet-backend',
         version: process.env.npm_package_version ?? '0.1.0',
-        node: process.version,
-        env: process.env.NODE_ENV,
+        build: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RENDER_GIT_COMMIT ?? 'unknown',
     }));
 };
 

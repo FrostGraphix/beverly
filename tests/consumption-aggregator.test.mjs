@@ -15,6 +15,7 @@ import {
   aggregateDeltasByPeriod,
   buildCustomerRechargeHistory,
   buildTariffMap,
+  calculateConsumptionValue,
   resolveEffectivePrice,
   revenueGap,
   computeSiteKpis,
@@ -132,20 +133,64 @@ test("meter reset (total1 drops) clamps delta to 0", () => {
   assertClose(deltas[2].delta, 1.5, 0.001, "next day after reset");
 });
 
-test("tamper flag is true when terminalCoverOpen", () => {
+// Boolean interval flags are INVERTED against their field names:
+// `false` means the named condition is active, `true` means healthy.
+test("tamper flag is true when terminalCoverOpen is false (cover actually open)", () => {
   const rows = [
-    { currentDate: "2026-04-01", total1: 10, remain1: 5, terminalCoverOpen: true },
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, terminalCoverOpen: false },
   ];
   const deltas = deriveDailyDeltas(rows);
   assertEqual(deltas[0].tamper, true);
 });
 
-test("relayOpen flag is correctly passed through", () => {
+test("tamper flag is false when every condition flag reads healthy", () => {
+  const rows = [
+    {
+      currentDate: "2026-04-01", total1: 10, remain1: 5,
+      terminalCoverOpen: true, magneticInterference: true, currentReverse: true,
+    },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, false);
+});
+
+test("tamper flag honours the literal string shape", () => {
+  const rows = [
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, currentReverse: "Yes" },
+    { currentDate: "2026-04-02", total1: 12, remain1: 5, currentReverse: "No" },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, true);
+  assertEqual(deltas[1].tamper, false);
+});
+
+test("relayOpen is true only when the relay is actually open", () => {
+  const rows = [
+    { currentDate: "2026-04-01", total1: 10, remain1: 5, relayOpen: false },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].relayOpen, true);
+});
+
+test("relayOpen is false for a connected meter", () => {
   const rows = [
     { currentDate: "2026-04-01", total1: 10, remain1: 5, relayOpen: true },
   ];
   const deltas = deriveDailyDeltas(rows);
-  assertEqual(deltas[0].relayOpen, true);
+  assertEqual(deltas[0].relayOpen, false);
+});
+
+test("no-data sentinel rows report no tamper and no relay alarm", () => {
+  const rows = [
+    {
+      currentDate: "2026-04-01", total1: -1, remain1: -1,
+      terminalCoverOpen: false, magneticInterference: false,
+      currentReverse: false, relayOpen: false,
+    },
+  ];
+  const deltas = deriveDailyDeltas(rows);
+  assertEqual(deltas[0].tamper, false);
+  assertEqual(deltas[0].relayOpen, false);
 });
 
 test("dates are truncated to YYYY-MM-DD", () => {
@@ -272,6 +317,51 @@ test("case-insensitive tariffId lookup", () => {
   const map = buildTariffMap(tariffRows);
   assertClose(resolveEffectivePrice("residential", map), 350.00, 0.001);
   assertClose(resolveEffectivePrice("kolo", map), 483.75, 0.001);
+});
+
+test("buildTariffMap supports the live banded price format", () => {
+  const map = buildTariffMap([{ tariffId: "BANDED", price: "0~999999~350", tax: 0 }]);
+  assertClose(resolveEffectivePrice("BANDED", map), 350, 0.001);
+});
+
+test("calculateConsumptionValue applies each assigned tariff", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 10 },
+    { tariffId: "KOLO", totalKwh: 5 },
+  ], map);
+  assertClose(result.valueNgn, 5918.75, 0.001);
+  assertEqual(result.complete, true);
+  assertClose(result.coveragePct, 100, 0.001);
+});
+
+test("calculateConsumptionValue exposes incomplete tariff coverage", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 10 },
+    { tariffId: "MISSING", totalKwh: 5 },
+  ], map);
+  assertClose(result.valueNgn, 3500, 0.001);
+  assertEqual(result.complete, false);
+  assertClose(result.coveragePct, 66.67, 0.001);
+});
+
+test("calculateConsumptionValue never rounds missing energy into complete coverage", () => {
+  const map = buildTariffMap(tariffRows);
+  const result = calculateConsumptionValue([
+    { tariffId: "RESIDENTIAL", totalKwh: 999999 },
+    { tariffId: "MISSING", totalKwh: 1 },
+  ], map);
+  assertEqual(result.complete, false);
+  assertClose(result.unpricedKwh, 1, 0.001);
+});
+
+test("calculateConsumptionValue rejects zero-priced tariffs", () => {
+  const map = new Map([["INVALID", { effectivePrice: 0 }]]);
+  const result = calculateConsumptionValue([{ tariffId: "INVALID", totalKwh: 10 }], map);
+  assertEqual(result.complete, false);
+  assertClose(result.valueNgn, 0, 0.001);
+  assertClose(result.unpricedKwh, 10, 0.001);
 });
 
 // ── revenueGap ────────────────────────────────────────────────────────────────

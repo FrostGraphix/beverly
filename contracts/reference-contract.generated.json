@@ -6,24 +6,48 @@
     "routeManifest": "reference-route-manifest.json",
     "endpointRegistry": "backend/src/services/endpoint-registry.ts"
   },
-  "generatedAt": "2026-04-29T05:15:15.261Z",
+  "generatedAt": "2026-07-15T07:51:43.608Z",
   "documentedTotal": 144,
-  "endpointCount": 144,
-  "endpointCountNote": "matches overview",
+  "endpointCount": 153,
+  "endpointCountNote": "overview count differs from endpoint catalog lines",
   "observedEndpointCount": 16,
-  "visibleEndpointCount": 31,
+  "visibleEndpointCount": 40,
   "liveWriteEndpointCount": 83,
   "coverage": {
     "crawlUniqueEndpointCount": 16,
     "crawlMissingEndpointCount": 0,
     "crawlMissingEndpoints": [],
-    "routeCount": 38,
-    "fullyMappedRouteCount": 38,
+    "routeCount": 41,
+    "fullyMappedRouteCount": 41,
     "routeCoverage": [
       {
         "group": "Dashboard",
         "title": "Dashboard",
         "hash": "#/dashboard",
+        "apiCount": 2,
+        "coveredApiCount": 2,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Report Centre",
+        "hash": "#/admin/reports",
+        "apiCount": 5,
+        "coveredApiCount": 5,
+        "fullyMapped": true
+      },
+      {
+        "group": "Data Report",
+        "title": "Station Consumption",
+        "hash": "#/prepay-report/station-consumption",
+        "apiCount": 1,
+        "coveredApiCount": 1,
+        "fullyMapped": true
+      },
+      {
+        "group": "System",
+        "title": "Automation Command",
+        "hash": "#/system/automation-command",
         "apiCount": 2,
         "coveredApiCount": 2,
         "fullyMapped": true
@@ -168,8 +192,8 @@
         "group": "Data Report",
         "title": "Interval Data",
         "hash": "#/prepay-report/daily-data-meter",
-        "apiCount": 2,
-        "coveredApiCount": 2,
+        "apiCount": 3,
+        "coveredApiCount": 3,
         "fullyMapped": true
       },
       {
@@ -2225,7 +2249,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileDailyDataReadRequest",
       "responseSchema": "LoadProfileDailyDataResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -2248,7 +2272,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileReadRequest",
       "responseSchema": "LoadProfileResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [
         {
           "group": "Remote Support",
@@ -2284,7 +2308,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileInstantaneousValueReadRequest",
       "responseSchema": "LoadProfileInstantaneousValueResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -2307,7 +2331,7 @@
       "method": "POST",
       "requestSchema": "LoadProfileMonthlyDataReadRequest",
       "responseSchema": "LoadProfileMonthlyDataResponseResponseDto",
-      "operation": "generic",
+      "operation": "read",
       "consumers": [],
       "observed": false,
       "aliases": [
@@ -4534,6 +4558,339 @@
         "/API/DailyDataMeter/readHourly"
       ],
       "uiRouteConsumers": [],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/revenue",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/revenue",
+        "/API/reports/revenue"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/revenue",
+        "/API/reports/revenue"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/wallet",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/wallet",
+        "/API/reports/wallet"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/wallet",
+        "/API/reports/wallet"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/customers",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/customers",
+        "/API/reports/customers"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/customers",
+        "/API/reports/customers"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/audit",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/audit",
+        "/API/reports/audit"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/audit",
+        "/API/reports/audit"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/reports/settlement",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/reports/settlement",
+        "/API/reports/settlement"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/reports/settlement",
+        "/API/reports/settlement"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Report Centre",
+          "hash": "#/admin/reports"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/local/consumption/station-analytics",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Station Consumption",
+          "hash": "#/prepay-report/station-consumption",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/local/consumption/station-analytics",
+        "/API/local/consumption/station-analytics"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/local/consumption/station-analytics",
+        "/API/local/consumption/station-analytics"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Station Consumption",
+          "hash": "#/prepay-report/station-consumption"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "System",
+      "path": "/api/system/automation-report",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/system/automation-report",
+        "/API/system/automation-report"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/system/automation-report",
+        "/API/system/automation-report"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "System",
+      "path": "/api/system/automation-control",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/system/automation-control",
+        "/API/system/automation-control"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/system/automation-control",
+        "/API/system/automation-control"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "System",
+          "title": "Automation Command",
+          "hash": "#/system/automation-command"
+        }
+      ],
+      "writeRiskLevel": "none"
+    },
+    {
+      "module": "Data Report",
+      "path": "/api/DailyDataMeter/export.xlsx",
+      "operationId": "",
+      "method": "POST",
+      "requestSchema": "",
+      "responseSchema": "",
+      "operation": "generic",
+      "consumers": [
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter",
+          "status": null
+        }
+      ],
+      "observed": false,
+      "aliases": [
+        "/api/DailyDataMeter/export.xlsx",
+        "/API/DailyDataMeter/export.xlsx"
+      ],
+      "liveWrite": false,
+      "visibleRoute": true,
+      "manifestOnly": true,
+      "casingVariants": [
+        "/api/DailyDataMeter/export.xlsx",
+        "/API/DailyDataMeter/export.xlsx"
+      ],
+      "uiRouteConsumers": [
+        {
+          "group": "Data Report",
+          "title": "Interval Data",
+          "hash": "#/prepay-report/daily-data-meter"
+        }
+      ],
       "writeRiskLevel": "none"
     }
   ]

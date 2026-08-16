@@ -18,10 +18,14 @@ const routes: RouteRecordRaw[] = [
     { path: '/wallet/fund',     name: 'fund',           component: () => import('../views/Fund.vue'),          meta: { auth: true } },
     { path: '/wallet/funding',  name: 'funding-history',component: () => import('../views/FundingHistory.vue'),meta: { auth: true } },
     { path: '/vend',            name: 'vend',           component: () => import('../views/Vend.vue'),          meta: { auth: true } },
+    { path: '/meter-orders',    name: 'meter-orders',   component: () => import('../views/MeterOrders.vue'),   meta: { auth: true } },
+    { path: '/meter-orders/new',name: 'meter-order-new',component: () => import('../views/MeterOrderCreate.vue'),meta: { auth: true } },
     { path: '/remote-send',     name: 'remote-send',    component: () => import('../views/RemoteSend.vue'),    meta: { auth: true } },
     { path: '/transactions',    name: 'transactions',   component: () => import('../views/Transactions.vue'),  meta: { auth: true } },
     { path: '/receipts',        name: 'receipts',       component: () => import('../views/Receipts.vue'),      meta: { auth: true } },
     { path: '/statement',       name: 'statement',      component: () => import('../views/Statement.vue'),     meta: { auth: true } },
+    { path: '/consumption',     name: 'consumption',    component: () => import('../views/Consumption.vue'),   meta: { auth: true } },
+    { path: '/notifications',   name: 'notifications',  component: () => import('../views/Notifications.vue'), meta: { auth: true } },
     { path: '/profile',         name: 'profile',        component: () => import('../views/Profile.vue'),       meta: { auth: true } },
     { path: '/security',        name: 'security',       component: () => import('../views/Security.vue'),      meta: { auth: true } },
     { path: '/disputes',        name: 'disputes',       component: () => import('../views/Disputes.vue'),     meta: { auth: true } },
@@ -29,6 +33,8 @@ const routes: RouteRecordRaw[] = [
     { path: '/error',           name: 'error',           component: () => import('../views/Error.vue') },
     { path: '/:pathMatch(.*)*', name: 'not-found',      component: () => import('../views/NotFound.vue') },
 ];
+
+const MFA_OPTIONAL_ROUTE_NAMES = new Set(['vend', 'remote-send', 'vend-access']);
 
 export const router = createRouter({
     history: createWebHistory(portalHistoryBase(import.meta.env.BASE_URL)),
@@ -50,7 +56,15 @@ router.beforeEach(async (to) => {
     if (auth.isAuthenticated && auth.user?.password_reset_required && to.name !== 'password-change' && !to.meta.allowReset) {
         return { name: 'password-change' };
     }
-    if (auth.isAuthenticated && auth.requiresMfaVerification && to.name !== 'security') {
+    if (auth.isAuthenticated && auth.requiresMfaVerification && to.name === 'dashboard') {
+        return { name: auth.user?.vend_credential_configured ? 'vend' : 'vend-access' };
+    }
+    if (
+        auth.isAuthenticated &&
+        auth.requiresMfaVerification &&
+        to.name !== 'security' &&
+        !MFA_OPTIONAL_ROUTE_NAMES.has(String(to.name))
+    ) {
         return { name: 'security', query: { mode: 'verify', redirect: to.fullPath } };
     }
     if (

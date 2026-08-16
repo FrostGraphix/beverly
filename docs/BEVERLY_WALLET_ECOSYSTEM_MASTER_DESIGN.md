@@ -69,7 +69,7 @@ How staff transitions:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                  Beverly Operations Platform                  │
+│              Beverly - Your Smart Power Partner               │
 │                                                                │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐  │
 │  │  CRM Admin   │   │ Vendor Retail│   │  Customer App    │  │
@@ -334,7 +334,7 @@ Step 10: Vendor enters portal.
 - View settlement statement.
 - Reprint receipts.
 - Raise disputes.
-- Manage sub-users (vendor_manager role only).
+- Manage sub-users (vendor role only).
 
 ### 5.4 Vendor Cannot
 

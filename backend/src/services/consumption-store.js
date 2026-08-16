@@ -1,16 +1,58 @@
 "use strict";
 
 const supabase = require("./supabase-service");
+const { normalizeIntervalRow, conditionActive } = require("./abnormal-alarm-service");
 
-// Canonical list of real, live stations. Anything else in the raw tables
-// (e.g. "0001", "TEST_STATION" from smoke-tests / webhook tests) is junk and
-// must never surface in analytics. Filtering here keeps the numbers correct
-// regardless of what test data lands in daily_meter_readings.
-const CANONICAL_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-const CANONICAL_STATION_SET = new Set(CANONICAL_STATIONS);
+// Signal columns on daily_meter_readings, in DB column -> upstream camelCase order.
+// Single source of truth for the write-side (rowToRecord) and read-side
+// (readDailyMeterRows/readCompactRowsFromStore) column list, so they can't drift.
+const NUMERIC_SIGNAL_COLUMNS = [
+  ["usage1", "usage1"],
+  ["interval_demand", "intervalDemand"],
+  ["power", "power"],
+  ["voltage_a", "voltageA"],
+  ["voltage_b", "voltageB"],
+  ["voltage_c", "voltageC"],
+  ["current_a", "currentA"],
+  ["current_b", "currentB"],
+  ["current_c", "currentC"],
+];
+// Boolean alarm flags. Stored as an already-resolved "is this alarm active" value
+// (conditionActive() applied once, at ingestion) -- see
+// abnormal-alarm-service.js's deriveAbnormalAlarmsFromResolvedFlags for why this
+// must not be re-inverted on read.
+const ALARM_FLAG_COLUMNS = [
+  ["relay_open", "relayOpen"],
+  ["battery_low", "batteryLow"],
+  ["magnetic_interference", "magneticInterference"],
+  ["terminal_cover_open", "terminalCoverOpen"],
+  ["cover_open", "coverOpen"],
+  ["current_reverse", "currentReverse"],
+  ["current_unbalance", "currentUnbalance"],
+];
+const SIGNAL_SELECT_COLUMNS = [
+  "gateway_id",
+  ...NUMERIC_SIGNAL_COLUMNS.map(([col]) => col),
+  "source2_activated",
+  ...ALARM_FLAG_COLUMNS.map(([col]) => col),
+];
 
-function isCanonicalStation(stationId) {
-  return CANONICAL_STATION_SET.has(normalizeStation(stationId));
+function numericOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+// Reverse of signalColumnsFromRow: DB snake_case -> the camelCase keys
+// deriveAbnormalAlarmsFromResolvedFlags (and normalizeIntervalRow) expect.
+function signalColumnsToRow(dbRow) {
+  const out = {
+    gatewayId: dbRow.gateway_id,
+    source2Activated: dbRow.source2_activated,
+  };
+  for (const [column, key] of NUMERIC_SIGNAL_COLUMNS) out[key] = dbRow[column];
+  for (const [column, key] of ALARM_FLAG_COLUMNS) out[key] = dbRow[column];
+  return out;
 }
 
 function storeEnabled() {
@@ -65,16 +107,34 @@ function rowToRecord(row, requestStation = "") {
     reading_date: readingDate,
     total1: Number.isFinite(Number(row.total1)) ? Number(row.total1) : null,
     remain1: Number.isFinite(Number(row.remain1)) ? Number(row.remain1) : null,
-    row_json: {
-      ...row,
-      stationId,
-      meterId,
-      currentDate: readingDate,
-    },
     captured_at: new Date().toISOString(),
+    ...signalColumnsFromRow(row, stationId),
   };
 }
 
+// Resolves the OEM fault/electrical signal fields (via abnormal-alarm-service.js's
+// own alias-matching, so ingestion-time and read-time interpretation can never
+// drift) into the typed daily_meter_readings columns. Booleans are stored as an
+// already-resolved "is this alarm active" value -- see ALARM_FLAG_COLUMNS above.
+function signalColumnsFromRow(row, stationId) {
+  const normalized = normalizeIntervalRow(row, stationId);
+  const out = {
+    gateway_id: normalized.gatewayId ? String(normalized.gatewayId) : null,
+    source2_activated: normalized.source2Activated === undefined ? null : Boolean(normalized.source2Activated),
+  };
+  for (const [column, key] of NUMERIC_SIGNAL_COLUMNS) out[column] = numericOrNull(normalized[key]);
+  for (const [column, key] of ALARM_FLAG_COLUMNS) {
+    out[column] = normalized[key] === undefined ? null : conditionActive(normalized[key]);
+  }
+  return out;
+}
+
+// row_json used to carry the full raw row here too -- same dead-write pattern
+// already found and fixed on daily_meter_readings and audit_logs. The only
+// read of this table (countRawDuplicateRows below) selects `id` alone; nothing
+// anywhere reads row_json. The column has a NOT NULL DEFAULT '{}'::jsonb, so
+// simply not sending it is enough -- no trigger needed like the main table
+// required (this write path is low-frequency, duplicate-detection events only).
 function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, eventType = "duplicate", sourcePage = null, sourceRow = null } = {}) {
   const stationId = normalizeStation(row.stationId || row.station || requestStation);
   const meterId = normalizeMeter(row.meterId || row.customerId);
@@ -88,13 +148,6 @@ function rowToRawDuplicate(row, { requestStation = "", duplicateIndex = 1, event
     event_type: eventType,
     source_page: Number.isFinite(Number(sourcePage)) ? Number(sourcePage) : null,
     source_row: Number.isFinite(Number(sourceRow)) ? Number(sourceRow) : null,
-    row_json: {
-      ...row,
-      stationId,
-      meterId,
-      currentDate: readingDate,
-      rawDuplicateIndex: duplicateIndex,
-    },
     captured_at: new Date().toISOString(),
   };
 }
@@ -265,7 +318,7 @@ async function dateBoundForStation(stationId = "", direction = "asc") {
   return row?.reading_date || null;
 }
 
-async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterStationStats(stations = []) {
   if (!storeEnabled()) {
     return {
       enabled: false,
@@ -309,7 +362,7 @@ async function dailyMeterStationStats(stations = ["TUNGA", "UMAISHA", "OGUFA", "
   }
 }
 
-async function dailyMeterTableReport(stations = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"]) {
+async function dailyMeterTableReport(stations = []) {
   const stats = await dailyMeterStationStats(stations);
   return {
     ...stats,
@@ -329,13 +382,17 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
 
   const pageNumber = Math.max(1, Number(request.pageNumber || 1));
   const pageSize = Math.max(1, Math.min(Number(request.pageSize || 5000), 5000));
-  const compact = request.compact === true || request.compact === "true";
   const offset = (pageNumber - 1) * pageSize;
   const rangeEnd = offset + pageSize - 1;
+  // row_json is no longer read. It carried the raw OEM payload, but the nightly
+  // retention job blanks it after 7 days, so it was already absent from ~89% of
+  // rows: a non-compact read of anything older returned zero rows and silently
+  // fell through to the upstream proxy. Both modes now reconstruct from the
+  // persisted scalar columns, which are populated for every row regardless of
+  // age. This also removes the last reader of row_json, allowing the column to
+  // be blanked and eventually dropped.
   const query = [
-    compact
-      ? "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1"
-      : "select=row_json",
+    `select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1,${SIGNAL_SELECT_COLUMNS.join(",")}`,
     `station_id=eq.${encodeURIComponent(stationId)}`,
     `reading_date=gte.${encodeURIComponent(from)}`,
     `reading_date=lte.${encodeURIComponent(to)}`,
@@ -349,19 +406,17 @@ async function readDailyMeterRows({ pathname, requestPayload: payload }) {
     },
   });
   const rows = (Array.isArray(body) ? body : [])
-    .map((row) => {
-      if (!compact) return row.row_json || {};
-      return {
-        stationId: row.station_id,
-        meterId: row.meter_id,
-        customerId: row.customer_id,
-        customerName: row.customer_name,
-        currentDate: row.reading_date,
-        total1: row.total1,
-        remain1: row.remain1,
-      };
-    })
-    .filter((row) => Object.keys(row).length);
+    .map((row) => ({
+      stationId: row.station_id,
+      meterId: row.meter_id,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      currentDate: row.reading_date,
+      total1: row.total1,
+      remain1: row.remain1,
+      ...signalColumnsToRow(row),
+    }))
+    .filter((row) => row.stationId || row.meterId);
   if (!rows.length) return null;
   const total = totalFromContentRange(response.headers.get("content-range"), rows.length);
   return {
@@ -384,7 +439,7 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
   const station = normalizeStation(stationId);
   const pageSize = 1000;
   const filters = [
-    "select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1",
+    `select=station_id,meter_id,customer_id,customer_name,reading_date,total1,remain1,${SIGNAL_SELECT_COLUMNS.join(",")}`,
     `reading_date=gte.${encodeURIComponent(from)}`,
     `reading_date=lte.${encodeURIComponent(to)}`,
     "order=station_id.asc,meter_id.asc,reading_date.asc",
@@ -392,31 +447,40 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
   if (station) filters.splice(1, 0, `station_id=eq.${encodeURIComponent(station)}`);
   const query = `/daily_meter_readings?${filters.join("&")}`;
 
-  async function fetchRange(offset) {
+  async function fetchRange(offset, withCount = false) {
     const rangeEnd = offset + pageSize - 1;
     const { response, body } = await supabase.restRequestWithResponse(query, {
       headers: {
-        Prefer: "count=exact",
+        ...(withCount ? { Prefer: "count=planned" } : {}),
         Range: `${offset}-${rangeEnd}`,
       },
     });
     const pageRows = Array.isArray(body) ? body : [];
     return {
       rows: pageRows,
-      total: totalFromContentRange(response.headers.get("content-range"), offset + pageRows.length),
+      total: withCount ? totalFromContentRange(response.headers.get("content-range"), null) : null,
     };
   }
 
-  const firstPage = await fetchRange(0);
+  const firstPage = await fetchRange(0, true);
   const rows = [...firstPage.rows];
   const total = firstPage.total;
   const offsets = [];
-  for (let offset = pageSize; offset < total; offset += pageSize) offsets.push(offset);
+  for (let offset = pageSize; offset < (total ?? pageSize); offset += pageSize) offsets.push(offset);
 
   const concurrency = 6;
+  let lastPage = firstPage;
   for (let index = 0; index < offsets.length; index += concurrency) {
     const pageResults = await Promise.all(offsets.slice(index, index + concurrency).map((offset) => fetchRange(offset)));
     for (const result of pageResults) rows.push(...result.rows);
+    lastPage = pageResults[pageResults.length - 1] || lastPage;
+  }
+
+  let nextOffset = offsets.length ? offsets[offsets.length - 1] + pageSize : pageSize;
+  while (lastPage.rows.length === pageSize) {
+    lastPage = await fetchRange(nextOffset);
+    rows.push(...lastPage.rows);
+    nextOffset += pageSize;
   }
 
   return rows.map((row) => ({
@@ -427,6 +491,7 @@ async function readCompactRowsFromStore({ stationId, from, to }) {
     currentDate: row.reading_date,
     total1: row.total1,
     remain1: row.remain1,
+    ...signalColumnsToRow(row),
   }));
 }
 
@@ -464,6 +529,45 @@ function effectiveGranularity(granularity, windowDays) {
   return granularity;
 }
 
+function dateParts(day) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ""));
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function isMonthStart(day) {
+  const parts = dateParts(day);
+  return !!parts && parts.day === 1;
+}
+
+function isMonthEnd(day) {
+  const parts = dateParts(day);
+  if (!parts) return false;
+  const lastDay = new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
+  return parts.day === lastDay;
+}
+
+function isoWeekday(day) {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return 0;
+  return date.getUTCDay() || 7;
+}
+
+function isWeeklyBoundary(from, to) {
+  return isoWeekday(from) === 1 && isoWeekday(to) === 7;
+}
+
+function supportsExactAggregateRange(granularity, from, to) {
+  if (granularity === "monthly") return isMonthStart(from) && isMonthEnd(to);
+  if (granularity === "weekly") return isWeeklyBoundary(from, to);
+  if (granularity === "yearly") return /-\d{2}-\d{2}$/.test(from) && from.endsWith("-01-01") && to.endsWith("-12-31");
+  return true;
+}
+
 /**
  * Convert a period_start date (ISO YYYY-MM-DD) to the display key used by the
  * existing frontend consumers (same format as periodKey()).
@@ -492,7 +596,7 @@ function aggPeriodKey(periodStart, granularity) {
 // than several small per-station scans run in parallel).
 async function fetchStationAggregateRows({ station, periodType, fromBound, to, pageSize }) {
   const filters = [
-    "select=station_id,meter_id,customer_id,customer_name,period_type,period_start,kwh_total,reading_count",
+    "select=station_id,meter_id,customer_id,customer_name,period_type,period_start,kwh_total,reading_count,tariff_value_ngn,priced_kwh,unpriced_kwh",
     `station_id=eq.${encodeURIComponent(station)}`,
     `period_type=eq.${encodeURIComponent(periodType)}`,
     `period_start=gte.${encodeURIComponent(fromBound)}`,
@@ -501,15 +605,15 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
   ];
   const query = `/meter_consumption_aggregates?${filters.join("&")}`;
 
-  // count=exact runs a full COUNT over the filtered set — only worth paying once
-  // (on the first page) to learn how many pages to fetch. Subsequent pages skip it.
+  // Planner counts avoid full-table count timeouts. Pagination still continues
+  // through a short page, so stale estimates cannot omit rows.
   async function fetchRange(offset, withCount) {
     const headers = { Range: `${offset}-${offset + pageSize - 1}` };
-    if (withCount) headers.Prefer = "count=exact";
+    if (withCount) headers.Prefer = "count=planned";
     const { response, body } = await supabase.restRequestWithResponse(query, { headers });
     const rows = Array.isArray(body) ? body : [];
     const total = withCount
-      ? totalFromContentRange(response.headers.get("content-range"), offset + rows.length)
+      ? totalFromContentRange(response.headers.get("content-range"), null)
       : null;
     return { rows, total: Number.isFinite(total) ? total : null };
   }
@@ -518,6 +622,8 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
   const rows = [...first.rows];
   const total = first.total;
 
+  let lastPage = first;
+  let nextOffset = pageSize;
   if (total !== null && total > pageSize) {
     const offsets = [];
     for (let o = pageSize; o < total; o += pageSize) offsets.push(o);
@@ -525,34 +631,35 @@ async function fetchStationAggregateRows({ station, periodType, fromBound, to, p
     for (let i = 0; i < offsets.length; i += concurrency) {
       const pages = await Promise.all(offsets.slice(i, i + concurrency).map((o) => fetchRange(o, false)));
       for (const p of pages) rows.push(...p.rows);
+      lastPage = pages[pages.length - 1] || lastPage;
     }
+    nextOffset = offsets[offsets.length - 1] + pageSize;
   } else if (total === null && first.rows.length === pageSize) {
     let o = pageSize;
     while (true) {
       const page = await fetchRange(o, false);
       if (!page.rows.length) break;
       rows.push(...page.rows);
+      lastPage = page;
       o += pageSize;
       if (page.rows.length < pageSize) break;
     }
+    nextOffset = o;
+  }
+  while (lastPage.rows.length === pageSize) {
+    lastPage = await fetchRange(nextOffset, false);
+    rows.push(...lastPage.rows);
+    nextOffset += pageSize;
   }
   return rows;
 }
 
-async function readAggregatedDeltas({ stationId, from, to, granularity = "daily" }) {
+async function readAggregatedDeltas({ stationIds = [], from, to, granularity = "daily" }) {
   const periodType = aggPeriodType(granularity);
-  // For non-daily granularities the period_start of the *first* overlapping bucket
-  // may be earlier than `from` (e.g. a Monday-start week that contains `from`).
-  // Extend the lower bound by the max period width so we never miss a bucket.
-  const periodExtendDays = granularity === "yearly" ? 365 : granularity === "monthly" ? 31 : granularity === "weekly" ? 6 : 0;
-  const fromBound = periodExtendDays > 0 ? addDaysIso(from, -periodExtendDays) : from;
+  const fromBound = from;
   const pageSize = 1000;
 
-  // One station if requested, otherwise every canonical station (junk/test
-  // stations are never queried, so they can't leak into totals).
-  const stations = stationId
-    ? (isCanonicalStation(stationId) ? [normalizeStation(stationId)] : [])
-    : CANONICAL_STATIONS;
+  const stations = [...new Set(stationIds.map(normalizeStation).filter(Boolean))];
   if (!stations.length) return [];
 
   try {
@@ -562,9 +669,11 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
     );
     const allRows = perStation.flat();
     if (!allRows.length) return [];
-    return allRows
-      .filter((r) => isCanonicalStation(r.station_id))
-      .map((r) => ({
+    return allRows.map((r) => {
+        const hasValuation = r.tariff_value_ngn !== undefined
+          && r.priced_kwh !== undefined
+          && r.unpriced_kwh !== undefined;
+        return {
         stationId:    r.station_id,
         meterId:      r.meter_id,
         customerId:   r.customer_id || "",
@@ -572,7 +681,11 @@ async function readAggregatedDeltas({ stationId, from, to, granularity = "daily"
         periodStart:  r.period_start,
         kwhTotal:     Number(r.kwh_total) || 0,
         readingCount: Number(r.reading_count) || 0,
-      }));
+        tariffValueNgn: Number(r.tariff_value_ngn) || 0,
+        pricedKwh: Number(r.priced_kwh) || 0,
+        unpricedKwh: hasValuation ? Number(r.unpriced_kwh) || 0 : Number(r.kwh_total) || 0,
+      };
+      });
   } catch (err) {
     // Table not yet created — gracefully fall back to raw-row path
     const msg = String(err?.message || err || "");
@@ -618,13 +731,11 @@ async function readStationMeterReadRollups(stationId = "") {
  *
  * Falls back gracefully if the per-station function hasn't been deployed yet.
  */
-const KNOWN_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-
-async function refreshMeterReadingAggregates() {
+async function refreshMeterReadingAggregates(stationIds = []) {
   const t0 = Date.now();
   const results = [];
 
-  for (const station of KNOWN_STATIONS) {
+  for (const station of [...new Set(stationIds.map(normalizeStation).filter(Boolean))]) {
     const { body, response } = await supabase.restRequestWithResponse(
       "/rpc/refresh_meter_reading_aggregates_for_station",
       { method: "POST", body: { p_station_id: station } }
@@ -664,7 +775,7 @@ async function readDailyMeterSummary({ requestPayload: payload }) {
   if (!from || !to) return null;
 
   // ── Try aggregate table first ──────────────────────────────────────────────
-  const aggRows = await readAggregatedDeltas({ stationId, from, to, granularity });
+  const aggRows = await readAggregatedDeltas({ stationIds: stationId ? [stationId] : [], from, to, granularity });
 
   if (aggRows !== null && aggRows.length > 0) {
     const byStation = new Map();
@@ -764,6 +875,35 @@ function addDaysIso(day, offset) {
   return date.toISOString().slice(0, 10);
 }
 
+// Raw daily_meter_readings retention, kept in sync with pg_cron job 18 as last rewritten
+// by supabase/migrations/20260812170000_raw_retention_120d.sql. Overridable so a
+// deployment that chooses a different window does not have to patch code.
+//
+// If you change job 18's INTERVAL, change this too -- they are two halves of one policy,
+// and a mismatch makes the drill-down either claim data is archived when it is still
+// live, or silently return a short series with no explanation.
+const RAW_HOT_WINDOW_DAYS = Number(process.env.RAW_HOT_WINDOW_DAYS || 120);
+
+/**
+ * Describes how much of a requested range falls outside the raw hot window.
+ * Returns null when the whole range is live, so callers can treat presence as
+ * "part of this answer is incomplete, and here is where the rest lives".
+ */
+function coldRangeNotice(from) {
+  const cutoff = addDaysIso(new Date().toISOString().slice(0, 10), -RAW_HOT_WINDOW_DAYS);
+  const requested = normalizeDate(from);
+  if (!requested || requested >= cutoff) return null;
+  return {
+    hotWindowDays: RAW_HOT_WINDOW_DAYS,
+    hotFrom: cutoff,
+    requestedFrom: requested,
+    // Daily granularity and telemetry only; monthly/yearly totals are unaffected and
+    // remain queryable live from meter_consumption_aggregates.
+    message: `Daily readings before ${cutoff} are archived. Download the station-month CSV from Archive Reports for ${requested} to ${cutoff}.`,
+    archiveRouteHash: "#/prepay-report/archive-reports"
+  };
+}
+
 function weekdayIndex(day) {
   // 0 = Monday … 6 = Sunday
   const date = new Date(`${String(day).slice(0, 10)}T00:00:00.000Z`);
@@ -773,8 +913,48 @@ function weekdayIndex(day) {
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+async function computeSeasonalityFromDailyDeltas({ stationId, from, to }) {
+  try {
+    const dailyRows = await readAggregatedDeltas({ stationIds: stationId ? [stationId] : [], from, to, granularity: "daily" });
+    if (dailyRows && dailyRows.length > 0) {
+      const weekdaySum = new Array(7).fill(0);
+      const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+      for (const row of dailyRows) {
+        const date = normalizeDate(row.periodStart);
+        if (!date) continue;
+        const wd = weekdayIndex(date);
+        const value = Number(row.kwhTotal) || 0;
+        weekdaySum[wd] += value;
+        weekdayDates[wd].add(date);
+      }
+      return {
+        labels: WEEKDAY_LABELS,
+        values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+      };
+    }
+  } catch {
+    // Return empty seasonality on error
+  }
+  return { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+}
+
 function round3(value) {
   return parseFloat((Number(value) || 0).toFixed(3));
+}
+
+function consumptionValuation(valueNgn, pricedKwh, unpricedKwh, totalKwh) {
+  const priced = Math.max(0, Number(pricedKwh) || 0);
+  const unpriced = Math.max(0, Number(unpricedKwh) || 0);
+  const total = Math.max(0, Number(totalKwh) || priced + unpriced);
+  return {
+    valueNgn: Number((Number(valueNgn) || 0).toFixed(2)),
+    pricedKwh: round3(priced),
+    unpricedKwh: round3(unpriced),
+    totalKwh: round3(total),
+    coveragePct: total > 0 ? Number(((priced / total) * 100).toFixed(2)) : 100,
+    complete: unpriced <= 0.0005,
+    basis: "historical-snapshot",
+  };
 }
 
 /**
@@ -823,7 +1003,7 @@ function rowsToDeltasWithMeta(rows) {
  * currentAgg and priorAgg are arrays of { stationId, meterId, customerId,
  * customerName, periodStart, kwhTotal, readingCount }.
  */
-function buildAnalyticsFromAggregates({
+async function buildAnalyticsFromAggregates({
   currentAgg, priorAgg,
   from, to, priorFrom, priorTo,
   granularity, topLimit, windowDays,
@@ -836,6 +1016,9 @@ function buildAnalyticsFromAggregates({
   const byPeriodStn = new Map();
   let consumedKwh   = 0;
   let priorKwh      = 0;
+  let tariffValueNgn = 0;
+  let pricedKwh = 0;
+  let unpricedKwh = 0;
 
   function stn(id) {
     if (!stationAcc.has(id)) {
@@ -850,6 +1033,9 @@ function buildAnalyticsFromAggregates({
 
   for (const row of currentAgg) {
     consumedKwh += row.kwhTotal;
+    tariffValueNgn += row.tariffValueNgn;
+    pricedKwh += row.pricedKwh;
+    unpricedKwh += row.unpricedKwh;
     const s = stn(row.stationId);
     s.totalKwh += row.kwhTotal;
     s.readingCount += row.readingCount;
@@ -936,8 +1122,28 @@ function buildAnalyticsFromAggregates({
     }));
 
   const allMeters    = new Set(Array.from(meterAcc.keys()));
+  const allCustomers = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key));
   const activeMeters = new Set(Array.from(meterAcc.values()).filter((m) => m.totalKwh > 0).map((m) => `${m.station}:${m.meterId}`));
   const distinctDays = Array.from(byPeriod.values()).filter((v) => v > 0).length;
+  let seasonality = { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+  if (granularity === "daily") {
+    const weekdaySum = new Array(7).fill(0);
+    const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+    for (const row of currentAgg) {
+      const date = normalizeDate(row.periodStart);
+      if (!date) continue;
+      const wd = weekdayIndex(date);
+      const value = Number(row.kwhTotal) || 0;
+      weekdaySum[wd] += value;
+      weekdayDates[wd].add(date);
+    }
+    seasonality = {
+      labels: WEEKDAY_LABELS,
+      values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+    };
+  } else {
+    seasonality = await computeSeasonalityFromDailyDeltas({ stationId: filterStation, from, to });
+  }
 
   return {
     status: 200,
@@ -950,6 +1156,7 @@ function buildAnalyticsFromAggregates({
           priorKwh,
           growthPct:        growth(consumedKwh, priorKwh),
           meterCount:       allMeters.size,
+          customerCount:    allCustomers.size,
           activeMeterCount: activeMeters.size,
           avgPerMeter:      allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
           avgDailyKwh:      distinctDays ? round3(consumedKwh / distinctDays) : 0,
@@ -958,20 +1165,169 @@ function buildAnalyticsFromAggregates({
           sourceRows:       currentAgg.length,
           source:           "aggregated",
         },
+        tariffBreakdown: [],
+        valuation: consumptionValuation(tariffValueNgn, pricedKwh, unpricedKwh, consumedKwh),
         stations,
         temporal: {
           labels,
           kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)),
           seriesByStation,
         },
-        // Seasonality not available from period aggregates — omit gracefully
-        seasonality: { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) },
+        seasonality,
         topMeters,
       },
       _proxy: {
         source: proxySource,
         pathname: "/api/local/consumption/station-analytics",
       },
+    },
+  };
+}
+
+async function readStationAnalyticsSummary(params) {
+  try {
+    const { body } = await supabase.restRequestWithResponse("/rpc/get_station_consumption_analytics", {
+      method: "POST",
+      retryable: true, // read-only analytics query — safe to retry once on a transient timeout
+      body: params,
+    });
+    return body && Array.isArray(body.stations) && Array.isArray(body.temporal) ? body : null;
+  } catch (err) {
+    const message = String(err?.message || err || "");
+    if (/get_station_consumption_analytics|schema cache|does not exist/i.test(message)) return null;
+    throw err;
+  }
+}
+
+async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, granularity, requestedGranularity, windowDays, stationId }) {
+  const growth = (current, prior) => prior > 0 ? round3(((current - prior) / prior) * 100) : (current > 0 ? null : 0);
+  const rollups = new Map((summary.rollups || []).map((row) => [normalizeStation(row.station_id), row]));
+  const stationRows = summary.stations || [];
+  const consumedKwh = round3(stationRows.reduce((sum, row) => sum + Number(row.total_kwh || 0), 0));
+  const priorKwh = round3(stationRows.reduce((sum, row) => sum + Number(row.prior_kwh || 0), 0));
+  let latestOdometerKwh = 0;
+  let metersWithLatest = 0;
+
+  const stations = stationRows.map((row) => {
+    const station = normalizeStation(row.station_id);
+    const totalKwh = round3(row.total_kwh);
+    const stationPrior = round3(row.prior_kwh);
+    const meterCount = Number(row.meter_count) || 0;
+    const readingCount = Number(row.reading_count) || 0;
+    const rollup = rollups.get(station) || {};
+    const stationMeterRead = round3(rollup.latest_odometer_kwh);
+    const stationLatestMeters = Number(rollup.meters_with_latest) || 0;
+    latestOdometerKwh += stationMeterRead;
+    metersWithLatest += stationLatestMeters;
+    return {
+      station,
+      totalKwh,
+      priorKwh: stationPrior,
+      growthPct: growth(totalKwh, stationPrior),
+      meterCount,
+      customerCount: Number(row.customer_count) || meterCount,
+      activeMeterCount: Number(row.active_meter_count) || 0,
+      avgPerMeter: meterCount ? round3(totalKwh / meterCount) : 0,
+      avgDailyKwh: readingCount ? round3(totalKwh / readingCount) : 0,
+      readingDays: readingCount,
+      peakDay: { date: null, kwh: 0 },
+      share: consumedKwh > 0 ? round3((totalKwh / consumedKwh) * 100) : 0,
+      latestOdometerKwh: stationMeterRead,
+      metersWithLatest: stationLatestMeters,
+      latestReading: normalizeDate(rollup.latest_reading),
+      tariffValueNgn: Number(row.tariff_value_ngn) || 0,
+      pricedKwh: round3(row.priced_kwh),
+      unpricedKwh: round3(row.unpriced_kwh),
+    };
+  });
+
+  const byPeriod = new Map();
+  const byPeriodStation = new Map();
+  for (const row of summary.temporal || []) {
+    const label = aggPeriodKey(row.period_start, granularity);
+    const station = normalizeStation(row.station_id);
+    const value = Number(row.kwh_total) || 0;
+    byPeriod.set(label, (byPeriod.get(label) || 0) + value);
+    if (!byPeriodStation.has(label)) byPeriodStation.set(label, new Map());
+    byPeriodStation.get(label).set(station, value);
+  }
+  const labels = Array.from(byPeriod.keys()).sort((left, right) => left.localeCompare(right));
+  const seriesByStation = Object.fromEntries(stations.map((station) => [
+    station.station,
+    labels.map((label) => round3(byPeriodStation.get(label)?.get(station.station) || 0)),
+  ]));
+  const topMeters = (summary.topMeters || []).map((row) => ({
+    meterId: row.meter_id,
+    station: normalizeStation(row.station_id),
+    customerId: row.customer_id || "",
+    customerName: row.customer_name || "",
+    tariffId: row.tariff_id || "",
+    totalKwh: round3(row.total_kwh),
+    activeDays: Number(row.active_periods) || 0,
+    avgDailyKwh: Number(row.active_periods) ? round3(Number(row.total_kwh) / Number(row.active_periods)) : 0,
+  }));
+  const readingDays = labels.filter((label) => Number(byPeriod.get(label)) > 0).length;
+
+  let seasonality = { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
+  if (granularity === "daily") {
+    const weekdaySum = new Array(7).fill(0);
+    const weekdayDates = [new Set(), new Set(), new Set(), new Set(), new Set(), new Set(), new Set()];
+    for (const row of summary.temporal || []) {
+      const date = normalizeDate(row.period_start);
+      if (!date) continue;
+      const wd = weekdayIndex(date);
+      const value = Number(row.kwh_total) || 0;
+      weekdaySum[wd] += value;
+      weekdayDates[wd].add(date);
+    }
+    seasonality = {
+      labels: WEEKDAY_LABELS,
+      values: weekdaySum.map((sum, wd) => (weekdayDates[wd].size ? round3(sum / weekdayDates[wd].size) : 0)),
+    };
+  } else {
+    seasonality = await computeSeasonalityFromDailyDeltas({ stationId, from, to });
+  }
+
+  return {
+    status: 200,
+    body: {
+      code: 0, msg: "success", reason: "success",
+      data: {
+        range: {
+          from, to, priorFrom, priorTo, periodDays: windowDays, granularity,
+          requestedGranularity,
+          granularityCoarsened: granularity !== requestedGranularity,
+        },
+        totals: {
+          consumedKwh, priorKwh, growthPct: growth(consumedKwh, priorKwh),
+          meterCount: stations.reduce((sum, row) => sum + row.meterCount, 0),
+          customerCount: Number(summary.customerCount) || stations.reduce((sum, row) => sum + row.customerCount, 0),
+          activeMeterCount: stations.reduce((sum, row) => sum + row.activeMeterCount, 0),
+          avgPerMeter: stations.reduce((sum, row) => sum + row.meterCount, 0)
+            ? round3(consumedKwh / stations.reduce((sum, row) => sum + row.meterCount, 0)) : 0,
+          avgDailyKwh: readingDays ? round3(consumedKwh / readingDays) : 0,
+          readingDays, stationCount: stations.length,
+          sourceRows: Number(summary.sourceRows) || 0,
+          source: "aggregated",
+          latestOdometerKwh: round3(latestOdometerKwh),
+          metersWithLatest,
+        },
+        tariffBreakdown: (summary.tariffBreakdown || []).map((row) => ({
+          tariffId: row.tariff_id || "",
+          totalKwh: round3(row.total_kwh),
+        })),
+        valuation: consumptionValuation(
+          summary.valuation?.valueNgn,
+          summary.valuation?.pricedKwh,
+          summary.valuation?.unpricedKwh,
+          summary.valuation?.totalKwh ?? consumedKwh
+        ),
+        stations,
+        temporal: { labels, kwhSeries: labels.map((label) => round3(byPeriod.get(label) || 0)), seriesByStation },
+        seasonality,
+        topMeters,
+      },
+      _proxy: { source: "supabase-station-analytics-rpc", pathname: "/api/local/consumption/station-analytics" },
     },
   };
 }
@@ -990,6 +1346,9 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   if (!storeEnabled()) return null;
   const request = requestPayload(payload);
   const stationId = normalizeStation(request.stationId || request.SITE_ID || request.siteId || "");
+  const stationIds = stationId
+    ? [stationId]
+    : [...new Set((Array.isArray(request.stationIds) ? request.stationIds : []).map(normalizeStation).filter(Boolean))];
   const from = normalizeDate(request.FROM || request.from);
   const to = normalizeDate(request.TO || request.to);
   const granularity = normalizeGranularity(request.granularity);
@@ -1004,39 +1363,53 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   const priorTo = addDaysIso(from, -1);
   const priorFrom = addDaysIso(priorTo, -(windowDays - 1));
 
-  // Coarsen the query granularity for wide windows so we never pull hundreds of
-  // thousands of per-meter rows (keeps queries fast + the chart readable).
-  const queryGranularity = effectiveGranularity(granularity, windowDays);
-  const granularityCoarsened = queryGranularity !== granularity;
+  const chartGranularity = effectiveGranularity(granularity, windowDays);
+  // Coarsen only when the selected date range exactly matches aggregate bucket
+  // boundaries. Weekly/monthly aggregate rows represent whole buckets, so using
+  // them for partial custom ranges would over-count outside the user's filter.
+  const queryGranularity = supportsExactAggregateRange(chartGranularity, from, to) ? chartGranularity : "daily";
+  const granularityCoarsened = chartGranularity !== granularity;
+
+  const summary = await readStationAnalyticsSummary({
+    p_from: from,
+    p_to: to,
+    p_prior_from: priorFrom,
+    p_prior_to: priorTo,
+    p_station_id: stationId || null,
+    p_period_type: aggPeriodType(queryGranularity),
+    p_top_limit: topLimit,
+  });
+  if (summary) {
+    return await buildAnalyticsFromSummary({
+      summary, from, to, priorFrom, priorTo,
+      granularity: chartGranularity,
+      requestedGranularity: granularity,
+      windowDays, stationId,
+    });
+  }
 
   // ── Try aggregate table path ──────────────────────────────────────────────
-  const DEFAULT_STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
-  const allowedStations = stationId ? null : new Set(DEFAULT_STATIONS);
   const [currentAggRaw, priorAggRaw] = await Promise.all([
-    readAggregatedDeltas({ stationId, from, to, granularity: queryGranularity }),
-    readAggregatedDeltas({ stationId, from: priorFrom, to: priorTo, granularity: queryGranularity }),
+    readAggregatedDeltas({ stationIds, from, to, granularity: queryGranularity }),
+    readAggregatedDeltas({ stationIds, from: priorFrom, to: priorTo, granularity: queryGranularity }),
   ]);
-  const currentAgg = allowedStations && currentAggRaw
-    ? currentAggRaw.filter((row) => allowedStations.has(normalizeStation(row.stationId)))
-    : currentAggRaw;
-  const priorAgg = allowedStations && priorAggRaw
-    ? priorAggRaw.filter((row) => allowedStations.has(normalizeStation(row.stationId)))
-    : priorAggRaw;
+  const currentAgg = currentAggRaw;
+  const priorAgg = priorAggRaw;
 
   // If aggregates are available, build analytics from them (fast path).
   if (currentAgg !== null && currentAgg.length > 0) {
     const meterReadRollups = await readStationMeterReadRollups(stationId);
-    const response = buildAnalyticsFromAggregates({
+    const response = await buildAnalyticsFromAggregates({
       currentAgg, priorAgg: priorAgg || [],
       from, to, priorFrom, priorTo,
-      granularity: queryGranularity, topLimit, windowDays,
+      granularity: chartGranularity, topLimit, windowDays,
       stationId,
       proxySource: "supabase-station-analytics-agg",
     });
     const data = response.body.data;
     // Tell the client which granularity was actually used (for chart axis + note).
     data.range.requestedGranularity = granularity;
-    data.range.granularity = queryGranularity;
+    data.range.granularity = chartGranularity;
     data.range.granularityCoarsened = granularityCoarsened;
     let latestOdometerKwh = 0;
     let metersWithLatest = 0;
@@ -1060,7 +1433,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
 
   // ── Fallback: raw row scan (pre-migration path) ───────────────────────────
   const baselineFrom = addDaysIso(priorFrom, -1);
-  const targetStations = stationId ? [stationId] : DEFAULT_STATIONS;
+  const targetStations = stationIds;
   const rowsArrays = await Promise.all(
     targetStations.map((st) => readCompactRowsFromStore({ stationId: st, from: baselineFrom, to }).catch(() => []))
   );
@@ -1119,7 +1492,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     s.byDay.set(d.date, (s.byDay.get(d.date) || 0) + d.delta);
     overallByDate.set(d.date, (overallByDate.get(d.date) || 0) + d.delta);
 
-    const pk = periodKey(d.date, granularity);
+    const pk = periodKey(d.date, chartGranularity);
     byPeriod.set(pk, (byPeriod.get(pk) || 0) + d.delta);
     if (!byPeriodStation.has(pk)) byPeriodStation.set(pk, new Map());
     const psMap = byPeriodStation.get(pk);
@@ -1145,7 +1518,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
   for (const row of rows) {
     const date = normalizeDate(row.currentDate);
     const total1 = Number(row.total1);
-    if (!date || date < from || date > to || !Number.isFinite(total1) || total1 < 0) continue;
+    if (!date || date > to || !Number.isFinite(total1) || total1 < 0) continue;
     const rowStation = normalizeStation(row.stationId);
     const meterId = normalizeMeter(row.meterId || row.customerId);
     if (!meterId) continue;
@@ -1234,6 +1607,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     }));
 
   const distinctDays = overallByDate.size;
+  const customerCount = new Set(Array.from(meterAcc.entries()).map(([key, meter]) => meter.customerId || key)).size;
   const latestOdometerKwh = Array.from(latestByStation.values()).reduce((sum, entry) => sum + entry.latestOdometerKwh, 0);
   return {
     status: 200,
@@ -1242,7 +1616,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
       msg: "success",
       reason: "success",
       data: {
-        range: { from, to, granularity, priorFrom, priorTo, periodDays: windowDays },
+        range: { from, to, granularity: chartGranularity, requestedGranularity: granularity, granularityCoarsened, priorFrom, priorTo, periodDays: windowDays },
         totals: {
           consumedKwh: round3(consumedKwh),
           latestOdometerKwh: round3(latestOdometerKwh),
@@ -1250,6 +1624,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
           priorKwh: round3(priorKwh),
           growthPct: growth(consumedKwh, priorKwh),
           meterCount: allMeters.size,
+          customerCount,
           activeMeterCount: activeMeters.size,
           avgPerMeter: allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
           avgDailyKwh: distinctDays ? round3(consumedKwh / distinctDays) : 0,
@@ -1258,6 +1633,8 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
           sourceRows: rows.length,
           source: "raw-fallback",
         },
+        tariffBreakdown: [],
+        valuation: consumptionValuation(0, 0, consumedKwh, consumedKwh),
         stations,
         temporal: {
           labels,
@@ -1358,6 +1735,13 @@ async function readMeterConsumptionAnalysis({ requestPayload: payload }) {
         customerId,
         customerName,
         range: { from, to, baselineFrom },
+        // Raw readings are retained for RAW_HOT_WINDOW_DAYS (Phase 2 cut this from
+        // 12 months to 90 days, gated on the month being archived first). A request
+        // reaching further back is not an error and not an empty meter -- the data
+        // exists as a downloadable station-month CSV on the Archive Reports page.
+        // Saying so explicitly is the whole point: the old behaviour was to silently
+        // return a short series and let the reader assume the meter went quiet.
+        coldRange: coldRangeNotice(from),
         totals: {
           consumedKwh,
           readingDays: days.size,

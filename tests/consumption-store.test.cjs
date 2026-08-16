@@ -10,6 +10,8 @@ const supabase = require("../backend/src/services/supabase-service");
 const store = require("../backend/src/services/consumption-store");
 
 const requests = [];
+let forceRawAnalytics = false;
+let forceRpcAnalytics = false;
 const originalRestRequest = supabase.restRequest;
 const originalRestRequestWithResponse = supabase.restRequestWithResponse;
 
@@ -21,6 +23,21 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
 
   supabase.restRequestWithResponse = async (pathname, options = {}) => {
     requests.push({ kind: "read", pathname, options });
+    if (forceRpcAnalytics && pathname === "/rpc/get_station_consumption_analytics") {
+      return {
+        response: { headers: { get: () => "" } },
+        body: {
+          sourceRows: 2,
+          customerCount: 1,
+          valuation: { valueNgn: 7000, pricedKwh: 20, unpricedKwh: 0, totalKwh: 20, coveragePct: 100, complete: true, basis: "historical-snapshot" },
+          stations: [{ station_id: "TUNGA", total_kwh: 20, prior_kwh: 10, meter_count: 1, customer_count: 1, active_meter_count: 1, reading_count: 2 }],
+          temporal: [{ station_id: "TUNGA", period_start: "2026-05-07", kwh_total: 20 }],
+          tariffBreakdown: [{ tariff_id: "RESIDENTIAL", total_kwh: 20 }],
+          topMeters: [{ station_id: "TUNGA", meter_id: "M-1", customer_id: "C-1", customer_name: "Ada", tariff_id: "RESIDENTIAL", total_kwh: 20, active_periods: 2 }],
+          rollups: [{ station_id: "TUNGA", latest_odometer_kwh: 115, meters_with_latest: 1, latest_reading: "2026-05-07" }]
+        }
+      };
+    }
     if (pathname.includes("select=id")) {
       return {
         response: {
@@ -50,6 +67,90 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
       };
     }
     if (pathname.startsWith("/meter_consumption_aggregates")) {
+      if (forceRawAnalytics) {
+        return {
+          response: { headers: { get: () => "*/0" } },
+          body: []
+        };
+      }
+      if (pathname.includes("period_start=gte.2026-05-25")) {
+        return {
+          response: {
+            headers: {
+              get(name) {
+                return String(name).toLowerCase() === "content-range" ? "0-1/2" : "";
+              }
+            }
+          },
+          body: [
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "day",
+              period_start: "2026-05-26",
+              kwh_total: 8,
+              reading_count: 1
+            },
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "day",
+              period_start: "2026-06-03",
+              kwh_total: 12,
+              reading_count: 1
+            }
+          ]
+        };
+      }
+      if (pathname.includes("period_type=eq.month")) {
+        const includesExactWindow = pathname.includes("period_start=gte.2026-05-01");
+        return {
+          response: {
+            headers: {
+              get(name) {
+                return String(name).toLowerCase() === "content-range" ? (includesExactWindow ? "0-1/2" : "0-2/3") : "";
+              }
+            }
+          },
+          body: (includesExactWindow ? [] : [
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-04-01",
+              kwh_total: 700,
+              reading_count: 30
+            }
+          ]).concat([
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-05-01",
+              kwh_total: 800,
+              reading_count: 31
+            },
+            {
+              station_id: "TUNGA",
+              meter_id: "M-1",
+              customer_id: "C-1",
+              customer_name: "Ada",
+              period_type: "month",
+              period_start: "2026-06-01",
+              kwh_total: 900,
+              reading_count: 30
+            }
+          ])
+        };
+      }
       return {
         response: {
           headers: {
@@ -98,7 +199,14 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
             customer_name: "Ada",
             reading_date: "2026-05-07",
             total1: 115,
-            remain1: 4
+            remain1: 4,
+            gateway_id: "GW-1",
+            power: 120,
+            voltage_a: 230,
+            current_a: 5,
+            relay_open: true,
+            battery_low: false,
+            magnetic_interference: true
           }
         ]
       };
@@ -155,6 +263,49 @@ assert.strictEqual(write.options.body[0].station_id, "TUNGA");
 assert.strictEqual(write.options.body[0].meter_id, "M-1");
 assert.strictEqual(write.options.body[0].reading_date, "2026-05-07");
 
+// Signal-column polarity proof: conditionActive() inverts plain booleans (raw
+// upstream "true" means healthy), so a raw relayOpen:false / magneticInterference:false
+// must be stored as *active* (true), and a raw batteryLow:true must be stored as
+// *not active* (false). Getting this backwards would silently invert every alarm.
+requests.length = 0;
+await store.writeDailyMeterRows({
+  pathname: "/api/DailyDataMeter/read",
+  requestPayload: { stationId: "TUNGA" },
+  responsePayload: {
+    code: 0,
+    result: {
+      total: 1,
+      data: [
+        {
+          stationId: "TUNGA",
+          meterId: "M-2",
+          customerId: "C-2",
+          customerName: "Bala",
+          currentDate: "2026-05-08",
+          total1: 200,
+          remain1: 10,
+          gatewayId: "GW-2",
+          power: 300,
+          voltageA: 240,
+          currentA: 6,
+          relayOpen: false,
+          batteryLow: true,
+          magneticInterference: false
+        }
+      ]
+    }
+  }
+});
+const signalWrite = requests.find((request) => request.kind === "write");
+assert.strictEqual(signalWrite.options.body[0].gateway_id, "GW-2");
+assert.strictEqual(signalWrite.options.body[0].power, 300);
+assert.strictEqual(signalWrite.options.body[0].voltage_a, 240);
+assert.strictEqual(signalWrite.options.body[0].current_a, 6);
+assert.strictEqual(signalWrite.options.body[0].relay_open, true, "raw relayOpen:false must resolve to active:true");
+assert.strictEqual(signalWrite.options.body[0].battery_low, false, "raw batteryLow:true must resolve to active:false");
+assert.strictEqual(signalWrite.options.body[0].magnetic_interference, true, "raw magneticInterference:false must resolve to active:true");
+requests.length = 0;
+
 const response = await store.readDailyMeterRows({
   pathname: "/api/DailyDataMeter/read",
   requestPayload: {
@@ -168,9 +319,41 @@ const response = await store.readDailyMeterRows({
 
 assert.strictEqual(response.status, 200);
 assert.strictEqual(response.body._proxy.source, "supabase-consumption");
-assert.strictEqual(response.body.result.total, 1);
+// readDailyMeterRows no longer selects row_json in any mode. It used to, for
+// non-compact reads, but the nightly retention job blanks row_json after 7
+// days, so those reads returned zero rows for ~89% of the table and silently
+// fell through to the upstream proxy. Both modes now project the persisted
+// scalar columns, which are populated for every row regardless of age — so
+// this read resolves against the same two-row fixture the compact path uses.
+assert.strictEqual(response.body.result.total, 2);
 assert.strictEqual(response.body.result.data[0].meterId, "M-1");
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("reading_date=gte.2026-05-07")));
+// Regression guard: no read path may request row_json again.
+assert(
+  !requests.some((request) => request.kind === "read" && request.pathname.includes("select=row_json")),
+  "readDailyMeterRows must not select row_json — the column is retention-blanked and being retired"
+);
+// Regression guard: the signal columns must actually be requested and reconstructed.
+assert(
+  requests.some((request) => request.kind === "read" && request.pathname.includes("relay_open")),
+  "readDailyMeterRows must select the typed signal columns"
+);
+const signalRow = response.body.result.data.find((row) => row.meterId === "M-1" && row.currentDate === "2026-05-07");
+assert.strictEqual(signalRow.gatewayId, "GW-1");
+assert.strictEqual(signalRow.power, 120);
+assert.strictEqual(signalRow.relayOpen, true);
+assert.strictEqual(signalRow.batteryLow, false);
+assert.strictEqual(signalRow.magneticInterference, true);
+
+// End-to-end proof: rows reconstructed by readDailyMeterRows, fed through
+// deriveAbnormalAlarmsFromResolvedFlags, must report exactly the alarms the stored
+// (already-resolved) booleans say are active — relayOpen and magneticInterference,
+// not batteryLow — with no second inversion.
+const { deriveAbnormalAlarmsFromResolvedFlags } = require("../backend/src/services/abnormal-alarm-service");
+const derivedAlarms = deriveAbnormalAlarmsFromResolvedFlags(response.body.result.data, "TUNGA");
+const signalRowAlarms = derivedAlarms.filter((row) => row.meterId === "M-1" && row.currentDate === "2026-05-07");
+const derivedAlarmKeys = signalRowAlarms.map((row) => row.alarmKey).sort();
+assert.deepStrictEqual(derivedAlarmKeys, ["magneticInterference", "relayOpen"].sort());
 
 const report = await store.dailyMeterTableReport(["TUNGA"]);
 assert.strictEqual(report.enabled, true);
@@ -195,6 +378,75 @@ assert.strictEqual(summary.status, 200);
 assert.strictEqual(summary.body._proxy.source, "supabase-consumption-summary-agg");
 assert.strictEqual(summary.body.data.consumedKwh, 5);
 assert.deepStrictEqual(summary.body.data.temporal.labels, ["2026-05-07"]);
+
+requests.length = 0;
+const partialMonthlyAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-25",
+    TO: "2026-06-21",
+    granularity: "monthly",
+    topMeters: 10
+  }
+});
+assert.strictEqual(partialMonthlyAnalytics.status, 200);
+assert.strictEqual(partialMonthlyAnalytics.body.data.range.granularity, "monthly");
+assert.deepStrictEqual(partialMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
+assert.strictEqual(partialMonthlyAnalytics.body.data.totals.consumedKwh, 20);
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.day")));
+assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
+
+requests.length = 0;
+const exactMonthlyAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-01",
+    TO: "2026-06-30",
+    granularity: "monthly",
+    topMeters: 10
+  }
+});
+assert.strictEqual(exactMonthlyAnalytics.status, 200);
+assert.deepStrictEqual(exactMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
+assert.strictEqual(exactMonthlyAnalytics.body.data.totals.consumedKwh, 1700);
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-05-01")));
+assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-03-31")));
+
+requests.length = 0;
+forceRawAnalytics = true;
+const rawAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-06",
+    TO: "2026-05-07",
+    granularity: "daily"
+  }
+});
+assert.strictEqual(rawAnalytics.status, 200);
+assert(requests.some((request) => request.options?.headers?.Prefer === "count=planned"));
+assert(!requests.some((request) => request.options?.headers?.Prefer === "count=exact"));
+
+requests.length = 0;
+forceRawAnalytics = false;
+forceRpcAnalytics = true;
+const rpcAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-05-06",
+    TO: "2026-05-07",
+    granularity: "daily"
+  }
+});
+assert.strictEqual(rpcAnalytics.status, 200);
+assert.strictEqual(rpcAnalytics.body._proxy.source, "supabase-station-analytics-rpc");
+assert.strictEqual(rpcAnalytics.body.data.totals.consumedKwh, 20);
+assert.strictEqual(rpcAnalytics.body.data.totals.customerCount, 1);
+assert.deepStrictEqual(rpcAnalytics.body.data.valuation, { valueNgn: 7000, pricedKwh: 20, unpricedKwh: 0, totalKwh: 20, coveragePct: 100, complete: true, basis: "historical-snapshot" });
+assert.deepStrictEqual(rpcAnalytics.body.data.tariffBreakdown, [{ tariffId: "RESIDENTIAL", totalKwh: 20 }]);
+assert.strictEqual(rpcAnalytics.body.data.topMeters[0].tariffId, "RESIDENTIAL");
+assert.deepStrictEqual(rpcAnalytics.body.data.temporal.labels, ["2026-05-07"]);
+assert(requests.some((request) => request.pathname === "/rpc/get_station_consumption_analytics"));
 
 supabase.restRequest = originalRestRequest;
 supabase.restRequestWithResponse = originalRestRequestWithResponse;

@@ -1,3 +1,8 @@
+/*
+ * LEGACY — consumption / table-page layer.
+ * Consumption chart, token history table, and container-query breakpoints for the billing views.
+ * Extracted from the original monolithic stylesheet. New table styles go in primitives.css.
+ */
 .table-page,
 .consumption-page {
   container-type: inline-size;
@@ -483,6 +488,62 @@
   border-color: color-mix(in srgb, var(--success) 34%, transparent) !important;
   background: var(--success-bg) !important;
   color: var(--success) !important;
+}
+
+.preflight-panel {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle, var(--bg-card));
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.preflight-panel.has-blocking {
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+  background: var(--danger-bg);
+}
+
+.preflight-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.preflight-title {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.preflight-summary {
+  color: var(--text-muted);
+}
+
+.preflight-issues {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.preflight-issues .preflight-more {
+  color: var(--text-muted);
+  list-style: none;
+  margin-left: -18px;
+}
+
+.preflight-fix {
+  display: block;
+  margin-top: 10px;
+}
+
+.preflight-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
 }
 
 .modal-log {

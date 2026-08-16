@@ -107,11 +107,19 @@ function field(label, value, options = {}) {
   };
 }
 
+const excludedReceiptLabels = new Set([
+  "customer id",
+  "meter phase mode",
+  "require three phase",
+  "is three phase"
+]);
+
 function appendField(fields, seenLabels, label, value, options = {}) {
   const normalizedLabel = humanizeKey(label);
   const normalizedValue = stringValue(value);
   if (!normalizedLabel || !normalizedValue) return;
   const key = normalizedLabel.toLowerCase();
+  if (excludedReceiptLabels.has(key)) return;
   if (seenLabels.has(key)) return;
   seenLabels.add(key);
   fields.push(field(normalizedLabel, value, {
@@ -122,25 +130,25 @@ function appendField(fields, seenLabels, label, value, options = {}) {
   }));
 }
 
-const brand = {
+export const brand = {
   name: "Beverly",
   company: "ACOB Lighting Technology Limited",
-  email: "support@acoblighting.com",
-  phone: "+234 800 BEVERLY",
-  web: "www.acoblighting.com"
+  email: "info@acoblighting.com",
+  phone: "+234 704 920 2634 / +234 803 290 2825",
+  web: "www.acoblighting.com",
+  address: "Plot 2, Block 14 Extension, Setraco Gate, Gwarinpa, FCT, Nigeria"
 };
 
 export const requiredReceiptFields = [
   "Receipt Id",
   "Token",
   "Meter Id",
-  "Customer Id",
   "Customer Name",
   "Total Paid",
   "Total Unit",
   "Tariff Id",
   "Tariff Price",
-  "Tax / VAT",
+  "Tax",
   "Payment Method",
   "Purchase Way",
   "Vend Status",
@@ -210,33 +218,20 @@ export function buildReceiptFilename(model, extension = "pdf") {
 }
 
 export function buildReceiptThemeFromDocument(targetDocument = typeof document !== "undefined" ? document : null) {
-  const root = targetDocument?.documentElement;
-  const view = targetDocument?.defaultView || (typeof window !== "undefined" ? window : null);
-  if (!root || !view?.getComputedStyle) return {};
-  const styles = view.getComputedStyle(root);
-  const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
-  return {
-    primary: resolve("--primary", "#ffd600"),
-    primaryDeep: resolve("--primary-deep", "#b99700"),
-    ink: resolve("--text-strong", "#f8fafc"),
-    textMain: resolve("--text-main", "#d7dee9"),
-    textMuted: resolve("--text-muted", "#8f98a8"),
-    panel: resolve("--bg-page", "#0b0d10"),
-    panelSoft: resolve("--bg-card", "#11151b"),
-    border: resolve("--border-color", "rgba(255, 214, 0, .28)")
-  };
+  void targetDocument;
+  return buildReceiptPdfTheme();
 }
 
 function buildReceiptPdfTheme() {
   return {
-    primary: "#d4a900",
-    primaryDeep: "#8a6a00",
-    ink: "#111827",
-    textMain: "#1f2937",
-    textMuted: "#475569",
+    primary: "#16a34a",
+    primaryDeep: "#166534",
+    ink: "#102a1b",
+    textMain: "#1f3d2b",
+    textMuted: "#5f6f65",
     panel: "#ffffff",
-    panelSoft: "#f8fafc",
-    border: "rgba(212, 169, 0, .38)"
+    panelSoft: "#f3fbf5",
+    border: "rgba(22, 163, 74, .28)"
   };
 }
 
@@ -257,7 +252,6 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
   const fields = [];
   [
     ["Receipt Id", receiptId, { section: "identity", emphasis: true }],
-    ["Customer Id", findRowValue(row, columnKey, ["Customer Id"], ["customerId"]), { section: "customer" }],
     ["Customer Name", findRowValue(row, columnKey, ["Customer Name"], ["customerName", "name"]), { section: "customer", emphasis: true }],
     ["Meter Id", findRowValue(row, columnKey, ["Meter Id"], ["meterId"]), { section: "meter", emphasis: true }],
     ["Meter Type", findRowValue(row, columnKey, ["Meter Type"], ["meterType"]), { section: "meter" }],
@@ -266,7 +260,7 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
     ["Total Paid", totalPaid, { section: "transaction", emphasis: true }],
     ["Total Unit", totalUnit, { section: "transaction" }],
     ["Tariff Price", findRowValue(row, columnKey, ["Tariff Price"], ["tariffPrice", "unitPrice", "price"]), { section: "transaction" }],
-    ["Tax / VAT", findRowValue(row, columnKey, ["VAT Charge"], ["tax"]), { section: "transaction" }],
+    ["Tax", findRowValue(row, columnKey, ["Tax"], ["tax"]), { section: "transaction" }],
     ["Payment Method", findRowValue(row, columnKey, ["Payment Method"], ["paymentMethod"]), { section: "transaction" }],
     ["Purchase Way", findRowValue(row, columnKey, ["Purchase Way"], ["purchaseWay"]), { section: "transaction" }],
     ["Vend Status", findRowValue(row, columnKey, ["Vend"], ["vend"]), { section: "transaction" }],
@@ -326,33 +320,27 @@ export function receiptHtml(model, options = {}) {
   const stationId = receiptFieldValue(model, ["Station Id"]);
   const totalUnit = receiptFieldValue(model, ["Total Unit"]);
   const displayTime = receiptTime(model);
+  const amountLabel = model.subject || "Amount";
   const filename = buildReceiptFilename(model, "pdf");
   const pageTitle = filename.replace(/\.pdf$/i, "");
   const theme = options.theme || {};
-  const lightMode = options.mode === "pdf" || options.light === true;
-  const primary = safeCssValue(theme.primary, "#ffd600");
-  const primaryDeep = safeCssValue(theme.primaryDeep, "#b99700");
-  const ink = safeCssValue(theme.ink, "#f8fafc");
-  const textMain = safeCssValue(theme.textMain, "#d7dee9");
-  const textMuted = safeCssValue(theme.textMuted, "#8f98a8");
-  const panel = safeCssValue(theme.panel, "#0b0d10");
-  const panelSoft = safeCssValue(theme.panelSoft, "#11151b");
-  const border = safeCssValue(theme.border, "rgba(255, 214, 0, .28)");
-  const pageBackground = lightMode ? "#ffffff" : "#050608";
-  const bodyBackground = lightMode
-    ? "#ffffff"
-    : "radial-gradient(circle at top left, rgba(255,214,0,.12), transparent 34%), #050608";
-  const receiptBackground = lightMode
-    ? "linear-gradient(180deg, #ffffff, #f8fafc)"
-    : "linear-gradient(180deg, #101216, #07080a)";
-  const tokenBackground = lightMode ? "#ffffff" : "#030407";
-  const summaryBackground = lightMode ? "rgba(15,23,42,.025)" : "rgba(255,255,255,.035)";
-  const detailBackground = lightMode ? "rgba(15,23,42,.02)" : "rgba(255,255,255,.025)";
-  const summaryBorder = lightMode ? "rgba(212,169,0,.30)" : "rgba(255,214,0,.18)";
-  const detailBorder = lightMode ? "rgba(212,169,0,.24)" : "rgba(255,214,0,.14)";
-  const receiptShadow = lightMode
-    ? "0 18px 46px rgba(15, 23, 42, .10), 0 0 0 6px rgba(212,169,0,.045)"
-    : "0 24px 70px rgba(0, 0, 0, .38), 0 0 0 6px rgba(255,214,0,.04)";
+  const primary = safeCssValue(theme.primary, "#16a34a");
+  const primaryDeep = safeCssValue(theme.primaryDeep, "#166534");
+  const ink = safeCssValue(theme.ink, "#102a1b");
+  const textMain = safeCssValue(theme.textMain, "#1f3d2b");
+  const textMuted = safeCssValue(theme.textMuted, "#5f6f65");
+  const panel = safeCssValue(theme.panel, "#ffffff");
+  const panelSoft = safeCssValue(theme.panelSoft, "#f3fbf5");
+  const border = safeCssValue(theme.border, "rgba(22, 163, 74, .28)");
+  const pageBackground = "#ffffff";
+  const bodyBackground = "#ffffff";
+  const receiptBackground = "linear-gradient(180deg, #ffffff, #f8fdf9)";
+  const tokenBackground = "#ffffff";
+  const summaryBackground = "rgba(22,163,74,.035)";
+  const detailBackground = "rgba(22,163,74,.025)";
+  const summaryBorder = "rgba(22,163,74,.24)";
+  const detailBorder = "rgba(22,163,74,.18)";
+  const receiptShadow = "0 18px 46px rgba(16, 42, 27, .10), 0 0 0 6px rgba(22,163,74,.035)";
 
   return `<!doctype html>
 <html>
@@ -369,7 +357,7 @@ export function receiptHtml(model, options = {}) {
       --text-muted: ${textMuted};
       --panel: ${panel};
       --panel-soft: ${panelSoft};
-      --panel-glow: rgba(255, 214, 0, .12);
+      --panel-glow: rgba(22, 163, 74, .10);
       --border: ${border};
     }
     * { box-sizing: border-box; }
@@ -382,7 +370,7 @@ export function receiptHtml(model, options = {}) {
     body { 
       font-family: Inter, "Segoe UI", Arial, sans-serif;
       margin: 0; 
-      padding: 24px;
+      padding: 0;
       background: ${bodyBackground};
       color: var(--text-main);
     }
@@ -424,13 +412,9 @@ export function receiptHtml(model, options = {}) {
       position: absolute;
       top: 0; left: 0; right: 0;
       height: 5px;
-      background: linear-gradient(90deg, var(--primary-deep), var(--primary), #fff2a6);
+      background: linear-gradient(90deg, var(--primary-deep), var(--primary), #bbf7d0);
     }
     .header {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 14px;
-      align-items: center;
       margin-bottom: 18px;
     }
     .brand {
@@ -440,37 +424,53 @@ export function receiptHtml(model, options = {}) {
       margin-bottom: 10px;
     }
     .brand-mark {
-      width: 34px;
-      height: 34px;
-      background: linear-gradient(135deg, var(--primary), #fff2a6);
-      color: #111;
-      border-radius: 12px;
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      color: #ffffff;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 18px;
+      font-size: 15px;
     }
     .brand-name {
       font-size: 20px;
       font-weight: 800;
       color: var(--ink);
     }
-    .header-meta {
-      min-width: 150px;
-      padding: 11px 12px;
+    .receipt-time {
+      min-width: 0;
+      min-height: 40px;
+      padding: 7px 10px;
       border: 1px solid var(--border);
-      border-radius: 16px;
-      background: var(--panel-soft);
-      text-align: right;
+      border-radius: 999px;
+      background: rgba(22,163,74,.08);
+      display: flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
-      color: var(--text-muted);
+      color: var(--ink);
+      font-weight: 750;
+      white-space: nowrap;
+      overflow: hidden;
+      width: fit-content;
+      margin-top: 10px;
     }
-    .header-meta strong {
-      display: block;
+    .receipt-time span {
       color: var(--primary);
-      font-size: 13px;
-      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 9px;
+      flex: 0 0 auto;
+    }
+    .receipt-time strong {
+      min-width: 0;
+      color: var(--ink);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .title {
       font-size: 21px;
@@ -483,25 +483,6 @@ export function receiptHtml(model, options = {}) {
       color: var(--text-muted);
       margin: 3px 0 0;
     }
-    .receipt-time {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 10px;
-      padding: 7px 10px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: rgba(255,214,0,.08);
-      color: var(--ink);
-      font-size: 11px;
-      font-weight: 750;
-    }
-    .receipt-time span {
-      color: var(--primary);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-size: 9px;
-    }
     .hero {
       display: grid;
       grid-template-columns: 1fr;
@@ -510,7 +491,7 @@ export function receiptHtml(model, options = {}) {
     }
     .amount-display {
       padding: 18px;
-      background: linear-gradient(135deg, var(--panel-glow), rgba(255,214,0,.04));
+      background: linear-gradient(135deg, var(--panel-glow), rgba(22,163,74,.03));
       border-radius: 18px;
       border: 1px solid var(--border);
       text-align: center;
@@ -588,12 +569,27 @@ export function receiptHtml(model, options = {}) {
       gap: 8px;
       margin-bottom: 14px;
     }
+    .receipt-status {
+      width: fit-content;
+      margin: 0 0 14px;
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--primary-deep);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
     .detail-item {
       padding: 9px 10px;
       border: 1px solid ${detailBorder};
       border-radius: 12px;
       background: ${detailBackground};
       min-width: 0;
+    }
+    .detail-item.wide {
+      grid-column: 1 / -1;
     }
     .detail-item span {
       display: block;
@@ -634,35 +630,34 @@ export function receiptHtml(model, options = {}) {
     }
     @media (max-width: 720px) {
       .receipt { width: 100%; padding: 20px; min-height: 100vh; }
-      .header, .summary-grid { grid-template-columns: 1fr; }
-      .header-meta { text-align: left; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .detail-section { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 360px) {
+      .detail-section { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
     <div class="header">
-      <div>
-        <div class="brand">
-          <div class="brand-mark">B</div>
-          <div class="brand-name">${escapeHtml(model.brand.name)}</div>
-        </div>
-        <h1 class="title">${escapeHtml(model.title)}</h1>
-        <p class="subtitle">${escapeHtml(model.subtitle)}</p>
-        <div class="receipt-time"><span>Time</span>${escapeHtml(displayTime)}</div>
+      <div class="brand">
+        <div class="brand-mark">B</div>
+        <div class="brand-name">${escapeHtml(model.brand.name)}</div>
       </div>
-      <div class="header-meta">
-        <strong>#${escapeHtml(model.receiptId || receiptId || "Pending")}</strong>
-        <span>Receipt ID</span>
-      </div>
+      <h1 class="title">${escapeHtml(model.title)}</h1>
+      <p class="subtitle">${escapeHtml(model.subtitle)}</p>
+      <div class="receipt-time"><span>Time</span><strong>${escapeHtml(displayTime)}</strong></div>
     </div>
 
     <div class="hero">
       <div class="amount-display">
-        <span class="amount-label">Amount Purchased</span>
+        <span class="amount-label">${escapeHtml(amountLabel)}</span>
         <span class="amount-value">${escapeHtml(model.amount || "0.00")}</span>
       </div>
     </div>
+
+    ${model.status ? `<div class="receipt-status">${escapeHtml(model.status)}</div>` : ''}
 
     ${tokenField ? `
     <div class="token-box">
@@ -675,11 +670,14 @@ export function receiptHtml(model, options = {}) {
       ${model.fields
         .filter((field) => !field.isToken && !["total paid", "amount"].includes(String(field.label).toLowerCase()))
         .slice(0, 24)
-        .map((field) => `
-      <div class="detail-item">
+        .map((field) => {
+          const wideField = /^(receipt id|reference|memo|created|actor)$/i.test(String(field.label));
+          return `
+      <div class="detail-item${wideField ? ' wide' : ''}">
         <span>${escapeHtml(field.label)}</span>
         <strong>${escapeHtml(field.value)}</strong>
-      </div>`)
+      </div>`;
+        })
         .join("")}
     </div>
 
@@ -687,7 +685,8 @@ export function receiptHtml(model, options = {}) {
       <span class="company-name">${escapeHtml(model.brand.company)}</span>
       <div class="contact-info">
         ${escapeHtml(model.brand.email)} &bull; ${escapeHtml(model.brand.phone)}<br>
-        ${escapeHtml(model.brand.web)}
+        ${escapeHtml(model.brand.web)}<br>
+        ${escapeHtml(model.brand.address)}
       </div>
     </div>
   </div>
@@ -715,7 +714,7 @@ export function buildReceiptPdfBytes(model) {
     model.subtitle,
     `Receipt: ${receiptId}`,
     `Time: ${receiptTime(model)}`,
-    `Amount Purchased: ${model.amount || "0.00"}`,
+    `${model.subject || "Amount"}: ${model.amount || "0.00"}`,
     `Token: ${tokenField?.value || ""}`,
     "----------------------------------------",
     `Customer: ${customerName}`,
@@ -731,7 +730,8 @@ export function buildReceiptPdfBytes(model) {
     "----------------------------------------",
     model.brand.email,
     model.brand.phone,
-    model.brand.web
+    model.brand.web,
+    model.brand.address
   ].filter(Boolean);
   const printableLines = textLines.flatMap((line) => {
     const text = stringValue(line);
@@ -780,47 +780,6 @@ function downloadPdfFallback(model, filename) {
   URL.revokeObjectURL(url);
 }
 
-function loadHtml2Pdf() {
-  if (window.html2pdf) return Promise.resolve(window.html2pdf);
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector("script[data-receipt-pdf-loader='html2pdf']");
-    if (existing) {
-      existing.addEventListener("load", () => resolve(window.html2pdf), { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    script.async = true;
-    script.dataset.receiptPdfLoader = "html2pdf";
-    script.onload = () => resolve(window.html2pdf);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-
-async function mountReceiptNode(model, options = {}) {
-  const wrapper = document.createElement("div");
-  wrapper.setAttribute("aria-hidden", "true");
-  wrapper.style.position = "fixed";
-  wrapper.style.left = "-10000px";
-  wrapper.style.top = "0";
-  wrapper.style.width = "794px";
-  wrapper.style.minHeight = "1123px";
-  wrapper.style.padding = "0";
-  wrapper.style.display = "grid";
-  wrapper.style.placeItems = "start center";
-  wrapper.style.zIndex = "0";
-  wrapper.style.pointerEvents = "none";
-  wrapper.style.background = options.mode === "pdf" || options.light === true ? "#ffffff" : "#050608";
-  wrapper.innerHTML = receiptHtml(model, options);
-  document.body.appendChild(wrapper);
-
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  if (document.fonts?.ready) await document.fonts.ready.catch(() => {});
-  return wrapper;
-}
-
 function waitForDocumentReady(targetWindow) {
   const targetDocument = targetWindow?.document;
   if (!targetDocument) return Promise.resolve();
@@ -841,51 +800,54 @@ function waitForDocumentReady(targetWindow) {
   });
 }
 
+export async function validatePdfBlob(blob) {
+  const contentType = String(blob?.type || "").toLowerCase();
+  if (!/^application\/pdf(?:;|$)/.test(contentType)) {
+    throw new Error(`receipt-pdf endpoint returned invalid content type: ${contentType || "unknown"}`);
+  }
+  const signature = new TextDecoder("ascii").decode(await blob.slice(0, 5).arrayBuffer());
+  if (signature !== "%PDF-") throw new Error("receipt-pdf endpoint returned an invalid PDF body");
+  return blob;
+}
+
+async function downloadServerReceiptPdf(model, filename) {
+  const controller = new AbortController();
+  // A cold serverless render downloads and unpacks Chromium before the first byte, which
+  // routinely takes longer than 20s. Aborting earlier than the function's own 60s ceiling
+  // just pushes every first receipt of the day onto the plain-text fallback PDF.
+  const timeout = setTimeout(() => controller.abort(), 55000);
+  try {
+    const response = await fetch("/api/receipt-pdf", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`receipt-pdf endpoint returned ${response.status}`);
+    const blob = await validatePdfBlob(await response.blob());
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function downloadReceiptPdf(model) {
-  const theme = buildReceiptPdfTheme();
   const filename = buildReceiptFilename(model, "pdf");
 
-  let wrapper = null;
   try {
-    const html2pdf = await loadHtml2Pdf();
-    wrapper = await mountReceiptNode(model, { theme, mode: "pdf" });
-    const receiptElement = wrapper.querySelector(".receipt");
-    if (!receiptElement) throw new Error("Receipt renderer did not mount");
-    const capturePage = document.createElement("div");
-    capturePage.style.width = "794px";
-    capturePage.style.minHeight = "1123px";
-    capturePage.style.padding = "24px 0";
-    capturePage.style.background = "#ffffff";
-    capturePage.style.display = "flex";
-    capturePage.style.justifyContent = "center";
-    capturePage.style.alignItems = "flex-start";
-    capturePage.appendChild(receiptElement);
-    wrapper.replaceChildren(capturePage);
-    const opt = {
-      margin: 0,
-      filename: filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-        windowHeight: 1123,
-        scrollX: 0,
-        scrollY: 0
-      },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ["avoid-all", "css", "legacy"] }
-    };
-
-    await html2pdf().set(opt).from(capturePage).save();
-    return { ok: true, mode: "html2pdf", filename };
+    await downloadServerReceiptPdf(model, filename);
+    return { ok: true, mode: "server", filename };
   } catch (error) {
-    console.error("Receipt PDF export failed. Using fallback PDF.", error);
+    console.warn("Server receipt PDF render failed. Using fallback PDF.", error);
     downloadPdfFallback(model, filename);
     return { ok: false, mode: "fallback", filename, error };
-  } finally {
-    if (wrapper?.parentNode) wrapper.parentNode.removeChild(wrapper);
   }
 }
 

@@ -5,15 +5,28 @@
         <span>{{ errorMessage }}</span>
         <BaseButton variant="primary" @click="load">Refresh</BaseButton>
       </div>
+      <div v-if="isStaleFallback" class="table-stale-banner" role="alert" aria-live="polite">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        <span>Showing cached / offline data — live connection unavailable.</span>
+        <BaseButton variant="ghost" size="sm" class="stale-refresh-link" @click="load">Refresh</BaseButton>
+      </div>
+      <section v-if="managementStatCards.length" class="management-stat-grid" aria-label="Management summary">
+        <article v-for="card in managementStatCards" :key="card.label" class="management-stat-card" :class="`tone-${card.tone}`">
+          <span>{{ card.label }}</span>
+          <strong>{{ formatStatValue(card.value) }}</strong>
+          <small v-if="card.hint" class="management-stat-hint">{{ card.hint }}</small>
+        </article>
+      </section>
     </template>
     <template #toolbar>
       <div class="filter-toolbar ddm-toolbar" data-testid="table-apply-controls" @click="closeSortDirectionMenu">
         <div class="ddm-toolbar-group ddm-search-group">
-          <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Site filter" @change="load">
+          <BaseSelect v-if="supportsSiteFilter" v-model="selectedSite" class="sort-select" aria-label="Station ID filter" @change="applySiteFilter">
             <option v-for="option in siteOptions" :key="option.value || 'all-sites'" :value="option.value">{{ option.label }}</option>
           </BaseSelect>
           <BaseSelect v-if="supportsMeterPhaseFilter" v-model="meterPhaseFilter" class="sort-select" aria-label="Meter phase filter" @change="applyControls">
             <option value="all">All phases</option>
+            <option value="single-phase">Single-phase only</option>
             <option value="three-phase">3-phase only</option>
           </BaseSelect>
           <BaseInput v-if="route.actions.includes('Search')" v-model="searchTerm" class="search-input" type="search" placeholder="Search Term" aria-label="Search Term" @keyup.enter="applyControls" />
@@ -55,8 +68,11 @@
           </template>
         </div>
 
-        <div class="ddm-toolbar-group ddm-actions-group">
+        <div class="ddm-toolbar-group ddm-reset-group">
           <BaseButton v-if="showResetButton" data-testid="table-reset-controls" @click="resetControls">Reset</BaseButton>
+        </div>
+
+        <div class="ddm-toolbar-group ddm-actions-group">
           <BaseButton
             v-for="action in toolbarActions"
             :key="action"
@@ -64,6 +80,18 @@
             :data-testid="`table-toolbar-action-${actionTestId(action)}`"
             @click="openAction(action, action === 'Add' ? {} : (selectedRow || visibleRows[0] || {}))"
           >{{ action }}</BaseButton>
+          <ExportRangeMenu
+            v-if="route.actions.includes('Export')"
+            ref="exportMenu"
+            v-model="exportRange"
+            :title="`Export ${route.title.toLowerCase()}`"
+            :search-term="searchTerm"
+            :sort-label="sortDirection === 'desc' ? 'Newest first' : 'Oldest first'"
+            :error="exportError"
+            :loading="exportLoading"
+            :disabled="!displayedTotal"
+            @download="downloadExport"
+          />
         </div>
       </div>
     </template>
@@ -78,6 +106,40 @@
         </div>
       </div>
       <p v-if="route.note" class="quota-line">{{ route.note }}</p>
+      <div v-if="pendingBindings.length" class="sync-banner" data-testid="account-pending-sync">
+        <div class="sync-banner__text">
+          <strong>{{ pendingBindings.length }} binding(s) not on the live API.</strong>
+          <span>{{ pendingBindingReason }}</span>
+        </div>
+        <div class="sync-banner__actions">
+          <BaseButton size="sm" :disabled="syncBusy" @click="showPendingDetail = !showPendingDetail">
+            {{ showPendingDetail ? 'Hide' : 'Review' }}
+          </BaseButton>
+          <BaseButton size="sm" variant="primary" :disabled="syncBusy" @click="retryPendingSync">
+            {{ syncBusy ? 'Syncing…' : 'Retry sync' }}
+          </BaseButton>
+        </div>
+      </div>
+      <div v-if="pendingBindings.length && showPendingDetail" class="sync-detail">
+        <table class="sync-detail__table">
+          <thead>
+            <tr><th>Customer</th><th>Meter</th><th>Station</th><th>Attempts</th><th>Last API response</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in pendingBindings" :key="`${row.customerId}-${row.meterId}`">
+              <td>{{ row.customerId }}</td>
+              <td>{{ row.meterId }}</td>
+              <td>{{ row.stationId }}</td>
+              <td>{{ row.attempts }}</td>
+              <td class="sync-detail__error">{{ row.lastError || 'Not attempted yet' }}</td>
+              <td>
+                <BaseButton size="sm" variant="ghost" :disabled="syncBusy" @click="retryPendingSync([row])">Retry</BaseButton>
+                <BaseButton size="sm" variant="danger" :disabled="syncBusy" @click="discardPending(row)">Discard</BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </template>
     <div class="table-scroll" @click="closeRowActionMenu">
       <table>
@@ -102,7 +164,8 @@
           <tr v-else-if="!visibleRows.length">
             <td class="empty-cell" :colspan="isBatchCheckable ? route.columns.length + 1 : route.columns.length">
               <svg style="width:36px;height:36px;opacity:.25;display:block;margin:0 auto 8px" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
-              {{ errorMessage ? "Load failed" : "No data found" }}
+              <strong>{{ errorMessage ? "Load failed" : "No records yet" }}</strong>
+              <BaseButton size="sm" @click="load">Refresh</BaseButton>
             </td>
           </tr>
           <tr v-else v-for="(row, rowIndex) in visibleRows" :key="rowIndex" :class="{ selected: row === selectedRow, checked: isRowChecked(row) }" @click="selectedRow = row">
@@ -192,7 +255,8 @@
         </article>
       </template>
       <div v-else-if="!visibleRows.length" class="mobile-table-empty">
-        {{ errorMessage ? "Load failed" : "No data found" }}
+        <strong>{{ errorMessage ? "Load failed" : "No records yet" }}</strong>
+        <BaseButton size="sm" @click="load">Refresh</BaseButton>
       </div>
       <article v-else v-for="(row, rowIndex) in visibleRows" :key="`mobile-row-${rowIndex}`" class="mobile-table-card" :class="{ selected: row === selectedRow }" @click="selectedRow = row">
         <div class="mobile-table-card__head">
@@ -269,15 +333,18 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import BaseTableShell from "./base/BaseTableShell.vue";
+import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import TaskOutputModal from "./TaskOutputModal.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
-import { columnKey, createFormSeed, fetchTableData, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { columnKey, createFormSeed, exportRowsForRoute, fetchTableData, fetchTableExportData, isBatchCheckableRoute, loadDynamicStationOptions, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeSupportsSiteFilter, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, tableSiteOptions, totalPages } from "../services/table-service";
+import { downloadTextFile, exportCsvText } from "../services/import-export.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mjs";
-import { toastWarn } from "../services/toast.js";
+import { discardPendingAccountBindings, fetchMeterStats, fetchPendingAccountBindings, retryPendingAccountBindings, summarizeSyncResult } from "../services/account-sync-service.mjs";
+import { toastError, toastSuccess, toastWarn } from "../services/toast.js";
 
 export default {
   name: "TablePage",
-  components: { ActionModal, BaseButton, BaseCheckbox, BaseInput, BaseSelect, BaseTableShell, TaskOutputModal },
+  components: { ActionModal, BaseButton, BaseCheckbox, BaseInput, BaseSelect, BaseTableShell, ExportRangeMenu, TaskOutputModal },
   props: {
     route: { type: Object, required: true }
   },
@@ -305,7 +372,16 @@ export default {
       meterPhaseFilter: "all",
       openRowActionIndex: null,
       sortDirectionMenuOpen: false,
-      loadToken: 0
+      exportRange: "all",
+      exportLoading: false,
+      exportError: "",
+      loadToken: 0,
+      managementStats: null,
+      managementStatsKey: "",
+      dataSource: "",
+      pendingBindings: [],
+      showPendingDetail: false,
+      syncBusy: false
     };
   },
   computed: {
@@ -314,6 +390,15 @@ export default {
     },
     isBatchCheckable() {
       return isBatchCheckableRoute(this.route);
+    },
+    isAccountRoute() {
+      return String(this.route?.hash || "").includes("management/account");
+    },
+    pendingBindingReason() {
+      const reasons = new Set(this.pendingBindings.map((row) => String(row.lastError || "").trim()).filter(Boolean));
+      if (!reasons.size) return "They are queued locally and have never reached the API.";
+      if (reasons.size === 1) return `API says: ${[...reasons][0]}`;
+      return `${reasons.size} different API errors — review for details.`;
     },
     sortableColumns() {
       return (this.route.columns || []).filter(c => c !== "Actions");
@@ -324,7 +409,7 @@ export default {
     toolbarActions() {
       return this.route.actions.filter((name) => {
         if (name === "Confirm" && String(this.route.hash || "").startsWith("#/remote-operation-record/")) return true;
-        if (["Sort", "Search", "Reset", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
+        if (["Sort", "Search", "Reset", "Export", "Cancel", "Confirm", "Print", "Edit", "Recharge", "Generate Token", "Delete", "Close"].includes(name)) return false;
         if (name === "Add Task" && this.route.columns.includes("Actions")) return false;
         return true;
       });
@@ -343,6 +428,32 @@ export default {
     },
     supportsMeterPhaseFilter() {
       return isCreditTokenRoute(this.route);
+    },
+    managementStatCards() {
+      const hash = String(this.route.hash || "");
+      const defaultStations = Number(this.managementStats?.stations ?? 9);
+
+      if (hash === "#/management/customer") return [
+        { label: "Total Customers", value: this.managementStats?.totalCustomers ?? this.total, tone: "primary" },
+        { label: "Stations", value: defaultStations, tone: "neutral" }
+      ];
+
+      if (hash === "#/management/account") {
+        // Exact counts from /api/local/meterStats/read — a meter is "connected"
+        // when a customer is bound to it (an account row exists), and "active"
+        // when that connected meter is switched on upstream. These used to be
+        // extrapolated from a 20-row sample, which is why Active read 767.
+        const stats = this.managementStats || {};
+        const stationCount = stats.stations ?? defaultStations;
+        return [
+          { label: "Total Meters", value: stats.totalMeters ?? 0, tone: "primary", hint: `${stats.unassignedMeters ?? 0} unassigned` },
+          { label: "Connected Meters", value: stats.connectedMeters ?? 0, tone: "primary", hint: "customer attached" },
+          { label: "Active Meters", value: stats.activeMeters ?? 0, tone: "success", hint: "connected and on" },
+          { label: "Inactive Meters", value: stats.inactiveMeters ?? 0, tone: "danger", hint: "connected but off" },
+          { label: "Stations", value: stationCount, tone: "neutral" }
+        ];
+      }
+      return [];
     },
     serverPaginated() {
       return routeUsesServerPagination(this.route);
@@ -377,6 +488,11 @@ export default {
         return this.filteredRows.filter((row) => row.meterId && ids.has(String(row.meterId)));
       }
       return this.filteredRows;
+    },
+    isStaleFallback() {
+      const src = String(this.dataSource || "").toLowerCase();
+      // Show banner for any source that isn't confirmed live data
+      return !this.loading && !this.errorMessage && src !== "" && src !== "live" && src !== "verified-live-total" && src !== "mapped";
     }
   },
   watch: {
@@ -388,14 +504,52 @@ export default {
         this.sortField = "";
         this.searchTerm = "";
         this.meterPhaseFilter = "all";
+        this.exportRange = "all";
+        this.exportError = "";
         this.currentPage = 1;
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         this.checkedMeterIds = new Set();
+        loadDynamicStationOptions().catch(() => null);
         this.load();
       }
     }
   },
   methods: {
+    exportDates() {
+      const to = new Date();
+      const from = new Date(to);
+      if (this.exportRange === "all") from.setTime(0);
+      else if (this.exportRange === "1d") from.setDate(from.getDate() - 1);
+      else if (this.exportRange === "7d") from.setDate(from.getDate() - 7);
+      else if (this.exportRange === "30d") from.setDate(from.getDate() - 30);
+      else from.setFullYear(from.getFullYear() - 1);
+      return { from: from.toISOString(), to: to.toISOString() };
+    },
+    async downloadExport() {
+      this.exportLoading = true;
+      this.exportError = "";
+      try {
+        const { from, to } = this.exportDates();
+        const table = await fetchTableExportData(this.route, {
+          from,
+          to,
+          siteId: this.supportsSiteFilter ? this.selectedSite : undefined,
+          meterPhaseFilter: this.supportsMeterPhaseFilter ? this.meterPhaseFilter : undefined,
+          searchTerm: this.searchTerm,
+          orderBy: this.route.actions.includes("Sort")
+            ? `${this.sortField || routeSortPolicy(this.route).key} ${this.sortDirection || routeSortDirection(this.route)}`
+            : undefined
+        });
+        const rows = exportRowsForRoute(this.route, table.rows);
+        const filename = `${String(this.route.title || "records").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}_${this.exportRange}.csv`;
+        downloadTextFile(filename, exportCsvText(this.route, rows, columnKey), "text/csv;charset=utf-8");
+        this.$refs.exportMenu?.close();
+      } catch (error) {
+        this.exportError = error?.message || "Export failed. Please retry.";
+      } finally {
+        this.exportLoading = false;
+      }
+    },
     async load() {
       const token = ++this.loadToken;
       this.errorMessage = "";
@@ -418,7 +572,10 @@ export default {
         if (token !== this.loadToken) return;
         this.allRows = table.rows;
         this.total = table.total;
+        this.dataSource = table.meta?.source || "";
         this.applyControls({ reloadServer: false });
+        this.loadManagementStats();
+        this.loadPendingBindings();
       } catch (error) {
         if (token !== this.loadToken) return;
         this.allRows = [];
@@ -456,9 +613,89 @@ export default {
       this.visibleRows = paginateRows(sortedRows, this.currentPage, this.pageSize);
       this.selectedRow = this.visibleRows[0] || null;
     },
+    formatStatValue(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric.toLocaleString() : value;
+    },
+    async loadPendingBindings() {
+      if (!this.isAccountRoute) return;
+      try {
+        this.pendingBindings = await fetchPendingAccountBindings({ stationId: this.selectedSite || "" });
+      } catch {
+        this.pendingBindings = [];
+      }
+    },
+    async retryPendingSync(rows = null) {
+      if (this.syncBusy) return;
+      const target = Array.isArray(rows) && rows.length ? rows : this.pendingBindings;
+      if (!target.length) return;
+      this.syncBusy = true;
+      try {
+        const result = await retryPendingAccountBindings(target);
+        const message = summarizeSyncResult(result);
+        if (result.failed) toastWarn(message);
+        else toastSuccess(message);
+        await this.loadPendingBindings();
+        if (result.synced) await this.load();
+      } catch (error) {
+        toastError(error?.message || "Sync failed");
+      } finally {
+        this.syncBusy = false;
+      }
+    },
+    async discardPending(row) {
+      if (this.syncBusy) return;
+      this.syncBusy = true;
+      try {
+        await discardPendingAccountBindings([row]);
+        await this.loadPendingBindings();
+      } catch (error) {
+        toastError(error?.message || "Could not discard the queued binding");
+      } finally {
+        this.syncBusy = false;
+      }
+    },
+    async loadManagementStats() {
+      const hash = String(this.route.hash || "");
+      if (!["#/management/customer", "#/management/account"].includes(hash)) return;
+      const key = `${hash}|${this.selectedSite}`;
+      if (this.managementStatsKey === key) return;
+      this.managementStatsKey = key;
+      const stationRoute = { hash: "#/admin/station", title: "Station", apis: ["/api/station/read"], columns: ["id"] };
+      try {
+        const stationTable = await fetchTableData(stationRoute, { pageNumber: 1, pageSize: 50 }).catch(() => ({ total: 9, rows: [] }));
+        if (key !== this.managementStatsKey) return;
+        const stationTotalCount = stationTable?.total || (Array.isArray(stationTable?.rows) && stationTable.rows.length ? stationTable.rows.length : 9);
+
+        if (hash === "#/management/customer") {
+          this.managementStats = { totalCustomers: this.total, stations: stationTotalCount };
+          return;
+        }
+
+        // Account page KPIs are about meters, counted exactly rather than
+        // extrapolated from one page of samples.
+        const stats = await fetchMeterStats({ stationId: this.selectedSite || "" });
+        if (key !== this.managementStatsKey) return;
+        this.managementStats = { ...stats, stations: stationTotalCount };
+      } catch {
+        if (key === this.managementStatsKey) {
+          this.managementStats = hash === "#/management/customer"
+            ? { totalCustomers: this.total, stations: 9 }
+            : { totalMeters: 0, connectedMeters: 0, activeMeters: 0, inactiveMeters: 0, unassignedMeters: 0, stations: 9 };
+          // Clear the memo so a failed attempt (e.g. the session was not ready
+          // yet) is retried on the next load instead of pinning zeros.
+          this.managementStatsKey = "";
+        }
+      }
+    },
     filterRowsByPhase(rows) {
-      if (this.meterPhaseFilter !== "three-phase") return rows;
-      return rows.filter((row) => meterPhaseFromRow(row) === "three-phase");
+      if (this.meterPhaseFilter === "all") return rows;
+      return rows.filter((row) => meterPhaseFromRow(row) === this.meterPhaseFilter);
+    },
+    applySiteFilter() {
+      this.currentPage = 1;
+      this.gotoPageInput = "1";
+      this.load();
     },
     resetControls() {
       this.searchTerm = "";
@@ -679,6 +916,7 @@ export default {
     },
     handleModalDone() {
       this.closeModal();
+      loadDynamicStationOptions(undefined, true).catch(() => null);
       this.load();
     }
   }
@@ -686,6 +924,75 @@ export default {
 </script>
 
 <style scoped>
+.table-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 45%, transparent);
+  color: var(--warning, #92400e);
+  font-size: 13px;
+  font-weight: 500;
+}
+.table-stale-banner svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  fill: currentColor;
+  opacity: 0.85;
+}
+.stale-refresh-link {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.management-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.management-stat-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.management-stat-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-stat-card strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-strong);
+  font-family: var(--font-mono);
+  font-size: 24px;
+}
+
+.management-stat-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.management-stat-card.tone-primary { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-color)); }
+.management-stat-card.tone-primary strong,
+.management-stat-card.tone-success strong { color: var(--success); }
+.management-stat-card.tone-danger strong { color: var(--danger); }
+
 .table-scroll table {
   table-layout: auto;
   width: max-content;
@@ -732,6 +1039,14 @@ export default {
 .table-page[aria-label="Role"] .table-scroll td.action-column {
   min-width: 110px;
   width: 110px;
+}
+
+.table-page[aria-label="Abnormal Alarm"] {
+  display: contents;
+}
+
+.table-page {
+  display: contents;
 }
 
 .table-scroll th[data-column-key="createDate"],
@@ -827,15 +1142,11 @@ export default {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.table-page[aria-label="Load Profile"] {
-  --bg-card: #ffffff;
-  --bg-page: #ffffff;
-}
 
 /* Custom Toolbar Grid Layout */
 .ddm-toolbar {
   display: grid !important;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 20px;
   align-items: center;
   flex-wrap: nowrap;
@@ -891,7 +1202,7 @@ export default {
   background: var(--bg-card);
   box-shadow: var(--shadow-md);
   padding: 6px;
-  z-index: 20;
+  z-index: 2000;
 }
 .sort-direction-menu__item {
   border: 0;
@@ -1010,6 +1321,9 @@ export default {
 }
 
 .mobile-table-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
   padding: 24px 16px;
   text-align: center;
   color: var(--text-muted);
@@ -1021,7 +1335,7 @@ export default {
 }
 
 @media(max-width:900px){
-  .ddm-toolbar { grid-template-columns: auto 1fr; gap: 10px; }
+  .ddm-toolbar { grid-template-columns: auto auto 1fr; gap: 10px; }
   .ddm-search-group {
     grid-column: 1 / -1;
     display: grid;
@@ -1039,8 +1353,9 @@ export default {
     flex-wrap: nowrap;
     justify-content: flex-start;
   }
+  .ddm-reset-group { grid-column: 2; }
   .ddm-actions-group {
-    grid-column: 2;
+    grid-column: 3;
     justify-content: flex-end;
     width: auto;
     flex-wrap: nowrap;
@@ -1048,12 +1363,74 @@ export default {
 }
 
 @media (max-width: 560px) {
-  .ddm-search-group {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  .management-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 16px 14px;
+  }
+
+  .management-stat-card { padding: 12px; }
+  .management-stat-card strong { font-size: 20px; }
+  .ddm-toolbar {
+    grid-template-columns: minmax(0, 1fr) 52px minmax(92px, auto);
     gap: 8px;
   }
-  .ddm-sort-group { grid-column: 1; }
-  .ddm-actions-group { grid-column: 2; }
+  .ddm-search-group {
+    display: contents;
+  }
+  .ddm-search-group .sort-select:first-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .ddm-search-group:has(.sort-select + .sort-select) .sort-select:first-child {
+    grid-column: 1 / 2;
+  }
+  .ddm-search-group .sort-select + .sort-select {
+    grid-column: 2 / -1;
+    grid-row: 1;
+  }
+  .ddm-search-group .search-input {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+  }
+  .ddm-search-group:not(:has(.sort-select)) .search-input { grid-row: 1; }
+  .ddm-sort-group {
+    grid-column: 2;
+    grid-row: 2;
+    width: 52px;
+  }
+  .ddm-sort-group:has(.sort-select) {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    width: auto;
+  }
+  .ddm-search-group:not(:has(.sort-select)) + .ddm-sort-group { grid-row: 1; }
+  .ddm-reset-group {
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 92px;
+  }
+  .ddm-search-group:not(:has(.sort-select)) ~ .ddm-reset-group { grid-row: 1; }
+  .ddm-reset-group :deep(.base-button),
+  .ddm-sort-group :deep(.base-button) {
+    width: 100%;
+    min-width: 0;
+  }
+  .ddm-actions-group {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .ddm-sort-group:has(.sort-select) ~ .ddm-actions-group { grid-row: 4; }
+  .ddm-actions-group :deep(.base-button),
+  .ddm-actions-group :deep(.export-range-menu) {
+    min-width: 0;
+    width: 100%;
+  }
+  .ddm-actions-group:empty { display: none; }
 }
 
 @media (max-width: 768px) {

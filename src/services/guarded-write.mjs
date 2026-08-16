@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Patterns that identify a FRONTEND guard response (live-writes disabled at
  * the proxy level).  A plain 403 from the upstream API must NOT match here —
@@ -11,7 +12,25 @@ const guardedWritePattern = /writes are blocked|live write/i;
  */
 const backendPermissionPattern = /route permission required|session lacks permission|forbidden/i;
 
+/**
+ * @typedef {Object} WriteErrorBody
+ * @property {{ source?: string }} [_proxy]
+ * @property {string} [reason]
+ * @property {string} [msg]
+ * @property {string} [message]
+ * @property {string} [error]
+ *
+ * @typedef {Object} WriteErrorLike
+ * @property {string} [message]
+ * @property {string} [reason]
+ * @property {number} [status]
+ * @property {{ source?: string }} [_proxy]
+ * @property {{ status?: number, data?: WriteErrorBody }} [response]
+ */
+
+/** @param {WriteErrorLike | string} [error] */
 export function isGuardedWriteError(error = {}) {
+  if (typeof error === "string") return guardedWritePattern.test(error);
   const source = error?.response?.data?._proxy?.source || error?._proxy?.source || "";
   if (source === "guard") return true;
 
@@ -39,6 +58,10 @@ export function guardedWriteMessage(action = "Action") {
   return `${action} not submitted. Live writes are off.`;
 }
 
+/**
+ * @param {WriteErrorLike} [error]
+ * @param {string} [fallback]
+ */
 export function userFacingError(error = {}, fallback = "Action failed") {
   if (isGuardedWriteError(error)) return guardedWriteMessage();
 

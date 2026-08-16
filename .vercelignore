@@ -11,7 +11,7 @@ source-crawl
 legacy-reference-app
 docs
 tests
-assets
+/assets
 browser_logs.txt
 tmp-*.log
 tmp-*.err.log

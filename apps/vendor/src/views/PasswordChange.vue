@@ -4,43 +4,59 @@
  *
  * Required on first login (vendor_users.password_reset_required=true).
  * Router guard in src/router/index.ts forces this view until the flag clears.
+ *
+ * Flow:
+ *   1. Vendor enters current temp password + new password (×2)
+ *   2. Client-side strength meter (length, classes, common patterns)
+ *   3. POST /api/v1/vendor/password-change → Supabase admin update + flag clear
+ *   4. Auth store flag cleared, success state, redirect to dashboard
+ *
+ * Backend records: wallet_security_events { event_type=password_change }
+ *                  wallet_security_events { event_type=temp_password_used }
  */
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '../lib/api';
 import { useVendorAuthStore } from '../stores/auth';
-import VendorAuthShell from '../components/VendorAuthShell.vue';
 
 const router = useRouter();
-const auth   = useVendorAuthStore();
+const auth = useVendorAuthStore();
 
-const current     = ref('');
-const next        = ref('');
-const confirm     = ref('');
-const showCurrent = ref(false);
-const showNext    = ref(false);
+const current = ref('');
+const next = ref('');
+const confirm = ref('');
+const showNext = ref(false);
 const showConfirm = ref(false);
-const loading     = ref(false);
-const error       = ref<string | null>(null);
-const success     = ref(false);
+const loading = ref(false);
+const error = ref<string | null>(null);
+const success = ref(false);
 
-const checks = computed(() => {
+// ─ Strength meter ─────────────────────────────────────────────
+interface Strength {
+    score: 0 | 1 | 2 | 3 | 4;
+    label: string;
+    color: string;
+    checks: { ok: boolean; label: string }[];
+}
+
+const strength = computed<Strength>(() => {
     const p = next.value;
-    return [
-        { ok: p.length >= 12,                                   label: 'At least 12 characters' },
-        { ok: /[A-Z]/.test(p) && /[a-z]/.test(p),              label: 'Mixed case letters' },
-        { ok: /\d/.test(p),                                     label: 'A number' },
-        { ok: /[^A-Za-z0-9]/.test(p),                          label: 'A symbol (! # $ …)' },
-        { ok: !/(123|abc|password|qwerty|beverly)/i.test(p),   label: 'Not a common pattern' },
+    const checks = [
+        { ok: p.length >= 12,                      label: 'At least 12 characters' },
+        { ok: /[A-Z]/.test(p) && /[a-z]/.test(p),  label: 'Mixed case letters' },
+        { ok: /\d/.test(p),                        label: 'A number' },
+        { ok: /[^A-Za-z0-9]/.test(p),              label: 'A symbol (! # $ …)' },
+        { ok: !/(123|abc|password|qwerty|beverly)/i.test(p), label: 'Not a common pattern' },
     ];
+    const passed = checks.filter((c) => c.ok).length;
+    const score = (passed === 0 ? 0 : Math.min(4, Math.max(1, passed - 1))) as 0 | 1 | 2 | 3 | 4;
+    const labels = ['Empty', 'Weak', 'Fair', 'Good', 'Strong'];
+    const colors = ['var(--text-faint)', 'var(--danger)', 'var(--warn)', 'oklch(70% 0.13 145)', 'var(--brand)'];
+    return { score, label: labels[score], color: colors[score], checks };
 });
 
-const score = computed(() => checks.value.filter((c) => c.ok).length as 0|1|2|3|4|5);
-const strengthLabel = computed(() => (['', 'Weak', 'Fair', 'Good', 'Strong', 'Strong'] as const)[score.value]);
-const strengthColor = computed(() => (['', 'var(--danger)', 'var(--warn)', 'var(--brand)', 'var(--success)', 'var(--success)'] as const)[score.value]);
-
+const allValid = computed(() => strength.value.score >= 3 && next.value === confirm.value && current.value.length > 0);
 const passwordsMatch = computed(() => !confirm.value || next.value === confirm.value);
-const allValid       = computed(() => score.value >= 3 && next.value === confirm.value && current.value.length > 0);
 
 async function submit() {
     if (loading.value) return;
@@ -50,7 +66,7 @@ async function submit() {
         error.value = 'New passwords do not match.';
         return;
     }
-    if (score.value < 3) {
+    if (strength.value.score < 3) {
         error.value = 'Choose a stronger password (Good or Strong).';
         return;
     }
@@ -63,13 +79,18 @@ async function submit() {
     try {
         await api.post('/api/v1/vendor/password-change', {
             current: current.value,
-            next:    next.value,
+            next: next.value,
         });
         if (auth.user) auth.user.password_reset_required = false;
         success.value = true;
+        // Brief success state, then route
         setTimeout(() => router.push('/'), 1200);
     } catch (e: any) {
-        error.value = (e instanceof ApiError ? e.message : e?.message) ?? 'Update failed. Please retry.';
+        if (e instanceof ApiError) {
+            error.value = e.message ?? 'Update failed.';
+        } else {
+            error.value = e?.message ?? 'Update failed. Please retry.';
+        }
     } finally {
         loading.value = false;
     }
@@ -82,195 +103,232 @@ function logout() {
 </script>
 
 <template>
-  <VendorAuthShell
-    title="Set your password"
-    subtitle="Your temporary password was for one-time access. Choose a strong password you'll remember — it protects all funds in your wallet."
-  >
-    <!-- Success state -->
-    <div v-if="success" class="success-state">
-      <div class="success-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
+  <main class="pc-shell">
+    <div class="bw-card pc-card">
+
+      <!-- Success state -->
+      <div v-if="success" class="pc-success">
+        <div class="pc-success-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <h1 class="bw-h1 pc-success-title">Password updated</h1>
+        <p class="pc-success-sub">Redirecting to your dashboard…</p>
       </div>
-      <p class="success-title">Password updated</p>
-      <p class="success-sub">Redirecting to your dashboard…</p>
-    </div>
 
-    <!-- Form state -->
-    <template v-else>
-      <p class="setup-eyebrow">First-time setup · step 1 of 1</p>
+      <!-- Form state -->
+      <template v-else>
+        <header class="pc-head">
+          <div class="bw-mark pc-mark" aria-hidden="true"></div>
+          <p class="pc-eyebrow">First-time setup · step 1 of 1</p>
+          <h1 class="bw-h1 pc-title">Set your new password</h1>
+          <p class="pc-sub">
+            Your temporary password was for one-time access. Choose a strong password you can remember —
+            this protects all funds in your wallet.
+          </p>
+        </header>
 
-      <form class="auth-form" @submit.prevent="submit" novalidate>
-        <div class="field">
-          <label class="field-label" for="pc-current">Temporary password</label>
-          <div class="password-field">
+        <form class="pc-form" @submit.prevent="submit" novalidate>
+          <!-- Current (temporary) -->
+          <div class="field">
+            <label class="bw-label" for="pc-current">Temporary password</label>
             <input
               id="pc-current"
+              class="bw-input"
               v-model="current"
-              class="bw-input"
-              :type="showCurrent ? 'text' : 'password'"
+              type="password"
               autocomplete="current-password"
-              placeholder="The one Beverly staff provided"
-              :disabled="loading"
+              required
+              placeholder="The one Beverly staff handed you"
             />
-            <button
-              type="button"
-              class="password-toggle"
-              :aria-label="showCurrent ? 'Hide password' : 'Show password'"
-              @click="showCurrent = !showCurrent"
-            >{{ showCurrent ? 'Hide' : 'Show' }}</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label class="field-label" for="pc-next">New password</label>
-          <div class="password-field">
-            <input
-              id="pc-next"
-              v-model="next"
-              class="bw-input"
-              :type="showNext ? 'text' : 'password'"
-              autocomplete="new-password"
-              placeholder="At least 12 characters"
-              :disabled="loading"
-            />
-            <button
-              type="button"
-              class="password-toggle"
-              :aria-label="showNext ? 'Hide password' : 'Show password'"
-              @click="showNext = !showNext"
-            >{{ showNext ? 'Hide' : 'Show' }}</button>
           </div>
 
-          <div v-if="next" class="strength-wrap">
-            <div class="strength-bar" :aria-label="`Password strength: ${strengthLabel}`">
-              <div v-for="i in 5" :key="i" class="strength-seg" :style="{ background: i <= score ? strengthColor : 'var(--border)' }" />
+          <!-- New password -->
+          <div class="field">
+            <label class="bw-label" for="pc-next">New password</label>
+            <div class="input-wrap">
+              <input
+                id="pc-next"
+                class="bw-input"
+                v-model="next"
+                :type="showNext ? 'text' : 'password'"
+                autocomplete="new-password"
+                minlength="12"
+                required
+                placeholder="At least 12 characters"
+              />
+              <button type="button" class="reveal" @click="showNext = !showNext" :aria-label="showNext ? 'Hide password' : 'Show password'">
+                {{ showNext ? '👁' : '○' }}
+              </button>
             </div>
-            <span v-if="strengthLabel" class="strength-label" :style="{ color: strengthColor }">{{ strengthLabel }}</span>
+
+            <!-- Strength meter -->
+            <div v-if="next" class="meter">
+              <div class="meter-bar" :aria-label="`Password strength: ${strength.label}`">
+                <span v-for="i in 4" :key="i" :class="['meter-seg', { active: i <= strength.score }]" :style="i <= strength.score ? { background: strength.color } : {}" />
+              </div>
+              <span class="meter-label" :style="{ color: strength.color }">{{ strength.label }}</span>
+            </div>
+
+            <!-- Checklist -->
+            <ul v-if="next" class="checks">
+              <li v-for="c in strength.checks" :key="c.label" :class="{ ok: c.ok }">
+                <span class="check-icon">{{ c.ok ? '✓' : '·' }}</span>
+                {{ c.label }}
+              </li>
+            </ul>
           </div>
-          <ul v-if="next" class="checks">
-            <li v-for="c in checks" :key="c.label" :class="{ ok: c.ok }">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <circle cx="6" cy="6" r="5.5" :stroke="c.ok ? 'currentColor' : 'var(--border)'"/>
-                <path v-if="c.ok" d="M3.5 6l2 2 3-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              {{ c.label }}
-            </li>
-          </ul>
-        </div>
 
-        <div class="field">
-          <label class="field-label" for="pc-confirm">Confirm new password</label>
-          <div class="password-field">
-            <input
-              id="pc-confirm"
-              v-model="confirm"
-              class="bw-input"
-              :type="showConfirm ? 'text' : 'password'"
-              autocomplete="new-password"
-              :class="{ 'input-error': !passwordsMatch }"
-              :disabled="loading"
-            />
-            <button
-              type="button"
-              class="password-toggle"
-              :aria-label="showConfirm ? 'Hide confirm' : 'Show confirm'"
-              @click="showConfirm = !showConfirm"
-            >{{ showConfirm ? 'Hide' : 'Show' }}</button>
+          <!-- Confirm -->
+          <div class="field">
+            <label class="bw-label" for="pc-confirm">Confirm new password</label>
+            <div class="input-wrap">
+              <input
+                id="pc-confirm"
+                class="bw-input"
+                v-model="confirm"
+                :type="showConfirm ? 'text' : 'password'"
+                autocomplete="new-password"
+                minlength="12"
+                required
+                :class="{ 'has-error': !passwordsMatch }"
+              />
+              <button type="button" class="reveal" @click="showConfirm = !showConfirm" :aria-label="showConfirm ? 'Hide' : 'Show'">
+                {{ showConfirm ? '👁' : '○' }}
+              </button>
+            </div>
+            <p v-if="!passwordsMatch" class="field-error">Passwords don't match.</p>
           </div>
-          <p v-if="!passwordsMatch" class="field-error">Passwords don't match.</p>
-        </div>
 
-        <div v-if="error" class="auth-error" role="alert">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
-            <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
-            <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <span>{{ error }}</span>
-        </div>
+          <p v-if="error" class="bw-alert danger pc-error" role="alert">{{ error }}</p>
 
-        <button class="bw-btn primary lg auth-btn" type="submit" :disabled="loading || !allValid">
-          <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-          {{ loading ? 'Updating…' : 'Set password & continue' }}
-        </button>
+          <button
+            class="bw-btn primary lg pc-submit"
+            type="submit"
+            :disabled="loading || !allValid"
+          >
+            {{ loading ? 'Updating…' : 'Set password & continue' }}
+          </button>
 
-        <button class="logout-link" type="button" @click="logout">Sign out instead</button>
-      </form>
+          <button class="bw-btn pc-logout" type="button" @click="logout">
+            Sign out instead
+          </button>
+        </form>
 
-      <p class="pc-foot">
-        Trouble signing in? Contact your Beverly account manager.
-        We never reset passwords by email — beware phishing.
-      </p>
-    </template>
-  </VendorAuthShell>
+        <footer class="pc-foot">
+          Trouble signing in? Contact your Beverly account manager.
+          We never reset passwords by email — beware phishing.
+        </footer>
+      </template>
+    </div>
+  </main>
 </template>
 
 <style scoped>
-.setup-eyebrow {
+.pc-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-5);
+  background:
+    radial-gradient(60% 50% at 50% 0%, var(--brand-glow), transparent 70%),
+    var(--canvas);
+}
+
+.pc-card {
+  width: 100%;
+  max-width: 480px;
+  padding: var(--s-6);
+}
+
+.pc-head { text-align: center; margin-bottom: var(--s-5); }
+.pc-mark {
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+  margin: 0 auto var(--s-3);
+}
+.pc-eyebrow {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--brand);
+  margin: 0 0 var(--s-1);
+}
+.pc-title {
+  font-size: var(--t-xl);
+  margin: 0 0 var(--s-2);
+}
+.pc-sub {
+  font-size: var(--t-sm);
+  color: var(--text-dim);
+  line-height: 1.55;
   margin: 0;
 }
 
-.auth-form { display: flex; flex-direction: column; gap: var(--s-4); }
-
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-2);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.pc-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
 }
-.field-error { font-size: var(--t-xs); color: var(--danger); margin: 2px 0 0; font-weight: 500; }
 
-.password-field { position: relative; }
-.password-field .bw-input { padding-right: 76px; }
-.password-toggle {
+.field { display: flex; flex-direction: column; }
+
+.input-wrap { position: relative; }
+.reveal {
   position: absolute;
-  right: 10px;
   top: 50%;
+  right: 10px;
   transform: translateY(-50%);
-  border: 0;
   background: transparent;
-  color: var(--brand);
-  font-size: var(--t-xs);
-  font-weight: 700;
+  border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 6px;
+  font-size: 16px;
+  padding: 4px;
+}
+.reveal:hover { color: var(--text); }
+
+.has-error { border-color: var(--danger) !important; }
+.field-error {
+  font-size: var(--t-xs);
+  color: var(--danger);
+  margin: 4px 0 0;
+  font-weight: 500;
 }
 
-.input-error { border-color: var(--danger) !important; }
-
-.strength-wrap {
+.meter {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  margin-top: 6px;
+  margin-top: 8px;
 }
-.strength-bar { display: flex; gap: 3px; flex: 1; }
-.strength-seg {
+.meter-bar {
+  display: flex;
+  gap: 3px;
   flex: 1;
-  height: 3px;
-  border-radius: 2px;
+}
+.meter-seg {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
   transition: background var(--dur-fast);
 }
-.strength-label {
+.meter-label {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  min-width: 48px;
+  min-width: 60px;
   text-align: right;
 }
 
 .checks {
   list-style: none;
-  margin: var(--s-2) 0 0;
+  margin: 8px 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -278,101 +336,78 @@ function logout() {
 }
 .checks li {
   font-size: var(--t-xs);
-  color: var(--text-2);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   transition: color var(--dur-fast);
 }
-.checks li.ok { color: var(--success); }
-
-.auth-error {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s-2);
-  padding: var(--s-3);
-  background: oklch(from var(--danger) l c h / 0.10);
-  border: 1px solid oklch(from var(--danger) l c h / 0.25);
-  border-radius: var(--r-md);
-  font-size: var(--t-sm);
-  color: var(--danger);
-  line-height: 1.5;
-}
-.error-icon { flex-shrink: 0; margin-top: 1px; }
-.auth-error span { flex: 1; }
-
-.auth-btn {
-  width: 100%;
-  justify-content: center;
-  gap: var(--s-2);
-  height: 48px;
-  font-size: var(--t-md);
-  display: inline-flex;
-  align-items: center;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-.btn-spinner {
+.checks li.ok { color: var(--brand); }
+.check-icon {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid oklch(100% 0 0 / 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
 }
 
-.logout-link {
-  background: none;
+.pc-error {
+  margin: 0;
+  font-size: var(--t-sm);
+}
+
+.pc-submit {
+  height: 48px;
+  justify-content: center;
+  width: 100%;
+}
+
+.pc-logout {
+  background: transparent;
   border: none;
-  color: var(--text-2);
+  color: var(--text-muted);
   font-size: var(--t-xs);
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
-  text-underline-offset: 2px;
   align-self: center;
 }
-.logout-link:hover { color: var(--text); }
+.pc-logout:hover { color: var(--text); }
 
 .pc-foot {
-  margin-top: var(--s-4);
+  margin-top: var(--s-5);
   padding-top: var(--s-4);
   border-top: 1px solid var(--border);
   text-align: center;
   font-size: var(--t-xs);
-  color: var(--text-2);
+  color: var(--text-muted);
   line-height: 1.6;
 }
 
 /* Success state */
-.success-state {
+.pc-success {
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-4) 0;
+  padding: var(--s-6) 0;
 }
-.success-icon {
+.pc-success-icon {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: oklch(70% 0.19 145 / 0.12);
+  background: oklch(70% 0.19 145 / 0.15);
   color: var(--brand);
   display: grid;
   place-items: center;
-  animation: pop 0.4s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  margin: 0 auto var(--s-4);
+  animation: pop 0.4s var(--ease-spring);
 }
 @keyframes pop {
-  from { transform: scale(0.6); opacity: 0; }
-  to   { transform: scale(1);   opacity: 1; }
+  0%   { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1);   opacity: 1; }
 }
-.success-title { font-weight: 700; font-size: var(--t-lg); margin: 0; }
-.success-sub   { font-size: var(--t-sm); color: var(--text-2); margin: 0; }
+.pc-success-title { margin: 0 0 var(--s-2); }
+.pc-success-sub { color: var(--text-dim); margin: 0; }
 
-@media (max-width: 400px) {
+@media (max-width: 480px) {
+  .pc-card { padding: var(--s-5); }
   .checks { grid-template-columns: 1fr; }
 }
 </style>

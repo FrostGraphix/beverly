@@ -9,6 +9,8 @@
  *  - Token totalPaid is revenue collected.
  */
 
+import { parseTariffUnitPrice } from "./tariff-pricing.mjs";
+
 /**
  * Returns ISO week key "YYYY-Www".
  *
@@ -46,6 +48,45 @@ export function toPeriodKey(dateStr, granularity) {
   }
 }
 
+/** Interval fields whose active state indicates meter tampering. */
+const TAMPER_FIELDS = ["terminalCoverOpen", "magneticInterference", "currentReverse"];
+
+/** total1 sentinel used by the upstream for "meter did not report this day". */
+const NO_DATA_TOTAL = -1;
+
+/**
+ * Interval condition flags arrive in two different conventions:
+ *
+ *   • boolean shape (/api/DailyDataMeter/read) — INVERTED against the field
+ *     name: `true` means the condition is absent (healthy), `false` means the
+ *     named condition IS active. Confirmed against live data: every meter
+ *     reporting `relayOpen: false` draws zero energy, while `relayOpen: true`
+ *     meters consume normally (an open relay cannot pass energy).
+ *   • string shape (/api/DailyDataMeter/readHourly) — literal: "Open"/"Yes"/
+ *     "Low"/"Abnormal" mean active; "Closed"/"No"/"Normal" mean healthy.
+ *
+ * Returns true only when the named condition is genuinely active.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function conditionActive(value) {
+  if (value === true) return false;
+  if (value === false) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return false;
+  return ["yes", "open", "low", "abnormal", "reverse", "unbalance"].includes(text);
+}
+
+/**
+ * A row with the no-data sentinel carries no meaningful flags — every flag
+ * reads false there, which would otherwise register as "all conditions active".
+ * @param {Object} row
+ * @returns {boolean}
+ */
+function hasInterval(row) {
+  return Number(row?.total1) !== NO_DATA_TOTAL;
+}
+
 /**
  * @param {Array<Object>} rows
  * @returns {Array<Object>}
@@ -56,13 +97,14 @@ export function deriveDailyDeltas(rows) {
     const previousTotal = index === 0 ? currentTotal : (Number(rows[index - 1].total1) || 0);
     const delta = Math.max(0, currentTotal - previousTotal);
     const hasReading = row.total1 != null && row.total1 !== "";
+    const reported = hasInterval(row);
     return {
       date: String(row.currentDate || "").substring(0, 10),
       delta: parseFloat(delta.toFixed(3)),
       total1: currentTotal,
       remain1: Number(row.remain1) || 0,
-      tamper: !!(row.terminalCoverOpen || row.magneticInterference || row.currentReverse),
-      relayOpen: !!row.relayOpen,
+      tamper: reported && TAMPER_FIELDS.some((field) => conditionActive(row[field])),
+      relayOpen: reported && conditionActive(row.relayOpen),
       hasReading,
     };
   });
@@ -180,7 +222,7 @@ export function groupRevenueByStation(records, granularity = "monthly") {
     }
     grouped[key].count++;
     grouped[key].totalPaid = parseFloat((grouped[key].totalPaid + (Number(record.totalPaid) || 0)).toFixed(2));
-    grouped[key].totalUnits = parseFloat((grouped[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(3));
+    grouped[key].totalUnits = parseFloat((grouped[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(4));
   }
   return grouped;
 }
@@ -199,7 +241,7 @@ export function buildCustomerRechargeHistory(records, granularity = "monthly") {
     }
     result[key].count++;
     result[key].totalPaid = parseFloat((result[key].totalPaid + (Number(record.totalPaid) || 0)).toFixed(2));
-    result[key].totalUnits = parseFloat((result[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(3));
+    result[key].totalUnits = parseFloat((result[key].totalUnits + (Number(record.totalUnit) || 0)).toFixed(4));
     result[key].tariffs.add(record.tariffId || "");
   }
 
@@ -220,7 +262,7 @@ export function buildTariffMap(tariffRows) {
   for (const tariff of tariffRows) {
     const tariffId = String(tariff.tariffId || "").toUpperCase();
     if (!tariffId) continue;
-    const price = Number(tariff.price) || 0;
+    const price = parseTariffUnitPrice(tariff.price);
     const tax = Number(tariff.tax) || 0;
     tariffMap.set(tariffId, {
       price,
@@ -238,6 +280,39 @@ export function buildTariffMap(tariffRows) {
  */
 export function resolveEffectivePrice(tariffId, tariffMap) {
   return tariffMap.get(String(tariffId || "").toUpperCase())?.effectivePrice ?? 350;
+}
+
+/**
+ * Prices tariff-segmented consumption without inventing a rate for uncovered kWh.
+ * @param {Array<{ tariffId?: string, tariff_id?: string, totalKwh?: number, total_kwh?: number }>} breakdown
+ * @param {Map<string, { effectivePrice: number }>} tariffMap
+ * @returns {{ valueNgn: number, pricedKwh: number, totalKwh: number, coveragePct: number, complete: boolean }}
+ */
+export function calculateConsumptionValue(breakdown, tariffMap) {
+  let valueNgn = 0;
+  let pricedKwh = 0;
+  let totalKwh = 0;
+
+  for (const row of breakdown || []) {
+    const kwh = Number(row.totalKwh ?? row.total_kwh) || 0;
+    if (kwh <= 0) continue;
+    totalKwh += kwh;
+    const tariff = tariffMap.get(String(row.tariffId ?? row.tariff_id ?? "").toUpperCase());
+    if (!tariff || !Number.isFinite(Number(tariff.effectivePrice)) || Number(tariff.effectivePrice) <= 0) continue;
+    pricedKwh += kwh;
+    valueNgn += kwh * Number(tariff.effectivePrice);
+  }
+
+  const unpricedKwh = Math.max(0, totalKwh - pricedKwh);
+  const coveragePct = totalKwh > 0 ? (pricedKwh / totalKwh) * 100 : 100;
+  return {
+    valueNgn: parseFloat(valueNgn.toFixed(2)),
+    pricedKwh: parseFloat(pricedKwh.toFixed(3)),
+    unpricedKwh: parseFloat(unpricedKwh.toFixed(3)),
+    totalKwh: parseFloat(totalKwh.toFixed(3)),
+    coveragePct: parseFloat(coveragePct.toFixed(2)),
+    complete: unpricedKwh <= 0.0005,
+  };
 }
 
 /**
@@ -286,10 +361,10 @@ export function computeSiteKpis(records, stationId = null) {
   }
 
   return {
-    totalKwh: parseFloat(totalUnits.toFixed(3)),
+    totalKwh: parseFloat(totalUnits.toFixed(4)),
     totalRevenue: parseFloat(totalRevenue.toFixed(2)),
     rechargeCount,
-    avgKwhPerRecharge: rechargeCount > 0 ? parseFloat((totalUnits / rechargeCount).toFixed(3)) : 0,
+    avgKwhPerRecharge: rechargeCount > 0 ? parseFloat((totalUnits / rechargeCount).toFixed(4)) : 0,
   };
 }
 
@@ -311,7 +386,7 @@ export function buildStationComparison(records) {
       };
     }
     const station = byStation[stationId];
-    station.totalKwh = parseFloat((station.totalKwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    station.totalKwh = parseFloat((station.totalKwh + (Number(record.totalUnit) || 0)).toFixed(4));
     station.totalRevenue = parseFloat((station.totalRevenue + (Number(record.totalPaid) || 0)).toFixed(2));
     station.rechargeCount++;
 
@@ -319,7 +394,7 @@ export function buildStationComparison(records) {
     if (!station.byTariff[tariffId]) {
       station.byTariff[tariffId] = { tariff: tariffId, totalKwh: 0, totalRevenue: 0, count: 0 };
     }
-    station.byTariff[tariffId].totalKwh = parseFloat((station.byTariff[tariffId].totalKwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    station.byTariff[tariffId].totalKwh = parseFloat((station.byTariff[tariffId].totalKwh + (Number(record.totalUnit) || 0)).toFixed(4));
     station.byTariff[tariffId].totalRevenue = parseFloat((station.byTariff[tariffId].totalRevenue + (Number(record.totalPaid) || 0)).toFixed(2));
     station.byTariff[tariffId].count++;
   }
@@ -376,7 +451,7 @@ export function buildTemporalSeries(records, granularity = "monthly", stationId 
   for (const record of filteredRecords) {
     const key = toPeriodKey(record.createDate, granularity);
     if (!grouped[key]) grouped[key] = { kwh: 0, revenue: 0, count: 0 };
-    grouped[key].kwh = parseFloat((grouped[key].kwh + (Number(record.totalUnit) || 0)).toFixed(3));
+    grouped[key].kwh = parseFloat((grouped[key].kwh + (Number(record.totalUnit) || 0)).toFixed(4));
     grouped[key].revenue = parseFloat((grouped[key].revenue + (Number(record.totalPaid) || 0)).toFixed(2));
     grouped[key].count++;
   }

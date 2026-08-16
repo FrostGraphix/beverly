@@ -1,0 +1,237 @@
+{
+  "recovery": {
+    "name": "June 24 verified recovery",
+    "cutoff": "2026-06-24T22:59:59Z",
+    "timezone": "Africa/Lagos",
+    "branch": "codex/recover-june24",
+    "branchBase": "7bdb44a05d443cb9a7dc59b9fcaf04d3fb6862e4",
+    "authoritativeTrackedTree": "c3e083a5a00fcc7ed8dfe99274de6fed8ef9396a",
+    "authoritativeTrackedParent": "3064a702",
+    "untrackedTree": "c3e083a5^3"
+  },
+  "sources": [
+    {
+      "kind": "stash-tree",
+      "ref": "c3e083a5",
+      "purpose": "Final tracked worktree captured during consolidation"
+    },
+    {
+      "kind": "stash-untracked-tree",
+      "ref": "c3e083a5^3",
+      "included": [
+        "backend/wallet/src/services/vat-policy.ts",
+        "backend/wallet/src/services/webhook-retention.ts",
+        "supabase/migrations/20260624100000_phase7_data_governance.sql"
+      ]
+    },
+    {
+      "kind": "codex-transcript",
+      "session": "019ee3d6-8674-7360-a364-c1ab1fb89b0b",
+      "timestamp": "2026-06-24T15:21:57.368Z",
+      "purpose": "Meter-order and protected-preview contract tests"
+    },
+    {
+      "kind": "codex-transcript",
+      "session": "019ee3df-dbc3-7460-a687-07b03247eee6",
+      "timestamps": [
+        "2026-06-24T15:22:57.614Z",
+        "2026-06-24T15:26:43.738Z"
+      ],
+      "purpose": "Header geometry and grouped sidebar restoration"
+    }
+  ],
+  "repairs": [
+    {
+      "path": "backend/wallet/src/routes/admin.ts",
+      "reason": "Removed an unused VAT import left by concurrent editing"
+    },
+    {
+      "path": "apps/admin/src/views/Dashboard.vue",
+      "reason": "Aligned template fields with the computed transaction model"
+    }
+  ],
+  "verificationRepairs": {
+    "recordedAt": "2026-06-30",
+    "runtime": {
+      "requiredNode": "22.x",
+      "verificationNode": "24.13.1",
+      "packageManager": "pnpm 10.28.0"
+    },
+    "files": [
+      {
+        "path": "backend/wallet/src/services/ledger.ts",
+        "sha256": "5cb1c04037a582ad464f1ad833cddfce0286a15733d50c2b8f1ecafe43c710e2",
+        "reason": "Enforced wallet status before creating holds"
+      },
+      {
+        "path": "src/App.vue",
+        "sha256": "be6742936335088653342b951331b154b3fc612e4a6763c6f4e5e06c37d655e6",
+        "reason": "Restored design-system contracts and mobile alert layering"
+      },
+      {
+        "path": "src/components/StationConsumptionPage.vue",
+        "sha256": "e4ea6e4185c7a3c9e6e96e845eee4eff825194006665adc7b84cd805b4779eb2",
+        "reason": "Guarded incomplete station responses"
+      },
+      {
+        "path": "src/data/route-manifest.js",
+        "sha256": "690e602f9407d41527f6362e5e7a9eb28bffe95e83012db0fd254f0aa97c85f2",
+        "reason": "Made wallet routing deployment-relative"
+      },
+      {
+        "path": "tests/full-crm-browser-smoke.test.cjs",
+        "sha256": "a24f7bcb59c23bd387d9e895047acf32158adb1c5fd53719c45a6aaa4f134732",
+        "reason": "Separated external-link validation"
+      }
+    ],
+    "passed": [
+      "typecheck",
+      "build",
+      "test",
+      "test:wallet",
+      "test:browser",
+      "test:visual:audit",
+      "test:full-smoke"
+    ]
+  },
+  "finalRepairs": {
+    "recordedAt": "2026-06-30",
+    "outcomes": [
+      "Atomic meter-order request claims and deterministic references",
+      "Runtime VAT policy wiring with maker-checker approval",
+      "Mobile notification panel layering and direct browser coverage",
+      "Notification station reads use the supported POST method",
+      "Preview profile filtering preserves authenticated route access",
+      "Guarded ECharts advisory acceptance prohibits affected Lines-series usage",
+      "Dashboard chart transition conflict removed",
+      "Canonical wallet backend restored for protected previews",
+      "Tracked runtime artifacts restored from origin/main"
+    ],
+    "files": [
+      {
+        "path": "backend/wallet/src/routes/admin.ts",
+        "sha256": "21d17366f37ca68cbc40fa19fdb1b599af2aebbb512b3c2a9da0a6445e9cf7ea"
+      },
+      {
+        "path": "backend/wallet/src/routes/vendor.ts",
+        "sha256": "0c43f495ce54dbcf5856fa145fd097e6a1c23689714a27c8a4756f202171b917"
+      },
+      {
+        "path": "backend/wallet/src/services/customer-purchase.ts",
+        "sha256": "642a1bb9eb11384cf6772cd7d9289ac97329d9b2eedd9a2a11a1232fa7c68072"
+      },
+      {
+        "path": "backend/wallet/src/services/meter-orders.ts",
+        "sha256": "256d0eede3a8b5d6fe5bfdeb3689d86d9d24b9f274b442336fdfb4629280b552"
+      },
+      {
+        "path": "backend/wallet/src/services/payment-transactions.ts",
+        "sha256": "2f5063e3e57b8f27b2ebb53570076229e62ee1913c360e60c5c0efc2a380000b"
+      },
+      {
+        "path": "backend/wallet/src/services/token-engine.ts",
+        "sha256": "2e14342c6258c12cd2d3af710d8584dd885ee4cc5e0d55f47d27becd08e76a0a"
+      },
+      {
+        "path": "backend/wallet/src/services/vat-policy.ts",
+        "sha256": "1968c3485e00d87eb6cf83e45def78574434d5b9f8a1aa99bb133d112cdda896"
+      },
+      {
+        "path": "backend/wallet/src/services/vending.ts",
+        "sha256": "d50ece259dcd30c43cd383ff844660d5dc1687e71720e24aa4534f0c5233f28e"
+      },
+      {
+        "path": "backend/wallet/src/services/__tests__/meter-orders.test.ts",
+        "sha256": "aa598da5741667cc443b6583bd1831624c2ddf9c3d36d3bd1450af424dcd9d1f"
+      },
+      {
+        "path": "backend/wallet/src/services/__tests__/vat-policy.test.ts",
+        "sha256": "f013207bc13dd35ba0fc84bd851f391b37c348629bd324a8dbca6f27d3ae7728"
+      },
+      {
+        "path": "api/reference.js",
+        "sha256": "7104b789111e8b3ceb08875ec7ead56eb807e6ac1b74f663049015278c454260"
+      },
+      {
+        "path": "package.json",
+        "sha256": "2fadd089d4c090c29d6e11ae9ee924b23764c3d220b8f776e4b160e8abe0bd0f"
+      },
+      {
+        "path": "src/components/StationAlertsBell.vue",
+        "sha256": "d45eb2eb7c47b1350c39d16641036fd46755dc57ea1e44325e4dee9d8ec66ee5"
+      },
+      {
+        "path": "supabase/migrations/20260624100000_phase7_data_governance.sql",
+        "sha256": "97a5b312537650ff430e66a6896a0b7f9d4ccb17e49b3fa39d1fe3f12f0097b9"
+      },
+      {
+        "path": "tests/station-alerts.browser.test.cjs",
+        "sha256": "74e81df2f79c01a5a146e67e6eda032caf759236d1b92d28ba5c0af93f63b9ff"
+      },
+      {
+        "path": "tests/live-proxy.test.cjs",
+        "sha256": "a878a929b53de629ee58e823dc67456fdcf12fe3412cfd20017a328635e9a948"
+      },
+      {
+        "path": "tests/vending-vat-contract.test.cjs",
+        "sha256": "fdcb821e6752345cbb1fa735ef1705f39cc177407e6f4c607a3e131cf7c53414"
+      },
+      {
+        "path": "tests/wallet-app-route-contract.test.cjs",
+        "sha256": "53594debeb218728f9d698e72e08cdbde5bcc83a6759f0100825e01c39c38020"
+      },
+      {
+        "path": "tools/security-audit-baseline.cjs",
+        "sha256": "2bcb812cade0ea912d641e05063c64a7d06c02213e1773b9e2c7040a1d0d0a7d"
+      },
+      {
+        "path": "src/services/dashboard-chart-options.mjs",
+        "sha256": "3362cb3bad0f63b2094bc8f4f250321faffde567042e1749027971802293dee6"
+      },
+      {
+        "path": "tests/dashboard-chart-options.test.mjs",
+        "sha256": "166f8e437ada3974ba784b106a647ca51e2721c627be7c2743f7f3db73d3aac5"
+      },
+      {
+        "path": "api/wallet-service.mjs",
+        "sha256": "66be099e844e56843f81f0c9e666ba7ce968ce1797a0881dea377033f56ea14d"
+      },
+      {
+        "path": "backend/wallet/src/server.ts",
+        "sha256": "782f57f67ff9f41219a89f110d03b3c1de17eed94493d3f8cc5dfea290ec6a89"
+      },
+      {
+        "path": "backend/wallet/src/queue/index.ts",
+        "sha256": "036cf4013d3d57facd265183b62aa594ba9fefa7855436fc3660ddc5783f3dfe"
+      },
+      {
+        "path": "tests/wallet-serverless-deployment.test.cjs",
+        "sha256": "0d246fea1e2ef8467987923484145480654b72a605fb76fca2121f28f1a01310"
+      },
+      {
+        "path": "vercel.json",
+        "sha256": "550507a367ef8bf6bcc3f9626c1ac406806412eb3f1ea25112fdb6d71761a2e2"
+      }
+    ],
+    "verification": {
+      "backendTestFiles": 14,
+      "backendTests": 100,
+      "visualScreenshots": 48,
+      "fullSmokePassed": true
+    }
+  },
+  "exclusions": [
+    "Current Antigravity placeholder implementations",
+    "Runtime databases and generated logs",
+    "Scratch scripts and generated PDF output",
+    "Unmerged Claude branch changes",
+    "June 25 production-gap and DRY refactors",
+    "June 24 two-theme transcript patch, because the approved plan retains four modes"
+  ],
+  "evidenceVault": "C:\\Users\\ACOB\\Desktop\\VS Code\\acob-crm-4-recovery-vault-20260629",
+  "productionPolicy": {
+    "forcePushAllowed": false,
+    "previewApprovalRequired": true,
+    "productionPromotionAllowed": false
+  }
+}

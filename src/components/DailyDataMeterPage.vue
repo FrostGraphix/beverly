@@ -2,7 +2,7 @@
   <div class="table-page ddm-container">
     <div class="sr-only">Meter interval ledger</div>
 
-    <div class="filter-toolbar ddm-toolbar" @click="closeSortDirectionMenu">
+    <div class="filter-toolbar ddm-toolbar" @click="closeMenus">
       <div class="ddm-toolbar-group ddm-search-group">
         <BaseInput
           v-model="searchTerm"
@@ -36,7 +36,19 @@
       </div>
       <div class="ddm-toolbar-group ddm-actions-group">
         <BaseButton @click="resetFilters">Reset</BaseButton>
-        <BaseButton variant="primary" :disabled="!rows.length" @click="exportCsv">Export</BaseButton>
+        <ExportRangeMenu
+          ref="exportMenu"
+          v-model="exportRange"
+          title="Export interval data"
+          description="XLSX includes every matching row."
+          format="XLSX"
+          delivery="Streamed download"
+          :search-term="searchTerm"
+          :sort-label="sortDir === 'desc' ? 'Newest first' : 'Oldest first'"
+          :error="exportState.error"
+          :disabled="!totalRecords"
+          @download="exportXlsx"
+        />
       </div>
     </div>
 
@@ -293,8 +305,8 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
+import ExportRangeMenu from "./base/ExportRangeMenu.vue";
 import { getApi, postApi } from "../services/api.js";
-import { downloadTextFile, exportReportCsvText } from "../services/import-export.mjs";
 import { hourlyCreateTime, intervalRowMatchesSearch, normalizeDailyMeterRow, sliceIntervalRows } from "../services/interval-data-flow.mjs";
 import { normalizeIntervalTableStatus } from "../services/interval-status.mjs";
 
@@ -314,7 +326,7 @@ function normalizeCollection(response) {
 
 export default {
   name: "DailyDataMeterPage",
-  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect },
+  components: { BaseButton, BaseIconButton, BaseInput, BaseSelect, ExportRangeMenu },
   props: {
     route: {
       type: Object,
@@ -348,7 +360,9 @@ export default {
         total: 0
       },
       openRowActionIndex: null,
-      sortDirectionMenuOpen: false
+      sortDirectionMenuOpen: false,
+      exportRange: "all",
+      exportState: { error: "" }
     };
   },
   computed: {
@@ -585,6 +599,9 @@ export default {
     closeSortDirectionMenu() {
       this.sortDirectionMenuOpen = false;
     },
+    closeMenus() {
+      this.closeSortDirectionMenu();
+    },
     onPageSizeChange() {
       this.page = 1;
       this.gotoPage = "1";
@@ -599,22 +616,21 @@ export default {
       const page = Number(this.gotoPage);
       if (Number.isFinite(page)) this.changePage(page);
     },
-    exportCsv() {
-      const columns = [
-        { label: "Meter Id", key: "meterId" },
-        { label: "Gateway Id", key: "gatewayId" },
-        { label: "Collection Date", key: "currentDate" },
-        { label: "Customer Id", key: "customerId" },
-        { label: "Customer Name", key: "customerName" },
-        { label: "Station Id", key: "stationId" },
-        { label: "Total Energy", key: "total1" },
-        { label: "Last Hour Usage", key: "usage1" },
-        { label: "Credit Balance", key: "remain1" },
-        { label: "Power", key: "power" },
-        { label: "Status", key: "status" }
-      ];
-      const content = exportReportCsvText("Interval Data", columns, this.rows, []);
-      downloadTextFile("interval_data.csv", content, "text/csv;charset=utf-8");
+    exportXlsx() {
+      const query = new URLSearchParams({
+        range: this.exportRange,
+        search: this.searchTerm.trim(),
+        sort: this.sortDir
+      });
+      const anchor = document.createElement("a");
+      anchor.href = `/api/DailyDataMeter/export.xlsx?${query.toString()}`;
+      anchor.download = `interval_data_${this.exportRange}.xlsx`;
+      anchor.hidden = true;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      this.exportState = { error: "" };
+      this.$refs.exportMenu?.close();
     },
     healthText(value) {
       // Hourly modal uses same polarity users expect in Interval table.
@@ -668,7 +684,7 @@ export default {
 <style scoped>
 .ddm-container { display: flex; flex-direction: column; min-height: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-.ddm-toolbar { display: grid !important; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; }
+.ddm-toolbar { position: relative; z-index: 100; overflow: visible; display: grid !important; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; }
 .ddm-toolbar-group { display: flex; align-items: center; gap: 12px; }
 .ddm-search-group { width: 100%; }
 .ddm-search-group .search-input { width: 100%; max-width: 100%; }
@@ -724,7 +740,7 @@ export default {
   background: var(--primary-light);
   color: var(--primary);
 }
-.mono-sm { font-family: "Courier New", monospace; font-size: 10px; }
+.mono-sm { font-family: var(--bev-font-mono); font-size: 10px; }
 .text-primary { color: var(--primary); }
 .text-muted { color: var(--text-muted); }
 .fw { font-weight: 700; }

@@ -6,19 +6,19 @@
         <p>Financial reconciliation between ledger and deliveries</p>
       </div>
       <div class="ops-head-actions">
-        <BaseButton @click="load">Refresh</BaseButton>
-        <BaseButton variant="primary" :disabled="running" @click="runRecon">Run Reconciliation</BaseButton>
+        <BaseButton :loading="loading" :disabled="loading" @click="load">Refresh</BaseButton>
+        <BaseButton variant="primary" :loading="running" :disabled="running" @click="runRecon">Run Reconciliation</BaseButton>
         <ExportToolbar :rows="reconciliationExportRows" :columns="exportColumns" title="Reconciliation Report" filename="beverly-reconciliation" :disabled="!Object.keys(summary).length" />
       </div>
     </header>
 
-    <div v-if="error" class="ops-error" role="alert">{{ error }}</div>
+    <div v-if="error" class="ops-error" role="alert">{{ error }} <BaseButton size="sm" @click="load">Retry</BaseButton></div>
     <div v-if="runResult" :class="['ops-run-result', runResult.status === 'balanced' ? 'run-balanced' : 'run-mismatch']" role="status">
       <strong>{{ runResult.status === 'balanced' ? '✓ Balanced' : `⚠ ${runResult.mismatchCount} mismatch(es) found` }}</strong>
       <span>Run ID: {{ shortId(runResult.id) }} · {{ formatDate(runResult.createdAt) }}</span>
     </div>
 
-    <div v-if="loading" class="ops-loading">
+    <div v-if="initialLoading" class="ops-loading" role="status" :aria-busy="initialLoading" aria-live="polite">
       <div v-for="n in 6" :key="n" class="skeleton-kpi"></div>
     </div>
 
@@ -127,6 +127,7 @@ export default {
       summary: {},
       runResult: null,
       loading: false,
+      initialLoading: true,
       running: false,
       error: ""
     };
@@ -174,6 +175,7 @@ export default {
         this.error = e?.message || "Failed to load reconciliation data";
       } finally {
         this.loading = false;
+        this.initialLoading = false;
       }
     },
     async runRecon() {
@@ -211,8 +213,9 @@ export default {
 .run-mismatch strong, .run-balanced strong { font-size: 14px; }
 
 .ops-loading { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.skeleton-kpi { height: 80px; background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-page) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 12px; }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-kpi { height: 80px; background: var(--bg-card); border-radius: 12px; position: relative; overflow: hidden; }
+.skeleton-kpi::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, var(--bg-page) 50%, transparent 100%); animation: skeleton-sweep 1.5s ease-in-out infinite; }
+@keyframes skeleton-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .kpi-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 20px; display: flex; flex-direction: column; gap: 6px; }

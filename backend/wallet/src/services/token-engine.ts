@@ -18,14 +18,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
+import { resolveVatRateBasisPoints } from './vat-policy.js';
+import { calculateVendingVatBreakdown } from './vending-vat.js';
+import { resolveOemConfig, resolveOemAuthHeader, DEFAULT_OEM_SLUG } from './oem-registry.js';
 
-const TAX_BY_TARIFF: Record<string, number> = {
-    RESIDENTIAL: 0,
-    COMMERCIAL: 0,
-    KOLO: 0.075,
-    PRODUCTIVE: 0,
-    PUBLIC: 0,
-};
 const PRICE_BY_TARIFF: Record<string, number> = {
     RESIDENTIAL: 350,
     COMMERCIAL: 350,
@@ -54,14 +50,44 @@ function upstreamFailure(payload: { code?: number; msg?: string; reason?: string
     return new TokenEngineError(message, fallbackCode, payload.code === 99 || payload.code === 429);
 }
 
-async function energyCall<T>(path: string, init: RequestInit = {}): Promise<T> {
-    if (!env.ENERGY_BACKEND_URL || !env.ENERGY_BEARER_TOKEN) {
+// Phase 6 unification: resolves the target OEM's base URL + auth header from the
+// shared oem_manufacturers/oem_credentials registry (see oem-registry.ts) when
+// `oemId` is given or the default (Calinmeter) row is seeded there. Falls back to
+// the legacy env.ENERGY_BACKEND_URL/env.ENERGY_BEARER_TOKEN pair as a single unit
+// (never mixes one OEM's URL with another's token) whenever the registry has
+// nothing usable — this is what keeps the live Calinmeter vending flow
+// zero-regression whether or not the registry has been seeded in a given
+// environment. Set OEM_REGISTRY_DISABLED=true to force the legacy path instantly.
+async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
+    const oemConfig = await resolveOemConfig(oemId);
+    const authHeaderFromOem = resolveOemAuthHeader(oemConfig);
+    if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
+        return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
+    }
+    const isSeedDefault = !oemId || !oemConfig || oemConfig.isSeedDefault || oemConfig.slug === DEFAULT_OEM_SLUG;
+    if (isSeedDefault) {
+        const baseUrl = (oemConfig && oemConfig.baseUrl) ? oemConfig.baseUrl : (env.ENERGY_BACKEND_URL || '');
+        const authHeader = authHeaderFromOem || (env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null);
+        if (baseUrl && authHeader) {
+            return { baseUrl, authHeader };
+        }
+    }
+    if (oemId && !isSeedDefault) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
+    return {
+        baseUrl: env.ENERGY_BACKEND_URL || '',
+        authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
+    };
+}
+
+async function energyCall<T>(path: string, init: RequestInit = {}, oemId?: string): Promise<T> {
+    const { baseUrl, authHeader } = await resolveEnergyTarget(oemId);
+    if (!baseUrl || !authHeader) {
         throw new TokenEngineError('energy backend not configured', 'energy_not_configured');
     }
-    const res = await fetch(`${env.ENERGY_BACKEND_URL}${path}`, {
+    const res = await fetch(`${baseUrl}${path}`, {
         ...init,
         headers: {
-            Authorization: `Bearer ${env.ENERGY_BEARER_TOKEN}`,
+            [authHeader.name]: authHeader.value,
             'Content-Type': 'application/json',
             ...(init.headers ?? {}),
         },
@@ -80,19 +106,16 @@ async function energyCall<T>(path: string, init: RequestInit = {}): Promise<T> {
 export interface TariffInfo {
     tariffId: string;
     basePricePerKwh: number;
-    taxRate: number;
     effectivePricePerKwh: number;
 }
 
 export function resolveTariffPricing(tariffId: string): TariffInfo {
     const id = tariffId.toUpperCase();
     const base = PRICE_BY_TARIFF[id] ?? 350;
-    const tax = TAX_BY_TARIFF[id] ?? 0;
     return {
         tariffId: id,
         basePricePerKwh: base,
-        taxRate: tax,
-        effectivePricePerKwh: base * (1 + tax),
+        effectivePricePerKwh: base,
     };
 }
 
@@ -101,22 +124,41 @@ export interface PurchasePreview {
     units: number;            // kWh
     effectivePricePerKwh: number;
     taxAmountMinor: number;
+    energyAmountMinor: number;
+    grossAmountMinor: number;
+    vatRateBasisPoints: number;
     tariffId: string;
 }
 
-export function previewPurchase(amountMinor: number, tariffId: string): PurchasePreview {
-    if (amountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
+export function previewPurchase(
+    energyAmountMinor: number,
+    tariffId: string,
+    vatRateBasisPoints = env.VENDING_VAT_BASIS_POINTS,
+): PurchasePreview {
+    if (energyAmountMinor <= 0) throw new TokenEngineError('amount must be positive', 'invalid_amount');
     const t = resolveTariffPricing(tariffId);
-    const naira = amountMinor / 100;
-    const units = naira / t.effectivePricePerKwh;
-    const taxMinor = Math.round(amountMinor * (t.taxRate / (1 + t.taxRate)));
+    const vat = calculateVendingVatBreakdown(energyAmountMinor, vatRateBasisPoints);
+    const naira = vat.energyAmountMinor / 100;
+    const units = naira / t.basePricePerKwh;
     return {
-        amountMinor,
+        amountMinor: vat.grossAmountMinor,
         units: Number(units.toFixed(4)),
         effectivePricePerKwh: t.effectivePricePerKwh,
-        taxAmountMinor: taxMinor,
+        taxAmountMinor: vat.vatAmountMinor,
+        energyAmountMinor: vat.energyAmountMinor,
+        grossAmountMinor: vat.grossAmountMinor,
+        vatRateBasisPoints: vat.vatRateBasisPoints,
         tariffId: t.tariffId,
     };
+}
+
+export async function previewPurchaseWithPolicy(
+    amountMinor: number,
+    tariffId: string,
+    at = new Date(),
+): Promise<PurchasePreview> {
+    const vatRateBasisPoints = await resolveVatRateBasisPoints(at);
+    return previewPurchase(amountMinor, tariffId, vatRateBasisPoints);
 }
 
 export interface MeterInfo {
@@ -128,13 +170,23 @@ export interface MeterInfo {
     protocolVersion?: string | null;
     communicationWay?: string | null;
     isThreePhase?: boolean | null;
+    sgc?: string | null;
     resolutionSource?: 'energy_account' | 'local_binding' | 'energy_low_purchase_report' | 'archived_contract_sample';
     liveVerified?: boolean;
+    /**
+     * Phase 6 unification: which OEM this meter belongs to (from
+     * account_bindings.oem_id when resolved locally, or the oemId the caller
+     * already knew and passed into lookupMeter). Undefined/null means "unknown —
+     * treat as the default OEM," which is exactly today's single-tenant behavior
+     * (every existing meter predates OEM tagging). Threaded into generateCreditToken/
+     * createRemoteSendTask so a vend for a tagged meter targets the right upstream.
+     */
+    oemId?: string | null;
 }
 
 export async function lookupMeter(
     meterId: string,
-    opts: { allowArchivedFallback?: boolean; allowHistoricalFallback?: boolean } = {},
+    opts: { allowArchivedFallback?: boolean; allowHistoricalFallback?: boolean; oemId?: string | null } = {},
 ): Promise<MeterInfo> {
     const normalizedMeterId = meterId.trim();
     // Energy backend lookup. Returns 200 + 1 row or 404.
@@ -167,16 +219,25 @@ export async function lookupMeter(
         }>('/api/account/read', {
             method: 'POST',
             body: JSON.stringify({ meterId: normalizedMeterId, pageNumber: 1, pageSize: 50 }),
-        });
+        }, opts.oemId ?? undefined);
         if (!upstreamSucceeded(data)) throw upstreamFailure(data, 'energy_query_failed');
         const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || '').trim() === normalizedMeterId);
         if (row) {
             const meter = normalizeMeterRow(row, normalizedMeterId);
+            let isThreePhase = meter.isThreePhase ?? null;
+            let sgc = meter.sgc ?? null;
+            if (isThreePhase === null || !sgc) {
+                const meta = await lookupMeterMeta(normalizedMeterId, opts.oemId);
+                if (isThreePhase === null) isThreePhase = meta.isThreePhase;
+                if (!sgc) sgc = meta.sgc;
+            }
             return {
                 ...meter,
-                isThreePhase: meter.isThreePhase ?? await lookupMeterPhase(normalizedMeterId),
+                isThreePhase,
+                sgc,
                 resolutionSource: 'energy_account',
                 liveVerified: true,
+                oemId: opts.oemId ?? null,
             };
         }
     } catch (error) {
@@ -189,7 +250,7 @@ export async function lookupMeter(
     if (fallback) return fallback;
 
     if (opts.allowHistoricalFallback) {
-        const historical = await lookupHistoricalLowPurchaseReport(normalizedMeterId).catch((error) => {
+        const historical = await lookupHistoricalLowPurchaseReport(normalizedMeterId, opts.oemId).catch((error) => {
             if (error instanceof TokenEngineError) {
                 if (!upstreamError || error.retryable) upstreamError = error;
                 return null;
@@ -247,6 +308,7 @@ function normalizeMeterRow(row: Record<string, unknown>, requestedMeterId: strin
         protocolVersion: String(row.protocolVersion || row.protocol_version || '').trim() || null,
         communicationWay: String(row.communicationWay || row.communication_way || '').trim() || null,
         isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
+        sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
     };
 }
 
@@ -259,7 +321,7 @@ function normalizeBoolean(value: unknown): boolean | null {
     return null;
 }
 
-async function lookupMeterPhase(meterId: string): Promise<boolean | null> {
+async function lookupMeterMeta(meterId: string, oemId?: string | null): Promise<{ isThreePhase: boolean | null; sgc: string | null }> {
     try {
         const data = await energyCall<{
             code?: number;
@@ -270,19 +332,23 @@ async function lookupMeterPhase(meterId: string): Promise<boolean | null> {
         }>('/api/meter/read', {
             method: 'POST',
             body: JSON.stringify({ meterId, pageNumber: 1, pageSize: 20 }),
-        });
-        if (!upstreamSucceeded(data)) return null;
+        }, oemId ?? undefined);
+        if (!upstreamSucceeded(data)) return { isThreePhase: null, sgc: null };
         const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || item.id || '').trim() === meterId);
-        return row ? normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase) : null;
+        if (!row) return { isThreePhase: null, sgc: null };
+        return {
+            isThreePhase: normalizeBoolean(row.isThreePhase ?? row.is_three_phase ?? row.threePhase),
+            sgc: String(row.sgc ?? row.SGC ?? '').trim() || null,
+        };
     } catch {
-        return null;
+        return { isThreePhase: null, sgc: null };
     }
 }
 
 async function lookupLocalAccountBinding(meterId: string): Promise<MeterInfo | null> {
     const { data } = await adminClient
         .from('account_bindings')
-        .select('customer_id, meter_id, tariff_id, station_id, remark, meter_type, detail_json')
+        .select('customer_id, meter_id, tariff_id, station_id, remark, meter_type, detail_json, oem_id')
         .eq('meter_id', meterId)
         .eq('status', 'active')
         .limit(1)
@@ -300,10 +366,14 @@ async function lookupLocalAccountBinding(meterId: string): Promise<MeterInfo | n
             || normalizeBoolean((data.detail_json as any)?.isThreePhase ?? (data.detail_json as any)?.is_three_phase) === true,
         resolutionSource: 'local_binding',
         liveVerified: true,
+        // Nullable — every account_binding predating Phase 0's retrofit has no
+        // oem_id yet. A null value here is treated as "default OEM" downstream,
+        // which is exactly correct since every such row is a real Calinmeter meter.
+        oemId: (data as any).oem_id ?? null,
     };
 }
 
-async function lookupHistoricalLowPurchaseReport(meterId: string): Promise<MeterInfo | null> {
+async function lookupHistoricalLowPurchaseReport(meterId: string, oemId?: string | null): Promise<MeterInfo | null> {
     const now = new Date();
     const from = new Date(now);
     from.setUTCDate(from.getUTCDate() - 180);
@@ -326,7 +396,7 @@ async function lookupHistoricalLowPurchaseReport(meterId: string): Promise<Meter
     }>('/API/PrepayReport/LowPurchaseSituation', {
         method: 'POST',
         body: JSON.stringify(payload),
-    });
+    }, oemId ?? undefined);
     if (!upstreamSucceeded(data)) throw upstreamFailure(data, 'energy_report_query_failed');
     const row = accountRows(data).find((item) => String(item.meterId || item.meter_id || item.customerId || '').trim() === meterId);
     if (!row) return null;
@@ -336,12 +406,12 @@ async function lookupHistoricalLowPurchaseReport(meterId: string): Promise<Meter
         communicationWay: null,
         resolutionSource: 'energy_low_purchase_report',
         liveVerified: false,
+        oemId: oemId ?? null,
     };
 }
 
 function archivedMeterFallbackEnabled() {
-    if (env.NODE_ENV === 'production') return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true;
-    return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK !== false;
+    return env.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true;
 }
 
 function findRepoFile(relativePath: string) {
@@ -408,35 +478,75 @@ export interface StationInfo {
     stationId: string;
     name: string;
     remark?: string | null;
+    oemId: string | null;
+    oemSlug: string | null;
+    oemName: string | null;
+    status: 'active' | 'disabled';
 }
 
-let stationsCache: { at: number; data: StationInfo[] } | null = null;
+// Keyed by oemId (default-OEM key '' when none given) so a future second OEM's
+// station list can't collide with Calinmeter's cached one.
+const stationsCache = new Map<string, { at: number; data: StationInfo[] }>();
 const STATIONS_TTL_MS = 5 * 60 * 1000;
 
-export async function listStations(opts: { force?: boolean } = {}): Promise<StationInfo[]> {
-    if (!opts.force && stationsCache && Date.now() - stationsCache.at < STATIONS_TTL_MS) {
-        return stationsCache.data;
+export async function listStations(opts: { force?: boolean; oemId?: string | null } = {}): Promise<StationInfo[]> {
+    const cacheKey = opts.oemId ?? '';
+    const cached = stationsCache.get(cacheKey);
+    if (!opts.force && cached && Date.now() - cached.at < STATIONS_TTL_MS) {
+        return cached.data;
     }
     // Upstream returns: { code, reason, result: { total, data: [{ stationId, name, ... }] } }
+    const owner = await resolveOemConfig(opts.oemId ?? undefined);
     const resp = await energyCall<{
         code?: number;
-        result?: { total?: number; data?: Array<{ stationId: string; name: string; remark?: string | null }> };
+        result?: { total?: number; data?: Array<{ stationId: string; name: string; remark?: string | null; status?: unknown }> };
     }>('/api/station/read', {
         method: 'POST',
         body: JSON.stringify({ pageNumber: 1, pageSize: 500 }),
-    });
+    }, opts.oemId ?? undefined);
     const raw = resp.result?.data ?? [];
     // Exclude system noise rows (legacy "admin", "0001" placeholder)
     const stations: StationInfo[] = raw
         .filter((s) => s.stationId && s.stationId.toUpperCase() !== 'ADMIN')
-        .map((s) => ({ stationId: s.stationId, name: s.name ?? s.stationId, remark: s.remark ?? null }))
+        .map((s) => ({
+            stationId: s.stationId,
+            name: s.name ?? s.stationId,
+            remark: s.remark ?? null,
+            oemId: owner?.oemId ?? null,
+            oemSlug: owner?.slug ?? null,
+            oemName: owner?.displayName ?? null,
+            status: s.status === false || s.status === 0 || /^(disabled|inactive|offline|deleted)$/i.test(String(s.status ?? ''))
+                ? 'disabled' as const
+                : 'active' as const,
+        }))
         .sort((a, b) => a.name.localeCompare(b.name));
-    stationsCache = { at: Date.now(), data: stations };
+    stationsCache.set(cacheKey, { at: Date.now(), data: stations });
     return stations;
 }
 
+export async function listStationDirectory(opts: { force?: boolean } = {}): Promise<StationInfo[]> {
+    const { data, error } = await adminClient
+        .from('oem_manufacturers')
+        .select('id')
+        .eq('status', 'active')
+        .order('display_name');
+    if (error) throw new TokenEngineError(error.message, 'oem_directory_unavailable', true);
+    const owners = (data ?? []).map((row) => String(row.id || '').trim()).filter(Boolean);
+    if (!owners.length) return listStations({ force: opts.force });
+    const results = await Promise.allSettled(owners.map((oemId) => listStations({ force: opts.force, oemId })));
+    const stations = results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
+    if (!stations.length) {
+        const fallbackStations = await listStations({ force: opts.force });
+        if (!fallbackStations.length) {
+            throw new TokenEngineError('No OEM station directory is available', 'stations_unavailable', true);
+        }
+        return fallbackStations;
+    }
+    return stations.sort((left, right) => `${left.oemName}:${left.name}`.localeCompare(`${right.oemName}:${right.name}`));
+}
+
 export function invalidateStationsCache() {
-    stationsCache = null;
+    stationsCache.clear();
 }
 
 export interface GenerateTokenInput {
@@ -448,8 +558,12 @@ export interface GenerateTokenInput {
     units: number;
     tariffId: string;
     isThreePhase?: boolean | null;
+    /** Supply Group Code — lets the resolver apply an SGC-level S1/S2 rule. */
+    sgc?: string | null;
     /** External reference for traceability — usually purchase_order_id */
     reference: string;
+    /** Phase 6: which OEM to vend against (see MeterInfo.oemId). */
+    oemId?: string | null;
 }
 
 export interface GenerateTokenResult {
@@ -461,7 +575,7 @@ export interface GenerateTokenResult {
     upstreamPayload: Record<string, unknown>;
 }
 
-export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean } = {}) {
+export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
     const amount = Math.round((input.amountMinor / 100) * 100) / 100;
     return {
         customerId: input.customerId,
@@ -475,14 +589,72 @@ export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPre
         totalUnit: input.units,
         payDebtPercent: 0,
         paymentMethod: 'Cash',
-        isS2: input.isThreePhase === true,
+        isS2: typeof opts.isS2 === 'boolean' ? opts.isS2 : input.isThreePhase === true,
     };
+}
+
+/**
+ * Resolve the effective STS token format (isS2) using the shared override store:
+ *   per-meter override → SGC rule → phase fallback.
+ * Reads the same Supabase tables the CRM writes (meter_token_overrides, sgc_token_rules).
+ * Any lookup failure (incl. tables not yet migrated) falls back to the phase guess.
+ */
+export async function resolveEffectiveIsS2(input: GenerateTokenInput): Promise<boolean> {
+    const meterId = String(input.meterId || '').trim();
+    if (meterId) {
+        try {
+            const { data } = await adminClient
+                .from('meter_token_overrides')
+                .select('is_s2')
+                .eq('meter_id', meterId)
+                .maybeSingle();
+            if (data && typeof (data as any).is_s2 === 'boolean') return (data as any).is_s2;
+        } catch { /* table may not exist yet */ }
+    }
+
+    let sgc = String(input.sgc || '').trim();
+    if (!sgc && meterId) {
+        sgc = (await lookupMeterMeta(meterId, input.oemId)).sgc ?? '';
+    }
+    if (sgc) {
+        try {
+            const { data } = await adminClient
+                .from('sgc_token_rules')
+                .select('is_s2')
+                .eq('sgc', sgc)
+                .maybeSingle();
+            if (data && typeof (data as any).is_s2 === 'boolean') return (data as any).is_s2;
+        } catch { /* table may not exist yet */ }
+    }
+
+    return input.isThreePhase === true;
+}
+
+/**
+ * Guards against silently building an STS token payload for an OEM that doesn't
+ * speak STS. `direct_credit` (an OEM that credits a meter in real time with no
+ * physical token) is reserved in the schema (oem_manufacturers.vending_strategy)
+ * but its actual code path has NOT been built — neither Calinmeter nor, per public
+ * documentation, Sparkmeter needs it, so building it now would be speculative,
+ * untestable code with no real spec to verify against. Fails loudly and
+ * specifically instead of vending Calinmeter's STS shape at a non-STS OEM.
+ */
+async function assertVendingStrategySupported(oemId?: string | null): Promise<void> {
+    const config = await resolveOemConfig(oemId ?? DEFAULT_OEM_SLUG);
+    if (config?.vendingStrategy === 'direct_credit') {
+        throw new TokenEngineError(
+            `${config.displayName} is configured for direct-credit vending, which is not yet implemented in the wallet backend. STS token generation cannot be used for this OEM.`,
+            'vending_strategy_not_implemented',
+        );
+    }
 }
 
 export async function generateCreditToken(input: GenerateTokenInput): Promise<GenerateTokenResult> {
     if (!env.ENERGY_AUTHORIZATION_PASSWORD) {
         throw new TokenEngineError('energy authorization password not configured', 'energy_authorization_missing');
     }
+    await assertVendingStrategySupported(input.oemId);
+    const isS2 = await resolveEffectiveIsS2(input);
     const response = await energyCall<{
         code?: number;
         msg?: string;
@@ -491,8 +663,8 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
         result?: Record<string, unknown>;
     }>('/api/token/creditToken/generate', {
         method: 'POST',
-        body: JSON.stringify(buildCreditTokenPayload(input)),
-    });
+        body: JSON.stringify(buildCreditTokenPayload(input, { isS2 })),
+    }, input.oemId ?? undefined);
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'token_generation_failed');
     const data = (response.result || response.data || response) as Record<string, unknown>;
     const token = String(data.token || data.tokenFirst || '').trim();
@@ -526,6 +698,8 @@ export interface RemoteSendInput {
     protocolVersion?: string | null;
     token: string;
     reference: string;
+    /** Phase 6: which OEM to dispatch the remote-send task against. */
+    oemId?: string | null;
 }
 
 export interface RemoteSendResult {
@@ -658,6 +832,7 @@ async function waitForRemoteTokenTerminal(input: RemoteSendInput & { taskId: str
                 method: 'POST',
                 body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
             },
+            input.oemId ?? undefined,
         );
         if (!upstreamSucceeded(lookupResponse)) throw upstreamFailure(lookupResponse, 'remote_status_failed');
         const row = taskRowForRemoteSend(lookupResponse, input);
@@ -681,6 +856,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
             method: 'POST',
             body: JSON.stringify(buildRemoteTokenTaskPayload(input)),
         },
+        input.oemId ?? undefined,
     );
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_send_failed');
     let confirmPayload = buildRemoteTaskConfirmPayload(response);
@@ -697,6 +873,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
                 method: 'POST',
                 body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
             },
+            input.oemId ?? undefined,
         );
         if (!upstreamSucceeded(lookupResponse)) throw upstreamFailure(lookupResponse, 'remote_send_lookup_failed');
         confirmPayload = buildRemoteTokenStandbyConfirmPayload(lookupResponse, input);
@@ -709,6 +886,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
                 method: 'POST',
                 body: JSON.stringify(confirmPayload),
             },
+            input.oemId ?? undefined,
         );
         if (!upstreamSucceeded(confirmResponse) && !isAcceptedRemoteConfirm(confirmResponse)) {
             throw upstreamFailure(confirmResponse, 'remote_send_confirm_failed');
@@ -721,7 +899,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
     return finalTask;
 }
 
-export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick<RemoteSendInput, 'meterId' | 'token'>> = {}): Promise<RemoteSendResult> {
+export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick<RemoteSendInput, 'meterId' | 'token' | 'oemId'>> = {}): Promise<RemoteSendResult> {
     const response = await energyCall<{
         code?: number;
         msg?: string;
@@ -734,6 +912,7 @@ export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick
             method: 'POST',
             body: JSON.stringify(context.meterId ? buildRemoteTokenTaskLookupPayload({ meterId: context.meterId }) : { taskId, pageNumber: 1, pageSize: 10, orderBy: 'createDate desc' }),
         },
+        context.oemId ?? undefined,
     );
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_status_failed');
     const row = taskRowForRemoteSend(response, { meterId: context.meterId ?? '', token: context.token ?? '', taskId }) || collectTaskRows(response).find((item) => Number(item.id ?? item.taskId ?? item.recordId) === Number(taskId));

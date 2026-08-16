@@ -33,7 +33,7 @@ assert.strictEqual(bar.yAxis.type, "value");
 assert.strictEqual(bar.animation, true);
 assert.strictEqual(bar.series[0].animationDuration, 1200);
 assert.strictEqual(bar.series[0].animationEasing, "elasticOut");
-assert.strictEqual(bar.series[0].universalTransition, true);
+assert.strictEqual(bar.series[0].universalTransition, undefined);
 assert.strictEqual(bar.series[0].itemStyle.color, "#059669");
 assert.strictEqual(typeof bar.series[0].itemStyle.color, "string");
 assert.strictEqual(themed.series[0].itemStyle.color, "#047857");
@@ -65,6 +65,9 @@ assert(echartPanel.includes("echart-canvas"));
 assert(echartPanel.includes("loadECharts"));
 assert(echartPanel.includes("setOption"));
 assert(echartPanel.includes("resize"));
+assert(echartPanel.includes("ResizeObserver"));
+assert(echartPanel.includes("resizeObserver.observe(this.$refs.chart)"));
+assert(echartPanel.includes("resizeObserver.disconnect()"));
 assert(echartPanel.includes("createBarBaseline"));
 assert(echartPanel.includes("createBarRiseOption"));
 assert(echartPanel.includes("shouldReplayChart"));
@@ -72,6 +75,7 @@ assert(echartPanel.includes("createChartBaseline"));
 assert(echartPanel.includes("createChartRiseOption"));
 assert(echartPanel.includes('"bar", "line", "pie"'));
 assert(!echartPanel.includes('"macarons"'));
+assert(!echartPanel.includes("dashboard-avatar-rise"));
 
 console.log(JSON.stringify({
   charts: 3,

@@ -1,4 +1,4 @@
-import { getCookie, liveWritesAllowed, postApi, uploadApi } from "./api.js";
+import { liveWritesAllowed, postApi, uploadApi } from "./api.js";
 import { mapActionResponse, mapWriteLog } from "./mappers/action-mapper.mjs";
 import { managementFields } from "./management-forms.mjs";
 import { buildWritePayload, isWriteEndpoint, validateWriteForm } from "./write-helpers.mjs";
@@ -10,8 +10,6 @@ export function actionEndpoint(route, action, uploadMode = false) {
   if (uploadMode) return "/api/File/Upload";
   if (action === "Recharge") return "/api/token/creditToken/generate";
   if (action === "Cancel" && route.hash.includes("credit-token-record") && !route.hash.includes("clear-credit")) return "/api/token/creditTokenRecord/cancel";
-  if (action === "Cancel" && route.hash.includes("clear-tamper-token-record")) return "/api/token/clearTamperTokenRecord/cancel";
-  if (action === "Cancel" && route.hash.includes("set-maximum-power-limit-token-record")) return "/api/token/setMaximumPowerLimitTokenRecord/cancel";
   if (action === "Generate Token" && route.hash.includes("clear-credit")) return "/api/token/clearCreditToken/generate";
   if (action === "Generate Token" && route.hash.includes("clear-tamper")) return "/api/token/clearTamperToken/generate";
   if (action === "Generate Token" && route.hash.includes("set-maximum-power-limit")) return "/api/token/setMaximumPowerLimitToken/generate";
@@ -52,46 +50,46 @@ function auditMeta(route, action, form) {
   };
 }
 
+const IMPORT_FIELD_ALIASES = {
+  "/api/gateway/import": { id: "gatewayId", name: "gatewayName" },
+  "/api/customer/import": { id: "customerId", name: "customerName" },
+  "/api/tariff/import": { id: "tariffId", name: "tariffName" },
+  "/api/meter/import": { meterType: "type" },
+  "/api/dlms/import": { id: "dlmsId", name: "nameEN" }
+};
+
+const IMPORT_SYSTEM_FIELDS = new Set(["createDate", "updateDate"]);
+const IMPORT_EMPTY_FIELD_DEFAULTS = {
+  "/api/account/import": new Set(["remark"])
+};
+
+function importPayload(endpoint, importRows = []) {
+  const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
+  const emptyFieldDefaults = IMPORT_EMPTY_FIELD_DEFAULTS[endpoint] || new Set();
+  return importRows.map((row) => Object.entries(row).reduce((mapped, [key, value]) => {
+    if (IMPORT_SYSTEM_FIELDS.has(key)) return mapped;
+    const target = aliases[key] || key;
+    let text = String(value ?? "").trim();
+    if (target === "ctRatio") {
+      let numVal = Number(text);
+      if (text && text.includes("/")) {
+        const parts = text.split("/").map(Number);
+        if (parts.length === 2 && parts[1] !== 0 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          numVal = parts[0] / parts[1];
+        }
+      }
+      text = Number.isFinite(numVal) && numVal > 0 ? String(numVal) : "1";
+    }
+    if (text || emptyFieldDefaults.has(target)) mapped[target] = text;
+    return mapped;
+  }, {}));
+}
+
 function requestHeaders(route, action) {
   return {
     "X-Route-Hash": String(route?.hash || ""),
     "X-Route-Action": String(action || "")
   };
-}
-
-const mirrorUserWriteOrigin = (import.meta.env?.VITE_USER_MIRROR_ORIGIN || "http://8.208.16.168:9311").replace(/\/+$/, "");
-const mirrorUserWriteEnabled = String(import.meta.env?.VITE_USER_MIRROR_ENABLED || "true").toLowerCase() !== "false";
-
-function shouldMirrorUserWrite(route, action, endpoint) {
-  if (!mirrorUserWriteEnabled) return false;
-  const hash = String(route?.hash || "");
-  const roleOrUserRoute = hash.includes("admin/user") || hash.includes("admin/role");
-  if (!roleOrUserRoute) return false;
-  if (!["Add", "Edit", "Delete"].includes(action)) return false;
-  return Boolean(endpoint && (endpoint.startsWith("/api/user/") || endpoint.startsWith("/api/role/")));
-}
-
-async function mirrorUserWrite(route, action, endpoint, payload) {
-  const token = getCookie("token");
-  const response = await fetch(`${mirrorUserWriteOrigin}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...requestHeaders(route, action),
-    },
-    body: JSON.stringify(payload || {}),
-  });
-
-  let json = null;
-  try { json = await response.json(); } catch { json = null; }
-
-  const responseCode = Number(json?.code);
-  const failedByCode = Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200;
-  if (!response.ok || failedByCode) {
-    const reason = json?.reason || json?.msg || json?.message || `HTTP ${response.status}`;
-    throw new Error(`Remote user sync failed: ${reason}`);
-  }
 }
 
 function formDataPayload(route, action, form, selectedFile) {
@@ -211,6 +209,8 @@ export async function submitRouteAction(route, action, form, options = {}) {
 
   const payload = isRemoteTaskConfirm(route, action)
     ? remoteTaskConfirmPayloadFromRow(form)
+    : action === "Import" && /\/api\/.+\/import$/i.test(endpoint)
+    ? importPayload(endpoint, importRows)
     : action === "Import"
     ? buildWritePayload(endpoint, { ...form, ...meta, rows: importRows, items: importRows }, fields)
     : writeAction
@@ -220,23 +220,46 @@ export async function submitRouteAction(route, action, form, options = {}) {
     throw new Error("task id is required");
   }
   const requestLog = mapWriteLog(endpoint, payload, uploadMode ? { ...meta, fileName: form.fileName, fileSize: selectedFile?.size || 0 } : null);
-  if (!uploadMode && shouldMirrorUserWrite(route, action, endpoint)) {
-    await mirrorUserWrite(route, action, endpoint, payload);
-  }
-
   const response = uploadMode
     ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint
       ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
       : { data: {} };
   const responseCode = Number(response?.code);
-  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !isRemoteTaskConfirmAccepted(response, route, action)) {
+  // 202 means the proxy could not reach upstream and queued the rows locally.
+  // That is not a success and not an error — it is reported as "queued" so the
+  // caller can tell the operator the records are not live yet.
+  const queued = responseCode === 202;
+  // 207 means some rows went live and some were rejected; both counts are
+  // reported rather than collapsing the batch into one success or one failure.
+  const partial = responseCode === 207;
+  if (Number.isFinite(responseCode) && responseCode !== 0 && responseCode !== 200 && !queued && !partial && !isRemoteTaskConfirmAccepted(response, route, action)) {
     throw new Error(response?.reason || response?.msg || `Request failed with code ${responseCode}`);
+  }
+
+  // After successful user create, reset on upstream so the password is registered there too.
+  // The upstream UserCreateRequest schema has no password field, so a reset call is needed
+  // to initialise the account on systems that share the same upstream API.
+  if (endpoint === "/api/user/create" && action === "Add" && payload.userId) {
+    try {
+      await api.postApi("/api/user/reset", { userId: payload.userId });
+    } catch {
+      // Non-fatal — user is created; reset failure only affects upstream password sync
+    }
   }
   if (isCustomerDelete(route, action)) {
     await verifyCustomerDeleted(form, api);
   }
   const mapped = mapActionResponse(response, action, isRemoteTaskConfirmAccepted(response, route, action) ? "submitted" : "success");
+  const summary = response?.result || response?.data || {};
+  const queuedCount = Number(summary.pendingCount || 0);
+  const syncedCount = Number(summary.synced || 0);
+  const failedCount = Number(summary.failed || 0);
+  const resultText = queued
+    ? `Queued ${queuedCount || (Array.isArray(payload) ? payload.length : 1)} row(s) — upstream unreachable, not live yet`
+    : partial
+      ? `${syncedCount} row(s) live, ${failedCount} rejected by the API`
+      : mapped.resultText;
 
   return {
     endpoint,
@@ -244,6 +267,11 @@ export async function submitRouteAction(route, action, form, options = {}) {
     requestLog,
     responseLog: response,
     mapped,
-    resultText: mapped.resultText
+    queued,
+    partial,
+    queuedCount,
+    syncedCount,
+    failedCount,
+    resultText
   };
 }

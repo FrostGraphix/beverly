@@ -25,7 +25,10 @@ interface AccessResponse {
     staff: unknown[];
 }
 
-const STAFF_ROLES = ['super-admin', 'operations-manager', 'finance-checker', 'account'];
+// System roles first, in a stable order; every other role (custom ones created
+// from Roles & Team) follows alphabetically. Filtering to a fixed list here
+// silently hid custom roles from this matrix.
+const SYSTEM_ROLE_ORDER = ['super-admin', 'operations-manager', 'finance-checker', 'account'];
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -81,9 +84,13 @@ function riskClass(r: string) {
     return ({ critical: 'danger', high: 'warn', medium: 'info', low: 'neutral' } as Record<string, string>)[r] ?? 'neutral';
 }
 
-const displayRoles = computed(() =>
-    STAFF_ROLES.filter((k) => roles.value.some((r) => r.role_key === k)),
-);
+const displayRoles = computed(() => [
+    ...SYSTEM_ROLE_ORDER.filter((k) => roles.value.some((r) => r.role_key === k)),
+    ...roles.value
+        .map((r) => r.role_key)
+        .filter((k) => !SYSTEM_ROLE_ORDER.includes(k))
+        .sort(),
+]);
 
 async function load() {
     loading.value = true;
@@ -109,7 +116,7 @@ onMounted(load);
     <div v-if="error" class="bw-banner error">{{ error }}</div>
 
     <!-- Risk summary -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile">
         <p class="kpi-label">Total permissions</p>
         <p class="kpi-value">{{ catalog.length }}</p>
@@ -199,7 +206,7 @@ onMounted(load);
 .empty { text-align: center; padding: var(--s-6); }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
-.kpi-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); }
+.kpi-tile { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: var(--s-4); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
 .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
 .kpi-value { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-xl); margin: 0; }
 .kpi-sub { font-size: var(--t-xs); color: var(--text-muted); margin: 4px 0 0; }

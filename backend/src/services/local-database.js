@@ -10,6 +10,12 @@ try {
   DatabaseSync = null;
 }
 
+const {
+  isExplicitStationId,
+  mergeDerivedWithCanonical,
+  canonicalStationRows
+} = require("./oem-station-fallback");
+
 const defaultDatabasePath = path.resolve(__dirname, "..", "..", "..", "tmp", "reference-crm.sqlite");
 
 let database = null;
@@ -43,7 +49,13 @@ function createMemoryStore() {
     wallet_approval_requests: [],
     wallet_reconciliation_runs: [],
     wallet_risk_events: [],
-    sms_notifications: []
+    sms_notifications: [],
+    meter_token_overrides: new Map(),
+    sgc_token_rules: new Map(),
+    oem_manufacturers: new Map(),
+    oem_endpoint_configs: new Map(),
+    oem_credentials: new Map(),
+    oem_station_mappings: new Map()
   };
 }
 
@@ -468,10 +480,685 @@ function ensureDatabase() {
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS meter_token_overrides (
+      meter_id TEXT PRIMARY KEY,
+      is_s2 INTEGER NOT NULL,
+      note TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sgc_token_rules (
+      sgc TEXT PRIMARY KEY,
+      is_s2 INTEGER NOT NULL,
+      note TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_manufacturers (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      logo_storage_path TEXT,
+      status TEXT NOT NULL,
+      is_seed_default INTEGER NOT NULL DEFAULT 0,
+      capabilities_json TEXT NOT NULL DEFAULT '{}',
+      vending_strategy TEXT NOT NULL DEFAULT 'sts_token',
+      rate_limit_window_ms INTEGER,
+      rate_limit_max_requests INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_endpoint_configs (
+      oem_id TEXT NOT NULL,
+      logical_key TEXT NOT NULL,
+      upstream_path TEXT NOT NULL,
+      method TEXT NOT NULL,
+      casing_variant TEXT,
+      request_field_map TEXT NOT NULL DEFAULT '{}',
+      response_field_map TEXT NOT NULL DEFAULT '{}',
+      payload_shape TEXT NOT NULL DEFAULT '{}',
+      pagination_style TEXT,
+      requires_live_read INTEGER NOT NULL DEFAULT 0,
+      is_write_override INTEGER,
+      adapter_fn_name TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (oem_id, logical_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_credentials (
+      oem_id TEXT PRIMARY KEY,
+      auth_strategy TEXT NOT NULL,
+      base_url TEXT,
+      encrypted_bearer_token TEXT,
+      encrypted_client_secret TEXT,
+      encrypted_username TEXT,
+      encrypted_password TEXT,
+      token_endpoint_path TEXT,
+      api_key_header_name TEXT,
+      encryption_key_version INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS oem_station_mappings (
+      oem_id TEXT NOT NULL,
+      station_id TEXT NOT NULL,
+      community_label TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (oem_id, station_id)
+    );
   `);
+
+  // Lightweight ADD COLUMN migration for existing local dev SQLite files created
+  // before a column existed — CREATE TABLE IF NOT EXISTS above only helps fresh
+  // databases. SQLite has no "ADD COLUMN IF NOT EXISTS"; swallow the duplicate-
+  // column error instead. Safe to run on every start.
+  ensureColumnExists(database, "oem_credentials", "api_key_header_name", "TEXT");
 
   seedSecurityTables(database);
   return database;
+}
+
+function ensureColumnExists(db, table, column, definition) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/duplicate column name/i.test(message)) throw error;
+  }
+}
+
+// ── Meter token-format (STS S1/S2) per-meter overrides ──────────────────────
+// The token "isS2" flag is normally guessed from meter phase, but phase does not
+// reliably map to the STS standard. These rows pin the correct format per meter.
+function getMeterTokenOverride(meterId) {
+  const id = String(meterId || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.meter_token_overrides.get(id) || null;
+  }
+  const row = db.prepare(
+    "SELECT meter_id, is_s2, note, updated_by, updated_at FROM meter_token_overrides WHERE meter_id = ?"
+  ).get(id);
+  if (!row) return null;
+  return {
+    meterId: row.meter_id,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+function setMeterTokenOverride(entry = {}) {
+  const id = String(entry.meterId || "").trim();
+  if (!id) throw new Error("meterId is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+
+  // null/undefined isS2 clears the override (revert to phase-derived default).
+  if (entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto") {
+    if (isMemoryDatabase(db)) {
+      db.memoryStore.meter_token_overrides.delete(id);
+    } else {
+      db.prepare("DELETE FROM meter_token_overrides WHERE meter_id = ?").run(id);
+    }
+    return { meterId: id, cleared: true };
+  }
+
+  const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+  const record = {
+    meterId: id,
+    isS2,
+    note: String(entry.note || ""),
+    updatedBy: String(entry.updatedBy || ""),
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.meter_token_overrides.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO meter_token_overrides (meter_id, is_s2, note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(meter_id) DO UPDATE SET
+      is_s2 = excluded.is_s2,
+      note = excluded.note,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(id, isS2 ? 1 : 0, record.note, record.updatedBy, timestamp);
+  return record;
+}
+
+function listMeterTokenOverrides() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.meter_token_overrides.values());
+  }
+  return db.prepare(
+    "SELECT meter_id, is_s2, note, updated_by, updated_at FROM meter_token_overrides ORDER BY updated_at DESC"
+  ).all().map((row) => ({
+    meterId: row.meter_id,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  }));
+}
+
+// ── SGC-level token-format rules ────────────────────────────────────────────
+// STS standard is uniform within a Supply Group Code, so one rule covers a whole
+// group of meters. Resolution order: per-meter override → SGC rule → phase guess.
+function getSgcTokenRule(sgc) {
+  const id = String(sgc || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.sgc_token_rules.get(id) || null;
+  }
+  const row = db.prepare(
+    "SELECT sgc, is_s2, note, updated_by, updated_at FROM sgc_token_rules WHERE sgc = ?"
+  ).get(id);
+  if (!row) return null;
+  return { sgc: row.sgc, isS2: row.is_s2 === 1, note: row.note || "", updatedBy: row.updated_by || "", updatedAt: row.updated_at };
+}
+
+function setSgcTokenRule(entry = {}) {
+  const id = String(entry.sgc || "").trim();
+  if (!id) throw new Error("sgc is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  if (entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto") {
+    if (isMemoryDatabase(db)) {
+      db.memoryStore.sgc_token_rules.delete(id);
+    } else {
+      db.prepare("DELETE FROM sgc_token_rules WHERE sgc = ?").run(id);
+    }
+    return { sgc: id, cleared: true };
+  }
+  const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+  const record = { sgc: id, isS2, note: String(entry.note || ""), updatedBy: String(entry.updatedBy || ""), updatedAt: timestamp };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.sgc_token_rules.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO sgc_token_rules (sgc, is_s2, note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(sgc) DO UPDATE SET
+      is_s2 = excluded.is_s2,
+      note = excluded.note,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at
+  `).run(id, isS2 ? 1 : 0, record.note, record.updatedBy, timestamp);
+  return record;
+}
+
+function listSgcTokenRules() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.sgc_token_rules.values());
+  }
+  return db.prepare(
+    "SELECT sgc, is_s2, note, updated_by, updated_at FROM sgc_token_rules ORDER BY updated_at DESC"
+  ).all().map((row) => ({
+    sgc: row.sgc,
+    isS2: row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  }));
+}
+
+// ── OEM manufacturer registry ───────────────────────────────────────────────
+// One row per meter manufacturer (Calinmeter, Sparkmeter, Ihemeter, ...). This is
+// the top-level tenant entity the multi-OEM proxy resolves per request.
+function mapOemManufacturerRow(row) {
+  if (!row) return null;
+  let capabilities = {};
+  try {
+    capabilities = typeof row.capabilities_json === "string" ? JSON.parse(row.capabilities_json || "{}") : (row.capabilities || {});
+  } catch {
+    capabilities = {};
+  }
+  const isSeedDefault = row.is_seed_default === 1 || row.is_seed_default === true || row.slug === "calinmeter";
+  const hasCapabilities = capabilities && typeof capabilities === "object" && Object.values(capabilities).some(Boolean);
+  if (!hasCapabilities || isSeedDefault) {
+    capabilities = {
+      remote_meter_task: true,
+      tariff_management: true,
+      gprs_support: true,
+      event_notification: true,
+      load_profile: true,
+      firmware_update: true,
+      dlms_protocol: true,
+      dlt645_protocol: true,
+      wallet_vending: true,
+      ...capabilities
+    };
+  }
+  return {
+    id: row.id,
+    slug: row.slug,
+    displayName: row.display_name,
+    logoStoragePath: row.logo_storage_path || "",
+    status: row.status,
+    isSeedDefault,
+    capabilities,
+    vendingStrategy: row.vending_strategy || "sts_token",
+    rateLimitWindowMs: row.rate_limit_window_ms || null,
+    rateLimitMaxRequests: row.rate_limit_max_requests || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function getOemManufacturer(idOrSlug) {
+  const key = String(idOrSlug || "").trim();
+  if (!key) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    const byId = db.memoryStore.oem_manufacturers.get(key);
+    if (byId) return byId;
+    for (const record of db.memoryStore.oem_manufacturers.values()) {
+      if (record.slug === key) return record;
+    }
+    return null;
+  }
+  const row = db.prepare(
+    "SELECT * FROM oem_manufacturers WHERE id = ? OR slug = ? LIMIT 1"
+  ).get(key, key);
+  return mapOemManufacturerRow(row);
+}
+
+function listOemManufacturers() {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_manufacturers.values());
+  }
+  return db.prepare("SELECT * FROM oem_manufacturers ORDER BY created_at ASC").all().map(mapOemManufacturerRow);
+}
+
+function upsertOemManufacturer(entry = {}) {
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const slug = String(entry.slug || "").trim().toLowerCase();
+  if (!slug) throw new Error("slug is required");
+  const existing = getOemManufacturer(entry.id || slug);
+  const id = existing?.id || entry.id || crypto.randomUUID();
+  const record = {
+    id,
+    slug,
+    displayName: String(entry.displayName || slug),
+    logoStoragePath: String(entry.logoStoragePath || ""),
+    status: String(entry.status || "draft"),
+    isSeedDefault: Boolean(entry.isSeedDefault),
+    capabilities: entry.capabilities && typeof entry.capabilities === "object" ? entry.capabilities : {},
+    vendingStrategy: String(entry.vendingStrategy || "sts_token"),
+    rateLimitWindowMs: entry.rateLimitWindowMs != null ? Number(entry.rateLimitWindowMs) : null,
+    rateLimitMaxRequests: entry.rateLimitMaxRequests != null ? Number(entry.rateLimitMaxRequests) : null,
+    createdAt: existing?.createdAt || timestamp,
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_manufacturers.set(id, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_manufacturers (
+      id, slug, display_name, logo_storage_path, status, is_seed_default,
+      capabilities_json, vending_strategy, rate_limit_window_ms, rate_limit_max_requests,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      slug = excluded.slug,
+      display_name = excluded.display_name,
+      logo_storage_path = excluded.logo_storage_path,
+      status = excluded.status,
+      is_seed_default = excluded.is_seed_default,
+      capabilities_json = excluded.capabilities_json,
+      vending_strategy = excluded.vending_strategy,
+      rate_limit_window_ms = excluded.rate_limit_window_ms,
+      rate_limit_max_requests = excluded.rate_limit_max_requests,
+      updated_at = excluded.updated_at
+  `).run(
+    id, record.slug, record.displayName, record.logoStoragePath, record.status,
+    record.isSeedDefault ? 1 : 0, JSON.stringify(record.capabilities), record.vendingStrategy,
+    record.rateLimitWindowMs, record.rateLimitMaxRequests, record.createdAt, timestamp
+  );
+  return record;
+}
+
+function deleteOemManufacturer(idOrSlug) {
+  const existing = getOemManufacturer(idOrSlug);
+  if (!existing) return { deleted: false };
+  const db = ensureDatabase();
+  const oemId = existing.id;
+  if (isMemoryDatabase(db)) {
+    // Mirror Supabase's ON DELETE CASCADE — remove dependent rows locally too,
+    // otherwise deleting an OEM would orphan its credentials/endpoints/mappings.
+    db.memoryStore.oem_manufacturers.delete(oemId);
+    db.memoryStore.oem_credentials.delete(oemId);
+    for (const key of Array.from(db.memoryStore.oem_endpoint_configs.keys())) {
+      if (key.startsWith(`${oemId}::`)) db.memoryStore.oem_endpoint_configs.delete(key);
+    }
+    for (const key of Array.from(db.memoryStore.oem_station_mappings.keys())) {
+      if (key.startsWith(`${oemId}::`)) db.memoryStore.oem_station_mappings.delete(key);
+    }
+  } else {
+    db.prepare("DELETE FROM oem_endpoint_configs WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_credentials WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_station_mappings WHERE oem_id = ?").run(oemId);
+    db.prepare("DELETE FROM oem_manufacturers WHERE id = ?").run(oemId);
+  }
+  return { deleted: true, id: oemId };
+}
+
+// ── OEM endpoint configuration ──────────────────────────────────────────────
+// One row per (oemId, logicalKey) — the declarative mapping from a stable internal
+// operation name to that OEM's real upstream path/method/casing/field shape.
+function mapOemEndpointConfigRow(row) {
+  if (!row) return null;
+  const parseJson = (value) => {
+    try {
+      return JSON.parse(value || "{}");
+    } catch {
+      return {};
+    }
+  };
+  return {
+    oemId: row.oem_id,
+    logicalKey: row.logical_key,
+    upstreamPath: row.upstream_path,
+    method: row.method,
+    casingVariant: row.casing_variant || "",
+    requestFieldMap: parseJson(row.request_field_map),
+    responseFieldMap: parseJson(row.response_field_map),
+    payloadShape: parseJson(row.payload_shape),
+    paginationStyle: row.pagination_style || "none",
+    requiresLiveRead: row.requires_live_read === 1,
+    isWriteOverride: row.is_write_override === null || row.is_write_override === undefined ? null : row.is_write_override === 1,
+    adapterFnName: row.adapter_fn_name || "",
+    enabled: row.enabled === 1,
+    updatedAt: row.updated_at
+  };
+}
+
+function endpointConfigKey(oemId, logicalKey) {
+  return `${String(oemId || "").trim()}::${String(logicalKey || "").trim()}`;
+}
+
+function getOemEndpointConfig(oemId, logicalKey) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.oem_endpoint_configs.get(endpointConfigKey(oemId, logicalKey)) || null;
+  }
+  const row = db.prepare(
+    "SELECT * FROM oem_endpoint_configs WHERE oem_id = ? AND logical_key = ?"
+  ).get(String(oemId || ""), String(logicalKey || ""));
+  return mapOemEndpointConfigRow(row);
+}
+
+function listOemEndpointConfigs(oemId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return Array.from(db.memoryStore.oem_endpoint_configs.values()).filter((row) => row.oemId === oemId);
+  }
+  return db.prepare(
+    "SELECT * FROM oem_endpoint_configs WHERE oem_id = ? ORDER BY logical_key ASC"
+  ).all(String(oemId || "")).map(mapOemEndpointConfigRow);
+}
+
+function upsertOemEndpointConfig(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  const logicalKey = String(entry.logicalKey || "").trim();
+  if (!oemId || !logicalKey) throw new Error("oemId and logicalKey are required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = {
+    oemId,
+    logicalKey,
+    upstreamPath: String(entry.upstreamPath || ""),
+    method: String(entry.method || "GET").toUpperCase(),
+    casingVariant: String(entry.casingVariant || ""),
+    requestFieldMap: entry.requestFieldMap && typeof entry.requestFieldMap === "object" ? entry.requestFieldMap : {},
+    responseFieldMap: entry.responseFieldMap && typeof entry.responseFieldMap === "object" ? entry.responseFieldMap : {},
+    payloadShape: entry.payloadShape && typeof entry.payloadShape === "object" ? entry.payloadShape : {},
+    paginationStyle: String(entry.paginationStyle || "none"),
+    requiresLiveRead: Boolean(entry.requiresLiveRead),
+    isWriteOverride: entry.isWriteOverride === null || entry.isWriteOverride === undefined ? null : Boolean(entry.isWriteOverride),
+    adapterFnName: String(entry.adapterFnName || ""),
+    enabled: entry.enabled !== false,
+    updatedAt: timestamp
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_endpoint_configs.set(endpointConfigKey(oemId, logicalKey), record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_endpoint_configs (
+      oem_id, logical_key, upstream_path, method, casing_variant,
+      request_field_map, response_field_map, payload_shape, pagination_style,
+      requires_live_read, is_write_override, adapter_fn_name, enabled, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(oem_id, logical_key) DO UPDATE SET
+      upstream_path = excluded.upstream_path,
+      method = excluded.method,
+      casing_variant = excluded.casing_variant,
+      request_field_map = excluded.request_field_map,
+      response_field_map = excluded.response_field_map,
+      payload_shape = excluded.payload_shape,
+      pagination_style = excluded.pagination_style,
+      requires_live_read = excluded.requires_live_read,
+      is_write_override = excluded.is_write_override,
+      adapter_fn_name = excluded.adapter_fn_name,
+      enabled = excluded.enabled,
+      updated_at = excluded.updated_at
+  `).run(
+    oemId, logicalKey, record.upstreamPath, record.method, record.casingVariant,
+    JSON.stringify(record.requestFieldMap), JSON.stringify(record.responseFieldMap), JSON.stringify(record.payloadShape),
+    record.paginationStyle, record.requiresLiveRead ? 1 : 0,
+    record.isWriteOverride === null ? null : (record.isWriteOverride ? 1 : 0),
+    record.adapterFnName, record.enabled ? 1 : 0, timestamp
+  );
+  return record;
+}
+
+function deleteOemEndpointConfig(oemId, logicalKey) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return { deleted: db.memoryStore.oem_endpoint_configs.delete(endpointConfigKey(oemId, logicalKey)) };
+  }
+  const result = db.prepare("DELETE FROM oem_endpoint_configs WHERE oem_id = ? AND logical_key = ?").run(String(oemId || ""), String(logicalKey || ""));
+  return { deleted: (result.changes || 0) > 0 };
+}
+
+// ── OEM credentials (encrypted at rest by the caller — this layer is storage-only) ──
+function mapOemCredentialsRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    authStrategy: row.auth_strategy,
+    baseUrl: row.base_url || "",
+    encryptedBearerToken: row.encrypted_bearer_token || "",
+    encryptedClientSecret: row.encrypted_client_secret || "",
+    encryptedUsername: row.encrypted_username || "",
+    encryptedPassword: row.encrypted_password || "",
+    tokenEndpointPath: row.token_endpoint_path || "",
+    apiKeyHeaderName: row.api_key_header_name || "",
+    encryptionKeyVersion: row.encryption_key_version || 1,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by || ""
+  };
+}
+
+function getOemCredentials(oemId) {
+  const id = String(oemId || "").trim();
+  if (!id) return null;
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.oem_credentials.get(id) || null;
+  }
+  return mapOemCredentialsRow(db.prepare("SELECT * FROM oem_credentials WHERE oem_id = ?").get(id));
+}
+
+function upsertOemCredentials(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  if (!oemId) throw new Error("oemId is required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = {
+    oemId,
+    authStrategy: String(entry.authStrategy || "bearer_static"),
+    baseUrl: String(entry.baseUrl || ""),
+    encryptedBearerToken: String(entry.encryptedBearerToken || ""),
+    encryptedClientSecret: String(entry.encryptedClientSecret || ""),
+    encryptedUsername: String(entry.encryptedUsername || ""),
+    encryptedPassword: String(entry.encryptedPassword || ""),
+    tokenEndpointPath: String(entry.tokenEndpointPath || ""),
+    apiKeyHeaderName: String(entry.apiKeyHeaderName || ""),
+    encryptionKeyVersion: Number(entry.encryptionKeyVersion || 1),
+    updatedAt: timestamp,
+    updatedBy: String(entry.updatedBy || "")
+  };
+  if (isMemoryDatabase(db)) {
+    db.memoryStore.oem_credentials.set(oemId, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_credentials (
+      oem_id, auth_strategy, base_url, encrypted_bearer_token, encrypted_client_secret,
+      encrypted_username, encrypted_password, token_endpoint_path, api_key_header_name, encryption_key_version,
+      updated_at, updated_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(oem_id) DO UPDATE SET
+      auth_strategy = excluded.auth_strategy,
+      base_url = excluded.base_url,
+      encrypted_bearer_token = excluded.encrypted_bearer_token,
+      encrypted_client_secret = excluded.encrypted_client_secret,
+      encrypted_username = excluded.encrypted_username,
+      encrypted_password = excluded.encrypted_password,
+      token_endpoint_path = excluded.token_endpoint_path,
+      api_key_header_name = excluded.api_key_header_name,
+      encryption_key_version = excluded.encryption_key_version,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  `).run(
+    oemId, record.authStrategy, record.baseUrl, record.encryptedBearerToken, record.encryptedClientSecret,
+    record.encryptedUsername, record.encryptedPassword, record.tokenEndpointPath, record.apiKeyHeaderName, record.encryptionKeyVersion,
+    timestamp, record.updatedBy
+  );
+  return record;
+}
+
+// ── OEM station/community mappings (drives the "installed in N communities" count) ──
+function stationMappingKey(oemId, stationId) {
+  return `${String(oemId || "").trim()}::${String(stationId || "").trim().toUpperCase()}`;
+}
+
+function isSeedOrCalinOem(oemId, oemSlug) {
+  if (!oemId && !oemSlug) return true;
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed")) return true;
+  try {
+    const oem = getOemManufacturer(oemId);
+    if (!oem) return false;
+    if (oem.isSeedDefault || String(oem.slug || "").toLowerCase().includes("calin")) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function listOemStationMappings(oemId, oemSlug) {
+  const db = ensureDatabase();
+  const slugKey = String(oemSlug || "").trim().toLowerCase();
+  const idKey = String(oemId || "").trim();
+  const seedKey = "b0e00000-0000-0000-0000-000000000001";
+  const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey
+    || ((idKey || slugKey) ? isSeedOrCalinOem(idKey, slugKey) : false);
+
+  let rows = [];
+  if (isMemoryDatabase(db)) {
+    rows = Array.from(db.memoryStore.oem_station_mappings.values()).filter(
+      (row) => row.oemId === idKey || row.oemId === slugKey || (isCalin && (row.oemId === seedKey || row.oemId === "calinmeter"))
+    );
+  } else {
+    rows = db.prepare(
+      "SELECT * FROM oem_station_mappings WHERE oem_id = ? OR oem_id = ? OR (oem_id = ? AND ?) OR (oem_id = 'calinmeter' AND ?) ORDER BY station_id ASC"
+    ).all(idKey, slugKey, seedKey, isCalin ? 1 : 0, isCalin ? 1 : 0).map((row) => ({
+      oemId: row.oem_id,
+      stationId: row.station_id,
+      communityLabel: row.community_label || row.station_id,
+      createdAt: row.created_at
+    }));
+  }
+
+  const filtered = rows.filter((r) => isExplicitStationId(r.stationId));
+  if (filtered.length > 0) return filtered;
+
+  if (isCalin) {
+    try {
+      // There is no `stations` table locally either — account_bindings.station_id
+      // is the station universe this database actually carries.
+      const stationIds = isMemoryDatabase(db)
+        ? (db.memoryStore.account_bindings || []).map((b) => b && b.stationId)
+        : db.prepare(
+          "SELECT DISTINCT station_id FROM account_bindings WHERE station_id IS NOT NULL AND station_id <> '' ORDER BY station_id ASC"
+        ).all().map((row) => row.station_id);
+
+      const live = mergeDerivedWithCanonical(oemId, stationIds);
+      if (live.length > 0) return live;
+    } catch {
+      // ignore
+    }
+
+    return canonicalStationRows(oemId);
+  }
+
+  return [];
+}
+
+function countOemStationMappings(oemId, oemSlug) {
+  return listOemStationMappings(oemId, oemSlug).length;
+}
+
+function upsertOemStationMapping(entry = {}) {
+  const oemId = String(entry.oemId || "").trim();
+  const stationId = String(entry.stationId || "").trim();
+  if (!oemId || !stationId) throw new Error("oemId and stationId are required");
+  const db = ensureDatabase();
+  const timestamp = nowIso();
+  const record = { oemId, stationId, communityLabel: String(entry.communityLabel || ""), createdAt: timestamp };
+  if (isMemoryDatabase(db)) {
+    const key = stationMappingKey(oemId, stationId);
+    const existing = db.memoryStore.oem_station_mappings.get(key);
+    if (existing) record.createdAt = existing.createdAt;
+    db.memoryStore.oem_station_mappings.set(key, record);
+    return record;
+  }
+  db.prepare(`
+    INSERT INTO oem_station_mappings (oem_id, station_id, community_label, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(oem_id, station_id) DO UPDATE SET
+      community_label = excluded.community_label
+  `).run(oemId, stationId, record.communityLabel, timestamp);
+  return record;
+}
+
+function deleteOemStationMapping(oemId, stationId) {
+  const db = ensureDatabase();
+  if (isMemoryDatabase(db)) {
+    return { deleted: db.memoryStore.oem_station_mappings.delete(stationMappingKey(oemId, stationId)) };
+  }
+  const result = db.prepare("DELETE FROM oem_station_mappings WHERE oem_id = ? AND station_id = ?").run(String(oemId || ""), String(stationId || ""));
+  return { deleted: (result.changes || 0) > 0 };
 }
 
 function cacheApiResponse(entry) {
@@ -561,6 +1248,46 @@ function recordAuditLog(entry) {
     JSON.stringify(sanitizeValue(entry.details || {})),
     nowIso()
   );
+}
+
+function listAuditLogs(options = {}) {
+  const db = ensureDatabase();
+  const limit = Math.max(1, Math.min(Number(options.limit || 100), 500));
+  const proxySource = String(options.proxySource || "");
+  if (isMemoryDatabase(db)) {
+    return db.memoryStore.audit_logs
+      .filter((row) => !proxySource || String(row.proxySource || "") === proxySource)
+      .slice(-limit)
+      .reverse()
+      .map((row) => ({
+        id: row.id || null,
+        method: String(row.method || "GET").toUpperCase(),
+        path: String(row.path || "/"),
+        outcome: String(row.outcome || "success"),
+        statusCode: Number(row.statusCode || 200),
+        proxySource: String(row.proxySource || "unknown"),
+        details: sanitizeValue(row.details || {}),
+        createdAt: row.createdAt || null
+      }));
+  }
+  const columns = "id, method, path, outcome, status_code, proxy_source, detail_json, created_at";
+  const rows = proxySource
+    ? db.prepare(`
+        SELECT ${columns} FROM audit_logs WHERE proxy_source = ? ORDER BY created_at DESC LIMIT ?
+      `).all(proxySource, limit)
+    : db.prepare(`
+        SELECT ${columns} FROM audit_logs ORDER BY created_at DESC LIMIT ?
+      `).all(limit);
+  return rows.map((row) => ({
+    id: row.id,
+    method: row.method,
+    path: row.path,
+    outcome: row.outcome,
+    statusCode: row.status_code,
+    proxySource: row.proxy_source,
+    details: parseJson(row.detail_json, {}),
+    createdAt: row.created_at
+  }));
 }
 
 function recordImportJob(entry) {
@@ -798,27 +1525,60 @@ function deleteAccountBinding(entry) {
   return Number(result.changes || 0);
 }
 
+// Rows written by the old silent-fallback path carry status "active" even
+// though they never reached upstream. Anything whose source is a fallback or a
+// rejection is unsynced by definition, whatever its stored status says.
+const unsyncedBindingSources = new Set(["local-fallback", "upstream-rejected"]);
+
+function isPendingBinding(row = {}) {
+  return String(row.status || "") === "pending" || unsyncedBindingSources.has(String(row.source || ""));
+}
+
+function accountBindingDetails(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function listAccountBindings(options = {}) {
   const db = ensureDatabase();
   const customerId = String(options.customerId || "").trim();
   const meterId = String(options.meterId || "").trim();
   const stationId = String(options.stationId || "").trim().toUpperCase();
+  const status = String(options.status || "").trim();
+  const searchTerm = String(options.searchTerm || "").trim().toLowerCase();
+  const matchesSearch = (row) => !searchTerm || [row.customerId, row.meterId, row.tariffId, row.stationId]
+    .some((value) => String(value || "").toLowerCase().includes(searchTerm));
   if (isMemoryDatabase(db)) {
     let rows = db.memoryStore.account_bindings.slice();
     if (customerId) rows = rows.filter((row) => String(row.customerId || "") === customerId);
     if (meterId) rows = rows.filter((row) => String(row.meterId || "") === meterId);
     if (stationId) rows = rows.filter((row) => String(row.stationId || "").toUpperCase() === stationId);
-    return rows.map((row) => ({
-      customerId: row.customerId,
-      meterId: row.meterId,
-      tariffId: row.tariffId,
-      ctRatio: row.ctRatio,
-      stationId: row.stationId,
-      remark: row.remark,
-      createDate: row.createdAt,
-      updateDate: row.updatedAt,
-      _localFallback: true
-    }));
+    if (status === "pending") rows = rows.filter(isPendingBinding);
+    else if (status) rows = rows.filter((row) => String(row.status || "") === status && !isPendingBinding(row));
+    return rows.filter(matchesSearch).map((row) => {
+      const details = accountBindingDetails(row.details);
+      return {
+        customerId: row.customerId,
+        meterId: row.meterId,
+        tariffId: row.tariffId,
+        ctRatio: row.ctRatio,
+        stationId: row.stationId,
+        remark: row.remark,
+        source: row.source,
+        status: row.status,
+        lastError: String(details.lastError || ""),
+        attempts: Number(details.attempts || 0),
+        createDate: row.createdAt,
+        updateDate: row.updatedAt,
+        _localFallback: true
+      };
+    });
   }
   const clauses = [];
   const params = [];
@@ -836,22 +1596,34 @@ function listAccountBindings(options = {}) {
   }
   const whereClause = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db.prepare(`
-    SELECT customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, created_at, updated_at
+    SELECT customer_id, meter_id, tariff_id, ct_ratio, station_id, remark, source, status, detail_json, created_at, updated_at
     FROM account_bindings
     ${whereClause}
     ORDER BY updated_at DESC
   `).all(...params);
-  return rows.map((row) => ({
-    customerId: row.customer_id,
-    meterId: row.meter_id,
-    tariffId: row.tariff_id,
-    ctRatio: row.ct_ratio,
-    stationId: row.station_id,
-    remark: row.remark,
-    createDate: row.created_at,
-    updateDate: row.updated_at,
-    _localFallback: true
-  }));
+  return rows.map((row) => {
+    const details = accountBindingDetails(row.detail_json);
+    return {
+      customerId: row.customer_id,
+      meterId: row.meter_id,
+      tariffId: row.tariff_id,
+      ctRatio: row.ct_ratio,
+      stationId: row.station_id,
+      remark: row.remark,
+      source: row.source,
+      status: row.status,
+      lastError: String(details.lastError || ""),
+      attempts: Number(details.attempts || 0),
+      createDate: row.created_at,
+      updateDate: row.updated_at,
+      _localFallback: true
+    };
+  }).filter((row) => {
+    if (!matchesSearch(row)) return false;
+    if (status === "pending") return isPendingBinding(row);
+    if (status) return String(row.status || "") === status && !isPendingBinding(row);
+    return true;
+  });
 }
 
 function tableCounts() {
@@ -1217,8 +1989,13 @@ module.exports = {
   databasePath,
   deleteAccountBinding,
   ensureDatabase,
+  getMeterTokenOverride,
+  getSgcTokenRule,
   getSmsNotification,
   listAccountBindings,
+  listAuditLogs,
+  listMeterTokenOverrides,
+  listSgcTokenRules,
   listImportJobs,
   listAutomationDeliveries,
   listSmsNotifications,
@@ -1232,7 +2009,23 @@ module.exports = {
   recordWriteConfirmation,
   resetForTests,
   saveAccountBinding,
+  setMeterTokenOverride,
+  setSgcTokenRule,
   tableCounts,
   updateSmsNotificationStatus,
-  writableRoot
+  writableRoot,
+  getOemManufacturer,
+  listOemManufacturers,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemEndpointConfig,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemStationMappings,
+  countOemStationMappings,
+  upsertOemStationMapping,
+  deleteOemStationMapping
 };

@@ -16,6 +16,9 @@
 
 <script>
 import BaseButton from "../base/BaseButton.vue";
+import { stationOptionsSync } from "../../services/station-registry.mjs";
+
+const COLORS = ["#40c9c6", "#10b981", "#f4516c", "#34bfa3", "#ffb822"];
 
 export default {
   name: "SiteSidebar",
@@ -26,15 +29,15 @@ export default {
   },
   computed: {
     stations() {
-      const all = [
+      return [
         { id: null,      label: "All Sites", color: "var(--primary)",  count: null },
-        { id: "TUNGA",   label: "Tunga",     color: "#40c9c6",         count: this.accountCounts["TUNGA"]   ?? null },
-        { id: "UMAISHA", label: "Umaisha",   color: "#10b981",         count: this.accountCounts["UMAISHA"] ?? null },
-        { id: "OGUFA",   label: "Ogufa",     color: "#f4516c",         count: this.accountCounts["OGUFA"]   ?? null },
-        { id: "KYAKALE", label: "Kyakale",   color: "#34bfa3",         count: this.accountCounts["KYAKALE"] ?? null },
-        { id: "MUSHA",   label: "Musha",     color: "#ffb822",         count: this.accountCounts["MUSHA"]   ?? null },
+        ...stationOptionsSync().map((station, index) => ({
+          id: station.stationId,
+          label: station.label,
+          color: COLORS[index % COLORS.length],
+          count: this.accountCounts[station.stationId] ?? null
+        }))
       ];
-      return all;
     }
   }
 };

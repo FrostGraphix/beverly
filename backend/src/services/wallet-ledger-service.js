@@ -430,6 +430,27 @@ function walletSummary(walletId) {
   };
 }
 
+function activitySummary(walletId) {
+  const wallet = walletById(walletId);
+  if (!wallet) throw new Error("Wallet not found");
+  const entries = ledgerRows(wallet.id);
+  const todayKey = nowIso().slice(0, 10);
+  const isToday = (entry) => String(entry.createdAt || "").slice(0, 10) === todayKey;
+  const sum = (list) => list.reduce((total, entry) => total + Number(entry.amountMinor || 0), 0);
+  const vended = entries.filter((entry) => entry.entryType === "purchase_capture");
+  const todayVended = vended.filter(isToday);
+  const todayFunded = entries.filter((entry) => entry.entryType === "funding_credit" && isToday(entry));
+  const totalFunded = entries.filter((entry) => entry.entryType === "funding_credit");
+  const totalReversed = entries.filter((entry) => entry.entryType === "purchase_reversal");
+  return {
+    today_vended_minor: sum(todayVended),
+    today_vended_count: todayVended.length,
+    today_funded_minor: sum(todayFunded),
+    total_funded_minor: sum(totalFunded),
+    total_reversed_minor: sum(totalReversed)
+  };
+}
+
 function postLedgerEntry(input = {}) {
   const db = ensureWalletSchema();
   const wallet = walletById(input.walletId);
@@ -743,6 +764,7 @@ function listWalletAuditEvents({ organizationId, walletId, limit = 100 } = {}) {
 
 module.exports = {
   activeHolds,
+  activitySummary,
   availableBalanceMinor,
   captureHold,
   createVendorOrganization,

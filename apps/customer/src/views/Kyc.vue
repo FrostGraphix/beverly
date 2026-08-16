@@ -28,14 +28,14 @@ function saveDraft() {
         step: t1Index.value,
     };
     try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
         draftSaved.value = true;
         setTimeout(() => { draftSaved.value = false; }, 2000);
     } catch { /* storage unavailable */ }
 }
 
 function clearDraft() {
-    try { localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
     draftExists.value = false;
 }
 
@@ -67,7 +67,7 @@ watch([fullName, dob, address, state, lga, t1Index], () => {
     // Only auto-save once something meaningful is entered
     if (fullName.value || dob.value || address.value) {
         try {
-            localStorage.setItem(DRAFT_KEY, JSON.stringify({
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
                 fullName: fullName.value, dob: dob.value,
                 address: address.value, state: state.value, lga: lga.value,
                 step: t1Index.value,
@@ -98,7 +98,7 @@ const dobMax = computed(() =>
 onMounted(() => {
     if (tier.value >= 1) return; // Tier 1 already done — no draft needed
     try {
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = sessionStorage.getItem(DRAFT_KEY);
         if (!raw) return;
         const draft: T1Draft = JSON.parse(raw);
         if (draft.fullName || draft.dob || draft.address) {
@@ -487,7 +487,9 @@ function skipTier2() {
   bottom: 90px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--surface);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--brand);
   color: var(--brand);
   border-radius: var(--r-full);
@@ -604,8 +606,11 @@ function skipTier2() {
   align-items: center;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-5);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
   border-radius: var(--r-xl);
   margin-top: var(--s-3);
   flex-wrap: wrap;

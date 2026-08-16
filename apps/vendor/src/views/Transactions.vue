@@ -1,27 +1,54 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api } from '../lib/api';
+import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
+import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 interface PurchaseOrder {
     id: string; meter_id: string; customer_name: string | null;
     meter_type: 'single_phase' | 'three_phase' | null;
-    station_id: string | null; amount_minor: number; units_kwh: number | null;
+    station_id: string | null; amount_minor: number; energy_amount_minor?: number | null;
+    vat_amount_minor?: number | null; vat_rate_basis_points?: number | null; units_kwh: number | null;
     token: string | null; purchase_mode: 'wallet' | 'direct_pay' | 'remote_send';
-    status: string; delivery_state: string | null; created_at: string;
+    status: string; delivery_state: string | null; receipt_id?: string | null; created_at: string;
 }
 
 const purchases = ref<PurchaseOrder[]>([]);
 const loading   = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
+const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
+const exporting = ref(false);
+const exportError = ref<string | null>(null);
 
-const filtered = () => {
-    if (filter.value === 'all')       return purchases.value;
-    if (filter.value === 'delivered') return purchases.value.filter(p => p.status === 'delivered');
-    if (filter.value === 'failed')    return purchases.value.filter(p => p.status === 'failed');
-    return purchases.value.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
+const filterPurchases = (rows: PurchaseOrder[]) => {
+    if (filter.value === 'all')       return rows;
+    if (filter.value === 'delivered') return rows.filter(p => p.status === 'delivered');
+    if (filter.value === 'failed')    return rows.filter(p => p.status === 'failed');
+    return rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
 };
+
+const filtered = () => filterPurchases(purchases.value);
+
+const CSV_COLUMNS: Column<PurchaseOrder>[] = [
+    { key: 'created_at', header: 'Date', value: (row) => row.created_at },
+    { key: 'customer', header: 'Customer', value: (row) => row.customer_name ?? '' },
+    { key: 'meter', header: 'Meter', value: (row) => row.meter_id },
+    { key: 'phase', header: 'Phase', value: (row) => meterTypeLabel(row.meter_type) },
+    { key: 'station', header: 'Station', value: (row) => row.station_id ?? '' },
+    { key: 'mode', header: 'Mode', value: (row) => row.purchase_mode },
+    { key: 'paid', header: 'Paid (NGN)', value: (row) => (row.amount_minor / 100).toFixed(2) },
+    { key: 'energy', header: 'Energy (NGN)', value: (row) => ((row.energy_amount_minor ?? row.amount_minor) / 100).toFixed(2) },
+    { key: 'vat', header: 'VAT (NGN)', value: (row) => ((row.vat_amount_minor ?? 0) / 100).toFixed(2) },
+    { key: 'units', header: 'Units (kWh)', value: (row) => row.units_kwh ?? '' },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+    { key: 'token', header: 'Token', value: (row) => row.token ?? '' },
+];
 
 function statusBadge(s: string) {
     if (s === 'delivered')                return 'success';
@@ -38,6 +65,40 @@ function meterTypeLabel(type?: string | null) {
     return 'Unknown';
 }
 
+function canReceipt(p: PurchaseOrder) {
+    return p.status === 'delivered' && !!p.receipt_id;
+}
+
+function viewPurchaseReceipt(p: PurchaseOrder) {
+    viewReceipt(purchaseReceipt(p));
+}
+
+function printPurchaseReceipt(p: PurchaseOrder) {
+    printReceipt(purchaseReceipt(p));
+}
+
+async function exportTransactions() {
+    exporting.value = true;
+    exportError.value = null;
+    try {
+        const rows: PurchaseOrder[] = [];
+        const pageSize = 500;
+        let hasMore = true;
+        while (hasMore) {
+            const response = await api.get<{ purchases: PurchaseOrder[]; has_more: boolean }>(
+                `/api/v1/vendor/transactions?period=${exportRange.value}&limit=${pageSize}&offset=${rows.length}`,
+            );
+            rows.push(...(response.purchases ?? []));
+            hasMore = response.has_more;
+        }
+        exportCsv(`beverly-vendor-transactions-${exportRange.value}`, filterPurchases(rows), CSV_COLUMNS);
+    } catch (cause: any) {
+        exportError.value = cause?.message ?? 'Export failed';
+    } finally {
+        exporting.value = false;
+    }
+}
+
 onMounted(async () => {
     loading.value = true;
     try {
@@ -49,21 +110,38 @@ onMounted(async () => {
 
 <template>
   <AppShell title="Transactions">
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <div>
           <div class="bw-card-title">Vending history</div>
           <div class="bw-card-sub">{{ purchases.length }} records loaded</div>
         </div>
-        <div class="bw-segmented">
+        <div class="transaction-status bw-segmented">
           <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
                   :class="['bw-seg', filter === f ? 'active' : '']"
                   @click="filter = f">{{ f }}</button>
         </div>
+        <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
       </div>
 
+      <div class="transaction-toolbar">
+        <label class="export-range-label">
+          <span>Export period</span>
+          <select v-model="exportRange" class="bw-input export-range">
+            <option value="1d">Last day</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">All time</option>
+          </select>
+        </label>
+        <button class="bw-btn sm" :disabled="exporting" @click="exportTransactions">
+          {{ exporting ? 'Exporting...' : 'Export CSV' }}
+        </button>
+      </div>
+      <div v-if="exportError" class="bw-error-banner transaction-export-error">{{ exportError }}</div>
+
       <!-- Filter pills (mobile) -->
-      <div class="bw-filter-bar" style="display: none">
+      <div class="bw-filter-bar">
         <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
                 :class="['bw-filter-pill', filter === f ? 'active' : '']"
                 @click="filter = f">{{ f }}</button>
@@ -80,10 +158,13 @@ onMounted(async () => {
               <th>Phase</th>
               <th>Station</th>
               <th>Mode</th>
-              <th style="text-align:right">Amount</th>
+              <th style="text-align:right">Paid</th>
+              <th style="text-align:right">Energy</th>
+              <th style="text-align:right">VAT</th>
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
+              <th>Receipt</th>
             </tr>
           </thead>
           <tbody>
@@ -99,12 +180,21 @@ onMounted(async () => {
               <td class="bw-muted">{{ p.station_id || '—' }}</td>
               <td><span class="bw-badge neutral">{{ p.purchase_mode }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.energy_amount_minor ?? p.amount_minor) }}</td>
+              <td class="bw-money" style="text-align:right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
-              <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0, 12) + '…' : '—' }}</td>
+              <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0, 12) + '...' : '-' }}</td>
+              <td>
+                <div v-if="canReceipt(p)" class="receipt-actions">
+                  <button class="bw-btn sm" @click="viewPurchaseReceipt(p)">View</button>
+                  <button class="bw-btn sm" @click="printPurchaseReceipt(p)">Print</button>
+                </div>
+                <span v-else class="bw-muted">-</span>
+              </td>
             </tr>
             <tr v-if="!filtered().length && !loading">
-              <td colspan="10" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
+              <td colspan="13" class="bw-muted" style="text-align:center; padding: var(--s-6)">No transactions.</td>
             </tr>
           </tbody>
         </table>
@@ -139,6 +229,21 @@ onMounted(async () => {
               <span class="bw-tc-pair-label">Units</span>
               <span class="bw-tc-pair-val bw-mono">{{ kwh(p.units_kwh) }}</span>
             </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">Energy value</span>
+              <span class="bw-tc-pair-val bw-money">{{ naira(p.energy_amount_minor ?? p.amount_minor) }}</span>
+            </div>
+            <div class="bw-tc-pair">
+              <span class="bw-tc-pair-label">VAT</span>
+              <span class="bw-tc-pair-val bw-money">{{ naira(p.vat_amount_minor ?? 0) }}</span>
+            </div>
+            <div class="bw-tc-pair" v-if="canReceipt(p)">
+              <span class="bw-tc-pair-label">Receipt</span>
+              <span class="receipt-actions">
+                <button class="bw-btn sm" @click="viewPurchaseReceipt(p)">View</button>
+                <button class="bw-btn sm" @click="printPurchaseReceipt(p)">Print</button>
+              </span>
+            </div>
           </div>
         </div>
         <div v-if="!filtered().length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No transactions.</div>
@@ -146,3 +251,38 @@ onMounted(async () => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.transaction-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  padding: 0 var(--s-4) var(--s-3);
+}
+
+.bw-filter-bar { display: none; }
+
+.export-range-label {
+  display: grid;
+  gap: var(--s-1);
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
+
+.export-range {
+  min-width: 140px;
+  padding-block: var(--s-2);
+}
+
+.transaction-export-error { margin: 0 var(--s-4) var(--s-3); }
+
+@media (max-width: 640px) {
+  .transaction-status { display: none; }
+  .bw-filter-bar { display: flex; }
+  .transaction-toolbar { align-items: end; justify-content: space-between; }
+  .export-range-label { flex: 1 1 auto; }
+  .export-range { width: 100%; min-width: 0; }
+  .transaction-toolbar .bw-btn { flex: 0 0 auto; }
+}
+</style>

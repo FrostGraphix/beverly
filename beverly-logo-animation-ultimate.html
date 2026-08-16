@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beverly — Ultimate Solar Eclipse & Volumetric Reveal</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800;900&family=Plus+Jakarta+Sans:wght@800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root {
+  --beverly-green: #2FC34A;
+  --beverly-light: #52f470;
+  --near-black: #010302;
+  --clean-white: #FFFFFF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: var(--near-black); 
+  color: var(--clean-white); 
+  font-family: 'Plus Jakarta Sans', sans-serif; 
+  overflow: hidden; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  height: 100vh; 
+  perspective: 1200px;
+}
+
+/* Overlays */
+.vignette { position: fixed; inset: 0; box-shadow: inset 0 0 350px #000; pointer-events: none; z-index: 100; }
+.cinematic-vibe { position: fixed; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(47, 195, 74, 0.12) 0%, rgba(0,0,0,0.8) 70%); pointer-events: none; }
+
+/* Solar Eclipse Core behind Logo */
+#eclipse-ring {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.2);
+  width: 450px; height: 450px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(47,195,74,0.4) 0%, rgba(47,195,74,0.1) 50%, transparent 70%);
+  box-shadow: 0 0 120px rgba(47, 195, 74, 0.6), inset 0 0 80px rgba(47, 195, 74, 0.8);
+  opacity: 0; filter: blur(30px); z-index: 2; pointer-events: none;
+}
+
+/* Light Rays Canvas */
+#ray-canvas { position: absolute; inset: 0; z-index: 3; pointer-events: none; mix-blend-mode: screen; }
+
+/* Main Stage */
+#stage { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; transform-style: preserve-3d; }
+
+/* Logo Container */
+#logo-frame { position: relative; padding: 30px; transform-style: preserve-3d; }
+
+#logo-img {
+  width: 600px; display: block; opacity: 0;
+  transform: translateZ(400px) rotateY(-20deg) rotateX(15deg);
+  filter: blur(50px) brightness(500%);
+  will-change: transform, filter, opacity;
+}
+
+/* Glass Reflective Shimmer Sweep */
+#shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(125deg, transparent 30%, rgba(255,255,255,0.9) 50%, transparent 70%);
+  transform: translateX(-200%) skewX(-30deg);
+  mix-blend-mode: overlay; pointer-events: none; z-index: 15;
+}
+
+/* Cyber Equalizer Sound Wave Visualizers */
+.eq-container { display: flex; align-items: flex-end; gap: 4px; height: 25px; }
+.eq-bar { width: 3px; height: 20%; background: var(--beverly-green); box-shadow: 0 0 80px var(--beverly-green); border-radius: 2px; }
+
+/* HUD Bottom Bar */
+#hud-bar {
+  margin-top: 40px; opacity: 0; transform: translateY(20px);
+  display: flex; align-items: center; gap: 20px;
+  background: rgba(4, 10, 7, 0.9);
+  border: 1px solid rgba(47, 195, 74, 0.4);
+  padding: 14px 30px; border-radius: 8px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(47,195,74,0.15);
+}
+
+#tagline-text {
+  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800;
+  color: var(--beverly-green); letter-spacing: 5px; text-transform: uppercase;
+  text-shadow: 0 0 15px rgba(47, 195, 74, 0.6);
+}
+
+/* Replay Button */
+#replay-btn {
+  position: fixed; bottom: 35px;
+  background: rgba(5, 12, 8, 0.9);
+  border: 1px solid rgba(47, 195, 74, 0.4);
+  color: var(--clean-white); padding: 12px 28px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800;
+  letter-spacing: 3px; cursor: pointer; z-index: 200; border-radius: 4px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#replay-btn:hover {
+  background: var(--beverly-green); color: #000;
+  box-shadow: 0 0 30px rgba(47, 195, 74, 0.8);
+}
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="cinematic-vibe"></div>
+<div id="eclipse-ring"></div>
+<canvas id="ray-canvas"></canvas>
+
+<div id="stage">
+  <div id="logo-frame">
+    <div id="shimmer"></div>
+    <img src="beverly-logo.png" id="logo-img" alt="Beverly Logo">
+  </div>
+
+  <div id="hud-bar">
+    <div class="eq-container" id="eq-left">
+      <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+    </div>
+    <span id="tagline-text">_</span>
+    <div class="eq-container" id="eq-right">
+      <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+    </div>
+  </div>
+</div>
+
+<button id="replay-btn" onclick="triggerUltimateReveal()">⚡ ULTIMATE REVEAL</button>
+
+<script>
+/* =======================================================================
+   VOLUMETRIC RAY & STARBURST CANVAS
+   ======================================================================= */
+const canvas = document.getElementById('ray-canvas');
+const ctx = canvas.getContext('2d');
+let w, h;
+let rays = [];
+
+function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+for(let i=0; i<40; i++) {
+  rays.push({
+    angle: (i / 40) * Math.PI * 2,
+    length: Math.random() * 400 + 200,
+    width: Math.random() * 0.08 + 0.02,
+    alpha: Math.random() * 0.4 + 0.1
+  });
+}
+
+function drawRays() {
+  ctx.clearRect(0, 0, w, h);
+  let cx = w / 2;
+  let cy = h / 2;
+  
+  for(let r of rays) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    let a1 = r.angle - r.width;
+    let a2 = r.angle + r.width;
+    ctx.lineTo(cx + Math.cos(a1) * r.length, cy + Math.sin(a1) * r.length);
+    ctx.lineTo(cx + Math.cos(a2) * r.length, cy + Math.sin(a2) * r.length);
+    ctx.closePath();
+    
+    let grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, r.length);
+    grad.addColorStop(0, 'rgba(47, 195, 74, 0.4)');
+    grad.addColorStop(0.5, 'rgba(47, 195, 74, 0.1)');
+    grad.addColorStop(1, 'transparent');
+    
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+  requestAnimationFrame(drawRays);
+}
+drawRays();
+
+/* Equalizer Animation */
+function animateEQ() {
+  document.querySelectorAll('.eq-bar').forEach(bar => {
+    let h = Math.floor(Math.random() * 80 + 20);
+    bar.style.height = h + '%';
+  });
+}
+setInterval(animateEQ, 120);
+
+/* =======================================================================
+   GSAP ULTIMATE TIMELINE
+   ======================================================================= */
+let masterTL;
+
+function triggerUltimateReveal() {
+  if(masterTL) masterTL.kill();
+
+  masterTL = gsap.timeline();
+
+  // Initial State
+  gsap.set('#logo-img', { opacity: 0, z: 500, rotateY: -20, rotateX: 15, filter: 'blur(50px) brightness(500%)' });
+  gsap.set('#eclipse-ring', { opacity: 0, scale: 0.2 });
+  gsap.set('#hud-bar', { opacity: 0, y: 20 });
+  gsap.set('#shimmer', { x: '-200%' });
+  document.getElementById('tagline-text').innerText = '_';
+
+  // Act 1: Eclipse Core Ignition (0s - 1.0s)
+  masterTL.to('#eclipse-ring', { opacity: 1, scale: 1.5, duration: 1.2, ease: "power3.out" }, 0.2);
+
+  // Act 2: Cinematic 3D Logo Slam (1.0s)
+  masterTL.to('#logo-img', {
+    opacity: 1,
+    z: 0,
+    rotateY: 0,
+    rotateX: 0,
+    filter: 'blur(0px) brightness(100%) drop-shadow(0 25px 70px rgba(47,195,74,0.7))',
+    duration: 1.2,
+    ease: "expo.out"
+  }, 1.0);
+
+  // Act 3: Glass Shimmer Sweep (1.5s)
+  masterTL.to('#shimmer', { x: '200%', duration: 1.0, ease: "power2.inOut" }, 1.5);
+
+  // Act 4: HUD Lockup Reveal (2.0s)
+  masterTL.to('#hud-bar', { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 2.0);
+
+  const tagline = "YOUR SMART POWER PARTNER!";
+  masterTL.to({}, {
+    duration: 0.9,
+    ease: "steps(25)",
+    onUpdate: function() {
+      const len = Math.floor(this.progress() * tagline.length);
+      document.getElementById('tagline-text').innerText = tagline.substring(0, len) + (len === tagline.length ? '' : '_');
+    }
+  }, 2.1);
+
+  // Act 5: Breathing Floating Loop
+  masterTL.to('#logo-img', {
+    y: -10,
+    rotateX: 3,
+    duration: 3,
+    ease: "sine.inOut",
+    yoyo: true,
+    repeat: -1
+  }, 3.2);
+
+  masterTL.to('#eclipse-ring', {
+    scale: 1.8,
+    opacity: 0.7,
+    duration: 2.5,
+    ease: "sine.inOut",
+    yoyo: true,
+    repeat: -1
+  }, 3.2);
+}
+
+window.onload = triggerUltimateReveal;
+</script>
+</body>
+</html>

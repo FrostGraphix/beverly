@@ -9,6 +9,7 @@ const targetUrl = String(
 const approved = String(process.env.STAGING_WRITE_APPROVED || "false").toLowerCase() === "true";
 const protectionBypass = String(
   process.env.VERCEL_PROTECTION_BYPASS ||
+  process.env.VERCEL_AUTOMATION_BYPASS ||
   process.env.VERCEL_AUTOMATION_BYPASS_SECRET ||
   ""
 ).trim();

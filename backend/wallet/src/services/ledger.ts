@@ -28,8 +28,7 @@ export type EntryType =
     | 'reversal_credit'
     | 'reversal_debit'
     | 'fee_debit'
-    | 'promo_credit'
-    | 'refund_credit';
+    | 'promo_credit';
 
 export interface LedgerEntry {
     id: string;
@@ -160,9 +159,7 @@ export interface Hold {
 
 export async function createHold(input: HoldInput): Promise<Hold> {
     if (input.amountMinor <= 0) throw new LedgerError('amount must be positive', 'invalid_amount');
-    const ttl = input.ttlSeconds ?? 900;
-    const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
-
+    if (!input.idempotencyKey) throw new LedgerError('idempotencyKey is required', 'missing_idempotency_key');
     const { data: wallet, error: walletError } = await adminClient
         .from('wallets')
         .select('id, status')
@@ -174,28 +171,21 @@ export async function createHold(input: HoldInput): Promise<Hold> {
     } catch (error: any) {
         throw new LedgerError(error.message, error.code ?? 'wallet_inactive');
     }
-
-    // Fast-fail balance check. Note: not atomic — concurrent holds can bypass this.
-    // The authoritative guard is fn_capture_hold / fn_post_ledger_entry at debit time.
-    const bal = await getBalance(input.walletId);
-    if (bal.availableMinor < input.amountMinor) {
-        throw new LedgerError('insufficient available balance for hold', 'insufficient_balance');
+    const ttl = input.ttlSeconds ?? 900;
+    if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) {
+        throw new LedgerError('hold ttl must be between one second and one hour', 'invalid_hold_ttl');
     }
+    const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
 
-    const { data, error } = await adminClient
-        .from('wallet_holds')
-        .insert({
-            wallet_id: input.walletId,
-            amount_minor: input.amountMinor,
-            reference_type: input.referenceType ?? null,
-            reference_id: input.referenceId ?? null,
-            idempotency_key: input.idempotencyKey,
-            expires_at: expiresAt,
-            status: 'active',
-            created_by: input.createdBy,
-        })
-        .select('*')
-        .single();
+    const { data, error } = await adminClient.rpc('fn_create_hold', {
+        p_wallet_id: input.walletId,
+        p_amount_minor: input.amountMinor,
+        p_reference_type: input.referenceType ?? null,
+        p_reference_id: input.referenceId ?? null,
+        p_idempotency_key: input.idempotencyKey,
+        p_expires_at: expiresAt,
+        p_created_by: input.createdBy,
+    });
 
     if (error) {
         if (error.code === '23505') {
@@ -207,7 +197,14 @@ export async function createHold(input: HoldInput): Promise<Hold> {
                 .single();
             if (existing) return existing as Hold;
         }
-        throw new LedgerError(error.message, 'hold_error');
+        const message = error.message ?? 'Could not create hold.';
+        if (/insufficient available balance/i.test(message)) {
+            throw new LedgerError(message, 'insufficient_balance');
+        }
+        if (/wallet (not found|is not active)/i.test(message)) {
+            throw new LedgerError(message, 'wallet_inactive');
+        }
+        throw new LedgerError(message, 'hold_error');
     }
     return data as Hold;
 }
@@ -223,6 +220,7 @@ export interface CaptureInput {
 }
 
 export async function captureHold(input: CaptureInput): Promise<LedgerEntry> {
+    if (!input.idempotencyKey) throw new LedgerError('idempotencyKey is required', 'missing_idempotency_key');
     const { data, error } = await adminClient.rpc('fn_capture_hold', {
         p_hold_id: input.holdId,
         p_entry_type: input.entryType,
@@ -232,7 +230,13 @@ export async function captureHold(input: CaptureInput): Promise<LedgerEntry> {
         p_memo: input.memo ?? null,
         p_created_by: input.createdBy,
     });
-    if (error) throw new LedgerError(error.message, 'capture_error');
+    if (error) {
+        const message = error.message ?? 'Could not capture hold.';
+        if (/hold has expired/i.test(message)) throw new LedgerError(message, 'hold_expired');
+        if (/hold is not active/i.test(message)) throw new LedgerError(message, 'hold_inactive');
+        if (/insufficient available balance/i.test(message)) throw new LedgerError(message, 'insufficient_balance');
+        throw new LedgerError(message, 'capture_error');
+    }
     return data as LedgerEntry;
 }
 
@@ -310,6 +314,46 @@ async function getBalanceFromLedger(walletId: string): Promise<Balance> {
         availableMinor: ledgerBalanceMinor - activeHoldsMinor,
         currency: wallet.currency,
         status: wallet.status,
+    };
+}
+
+export interface ActivitySummary {
+    todayVendedMinor: number;
+    todayVendedCount: number;
+    todayFundedMinor: number;
+    totalFundedMinor: number;
+    totalReversedMinor: number;
+}
+
+export async function getActivitySummary(walletId: string): Promise<ActivitySummary> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const todayIso = startOfDay.toISOString();
+
+    const sum = (rows: { amount_minor: number | string }[] | null) =>
+        (rows ?? []).reduce((total, row) => total + Number(row.amount_minor ?? 0), 0);
+
+    const [todayVended, todayFunded, totalFunded, totalReversed] = await Promise.all([
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'purchase_debit').gte('created_at', todayIso),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'funding_credit').gte('created_at', todayIso),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'funding_credit'),
+        adminClient.from('wallet_ledger_entries').select('amount_minor')
+            .eq('wallet_id', walletId).eq('entry_type', 'reversal_credit'),
+    ]);
+
+    for (const result of [todayVended, todayFunded, totalFunded, totalReversed]) {
+        if (result.error) throw new LedgerError(result.error.message, 'activity_summary_error');
+    }
+
+    return {
+        todayVendedMinor: sum(todayVended.data),
+        todayVendedCount: todayVended.data?.length ?? 0,
+        todayFundedMinor: sum(todayFunded.data),
+        totalFundedMinor: sum(totalFunded.data),
+        totalReversedMinor: sum(totalReversed.data),
     };
 }
 

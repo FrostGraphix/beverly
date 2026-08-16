@@ -9,9 +9,9 @@
 
     <section class="wallet-auth-shell">
       <aside class="wallet-auth-story" aria-label="Wallet access overview">
-        <a class="wallet-auth-backlink" href="https://acob-beverly.vercel.app/#/login">Back to Beverly CRM</a>
+        <a class="wallet-auth-backlink" href="/#/login">Back to Beverly CRM</a>
         <div class="wallet-auth-badge">
-          <span class="wallet-auth-badge-mark">B</span>
+          <span class="wallet-auth-badge-mark" aria-hidden="true"></span>
           <strong>Beverly Wallet Access</strong>
         </div>
         <h1 class="wallet-auth-title">Designed for fast wallet entry, safe recovery, and traceable power sales.</h1>
@@ -267,14 +267,14 @@ import BaseInput from "../base/BaseInput.vue";
 import {
   defaultWalletAuthForm,
   resolveWalletAuthMode,
-  runWalletAuthDemo,
   walletAuthCopy,
   walletAuthHash,
   walletAuthHighlights,
   walletAuthModes,
-  writeWalletDemoSession,
   validateWalletAuthForm
 } from "../../services/vendor-auth-service.mjs";
+import { login } from "../../services/api.js";
+import { playLoginVoice, unlockLoginVoice } from "../../utils/voice.js";
 
 export default {
   name: "VendorAuthPage",
@@ -380,6 +380,7 @@ export default {
       this.setMode(this.modes.login);
     },
     async submit() {
+      unlockLoginVoice();
       this.error = "";
       this.notice = "";
       this.fieldErrors = validateWalletAuthForm(this.mode, this.form);
@@ -391,20 +392,19 @@ export default {
 
       this.submitting = true;
       try {
-        const outcome = runWalletAuthDemo(this.mode, this.form);
-        this.notice = outcome.notice || "";
-
-        if (outcome.authenticated) {
-          writeWalletDemoSession({ passwordResetRequired: false, accountStatus: this.mode === this.modes.signup ? "pending" : "approved" });
+        if (this.mode === this.modes.login) {
+          // Real Supabase-backed login via /api/user/login
+          await login({ userId: this.form.identity, password: this.form.password });
+          playLoginVoice();
           this.$emit("vendor-authenticated");
           return;
         }
-
-        if (this.mode === this.modes.signup && !this.form.recoveryCode) {
-          this.form.recoveryCode = "BVR-4281";
-        }
-        this.setMode(outcome.nextMode || this.modes.login);
-        this.notice = outcome.notice || "";
+        // Signup / forgot-password / password-reset flows require backend
+        // provisioning endpoints that are not yet exposed on this portal.
+        // Surface a clear actionable message instead of crashing.
+        this.error = "This action is not yet available on the vendor portal. Contact Beverly support.";
+      } catch (err) {
+        this.error = err?.message || "Authentication failed. Check your credentials and try again.";
       } finally {
         this.submitting = false;
       }
@@ -474,12 +474,11 @@ export default {
 .wallet-auth-badge-mark {
   width: 28px;
   height: 28px;
-  display: grid;
-  place-items: center;
+  display: block;
   border-radius: 50%;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--color-brand) 38%, transparent), color-mix(in srgb, var(--color-brand-strong) 52%, transparent));
-  color: var(--color-text-inverse);
-  font-weight: 900;
+  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
 }
 
 .wallet-auth-title {

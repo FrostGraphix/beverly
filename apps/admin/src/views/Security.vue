@@ -357,7 +357,7 @@ onMounted(async () => {
 .sec-side h3 { margin: 0 0 4px; font-size: var(--t-md); }
 .sec-side .bw-input { margin: var(--s-3) 0; }
 .sec-danger { border-color: oklch(from var(--danger) l c h / .3); }
-.bw-btn.danger { background: var(--danger); color: #fff; }
+.bw-btn.danger { background: var(--danger); color: oklch(10% 0.04 25); }
 
 @media (max-width: 960px) {
   .sec-grid { grid-template-columns: 1fr; }

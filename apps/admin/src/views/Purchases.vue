@@ -19,8 +19,11 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
+import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 interface Purchase {
     id: string;
@@ -33,6 +36,9 @@ interface Purchase {
     station_id: string | null;
     tariff_id: string | null;
     amount_minor: number;
+    energy_amount_minor?: number | null;
+    vat_amount_minor?: number | null;
+    vat_rate_basis_points?: number | null;
     units_kwh: number | null;
     purchase_mode: string;
     status: string;
@@ -75,6 +81,7 @@ const items = ref<Purchase[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const cardView = ref<'table' | 'list'>('table');
 
 const fStatus    = ref('');
 const fActorType = ref('');
@@ -83,6 +90,16 @@ const fMeterType = ref('');
 const fQ         = ref('');
 const fSince     = ref('');
 const fUntil     = ref('');
+const stationOptions = ref<{ stationId: string; name: string; oemName: string | null }[]>([]);
+
+async function loadStations() {
+    try {
+        const result = await api.get<{ stations: { stationId: string; name: string; oemName: string | null }[] }>('/api/v1/admin/stations');
+        stationOptions.value = result.stations ?? [];
+    } catch (e: any) {
+        banner.value = { tone: 'error', text: e?.message ?? 'Could not load stations.' };
+    }
+}
 
 async function loadSummary() {
     try { summary.value = await api.get<PurchaseSummary>('/api/v1/admin/purchases/summary'); }
@@ -237,6 +254,8 @@ function exportCsvRows() {
         { key: 'meter_type', header: 'Phase', value: (p) => meterTypeLabel(p.meter_type) },
         { key: 'station_id', header: 'Station', value: (p) => p.station_id ?? '' },
         { key: 'amount', header: 'Amount (â‚¦)', value: (p) => (p.amount_minor ?? 0) / 100 },
+        { key: 'energy_amount', header: 'Energy Value (â‚¦)', value: (p) => (p.energy_amount_minor ?? 0) / 100 },
+        { key: 'vat_amount', header: 'VAT (â‚¦)', value: (p) => (p.vat_amount_minor ?? 0) / 100 },
         { key: 'units_kwh', header: 'Units (kWh)', value: (p) => p.units_kwh ?? '' },
         { key: 'status', header: 'Status', value: (p) => p.status },
     ]);
@@ -249,18 +268,27 @@ function exportPdfDoc() {
         meta: [
             { label: 'Rows', value: String(items.value.length) },
             { label: 'Total value', value: naira(items.value.reduce((s, p) => s + Number(p.amount_minor ?? 0), 0)) },
+            { label: 'VAT', value: naira(items.value.reduce((s, p) => s + Number(p.vat_amount_minor ?? 0), 0)) },
         ],
         tables: [{
             title: 'Purchases',
-            columns: ['When', 'Buyer', 'Meter', 'Phase', 'Station', 'Amount', 'Status'],
+            columns: ['When', 'Buyer', 'Meter', 'Phase', 'Station', 'Amount', 'VAT', 'Status'],
             rows: items.value.map((p) => [
-                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, meterTypeLabel(p.meter_type), p.station_id ?? 'â€”', naira(p.amount_minor), p.status,
+                shortDate(p.created_at), p.customer_name ?? 'â€”', p.meter_id, meterTypeLabel(p.meter_type), p.station_id ?? 'â€”', naira(p.amount_minor), naira(p.vat_amount_minor ?? 0), p.status,
             ]),
         }],
     });
 }
 
-onMounted(() => { void loadSummary(); void loadList(); });
+function viewPurchaseReceipt(p: Purchase | PurchaseDetail['purchase']) {
+    viewReceipt(purchaseReceipt(p));
+}
+
+function printPurchaseReceipt(p: Purchase | PurchaseDetail['purchase']) {
+    printReceipt(purchaseReceipt(p));
+}
+
+onMounted(() => { void loadStations(); void loadSummary(); void loadList(); });
 watch([fStatus, fActorType], () => loadList());
 </script>
 
@@ -274,7 +302,7 @@ watch([fStatus, fActorType], () => loadList());
     </transition>
 
     <!-- KPI strip -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Today</p>
         <p class="kpi-value">{{ naira(summary?.todayValueMinor) }}</p>
@@ -325,7 +353,12 @@ watch([fStatus, fActorType], () => loadList());
         </div>
         <div>
           <label class="bw-label">Station</label>
-          <input class="bw-input bw-mono" v-model="fStation" placeholder="e.g. TUNGA" @keyup.enter="loadList()" />
+          <select class="bw-input bw-mono" v-model="fStation" @change="loadList()">
+            <option value="">All</option>
+            <option v-for="station in stationOptions" :key="station.stationId" :value="station.stationId">
+              {{ station.name || station.stationId }}{{ station.oemName ? ` · ${station.oemName}` : '' }}
+            </option>
+          </select>
         </div>
         <div>
           <label class="bw-label">Phase</label>
@@ -355,18 +388,23 @@ watch([fStatus, fActorType], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="cardView">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ items.length }} purchases</h2>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">CSV</button>
+        <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span style="width:6px"></span>
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
       </div>
 
+      <div class="purchase-layout-bar">
+        <span>Purchase results</span>
+        <WalletDataViewSwitch v-model="cardView" label="Purchase display view" />
+      </div>
+
       <!-- Desktop -->
-      <div class="bw-t-wrap">
+      <div class="bw-t-wrap purchase-table-wrap">
         <table class="bw-table">
           <thead>
             <tr>
@@ -376,7 +414,9 @@ watch([fStatus, fActorType], () => loadList());
               <th>Phase</th>
               <th>Station</th>
               <th style="text-align: right">Amount</th>
+              <th style="text-align: right">VAT</th>
               <th>Status</th>
+              <th>Receipt</th>
               <th></th>
             </tr>
           </thead>
@@ -395,11 +435,18 @@ watch([fStatus, fActorType], () => loadList());
               </td>
               <td class="bw-mono bw-muted">{{ p.station_id || 'â€”' }}</td>
               <td class="bw-money" style="text-align: right">{{ naira(p.amount_minor) }}</td>
+              <td class="bw-money" style="text-align: right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click.stop="viewPurchaseReceipt(p)">View</button>
+                  <button class="bw-btn sm" @click.stop="printPurchaseReceipt(p)">Print</button>
+                </div>
+              </td>
               <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!items.length && !loading">
-              <td colspan="8" class="bw-muted empty">No purchases match the filters.</td>
+              <td colspan="10" class="bw-muted empty">No purchases match the filters.</td>
             </tr>
           </tbody>
         </table>
@@ -411,6 +458,7 @@ watch([fStatus, fActorType], () => loadList());
           <div class="pc-head">
             <div>
               <div class="bw-money pc-amount">{{ naira(p.amount_minor) }}</div>
+              <div class="bw-muted pc-meta">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
               <div class="bw-mono pc-meta">{{ p.meter_id }} Â· {{ shortDate(p.created_at) }}</div>
             </div>
             <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
@@ -428,6 +476,10 @@ watch([fStatus, fActorType], () => loadList());
             <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
               {{ meterTypeLabel(p.meter_type) }}
             </span>
+          </div>
+          <div class="receipt-actions pc-receipts">
+            <button class="bw-btn sm" @click.stop="viewPurchaseReceipt(p)">View</button>
+            <button class="bw-btn sm" @click.stop="printPurchaseReceipt(p)">Print</button>
           </div>
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty">No purchases.</div>
@@ -461,7 +513,7 @@ watch([fStatus, fActorType], () => loadList());
               <span :class="['bw-badge', detail.purchase.meter_type === 'three_phase' ? 'info' : 'neutral']">
                 {{ meterTypeLabel(detail.purchase.meter_type) }}
               </span>
-              <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(2) }} kWh</span>
+              <span class="bw-muted bw-mono">{{ Number(detail.purchase.units_kwh ?? 0).toFixed(4) }} kWh</span>
               <span class="bw-muted bw-mono">{{ detail.purchase.tariff_id || 'â€”' }}</span>
             </div>
 
@@ -502,6 +554,9 @@ watch([fStatus, fActorType], () => loadList());
                 <dt>Phase</dt><dd>{{ meterTypeLabel(detail.purchase.meter_type) }}</dd>
                 <dt>Station</dt><dd class="bw-mono">{{ detail.purchase.station_id || 'â€”' }}</dd>
                 <dt>Mode</dt><dd>{{ detail.purchase.purchase_mode }}</dd>
+                <dt>Amount paid</dt><dd>{{ naira(detail.purchase.amount_minor) }}</dd>
+                <dt>Energy value</dt><dd>{{ naira(detail.purchase.energy_amount_minor ?? 0) }}</dd>
+                <dt>VAT ({{ Number(detail.purchase.vat_rate_basis_points ?? 0) / 100 }}%)</dt><dd>{{ naira(detail.purchase.vat_amount_minor ?? 0) }}</dd>
                 <dt>Receipt</dt>
                 <dd>
                   <span v-if="detail.receipt" class="bw-mono">#{{ String(detail.receipt.id).slice(0, 8) }}</span>
@@ -529,16 +584,34 @@ watch([fStatus, fActorType], () => loadList());
 
             <!-- Actions -->
             <div class="dr-actions">
-              <button
-                v-if="detail.purchase.token && detail.purchase.actor_type === 'customer'"
-                class="bw-btn"
-                @click="resendOpen = true"
-              >Resend SMS</button>
-              <button
-                v-if="['delivered','completed','token_issued'].includes(detail.purchase.status)"
-                class="bw-btn danger"
-                @click="refundOpen = true"
-              >Request refund</button>
+              <div class="dr-action-buttons">
+                <button
+                  v-if="detail.purchase.token && detail.purchase.actor_type === 'customer'"
+                  class="bw-btn"
+                  @click="resendOpen = true"
+                >Resend SMS</button>
+                <button class="bw-btn" @click="viewPurchaseReceipt(detail.purchase)">View receipt</button>
+                <button class="bw-btn" @click="printPurchaseReceipt(detail.purchase)">Print receipt</button>
+                <button
+                  v-if="['delivered','completed','token_issued'].includes(detail.purchase.status)"
+                  class="bw-btn danger"
+                  @click="refundOpen = true"
+                >Request refund</button>
+              </div>
+              <MobileActionMenu label="Purchase actions">
+                <button class="mobile-action-item" @click="viewPurchaseReceipt(detail.purchase)">View receipt</button>
+                <button class="mobile-action-item" @click="printPurchaseReceipt(detail.purchase)">Print receipt</button>
+                <button
+                  v-if="detail.purchase.token && detail.purchase.actor_type === 'customer'"
+                  class="mobile-action-item"
+                  @click="resendOpen = true"
+                >Resend SMS</button>
+                <button
+                  v-if="['delivered','completed','token_issued'].includes(detail.purchase.status)"
+                  class="mobile-action-item danger"
+                  @click="refundOpen = true"
+                >Request refund</button>
+              </MobileActionMenu>
             </div>
 
           </aside>
@@ -601,9 +674,12 @@ watch([fStatus, fActorType], () => loadList());
   gap: var(--s-3); margin-bottom: var(--s-3);
 }
 .kpi-tile {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
   border-radius: var(--r-lg); padding: var(--s-4);
   position: relative; overflow: hidden;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
 .kpi-tile.brand {
   background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent);
@@ -629,9 +705,34 @@ watch([fStatus, fActorType], () => loadList());
 .p-row { cursor: pointer; }
 .p-row:hover { background: var(--surface-2); }
 .row-arrow { color: var(--text-muted); text-align: right; width: 24px; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.purchase-layout-bar { display: none; }
+.purchase-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.purchase-view-toggle button {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.purchase-view-toggle button:hover { color: var(--text); }
+.purchase-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.purchase-view-toggle svg { width: 17px; height: 17px; }
 
 .p-cards { padding: var(--s-3); }
 .p-card {
@@ -644,10 +745,11 @@ watch([fStatus, fActorType], () => loadList());
 .pc-meta { font-size: var(--t-xs); color: var(--text-muted); margin-top: 2px; }
 .pc-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: var(--t-sm); border-top: 1px dashed var(--border); }
 .pc-label { color: var(--text-muted); }
+.pc-receipts { justify-content: flex-end; padding-top: var(--s-3); margin-top: var(--s-2); border-top: 1px dashed var(--border); }
 
 /* Drawer */
 .drawer-scrim { position: fixed; inset: 0; background: oklch(0% 0 0 / 0.55); z-index: 200; display: flex; justify-content: flex-end; }
-.drawer { width: min(640px, 100%); height: 100%; background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: var(--s-5); box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40); }
+.drawer { width: min(640px, 100%); height: 100%; background: var(--glass-bg-strong); border-left: 1px solid var(--glass-border); overflow-y: auto; padding: var(--s-5); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40); }
 .drawer-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--s-4); }
 .drawer-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--brand); margin: 0 0 2px; }
 .drawer-title { margin: 0 0 4px; font-size: var(--t-xl); font-family: var(--font-mono); }
@@ -682,11 +784,13 @@ watch([fStatus, fActorType], () => loadList());
 .tl-step.done:not(.last)::before { background: oklch(from var(--brand) l c h / 0.40); }
 .tl-dot {
   width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
-  border: 2px solid var(--border-strong); background: var(--surface);
+  border: 2px solid var(--glass-border-strong); background: var(--glass-bg-strong);
   display: grid; place-items: center; color: var(--text-muted); z-index: 1;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
-.tl-dot.done { border-color: var(--brand); background: var(--brand); color: white; }
-.tl-dot.fail { border-color: var(--danger); background: var(--danger); color: white; font-weight: 700; font-size: 11px; }
+.tl-dot.done { border-color: var(--brand); background: var(--brand); color: oklch(8% 0.04 145); }
+.tl-dot.fail { border-color: var(--danger); background: var(--danger); color: oklch(10% 0.04 25); font-weight: 700; font-size: 11px; }
 .tl-body { display: flex; flex-direction: column; gap: 2px; padding-top: 1px; }
 .tl-label { font-size: var(--t-sm); color: var(--text); }
 .tl-at { font-size: 10px; color: var(--text-muted); }
@@ -700,7 +804,14 @@ watch([fStatus, fActorType], () => loadList());
 .ledger-amt.credit { color: var(--brand); }
 .ledger-amt.debit { color: var(--text); }
 
-.dr-actions { display: flex; gap: var(--s-2); margin-top: var(--s-4); }
+.dr-actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-4); }
+.dr-action-buttons { display: flex; gap: var(--s-2); }
+
+@media (max-width: 720px) {
+  .dr-action-buttons {
+    display: none;
+  }
+}
 
 .drawer-enter-active, .drawer-leave-active { transition: opacity 0.20s var(--ease-out); }
 .drawer-enter-active .drawer, .drawer-leave-active .drawer { transition: transform 0.22s var(--ease-out); }
@@ -719,6 +830,38 @@ watch([fStatus, fActorType], () => loadList());
   .drawer { width: 100%; padding: var(--s-4); }
   .dr-dl { grid-template-columns: 1fr; }
   .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }
+
+  .purchase-layout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
+  .p-cards--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+    padding: var(--s-2);
+  }
+  .bw-t-wrap ~ .p-cards--grid { display: grid; }
+  .purchase-table-wrap.mobile-table-active { display: block; overflow-x: auto; }
+  .p-cards--table { display: none !important; }
+  .p-cards--grid .p-card {
+    min-width: 0;
+    margin-bottom: 0;
+    padding: var(--s-3);
+    overflow: hidden;
+  }
+  .p-cards--grid .pc-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-2); }
+  .p-cards--grid .pc-head > .bw-badge { justify-self: start; }
+  .p-cards--grid .pc-meta,
+  .p-cards--grid .pc-row > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  .p-cards--grid .pc-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .p-cards--grid .pc-receipts { white-space: normal; }
 }
 </style>
 

@@ -53,6 +53,10 @@ function createProxyServer() {
         this.statusCode = code;
         return this;
       },
+      setHeader(name, value) {
+        res.setHeader(name, value);
+        return this;
+      },
       json(body) {
         res.statusCode = this.statusCode;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -212,7 +216,9 @@ async function main() {
       LIVE_API_PROXY_ENABLED: "true",
       LIVE_API_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
       LIVE_API_BEARER_TOKEN: "env-token",
-      ALLOW_LIVE_WRITES: "true"
+      ALLOW_LIVE_WRITES: "true",
+      APPROVED_LIVE_WRITES: "true",
+      DEMO_AUTH_ENABLED: "true"
     }, async () => {
       const liveRead = await request(proxyPort, "POST", "/api/remoteMeterTask/getReadingTask?SITE_ID=KYAKALE", {
         headers: {
@@ -229,7 +235,7 @@ async function main() {
 
       // --- Meter Control Task smoke tests ---
       const controlSwitchOn = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/CreateControlTask", {
-        headers: { "Content-Type": "application/json", Authorization: "Bearer caller-token" },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer local-dev-token" },
         body: Buffer.from(JSON.stringify([{
           customerId: "C001", customerName: "Test", meterId: "M001",
           version: "2.2", flag: "1", name: "Switch On",
@@ -237,14 +243,14 @@ async function main() {
           data: "1", stationId: "0001", remark: ""
         }]))
       });
-      assert.strictEqual(controlSwitchOn.status, 200, "Switch On: expected 200");
+      assert.strictEqual(controlSwitchOn.status, 200, `Switch On: expected 200, received ${JSON.stringify(controlSwitchOn.body)}`);
       assert.strictEqual(controlSwitchOn.body.reason, "success", "Switch On: expected success");
       const echoOn = controlSwitchOn.body.result?.echo || controlSwitchOn.body.data?.result?.echo;
       assert.strictEqual(echoOn?.flag, "1", "Switch On: flag must be '1', not label string");
       assert.strictEqual(echoOn?.data, "1", "Switch On: data must be '1'");
 
       const controlSwitchOff = await request(proxyPort, "POST", "/api/API/RemoteMeterTask/CreateControlTask", {
-        headers: { "Content-Type": "application/json", Authorization: "Bearer caller-token" },
+        headers: { "Content-Type": "application/json", Authorization: "Bearer local-dev-token" },
         body: Buffer.from(JSON.stringify([{
           customerId: "C001", customerName: "Test", meterId: "M001",
           version: "2.2", flag: "0", name: "Switch Off",
@@ -386,6 +392,18 @@ async function main() {
       assert.strictEqual(localLogin.body.data.userId, "admin");
       assert.strictEqual(localLogin.body._proxy.source, "local-auth");
 
+      const currentUser = await request(proxyPort, "POST", "/api/user/read", {
+        headers: {
+          "Authorization": "Bearer local-dev-token",
+          "Content-Type": "application/json"
+        },
+        body: Buffer.from(JSON.stringify({ userId: "admin", pageNumber: 1, pageSize: 1 }))
+      });
+      assert.strictEqual(currentUser.status, 200);
+      const currentUserRows = currentUser.body.result?.data || currentUser.body.data?.data || [];
+      assert.strictEqual(currentUserRows.length, 1);
+      assert.strictEqual(currentUserRows[0].userId, "admin");
+
       const blockedWrite = await request(proxyPort, "POST", "/api/account/create", {
         headers: {
           "Content-Type": "application/json"
@@ -513,7 +531,7 @@ async function main() {
       assert.strictEqual(trustedAccountRead.body._proxy.source, "live-required");
       const sanitizedAccountRequest = upstreamRequests.find((entry) => entry.url === "/api/account/read" && entry.body.includes("customerId asc"));
       assert(sanitizedAccountRequest, "account live proxy must normalize stale id sort keys");
-      assert(sanitizedAccountRequest.body.includes('"pageSize":20'), "account live proxy must cap stale page sizes");
+      assert(sanitizedAccountRequest.body.includes('"pageSize":500'), "account live proxy must preserve supported bulk page sizes");
 
       const mfaFactorsAlias = await request(proxyPort, "GET", "/auth/mfa/factors");
       assert.strictEqual(mfaFactorsAlias.status, 200);

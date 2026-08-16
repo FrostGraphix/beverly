@@ -14,6 +14,7 @@
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { useStaffAuthStore } from '../stores/auth';
@@ -27,9 +28,15 @@ interface CustomerUser {
     phone?: string | null;
 }
 
+interface VendorOrg {
+    legal_name?: string | null;
+    trading_name?: string | null;
+}
+
 interface MeterOrder {
     id: string;
     customer_id: string;
+    customer_name_snapshot?: string | null;
     meter_type: 'single_phase' | 'three_phase';
     property_address: string;
     service_area: string;
@@ -41,7 +48,10 @@ interface MeterOrder {
     notes: string | null;
     created_at: string;
     updated_at: string;
-    customers?: { users?: CustomerUser | null } | null;
+    source_channel?: 'customer_portal' | 'vendor_portal' | 'admin_portal';
+    sponsor_mode?: 'manual_paid' | 'vendor_wallet';
+    customers?: CustomerUser | null;
+    vendor_organizations?: VendorOrg | null;
 }
 
 interface Stats {
@@ -51,6 +61,7 @@ interface Stats {
     installed: number;
     installed_today: number;
     cancelled: number;
+    by_source?: Record<string, number>;
 }
 
 // ── data ──────────────────────────────────────────────────────────
@@ -100,15 +111,33 @@ const STATUS_NEXT: Record<string, string> = {
     assigned:   'dispatched',
     dispatched: 'installed',
 };
+const STATUS_ALLOWED: Record<string, string[]> = {
+    pending_payment: ['paid', 'cancelled'],
+    paid: ['assigned', 'cancelled'],
+    assigned: ['dispatched', 'cancelled'],
+    dispatched: ['installed'],
+    installed: [],
+    cancelled: [],
+};
 
 function customerName(o: MeterOrder) {
-    return o.customers?.users?.full_name ?? `Customer #${o.customer_id.slice(0, 8)}`;
+    return o.customers?.full_name ?? o.customer_name_snapshot ?? `Customer #${o.customer_id.slice(0, 8)}`;
 }
 function customerContact(o: MeterOrder) {
-    return o.customers?.users?.phone ?? o.contact_phone;
+    return o.customers?.phone ?? o.contact_phone;
 }
 function meterTypeLabel(t: string) {
     return t === 'three_phase' ? '3-Phase' : '1-Phase';
+}
+function sourceLabel(o: MeterOrder) {
+    if (o.source_channel === 'vendor_portal') {
+        return o.vendor_organizations?.trading_name ?? o.vendor_organizations?.legal_name ?? 'Vendor portal';
+    }
+    if (o.source_channel === 'admin_portal') return 'Admin assisted';
+    return 'Customer self-service';
+}
+function sponsorLabel(o: MeterOrder) {
+    return o.sponsor_mode === 'vendor_wallet' ? 'Vendor wallet' : 'Manual paid';
 }
 
 // ── fetch ─────────────────────────────────────────────────────────
@@ -185,6 +214,9 @@ const actionDesc = computed(() => {
 const needsTech = computed(() =>
     actionVerb.value === 'advance' && ['assigned', 'dispatched'].includes(actionStatus.value)
 );
+const actionStatuses = computed(() => actionOrder.value
+    ? [actionOrder.value.status, ...(STATUS_ALLOWED[actionOrder.value.status] ?? [])]
+    : []);
 
 function askAdvance(o: MeterOrder) {
     if (!canManageMeterOrders.value) return;
@@ -272,6 +304,11 @@ function doExport() {
 
 <template>
   <AppShell title="Meter Orders">
+    <div class="bw-page-actions">
+      <RouterLink v-if="canManageMeterOrders" to="/meter-orders/new" class="bw-btn primary" style="text-decoration:none">
+        New Order
+      </RouterLink>
+    </div>
 
     <!-- Banner -->
     <transition name="banner">
@@ -282,29 +319,29 @@ function doExport() {
     </transition>
 
     <!-- KPI row -->
-    <div v-if="stats" class="mo-kpi-row">
+    <div class="mo-kpi-row bw-mobile-kpi-grid" aria-label="Meter order summary">
       <div class="mo-kpi">
         <span class="mo-kpi-label">Total orders</span>
-        <span class="mo-kpi-value">{{ stats.total }}</span>
+        <span class="mo-kpi-value">{{ stats?.total ?? '—' }}</span>
       </div>
       <div class="mo-kpi warn">
         <span class="mo-kpi-label">Pending payment</span>
-        <span class="mo-kpi-value">{{ stats.pending_payment }}</span>
+        <span class="mo-kpi-value">{{ stats?.pending_payment ?? '—' }}</span>
       </div>
       <div class="mo-kpi info">
         <span class="mo-kpi-label">In progress</span>
-        <span class="mo-kpi-value">{{ stats.in_progress }}</span>
+        <span class="mo-kpi-value">{{ stats?.in_progress ?? '—' }}</span>
       </div>
       <div class="mo-kpi success">
         <span class="mo-kpi-label">Installed</span>
         <span class="mo-kpi-value">
-          {{ stats.installed }}
-          <span v-if="stats.installed_today" class="mo-kpi-today">+{{ stats.installed_today }} today</span>
+          {{ stats?.installed ?? '—' }}
+          <span v-if="stats?.installed_today" class="mo-kpi-today">+{{ stats.installed_today }} today</span>
         </span>
       </div>
       <div class="mo-kpi danger">
         <span class="mo-kpi-label">Cancelled</span>
-        <span class="mo-kpi-value">{{ stats.cancelled }}</span>
+        <span class="mo-kpi-value">{{ stats?.cancelled ?? '—' }}</span>
       </div>
     </div>
 
@@ -349,6 +386,7 @@ function doExport() {
               <th>Type</th>
               <th>Address</th>
               <th>Area</th>
+              <th>Source</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
               <th>Date</th>
@@ -358,10 +396,10 @@ function doExport() {
           </thead>
           <tbody>
             <tr v-if="loading">
-              <td :colspan="canManageMeterOrders ? 9 : 8" class="mo-center-cell">Loading…</td>
+              <td :colspan="canManageMeterOrders ? 10 : 9" class="mo-center-cell">Loading…</td>
             </tr>
             <tr v-else-if="!orders.length">
-              <td :colspan="canManageMeterOrders ? 9 : 8" class="mo-center-cell">No orders match the current filters.</td>
+              <td :colspan="canManageMeterOrders ? 10 : 9" class="mo-center-cell">No orders match the current filters.</td>
             </tr>
             <tr v-for="o in orders" :key="o.id">
               <td>
@@ -375,6 +413,7 @@ function doExport() {
               </td>
               <td class="mo-address">{{ o.property_address }}</td>
               <td class="bw-muted" style="font-size: var(--t-sm)">{{ o.service_area }}</td>
+              <td class="bw-muted" style="font-size: var(--t-sm)">{{ sourceLabel(o) }} · {{ sponsorLabel(o) }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(o.amount_minor) }}</td>
               <td>
                 <span :class="['bw-badge', STATUS_BADGE[o.status] ?? 'neutral']">
@@ -408,6 +447,23 @@ function doExport() {
                     Cancel
                   </button>
                 </div>
+                <MobileActionMenu label="Meter order actions">
+                  <button
+                    v-if="STATUS_NEXT[o.status]"
+                    class="mobile-action-item primary"
+                    @click="askAdvance(o)"
+                  >
+                    {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
+                  </button>
+                  <button class="mobile-action-item" @click="askCustomStatus(o)">Edit</button>
+                  <button
+                    v-if="['paid','assigned','dispatched'].includes(o.status)"
+                    class="mobile-action-item danger"
+                    @click="askCancel(o)"
+                  >
+                    Cancel
+                  </button>
+                </MobileActionMenu>
               </td>
             </tr>
           </tbody>
@@ -455,22 +511,23 @@ function doExport() {
           </div>
 
           <div v-if="canManageMeterOrders" class="mo-card-acts">
-            <button
-              v-if="STATUS_NEXT[o.status]"
-              class="bw-btn primary"
-              style="flex: 1"
-              @click="askAdvance(o)"
-            >
-              → {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
-            </button>
-            <button class="bw-btn" @click="askCustomStatus(o)">Edit</button>
-            <button
-              v-if="['paid','assigned','dispatched'].includes(o.status)"
-              class="bw-btn danger"
-              @click="askCancel(o)"
-            >
-              Cancel
-            </button>
+            <MobileActionMenu label="Meter order actions">
+              <button
+                v-if="STATUS_NEXT[o.status]"
+                class="mobile-action-item primary"
+                @click="askAdvance(o)"
+              >
+                {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
+              </button>
+              <button class="mobile-action-item" @click="askCustomStatus(o)">Edit</button>
+              <button
+                v-if="['paid','assigned','dispatched'].includes(o.status)"
+                class="mobile-action-item danger"
+                @click="askCancel(o)"
+              >
+                Cancel
+              </button>
+            </MobileActionMenu>
           </div>
         </div>
 
@@ -503,11 +560,7 @@ function doExport() {
       <div v-if="actionVerb === 'advance'" class="mo-cd-field">
         <label class="mo-cd-label">New status</label>
         <select v-model="actionStatus" class="bw-select">
-          <option value="paid">Paid</option>
-          <option value="assigned">Assigned</option>
-          <option value="dispatched">Dispatched / En Route</option>
-          <option value="installed">Installed</option>
-          <option value="cancelled">Cancelled</option>
+          <option v-for="status in actionStatuses" :key="status" :value="status">{{ STATUS_LABEL[status] }}</option>
         </select>
       </div>
 
@@ -567,13 +620,17 @@ function doExport() {
   margin-bottom: var(--s-3);
 }
 .mo-kpi {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  min-height: 96px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-md);
   padding: var(--s-3) var(--s-4);
   display: flex; flex-direction: column; gap: 4px;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
-.mo-kpi-label { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.mo-kpi-label { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0; }
 .mo-kpi-value { font-family: var(--font-mono); font-size: var(--t-xl); font-weight: 700; color: var(--text); display: flex; align-items: baseline; gap: 6px; }
 .mo-kpi-today { font-size: var(--t-xs); font-weight: 500; color: var(--brand); }
 .mo-kpi.success .mo-kpi-value { color: var(--brand); }
@@ -640,7 +697,7 @@ function doExport() {
 .mo-card-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: var(--t-sm); border-top: 1px dashed var(--border); }
 .mo-card-lbl { color: var(--text-muted); }
 .mo-card-val { text-align: right; max-width: 55%; word-break: break-word; }
-.mo-card-acts { display: flex; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
+.mo-card-acts { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
 .mo-card-acts .bw-btn { min-height: 36px; }
 .mo-empty { text-align: center; padding: var(--s-8); font-size: var(--t-sm); }
 
@@ -661,8 +718,24 @@ function doExport() {
 @media (max-width: 900px) {
   .mo-kpi-row { grid-template-columns: repeat(3, 1fr); }
 }
+@media (max-width: 720px) {
+  .mo-table .mo-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .mo-row-acts {
+    display: none;
+  }
+}
 @media (max-width: 560px) {
   .mo-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .mo-kpi { min-height: 88px; padding: var(--s-3); }
   .mo-toolbar { flex-direction: column; align-items: stretch; }
   .mo-search-wrap,
   .mo-status-select {

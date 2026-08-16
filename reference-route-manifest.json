@@ -16,6 +16,71 @@
     ]
   },
   {
+    "group": "Data Report",
+    "title": "Report Centre",
+    "hash": "#/admin/reports",
+    "apis": [
+      "/api/reports/revenue",
+      "/api/reports/wallet",
+      "/api/reports/customers",
+      "/api/reports/audit",
+      "/api/reports/settlement"
+    ],
+    "columns": [],
+    "actions": [
+      "Generate",
+      "Export"
+    ],
+    "isCustomPage": true,
+    "customComponent": "ReportsPage",
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
+    "group": "Data Report",
+    "title": "Station Consumption",
+    "hash": "#/prepay-report/station-consumption",
+    "apis": [
+      "/api/local/consumption/station-analytics"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Export"
+    ],
+    "isCustomPage": true,
+    "customComponent": "StationConsumptionPage",
+    "roles": [
+      "super-admin",
+      "operations-manager",
+      "account"
+    ]
+  },
+  {
+    "group": "System",
+    "title": "Automation Command",
+    "hash": "#/system/automation-command",
+    "apis": [
+      "/api/system/automation-report",
+      "/api/system/automation-control"
+    ],
+    "columns": [],
+    "actions": [
+      "Refresh",
+      "Save",
+      "Test Alert"
+    ],
+    "isCustomPage": true,
+    "customComponent": "AutomationCommandPage",
+    "roles": [
+      "super-admin",
+      "operations-manager"
+    ]
+  },
+  {
     "group": "Token Generate",
     "title": "Credit Token",
     "hash": "#/token-generate/credit-token",
@@ -585,7 +650,8 @@
     "hash": "#/prepay-report/daily-data-meter",
     "apis": [
       "/api/station/read",
-      "/api/DailyDataMeter/read"
+      "/api/DailyDataMeter/read",
+      "/api/DailyDataMeter/export.xlsx"
     ],
     "columns": [
       "meterId",

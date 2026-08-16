@@ -1,3 +1,9 @@
+/*
+ * LEGACY — foundation layer.
+ * Global reset, base typography, CSS custom properties (tokens), and scrollbar styles.
+ * Extracted from the original monolithic stylesheet. Do NOT add new rules here;
+ * new tokens belong in primitives.css or packages/tokens/.
+ */
 * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {

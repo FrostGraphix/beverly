@@ -9,6 +9,11 @@
 import { adminClient } from '../db/supabase.js';
 import { getOrCreateWallet, setOwnerWalletStatus, WalletStateError } from './wallets.js';
 import { logAction, logSecurityEvent } from './audit.js';
+import { sendEmail } from '../adapters/resend.js';
+import { vendorOnboardingEmail } from '../emails/templates.js';
+import { isFlagEnabled } from './feature-flags.js';
+import { env } from '../config/env.js';
+import { normalizeSmsPhone } from './sms-guardrails.js';
 import crypto from 'node:crypto';
 
 export class OnboardingError extends Error {
@@ -79,11 +84,14 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
 
     // 2) create auth user via Supabase Admin API
     const tempPwd = genTempPassword();
+    const phone = input.primaryUserPhone ? normalizeSmsPhone(input.primaryUserPhone) : undefined;
     const { data: authUserData, error: authErr } = await adminClient.auth.admin.createUser({
-        email: input.primaryUserEmail,
+        email: input.primaryUserEmail || undefined,
+        phone: phone || undefined,
         password: tempPwd,
-        email_confirm: true,
-        user_metadata: { role: 'vendor_user', full_name: input.primaryUserFullName },
+        email_confirm: input.primaryUserEmail ? true : undefined,
+        phone_confirm: phone ? true : undefined,
+        user_metadata: { role: 'vendor', full_name: input.primaryUserFullName },
     });
     if (authErr || !authUserData.user) {
         throw new OnboardingError(`auth create failed: ${authErr?.message ?? 'unknown'}`, 'auth_create_failed');
@@ -94,7 +102,7 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
     const { data: vu, error: vuErr } = await adminClient.from('vendor_users').insert({
         auth_user_id: authUserId,
         vendor_organization_id: organization.id,
-        role: 'vendor_manager',
+        role: 'vendor',
         full_name: input.primaryUserFullName,
         email: input.primaryUserEmail,
         phone: input.primaryUserPhone ?? null,
@@ -142,6 +150,21 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             vendor_organization_id: organization.id,
         },
     });
+
+    try {
+        let flagOn = false;
+        try { flagOn = await isFlagEnabled('notifications.email.vendor_onboarding'); } catch { /* flag missing = disabled */ }
+        if (flagOn) {
+            const content = vendorOnboardingEmail({
+                contactName: input.primaryUserFullName,
+                legalName: input.legalName,
+                loginEmail: input.primaryUserEmail,
+                temporaryPassword: tempPwd,
+                loginUrl: env.VENDOR_PORTAL_URL,
+            });
+            await sendEmail({ to: input.primaryUserEmail, subject: content.subject, html: content.html, text: content.text, tag: 'vendor-onboarding' });
+        }
+    } catch { /* non-fatal */ }
 
     return {
         organizationId: organization.id,

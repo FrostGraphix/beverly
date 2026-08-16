@@ -283,6 +283,14 @@ Entities read-only: Log, Debt, Protocol, Remote Support
 |----------|-----------|-----|----------------|
 | RESIDENTIAL | ₦350/kWh | 0% | ₦350.00 |
 | COMMERCIAL | ₦350/kWh | 0% | ₦350.00 |
+
+### Vending VAT
+
+- Approved `vat_policies` rows own rates.
+- `VENDING_VAT_BASIS_POINTS` provides fallback.
+- `@beverly/tokens` owns calculation logic.
+- Entered purchase amounts include VAT.
+- Orders persist rate and breakdown.
 | KOLO | ₦450/kWh | 7.5% | ₦483.75 |
 | PRODUCTIVE | ₦350/kWh | 0% | ₦350.00 |
 | PUBLIC | ₦350/kWh | 0% | ₦350.00 |

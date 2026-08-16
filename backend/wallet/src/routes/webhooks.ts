@@ -1,25 +1,22 @@
 /**
- * Inbound webhooks — /api/v1/webhook/*
+ * Inbound webhooks - /api/v1/webhook/*
  *
- *   POST /paystack — charge.success / charge.failed.
- *     1. Verify HMAC signature.
- *     2. Persist raw to payment_webhooks (idempotent by gateway_reference).
- *     3. Look up payment_transaction by reference.
- *     4. Verify with Paystack server-side (never trust webhook alone).
- *     5. On success: write funding_credit ledger entry (idempotent).
- *     6. Update payment_transaction + funding_request status.
+ * POST /paystack - charge.success / charge.failed.
+ * 1. Verify HMAC signature.
+ * 2. Persist raw to payment_webhooks.
+ * 3. Verify the Paystack reference server-side.
+ * 4. Fulfill the local payment transaction through the shared reconciler.
  */
 import type { FastifyPluginAsync } from 'fastify';
+import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
-import { verifyTransaction, verifyWebhookSignature } from '../adapters/paystack.js';
-import { postEntry } from '../services/ledger.js';
+import { verifyWebhookSignature } from '../adapters/paystack.js';
+import { processPaystackChargeSuccess } from '../services/payment-webhooks.js';
+import { encryptSecret } from '../services/totp.js';
 import { logAction } from '../services/audit.js';
-import { sendTokenSmsToCustomer } from '../services/customer-purchase.js';
-import { notifyWalletFunded, notifyTokenPurchased } from '../services/notifications.js';
-import { assertWalletCanTransact, findWalletByOwner } from '../services/wallets.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
-    // Need raw body for signature verification
+    // Need raw body for signature verification.
     fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => {
         try {
             const json = JSON.parse((body as Buffer).toString('utf8'));
@@ -34,354 +31,101 @@ const route: FastifyPluginAsync = async (fastify) => {
         const raw = (req.body as { __raw?: string }).__raw ?? '';
         const sig = req.headers['x-paystack-signature'] as string | undefined;
         const valid = verifyWebhookSignature(raw, sig);
-
-        const payload = req.body as { event?: string; data?: any };
-        const eventType = payload.event ?? 'unknown';
-        const reference = payload.data?.reference ?? null;
-
-        // persist raw immediately
-        await adminClient.from('payment_webhooks').insert({
-            gateway: 'paystack',
-            event_type: eventType,
-            gateway_reference: reference,
-            signature: sig ?? null,
-            signature_valid: valid,
-            raw_payload: payload as any,
-        });
-
         if (!valid) {
             return reply.code(401).send({ error: 'bad_signature' });
         }
 
-        // We only act on charge.success — other events recorded but not processed in MVP
+        const payload = req.body as { event?: string; data?: any };
+        const eventType = payload.event ?? 'unknown';
+        const reference = payload.data?.reference ?? null;
+        const eventId = typeof payload.data?.id === 'string' || typeof payload.data?.id === 'number'
+            ? String(payload.data.id)
+            : null;
+        const payloadDigest = crypto.createHash('sha256').update(raw).digest('hex');
+        const storedPayload = {
+            event: eventType,
+            reference,
+            event_id: eventId,
+            amount: payload.data?.amount ?? null,
+            status: payload.data?.status ?? null,
+        };
+
+        const { data: webhookRow, error: webhookErr } = await adminClient.from('payment_webhooks').insert({
+            gateway: 'paystack',
+            event_type: eventType,
+            gateway_reference: reference,
+            gateway_event_id: eventId,
+            payload_digest: payloadDigest,
+            signature: 'verified',
+            signature_valid: true,
+            verified_at: new Date().toISOString(),
+            raw_payload: storedPayload,
+            payload_encrypted: encryptSecret(raw),
+        }).select('id').single();
+        if (webhookErr?.code === '23505') {
+            return reply.code(200).send({ ok: true, duplicate: true });
+        }
+        if (webhookErr || !webhookRow) throw webhookErr ?? new Error('webhook_persist_failed');
+        const webhookId = (webhookRow as any).id as string;
+
         if (eventType !== 'charge.success') {
+            await markWebhookProcessed(webhookId, `ignored_event=${eventType}`);
             return reply.code(200).send({ ok: true, ignored: eventType });
         }
-
         if (!reference) {
+            await markWebhookProcessed(webhookId, 'no_reference');
             return reply.code(200).send({ ok: true, ignored: 'no_reference' });
         }
 
-        // verify server-side
-        const verified = await verifyTransaction(reference);
-        if (verified.status !== 'success') {
-            await markWebhookProcessed(payload, `verify_status=${verified.status}`);
-            return reply.code(200).send({ ok: true, ignored: `verify_${verified.status}` });
-        }
-
-        // find payment_transaction
-        const { data: tx } = await adminClient
-            .from('payment_transactions')
-            .select('*')
-            .eq('gateway_reference', reference)
-            .maybeSingle();
-        if (!tx) {
-            await markWebhookProcessed(payload, 'no_local_tx');
-            return reply.code(200).send({ ok: true, ignored: 'no_local_tx' });
-        }
-
-        // already done? idempotent
-        if ((tx as any).status === 'succeeded') {
-            await markWebhookProcessed(payload);
-            return { ok: true, already: true };
-        }
-
-        // Vendor wallet funding (via funding_request)
-        if ((tx as any).purpose === 'wallet_funding' && (tx as any).actor_type === 'vendor') {
-            const fundingId = (tx as any).metadata?.funding_request_id as string | undefined;
-            if (fundingId) {
-                const { data: fr } = await adminClient.from('funding_requests').select('*').eq('id', fundingId).maybeSingle();
-                if (fr) {
-                    const wallet = await findWalletByOwner('vendor', (fr as any).vendor_organization_id);
-                    try {
-                        assertWalletCanTransact(wallet, 'receive funding');
-                    } catch (error: any) {
-                        await blockWebhookFulfillment(tx, payload, error);
-                        return reply.code(200).send({ ok: true, blocked: error.code ?? 'wallet_inactive' });
-                    }
-                    if (wallet.id !== (fr as any).wallet_id) {
-                        await adminClient
-                            .from('funding_requests')
-                            .update({ wallet_id: wallet.id })
-                            .eq('id', (fr as any).id);
-                    }
-                    await postEntry({
-                        walletId: wallet.id,
-                        direction: 'credit',
-                        amountMinor: (fr as any).amount_minor,
-                        entryType: 'payment_credit',
-                        referenceType: 'funding_request',
-                        referenceId: (fr as any).id,
-                        idempotencyKey: `funding.${(fr as any).id}.paystack.credit`,
-                        memo: `Paystack ${reference}`,
-                        createdBy: (fr as any).submitted_by,
-                        audit: { actorType: 'webhook' },
-                    });
-                    await adminClient.from('funding_requests').update({
-                        status: 'approved',
-                        approved_at: new Date().toISOString(),
-                    }).eq('id', (fr as any).id);
-                }
+        try {
+            const result = await processPaystackChargeSuccess(reference, 'webhook');
+            await markWebhookProcessed(webhookId, result.status === 'ignored' || result.status === 'blocked' ? result.reason : undefined);
+            if (result.status === 'ignored') {
+                return reply.code(200).send({ ok: true, ignored: result.reason });
             }
-        }
-
-        // Customer wallet top-up
-        if ((tx as any).purpose === 'wallet_funding' && (tx as any).actor_type === 'customer') {
-            const walletId = (tx as any).metadata?.wallet_id as string | undefined;
-            if (walletId) {
-                const wallet = await findWalletForWebhook(walletId);
-                try {
-                    assertWalletCanTransact(wallet, 'receive funding');
-                } catch (error: any) {
-                    await blockWebhookFulfillment(tx, payload, error);
-                    return reply.code(200).send({ ok: true, blocked: error.code ?? 'wallet_inactive' });
-                }
-                await postEntry({
-                    walletId: wallet.id,
-                    direction: 'credit',
-                    amountMinor: verified.amount,
-                    entryType: 'payment_credit',
-                    referenceType: 'payment_transaction',
-                    referenceId: (tx as any).id,
-                    idempotencyKey: `customer_fund.${(tx as any).id}.paystack.credit`,
-                    memo: `Wallet top-up · Paystack ${reference}`,
-                    createdBy: (tx as any).actor_id,
-                    audit: { actorType: 'webhook' },
-                });
-                // Notify customer
-                notifyWalletFunded((tx as any).actor_id, {
-                    amountMinor: verified.amount,
-                    reference,
-                }).catch(() => undefined);
+            if (result.status === 'blocked') {
+                return reply.code(200).send({ ok: true, blocked: result.reason });
             }
+            return { ok: true, already: result.status === 'already_fulfilled' };
+        } catch (error: any) {
+            await setWebhookRetryError(webhookId, error?.message ?? 'webhook_processing_failed');
+            throw error;
         }
-
-        // Customer direct-pay token purchase: generate token after payment
-        if ((tx as any).purpose === 'token_purchase' && (tx as any).actor_type === 'customer') {
-            const purchaseOrderId = (tx as any).metadata?.purchase_order_id as string | undefined;
-            if (purchaseOrderId) {
-                const { data: po } = await adminClient
-                    .from('purchase_orders')
-                    .select('*')
-                    .eq('id', purchaseOrderId)
-                    .maybeSingle();
-                if (po && (po as any).status !== 'delivered' && (po as any).status !== 'failed') {
-                    let issuedToken: string | null = null;
-                    try {
-                        const wallet = await findWalletByOwner('customer', (po as any).customer_id ?? (tx as any).actor_id);
-                        if (wallet) assertWalletCanTransact(wallet, 'buy tokens');
-                        const { generateCreditToken, previewPurchase, lookupMeter } = await import('../services/token-engine.js');
-                        const { createReceipt } = await import('../services/vending.js');
-                        const { declaredMeterType, effectiveThreePhase } = await import('../services/customer-purchase.js');
-                        const meter = await lookupMeter((po as any).meter_id);
-                        const preview = previewPurchase((po as any).amount_minor, meter.tariffId);
-                        // Phase: live record wins; customer's onboarding declaration fills any gap.
-                        const declared = await declaredMeterType((po as any).customer_id, meter.meterId);
-                        const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);
-                        const meterType = isThreePhase ? 'three_phase' : 'single_phase';
-                        const tokenRes = await generateCreditToken({
-                            meterId: meter.meterId,
-                            customerId: meter.customerId,
-                            amountMinor: (po as any).amount_minor,
-                            units: preview.units,
-                            tariffId: meter.tariffId,
-                            isThreePhase,
-                            reference: purchaseOrderId,
-                        });
-                        issuedToken = tokenRes.token;
-                        const receipt = await createReceipt({
-                            purchaseOrderId,
-                            payload: {
-                                receiptNumber: `BV-${purchaseOrderId.replace(/-/g,'').slice(0,12).toUpperCase()}`,
-                                customerId: (po as any).customer_id,
-                                meterId: meter.meterId,
-                                meterType,
-                                amountMinor: (po as any).amount_minor,
-                                units: preview.units,
-                                token: tokenRes.token,
-                                generatedAt: tokenRes.generatedAt,
-                                purchaseMode: 'direct_pay',
-                            },
-                        });
-                        await adminClient.from('purchase_orders').update({
-                            token: tokenRes.token,
-                            receipt_id: receipt.id,
-                            meter_type: meterType,
-                            status: 'delivered',
-                            delivery_state: 'token_generated',
-                        }).eq('id', purchaseOrderId);
-                        try {
-                            await sendTokenSmsToCustomer({
-                                customerId: (po as any).customer_id,
-                                token: tokenRes.token,
-                                meterId: meter.meterId,
-                                amountMinor: (po as any).amount_minor,
-                                units: preview.units,
-                                receiptId: receipt.id,
-                            });
-                        } catch (smsError: any) {
-                            await logAction({
-                                actorUserId: null,
-                                actorType: 'system',
-                                action: 'customer.purchase.token_sms_failed',
-                                targetType: 'purchase_order',
-                                targetId: purchaseOrderId,
-                                after: { reason: smsError?.message ?? 'sms_failed' },
-                            });
-                        }
-                        // In-app + email notification
-                        notifyTokenPurchased((po as any).customer_id, {
-                            meterId: meter.meterId,
-                            units: preview.units,
-                            amountMinor: (po as any).amount_minor,
-                            token: tokenRes.token,
-                        }).catch(() => undefined);
-                    } catch (e: any) {
-                        await adminClient.from('purchase_orders').update({
-                            token: issuedToken ?? undefined,
-                            status: 'delivery_pending_review',
-                            failure_reason: `direct_pay_token_failed: ${e.message}`.slice(0, 500),
-                        }).eq('id', purchaseOrderId);
-                    }
-                }
-            }
-        }
-
-        // Dedicated Virtual Account (NUBAN) top-up — channel='dedicated_nuban'
-        // Paystack fires this as charge.success; there is no separate event type.
-        if (verified.channel === 'dedicated_nuban' && !tx) {
-            const accountNumber = payload.data?.dedicated_account?.account_number as string | undefined;
-            if (accountNumber) {
-                const { data: va } = await adminClient
-                    .from('virtual_accounts')
-                    .select('wallet_id, owner_type, owner_id')
-                    .eq('account_number', accountNumber)
-                    .eq('status', 'active')
-                    .maybeSingle();
-                if (va) {
-                    const vaWallet = await findWalletForWebhook((va as any).wallet_id);
-                    try {
-                        assertWalletCanTransact(vaWallet, 'receive DVA funding');
-                        await postEntry({
-                            walletId:       (va as any).wallet_id,
-                            direction:      'credit',
-                            amountMinor:    verified.amount,
-                            entryType:      'payment_credit',
-                            referenceType:  'dva_transfer',
-                            referenceId:    reference,
-                            idempotencyKey: `dva.${reference}.credit`,
-                            memo:           `Bank transfer via ${accountNumber}`,
-                            createdBy:      (va as any).owner_id,
-                            audit:          { actorType: 'webhook' },
-                        });
-                        notifyWalletFunded((va as any).owner_id, {
-                            amountMinor: verified.amount,
-                            reference,
-                        }).catch(() => undefined);
-                    } catch { /* wallet inactive — log but do not block 200 */ }
-                }
-            }
-            await markWebhookProcessed(payload);
-            return { ok: true };
-        }
-
-        // mark transaction success
-        await adminClient.from('payment_transactions').update({
-            status: 'succeeded',
-            completed_at: new Date().toISOString(),
-            channel: verified.channel,
-            metadata: { ...((tx as any).metadata ?? {}), authorization: verified.authorization, paystack: verified },
-        }).eq('id', (tx as any).id);
-
-        await markWebhookProcessed(payload);
-
-        await logAction({
-            actorUserId: null,
-            actorType: 'webhook',
-            action: 'paystack.charge.success',
-            targetType: 'payment_transaction',
-            targetId: (tx as any).id,
-            after: { reference, channel: verified.channel },
-        });
-
-        return { ok: true };
     });
 
-    async function markWebhookProcessed(payload: any, error?: string) {
+    fastify.post('/resend', async (req) => {
+        const payload = req.body as { type?: string; data?: any };
+        const eventType = payload.type ?? 'unknown';
+        const emailData = payload.data ?? {};
+        const recipient = Array.isArray(emailData.to) ? emailData.to.join(',') : (emailData.to ?? 'unknown');
+        const subject = emailData.subject ?? 'N/A';
+
+        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.delivery_delayed') {
+            await logAction({
+                actorUserId: 'system',
+                actorType: 'system',
+                action: 'resend.email_bounced',
+                targetType: 'email',
+                targetId: recipient,
+                after: { eventType, recipient, subject, bounceData: emailData.bounce ?? emailData },
+            }).catch(() => undefined);
+        }
+
+        return { ok: true, received: eventType };
+    });
+
+    async function markWebhookProcessed(webhookId: string, error?: string) {
         await adminClient.from('payment_webhooks').update({
             processed: true,
             processed_at: new Date().toISOString(),
             error: error ?? null,
-        }).eq('gateway_reference', payload.data?.reference ?? '').not('processed', 'is', true);
+        }).eq('id', webhookId).eq('processed', false);
     }
 
-    async function findWalletForWebhook(walletId: string) {
-        const { data, error } = await adminClient
-            .from('wallets')
-            .select('id, owner_type, owner_id, currency, status, daily_debit_cap_minor, monthly_debit_cap_minor, created_at')
-            .eq('id', walletId)
-            .maybeSingle();
-        if (error) throw error;
-        return data as any;
-    }
-
-    async function blockWebhookFulfillment(tx: any, payload: any, error: any) {
-        const code = error?.code ?? 'wallet_inactive';
-        const blockedAt = new Date().toISOString();
-        const metadata = {
-            ...(tx.metadata ?? {}),
-            fulfillment_blocked: true,
-            fulfillment_blocked_reason: code,
-            fulfillment_blocked_at: blockedAt,
-            requires_ops_review: true,
-        };
-
-        // Token purchases were paid; park delivery for ops review instead of hard-failing fulfillment.
-        if (tx.purpose === 'token_purchase' && tx.actor_type === 'customer') {
-            const purchaseOrderId = tx.metadata?.purchase_order_id;
-            if (purchaseOrderId) {
-                await adminClient
-                    .from('purchase_orders')
-                    .update({
-                        status: 'delivery_pending_review',
-                        failure_reason: `wallet_inactive_on_webhook: ${code}`.slice(0, 500),
-                        delivery_state: 'wallet_state_blocked_needs_review',
-                    })
-                    .eq('id', purchaseOrderId);
-            }
-        }
-
-        // Vendor funding remains pending finance review while wallet is inactive.
-        if (tx.purpose === 'wallet_funding' && tx.actor_type === 'vendor') {
-            const fundingRequestId = tx.metadata?.funding_request_id;
-            if (fundingRequestId) {
-                await adminClient
-                    .from('funding_requests')
-                    .update({
-                        status: 'under_review',
-                        rejection_reason: `wallet_inactive_on_webhook: ${code}`.slice(0, 500),
-                    })
-                    .eq('id', fundingRequestId)
-                    .in('status', ['initiated', 'proof_uploaded']);
-            }
-        }
-
-        await adminClient
-            .from('payment_transactions')
-            .update({
-                status: 'succeeded',
-                metadata,
-            })
-            .eq('id', tx.id);
-        await markWebhookProcessed(payload, code);
-        await logAction({
-            actorUserId: null,
-            actorType: 'webhook',
-            action: 'paystack.fulfillment_blocked',
-            targetType: 'payment_transaction',
-            targetId: tx.id,
-            after: { reason: code },
-        });
+    async function setWebhookRetryError(webhookId: string, error: string) {
+        await adminClient.from('payment_webhooks').update({
+            error: `retry_pending:${error}`.slice(0, 500),
+        }).eq('id', webhookId).eq('processed', false);
     }
 };
 

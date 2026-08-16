@@ -22,7 +22,7 @@
           <span>Station</span>
           <BaseSelect v-model="activeStation" @change="loadActive">
             <option value="">All stations</option>
-            <option v-for="station in STATION_LIST" :key="station.id" :value="station.id">{{ station.label }}</option>
+            <option v-for="station in stationList" :key="station.id" :value="station.id">{{ station.label }}</option>
           </BaseSelect>
         </label>
 
@@ -163,7 +163,14 @@
           <div class="csp-load-fill" :style="{ width: loadPercent + '%' }" />
         </div>
         <div v-if="stationError" class="csp-error">{{ stationError }}</div>
-        <div class="csp-chart-wrap">
+        <div v-if="!loadingStations && !allAggRows.length" class="csp-empty-state">
+          <svg class="csp-empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="14" width="36" height="26" rx="3"/><path d="M16 14V10a4 4 0 0 1 8 0v4M24 28v4M16 32l4-4 4 4 4-6 4 6"/>
+          </svg>
+          <p class="csp-empty-title">No consumption data</p>
+          <p class="csp-empty-sub">No readings were found for the selected period. Try a different date range or granularity.</p>
+        </div>
+        <div v-else class="csp-chart-wrap">
           <EChartPanel :option="allChartOption" />
         </div>
       </div>
@@ -413,6 +420,7 @@ import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { postApi } from "../services/api.js";
+import { fetchStationOptions } from "../services/station-registry.mjs";
 import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
 import {
   aggregateConsumptionRows,
@@ -424,13 +432,7 @@ import {
   summarizeConsumptionRows
 } from "../services/consumption-statistics-service.mjs";
 
-const STATION_LIST = [
-  { id: "TUNGA",   label: "Tunga",   color: "#40c9c6" },
-  { id: "UMAISHA", label: "Umaisha", color: "#10b981" },
-  { id: "OGUFA",   label: "Ogufa",   color: "#f4516c" },
-  { id: "KYAKALE", label: "Kyakale", color: "#34bfa3" },
-  { id: "MUSHA",   label: "Musha",   color: "#ffb822" }
-];
+const STATION_COLORS = ["#40c9c6", "#10b981", "#f4516c", "#34bfa3", "#ffb822"];
 
 const PERIODS = [
   { key: "all",      label: "All Time" },
@@ -455,13 +457,13 @@ export default {
   data() {
     return {
       PERIODS,
-      STATION_LIST,
+      stationList: [],
       activeView: "all",
       activePeriod: "monthly",
       customGranularity: "daily",
       customFrom: "",
       customTo: "",
-      stationDataMap: Object.fromEntries(STATION_LIST.map((s) => [s.id, { rows: [], loading: false, error: "" }])),
+      stationDataMap: {},
       stationsLoaded: false,
       stationError: "",
       activeStation: "",
@@ -507,18 +509,18 @@ export default {
     granularity() { return this.periodRange.granularity; },
     granularityLabel() { return GRANULARITY_LABELS[this.granularity] || this.granularity; },
     loadingStations() {
-      return STATION_LIST.some((s) => this.stationDataMap[s.id].loading);
+      return this.stationList.some((s) => this.stationDataMap[s.id]?.loading);
     },
     loadedCount() {
-      return STATION_LIST.filter((s) => !this.stationDataMap[s.id].loading && (this.stationDataMap[s.id].rows.length > 0 || this.stationsLoaded)).length;
+      return this.stationList.filter((s) => !this.stationDataMap[s.id]?.loading && (this.stationDataMap[s.id]?.rows.length > 0 || this.stationsLoaded)).length;
     },
     loadPercent() {
-      return Math.round((this.loadedCount / STATION_LIST.length) * 100);
+      return this.stationList.length ? Math.round((this.loadedCount / this.stationList.length) * 100) : 0;
     },
 
     // ── ALL SITES ──
     allRawRows() {
-      return STATION_LIST.flatMap((s) => this.stationDataMap[s.id].rows);
+      return this.stationList.flatMap((s) => this.stationDataMap[s.id]?.rows || []);
     },
     allAggRows() {
       return aggregateConsumptionRows(this.allRawRows, this.granularity);
@@ -540,7 +542,7 @@ export default {
 
     // ── BY STATION ──
     stationSummary() {
-      return STATION_LIST.map((s) => {
+      return this.stationList.map((s) => {
         const entry = this.stationDataMap[s.id];
         const agg = aggregateConsumptionRows(entry.rows, this.granularity);
         const total = agg.reduce((sum, r) => sum + r.consumption, 0);
@@ -551,19 +553,19 @@ export default {
       return buildStationBarChartOption(this.stationSummary, this.chartTheme || {});
     },
     activeStationLabel() {
-      return STATION_LIST.find((s) => s.id === this.activeStation)?.label || this.activeStation;
+      return this.stationList.find((s) => s.id === this.activeStation)?.label || this.activeStation;
     },
     drillRows() {
       if (!this.activeStation) return [];
       const entry = this.stationDataMap[this.activeStation];
-      return decorateConsumptionRows(aggregateConsumptionRows(entry.rows, this.granularity));
+      return decorateConsumptionRows(aggregateConsumptionRows(entry?.rows || [], this.granularity));
     },
     drillChartOption() {
       if (!this.activeStation) return {};
-      const st = STATION_LIST.find((s) => s.id === this.activeStation);
+      const st = this.stationList.find((s) => s.id === this.activeStation);
       const theme = { ...this.chartTheme, primary: st?.color || "#059669" };
       return buildBarChartOption(
-        aggregateConsumptionRows(this.stationDataMap[this.activeStation].rows, this.granularity),
+        aggregateConsumptionRows(this.stationDataMap[this.activeStation]?.rows || [], this.granularity),
         this.granularity,
         theme,
         this.activeStationLabel
@@ -648,7 +650,7 @@ export default {
   mounted() {
     this.syncTheme();
     this.watchTheme();
-    this._fetchAllStations();
+    this._loadStationDirectory();
   },
 
   beforeUnmount() {
@@ -656,6 +658,23 @@ export default {
   },
 
   methods: {
+    async _loadStationDirectory() {
+      try {
+        const options = await fetchStationOptions();
+        this.stationList = options.map((station, index) => ({
+          id: station.stationId,
+          label: station.label,
+          color: STATION_COLORS[index % STATION_COLORS.length]
+        }));
+        this.stationDataMap = Object.fromEntries(
+          this.stationList.map((station) => [station.id, { rows: [], loading: false, error: "" }])
+        );
+        await this._fetchAllStations();
+      } catch (error) {
+        this.stationError = error?.message || "Failed to load stations";
+      }
+    },
+
     switchView(view) {
       this.activeView = view;
       if ((view === "all" || view === "station") && !this.stationsLoaded && !this.loadingStations) {
@@ -711,6 +730,7 @@ export default {
     },
 
     async _fetchAllStations() {
+      if (!this.stationList.length) return;
       this.stationsLoaded = false;
       this.stationError = "";
       const { from, to, granularity } = this.periodRange;
@@ -732,7 +752,7 @@ export default {
         }
       };
 
-      await Promise.all(STATION_LIST.map((s) => fetchOne(s)));
+      await Promise.all(this.stationList.map((s) => fetchOne(s)));
       this.stationsLoaded = true;
     },
 
@@ -1467,6 +1487,10 @@ export default {
 .csp-down { color: var(--danger); }
 
 .csp-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+.csp-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; gap: 10px; }
+.csp-empty-icon { width: 48px; height: 48px; color: var(--text-muted); opacity: 0.5; }
+.csp-empty-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-strong); }
+.csp-empty-sub { margin: 0; font-size: 13px; color: var(--text-muted); text-align: center; max-width: 340px; }
 
 .csp-badge {
   display: inline-flex;

@@ -2,11 +2,11 @@
   <div class="dashboard-live-page">
     <section class="dashboard-card-grid" aria-label="Dashboard summary">
       <template v-if="loading">
-        <div v-for="i in 4" :key="'skel-card-'+i" class="dashboard-stat-card skeleton">
-          <div class="skeleton-avatar" style="margin-right: 16px;"></div>
-          <div style="flex: 1;">
-            <div class="skeleton-text" style="width: 60%;"></div>
-            <div class="skeleton-text" style="width: 40%;"></div>
+        <div v-for="i in 4" :key="'skel-card-'+i" class="dashboard-stat-card dashboard-stat-skeleton" aria-hidden="true">
+          <span class="dashboard-skeleton-icon"></span>
+          <div class="dashboard-skeleton-copy">
+            <span class="dashboard-skeleton-line dashboard-skeleton-line--label"></span>
+            <span class="dashboard-skeleton-line dashboard-skeleton-line--value"></span>
           </div>
         </div>
       </template>
@@ -20,24 +20,43 @@
           <span class="dashboard-stat-icon" :style="{ color: card.color, '--theme-color': card.color }" v-html="card.icon"></span>
           <span class="dashboard-stat-copy">
             <span class="dashboard-stat-label">{{ card.label }}</span>
-            <span class="dashboard-stat-value">{{ formatNumber(animatedPanel[card.key]) }}</span>
+            <span class="dashboard-stat-value">
+              <span v-if="card.key === 'totalPurchaseMoney'" class="dashboard-stat-symbol" aria-label="Naira">₦</span>
+              <span>{{ formatStatValue(card, animatedPanel[card.key]) }}</span>
+              <span v-if="card.key === 'totalPurchaseUnit'" class="dashboard-stat-unit">kWh</span>
+            </span>
           </span>
         </BaseButton>
       </template>
     </section>
 
     <section class="dashboard-chart-card dashboard-chart-wide" aria-label="Top dashboard chart">
-      <div v-if="loading" class="skeleton skeleton-card" style="height: 350px;"></div>
+      <div v-if="loading" class="dashboard-chart-skeleton" role="status" aria-label="Loading purchase chart">
+        <span class="dashboard-chart-skeleton-title"></span>
+        <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+          <span v-for="height in [36, 56, 44, 72, 48, 62, 40, 78, 52, 66, 46, 70]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+        </div>
+      </div>
       <EChartPanel v-else :option="topChartOption" />
     </section>
 
     <section class="dashboard-chart-pair">
       <article class="dashboard-chart-card">
-        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading success chart">
+          <span class="dashboard-chart-skeleton-title"></span>
+          <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+            <span v-for="height in [42, 58, 48, 68, 54, 76, 64, 82]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+          </div>
+        </div>
         <EChartPanel v-else :option="successChartOption" />
       </article>
       <article class="dashboard-chart-card">
-        <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+        <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading alarm chart">
+          <span class="dashboard-chart-skeleton-title"></span>
+          <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+            <span v-for="height in [58, 46, 70, 52, 80, 64, 42, 72]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+          </div>
+        </div>
         <EChartPanel v-else :option="alarmChartOption" @chart-click="openAbnormalAlarmPage" />
       </article>
     </section>
@@ -54,7 +73,13 @@
           {{ mode.label }}
         </BaseButton>
       </div>
-      <div v-if="loading" class="skeleton skeleton-card" style="height: 300px;"></div>
+      <div v-if="loading" class="dashboard-chart-skeleton dashboard-chart-skeleton--compact" role="status" aria-label="Loading consumption chart">
+        <span class="dashboard-chart-skeleton-title"></span>
+        <div class="dashboard-chart-skeleton-plot" aria-hidden="true">
+          <span v-for="height in [34, 62, 46, 72, 54, 42, 68, 58]" :key="height" class="dashboard-chart-skeleton-bar" :style="{ height: `${height}%` }"></span>
+        </div>
+      </div>
+      <div v-else-if="!consumption.values.length" class="dashboard-chart-empty">No current consumption data.</div>
       <EChartPanel v-else :option="consumptionChartOption" />
     </section>
   </div>
@@ -66,6 +91,7 @@ import BaseButton from "./base/BaseButton.vue";
 import { fetchDashboardData } from "../services/dashboard-service.mjs";
 import { createBarOption, createLineOption, createPieOption, dashboardSeries } from "../services/dashboard-chart-options.mjs";
 import { dashboardChartTitles } from "../services/mappers/dashboard-mapper.mjs";
+import { useOemStore } from "../stores/oem-store";
 
 const iconMarkup = {
   account: '<svg viewBox="0 0 1024 1024" aria-hidden="true"><path d="M512 512c113.1 0 204.8-91.7 204.8-204.8S625.1 102.4 512 102.4 307.2 194.1 307.2 307.2 398.9 512 512 512zm0 102.4c-136.5 0-409.6 68.5-409.6 204.8v102.4h819.2V819.2c0-136.3-273.1-204.8-409.6-204.8z"/></svg>',
@@ -85,26 +111,6 @@ const consumptionModes = [
   { id: "daily", label: "Daily", type: 4 },
   { id: "monthly", label: "Monthly", type: 5 }
 ];
-
-const referenceConsumption = {
-  labels: [
-    "2026-03-29", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04",
-    "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10",
-    "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16",
-    "2026-04-17", "2026-04-18", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22",
-    "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-26", "2026-04-27"
-  ],
-  values: [
-    0, 4200, 2900, 1200, 0, 2050, 1650, 1450, 950, 0,
-    1580, 0, 3080, 0, 2050, 0, 5450, 80, 850, 0,
-    1980, 3480, 1380, 0, 0, 1200, 6150, 580, 1980
-  ]
-};
-
-const referenceMonthlyConsumption = {
-  labels: ["2026-03", "2026-04"],
-  values: [4200, 40020]
-};
 
 export default {
   name: "DashboardPage",
@@ -134,10 +140,16 @@ export default {
       chartTheme: null,
       themeObserver: null,
       countFrame: null,
-      dashboardLoadId: 0
+      refreshTimer: null,
+      visibilityHandler: null,
+      dashboardLoadId: 0,
+      warmApplied: false
     };
   },
   computed: {
+    oemStore() {
+      return useOemStore();
+    },
     cards() {
       const theme = this.chartTheme || {};
       return dashboardCards.map((card) => ({
@@ -184,10 +196,17 @@ export default {
   mounted() {
     this.syncThemePalette();
     this.observeThemeChanges();
+    this.refreshTimer = window.setInterval(() => this.loadDataset(this.activeType, false), 300000);
+    this.visibilityHandler = () => {
+      if (document.visibilityState === "visible") this.loadDataset(this.activeType, false);
+    };
+    document.addEventListener("visibilitychange", this.visibilityHandler);
   },
   beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
     if (this.countFrame) cancelAnimationFrame(this.countFrame);
+    if (this.refreshTimer) window.clearInterval(this.refreshTimer);
+    if (this.visibilityHandler) document.removeEventListener("visibilitychange", this.visibilityHandler);
   },
   methods: {
     async refreshDashboard() {
@@ -204,37 +223,40 @@ export default {
         ? this.toMonthlyConsumption(this.dailyConsumption)
         : this.dailyConsumption;
     },
-    async loadDataset(activeType) {
+    applyDataset(dataset) {
+      this.panel = dataset.panel;
+      this.animatePanel(dataset.panel);
+      this.top = dataset.top;
+      this.dailyConsumption = dataset.consumption;
+      this.consumption = this.consumptionMode === "monthly"
+        ? this.toMonthlyConsumption(this.dailyConsumption)
+        : this.dailyConsumption;
+      this.success = dataset.success;
+      this.alarms = dataset.alarms;
+    },
+    async loadDataset(activeType, showLoading = true) {
+      if (!showLoading && this.loading) return;
       const loadId = ++this.dashboardLoadId;
-      this.loading = true;
+      // Paint the background-warmed dataset instantly (no spinner) if the OEM Hub
+      // prefetched this OEM's dashboard, then refresh silently in the background.
+      if (showLoading && !this.warmApplied) {
+        const warm = this.oemStore.warmCache[this.oemStore.currentOemId];
+        if (warm && warm.status === "ready" && warm.dataset) {
+          this.applyDataset(warm.dataset);
+          this.warmApplied = true;
+          this.loading = false;
+          this.loadDataset(activeType, false);
+          return;
+        }
+      }
+      if (showLoading) this.loading = true;
       try {
         const dataset = await fetchDashboardData({ activeType, consumptionType: 4 });
         if (loadId !== this.dashboardLoadId) return;
-        this.panel = dataset.panel;
-        this.animatePanel(dataset.panel);
-        this.top = dataset.top;
-        this.dailyConsumption = this.resolveConsumptionDataset(dataset.consumption, 4);
-        this.consumption = this.consumptionMode === "monthly"
-          ? this.toMonthlyConsumption(this.dailyConsumption)
-          : this.dailyConsumption;
-        this.success = dataset.success;
-        this.alarms = dataset.alarms;
+        this.applyDataset(dataset);
       } finally {
-        if (loadId === this.dashboardLoadId) this.loading = false;
+        if (showLoading && loadId === this.dashboardLoadId) this.loading = false;
       }
-    },
-    resolveConsumptionDataset(consumption, type = this.consumptionType) {
-      const hasVisibleValues = consumption.values.some((value) => Number(value) > 0);
-      const hasExpectedData = type === 5
-        ? consumption.labels.length > 0 && hasVisibleValues
-        : consumption.labels.length > 5 && hasVisibleValues;
-      if (hasExpectedData) return consumption;
-      const fallback = type === 5 ? referenceMonthlyConsumption : referenceConsumption;
-      return {
-        title: dashboardChartTitles[type] || "Daily Consumption",
-        labels: fallback.labels,
-        values: fallback.values
-      };
     },
     toMonthlyConsumption(daily) {
       const totals = new Map();
@@ -244,11 +266,26 @@ export default {
       });
       const labels = [...totals.keys()];
       const values = labels.map((label) => Number((totals.get(label) || 0).toFixed(2)));
-      return this.resolveConsumptionDataset({
+      return {
         title: "Monthly Consumption",
         labels,
         values
-      }, 5);
+      };
+    },
+    formatStatValue(card, value) {
+      const num = Number(value || 0);
+      if (card && card.key === "totalPurchaseMoney") {
+        return num.toLocaleString("en-NG", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+      if (card && (card.key === "totalAccountCount" || card.key === "totalPurchaseTimes")) {
+        return Math.round(num).toLocaleString();
+      }
+      return num.toLocaleString(undefined, {
+        maximumFractionDigits: 1
+      });
     },
     formatNumber(value) {
       return Number(value || 0).toLocaleString(undefined, {

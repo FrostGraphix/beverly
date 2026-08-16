@@ -3,6 +3,12 @@
 const crypto = require("crypto");
 const localDatabase = require("./local-database");
 const supabase = require("./supabase-service");
+const {
+  isUuid,
+  isExplicitStationId,
+  mergeDerivedWithCanonical,
+  canonicalStationRows
+} = require("./oem-station-fallback");
 
 const tableNames = [
   "users",
@@ -46,6 +52,54 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function uuidOrNull(value) {
+  const text = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+
+// Full API response bodies used to be written into BOTH `detail` and `metadata`
+// (byte-identical, pure duplication) on every audited action. Investigation of
+// every caller in the repo showed that JSON is only ever read back for one
+// narrow slice: client-error telemetry (client-error-service.js's
+// listClientErrors, filtered to proxySource === "client-error"). Everything
+// else -- login/download/create/remote_command from auditResult() in
+// api/reference.js -- writes and never reads it. `metadata` is retired
+// entirely; `detail` is only populated for the slice that's actually consumed.
+// outcome/statusCode/method get real columns instead of living only in JSON,
+// matching what the local SQLite backend (local-database.js) already does.
+function mapAuditRow(entry = {}) {
+  const method = String(entry.method || "GET").toUpperCase();
+  const path = String(entry.path || "/");
+  const normalizedPath = path.toLowerCase();
+  const action = normalizedPath.includes("login") ? "login"
+    : normalizedPath.includes("logout") ? "logout"
+      : normalizedPath.includes("import") ? "import"
+        : normalizedPath.includes("export") ? "export"
+          : normalizedPath.includes("remote") ? "remote_command"
+            : method === "DELETE" ? "delete"
+              : ["PUT", "PATCH"].includes(method) ? "update"
+                : method === "POST" ? "create"
+                  : "download";
+  const outcome = String(entry.outcome || "success");
+  const statusCode = Number(entry.statusCode || 200);
+  const proxySource = String(entry.proxySource || "unknown");
+  const detail = proxySource === "client-error"
+    ? sanitizeValue({ ...(entry.details || {}), method, outcome, statusCode, proxySource })
+    : {};
+  return {
+    user_id: uuidOrNull(entry.userId),
+    action,
+    resource: path,
+    resource_id: entry.resourceId || null,
+    detail,
+    outcome,
+    status_code: statusCode,
+    method,
+    source: proxySource,
+    request_id: uuidOrNull(entry.requestId)
+  };
+}
+
 function stableId(prefix) {
   return crypto.createHash("sha256").update(prefix).digest("hex");
 }
@@ -67,7 +121,27 @@ function countFromRange(value) {
   return match ? Number(match[1]) : 0;
 }
 
+// Mirrors local-database: a binding written by the old silent-fallback path is
+// unsynced regardless of the status column it was stored with.
+const unsyncedBindingSources = new Set(["local-fallback", "upstream-rejected"]);
+
+function isPendingBinding(row = {}) {
+  return String(row.status || "") === "pending" || unsyncedBindingSources.has(String(row.source || ""));
+}
+
+function accountBindingDetails(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function mapAccountBindingRow(row = {}) {
+  const details = accountBindingDetails(row.detail_json);
   return {
     customerId: row.customer_id,
     meterId: row.meter_id,
@@ -75,6 +149,10 @@ function mapAccountBindingRow(row = {}) {
     ctRatio: row.ct_ratio,
     stationId: row.station_id,
     remark: row.remark,
+    source: row.source,
+    status: row.status,
+    lastError: String(details.lastError || ""),
+    attempts: Number(details.attempts || 0),
     createDate: row.created_at,
     updateDate: row.updated_at,
     _supabase: true
@@ -140,17 +218,33 @@ async function recordAuditLog(entry) {
     () => supabase.restRequest("/audit_logs", {
       method: "POST",
       prefer: "return=minimal",
-      body: {
-        method: String(entry.method || "GET").toUpperCase(),
-        path: String(entry.path || "/"),
-        outcome: String(entry.outcome || "success"),
-        status_code: Number(entry.statusCode || 200),
-        proxy_source: String(entry.proxySource || "unknown"),
-        detail_json: sanitizeValue(entry.details || {}),
-        user_id: entry.userId || null,
-        request_id: entry.requestId || null
-      }
+      body: mapAuditRow(entry)
     })
+  );
+}
+
+async function listAuditLogs(options = {}) {
+  return runWithFallback(
+    () => localDatabase.listAuditLogs(options),
+    async () => {
+      const limit = Math.max(1, Math.min(Number(options.limit || 100), 500));
+      const proxySource = String(options.proxySource || "");
+      const sourceFilter = proxySource ? `&source=eq.${encodeURIComponent(proxySource)}` : "";
+      const rows = await supabase.restRequest(`/audit_logs?select=*${sourceFilter}&order=created_at.desc&limit=${limit}`);
+      return (Array.isArray(rows) ? rows : []).map((row) => {
+        const details = row.detail_json || row.detail || {};
+        return {
+          id: row.id || null,
+          method: String(row.method || details.method || "GET").toUpperCase(),
+          path: String(row.path || row.resource || "/"),
+          outcome: String(row.outcome || details.outcome || "success"),
+          statusCode: Number(row.status_code || details.statusCode || 200),
+          proxySource: String(row.proxy_source || row.source || details.proxySource || "unknown"),
+          details,
+          createdAt: row.created_at || null
+        };
+      });
+    }
   );
 }
 
@@ -308,14 +402,23 @@ async function listAccountBindings(options = {}) {
     () => localDatabase.listAccountBindings(options),
     async () => {
       const filters = [
-        "select=customer_id,meter_id,tariff_id,ct_ratio,station_id,remark,created_at,updated_at"
+        "select=customer_id,meter_id,tariff_id,ct_ratio,station_id,remark,source,status,detail_json,created_at,updated_at"
       ];
       if (options.customerId) filters.push(`customer_id=eq.${encodeURIComponent(String(options.customerId))}`);
       if (options.meterId) filters.push(`meter_id=eq.${encodeURIComponent(String(options.meterId))}`);
       if (options.stationId) filters.push(`station_id=eq.${encodeURIComponent(String(options.stationId).toUpperCase())}`);
       filters.push("order=updated_at.desc");
       const rows = await supabase.restRequest(`/account_bindings?${filters.join("&")}`);
-      return (Array.isArray(rows) ? rows : []).map(mapAccountBindingRow);
+      const mapped = (Array.isArray(rows) ? rows : []).map(mapAccountBindingRow);
+      const searchTerm = String(options.searchTerm || "").trim().toLowerCase();
+      const status = String(options.status || "").trim();
+      return mapped.filter((row) => {
+        if (status === "pending" && !isPendingBinding(row)) return false;
+        if (status && status !== "pending" && (String(row.status || "") !== status || isPendingBinding(row))) return false;
+        if (!searchTerm) return true;
+        return [row.customerId, row.meterId, row.tariffId, row.stationId]
+          .some((value) => String(value || "").toLowerCase().includes(searchTerm));
+      });
     }
   );
 }
@@ -389,11 +492,541 @@ async function tableCounts() {
   );
 }
 
+// Meter token-format (STS S1/S2) overrides — persisted to Supabase in production,
+// local SQLite otherwise (same fallback model as account bindings).
+function mapOverrideRow(row) {
+  if (!row) return null;
+  return {
+    meterId: row.meter_id,
+    isS2: row.is_s2 === true || row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+async function getMeterTokenOverride(meterId) {
+  return runWithFallback(
+    () => localDatabase.getMeterTokenOverride(meterId),
+    async () => {
+      const id = encodeURIComponent(String(meterId || ""));
+      const rows = await supabase.restRequest(`/meter_token_overrides?meter_id=eq.${id}&select=meter_id,is_s2,note,updated_by,updated_at&limit=1`);
+      return mapOverrideRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function setMeterTokenOverride(entry = {}) {
+  const meterId = String(entry.meterId || "").trim();
+  const clear = entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto";
+  return runWithFallback(
+    () => localDatabase.setMeterTokenOverride(entry),
+    async () => {
+      if (clear) {
+        await supabase.restRequest(`/meter_token_overrides?meter_id=eq.${encodeURIComponent(meterId)}`, {
+          method: "DELETE",
+          prefer: "return=minimal"
+        });
+        return { meterId, cleared: true };
+      }
+      const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+      const rows = await supabase.restRequest("/meter_token_overrides?on_conflict=meter_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: {
+          meter_id: meterId,
+          is_s2: isS2,
+          note: String(entry.note || ""),
+          updated_by: String(entry.updatedBy || ""),
+          updated_at: nowIso()
+        }
+      });
+      return mapOverrideRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listMeterTokenOverrides() {
+  return runWithFallback(
+    () => localDatabase.listMeterTokenOverrides(),
+    async () => {
+      const rows = await supabase.restRequest("/meter_token_overrides?select=meter_id,is_s2,note,updated_by,updated_at&order=updated_at.desc");
+      return (Array.isArray(rows) ? rows : []).map(mapOverrideRow);
+    }
+  );
+}
+
+// SGC-level rules — one row classifies a whole supply group.
+function mapSgcRuleRow(row) {
+  if (!row) return null;
+  return {
+    sgc: row.sgc,
+    isS2: row.is_s2 === true || row.is_s2 === 1,
+    note: row.note || "",
+    updatedBy: row.updated_by || "",
+    updatedAt: row.updated_at
+  };
+}
+
+async function getSgcTokenRule(sgc) {
+  return runWithFallback(
+    () => localDatabase.getSgcTokenRule(sgc),
+    async () => {
+      const id = encodeURIComponent(String(sgc || ""));
+      const rows = await supabase.restRequest(`/sgc_token_rules?sgc=eq.${id}&select=sgc,is_s2,note,updated_by,updated_at&limit=1`);
+      return mapSgcRuleRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function setSgcTokenRule(entry = {}) {
+  const sgc = String(entry.sgc || "").trim();
+  const clear = entry.isS2 === null || entry.isS2 === undefined || entry.isS2 === "auto";
+  return runWithFallback(
+    () => localDatabase.setSgcTokenRule(entry),
+    async () => {
+      if (clear) {
+        await supabase.restRequest(`/sgc_token_rules?sgc=eq.${encodeURIComponent(sgc)}`, { method: "DELETE", prefer: "return=minimal" });
+        return { sgc, cleared: true };
+      }
+      const isS2 = entry.isS2 === true || entry.isS2 === 1 || entry.isS2 === "true" || entry.isS2 === "1";
+      const rows = await supabase.restRequest("/sgc_token_rules?on_conflict=sgc", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body: {
+          sgc,
+          is_s2: isS2,
+          note: String(entry.note || ""),
+          updated_by: String(entry.updatedBy || ""),
+          updated_at: nowIso()
+        }
+      });
+      return mapSgcRuleRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listSgcTokenRules() {
+  return runWithFallback(
+    () => localDatabase.listSgcTokenRules(),
+    async () => {
+      const rows = await supabase.restRequest("/sgc_token_rules?select=sgc,is_s2,note,updated_by,updated_at&order=updated_at.desc");
+      return (Array.isArray(rows) ? rows : []).map(mapSgcRuleRow);
+    }
+  );
+}
+
+// ── OEM manufacturer registry ───────────────────────────────────────────────
+// Top-level tenant entity for the multi-OEM proxy. Supabase column is `capabilities`
+// (jsonb); the local SQLite mirror stores the same shape as `capabilities_json` text.
+function mapOemManufacturerRow(row) {
+  if (!row) return null;
+  let capabilities = row.capabilities ?? row.capabilities_json ?? {};
+  if (typeof capabilities === "string") {
+    try {
+      capabilities = JSON.parse(capabilities);
+    } catch {
+      capabilities = {};
+    }
+  }
+  const isSeedDefault = row.is_seed_default === true || row.is_seed_default === 1 || row.slug === "calinmeter";
+  const hasCapabilities = capabilities && typeof capabilities === "object" && Object.values(capabilities).some(Boolean);
+  if (!hasCapabilities || isSeedDefault) {
+    capabilities = {
+      remote_meter_task: true,
+      tariff_management: true,
+      gprs_support: true,
+      event_notification: true,
+      load_profile: true,
+      firmware_update: true,
+      dlms_protocol: true,
+      dlt645_protocol: true,
+      wallet_vending: true,
+      ...capabilities
+    };
+  }
+  return {
+    id: row.id,
+    slug: row.slug,
+    displayName: row.display_name,
+    logoStoragePath: row.logo_storage_path || "",
+    status: row.status,
+    isSeedDefault,
+    capabilities,
+    vendingStrategy: row.vending_strategy || "sts_token",
+    rateLimitWindowMs: row.rate_limit_window_ms || null,
+    rateLimitMaxRequests: row.rate_limit_max_requests || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getOemManufacturer(idOrSlug) {
+  return runWithFallback(
+    () => localDatabase.getOemManufacturer(idOrSlug),
+    async () => {
+      const key = encodeURIComponent(String(idOrSlug || ""));
+      const rows = await supabase.restRequest(`/oem_manufacturers?or=(id.eq.${key},slug.eq.${key})&limit=1`);
+      return mapOemManufacturerRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listOemManufacturers() {
+  return runWithFallback(
+    () => localDatabase.listOemManufacturers(),
+    async () => {
+      const rows = await supabase.restRequest("/oem_manufacturers?select=*&order=created_at.asc");
+      return (Array.isArray(rows) ? rows : []).map(mapOemManufacturerRow);
+    }
+  );
+}
+
+async function upsertOemManufacturer(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemManufacturer(entry),
+    async () => {
+      const slug = String(entry.slug || "").trim().toLowerCase();
+      const body = {
+        slug,
+        display_name: String(entry.displayName || slug),
+        logo_storage_path: String(entry.logoStoragePath || ""),
+        status: String(entry.status || "draft"),
+        is_seed_default: Boolean(entry.isSeedDefault),
+        capabilities: entry.capabilities && typeof entry.capabilities === "object" ? entry.capabilities : {},
+        vending_strategy: String(entry.vendingStrategy || "sts_token"),
+        rate_limit_window_ms: entry.rateLimitWindowMs != null ? Number(entry.rateLimitWindowMs) : null,
+        rate_limit_max_requests: entry.rateLimitMaxRequests != null ? Number(entry.rateLimitMaxRequests) : null,
+        updated_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_manufacturers?on_conflict=slug", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemManufacturerRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemManufacturer(idOrSlug) {
+  return runWithFallback(
+    () => localDatabase.deleteOemManufacturer(idOrSlug),
+    async () => {
+      const key = encodeURIComponent(String(idOrSlug || ""));
+      await supabase.restRequest(`/oem_manufacturers?or=(id.eq.${key},slug.eq.${key})`, { method: "DELETE", prefer: "return=minimal" });
+      return { deleted: true };
+    }
+  );
+}
+
+// ── OEM endpoint configuration ──────────────────────────────────────────────
+// One row per (oemId, logicalKey) — the declarative path/method/casing/field-map
+// a new manufacturer needs instead of hardcoded per-OEM proxy branches.
+function mapOemEndpointConfigRow(row) {
+  if (!row) return null;
+  const parseMaybeJson = (value) => {
+    if (value && typeof value === "object") return value;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
+  return {
+    oemId: row.oem_id,
+    logicalKey: row.logical_key,
+    upstreamPath: row.upstream_path,
+    method: row.method,
+    casingVariant: row.casing_variant || "",
+    requestFieldMap: parseMaybeJson(row.request_field_map),
+    responseFieldMap: parseMaybeJson(row.response_field_map),
+    payloadShape: parseMaybeJson(row.payload_shape),
+    paginationStyle: row.pagination_style || "none",
+    requiresLiveRead: row.requires_live_read === true || row.requires_live_read === 1,
+    isWriteOverride: row.is_write_override === null || row.is_write_override === undefined ? null : (row.is_write_override === true || row.is_write_override === 1),
+    adapterFnName: row.adapter_fn_name || "",
+    enabled: row.enabled === true || row.enabled === 1,
+    updatedAt: row.updated_at
+  };
+}
+
+async function getOemEndpointConfig(oemId, logicalKey) {
+  return runWithFallback(
+    () => localDatabase.getOemEndpointConfig(oemId, logicalKey),
+    async () => {
+      const rows = await supabase.restRequest(
+        `/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&logical_key=eq.${encodeURIComponent(logicalKey)}&limit=1`
+      );
+      return mapOemEndpointConfigRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function listOemEndpointConfigs(oemId) {
+  return runWithFallback(
+    () => localDatabase.listOemEndpointConfigs(oemId),
+    async () => {
+      const rows = await supabase.restRequest(`/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&order=logical_key.asc`);
+      return (Array.isArray(rows) ? rows : []).map(mapOemEndpointConfigRow);
+    }
+  );
+}
+
+async function upsertOemEndpointConfig(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemEndpointConfig(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        logical_key: String(entry.logicalKey || ""),
+        upstream_path: String(entry.upstreamPath || ""),
+        method: String(entry.method || "GET").toUpperCase(),
+        casing_variant: String(entry.casingVariant || ""),
+        request_field_map: entry.requestFieldMap && typeof entry.requestFieldMap === "object" ? entry.requestFieldMap : {},
+        response_field_map: entry.responseFieldMap && typeof entry.responseFieldMap === "object" ? entry.responseFieldMap : {},
+        payload_shape: entry.payloadShape && typeof entry.payloadShape === "object" ? entry.payloadShape : {},
+        pagination_style: String(entry.paginationStyle || "none"),
+        requires_live_read: Boolean(entry.requiresLiveRead),
+        is_write_override: entry.isWriteOverride === null || entry.isWriteOverride === undefined ? null : Boolean(entry.isWriteOverride),
+        adapter_fn_name: String(entry.adapterFnName || ""),
+        enabled: entry.enabled !== false,
+        updated_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_endpoint_configs?on_conflict=oem_id,logical_key", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemEndpointConfigRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemEndpointConfig(oemId, logicalKey) {
+  return runWithFallback(
+    () => localDatabase.deleteOemEndpointConfig(oemId, logicalKey),
+    async () => {
+      await supabase.restRequest(
+        `/oem_endpoint_configs?oem_id=eq.${encodeURIComponent(oemId)}&logical_key=eq.${encodeURIComponent(logicalKey)}`,
+        { method: "DELETE", prefer: "return=minimal" }
+      );
+      return { deleted: true };
+    }
+  );
+}
+
+// ── OEM credentials ──────────────────────────────────────────────────────────
+// Values here are already AES-256-GCM encrypted by the caller (see
+// oem-credential-crypto.js) — this layer only persists/retrieves ciphertext.
+function mapOemCredentialsRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    authStrategy: row.auth_strategy,
+    baseUrl: row.base_url || "",
+    encryptedBearerToken: row.encrypted_bearer_token || "",
+    encryptedClientSecret: row.encrypted_client_secret || "",
+    encryptedUsername: row.encrypted_username || "",
+    encryptedPassword: row.encrypted_password || "",
+    tokenEndpointPath: row.token_endpoint_path || "",
+    apiKeyHeaderName: row.api_key_header_name || "",
+    encryptionKeyVersion: row.encryption_key_version || 1,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by || ""
+  };
+}
+
+async function getOemCredentials(oemId) {
+  return runWithFallback(
+    () => localDatabase.getOemCredentials(oemId),
+    async () => {
+      const rows = await supabase.restRequest(`/oem_credentials?oem_id=eq.${encodeURIComponent(oemId)}&limit=1`);
+      return mapOemCredentialsRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function upsertOemCredentials(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemCredentials(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        auth_strategy: String(entry.authStrategy || "bearer_static"),
+        base_url: String(entry.baseUrl || ""),
+        encrypted_bearer_token: String(entry.encryptedBearerToken || ""),
+        encrypted_client_secret: String(entry.encryptedClientSecret || ""),
+        encrypted_username: String(entry.encryptedUsername || ""),
+        encrypted_password: String(entry.encryptedPassword || ""),
+        token_endpoint_path: String(entry.tokenEndpointPath || ""),
+        api_key_header_name: String(entry.apiKeyHeaderName || ""),
+        encryption_key_version: Number(entry.encryptionKeyVersion || 1),
+        updated_at: nowIso(),
+        updated_by: String(entry.updatedBy || "")
+      };
+      const rows = await supabase.restRequest("/oem_credentials?on_conflict=oem_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemCredentialsRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+// ── OEM station/community mappings — drives each card's install count ──────
+function mapOemStationMappingRow(row) {
+  if (!row) return null;
+  return {
+    oemId: row.oem_id,
+    stationId: row.station_id,
+    communityLabel: row.community_label || "",
+    createdAt: row.created_at
+  };
+}
+
+async function isSeedOrCalinOem(oemId, oemSlug) {
+  if (!oemId && !oemSlug) return true;
+  const key = (String(oemId || "") + " " + String(oemSlug || "")).toLowerCase();
+  if (key.includes("calin") || key.includes("b0e00000") || key.includes("seed")) return true;
+  try {
+    const oem = await getOemManufacturer(oemId);
+    if (!oem) return false;
+    if (oem.isSeedDefault || String(oem.slug || "").toLowerCase().includes("calin")) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+async function listOemStationMappings(oemId, oemSlug = "") {
+  const mappings = await runWithFallback(
+    () => localDatabase.listOemStationMappings(oemId, oemSlug),
+    async () => {
+      const slugKey = String(oemSlug || "").trim().toLowerCase();
+      const idKey = String(oemId || "").trim();
+      const seedKey = "b0e00000-0000-0000-0000-000000000001";
+      const isCalin = slugKey.includes("calin") || idKey.includes("calin") || idKey === seedKey
+        || ((idKey || slugKey) ? await isSeedOrCalinOem(idKey, slugKey) : false);
+
+      // oem_station_mappings.oem_id is a uuid column — a slug ("calinmeter") in an
+      // `oem_id.eq.` filter makes PostgREST reject the *whole* request with 22P02
+      // (invalid input syntax for type uuid), so only uuid-shaped targets go in.
+      const targets = new Set([idKey].filter(isUuid));
+      if (isCalin) targets.add(seedKey);
+
+      if (targets.size > 0) {
+        const orClause = Array.from(targets).map((t) => `oem_id.eq.${encodeURIComponent(t)}`).join(",");
+        const query = `/oem_station_mappings?or=(${orClause})&order=station_id.asc`;
+
+        try {
+          const result = await supabase.restRequest(query);
+          const rows = (Array.isArray(result) ? result : []).map(mapOemStationMappingRow)
+            .filter((r) => isExplicitStationId(r.stationId));
+          if (rows.length > 0) return rows;
+        } catch (error) {
+          // A custom OEM has no safe fallback set, so let runWithFallback log the
+          // failure and retry locally rather than silently reporting zero.
+          if (!isCalin) throw error;
+        }
+      }
+
+      if (isCalin) {
+        try {
+          // There is no `stations` table in Supabase — station_meter_read_rollups
+          // is keyed by station_id and is the live station universe the CRM keeps.
+          const stations = await supabase.restRequest(
+            "/station_meter_read_rollups?select=station_id&order=station_id.asc"
+          );
+          const liveRows = mergeDerivedWithCanonical(
+            oemId,
+            (Array.isArray(stations) ? stations : []).map((r) => r && r.station_id)
+          );
+
+          if (liveRows.length > 0) return liveRows;
+        } catch {
+          // ignore
+        }
+
+        return canonicalStationRows(oemId);
+      }
+
+      return [];
+    }
+  );
+
+  return Array.isArray(mappings) ? mappings : [];
+}
+
+async function countOemStationMappings(oemId, oemSlug = "") {
+  const list = await listOemStationMappings(oemId, oemSlug);
+  return list.length;
+}
+
+async function upsertOemStationMapping(entry = {}) {
+  return runWithFallback(
+    () => localDatabase.upsertOemStationMapping(entry),
+    async () => {
+      const body = {
+        oem_id: String(entry.oemId || ""),
+        station_id: String(entry.stationId || ""),
+        community_label: String(entry.communityLabel || ""),
+        created_at: nowIso()
+      };
+      const rows = await supabase.restRequest("/oem_station_mappings?on_conflict=oem_id,station_id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=representation",
+        body
+      });
+      return mapOemStationMappingRow(Array.isArray(rows) ? rows[0] : rows);
+    }
+  );
+}
+
+async function deleteOemStationMapping(oemId, stationId) {
+  return runWithFallback(
+    () => localDatabase.deleteOemStationMapping(oemId, stationId),
+    async () => {
+      await supabase.restRequest(
+        `/oem_station_mappings?oem_id=eq.${encodeURIComponent(oemId)}&station_id=eq.${encodeURIComponent(stationId)}`,
+        { method: "DELETE", prefer: "return=minimal" }
+      );
+      return { deleted: true };
+    }
+  );
+}
+
 module.exports = {
   cacheApiResponse,
   ensureDatabase,
+  getMeterTokenOverride,
+  setMeterTokenOverride,
+  listMeterTokenOverrides,
+  getSgcTokenRule,
+  setSgcTokenRule,
+  listSgcTokenRules,
+  getOemManufacturer,
+  listOemManufacturers,
+  upsertOemManufacturer,
+  deleteOemManufacturer,
+  getOemEndpointConfig,
+  listOemEndpointConfigs,
+  upsertOemEndpointConfig,
+  deleteOemEndpointConfig,
+  getOemCredentials,
+  upsertOemCredentials,
+  listOemStationMappings,
+  countOemStationMappings,
+  upsertOemStationMapping,
+  deleteOemStationMapping,
+  mapAuditRow,
   listAutomationDeliveries,
   listAccountBindings,
+  listAuditLogs,
   listImportJobs,
   readCachedApiResponse,
   deleteAccountBinding,

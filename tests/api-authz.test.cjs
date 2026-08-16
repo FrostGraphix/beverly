@@ -2,7 +2,9 @@
 
 const assert = require("assert");
 const http = require("http");
+process.env.JWT_SECRET = "api-authz-session-test-secret-at-least-32-chars";
 const handler = require("../api/reference");
+const { _test } = handler;
 
 function startServer(listener) {
   return new Promise((resolve) => {
@@ -22,6 +24,9 @@ function createProxyServer() {
       status(code) {
         this.statusCode = code;
         return this;
+      },
+      setHeader(name, value) {
+        res.setHeader(name, value);
       },
       json(body) {
         res.statusCode = this.statusCode;
@@ -65,6 +70,16 @@ function request(port, method, path, payload, headers = {}) {
     if (body.length) req.write(body);
     req.end();
   });
+}
+
+function sessionCookie(token) {
+  const now = Date.now();
+  const session = _test.signCrmSession({
+    startedAt: now,
+    lastActiveAt: now,
+    tokenFingerprint: _test.crmTokenFingerprint(token)
+  });
+  return `bev_token=${encodeURIComponent(token)}; bev_session=${encodeURIComponent(session)}`;
 }
 
 async function withEnv(env, run) {
@@ -142,20 +157,47 @@ async function main() {
       assert.strictEqual(unauthenticated.status, 401);
       assert.strictEqual(unauthenticated.body._proxy.source, "authz");
 
-      const forbiddenAdminRead = await request(port, "POST", "/api/user/read", { userId: "admin", pageNumber: 1, pageSize: 1 }, {
+      const bearerWithoutServerSession = await request(port, "POST", "/api/user/read", { userId: "admin", pageNumber: 1, pageSize: 1 }, {
         Authorization: "Bearer ops-token"
+      });
+      assert.strictEqual(bearerWithoutServerSession.status, 401);
+      assert.strictEqual(bearerWithoutServerSession.body.reason, "Server session required");
+
+      const forbiddenAdminRead = await request(port, "POST", "/api/user/read", { userId: "admin", pageNumber: 1, pageSize: 1 }, {
+        Authorization: "Bearer ops-token",
+        Cookie: sessionCookie("ops-token")
       });
       assert.strictEqual(forbiddenAdminRead.status, 403);
       assert.strictEqual(forbiddenAdminRead.body.reason, "Super admin required");
 
+      const readableLiveWriteStatus = await request(port, "GET", "/api/system/live-write-control", null, {
+        Authorization: "Bearer ops-token",
+        Cookie: sessionCookie("ops-token")
+      });
+      assert.strictEqual(readableLiveWriteStatus.status, 200);
+      assert.strictEqual(readableLiveWriteStatus.body.data.canManage, false);
+
+      const forbiddenLiveWriteChange = await request(port, "PUT", "/api/system/live-write-control", {
+        enabled: true,
+        reason: "Unauthorized role test",
+        confirmation: "ENABLE LIVE WRITES"
+      }, {
+        Authorization: "Bearer ops-token",
+        Cookie: sessionCookie("ops-token")
+      });
+      assert.strictEqual(forbiddenLiveWriteChange.status, 403);
+      assert.strictEqual(forbiddenLiveWriteChange.body.reason, "Super admin required");
+
       const selfRead = await request(port, "POST", "/api/user/read", { userId: "TEMPER", pageNumber: 1, pageSize: 1 }, {
-        Authorization: "Bearer self-token"
+        Authorization: "Bearer self-token",
+        Cookie: sessionCookie("self-token")
       });
       assert.notStrictEqual(selfRead.status, 401);
       assert.notStrictEqual(selfRead.status, 403);
 
       const permittedVendorWrite = await request(port, "POST", "/API/RemoteMeterTask/CreateTokenTask", [{ meterId: "4700", stationId: "UMAISHA" }], {
         Authorization: "Bearer vendor-token",
+        Cookie: sessionCookie("vendor-token"),
         "X-Route-Hash": "#/remote-operation/remote-meter-token",
         "X-Route-Action": "Add Task"
       });
@@ -164,11 +206,22 @@ async function main() {
 
       const blockedStationWrite = await request(port, "POST", "/API/RemoteMeterTask/CreateTokenTask", [{ meterId: "4700", stationId: "TUNGA" }], {
         Authorization: "Bearer vendor-token",
+        Cookie: sessionCookie("vendor-token"),
         "X-Route-Hash": "#/remote-operation/remote-meter-token",
         "X-Route-Action": "Add Task"
       });
       assert.strictEqual(blockedStationWrite.status, 403);
       assert.strictEqual(blockedStationWrite.body.reason, "Station scope violation");
+
+      const spoofedRouteHashWrite = await request(port, "POST", "/API/RemoteMeterTask/CreateTokenTask", [{ meterId: "4700", stationId: "UMAISHA" }], {
+        Authorization: "Bearer vendor-token",
+        Cookie: sessionCookie("vendor-token"),
+        "X-Route-Hash": "#/management/account",
+        "X-Route-Action": "Add Task"
+      });
+      assert.strictEqual(spoofedRouteHashWrite.status, 403);
+      assert.strictEqual(spoofedRouteHashWrite.body.reason, "Route permission required");
+      assert.strictEqual(spoofedRouteHashWrite.body._proxy.source, "authz");
     });
 
     console.log(JSON.stringify({

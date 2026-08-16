@@ -1,10 +1,12 @@
 <template>
   <main class="login-page auth-page" aria-label="Beverly sign in">
     <div class="auth-bg" aria-hidden="true">
+      <div class="auth-bg-orb"></div>
       <div class="auth-bg-beam auth-bg-beam--a"></div>
       <div class="auth-bg-beam auth-bg-beam--b"></div>
       <div class="auth-bg-glow"></div>
       <div class="auth-bg-grid"></div>
+      <div class="auth-bg-flash"></div>
     </div>
 
     <section class="auth-panel auth-panel--right">
@@ -16,13 +18,25 @@
             <span class="auth-card-mark">B</span>
             <span class="auth-card-name">Beverly</span>
           </div>
-          <h2 class="auth-card-title">Sign In</h2>
+          <h2 class="auth-card-title">Sign in</h2>
+          <p class="auth-card-sub">Your Smart Power Partner.</p>
         </header>
 
         <transition name="auth-alert-fade">
           <div v-if="error" class="auth-alert auth-alert--error" role="alert">
-            <strong>{{ error }}</strong>
-            <small v-if="errorReference">Reference {{ errorReference }}</small>
+            <svg class="auth-alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v6" />
+              <path d="M12 17h.01" />
+            </svg>
+            <span class="auth-alert-copy">
+              <strong>Sign in failed</strong>
+              <span>{{ error }}</span>
+              <small v-if="errorReference">Reference {{ errorReference }}</small>
+            </span>
+            <BaseIconButton class="auth-alert-close" aria-label="Dismiss error" @click="clearError">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+            </BaseIconButton>
           </div>
         </transition>
 
@@ -122,6 +136,7 @@
 import { login } from "../services/api";
 import { recordClientError } from "../services/error-logger.mjs";
 import { getMFAStatus } from "../services/mfa-service.mjs";
+import { playLoginVoice, unlockLoginVoice } from "../utils/voice";
 import BaseButton from "./base/BaseButton.vue";
 import BaseCheckbox from "./base/BaseCheckbox.vue";
 import BaseIconButton from "./base/BaseIconButton.vue";
@@ -164,6 +179,7 @@ export default {
   },
   methods: {
     async submit() {
+      unlockLoginVoice();
       this.error = "";
       this.errorReference = "";
       this.fieldErrors = this.validateFields();
@@ -193,9 +209,10 @@ export default {
           }
         } catch { /* MFA unavailable — proceed without */ }
 
+        playLoginVoice();
         this.$emit("logged-in");
       } catch (err) {
-        this.error = err?.message || "Sign in failed. Check credentials and retry.";
+        this.error = this.loginErrorMessage(err);
         this.errorReference = recordClientError("login-submit-error", err, {
           userId: this.form.userId
         });
@@ -208,6 +225,22 @@ export default {
       if (!this.form.userId) errors.userId = "Email is required.";
       if (!this.form.password) errors.password = "Password is required.";
       return errors;
+    },
+    loginErrorMessage(error) {
+      const status = Number(error?.response?.status);
+      const transportFailure = ["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT"].includes(String(error?.code || ""))
+        || /network error|timeout/i.test(String(error?.message || ""));
+      if (transportFailure) return "Beverly is unreachable. Check your connection, then retry.";
+      if (status === 401 || status === 403 || (status === 400 && /invalid.*credentials/i.test(String(error?.message || "")))) {
+        return "Email or password is incorrect.";
+      }
+      if (status === 429) return "Too many attempts. Wait briefly, then retry.";
+      if (status >= 500) return "The sign-in service is unavailable. Try again shortly.";
+      return error?.message || "Check your details, then retry.";
+    },
+    clearError() {
+      this.error = "";
+      this.errorReference = "";
     },
     focusFirstInvalid() {
       this.$nextTick(() => {
@@ -224,6 +257,7 @@ export default {
     onMfaVerified() {
       this.mfaRequired = false;
       this.mfaFactorId = null;
+      playLoginVoice();
       this.$emit("logged-in");
     },
     onMfaCancelled() {

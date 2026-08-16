@@ -1,4 +1,11 @@
 import { isGuardedWriteError } from "./guarded-write.mjs";
+import {
+  VENDING_VAT_BASIS_POINTS,
+  calculateVendingVatBreakdown as calculateSharedVendingVatBreakdown
+} from "../../packages/tokens/index.js";
+import { parseTariffUnitPrice } from "./tariff-pricing.mjs";
+
+export { parseTariffUnitPrice } from "./tariff-pricing.mjs";
 
 export const purchaseWays = [
   { value: "paid", label: "Vend By Total Paid" },
@@ -6,6 +13,7 @@ export const purchaseWays = [
 ];
 
 export const paymentMethods = ["Cash", "Check", "E-Pay"];
+export { VENDING_VAT_BASIS_POINTS };
 
 export function isTokenGenerateRoute(route = {}) {
   return String(route.hash || "").includes("token-generate");
@@ -43,6 +51,10 @@ export function isThreePhaseTokenMode(form = {}) {
 }
 
 export function tokenUsesS2(form = {}) {
+  // An explicit per-meter override always wins over the phase-derived guess.
+  // (STS S1/S2 standard is not reliably implied by single/three-phase.)
+  if (form.isS2Override === true) return true;
+  if (form.isS2Override === false) return false;
   return form.isS2 === true || isThreePhaseTokenMode(form) || meterPhaseFromRow(form) === "three-phase";
 }
 
@@ -67,35 +79,49 @@ export function tokenEndpoint(route = {}, action = "") {
   return "";
 }
 
-export function parseTariffUnitPrice(price) {
-  const parts = String(price ?? "").split("~").map((part) => Number(part)).filter((value) => Number.isFinite(value));
-  if (parts.length >= 3) return parts[2] > 0 ? parts[2] : 0;
-  return parts[0] > 0 ? parts[0] : 0;
-}
-
 export function findTariff(tariffs = [], tariffId = "") {
   const id = String(tariffId || "").trim().toLowerCase();
   return tariffs.find((tariff) => String(tariff.tariffId || tariff.id || "").trim().toLowerCase() === id) || null;
 }
 
-export function roundOneDecimal(value) {
+export function roundFourDecimals(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  return (Math.round(number * 10) / 10).toFixed(1);
+  return (Math.round(number * 10000) / 10000).toFixed(4);
+}
+
+export function calculateVendingVatBreakdown(amount, vatRateBasisPoints = VENDING_VAT_BASIS_POINTS) {
+  const energyAmount = Number(amount);
+  if (!(energyAmount > 0)) return { grossAmount: 0, energyAmount: 0, vatAmount: 0, vatRateBasisPoints };
+  const breakdown = calculateSharedVendingVatBreakdown(Math.round(energyAmount * 100), vatRateBasisPoints);
+  return {
+    grossAmount: breakdown.grossAmountMinor / 100,
+    energyAmount: breakdown.energyAmountMinor / 100,
+    vatAmount: breakdown.vatAmountMinor / 100,
+    vatRateBasisPoints: breakdown.vatRateBasisPoints
+  };
 }
 
 export function calculateTokenUnits(amount, tariff) {
   const unitPrice = parseTariffUnitPrice(tariff?.price);
-  const paid = Number(amount);
-  if (!unitPrice || !Number.isFinite(paid)) return "";
-  return roundOneDecimal(paid / unitPrice);
+  const grossAmount = Number(amount);
+  if (!unitPrice || !(grossAmount > 0)) return "";
+  const { energyAmountMinor } = calculateSharedVendingVatBreakdown(
+    Math.round(grossAmount * 100),
+    VENDING_VAT_BASIS_POINTS
+  );
+  return roundFourDecimals((energyAmountMinor / 100) / unitPrice);
 }
 
 export function calculateTokenAmount(totalUnit, tariff) {
   const unitPrice = parseTariffUnitPrice(tariff?.price);
   const units = Number(totalUnit);
   if (!unitPrice || !Number.isFinite(units)) return "";
-  return String(Math.round(units * unitPrice * 100) / 100);
+  const energyAmountMinor = Math.round(units * unitPrice * 100);
+  const grossAmountMinor = Math.round(
+    (energyAmountMinor * (10000 + VENDING_VAT_BASIS_POINTS)) / 10000
+  );
+  return String(grossAmountMinor / 100);
 }
 
 export function tokenValidationError(route, form = {}, tariff = null, options = {}) {
@@ -205,6 +231,7 @@ function localPreviewToken(route = {}, form = {}) {
 
 export function buildLocalTokenPreview(route = {}, form = {}) {
   const now = new Date().toISOString();
+  const vat = calculateVendingVatBreakdown(form.amount || form.totalPaid || 0);
   const data = {
     receiptId: `PREVIEW-${Date.now()}`,
     customerId: form.customerId || "",
@@ -213,8 +240,12 @@ export function buildLocalTokenPreview(route = {}, form = {}) {
     tariffId: form.tariffId || "",
     stationId: form.stationId || "",
     meterPhase: meterPhaseFromRow(form),
-    totalPaid: form.amount || form.totalPaid || "",
+    totalPaid: vat.grossAmount,
     totalUnit: form.totalUnit || "",
+    energyAmount: vat.energyAmount,
+    tax: vat.vatAmount,
+    vat: vat.vatAmount,
+    vatRateBasisPoints: vat.vatRateBasisPoints,
     maximumPower: form.maximumPower || "",
     token: localPreviewToken(route, form),
     status: true,

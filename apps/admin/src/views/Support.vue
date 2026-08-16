@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api } from '../lib/api';
 
 type Tab = 'tickets' | 'chat' | 'faq';
@@ -12,6 +14,7 @@ const tickets = ref<Ticket[]>([]);
 const ticketStats = ref<Record<string, number>>({});
 const ticketStatus = ref('');
 const ticketSearch = ref('');
+const ticketView = ref<'table' | 'grid'>('table');
 const selTicket = ref<Ticket | null>(null);
 const ticketDetail = ref<any>(null);
 const staffReply = ref('');
@@ -113,6 +116,9 @@ const faqs = ref<Faq[]>([]);
 const faqSearch = ref('');
 const showFaqEdit = ref(false);
 const faqForm = ref<any>({ id: '', category_id: '', question: '', answer: '', audience: 'all', published: true, sort_order: 0 });
+const deleteFaqOpen = ref(false);
+const deleteFaqTarget = ref<Faq | null>(null);
+const deleteFaqBusy = ref(false);
 
 async function loadFaqAdmin() {
     try {
@@ -140,9 +146,19 @@ async function saveFaq() {
         await loadFaqAdmin();
     } catch { /* ignore */ }
 }
-async function deleteFaq(f: Faq) {
-    if (!window.confirm('Delete this FAQ?')) return;
-    try { await api.del(`/api/v1/admin/support/faqs/${f.id}`); await loadFaqAdmin(); } catch { /* ignore */ }
+function askDeleteFaq(f: Faq) {
+    deleteFaqTarget.value = f;
+    deleteFaqOpen.value = true;
+}
+async function deleteFaq() {
+    if (!deleteFaqTarget.value) return;
+    deleteFaqBusy.value = true;
+    try {
+        await api.del(`/api/v1/admin/support/faqs/${deleteFaqTarget.value.id}`);
+        deleteFaqOpen.value = false;
+        deleteFaqTarget.value = null;
+        await loadFaqAdmin();
+    } catch { /* ignore */ } finally { deleteFaqBusy.value = false; }
 }
 async function togglePublish(f: Faq) {
     try {
@@ -174,7 +190,20 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 
 <template>
   <AppShell title="Support">
-    <div class="bw-segmented" style="margin-bottom: var(--s-4)">
+    <section class="support-hero">
+      <div>
+        <p class="support-kicker">Support command desk</p>
+        <h1>Customer care cockpit</h1>
+        <p>Resolve tickets, answer live chats, and keep the Beverly knowledge base sharp.</p>
+      </div>
+      <div class="support-hero-metrics" aria-label="Support overview">
+        <span><strong>{{ ticketStats.open ?? 0 }}</strong> open</span>
+        <span><strong>{{ waitingCount }}</strong> waiting</span>
+        <span><strong>{{ faqs.length }}</strong> FAQs</span>
+      </div>
+    </section>
+
+    <div class="bw-segmented support-tabs">
       <button :class="['bw-seg', tab === 'tickets' ? 'active' : '']" @click="tab = 'tickets'">
         Tickets <span v-if="ticketStats.open" class="sup-pill">{{ ticketStats.open }}</span>
       </button>
@@ -187,14 +216,14 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
     <!-- ═══ TICKETS ═══ -->
     <template v-if="tab === 'tickets'">
       <div class="sup-stats">
-        <div class="sup-stat"><strong>{{ ticketStats.total ?? 0 }}</strong><span>Total</span></div>
-        <div class="sup-stat"><strong>{{ ticketStats.open ?? 0 }}</strong><span>Open</span></div>
-        <div class="sup-stat"><strong>{{ ticketStats.pending ?? 0 }}</strong><span>Pending</span></div>
-        <div class="sup-stat"><strong>{{ ticketStats.awaiting_customer ?? 0 }}</strong><span>Awaiting</span></div>
-        <div class="sup-stat"><strong>{{ ticketStats.resolved ?? 0 }}</strong><span>Resolved</span></div>
+        <div class="sup-stat"><span>Total</span><strong>{{ ticketStats.total ?? 0 }}</strong></div>
+        <div class="sup-stat"><span>Open</span><strong>{{ ticketStats.open ?? 0 }}</strong></div>
+        <div class="sup-stat"><span>Pending</span><strong>{{ ticketStats.pending ?? 0 }}</strong></div>
+        <div class="sup-stat"><span>Awaiting</span><strong>{{ ticketStats.awaiting_customer ?? 0 }}</strong></div>
+        <div class="sup-stat"><span>Resolved</span><strong>{{ ticketStats.resolved ?? 0 }}</strong></div>
       </div>
 
-      <div class="bw-filter-bar">
+      <div class="bw-filter-bar support-filter">
         <select v-model="ticketStatus" class="bw-select bw-select-sm" @change="loadTickets">
           <option value="">All statuses</option>
           <option value="open">Open</option><option value="pending">Pending</option>
@@ -205,9 +234,26 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
         <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadTickets">Search</button>
       </div>
 
-      <div class="bw-table-wrapper">
+      <div class="ticket-layout-bar">
+        <span>Ticket results</span>
+        <div class="ticket-view-toggle" aria-label="Ticket layout">
+          <button type="button" :class="{ active: ticketView === 'grid' }" :aria-pressed="ticketView === 'grid'" aria-label="Grid view" title="Grid view" @click="ticketView = 'grid'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button type="button" :class="{ active: ticketView === 'table' }" :aria-pressed="ticketView === 'table'" aria-label="Table view" title="Table view" @click="ticketView = 'table'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M9 4v16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div :class="['bw-table-wrapper', 'support-table', { 'ticket-table-active': ticketView === 'table' }]">
         <table class="bw-table">
-          <thead><tr><th>Reference</th><th>Subject</th><th>From</th><th>Priority</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+          <thead><tr><th>Reference</th><th>Subject</th><th>From</th><th>Priority</th><th>Status</th><th>Updated</th><th class="sup-actions-col"></th></tr></thead>
           <tbody>
             <tr v-for="t in tickets" :key="t.id" style="cursor:pointer" @click="openTicket(t)">
               <td class="bw-mono">{{ t.reference }}</td>
@@ -216,11 +262,45 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <td><span :class="['bw-badge', priorityBadge(t.priority)]">{{ t.priority }}</span></td>
               <td><span :class="['bw-badge', statusBadge(t.status)]">{{ pretty(t.status) }}</span></td>
               <td class="bw-dim">{{ fmt(t.last_message_at) }}</td>
-              <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click.stop="openTicket(t)">Open</button></td>
+              <td class="sup-actions-col" @click.stop>
+                <button class="bw-btn bw-btn-ghost bw-btn-sm sup-row-action" @click="openTicket(t)">Open</button>
+                <MobileActionMenu label="Ticket actions">
+                  <button class="mobile-action-item" @click="openTicket(t)">Open</button>
+                </MobileActionMenu>
+              </td>
             </tr>
-            <tr v-if="!tickets.length"><td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No tickets.</td></tr>
+            <tr v-if="!tickets.length">
+              <td colspan="7">
+                <div class="sup-empty-state">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <strong>No support tickets</strong>
+                  <span>Tickets raised by customers and vendors will appear here.</span>
+                  <button class="bw-btn bw-btn-sm" @click="loadTickets">Refresh</button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
+      </div>
+
+      <div :class="['support-mobile-list', 'ticket-mobile-list', `ticket-mobile-list--${ticketView}`]">
+        <article v-for="t in tickets" :key="`mobile-${t.id}`" class="support-ticket-card" @click="openTicket(t)">
+          <div>
+            <span class="bw-mono">{{ t.reference }}</span>
+            <h3>{{ t.subject }}</h3>
+            <p>{{ t.requester_name || t.requester_actor_type }} · {{ fmt(t.last_message_at) }}</p>
+          </div>
+          <div class="support-ticket-card-actions">
+            <span :class="['bw-badge', priorityBadge(t.priority)]">{{ t.priority }}</span>
+            <span :class="['bw-badge', statusBadge(t.status)]">{{ pretty(t.status) }}</span>
+          </div>
+          <button class="bw-btn bw-btn-ghost bw-btn-sm" @click.stop="openTicket(t)">Open</button>
+        </article>
+        <div v-if="!tickets.length" class="sup-empty-state">
+          <strong>No support tickets</strong>
+          <span>Tickets raised by customers and vendors will appear here.</span>
+          <button class="bw-btn bw-btn-sm" @click="loadTickets">Refresh</button>
+        </div>
       </div>
     </template>
 
@@ -244,7 +324,12 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <span class="bw-dim">{{ fmt(s.last_message_at) }}</span>
             </div>
           </button>
-          <p v-if="!sessions.length" class="bw-muted" style="text-align:center; padding: var(--s-4)">No chat sessions.</p>
+          <div v-if="!sessions.length" class="sup-empty-state sup-empty-state--sm">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            <strong>No live chats</strong>
+            <span>Active customer chats appear here.</span>
+            <button class="bw-btn bw-btn-sm" @click="loadSessions">Refresh</button>
+          </div>
         </aside>
 
         <section class="sup-chat-main">
@@ -277,14 +362,14 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 
     <!-- ═══ FAQ ═══ -->
     <template v-else>
-      <div class="bw-filter-bar">
+      <div class="bw-filter-bar support-filter">
         <input v-model="faqSearch" class="bw-input bw-input-sm" placeholder="Search FAQs…" @keyup.enter="loadFaqAdmin" />
         <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadFaqAdmin">Search</button>
         <button class="bw-btn bw-btn-primary bw-btn-sm" style="margin-left:auto" @click="newFaq">+ New FAQ</button>
       </div>
-      <div class="bw-table-wrapper">
+      <div class="bw-table-wrapper support-table">
         <table class="bw-table">
-          <thead><tr><th>Question</th><th>Category</th><th>Audience</th><th>Views</th><th>Helpful</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Question</th><th>Category</th><th>Audience</th><th>Views</th><th>Helpful</th><th>Status</th><th class="sup-actions-col"></th></tr></thead>
           <tbody>
             <tr v-for="f in faqs" :key="f.id">
               <td>{{ f.question }}</td>
@@ -293,15 +378,53 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               <td class="bw-mono">{{ f.view_count }}</td>
               <td class="bw-mono">{{ f.helpful_count }}/{{ f.helpful_count + f.not_helpful_count }}</td>
               <td><span :class="['bw-badge', f.published ? 'bw-badge-success' : 'bw-badge-neutral']">{{ f.published ? 'Published' : 'Draft' }}</span></td>
-              <td style="white-space:nowrap">
-                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="editFaq(f)">Edit</button>
-                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="togglePublish(f)">{{ f.published ? 'Unpublish' : 'Publish' }}</button>
-                <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="deleteFaq(f)">Delete</button>
+              <td class="sup-actions-col" style="white-space:nowrap">
+                <div class="sup-row-actions">
+                  <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="editFaq(f)">Edit</button>
+                  <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="togglePublish(f)">{{ f.published ? 'Unpublish' : 'Publish' }}</button>
+                  <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="askDeleteFaq(f)">Delete</button>
+                </div>
+                <MobileActionMenu label="FAQ actions">
+                  <button class="mobile-action-item" @click="editFaq(f)">Edit</button>
+                  <button class="mobile-action-item" @click="togglePublish(f)">{{ f.published ? 'Unpublish' : 'Publish' }}</button>
+                  <button class="mobile-action-item danger" @click="askDeleteFaq(f)">Delete</button>
+                </MobileActionMenu>
               </td>
             </tr>
-            <tr v-if="!faqs.length"><td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No FAQs yet.</td></tr>
+            <tr v-if="!faqs.length">
+              <td colspan="7">
+                <div class="sup-empty-state">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                  <strong>No FAQs yet</strong>
+                  <span>Create your first FAQ article to help customers self-serve.</span>
+                  <button class="bw-btn bw-btn-primary bw-btn-sm" @click="newFaq">+ Add FAQ</button>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="bw-t-cards support-mobile-list">
+        <article v-for="f in faqs" :key="`faq-mobile-${f.id}`" class="support-ticket-card">
+          <div>
+            <span>{{ categoryName(f.category_id) }}</span>
+            <h3>{{ f.question }}</h3>
+            <p>{{ f.audience }} · {{ f.view_count }} views</p>
+          </div>
+          <div class="support-ticket-card-actions">
+            <span :class="['bw-badge', f.published ? 'bw-badge-success' : 'bw-badge-neutral']">{{ f.published ? 'Published' : 'Draft' }}</span>
+          </div>
+          <div class="support-card-actions">
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="editFaq(f)">Edit</button>
+            <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="togglePublish(f)">{{ f.published ? 'Unpublish' : 'Publish' }}</button>
+          </div>
+        </article>
+        <div v-if="!faqs.length" class="sup-empty-state">
+          <strong>No FAQs yet</strong>
+          <span>Create your first FAQ article to help customers self-serve.</span>
+          <button class="bw-btn bw-btn-primary bw-btn-sm" @click="newFaq">+ Add FAQ</button>
+        </div>
       </div>
     </template>
 
@@ -374,32 +497,222 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model:open="deleteFaqOpen"
+      title="Delete FAQ"
+      :description="deleteFaqTarget ? `Delete '${deleteFaqTarget.question}'?` : ''"
+      confirm-label="Delete FAQ"
+      tone="danger"
+      :loading="deleteFaqBusy"
+      @confirm="deleteFaq"
+    />
   </AppShell>
 </template>
 
 <style scoped>
+.support-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-4);
+  align-items: end;
+  padding: var(--s-5);
+  border: 1px solid oklch(from var(--brand) l c h / 0.28);
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(circle at 10% 8%, oklch(from var(--brand) l c h / 0.22), transparent 18rem),
+    linear-gradient(135deg, var(--surface-2), var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+.support-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, oklch(from var(--brand) l c h / 0.10), transparent),
+    repeating-linear-gradient(90deg, oklch(from var(--text) l c h / 0.06) 0 1px, transparent 1px 92px);
+  opacity: 0.45;
+}
+.support-hero > * { position: relative; }
+.support-kicker {
+  margin: 0 0 var(--s-2);
+  color: var(--brand);
+  font-size: var(--t-xs);
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.support-hero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(2rem, 5vw, var(--t-4xl));
+  line-height: 0.98;
+}
+.support-hero p:last-child {
+  max-width: 52ch;
+  margin: var(--s-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-md);
+}
+.support-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+  min-width: min(360px, 100%);
+}
+.support-hero-metrics span {
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: oklch(from var(--surface-3) l c h / 0.62);
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  text-align: center;
+}
+.support-hero-metrics strong {
+  display: block;
+  color: var(--brand);
+  font-family: var(--font-mono);
+  font-size: var(--t-xl);
+}
+
+.support-tabs {
+  width: 100%;
+  margin-bottom: var(--s-4);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.support-tabs::-webkit-scrollbar { display: none; }
+.support-tabs .bw-seg {
+  min-width: max-content;
+}
+
 .sup-pill { background: var(--brand); color: #04140b; border-radius: 999px; padding: 0 6px; font-size: 10px; margin-left: 4px; }
 .sup-pill--warn { background: var(--warn, oklch(78% 0.16 75)); color: #1a1300; }
 
-.sup-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-3); margin-bottom: var(--s-4); }
-.sup-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-3) var(--s-4); display: flex; flex-direction: column; }
-.sup-stat strong { font-size: var(--t-2xl); font-family: var(--font-mono); color: var(--text); }
-.sup-stat span { font-size: var(--t-xs); color: var(--text-muted); }
+.sup-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+.sup-stat {
+  min-width: 0;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  padding: var(--s-3);
+  display: grid;
+  gap: var(--s-2);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
+}
+.sup-stat strong { font-size: var(--t-2xl); font-family: var(--font-mono); color: var(--text); line-height: 1; }
+.sup-stat span { font-size: var(--t-xs); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.support-filter {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.65fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.support-filter > * {
+  min-width: 0;
+}
+.support-table {
+  overflow-x: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background: var(--glass-bg);
+}
+.support-table .bw-table {
+  min-width: 760px;
+}
+.ticket-layout-bar { display: none; }
+.ticket-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.ticket-view-toggle button {
+  width: 36px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ticket-view-toggle button:hover { color: var(--text); }
+.ticket-view-toggle button.active { background: var(--brand-glow); color: var(--brand); }
+.ticket-view-toggle svg { width: 17px; height: 17px; }
+.support-mobile-list {
+  display: none;
+  gap: var(--s-3);
+}
+.support-ticket-card {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
+}
+.support-ticket-card h3 {
+  margin: 4px 0;
+  color: var(--text);
+  font-size: var(--t-md);
+  line-height: 1.2;
+}
+.support-ticket-card p,
+.support-ticket-card span {
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+}
+.support-ticket-card-actions,
+.support-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.support-card-actions .bw-btn {
+  flex: 1;
+}
 
 .sup-chat { display: grid; grid-template-columns: 280px 1fr; gap: var(--s-4); height: 560px; }
-.sup-chat-list { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); overflow-y: auto; display: flex; flex-direction: column; }
+.sup-chat-list { border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); overflow-y: auto; display: flex; flex-direction: column; backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
 .sup-session { text-align: left; border: 0; border-bottom: 1px solid var(--border); background: none; padding: var(--s-3); cursor: pointer; color: var(--text); }
 .sup-session:hover { background: var(--surface-2); }
 .sup-session--on { background: var(--brand-glow); }
 .sup-session-top { display: flex; align-items: center; justify-content: space-between; }
 .sup-session-meta { display: flex; align-items: center; gap: var(--s-2); margin-top: 4px; font-size: var(--t-xs); }
 
-.sup-chat-main { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+.sup-chat-main { border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--glass-bg); display: flex; flex-direction: column; overflow: hidden; backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
 .sup-chat-head { display: flex; align-items: center; justify-content: space-between; padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); }
 .sup-chat-body { flex: 1; overflow-y: auto; padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
 .sup-chat-foot { display: flex; gap: var(--s-2); padding: var(--s-3); border-top: 1px solid var(--border); }
 .sup-chat-foot .bw-input { flex: 1; }
 .sup-chat-empty { display: grid; place-items: center; height: 100%; color: var(--text-muted); }
+.sup-empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 24px; color: var(--text-muted); text-align: center; }
+.sup-empty-state svg { opacity: 0.45; }
+.sup-empty-state strong { font-size: 15px; font-weight: 600; color: var(--text); }
+.sup-empty-state span { font-size: 13px; max-width: 260px; }
+.sup-empty-state--sm { padding: 24px 16px; }
+.sup-empty-state--sm strong { font-size: 13px; }
+.sup-empty-state--sm span { font-size: 12px; }
 
 .sup-msg { max-width: 80%; display: flex; flex-direction: column; }
 .sup-msg--staff { align-self: flex-end; align-items: flex-end; }
@@ -417,6 +730,123 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
 .sup-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 300px; overflow-y: auto; margin-bottom: var(--s-3); }
 .sup-internal-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: var(--text-2); margin-bottom: var(--s-2); cursor: pointer; }
 .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
-.bw-modal-lg { max-width: 620px; }
+.sup-actions-col { min-width: 120px; }
+.sup-row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.bw-modal-lg {
+  max-width: 620px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+.bw-modal-lg .bw-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.bw-modal-lg .bw-modal-header,
+.bw-modal-lg .bw-modal-footer {
+  flex: 0 0 auto;
+}
 .bw-input-sm { height: 30px; }
+
+@media (max-width: 720px) {
+  .support-hero {
+    grid-template-columns: 1fr;
+    padding: var(--s-4);
+  }
+
+  .support-hero-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .support-hero-metrics span {
+    padding: var(--s-2);
+  }
+
+  .support-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .support-filter .bw-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .support-table {
+    display: none;
+  }
+
+  .support-table.ticket-table-active {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .ticket-layout-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin-bottom: var(--s-3);
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
+  .support-mobile-list {
+    display: grid;
+  }
+
+  .ticket-mobile-list--table {
+    display: none;
+  }
+
+  .ticket-mobile-list--grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+  }
+  .ticket-mobile-list--grid .support-ticket-card {
+    min-width: 0;
+    gap: var(--s-2);
+    padding: var(--s-3);
+    overflow: hidden;
+  }
+  .ticket-mobile-list--grid .support-ticket-card h3,
+  .ticket-mobile-list--grid .support-ticket-card p,
+  .ticket-mobile-list--grid .support-ticket-card span { overflow-wrap: anywhere; }
+  .ticket-mobile-list--grid .support-ticket-card > .bw-btn { width: 100%; justify-content: center; }
+
+  .sup-chat {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .sup-chat-list,
+  .sup-chat-main {
+    min-height: 320px;
+  }
+
+  .sup-actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .sup-row-action,
+  .sup-row-actions {
+    display: none;
+  }
+
+  .help-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sup-chat-foot {
+    display: grid;
+  }
+}
 </style>

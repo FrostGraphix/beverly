@@ -14,7 +14,7 @@
           <div>
             <div class="scc-hero-eyebrow">Energy Intelligence</div>
             <h1 class="scc-hero-title">Station Consumption</h1>
-            <p class="scc-hero-sub">Meter odometer deltas · pre-aggregated every 6 h · instant queries</p>
+            <p class="scc-hero-sub">Compare station demand, meter activity, and load trends.</p>
           </div>
         </div>
         <div class="scc-hero-badges">
@@ -65,9 +65,9 @@
         <div class="scc-ctrl-body">
           <div class="scc-daterange">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-cal-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            <input v-model="from" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="from" type="date" class="scc-date" aria-label="Start date" @change="onCustomDate" />
             <span class="scc-date-sep" aria-hidden="true">&rarr;</span>
-            <input v-model="to" type="date" class="scc-date" @change="onCustomDate" />
+            <input v-model="to" type="date" class="scc-date" aria-label="End date" @change="onCustomDate" />
           </div>
         </div>
       </div>
@@ -88,7 +88,7 @@
           <!-- Station filter -->
           <div class="scc-select-wrap">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-select-icon"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-            <select v-model="stationFilter" class="scc-select" @change="load">
+            <select v-model="stationFilter" class="scc-select" aria-label="Station" @change="load">
               <option value="">All stations</option>
               <option v-for="s in STATIONS" :key="s" :value="s">{{ s }}</option>
             </select>
@@ -101,7 +101,8 @@
     <!-- Alerts -->
     <div v-if="error" class="scc-alert scc-alert--err">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      {{ error }}
+      <span>{{ error }}</span>
+      <button type="button" :disabled="loading" @click="load">Retry</button>
     </div>
     <div v-else-if="rangeNote" class="scc-alert scc-alert--info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -116,8 +117,24 @@
           <span v-if="k.icon" class="scc-kpi-icon" v-html="k.icon" />
         </div>
         <strong class="scc-kpi-value">{{ k.value }}</strong>
+        <small v-if="k.money" :class="['scc-kpi-money', k.moneyUnavailable && 'scc-kpi-money--unavailable']">{{ k.money }}</small>
         <small v-if="k.sub" :class="['scc-kpi-sub', k.tone && `scc-tone--${k.tone}`]">{{ k.sub }}</small>
         <div v-if="loading" class="scc-shimmer" />
+      </div>
+    </div>
+
+    <div v-if="data" class="scc-valuation" role="status" aria-live="polite">
+      <div>
+        <strong>Tariff valuation coverage</strong>
+        <span>{{ fmt(consumptionValue.pricedKwh) }} of {{ fmt(consumptionValue.totalKwh) }} kWh matched to dated tariffs</span>
+      </div>
+      <div class="scc-valuation-metrics">
+        <span>{{ fmt(consumptionValue.coveragePct, 2) }}% covered</span>
+        <span v-if="consumptionValue.unpricedKwh > 0">{{ fmt(consumptionValue.unpricedKwh) }} kWh unpriced</span>
+        <span>{{ fmtNgn(consumptionValue.valueNgn) }} valued</span>
+        <b :class="consumptionValue.complete ? 'scc-valuation-ok' : 'scc-valuation-warn'">
+          {{ consumptionValue.complete ? 'Complete' : 'Partial history' }}
+        </b>
       </div>
     </div>
 
@@ -130,7 +147,7 @@
           <strong>Consumption Trend</strong>
           <span class="scc-card-badge">{{ granularityLabel }} · kWh</span>
         </div>
-        <span class="scc-card-meta">{{ data ? data.temporal.labels.length : 0 }} periods</span>
+        <span class="scc-card-meta">{{ data?.temporal?.labels?.length || 0 }} periods</span>
       </div>
       <div class="scc-chart scc-chart--tall">
         <EChartPanel v-if="hasTemporal" :option="trendOption" />
@@ -172,7 +189,7 @@
           <EChartPanel v-if="hasSeasonality" :option="seasonalityOption" />
           <div v-else class="scc-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="10" width="4" height="11" rx="1" opacity=".3"/><rect x="10" y="6" width="4" height="15" rx="1" opacity=".3"/><rect x="17" y="3" width="4" height="18" rx="1" opacity=".3"/></svg>
-            <p>{{ loading ? 'Loading…' : (dataSource === "aggregated" ? "Not available with aggregated data." : "No data.") }}</p>
+            <p>{{ loading ? 'Loading…' : 'No load profile data for this range.' }}</p>
           </div>
         </div>
       </div>
@@ -186,7 +203,7 @@
           <strong>Station League Table</strong>
           <span class="scc-card-badge">{{ leagueRows.length }} stations</span>
         </div>
-        <span class="scc-card-meta">vs prior {{ data ? data.range.periodDays : 0 }}-day window</span>
+        <span class="scc-card-meta">vs prior {{ data?.range?.periodDays || 0 }}-day window</span>
       </div>
       <div class="scc-table-wrap scc-table-wrap--league">
         <table class="scc-table scc-table--league">
@@ -260,7 +277,7 @@
         </div>
       </div>
       <div class="scc-table-wrap">
-        <table class="scc-table">
+        <table class="scc-table scc-table--topmeters">
           <thead>
             <tr>
               <th class="scc-th-rank">#</th>
@@ -275,7 +292,8 @@
           </thead>
           <tbody>
             <tr v-for="(m, i) in pagedTopMeters" :key="m.meterId + m.station"
-              class="scc-tr scc-tr--click" @click="openMeter(m.meterId, m.station)">
+              class="scc-tr scc-tr--click" tabindex="0" @click="openMeter(m.meterId, m.station)"
+              @keydown.enter="openMeter(m.meterId, m.station)">
               <td class="scc-rank">{{ ((topMetersPage - 1) * topMetersPageSize) + i + 1 }}</td>
               <td class="scc-mono">{{ m.meterId }}</td>
               <td class="scc-customer">{{ m.customerName || '—' }}</td>
@@ -349,6 +367,14 @@
           </div>
 
           <template v-if="meterData && !meterLoading">
+            <!-- Part of the requested range predates the raw hot window. Say so rather
+                 than letting a truncated series read as "this meter went quiet". -->
+            <div v-if="meterData.coldRange" class="scc-cold-notice">
+              <strong>Partial range.</strong>
+              {{ meterData.coldRange.message }}
+              <a :href="meterData.coldRange.archiveRouteHash">Open Archive Reports</a>
+            </div>
+
             <!-- Meter KPIs -->
             <div class="scc-kpis scc-kpis--sm">
               <div v-for="k in meterKpis" :key="k.label" class="scc-kpi">
@@ -384,7 +410,7 @@
                   </div>
                 </div>
                 <div class="scc-table-wrap scc-table-wrap--scroll">
-                  <table class="scc-table">
+                  <table class="scc-table scc-table--drawer-recharges">
                     <thead>
                       <tr><th>Date</th><th class="scc-num">Units</th><th class="scc-num">Paid</th><th class="scc-num">Vend</th><th>Token</th></tr>
                     </thead>
@@ -413,7 +439,7 @@
                   </div>
                 </div>
                 <div class="scc-table-wrap scc-table-wrap--scroll">
-                  <table class="scc-table">
+                  <table class="scc-table scc-table--drawer-consumption">
                     <thead>
                       <tr><th>Date</th><th class="scc-num">Reading</th><th class="scc-num">Used kWh</th><th class="scc-num">Balance</th></tr>
                     </thead>
@@ -456,8 +482,9 @@ import {
   triggerMeterAggregateRefresh,
 } from "../services/consumption-service.mjs";
 
+import { fetchStations, stationsSync } from "../services/station-registry.mjs";
+
 const PALETTE = ["#059669", "#2563eb", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9", "#ec4899"];
-const STATIONS = ["TUNGA", "UMAISHA", "OGUFA", "KYAKALE", "MUSHA"];
 
 function fmtDate(d) {
   const y = d.getFullYear();
@@ -483,7 +510,10 @@ export default {
         { key: "weekly",  label: "Weekly" },
         { key: "monthly", label: "Monthly" },
       ],
-      STATIONS,
+      // Seeded from the last known estate for first paint, then replaced with
+      // the discovered list on mount — a station onboarded today appears in
+      // this dropdown today, with no redeploy.
+      STATIONS: stationsSync(),
       granularity: "daily",
       stationFilter: "",
       from: fmtDate(addDays(today, -29)),
@@ -528,10 +558,10 @@ export default {
       return !!(this.data && this.data.stations && this.data.stations.length);
     },
     hasSeasonality() {
-      return !!(this.data && this.data.seasonality && this.data.seasonality.values.some((v) => v > 0));
+      return !!(this.data && this.data.seasonality && Array.isArray(this.data.seasonality.values) && this.data.seasonality.values.length === 7);
     },
-    leagueRows() { return this.data ? this.data.stations : []; },
-    topMeters()  { return this.data ? this.data.topMeters : []; },
+    leagueRows() { return this.data?.stations || []; },
+    topMeters()  { return this.data?.topMeters || []; },
     topMetersTotalPages() {
       return Math.max(1, Math.ceil(this.topMeters.length / this.topMetersPageSize));
     },
@@ -547,16 +577,34 @@ export default {
       return Math.min(this.topMetersPage * this.topMetersPageSize, this.topMeters.length);
     },
 
+    consumptionValue() {
+      const consumedKwh = Number(this.data?.totals?.consumedKwh) || 0;
+      const valuation = this.data?.valuation || {};
+      const hasUnpriced = valuation.unpricedKwh !== undefined && valuation.unpricedKwh !== null;
+      const hasTotal = valuation.totalKwh !== undefined && valuation.totalKwh !== null;
+      return {
+        valueNgn: Number(valuation.valueNgn) || 0,
+        pricedKwh: Number(valuation.pricedKwh) || 0,
+        unpricedKwh: hasUnpriced ? Number(valuation.unpricedKwh) || 0 : consumedKwh,
+        totalKwh: hasTotal ? Number(valuation.totalKwh) || 0 : consumedKwh,
+        coveragePct: Number(valuation.coveragePct) || 0,
+        complete: valuation.complete === true,
+      };
+    },
+
     kpiCards() {
-      const t = this.data ? this.data.totals : null;
-      const top = this.data && this.data.stations[0];
-      const growthIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+      const t = this.data?.totals || null;
+      const top = this.data?.stations?.[0];
+      const customerCount = Number(t?.customerCount) || 0;
+      const stationCount = Number(t?.stationCount) || 0;
       return [
         { label: "Meter Read Total",   value: t ? `${this.fmt(t.latestOdometerKwh)} kWh` : "—", sub: t ? `${this.fmt(t.metersWithLatest, 0)} latest meter reads` : "",       tone: "", accent: "primary" },
-        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—",       sub: t ? this.growthLabel(t.growthPct) + " vs prior" : "",                  tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
+        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—", money: t ? this.moneyEquivalent() : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? this.growthLabel(t.growthPct) + " vs prior" : "", tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
         { label: "Active Meters",      value: t ? this.fmt(t.activeMeterCount, 0) : "—",         sub: t ? `of ${this.fmt(t.meterCount, 0)} seen` : "",                        tone: "", accent: "" },
-        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—",   sub: "in period",                                                            tone: "", accent: "" },
-        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—",   sub: t ? `${t.readingDays} reading periods` : "",                            tone: "", accent: "" },
+        { label: "Avg / Customer",     value: t && customerCount ? `${this.fmt(t.consumedKwh / customerCount)} kWh` : "—", money: t && customerCount ? this.moneyEquivalent(customerCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: customerCount ? `${this.fmt(customerCount, 0)} customers` : "No customers", tone: "", accent: "" },
+        { label: "Avg / Station",      value: t && stationCount ? `${this.fmt(t.consumedKwh / stationCount)} kWh` : "—", money: t && stationCount ? this.moneyEquivalent(stationCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: stationCount ? `${this.fmt(stationCount, 0)} reporting stations` : "No stations", tone: "", accent: "" },
+        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—", money: t && t.meterCount ? this.moneyEquivalent(t.meterCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: "in period", tone: "", accent: "" },
+        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—", money: t && t.readingDays ? this.moneyEquivalent(t.readingDays) : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? `${t.readingDays} reading periods` : "", tone: "", accent: "" },
         { label: "Top Station",        value: top ? top.station : "—",                      sub: top ? `${top.share}% of total load` : "",                               tone: "", accent: "" },
         { label: "Stations Reporting", value: t ? this.fmt(t.stationCount, 0) : "—",        sub: t ? `${t.readingDays} period${t.readingDays !== 1 ? "s" : ""} of data` : "", tone: "", accent: "" },
       ];
@@ -680,7 +728,7 @@ export default {
       const deltaData = series.map((r) => parseFloat((r.delta || 0).toFixed(3)));
       const balanceData = series.map((r) => r.remain1 == null ? null : parseFloat(r.remain1.toFixed(3)));
       const rechargeByDate = this.rechargeData.byDate || {};
-      const rechargeData = labels.map((d) => (rechargeByDate[d] ? parseFloat(rechargeByDate[d].units.toFixed(2)) : null));
+      const rechargeData = labels.map((d) => (rechargeByDate[d] ? parseFloat(rechargeByDate[d].units.toFixed(4)) : null));
       const hasBalance = balanceData.some((v) => v != null);
       const hasRecharges = rechargeData.some((v) => v != null);
       return {
@@ -703,6 +751,11 @@ export default {
   },
 
   mounted() {
+    // Refresh the estate before/alongside the first load so a newly onboarded
+    // station is selectable without a redeploy.
+    fetchStations()
+      .then((stations) => { if (stations.length) this.STATIONS = stations; })
+      .catch(() => { /* registry unreachable — keep the seeded list */ });
     this.load();
     this.themeObserver = new MutationObserver(() => { this.themeTick++; });
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -734,14 +787,25 @@ export default {
     },
 
     colorFor(station) {
-      const idx = STATIONS.indexOf(String(station || "").toUpperCase());
-      return PALETTE[(idx >= 0 ? idx : STATIONS.length) % PALETTE.length];
+      const idx = this.STATIONS.indexOf(String(station || "").toUpperCase());
+      return PALETTE[(idx >= 0 ? idx : this.STATIONS.length) % PALETTE.length];
     },
 
     fmt(value, decimals = 2) {
       const n = Number(value);
       if (!Number.isFinite(n)) return "—";
       return n.toLocaleString("en-NG", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    },
+
+    fmtNgn(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "—";
+      return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(n);
+    },
+
+    moneyEquivalent(divisor = 1) {
+      if (!this.consumptionValue.complete) return "Tariff value unavailable";
+      return `${this.fmtNgn(this.consumptionValue.valueNgn / Math.max(1, Number(divisor) || 1))} equivalent`;
     },
 
     growthLabel(pct) {
@@ -813,7 +877,10 @@ export default {
         }
       } catch (err) {
         if (myReq !== this.reqId) return;
-        this.error = err && err.message ? err.message : "Failed to load station consumption analytics.";
+        const message = err && err.message ? err.message : "";
+        this.error = /fetch failed|statement timeout|timed out/i.test(message)
+          ? "Station analytics is temporarily unavailable."
+          : message || "Failed to load station consumption analytics.";
         this.data = null;
       } finally {
         if (myReq === this.reqId) this.loading = false;
@@ -1195,6 +1262,17 @@ export default {
   line-height: 1.4;
 }
 .scc-alert svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+.scc-alert span { flex: 1; min-width: 0; }
+.scc-alert button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.scc-alert button:disabled { opacity: .5; cursor: default; }
 .scc-alert--err  { background: var(--danger-bg, #fef2f2); border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 30%, transparent); color: var(--danger, #dc2626); }
 .scc-alert--info { background: color-mix(in srgb, var(--primary) 9%, var(--bg-card)); border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); color: var(--primary); }
 
@@ -1226,7 +1304,28 @@ export default {
 .scc-kpi-head { display: flex; justify-content: space-between; align-items: center; }
 .scc-kpi-label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
 .scc-kpi-value { font-size: 18px; font-weight: 800; color: var(--text-main); letter-spacing: -0.025em; line-height: 1.1; }
+.scc-kpi-money { font-size: 10.5px; color: var(--primary); font-weight: 800; letter-spacing: -.01em; }
+.scc-kpi-money--unavailable { color: var(--text-faint); font-weight: 600; }
 .scc-kpi-sub   { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
+.scc-valuation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 11px;
+}
+.scc-valuation > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scc-valuation strong { font-size: 11.5px; }
+.scc-valuation span { color: var(--text-muted); }
+.scc-valuation-metrics b { padding: 3px 8px; border-radius: 999px; font-size: 10px; }
+.scc-valuation-ok { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.scc-valuation-warn { color: var(--danger, #dc2626); background: var(--danger-bg, #fef2f2); }
 .scc-tone--up      { color: var(--success, #059669); }
 .scc-tone--down    { color: var(--danger,  #ef4444); }
 .scc-tone--neutral { color: var(--text-faint); }
@@ -1300,15 +1399,21 @@ export default {
 .scc-chart--empty-state {
   height: 160px;
 }
-.scc-card--share {
+.scc-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.scc-row-2 > .scc-card {
   min-height: 300px;
   display: flex;
   flex-direction: column;
 }
-.scc-card--share .scc-chart--share {
+.scc-row-2 > .scc-card .scc-chart {
   flex: 1 1 auto;
   min-height: 240px;
-  height: auto;
+  height: 100%;
 }
 .scc-chart :deep(.echart-panel),
 .scc-chart :deep(.echart-canvas) {
@@ -1325,7 +1430,6 @@ export default {
 .scc-chart :deep(.dashboard-svg-chart svg) {
   overflow: hidden;
 }
-.scc-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .scc-empty {
   display: flex;
   flex-direction: column;
@@ -1344,7 +1448,82 @@ export default {
 .scc-table-wrap--league { -webkit-overflow-scrolling: touch; }
 .scc-table-wrap--scroll { max-height: 270px; overflow-y: auto; }
 .scc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.scc-table--league { min-width: 1020px; }
+.scc-table--topmeters {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--topmeters th:nth-child(1),
+.scc-table--topmeters td:nth-child(1) { width: 36px; text-align: center; }
+.scc-table--topmeters th:nth-child(2),
+.scc-table--topmeters td:nth-child(2) { width: 90px; }
+.scc-table--topmeters th:nth-child(3),
+.scc-table--topmeters td:nth-child(3) { width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.scc-table--topmeters th:nth-child(4),
+.scc-table--topmeters td:nth-child(4) { width: 110px; }
+.scc-table--topmeters th:nth-child(5),
+.scc-table--topmeters td:nth-child(5) { width: 100px; text-align: right; }
+.scc-table--topmeters th:nth-child(6),
+.scc-table--topmeters td:nth-child(6) { width: 110px; text-align: right; }
+.scc-table--topmeters th:nth-child(7),
+.scc-table--topmeters td:nth-child(7) { width: 100px; text-align: right; }
+.scc-table--topmeters th:nth-child(8),
+.scc-table--topmeters td:nth-child(8) { width: 28px; text-align: center; }
+
+.scc-table--league {
+  width: 100%;
+  min-width: 1020px;
+  table-layout: fixed;
+}
+.scc-table--league th:nth-child(1),
+.scc-table--league td:nth-child(1) { width: 36px; text-align: center; }
+.scc-table--league th:nth-child(2),
+.scc-table--league td:nth-child(2) { width: 120px; }
+.scc-table--league th:nth-child(3),
+.scc-table--league td:nth-child(3) { width: 110px; text-align: right; }
+.scc-table--league th:nth-child(4),
+.scc-table--league td:nth-child(4) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(5),
+.scc-table--league td:nth-child(5) { width: 110px; text-align: right; }
+.scc-table--league th:nth-child(6),
+.scc-table--league td:nth-child(6) { width: 70px; text-align: right; }
+.scc-table--league th:nth-child(7),
+.scc-table--league td:nth-child(7) { width: 70px; text-align: right; }
+.scc-table--league th:nth-child(8),
+.scc-table--league td:nth-child(8) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(9),
+.scc-table--league td:nth-child(9) { width: 95px; text-align: right; }
+.scc-table--league th:nth-child(10),
+.scc-table--league td:nth-child(10) { width: 130px; }
+.scc-table--league th:nth-child(11),
+.scc-table--league td:nth-child(11) { width: 80px; text-align: right; }
+
+.scc-table--drawer-recharges {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--drawer-recharges th:nth-child(1),
+.scc-table--drawer-recharges td:nth-child(1) { width: 90px; }
+.scc-table--drawer-recharges th:nth-child(2),
+.scc-table--drawer-recharges td:nth-child(2) { width: 70px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(3),
+.scc-table--drawer-recharges td:nth-child(3) { width: 80px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(4),
+.scc-table--drawer-recharges td:nth-child(4) { width: 70px; text-align: right; }
+.scc-table--drawer-recharges th:nth-child(5),
+.scc-table--drawer-recharges td:nth-child(5) { width: 130px; }
+
+.scc-table--drawer-consumption {
+  width: 100%;
+  table-layout: fixed;
+}
+.scc-table--drawer-consumption th:nth-child(1),
+.scc-table--drawer-consumption td:nth-child(1) { width: 90px; }
+.scc-table--drawer-consumption th:nth-child(2),
+.scc-table--drawer-consumption td:nth-child(2) { width: 90px; text-align: right; }
+.scc-table--drawer-consumption th:nth-child(3),
+.scc-table--drawer-consumption td:nth-child(3) { width: 80px; text-align: right; }
+.scc-table--drawer-consumption th:nth-child(4),
+.scc-table--drawer-consumption td:nth-child(4) { width: 80px; text-align: right; }
 .scc-table th {
   position: sticky;
   top: 0;
@@ -1355,7 +1534,7 @@ export default {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .04em;
-  color: var(--text-faint);
+  color: var(--text-muted);
   background: var(--bg-card);
   border-bottom: 1.5px solid var(--border-color);
   white-space: nowrap;
@@ -1366,19 +1545,21 @@ export default {
   color: var(--text-muted);
   white-space: nowrap;
   vertical-align: middle;
+  font-variant-numeric: tabular-nums;
 }
 .scc-tr:last-child td { border-bottom: none; }
 .scc-tr:hover td { background: var(--_softer); }
 .scc-tr--click { cursor: pointer; }
 .scc-tr--click:hover td { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.scc-tr--click:focus-visible td { outline: 2px solid var(--primary); outline-offset: -2px; }
 
-.scc-th-rank  { width: 32px; }
+.scc-th-rank  { width: 36px; text-align: center; }
 .scc-th-action { width: 24px; }
-.scc-num      { text-align: right; }
+.scc-num      { text-align: right; font-variant-numeric: tabular-nums; }
 .scc-bold     { font-weight: 700; color: var(--text-main); }
-.scc-rank     { color: var(--text-faint); font-weight: 700; }
+.scc-rank     { color: var(--text-faint); font-weight: 700; text-align: center; }
 .scc-muted    { color: var(--text-faint); font-size: 10.5px; }
-.scc-mono     { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; letter-spacing: -0.01em; }
+.scc-mono     { font-family: var(--bev-font-mono); font-size: 11.5px; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .scc-token    { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scc-customer { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scc-peak     { font-size: 11.5px; }
@@ -1493,8 +1674,11 @@ export default {
 }
 .scc-drawer-header-info { flex: 1; min-width: 0; }
 .scc-drawer-eyebrow { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--primary); display: block; margin-bottom: 2px; }
-.scc-drawer-title { margin: 0 0 3px; font-size: 20px; font-weight: 800; color: var(--text-main); font-family: ui-monospace, Menlo, monospace; letter-spacing: -0.01em; }
+.scc-drawer-title { margin: 0 0 3px; font-size: 20px; font-weight: 800; color: var(--text-main); font-family: var(--bev-font-mono); letter-spacing: -0.01em; }
 .scc-drawer-meta { margin: 0; font-size: 11.5px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.scc-cold-notice { margin-bottom: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted, rgba(127, 127, 127, 0.06)); color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.scc-cold-notice strong { color: var(--text); }
+.scc-cold-notice a { margin-left: 6px; color: var(--accent, #2563eb); text-decoration: underline; }
 .scc-drawer-close {
   display: grid;
   place-items: center;
@@ -1532,7 +1716,7 @@ export default {
 }
 
 /* ─── Responsive ──────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .scc-row-2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
@@ -1598,7 +1782,9 @@ export default {
   }
 }
 @media (max-width: 400px) {
-  .scc-kpis { grid-template-columns: 1fr; }
+  .scc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scc-kpi { min-width: 0; }
+  .scc-kpi-value { font-size: 14px; overflow-wrap: anywhere; }
   .scc-hero-actions .scc-hbtn:not(.scc-hbtn--primary) { display: none; }
   .scc-daterange { gap: 4px; }
   .scc-date-sep { font-size: 10px; }

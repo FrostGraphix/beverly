@@ -21,15 +21,23 @@
 import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { checkVerification, sendSms, sendVerification } from '../adapters/twilio.js';
-import { sendEmail } from '../adapters/postmark.js';
+import { sendEmail } from '../adapters/resend.js';
+import { welcomeEmail } from '../emails/templates.js';
+import { sendEmailVerification } from './customer-email-otp.js';
 import { getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
+import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import {
     assertCustomerOtpTrafficAllowed,
     normalizeSmsPhone,
     SmsGuardrailError,
 } from './sms-guardrails.js';
+import {
+    validateEmailFormatAndDomain,
+    isDisposableEmail,
+    EmailValidationError,
+} from './email-validation.js';
 
 export type OtpPurpose = 'signup' | 'login' | 'recovery';
 
@@ -65,6 +73,18 @@ export interface EmailLoginInput {
     password: string;
 }
 
+export interface PhoneSignupInput {
+    phone: string;
+    password: string;
+    full_name: string;
+    email?: string;
+}
+
+export interface PhoneLoginInput {
+    phone: string;
+    password: string;
+}
+
 interface StoredOtpChallenge {
     id: string;
     phone: string;
@@ -87,6 +107,7 @@ const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RATE_LIMIT_WINDOW_MS = env.SMS_OTP_RATE_LIMIT_WINDOW_SECONDS * 1000;
 const OTP_RATE_LIMIT_MAX = env.SMS_OTP_RATE_LIMIT_MAX;
 const OTP_MAX_ATTEMPTS = 5;
+const OTP_MEMORY_FALLBACK_ENABLED = env.NODE_ENV === 'test';
 export const CUSTOMER_OTP_TTL_SECONDS = OTP_TTL_MS / 1000;
 export const CUSTOMER_OTP_RETRY_AFTER_SECONDS = env.SMS_OTP_RESEND_COOLDOWN_SECONDS;
 
@@ -136,7 +157,7 @@ function storeFallbackOtpChallenge(input: Omit<StoredOtpChallenge, 'id' | 'attem
 }
 
 function generateOtp(): string {
-    return String(Math.floor(100000 + Math.random() * 900000));
+    return String(crypto.randomInt(100000, 1000000));
 }
 
 function hashOtp(otp: string): string {
@@ -152,6 +173,9 @@ function normalizeRequiredEmail(email: string): string {
     const normalized = normalizeOptionalEmail(email);
     if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
         throw new AuthError('Enter a valid email address.', 'invalid_email');
+    }
+    if (isDisposableEmail(normalized)) {
+        throw new AuthError('Disposable or temporary email addresses are not allowed.', 'disposable_email_not_allowed');
     }
     return normalized;
 }
@@ -283,7 +307,16 @@ export async function requestOtp(
     if (rateLimitResult.error && !isOtpStorageMissing(rateLimitResult.error.message)) {
         throw new AuthError(rateLimitResult.error.message, 'challenge_lookup_failed');
     }
-    const count = rateLimitResult.error && isOtpStorageMissing(rateLimitResult.error.message)
+    if (
+        rateLimitResult.error
+        && isOtpStorageMissing(rateLimitResult.error.message)
+        && !OTP_MEMORY_FALLBACK_ENABLED
+    ) {
+        throw otpChallengeCreateError(rateLimitResult.error.message);
+    }
+    const count = rateLimitResult.error
+        && isOtpStorageMissing(rateLimitResult.error.message)
+        && OTP_MEMORY_FALLBACK_ENABLED
         ? fallbackOtpRequestCount(normalised, since)
         : rateLimitResult.count;
     if ((count ?? 0) >= OTP_RATE_LIMIT_MAX) {
@@ -307,7 +340,9 @@ export async function requestOtp(
         })
         .select('id')
         .single();
-    const fallbackChallenge = insertResult.error && isOtpStorageMissing(insertResult.error.message)
+    const fallbackChallenge = insertResult.error
+        && isOtpStorageMissing(insertResult.error.message)
+        && OTP_MEMORY_FALLBACK_ENABLED
         ? storeFallbackOtpChallenge({
             phone: normalised,
             otp_hash: otp ? hashOtp(otp) : 'twilio-verify',
@@ -365,26 +400,26 @@ export async function requestOtp(
     return { challengeId, expiresAt, retryAfterSeconds: CUSTOMER_OTP_RETRY_AFTER_SECONDS };
 }
 
-async function emailPasswordToken(email: string, password: string): Promise<{ accessToken: string; userId: string }> {
-    if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-        throw new AuthError('Authentication is not configured. Contact support.', 'auth_not_configured');
-    }
-    let res: Response;
-    try {
-        res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-            method: 'POST',
-            headers: {
-                apikey: env.SUPABASE_ANON_KEY,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email, password }),
-        });
-    } catch {
-        // Network / DNS failure reaching Supabase — surface a clean 503 instead of a raw 500.
-        throw new AuthError('Authentication service is temporarily unavailable. Try again shortly.', 'auth_upstream_unreachable');
-    }
+async function emailPasswordToken(email: string, password: string): Promise<{
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: number | null;
+    expiresIn: number | null;
+    userId: string;
+}> {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+    });
     const body = await res.json().catch(() => ({})) as {
         access_token?: unknown;
+        refresh_token?: unknown;
+        expires_at?: unknown;
+        expires_in?: unknown;
         user?: { id?: unknown };
     };
     if (!res.ok || !body.access_token || !body.user?.id) {
@@ -393,7 +428,50 @@ async function emailPasswordToken(email: string, password: string): Promise<{ ac
     if (typeof body.access_token !== 'string' || typeof body.user.id !== 'string') {
         throw new AuthError('Invalid email or password.', 'invalid_credentials');
     }
-    return { accessToken: body.access_token, userId: body.user.id };
+    return {
+        accessToken: body.access_token,
+        refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
+        expiresAt: typeof body.expires_at === 'number' ? body.expires_at : null,
+        expiresIn: typeof body.expires_in === 'number' ? body.expires_in : null,
+        userId: body.user.id,
+    };
+}
+
+export async function phonePasswordToken(phone: string, password: string): Promise<{
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: number | null;
+    expiresIn: number | null;
+    userId: string;
+}> {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+            apikey: env.SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone, password }),
+    });
+    const body = await res.json().catch(() => ({})) as {
+        access_token?: unknown;
+        refresh_token?: unknown;
+        expires_at?: unknown;
+        expires_in?: unknown;
+        user?: { id?: unknown };
+    };
+    if (!res.ok || !body.access_token || !body.user?.id) {
+        throw new AuthError('Invalid phone number or password.', 'invalid_credentials');
+    }
+    if (typeof body.access_token !== 'string' || typeof body.user.id !== 'string') {
+        throw new AuthError('Invalid phone number or password.', 'invalid_credentials');
+    }
+    return {
+        accessToken: body.access_token,
+        refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : null,
+        expiresAt: typeof body.expires_at === 'number' ? body.expires_at : null,
+        expiresIn: typeof body.expires_in === 'number' ? body.expires_in : null,
+        userId: body.user.id,
+    };
 }
 
 async function createCustomerRow(input: {
@@ -401,7 +479,7 @@ async function createCustomerRow(input: {
     email: string | null;
     phone: string | null;
     fullName: string | null;
-    authProvider: 'phone_otp' | 'email_password';
+    authProvider: 'phone_otp' | 'email_password' | 'phone_password';
     emailVerifiedAt?: string | null;
 }): Promise<CustomerProfile> {
     const authLink = await hasCustomersAuthUserIdColumn()
@@ -430,8 +508,23 @@ async function createCustomerRow(input: {
 
 export async function signupWithEmail(
     input: EmailSignupInput,
-): Promise<{ access_token: string; customer: CustomerProfile; isNew: boolean }> {
-    const email = normalizeRequiredEmail(input.email);
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
+    let email: string;
+    try {
+        email = await validateEmailFormatAndDomain(input.email);
+    } catch (err: any) {
+        if (err instanceof EmailValidationError) {
+            throw new AuthError(err.message, err.code);
+        }
+        throw err;
+    }
     const password = normalizePassword(input.password);
     const fullName = input.full_name?.trim();
     if (!fullName || fullName.length < 2) throw new AuthError('Full name is required.', 'full_name_required');
@@ -472,7 +565,6 @@ export async function signupWithEmail(
             phone,
             fullName,
             authProvider: 'email_password',
-            emailVerifiedAt: new Date().toISOString(),
         });
 
         await getOrCreateWallet('customer', customer.id, {
@@ -481,13 +573,15 @@ export async function signupWithEmail(
         });
 
         try {
-            await sendEmail({
-                to: email,
-                subject: 'Welcome to Beverly',
-                text: `Hi ${fullName},\n\nYour Beverly account is active.\n\nThe Beverly Team`,
-                tag: 'customer-welcome',
-            });
+            let welcomeFlagOn = false;
+            try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing = disabled */ }
+            if (welcomeFlagOn) {
+                const content = welcomeEmail({ fullName });
+                await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+            }
         } catch { /* non-fatal */ }
+
+        sendEmailVerification(email, fullName).catch(() => undefined);
 
         await logAction({
             actorUserId: authData.user.id,
@@ -502,6 +596,9 @@ export async function signupWithEmail(
 
         return {
             access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
             customer,
             isNew: true,
         };
@@ -513,7 +610,14 @@ export async function signupWithEmail(
 
 export async function loginWithEmail(
     input: EmailLoginInput,
-): Promise<{ access_token: string; customer: CustomerProfile; isNew: boolean }> {
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
     const email = normalizeRequiredEmail(input.email);
     const password = normalizePassword(input.password);
     const session = await emailPasswordToken(email, password);
@@ -540,6 +644,159 @@ export async function loginWithEmail(
 
     return {
         access_token: session.accessToken,
+        refresh_token: session.refreshToken,
+        expires_at: session.expiresAt,
+        expires_in: session.expiresIn,
+        customer: customer as CustomerProfile,
+        isNew: false,
+    };
+}
+
+export async function signupWithPhone(
+    input: PhoneSignupInput,
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
+    const phone = normalizePhone(input.phone);
+    const password = normalizePassword(input.password);
+    const fullName = input.full_name?.trim();
+    if (!fullName || fullName.length < 2) throw new AuthError('Full name is required.', 'full_name_required');
+
+    let email: string | null = null;
+    if (input.email) {
+        try {
+            email = await validateEmailFormatAndDomain(input.email);
+        } catch (err: any) {
+            if (err instanceof EmailValidationError) {
+                throw new AuthError(err.message, err.code);
+            }
+            throw err;
+        }
+    }
+
+    const { data: existingPhone, error: existingPhoneErr } = await adminClient
+        .from('customers')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+    if (existingPhoneErr) throw new AuthError(existingPhoneErr.message, 'phone_lookup_failed');
+    if (existingPhone) throw new AuthError('A customer account with this phone already exists.', 'phone_in_use');
+
+    if (email) {
+        const { data: existingEmail, error: existingEmailErr } = await adminClient
+            .from('customers')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+        if (existingEmailErr) throw new AuthError(existingEmailErr.message, 'email_lookup_failed');
+        if (existingEmail) throw new AuthError('A customer account with this email already exists.', 'email_in_use');
+    }
+
+    const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
+        phone,
+        password,
+        phone_confirm: true,
+        user_metadata: { role: 'customer', full_name: fullName, email: email ?? undefined },
+    });
+    if (authErr || !authData.user) {
+        throw new AuthError(authErr?.message ?? 'User creation failed.', 'user_create_failed');
+    }
+
+    try {
+        const customer = await createCustomerRow({
+            authUserId: authData.user.id,
+            email,
+            phone,
+            fullName,
+            authProvider: 'phone_password',
+        });
+
+        await getOrCreateWallet('customer', customer.id, {
+            dailyCapMinor: 10_000_000,
+            monthlyCapMinor: 50_000_000,
+        });
+
+        if (email) {
+            try {
+                let welcomeFlagOn = false;
+                try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing */ }
+                if (welcomeFlagOn) {
+                    const content = welcomeEmail({ fullName });
+                    await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+                }
+            } catch { /* non-fatal */ }
+            sendEmailVerification(email, fullName).catch(() => undefined);
+        }
+
+        await logAction({
+            actorUserId: authData.user.id,
+            actorType: 'customer',
+            action: 'customer.phone_signup',
+            targetType: 'customer',
+            targetId: customer.id,
+            after: { email, phone },
+        });
+
+        const session = await phonePasswordToken(phone, password);
+
+        return {
+            access_token: session.accessToken,
+            refresh_token: session.refreshToken,
+            expires_at: session.expiresAt,
+            expires_in: session.expiresIn,
+            customer,
+            isNew: true,
+        };
+    } catch (error) {
+        await adminClient.auth.admin.deleteUser(authData.user.id);
+        throw error;
+    }
+}
+
+export async function loginWithPhone(
+    input: PhoneLoginInput,
+): Promise<{
+    access_token: string;
+    refresh_token: string | null;
+    expires_at: number | null;
+    expires_in: number | null;
+    customer: CustomerProfile;
+    isNew: boolean;
+}> {
+    const phone = normalizePhone(input.phone);
+    const password = normalizePassword(input.password);
+    const session = await phonePasswordToken(phone, password);
+
+    const { data: customer, error } = await adminClient
+        .from('customers')
+        .select('*')
+        .eq('auth_user_id', session.userId)
+        .maybeSingle();
+    if (error) throw new AuthError(error.message, 'customer_lookup_failed');
+    if (!customer) throw new AuthError('Customer profile not found.', 'customer_not_found');
+    if ((customer as CustomerProfile).status !== 'active') {
+        throw new AuthError('Account is not active.', 'account_inactive');
+    }
+
+    await logAction({
+        actorUserId: session.userId,
+        actorType: 'customer',
+        action: 'customer.phone_login',
+        targetType: 'customer',
+        targetId: (customer as CustomerProfile).id,
+        after: { phone },
+    });
+
+    return {
+        access_token: session.accessToken,
+        refresh_token: session.refreshToken,
+        expires_at: session.expiresAt,
+        expires_in: session.expiresIn,
         customer: customer as CustomerProfile,
         isNew: false,
     };
@@ -584,7 +841,12 @@ export async function verifyOtp(
     if (error && !isOtpStorageMissing(error.message)) {
         throw new AuthError(error.message, 'challenge_lookup_failed');
     }
-    const fallbackRow = error && isOtpStorageMissing(error.message) ? fallbackOtpChallenges.get(challengeId) : null;
+    if (error && isOtpStorageMissing(error.message) && !OTP_MEMORY_FALLBACK_ENABLED) {
+        throw otpChallengeCreateError(error.message);
+    }
+    const fallbackRow = error && isOtpStorageMissing(error.message) && OTP_MEMORY_FALLBACK_ENABLED
+        ? fallbackOtpChallenges.get(challengeId)
+        : null;
     if (!row && !fallbackRow) throw new AuthError('Challenge not found or already used.', 'challenge_not_found');
 
     const ch = (row ?? fallbackRow) as StoredOtpChallenge;
@@ -693,13 +955,14 @@ async function signUpCustomer(
 
     if (email) {
         try {
-            await sendEmail({
-                to: email,
-                subject: 'Welcome to Beverly',
-                text: `Hi ${meta.full_name ?? 'there'},\n\nYour Beverly account is active. Download the app to buy electricity tokens instantly.\n\n— The Beverly Team`,
-                tag: 'customer-welcome',
-            });
+            let welcomeFlagOn = false;
+            try { welcomeFlagOn = await isFlagEnabled('notifications.email.welcome'); } catch { /* flag missing = disabled */ }
+            if (welcomeFlagOn) {
+                const content = welcomeEmail({ fullName: meta.full_name ?? 'there' });
+                await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, tag: 'customer-welcome' });
+            }
         } catch { /* non-fatal */ }
+        sendEmailVerification(email, meta.full_name ?? 'there').catch(() => undefined);
     }
 
     await logAction({

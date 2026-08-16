@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beverly — Quantum Electrical Reveal</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800;900&family=Plus+Jakarta+Sans:wght@800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+:root {
+  --beverly-green: #2FC34A;
+  --beverly-glow: rgba(47, 195, 74, 0.8);
+  --near-black: #020403;
+  --clean-white: #FFFFFF;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+  background: var(--near-black); 
+  color: var(--clean-white); 
+  font-family: 'Plus Jakarta Sans', sans-serif; 
+  overflow: hidden; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  height: 100vh; 
+  perspective: 1000px; 
+}
+
+/* Background Atmosphere */
+.vignette { position: fixed; inset: 0; box-shadow: inset 0 0 350px #000; pointer-events: none; z-index: 100; }
+.film-grain { 
+  position: fixed; inset: 0; 
+  background: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)"/%3E%3C/svg%3E'); 
+  opacity: 0.05; mix-blend-mode: overlay; pointer-events: none; z-index: 99; 
+}
+
+/* Lightning & Shockwave Canvas */
+#fx-canvas { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+/* 3D Volumetric Light Field */
+#volumetric-core {
+  position: absolute; top: 50%; left: 50%;
+  width: 700px; height: 700px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(47, 195, 74, 0.25) 0%, rgba(47, 195, 74, 0.05) 40%, transparent 70%);
+  opacity: 0; filter: blur(50px); z-index: 1; pointer-events: none;
+}
+
+/* Radial Shockwave Ring */
+#shockwave {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 200px; height: 200px;
+  border-radius: 50%;
+  border: 2px solid var(--beverly-green);
+  box-shadow: 0 0 40px var(--beverly-green), inset 0 0 40px var(--beverly-green);
+  opacity: 0; z-index: 5; pointer-events: none;
+}
+
+/* Master Stage */
+#stage { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+/* Logo Wrapper & Metallic Specular Sweep Overlay */
+#logo-wrapper {
+  position: relative;
+  padding: 20px;
+  transform-style: preserve-3d;
+  will-change: transform, filter, opacity;
+}
+
+#logo-img {
+  width: 580px;
+  display: block;
+  opacity: 0;
+  transform: scale(2.5) translateZ(300px);
+  filter: blur(40px) brightness(400%);
+  will-change: transform, opacity, filter;
+}
+
+/* Specular Light Sweep Overlay over Logo */
+#specular-sweep {
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.8) 50%, transparent 80%);
+  transform: translateX(-150%) skewX(-25deg);
+  mix-blend-mode: overlay;
+  pointer-events: none; z-index: 20;
+}
+
+/* Tech System Indicators Header */
+#sys-hud {
+  display: flex; gap: 30px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: rgba(255,255,255,0.4); letter-spacing: 3px;
+  margin-bottom: 25px; opacity: 0; transform: translateY(-10px);
+}
+.hud-stat span { color: var(--beverly-green); font-weight: 800; }
+
+/* Tagline Lockup Box */
+#tagline-container { margin-top: 35px; opacity: 0; transform: translateY(15px); }
+#tagline-box {
+  display: flex; align-items: center; gap: 15px;
+  background: rgba(5, 12, 8, 0.85);
+  border: 1px solid rgba(47, 195, 74, 0.4);
+  padding: 14px 32px; border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(47, 195, 74, 0.2);
+}
+#tagline-text {
+  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800;
+  color: var(--beverly-green); letter-spacing: 5px; text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(47, 195, 74, 0.6);
+}
+.pulse-dot {
+  width: 8px; height: 8px; background: var(--beverly-green);
+  border-radius: 50%; box-shadow: 0 0 10px var(--beverly-green);
+  animation: pulse 1s infinite alternate;
+}
+@keyframes pulse { 0% { opacity: 0.3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
+
+/* Replay Button */
+#replay-btn {
+  position: fixed; bottom: 35px;
+  background: rgba(10, 15, 12, 0.9);
+  border: 1px solid rgba(47, 195, 74, 0.3);
+  color: var(--clean-white); padding: 12px 28px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800;
+  letter-spacing: 3px; cursor: pointer; z-index: 200; border-radius: 4px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+#replay-btn:hover {
+  background: var(--beverly-green); color: #000;
+  border-color: var(--beverly-green);
+  box-shadow: 0 0 25px var(--beverly-glow);
+}
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="film-grain"></div>
+<div id="volumetric-core"></div>
+<div id="shockwave"></div>
+<canvas id="fx-canvas"></canvas>
+
+<div id="stage">
+  <div id="sys-hud">
+    <div class="hud-stat">STATUS: <span>ONLINE</span></div>
+    <div class="hud-stat">GRID: <span>OPTIMAL</span></div>
+    <div class="hud-stat">VOLTAGE: <span>240V</span></div>
+  </div>
+
+  <div id="logo-wrapper">
+    <div id="specular-sweep"></div>
+    <img src="beverly-logo.png" id="logo-img" alt="Beverly Logo">
+  </div>
+
+  <div id="tagline-container">
+    <div id="tagline-box">
+      <div class="pulse-dot"></div>
+      <span id="tagline-text">_</span>
+    </div>
+  </div>
+</div>
+
+<button id="replay-btn" onclick="executeReveal()">⚡ REPLAY REVEAL</button>
+
+<script>
+/* =======================================================================
+   LIGHTNING ARCS & SHOCKWAVE CANVAS ENGINE
+   ======================================================================= */
+const canvas = document.getElementById('fx-canvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+let lightningActive = false;
+
+function resize() { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+function createBolt(startX, startY, endX, endY, branches) {
+  let points = [{x: startX, y: startY}];
+  let currentX = startX;
+  let currentY = startY;
+  let steps = 12;
+  
+  for(let i=0; i<steps; i++) {
+    let progress = i / steps;
+    let nextX = startX + (endX - startX) * progress + (Math.random() - 0.5) * 40;
+    let nextY = startY + (endY - startY) * progress + (Math.random() - 0.5) * 40;
+    points.push({x: nextX, y: nextY});
+  }
+  points.push({x: endX, y: endY});
+  
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for(let p of points) ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = Math.random() > 0.3 ? '#2FC34A' : '#FFFFFF';
+  ctx.lineWidth = Math.random() * 2 + 1;
+  ctx.shadowColor = '#2FC34A';
+  ctx.shadowBlur = 15;
+  ctx.stroke();
+}
+
+function drawFX() {
+  ctx.clearRect(0, 0, width, height);
+  if(lightningActive) {
+    if(Math.random() > 0.4) {
+      let cx = width / 2;
+      let cy = height / 2;
+      let angle = Math.random() * Math.PI * 2;
+      let dist = Math.random() * 400 + 100;
+      createBolt(cx + Math.cos(angle)*dist, cy + Math.sin(angle)*dist, cx, cy);
+    }
+  }
+  requestAnimationFrame(drawFX);
+}
+drawFX();
+
+/* =======================================================================
+   THE QUANTUM REVEAL GSAP TIMELINE
+   ======================================================================= */
+let masterTL;
+
+function executeReveal() {
+  if(masterTL) masterTL.kill();
+  
+  lightningActive = true;
+  masterTL = gsap.timeline();
+
+  // Reset elements
+  gsap.set('#logo-img', { opacity: 0, scale: 2.5, z: 300, filter: 'blur(40px) brightness(400%)' });
+  gsap.set('#volumetric-core', { opacity: 0, scale: 0.5 });
+  gsap.set('#shockwave', { opacity: 0, scale: 0 });
+  gsap.set('#sys-hud', { opacity: 0, y: -10 });
+  gsap.set('#tagline-container', { opacity: 0, y: 15 });
+  gsap.set('#specular-sweep', { x: '-150%' });
+  document.getElementById('tagline-text').innerText = '_';
+
+  // 1. Charging Core (0.2s - 1.2s)
+  masterTL.to('#volumetric-core', { opacity: 0.8, scale: 1.2, duration: 1.0, ease: "power2.out" }, 0.2);
+
+  // 2. Shockwave Explosion (1.2s)
+  masterTL.call(() => { lightningActive = false; }, null, 1.2);
+  masterTL.to('#shockwave', { opacity: 1, scale: 4, duration: 0.6, ease: "expo.out" }, 1.2);
+  masterTL.to('#shockwave', { opacity: 0, duration: 0.3 }, 1.5);
+
+  // 3. Logo Slam & Unmasking (1.25s)
+  masterTL.to('#logo-img', {
+    opacity: 1,
+    scale: 1,
+    z: 0,
+    filter: 'blur(0px) brightness(100%) drop-shadow(0 20px 60px rgba(47,195,74,0.6))',
+    duration: 0.8,
+    ease: "expo.out"
+  }, 1.25);
+
+  // 4. Specular Chrome Light Sweep across the logo (1.6s)
+  masterTL.to('#specular-sweep', { x: '150%', duration: 0.8, ease: "power2.inOut" }, 1.6);
+
+  // 5. Tech HUD Stats Reveal (1.9s)
+  masterTL.to('#sys-hud', { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 1.9);
+
+  // 6. Monospace Tagline Reveal (2.1s)
+  masterTL.to('#tagline-container', { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 2.1);
+
+  const tagline = "YOUR SMART POWER PARTNER!";
+  masterTL.to({}, {
+    duration: 0.8,
+    ease: "steps(25)",
+    onUpdate: function() {
+      const len = Math.floor(this.progress() * tagline.length);
+      document.getElementById('tagline-text').innerText = tagline.substring(0, len) + (len === tagline.length ? '' : '_');
+    }
+  }, 2.2);
+
+  // 7. Ambient Breathing Idle State (3.0s+)
+  masterTL.to('#logo-img', {
+    y: -8,
+    scale: 1.02,
+    duration: 3,
+    ease: "sine.inOut",
+    yoyo: true,
+    repeat: -1
+  }, 3.2);
+  
+  masterTL.to('#volumetric-core', {
+    opacity: 0.5,
+    scale: 1.4,
+    duration: 2.5,
+    ease: "sine.inOut",
+    yoyo: true,
+    repeat: -1
+  }, 3.2);
+}
+
+window.onload = executeReveal;
+</script>
+
+</body>
+</html>

@@ -20,8 +20,11 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
+import { printReceipt, viewReceipt, walletReceipt } from '../lib/receipts';
 
 interface Wallet {
     id: string;
@@ -65,6 +68,9 @@ const summary = ref<WalletSummary | null>(null);
 const wallets = ref<Wallet[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 
 const fOwnerType = ref<'' | 'vendor' | 'customer'>('');
@@ -279,69 +285,22 @@ function exportPdfDoc() {
     });
 }
 
-// ── Bulk operations ───────────────────────────────────────────────────────────
-const selectedIds = ref<Set<string>>(new Set());
-const bulkPanelOpen = ref(false);
-const bulkAction = ref<'frozen' | 'active' | 'limits'>('frozen');
-const bulkReason = ref('');
-const bulkDailyNaira = ref<number | ''>('');
-const bulkMonthlyNaira = ref<number | ''>('');
-const bulkBusy = ref(false);
-
-const allSelected = computed(() =>
-    wallets.value.length > 0 && wallets.value.every((w) => selectedIds.value.has(w.id)),
-);
-
-function toggleAll() {
-    if (allSelected.value) {
-        selectedIds.value = new Set();
-    } else {
-        selectedIds.value = new Set(wallets.value.map((w) => w.id));
-    }
+function viewWalletReceipt(w: Wallet) {
+    viewReceipt(walletReceipt(w));
 }
 
-function toggleOne(id: string) {
-    const s = new Set(selectedIds.value);
-    if (s.has(id)) s.delete(id); else s.add(id);
-    selectedIds.value = s;
+function printWalletReceipt(w: Wallet) {
+    printReceipt(walletReceipt(w));
 }
 
-async function runBulkAction() {
-    if (selectedIds.value.size === 0 || bulkBusy.value) return;
-    bulkBusy.value = true;
-    banner.value = null;
-    try {
-        const ids = [...selectedIds.value];
-        if (bulkAction.value === 'limits') {
-            if (!bulkDailyNaira.value && !bulkMonthlyNaira.value) {
-                banner.value = { tone: 'error', text: 'Provide at least one cap value.' };
-                return;
-            }
-            const body: Record<string, unknown> = { walletIds: ids, reason: bulkReason.value || 'Bulk limit update' };
-            if (bulkDailyNaira.value)   body.dailyCapMinor   = Math.round(Number(bulkDailyNaira.value) * 100);
-            if (bulkMonthlyNaira.value) body.monthlyCapMinor = Math.round(Number(bulkMonthlyNaira.value) * 100);
-            await api.post('/api/v1/admin/wallets/bulk-limits', body);
-            banner.value = { tone: 'success', text: `Limits updated for ${ids.length} wallet(s).` };
-        } else {
-            const r = await api.post<{ results: Array<{ id: string; ok: boolean; error?: string }> }>(
-                '/api/v1/admin/wallets/bulk-status',
-                { walletIds: ids, status: bulkAction.value, reason: bulkReason.value || `Bulk ${bulkAction.value}` },
-            );
-            const failed = r.results.filter((x) => !x.ok).length;
-            banner.value = { tone: failed ? 'error' : 'success', text: `${ids.length - failed}/${ids.length} wallets → ${bulkAction.value}. ${failed ? `${failed} failed.` : ''}` };
-        }
-        selectedIds.value = new Set();
-        bulkPanelOpen.value = false;
-        bulkReason.value = '';
-        bulkDailyNaira.value = '';
-        bulkMonthlyNaira.value = '';
-        await Promise.all([loadSummary(), loadList()]);
-    } catch (e: any) {
-        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Bulk action failed.';
-        banner.value = { tone: 'error', text: msg };
-    } finally {
-        bulkBusy.value = false;
-    }
+function viewDetailReceipt() {
+    if (!detail.value) return;
+    viewReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
+}
+
+function printDetailReceipt() {
+    if (!detail.value) return;
+    printReceipt(walletReceipt({ ...detail.value.wallet, ...detail.value }, ledger.value));
 }
 
 onMounted(() => { void loadSummary(); void loadList(); });
@@ -361,7 +320,7 @@ watch([fOwnerType, fStatus], () => loadList());
     </transition>
 
     <!-- KPI strip -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Total float</p>
         <p class="kpi-value">{{ naira(summary?.totalFloatMinor) }}</p>
@@ -424,38 +383,15 @@ watch([fOwnerType, fStatus], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
         <span class="bw-spacer"></span>
-        <template v-if="selectedIds.size > 0">
-          <span class="bw-muted" style="font-size:.85rem;margin-right:.5rem">{{ selectedIds.size }} selected</span>
-          <button class="bw-btn sm primary" @click="bulkPanelOpen = !bulkPanelOpen">Bulk Action</button>
-          <button class="bw-btn sm" style="margin-left:4px" @click="selectedIds = new Set()">Clear</button>
-        </template>
-        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows" style="margin-left:6px">CSV</button>
+        <WalletDataViewSwitch v-model="viewMode" label="Wallet display view" />
+        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs);margin-left:8px">loading…</span>
-      </div>
-
-      <!-- Bulk action panel -->
-      <div v-if="bulkPanelOpen && selectedIds.size > 0" class="bulk-panel">
-        <div class="bulk-panel-row">
-          <select v-model="bulkAction" class="bw-input" style="width:160px">
-            <option value="frozen">Freeze selected</option>
-            <option value="active">Unfreeze selected</option>
-            <option value="limits">Update limits</option>
-          </select>
-          <input v-model="bulkReason" class="bw-input" placeholder="Reason (required)" style="flex:1" />
-          <template v-if="bulkAction === 'limits'">
-            <input v-model.number="bulkDailyNaira" type="number" class="bw-input" placeholder="Daily cap (₦)" style="width:140px" />
-            <input v-model.number="bulkMonthlyNaira" type="number" class="bw-input" placeholder="Monthly cap (₦)" style="width:160px" />
-          </template>
-          <button class="bw-btn sm primary" :disabled="bulkBusy || !bulkReason" @click="runBulkAction">
-            {{ bulkBusy ? 'Working…' : 'Apply' }}
-          </button>
-          <button class="bw-btn sm" @click="bulkPanelOpen = false">Cancel</button>
-        </div>
+        <span style="width:6px"></span>
+        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
       </div>
 
       <!-- Desktop table -->
@@ -463,31 +399,36 @@ watch([fOwnerType, fStatus], () => loadList());
         <table class="bw-table">
           <thead>
             <tr>
-              <th style="width:36px"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th>
               <th>Owner</th>
               <th>Type</th>
               <th style="text-align: right">Balance</th>
               <th style="text-align: right">Available</th>
               <th style="text-align: right">Daily cap</th>
               <th>Status</th>
+              <th>Receipt</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="w in wallets" :key="w.id" class="w-row" :class="{ 'w-row-selected': selectedIds.has(w.id) }">
-              <td @click.stop><input type="checkbox" :checked="selectedIds.has(w.id)" @change="toggleOne(w.id)" /></td>
-              <td @click="openDetail(w)">
-                <div class="bw-truncate" style="max-width: 220px">{{ w.owner_name || '—' }}</div>
+            <tr v-for="w in wallets" :key="w.id" @click="openDetail(w)" class="w-row">
+              <td>
+                <div class="bw-truncate" style="max-width: 240px">{{ w.owner_name || 'â€”' }}</div>
                 <div class="bw-mono row-sub">{{ w.id.slice(0, 8) }}</div>
               </td>
-              <td @click="openDetail(w)"><span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span></td>
-              <td class="bw-money" style="text-align: right" @click="openDetail(w)">{{ naira(w.balance_minor) }}</td>
-              <td class="bw-money" style="text-align: right; color: var(--brand)" @click="openDetail(w)">{{ naira(w.available_minor) }}</td>
-              <td class="bw-money bw-muted" style="text-align: right; font-size: var(--t-xs)" @click="openDetail(w)">
-                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : '—' }}
+              <td><span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span></td>
+              <td class="bw-money" style="text-align: right">{{ naira(w.balance_minor) }}</td>
+              <td class="bw-money" style="text-align: right; color: var(--brand)">{{ naira(w.available_minor) }}</td>
+              <td class="bw-money bw-muted" style="text-align: right; font-size: var(--t-xs)">
+                {{ w.daily_debit_cap_minor != null ? naira(w.daily_debit_cap_minor) : 'â€”' }}
               </td>
-              <td @click="openDetail(w)"><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
-              <td class="row-arrow" @click="openDetail(w)">→</td>
+              <td><span :class="['bw-badge', statusBadge(w.status)]">{{ w.status }}</span></td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn sm" @click.stop="viewWalletReceipt(w)">View</button>
+                  <button class="bw-btn sm" @click.stop="printWalletReceipt(w)">Print</button>
+                </div>
+              </td>
+              <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!wallets.length && !loading">
               <td colspan="8" class="bw-muted empty">No wallets match the filters.</td>
@@ -519,6 +460,10 @@ watch([fOwnerType, fStatus], () => loadList());
               <p class="wc-label">Type</p>
               <span :class="['bw-badge', ownerBadge(w.owner_type)]">{{ w.owner_type }}</span>
             </div>
+          </div>
+          <div class="receipt-actions wc-receipts">
+            <button class="bw-btn sm" @click.stop="viewWalletReceipt(w)">View</button>
+            <button class="bw-btn sm" @click.stop="printWalletReceipt(w)">Print</button>
           </div>
         </div>
         <div v-if="!wallets.length && !loading" class="bw-muted empty">No wallets.</div>
@@ -584,7 +529,7 @@ watch([fOwnerType, fStatus], () => loadList());
             <div class="dr-block">
               <div class="dr-block-row">
                 <p class="dr-block-title" style="margin: 0">Limits</p>
-                <button class="bw-btn sm" @click="askLimits">Edit</button>
+                <button class="bw-btn sm dr-limit-edit" @click="askLimits">Edit</button>
               </div>
               <dl class="dr-dl">
                 <dt>Daily cap</dt>
@@ -596,9 +541,21 @@ watch([fOwnerType, fStatus], () => loadList());
               </dl>
 
               <div class="dr-actions">
+                <div class="dr-action-buttons">
                 <button v-if="detail.wallet.status === 'active'" class="bw-btn" @click="askStatus('frozen')">Freeze</button>
                 <button v-if="detail.wallet.status === 'frozen'" class="bw-btn primary" @click="askStatus('active')">Unfreeze</button>
                 <button v-if="detail.wallet.status !== 'closed'" class="bw-btn danger" @click="askStatus('closed')">Close</button>
+                <button class="bw-btn" @click="viewDetailReceipt">View receipt</button>
+                <button class="bw-btn" @click="printDetailReceipt">Print receipt</button>
+              </div>
+              <MobileActionMenu label="Wallet actions">
+                  <button class="mobile-action-item" @click="viewDetailReceipt">View receipt</button>
+                  <button class="mobile-action-item" @click="printDetailReceipt">Print receipt</button>
+                  <button class="mobile-action-item primary" @click="askLimits">Edit limits</button>
+                  <button v-if="detail.wallet.status === 'active'" class="mobile-action-item" @click="askStatus('frozen')">Freeze</button>
+                  <button v-if="detail.wallet.status === 'frozen'" class="mobile-action-item primary" @click="askStatus('active')">Unfreeze</button>
+                  <button v-if="detail.wallet.status !== 'closed'" class="mobile-action-item danger" @click="askStatus('closed')">Close</button>
+                </MobileActionMenu>
               </div>
             </div>
 
@@ -709,12 +666,15 @@ watch([fOwnerType, fStatus], () => loadList());
   margin-bottom: var(--s-3);
 }
 .kpi-tile {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   padding: var(--s-4);
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: var(--glass-shine), var(--glass-shadow-card);
 }
 .kpi-tile.brand {
   background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent);
@@ -748,11 +708,9 @@ watch([fOwnerType, fStatus], () => loadList());
 /* Table */
 .w-row { cursor: pointer; }
 .w-row:hover { background: var(--surface-2); }
-.w-row-selected { background: oklch(from var(--brand) l c h / 0.08); }
 .row-sub { font-size: 10px; margin-top: 2px; color: var(--text-muted); }
 .row-arrow { color: var(--text-muted); text-align: right; width: 24px; }
-.bulk-panel { background: var(--surface-2); border-bottom: 1px solid var(--border); padding: .75rem 1rem; }
-.bulk-panel-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -776,6 +734,12 @@ watch([fOwnerType, fStatus], () => loadList());
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-2);
   padding-top: var(--s-3); border-top: 1px dashed var(--border);
 }
+.wc-receipts {
+  justify-content: flex-end;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px dashed var(--border);
+}
 .wc-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--text-muted); margin: 0 0 2px;
@@ -789,8 +753,10 @@ watch([fOwnerType, fStatus], () => loadList());
 }
 .drawer {
   width: min(640px, 100%); height: 100%;
-  background: var(--surface); border-left: 1px solid var(--border);
+  background: var(--glass-bg-strong); border-left: 1px solid var(--glass-border);
   overflow-y: auto; padding: var(--s-5);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40);
 }
 .drawer-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--s-4); }
@@ -846,9 +812,10 @@ watch([fOwnerType, fStatus], () => loadList());
 .dr-dl dd { margin: 0; word-break: break-word; }
 
 .dr-actions {
-  display: flex; gap: var(--s-2); margin-top: var(--s-4);
+  display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-4);
   padding-top: var(--s-3); border-top: 1px dashed var(--border);
 }
+.dr-action-buttons { display: flex; gap: var(--s-2); }
 
 .ledger-list { list-style: none; margin: 0; padding: 0; }
 .ledger-row {
@@ -901,6 +868,8 @@ watch([fOwnerType, fStatus], () => loadList());
 
 @media (max-width: 640px) {
   .filter-grid { grid-template-columns: 1fr; }
+  .dr-limit-edit { display: none; }
+  .dr-action-buttons { display: none; }
   .drawer { width: 100%; padding: var(--s-4); }
   .dr-dl { grid-template-columns: 1fr; }
   .dr-dl dt { font-weight: 700; margin-top: var(--s-2); }

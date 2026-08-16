@@ -11,20 +11,18 @@
  *   customer    — row in customers with status='active'
  *
  * Guards:
- *   requireAuth()           — any authenticated actor
- *   requireStaff()          — staff only
- *   requireVendor()         — vendor_user only (blocks if password_reset_required)
- *   requireCustomer()       — customer only
- *   requireKycTier(n)       — customer with kyc_tier >= n
- *   requirePermission(perm) — staff with a specific RBAC permission granted
+ *   requireAuth()      — any authenticated actor
+ *   requireStaff()     — staff only
+ *   requireVendor()    — vendor_user only (blocks if password_reset_required)
+ *   requireCustomer()  — customer only
+ *   requireKycTier(n)  — customer with kyc_tier >= n
  */
 import fp from 'fastify-plugin';
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply, preHandlerHookHandler } from 'fastify';
 import { adminClient } from '../db/supabase.js';
 import { vendorMfaSessionVerified } from '../services/vendor-mfa.js';
 import { staffMfaEnrolled, staffMfaSessionVerified } from '../services/staff-mfa.js';
-import { roleHasPermission } from '../services/rbac.js';
-import { logAction } from '../services/audit.js';
+import { enforcePortalSession, PortalSessionError } from '../services/portal-session.js';
 
 export type ActorType = 'staff' | 'vendor_user' | 'customer';
 
@@ -32,36 +30,46 @@ export interface Actor {
     userId: string;          // auth.users.id (UUID)
     email: string | null;
     type: ActorType;
-    role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor_manager' | 'customer'
+    role: string;            // 'super-admin' | 'account' | 'finance-checker' | 'operations-manager' | 'vendor_user' | 'vendor' | 'customer'
     actorId: string;         // public.customers.id | public.vendor_users.id | userId for staff
+    stationId?: string;
+    stationIds?: string[];
     vendorOrganizationId?: string;
     customerId?: string;
     mfaVerified: boolean;
     mfaEnrolled?: boolean;
     kycTier?: number;
     passwordResetRequired?: boolean;
+    emailVerified?: boolean;
 }
 
 declare module 'fastify' {
     interface FastifyRequest {
         actor?: Actor;
+        portalSessionKey?: string;
     }
     interface FastifyInstance {
         requireAuth: () => preHandlerHookHandler;
         requireStaff: () => preHandlerHookHandler;
-        requireVendor: () => preHandlerHookHandler;
+        requireVendor: (options?: { requireMfa?: boolean }) => preHandlerHookHandler;
         requireCustomer: () => preHandlerHookHandler;
         requireKycTier: (min: number) => preHandlerHookHandler;
-        requirePermission: (permission: string) => preHandlerHookHandler;
     }
 }
 
 const STAFF_ROLES = new Set([
     'super-admin',
+    'developer',
     'account',
     'finance-checker',
     'operations-manager',
 ]);
+
+function normalizeVendorRole(role: unknown): 'vendor' | 'vendor_user' {
+    return ['vendor', 'vendor_manager', 'vendor-manager'].includes(String(role ?? '').toLowerCase())
+        ? 'vendor'
+        : 'vendor_user';
+}
 
 function isMissingColumn(message: string, column: string): boolean {
     const normalized = message.toLowerCase();
@@ -82,18 +90,13 @@ async function resolveActor(token: string): Promise<Actor | null> {
 
     const userId = user.id;
     const email  = user.email ?? null;
-    // aal2 = MFA verified (Supabase AMR)
-    const mfaVerified = Array.isArray(user.factors) && user.factors.some((f: any) => f.status === 'verified');
-
-    const rawRole = (user.user_metadata?.['role_key'] as string | undefined)
-        ?? (user.app_metadata?.['role_key'] as string | undefined)
-        ?? (user.user_metadata?.['role'] as string | undefined)
-        ?? (user.app_metadata?.['role'] as string | undefined);
+    // Enrollment status never proves this session passed MFA.
+    const mfaVerified = false;
 
     // 1. Vendor user lookup
     const { data: vu } = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, vendor_organizations(status)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
@@ -101,17 +104,23 @@ async function resolveActor(token: string): Promise<Actor | null> {
         const organization = (vu as any).vendor_organizations;
         if (organization?.status !== 'approved') return null;
         const mfaEnrolled = (vu as any).mfa_enrolled === true;
-        const appMfaVerified = mfaEnrolled ? await vendorMfaSessionVerified(userId, token) : true;
+        const appMfaVerified = mfaEnrolled && await vendorMfaSessionVerified(userId, token);
+        // A vendor holds exactly one station. Carry it on the actor so
+        // consumption reads scope without a second lookup per request.
+        const vendorStationId = String(organization?.station_id ?? '').trim().toUpperCase();
+        const emailVerified = Boolean((vu as any).email_verified_at || user.email_confirmed_at);
         return {
             userId,
             email,
             type: 'vendor_user',
-            role: (vu as any).role,
+            role: normalizeVendorRole((vu as any).role),
             actorId: (vu as any).id,
             vendorOrganizationId: (vu as any).vendor_organization_id,
+            ...(vendorStationId ? { stationId: vendorStationId, stationIds: [vendorStationId] } : {}),
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
             passwordResetRequired: (vu as any).password_reset_required,
+            emailVerified,
         };
     }
 
@@ -146,22 +155,36 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 3. Staff fallback — trust user_metadata.role claim
     // Staff lookup. Auth metadata alone is not enough for admin access.
     // Ordering marker for SOP tests: STAFF_ROLES.has(rawRole) stays after customer lookup.
-    const { data: staffRow } = await adminClient
+    let staffResult = await adminClient
         .from('users')
-        .select('id, auth_user_id, user_id, email, role_key')
+        .select('id, auth_user_id, user_id, email, role_key, station_id, station_ids')
         .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
-    const staffRole = (staffRow as any)?.role_key ?? rawRole;
+    if (staffResult.error && isMissingColumn(staffResult.error.message, 'station_ids')) {
+        staffResult = await adminClient
+            .from('users')
+            .select('id, auth_user_id, user_id, email, role_key, station_id')
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
+            .maybeSingle();
+    }
+    const staffRow = staffResult.data;
+    const staffRole = (staffRow as { role_key?: string } | null)?.role_key;
 
-    if (staffRow && staffRole && STAFF_ROLES.has(staffRole)) {
+    if (staffRow && staffRole && (STAFF_ROLES.has(staffRole) || staffRole.startsWith('custom-'))) {
         const mfaEnrolled = await staffMfaEnrolled(userId);
-        const appMfaVerified = mfaEnrolled ? await staffMfaSessionVerified(userId, token) : true;
+        const appMfaVerified = mfaEnrolled && await staffMfaSessionVerified(userId, token);
+        const stationIds = [...new Set([
+            ...((staffRow as any).station_ids ?? []),
+            (staffRow as any).station_id,
+        ].map((value) => String(value ?? '').trim().toUpperCase()).filter(Boolean))];
         return {
             userId,
             email: (staffRow as any).email ?? email,
             type: 'staff',
             role: staffRole,
             actorId: userId,
+            stationId: stationIds[0],
+            stationIds,
             mfaVerified: mfaVerified || appMfaVerified,
             mfaEnrolled,
         };
@@ -181,6 +204,15 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             if (!actor) {
                 return reply.code(401).send({ error: 'unauthorized', message: 'Invalid or expired session.' });
             }
+            try {
+                req.portalSessionKey = await enforcePortalSession(actor, token);
+            } catch (error) {
+                if (error instanceof PortalSessionError) {
+                    if (error.unavailable) req.log.error({ err: error }, 'portal session validation failed');
+                    return reply.code(error.unavailable ? 503 : 401).send({ error: error.code, message: error.message });
+                }
+                throw error;
+            }
             req.actor = actor;
             return undefined;
         };
@@ -193,6 +225,9 @@ const plugin: FastifyPluginAsync = async (fastify) => {
             if (req.actor?.type !== 'staff') {
                 return reply.code(403).send({ error: 'forbidden', message: 'Staff role required.' });
             }
+            // MFA is opt-in until an active authenticator factor exists.
+            // An unenrolled staff member must enter normally and can enroll
+            // from Security after authentication.
             if (req.actor.mfaEnrolled && !req.actor.mfaVerified) {
                 return reply.code(403).send({
                     error: 'mfa_required',
@@ -203,7 +238,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
         };
     });
 
-    fastify.decorate('requireVendor', (): preHandlerHookHandler => {
+    fastify.decorate('requireVendor', (options: { requireMfa?: boolean } = {}): preHandlerHookHandler => {
         return async (req: FastifyRequest, reply: FastifyReply) => {
             await (fastify.requireAuth() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
             if (reply.sent) return undefined;
@@ -216,7 +251,7 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                     message: 'Change your password before continuing.',
                 });
             }
-            if (req.actor.mfaEnrolled && !req.actor.mfaVerified) {
+            if (options.requireMfa !== false && req.actor.mfaEnrolled && !req.actor.mfaVerified) {
                 return reply.code(403).send({
                     error: 'mfa_required',
                     message: 'Verify two-factor authentication before continuing.',
@@ -246,34 +281,6 @@ const plugin: FastifyPluginAsync = async (fastify) => {
                     error: 'kyc_tier_required',
                     message: `KYC tier ${min} required.`,
                     currentTier: req.actor?.kycTier ?? 0,
-                });
-            }
-            return undefined;
-        };
-    });
-
-    // Fine-grained staff RBAC: requires the actor to be staff AND hold a
-    // specific permission from the shared catalog. Use for staff-facing routes
-    // outside the admin plugin, or to layer extra checks on top of it.
-    fastify.decorate('requirePermission', (permission: string): preHandlerHookHandler => {
-        return async (req: FastifyRequest, reply: FastifyReply) => {
-            await (fastify.requireStaff() as preHandlerHookHandler).call(fastify, req, reply, () => undefined);
-            if (reply.sent) return undefined;
-            const role = req.actor!.role;
-            if (!(await roleHasPermission(role, permission))) {
-                await logAction({
-                    actorUserId: req.actor!.userId,
-                    actorType: 'staff',
-                    actorRole: role,
-                    action: 'access.permission_denied',
-                    targetType: 'route',
-                    targetId: `${req.method.toUpperCase()} ${req.routeOptions?.url ?? req.url.split('?')[0]}`,
-                    metadata: { permission },
-                }).catch(() => undefined);
-                return reply.code(403).send({
-                    error: 'permission_denied',
-                    message: `Missing permission: ${permission}.`,
-                    details: { permission },
                 });
             }
             return undefined;

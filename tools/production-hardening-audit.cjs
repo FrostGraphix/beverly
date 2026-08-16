@@ -47,6 +47,10 @@ function runAudit(writeArtifact = true) {
   const profilePage = read("src/components/ProfilePage.vue");
   const apiService = read("src/services/api.js");
   const supabaseService = read("backend/src/services/supabase-service.js");
+  const seedMeterAggregates = read("tools/seed-meter-aggregates.mjs");
+  const receiptTools = read("src/services/receipt-tools.mjs");
+  const receiptPdf = read("api/receipt-pdf.js");
+  const mfaSetup = read("src/components/MfaSetupFlow.vue");
 
   const checks = [
     check(
@@ -119,6 +123,39 @@ function runAudit(writeArtifact = true) {
         architecture.includes("Offline demo mode is default"),
       "Live upstream defaults are env-only and local mode is default.",
       ["api/reference.js", "ARCHITECTURE.md"]
+    ),
+    check(
+      "service-credentials-env-only",
+      seedMeterAggregates.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
+        !/eyJ[A-Za-z0-9_-]{20,}\./.test(seedMeterAggregates),
+      "Service credentials are loaded from environment variables.",
+      ["tools/seed-meter-aggregates.mjs", ".env.example"]
+    ),
+    check(
+      "receipt-export-self-contained",
+      !receiptTools.includes("cdnjs.cloudflare.com") &&
+        !receiptTools.includes("script.src"),
+      "Receipt export does not load executable code from third parties.",
+      ["src/services/receipt-tools.mjs", "vercel.json"]
+    ),
+    // The pack URL was previously required to live only in the environment. A blank value
+    // shipped to production and every receipt render returned 502, so the endpoint now pins
+    // a default in code. The supply-chain intent is preserved by requiring that default to be
+    // an https, version-pinned URL on the official Sparticuz release host, overridable by env.
+    check(
+      "receipt-chromium-pinned-source",
+      receiptPdf.includes("process.env.RECEIPT_PDF_CHROMIUM_PACK_URL") &&
+        /https:\/\/github\.com\/Sparticuz\/chromium\/releases\/download\/v\d+\.\d+\.\d+\/chromium-v\d+\.\d+\.\d+-pack\.x64\.tar/.test(receiptPdf) &&
+        !/http:\/\//.test(receiptPdf),
+      "Receipt Chromium binary comes from a pinned, official, https source.",
+      ["api/receipt-pdf.js", ".env.example"]
+    ),
+    check(
+      "mfa-qr-generated-locally",
+      mfaSetup.includes('from "qrcode-generator"') &&
+        !mfaSetup.includes("qrserver.com"),
+      "MFA enrollment secrets never reach a third-party QR service.",
+      ["src/components/MfaSetupFlow.vue", "package.json"]
     ),
     check(
       "persistence-strategy",

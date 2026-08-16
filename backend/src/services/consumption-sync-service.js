@@ -6,9 +6,8 @@ const {
   dailyMeterTableReport,
   writeDailyMeterRows,
 } = require("./consumption-store");
-const { stations: defaultStations } = require("./refresh-targets");
-
 const dailyMeterPath = "/api/DailyDataMeter/read";
+const stationPath = "/api/station/read";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -24,7 +23,7 @@ function normalizeStations(value) {
   const stations = raw
     .map((station) => String(station || "").trim().toUpperCase())
     .filter(Boolean);
-  return stations.length ? Array.from(new Set(stations)) : defaultStations;
+  return Array.from(new Set(stations));
 }
 
 function positiveInteger(value, fallback) {
@@ -84,6 +83,16 @@ async function postLive(pathname, payload, options = {}) {
   }
 
   throw lastError || new Error("Live request failed");
+}
+
+async function resolveStations(value, options = {}) {
+  const requested = normalizeStations(value);
+  if (requested.length) return requested;
+  const payload = await postLive(stationPath, { pageNumber: 1, pageSize: 500 }, options);
+  const stations = normalizeStations(collectionRowsFromPayload(payload)
+    .map((row) => row?.stationId || row?.station_id || row?.siteId || row?.id));
+  if (!stations.length) throw new Error("Live station directory returned no stations");
+  return stations;
 }
 
 function rowsDateBounds(rows) {
@@ -197,7 +206,7 @@ async function syncStation(stationId, stationStats, options) {
 
 async function runConsumptionSync(input = {}) {
   const mode = input.mode === "backfill" || input.full === true ? "backfill" : "incremental";
-  const stationIds = normalizeStations(input.stations || input.stationId || process.env.CONSUMPTION_SYNC_STATIONS);
+  const stationIds = await resolveStations(input.stations || input.stationId || process.env.CONSUMPTION_SYNC_STATIONS, input);
   const before = await dailyMeterStationStats(stationIds);
   if (!before.tableReady) throw new Error(before.error || "Supabase daily_meter_readings is not ready");
 

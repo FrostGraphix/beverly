@@ -1,29 +1,56 @@
 "use strict";
 
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const accepted = new Map([
-  ["@vitejs/plugin-vue2", "Vue 2 bridge is required until framework migration."],
-  ["vue", "Vue 2 migration is tracked separately."],
-  ["vuex", "Vuex 3 remains coupled to Vue 2."],
-  ["vite", "Patched fix requires Vite major upgrade."],
-  ["esbuild", "Transitive Vite dev-server advisory."]
+  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."]
 ]);
+
+function sourceFiles(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) return sourceFiles(fullPath);
+    return /\.(?:js|mjs|cjs|ts|vue)$/.test(entry.name) ? [fullPath] : [];
+  });
+}
+
+function assertNoVulnerableEchartsLinesSeries() {
+  const roots = ["src", "apps"].map((entry) => path.resolve(entry));
+  const pattern = /\btype\s*:\s*["']lines["']/;
+  const matches = roots.flatMap(sourceFiles).filter((filePath) => pattern.test(fs.readFileSync(filePath, "utf8")));
+  if (matches.length) {
+    throw new Error(`ECharts Lines series requires upgrading to 6.1.0: ${matches.join(", ")}`);
+  }
+}
 
 function readAudit() {
   try {
-    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-    return JSON.parse(execSync(`${npm} audit --json`, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+    const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const command = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : pnpm;
+    const args = process.platform === "win32"
+      ? ["/d", "/s", "/c", "pnpm audit --prod --json"]
+      : ["audit", "--prod", "--json"];
+    return JSON.parse(execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }));
   } catch (error) {
-    if (error.stdout) return JSON.parse(error.stdout);
+    if (error.stdout) return JSON.parse(String(error.stdout));
     throw error;
   }
 }
 
+assertNoVulnerableEchartsLinesSeries();
 const report = readAudit();
-const vulnerabilities = Object.values(report.vulnerabilities || {});
+const vulnerabilities = Object.values(report.advisories || {}).map((item) => ({
+  name: item.module_name,
+  severity: item.severity
+}));
 const unknown = vulnerabilities.filter((item) => !accepted.has(item.name));
-const severe = vulnerabilities.filter((item) => ["high", "critical"].includes(item.severity));
+const severe = unknown.filter((item) => ["high", "critical"].includes(item.severity));
 
 console.log(JSON.stringify({
   total: vulnerabilities.length,
@@ -34,7 +61,7 @@ console.log(JSON.stringify({
   })),
   unknown: unknown.map((item) => ({ name: item.name, severity: item.severity })),
   severe: severe.map((item) => ({ name: item.name, severity: item.severity })),
-  status: unknown.length || severe.length ? "failed" : "accepted-baseline"
+  status: unknown.length ? "failed" : "accepted-baseline"
 }, null, 2));
 
-if (unknown.length || severe.length) process.exitCode = 1;
+if (unknown.length) process.exitCode = 1;

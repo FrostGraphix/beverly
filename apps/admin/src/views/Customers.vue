@@ -1,18 +1,27 @@
 <script setup lang="ts">
 /**
- * Customers admin list (super-admin / operations).
+ * Customers admin list (super-admin, operations-manager, account).
  *
  * KPI strip + filterable list. Row click → /customers/:id detail page.
+ *
+ * Station scoping: non-super-admin staff see only customers whose meters
+ * are registered at their assigned station(s). A staff member with no
+ * station assignment will receive an empty list from the API — this
+ * component surfaces an explanatory banner in that case.
  *
  * Endpoints:
  *   GET /api/v1/admin/customers[?status,kycTier,q,cursor]
  *   GET /api/v1/admin/customers/summary
  */
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { api, naira, shortDate } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
+import { useStaffAuthStore } from '../stores/auth';
 
 interface CustomerRow {
     id: string;
@@ -37,11 +46,33 @@ interface Summary {
 }
 
 const router = useRouter();
+const auth = useStaffAuthStore();
+const canDeleteCustomers = computed(() => auth.hasPermission('wallet.funding.approve'));
 const summary = ref<Summary | null>(null);
 const customers = ref<CustomerRow[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
 const banner = ref<string | null>(null);
+const success = ref<string | null>(null);
+
+/**
+ * True when the logged-in user is station-scoped (non-super-admin) but has
+ * no station assignments in their profile. In this state the API will always
+ * return an empty customer list because the station filter has nothing to
+ * match against. We surface a dedicated banner rather than letting the table
+ * silently show "No customers match the filters."
+ */
+const stationScopeEmpty = computed(
+    () => auth.user?.role !== 'super-admin' && auth.stationScope.length === 0,
+);
+const deleteOpen = ref(false);
+const deleteTarget = ref<CustomerRow | null>(null);
+const deleteReason = ref('');
+const deleteBusy = ref(false);
+const deleteReasonValid = computed(() => deleteReason.value.trim().length >= 4);
 
 const fStatus = ref('');
 const fTier = ref('');
@@ -54,6 +85,9 @@ async function loadSummary() {
 
 async function loadList(reset = true) {
     loading.value = true;
+    // Clear a previous station-scope banner before each fresh load so it does
+    // not linger if the user's profile has since been updated.
+    if (banner.value?.includes('station')) banner.value = null;
     try {
         const p = new URLSearchParams();
         if (fStatus.value) p.set('status', fStatus.value);
@@ -64,6 +98,12 @@ async function loadList(reset = true) {
         const r = await api.get<{ customers: CustomerRow[]; nextCursor: string | null }>(`/api/v1/admin/customers?${p}`);
         customers.value = reset ? r.customers : [...customers.value, ...r.customers];
         cursor.value = r.nextCursor;
+        // Surface an explicit explanation when a station-scoped user has no
+        // station assignment and the API therefore returns an empty list.
+        if (reset && r.customers.length === 0 && stationScopeEmpty.value) {
+            banner.value = 'No customers are visible because your staff account has no station assigned. '
+                + 'Ask a Super Admin to assign you to a station under Roles & Team.';
+        }
     } catch (e: any) {
         banner.value = e?.message ?? 'Could not load customers.';
     } finally { loading.value = false; }
@@ -72,6 +112,36 @@ async function loadList(reset = true) {
 function resetFilters() {
     fStatus.value = ''; fTier.value = ''; fQ.value = '';
     void loadList();
+}
+
+function askDeleteCustomer(customer: CustomerRow) {
+    if (!canDeleteCustomers.value) return;
+    deleteTarget.value = customer;
+    deleteReason.value = '';
+    deleteOpen.value = true;
+}
+
+async function deleteCustomer() {
+    if (!deleteTarget.value || !deleteReasonValid.value) return;
+    deleteBusy.value = true;
+    banner.value = null;
+    success.value = null;
+    const target = deleteTarget.value;
+    try {
+        await api.del(`/api/v1/admin/customers/${target.id}`, {
+            reason: deleteReason.value.trim(),
+        });
+        customers.value = customers.value.filter((c) => c.id !== target.id);
+        await loadSummary();
+        success.value = `${target.full_name || target.phone || 'Customer'} deleted.`;
+        deleteOpen.value = false;
+        deleteTarget.value = null;
+    } catch (e: any) {
+        banner.value = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Delete failed.';
+        deleteOpen.value = false;
+    } finally {
+        deleteBusy.value = false;
+    }
 }
 
 function statusBadge(s: string) {
@@ -126,8 +196,13 @@ watch([fStatus, fTier], () => loadList());
       <button class="bw-banner-x" @click="banner = null" aria-label="Dismiss">×</button>
     </div>
 
+    <div v-if="success" class="bw-banner success">
+      {{ success }}
+      <button class="bw-banner-x" @click="success = null" aria-label="Dismiss">×</button>
+    </div>
+
     <!-- KPI -->
-    <div class="kpi-grid">
+    <div class="kpi-grid bw-mobile-kpi-grid">
       <div class="kpi-tile brand">
         <p class="kpi-label">Total customers</p>
         <p class="kpi-value">{{ summary?.total ?? 0 }}</p>
@@ -183,11 +258,12 @@ watch([fStatus, fTier], () => loadList());
     </div>
 
     <!-- List -->
-    <div class="bw-card flush">
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">{{ customers.length }} customers</h2>
         <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">CSV</button>
+        <WalletDataViewSwitch v-model="viewMode" label="Customer display view" />
+        <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
         <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
         <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
       </div>
@@ -203,7 +279,7 @@ watch([fStatus, fTier], () => loadList());
               <th style="text-align: right">Balance</th>
               <th>Status</th>
               <th>Joined</th>
-              <th></th>
+              <th class="actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -217,7 +293,16 @@ watch([fStatus, fTier], () => loadList());
               <td class="bw-money" style="text-align: right">{{ naira(c.balance_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(c.status)]">{{ c.status }}</span></td>
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(c.created_at) }}</td>
-              <td class="row-arrow">→</td>
+              <td class="actions-col" @click.stop>
+                <div class="action-cluster">
+                  <router-link :to="`/customers/${c.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
+                  <button v-if="canDeleteCustomers" class="bw-btn sm danger" @click="askDeleteCustomer(c)">Delete</button>
+                </div>
+                <MobileActionMenu label="Customer actions">
+                  <router-link :to="`/customers/${c.id}`" class="mobile-action-item">View</router-link>
+                  <button v-if="canDeleteCustomers" class="mobile-action-item danger" @click="askDeleteCustomer(c)">Delete</button>
+                </MobileActionMenu>
+              </td>
             </tr>
             <tr v-if="!customers.length && !loading">
               <td colspan="7" class="bw-muted empty">No customers match the filters.</td>
@@ -246,6 +331,12 @@ watch([fStatus, fTier], () => loadList());
               <span :class="['bw-badge', tierBadge(c.kyc_tier)]">Tier {{ c.kyc_tier }}</span>
             </div>
           </div>
+          <div class="cc-actions" @click.stop>
+            <MobileActionMenu label="Customer actions">
+              <router-link :to="`/customers/${c.id}`" class="mobile-action-item">View</router-link>
+              <button v-if="canDeleteCustomers" class="mobile-action-item danger" @click="askDeleteCustomer(c)">Delete</button>
+            </MobileActionMenu>
+          </div>
         </div>
         <div v-if="!customers.length && !loading" class="bw-muted empty">No customers.</div>
       </div>
@@ -257,16 +348,39 @@ watch([fStatus, fTier], () => loadList());
       </div>
     </div>
 
+    <ConfirmDialog
+      v-model:open="deleteOpen"
+      title="Delete customer"
+      :description="deleteTarget
+        ? `Permanently delete ${deleteTarget.full_name || deleteTarget.phone || 'this customer'} from Beverly. Wallet, meter, purchase, notification, and login records will be removed.`
+        : ''"
+      confirm-label="Delete customer"
+      tone="danger"
+      :loading="deleteBusy"
+      :disable-confirm="!deleteReasonValid"
+      @confirm="deleteCustomer"
+    >
+      <label class="cd-input-label">Reason *</label>
+      <textarea
+        v-model="deleteReason"
+        rows="3"
+        class="cd-input"
+        placeholder="e.g. duplicate customer record"
+      />
+      <p class="cd-input-hint">Minimum 4 characters.</p>
+    </ConfirmDialog>
+
   </AppShell>
 </template>
 
 <style scoped>
 .bw-banner { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-md); margin-bottom: var(--s-3); font-size: var(--t-sm); border: 1px solid; }
 .bw-banner.error { background: oklch(from var(--danger) l c h / 0.08); border-color: oklch(from var(--danger) l c h / 0.30); color: var(--danger); }
+.bw-banner.success { background: oklch(from var(--brand) l c h / 0.08); border-color: oklch(from var(--brand) l c h / 0.30); color: var(--brand); }
 .bw-banner-x { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 18px; padding: 2px 8px; opacity: 0.7; }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
-.kpi-tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); position: relative; overflow: hidden; }
+.kpi-tile { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--r-lg); padding: var(--s-4); position: relative; overflow: hidden; backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); box-shadow: var(--glass-shine), var(--glass-shadow-card); }
 .kpi-tile.brand { background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent); border-color: oklch(from var(--brand) l c h / 0.25); }
 .kpi-tile.brand::before { content: ''; position: absolute; top: 0; left: 20%; right: 20%; height: 1px; background: linear-gradient(90deg, transparent, var(--brand), transparent); }
 .kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
@@ -281,7 +395,8 @@ watch([fStatus, fTier], () => loadList());
 .c-row { cursor: pointer; }
 .c-row:hover { background: var(--surface-2); }
 .row-sub { font-size: 10px; margin-top: 2px; color: var(--text-muted); }
-.row-arrow { color: var(--text-muted); text-align: right; width: 24px; }
+.actions-col { min-width: 150px; }
+.action-cluster { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
 .empty { text-align: center; padding: var(--s-6); }
 .load-more { padding: var(--s-3); text-align: center; }
 .bw-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -292,6 +407,32 @@ watch([fStatus, fTier], () => loadList());
 .cc-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--s-3); gap: var(--s-2); }
 .cc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); padding-top: var(--s-3); border-top: 1px dashed var(--border); }
 .cc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 2px; }
+.cc-actions { display: flex; gap: var(--s-2); padding-top: var(--s-3); margin-top: var(--s-3); border-top: 1px dashed var(--border); }
+
+:deep(.cd-body) .cd-input-label { display: block; font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+:deep(.cd-body) .cd-input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; color: var(--text); font-size: var(--t-sm); font-family: inherit; resize: vertical; min-height: 80px; }
+:deep(.cd-body) .cd-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
+:deep(.cd-body) .cd-input-hint { font-size: var(--t-xs); color: var(--text-muted); margin: 6px 0 0; }
+
+@media (max-width: 720px) {
+  .actions-col {
+    min-width: 72px;
+    position: sticky;
+    right: 0;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    z-index: 3;
+  }
+
+  .action-cluster {
+    display: none;
+  }
+
+  .cc-actions {
+    justify-content: flex-end;
+  }
+}
 
 @media (max-width: 640px) { .filter-grid { grid-template-columns: 1fr; } }
 </style>

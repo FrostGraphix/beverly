@@ -2,13 +2,17 @@ const fs = require("fs");
 const path = require("path");
 require("module").Module._initPaths();
 const { chromium } = require("playwright");
+const { loadEnvFile } = require("./env-loader.cjs");
+
+loadEnvFile();
 
 const edge = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 const outDir = path.resolve("source-crawl/authenticated");
+const sourceUrl = String(process.env.SOURCE_SITE_URL || "").replace(/\/+$/, "");
 const credentials = {
-  username: "admin",
-  password: "ACOB_ADMIN",
-  captcha: "8920"
+  username: String(process.env.SOURCE_USERNAME || ""),
+  password: String(process.env.SOURCE_PASSWORD || ""),
+  captcha: String(process.env.SOURCE_CAPTCHA || "")
 };
 
 const viewports = [
@@ -18,7 +22,7 @@ const viewports = [
 ];
 
 async function login(page) {
-  await page.goto("http://8.208.16.168:9311/#/dashboard", { waitUntil: "networkidle", timeout: 30000 });
+  await page.goto(`${sourceUrl}/#/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
   await page.locator('input[placeholder="Username"]').fill(credentials.username);
   await page.locator('input[placeholder="Password"]').fill(credentials.password);
   await page.locator('input[placeholder="Verification Code"]').fill(credentials.captcha);
@@ -28,6 +32,9 @@ async function login(page) {
 }
 
 async function main() {
+  if (!sourceUrl || !credentials.username || !credentials.password || !credentials.captcha) {
+    throw new Error("Set SOURCE_SITE_URL, SOURCE_USERNAME, SOURCE_PASSWORD, and SOURCE_CAPTCHA.");
+  }
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({
     headless: true,
@@ -61,7 +68,7 @@ async function main() {
   const shots = [];
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.goto("http://8.208.16.168:9311/#/dashboard", { waitUntil: "networkidle", timeout: 30000 });
+    await page.goto(`${sourceUrl}/#/dashboard`, { waitUntil: "networkidle", timeout: 30000 });
     await page.waitForTimeout(800);
     const visiblePath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}.png`);
     const fullPath = path.join(outDir, `live-dashboard-${viewport.name}-${viewport.width}x${viewport.height}-full.png`);

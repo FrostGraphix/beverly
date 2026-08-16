@@ -8,6 +8,7 @@
  *   3. Summary       — last 7d counts by action and actor type (heat list)
  */
 import { onMounted, ref, computed, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, shortDate, API_BASE, ApiError } from '../lib/api';
 
@@ -54,6 +55,7 @@ const tab = ref<'audit' | 'security' | 'summary'>('audit');
 const entries = ref<AuditEntry[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const route = useRoute();
 const auditError = ref('');
 const lastAuditLoadedAt = ref<string | null>(null);
 const exporting = ref(false);
@@ -259,7 +261,10 @@ watch(tab, (v) => {
     if (v === 'summary'  && !summary.value)        void loadSummary();
 });
 
-onMounted(loadAudit);
+onMounted(() => {
+    fActor.value = typeof route.query.actor === 'string' ? route.query.actor : '';
+    void loadAudit();
+});
 </script>
 
 <template>
@@ -410,6 +415,63 @@ onMounted(loadAudit);
               </tr>
             </tbody>
           </table>
+        </div>
+        <!-- Mobile cards -->
+        <div class="bw-t-cards">
+          <div v-for="e in entries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
+            <div class="bw-tc-top">
+              <div>
+                <div class="bw-tc-vendor">{{ e.action }}</div>
+                <div class="bw-tc-id">{{ shortDate(e.created_at) }}</div>
+              </div>
+              <span :class="['bw-badge', actorBadge(e.actor_type)]">{{ e.actor_type || 'system' }}</span>
+            </div>
+            <div class="bw-tc-mid">
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Actor Name</span>
+                <span class="bw-tc-pair-val">{{ actorName(e) }}</span>
+                <span class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ e.actor_role || shortId(e.actor_user_id) }}</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.target_type">
+                <span class="bw-tc-pair-label">Target</span>
+                <span class="bw-tc-pair-val">{{ e.target_type }} (#{{ shortId(e.target_id) }})</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.ip">
+                <span class="bw-tc-pair-label">IP Address</span>
+                <span class="bw-tc-pair-val bw-mono">{{ e.ip }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!entries.length && !loading" class="bw-muted empty" style="padding: var(--s-6); text-align: center;">No matching entries.</div>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="bw-t-cards">
+          <div v-for="e in entries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
+            <div class="bw-tc-top">
+              <div>
+                <div class="bw-tc-vendor">{{ e.action }}</div>
+                <div class="bw-tc-id">{{ shortDate(e.created_at) }}</div>
+              </div>
+              <span :class="['bw-badge', actorBadge(e.actor_type)]">{{ e.actor_type || 'system' }}</span>
+            </div>
+            <div class="bw-tc-mid">
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Actor Name</span>
+                <span class="bw-tc-pair-val">{{ actorName(e) }}</span>
+                <span class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ e.actor_role || shortId(e.actor_user_id) }}</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.target_type">
+                <span class="bw-tc-pair-label">Target</span>
+                <span class="bw-tc-pair-val">{{ e.target_type }} (#{{ shortId(e.target_id) }})</span>
+              </div>
+              <div class="bw-tc-pair" v-if="e.ip">
+                <span class="bw-tc-pair-label">IP Address</span>
+                <span class="bw-tc-pair-val bw-mono">{{ e.ip }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!entries.length && !loading" class="bw-muted empty" style="padding: var(--s-6); text-align: center;">No matching entries.</div>
         </div>
 
         <div v-if="cursor" class="load-more">
@@ -723,11 +785,13 @@ onMounted(loadAudit);
 .drawer {
   width: min(640px, 100%);
   height: 100%;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  border-left: 1px solid var(--glass-border);
   overflow-y: auto;
   padding: var(--s-5);
-  box-shadow: -16px 0 48px oklch(0% 0 0 / 0.40);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: -16px 0 48px oklch(0% 0 0 / 0.35), var(--glass-shine);
 }
 .drawer-head {
   display: flex;

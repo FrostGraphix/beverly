@@ -1,7 +1,7 @@
 ﻿<template>
   <AppShell title="Settlement Batches">
     <div class="bw-filter-bar">
-      <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportCsvRows">CSV</button>
+      <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportCsvRows">Export CSV</button>
       <button class="bw-btn bw-btn-sm" :disabled="!filteredBatches.length" @click="exportPdfDoc">PDF</button>
       <input v-model="search" class="bw-input bw-input-sm bw-mono" placeholder="Search vendor org…" @keyup.enter="applySearch" />
       <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="applySearch">Search</button>
@@ -23,6 +23,7 @@
               <th>Net</th>
               <th>Status</th>
               <th>Created</th>
+              <th>Receipt</th>
             </tr>
           </thead>
           <tbody>
@@ -35,9 +36,15 @@
               <td :style="netStyle(b.net_amount_minor)"><strong>{{ naira(b.net_amount_minor) }}</strong></td>
               <td><span :class="statusClass(b.status)" class="bw-badge">{{ b.status }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(b.created_at) }}</td>
+              <td>
+                <div class="receipt-actions">
+                  <button class="bw-btn bw-btn-sm" @click="viewSettlementReceipt(b)">View</button>
+                  <button class="bw-btn bw-btn-sm" @click="printSettlementReceipt(b)">Print</button>
+                </div>
+              </td>
             </tr>
             <tr v-if="!filteredBatches.length">
-              <td colspan="8" class="bw-empty">No settlement batches found.</td>
+              <td colspan="9" class="bw-empty">No settlement batches found.</td>
             </tr>
           </tbody>
         </table>
@@ -55,6 +62,7 @@
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Vendor</span><span class="bw-tc-pair-val">{{ b.vendor_organizations?.legal_name || 'â€”' }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Net</span><span class="bw-tc-pair-val" :style="netStyle(b.net_amount_minor)">{{ naira(b.net_amount_minor) }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Period</span><span class="bw-tc-pair-val">{{ fmtPeriod(b.period_start, b.period_end) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Receipt</span><span class="receipt-actions"><button class="bw-btn bw-btn-sm" @click="viewSettlementReceipt(b)">View</button><button class="bw-btn bw-btn-sm" @click="printSettlementReceipt(b)">Print</button></span></div>
           </div>
         </div>
       </div>
@@ -67,6 +75,7 @@ import { ref, computed, onMounted } from 'vue';
 import { api, naira } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import { exportCsv, printPdf } from '../lib/export';
+import { printReceipt, settlementReceipt, viewReceipt } from '../lib/receipts';
 
 const allBatches = ref<any[]>([]);
 const loading    = ref(false);
@@ -125,6 +134,10 @@ function vendorName(b: any) {
   return b.vendor_organizations?.trading_name || b.vendor_organizations?.legal_name || b.vendor_organization_id?.slice(0, 8) || 'â€”';
 }
 
+function viewSettlementReceipt(b: any) { viewReceipt(settlementReceipt(b)); }
+
+function printSettlementReceipt(b: any) { printReceipt(settlementReceipt(b)); }
+
 function exportCsvRows() {
   exportCsv('settlement-batches', filteredBatches.value, [
     { key: 'id', header: 'Batch ID', value: (b) => b.id },
@@ -162,6 +175,7 @@ onMounted(load);
 
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 </style>
 
 
