@@ -74,11 +74,10 @@ function resolveExpiresAt(options: VendorTokenOptions): number | null {
     return null;
 }
 
-function storeSession(token: string, user: VendorUserProfile, remember = true, options: VendorTokenOptions = {}) {
+function storeToken(token: string, remember = true, options: VendorTokenOptions = {}) {
     clearStoredToken();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(TOKEN_KEY, token);
-    storage.setItem(USER_KEY, JSON.stringify(user));
     if (options.refreshToken) storage.setItem(REFRESH_TOKEN_KEY, options.refreshToken);
     const expiresAt = resolveExpiresAt(options);
     if (expiresAt) storage.setItem(TOKEN_EXPIRES_AT_KEY, String(expiresAt));
@@ -136,7 +135,9 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
         setSession(token: string, user: VendorUserProfile, remember = true, tokenOptions: VendorTokenOptions = {}) {
             this.accessToken = token;
             this.user = user;
-            storeSession(token, user, remember, tokenOptions);
+            storeToken(token, remember, tokenOptions);
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem(USER_KEY, JSON.stringify(user));
         },
         async refreshMe() {
             const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');
