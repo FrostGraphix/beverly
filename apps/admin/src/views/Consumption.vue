@@ -358,7 +358,7 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
             @click="period = p.value"
           >{{ p.label }}</button>
         </div>
-        <button class="bw-btn bw-btn-sm" :disabled="refreshing || loading" @click="triggerRefresh">
+        <button type="button" class="bw-btn bw-btn-sm" :disabled="refreshing || loading" @click.prevent="triggerRefresh">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="refreshing ? 'animation:spin .7s linear infinite' : ''"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
           {{ refreshing ? 'Rebuilding…' : 'Rebuild aggregates' }}
         </button>
@@ -367,7 +367,7 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
 
     <div v-if="error" class="bw-error-banner" role="alert" style="margin-bottom: var(--s-4)">
       <span>{{ error }}</span>
-      <button class="bw-btn bw-btn-sm" @click="loadData">Try again</button>
+      <button type="button" class="bw-btn bw-btn-sm" @click.prevent="loadData">Try again</button>
     </div>
     <div v-else-if="stationError" class="bw-error-banner" role="status" style="margin-bottom: var(--s-4)">{{ stationError }}</div>
     <div v-else-if="refreshInfo" class="bw-success-banner" role="status" style="margin-bottom: var(--s-4)">{{ refreshInfo }}</div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
@@ -9,6 +9,9 @@ import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 const purchases = ref<any[]>([]);
 const loading   = ref(false);
+const showFilters = ref(false);
+const searchQuery = ref('');
+const pageSize = ref(10);
 const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
@@ -22,12 +25,29 @@ onMounted(async () => {
     } catch { /* noop */ } finally { loading.value = false; }
 });
 
-const filtered = () => {
-    if (filter.value === 'all')       return purchases.value;
-    if (filter.value === 'delivered') return purchases.value.filter(p => p.status === 'delivered');
-    if (filter.value === 'failed')    return purchases.value.filter(p => p.status === 'failed');
-    return purchases.value.filter(p => ['created','hold_active','dispatching','delivery_pending_review'].includes(p.status));
+const filterPurchases = (rows: any[]) => {
+    const q = searchQuery.value.trim().toLowerCase();
+    let result = rows;
+    if (filter.value === 'delivered') result = rows.filter(p => p.status === 'delivered');
+    else if (filter.value === 'failed') result = rows.filter(p => p.status === 'failed');
+    else if (filter.value === 'pending') result = rows.filter(p => ['created','hold_active','dispatching','delivery_pending_review'].includes(p.status));
+
+    if (q) {
+        result = result.filter(p => (
+            (p.meter_id || '').toLowerCase().includes(q) ||
+            (p.token || '').toLowerCase().includes(q) ||
+            (p.id || '').toLowerCase().includes(q)
+        ));
+    }
+    return result;
 };
+
+const activeFilterCount = computed(() => [
+    filter.value !== 'all',
+    Boolean(searchQuery.value.trim()),
+].filter(Boolean).length);
+
+const filtered = () => filterPurchases(purchases.value);
 
 function statusBadge(s: string) {
     if (s === 'delivered') return 'success';
@@ -60,20 +80,62 @@ function printPurchaseReceipt(p: any) {
 
 <template>
   <AppShell>
-    <div>
-      <p class="bw-page-title">Transactions</p>
-      <p class="bw-page-sub">{{ purchases.length }} purchases</p>
-    </div>
-
-    <div class="bw-segmented">
-      <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
-              :class="['bw-seg', filter === f ? 'active' : '']"
-              @click="filter = f">{{ f }}</button>
-    </div>
-    <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
-
-    <!-- Desktop table -->
     <div class="bw-card flush bw-data-region" :data-view="viewMode">
+      <div class="bw-table-head-bar recent-head-bar">
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Transactions</div>
+            <span v-if="loading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filtered().length }}</span>
+          </div>
+          <div class="bw-card-sub">Electricity vending purchases and token receipts</div>
+        </div>
+        <div class="recent-actions">
+          <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
+          <button
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="customer-tx-filter-panel"
+            title="Filter transactions"
+            @click="showFilters = !showFilters"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeFilterCount" class="recent-filter-count">{{ activeFilterCount }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Controls Panel -->
+      <div v-if="showFilters" id="customer-tx-filter-panel" class="recent-filter-panel">
+        <div class="recent-filter-grid">
+          <div class="filter-group">
+            <label class="filter-label">Search</label>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="bw-input bw-input-sm"
+              placeholder="Search meter, token..."
+            />
+          </div>
+          <div class="filter-group full-width">
+            <label class="filter-label">Status Filter</label>
+            <div class="recent-tabs-row">
+              <button
+                v-for="f in (['all','delivered','pending','failed'] as const)"
+                :key="f"
+                type="button"
+                :class="['bw-btn sm', filter === f ? 'primary' : '']"
+                @click="filter = f"
+              >
+                {{ f.charAt(0).toUpperCase() + f.slice(1) }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="bw-t-wrap">
         <table class="bw-table">
           <thead>
@@ -146,6 +208,23 @@ function printPurchaseReceipt(p: any) {
         </div>
         <div v-if="!filtered().length && !loading" class="bw-muted"
              style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No transactions.</div>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="filtered().length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing 1–{{ filtered().length }} of {{ filtered().length }} matching transactions
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline">
+            <span>Per page</span>
+            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+            </select>
+          </label>
+        </div>
       </div>
     </div>
   </AppShell>

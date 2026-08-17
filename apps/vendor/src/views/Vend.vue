@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import StatusPopup from '../components/StatusPopup.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api, ApiError, idempotencyHeaders, newIdempotencyKey } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -17,10 +18,15 @@ const loading = ref(false);
 const error = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
 const notice = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const remoteSending = ref(false);
+const remoteTrackerOpen = ref(false);
 const copied = ref(false);
 const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
 const vendIntentKey = ref(newIdempotencyKey());
 const vendIntentFingerprint = ref('');
+
+async function fetchRemoteSendStatus(endpoint: string) {
+    return await api.get<any>(endpoint);
+}
 
 function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
     resultPopup.value = { tone, title, message };
@@ -428,7 +434,9 @@ async function copyToken() {
     try {
         await navigator.clipboard.writeText(result.value.token);
         copied.value = true;
-        window.setTimeout(() => { copied.value = false; }, 1800);
+        window.setTimeout(() => {
+            copied.value = false;
+        }, 1800);
     } catch {
         notice.value = { tone: 'danger', title: 'Copy failed', message: 'Select the token and copy it manually.' };
     }
@@ -468,6 +476,7 @@ async function remoteSendGeneratedToken() {
     const orderId = current?.purchaseOrder?.id;
     if (!orderId) return;
     remoteSending.value = true;
+    remoteTrackerOpen.value = true;
     error.value = null;
     notice.value = {
         tone: 'info',
@@ -507,15 +516,16 @@ async function remoteSendGeneratedToken() {
         };
         showResultPopup(response.status === 'failed' ? 'danger' : 'info', followUpTitle, followUpMessage);
     } catch (e: any) {
-        const details = describeApiError(e, e?.message ?? 'Remote send failed');
-        const meterOffline = details.code === 'meter_offline';
+        const errCode = e?.code || 'remote_send_failed';
+        const errMsg = e?.message ?? 'Remote send failed';
+        const meterOffline = errCode === 'meter_offline';
         notice.value = {
             tone: meterOffline ? 'info' : 'danger',
-            title: details.title,
-            message: `${details.message}${details.action ? ` ${details.action}` : ''}`,
-            code: details.code,
+            title: 'Remote send issue',
+            message: errMsg,
+            code: errCode,
         };
-        showResultPopup(meterOffline ? 'info' : 'danger', details.title, `${details.message}${details.action ? ` ${details.action}` : ''}`);
+        showResultPopup(meterOffline ? 'info' : 'danger', 'Remote send issue', errMsg);
     } finally {
         remoteSending.value = false;
     }
@@ -738,6 +748,21 @@ async function remoteSendGeneratedToken() {
         This confirms the wallet debit.
       </p>
     </ConfirmDialog>
+
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="result?.purchaseOrder?.id"
+      :meter-id="result?.purchaseOrder?.meter_id ?? meter?.meterId"
+      :token="result?.token"
+      :amount-minor="result?.purchaseOrder?.amount_minor ?? preview?.amountMinor"
+      :units-kwh="result?.units"
+      :customer-name="meter?.customerName"
+      :delivery-state="result?.purchaseOrder?.delivery_state"
+      :remote-task-id="result?.purchaseOrder?.remote_task_id"
+      :api-endpoint="result?.purchaseOrder?.id ? `/api/v1/vendor/vend/${result.purchaseOrder.id}/remote-send` : null"
+      :fetcher="fetchRemoteSendStatus"
+      @updated="(res: any) => { if (res.purchaseOrder && result) result.purchaseOrder = { ...result.purchaseOrder, ...res.purchaseOrder }; }"
+    />
   </AppShell>
 </template>
 

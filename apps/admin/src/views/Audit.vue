@@ -365,9 +365,14 @@ onMounted(() => {
       <!-- List -->
       <div class="bw-card flush">
         <div class="bw-table-head-bar">
-          <h2 class="bw-h2" style="margin: 0">{{ entries.length }} entries</h2>
-          <span class="bw-spacer"></span>
-          <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Audit Log</div>
+              <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+              <span v-else class="bw-table-count">{{ entries.length }}</span>
+            </div>
+            <div class="bw-card-sub">System-wide admin and operator activity events</div>
+          </div>
         </div>
 
         <div class="bw-t-wrap">
@@ -521,9 +526,14 @@ onMounted(() => {
 
       <div class="bw-card flush">
         <div class="bw-table-head-bar">
-          <h2 class="bw-h2" style="margin: 0">{{ events.length }} events</h2>
-          <span class="bw-spacer"></span>
-          <span v-if="loadingSec" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Security events</div>
+              <span v-if="loadingSec" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+              <span v-else class="bw-table-count">{{ events.length }}</span>
+            </div>
+            <div class="bw-card-sub">Security, authentication, and access control audit records</div>
+          </div>
         </div>
 
         <div class="bw-t-wrap">

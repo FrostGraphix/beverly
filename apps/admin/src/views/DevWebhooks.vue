@@ -215,7 +215,7 @@ onMounted(loadHooks);
           <option value="">All endpoints</option>
           <option v-for="h in hooks" :key="h.id" :value="h.id">{{ h.url }}</option>
         </select>
-        <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadDeliveries">Refresh</button>
+        <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="loadDeliveries">Refresh</button>
       </div>
       <div v-if="dlLoading" class="bw-loading">Loading…</div>
       <div v-else class="bw-table-wrapper">

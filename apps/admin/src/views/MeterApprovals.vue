@@ -70,18 +70,22 @@
         <strong>Meter approvals unavailable</strong>
         <p>{{ error }}</p>
       </div>
-      <button class="bw-btn bw-btn-sm" @click="load">Try again</button>
+      <button type="button" class="bw-btn bw-btn-sm" @click.prevent="load">Try again</button>
     </div>
 
     <template v-else>
       <section class="bw-card flush meter-queue" :data-view="viewMode" aria-labelledby="meter-queue-title">
         <header class="bw-table-head-bar meter-queue-head">
-          <div>
-            <h2 id="meter-queue-title" class="bw-h2">Customer meter links</h2>
-            <p>Review claims or remove an existing wallet association.</p>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title" id="meter-queue-title">Customer meter links</div>
+              <span class="bw-table-count">{{ meters.length }}</span>
+            </div>
+            <div class="bw-card-sub">Review claims or remove an existing wallet association</div>
           </div>
-          <span class="bw-spacer"></span>
-          <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Meter link display view" />
+          <div class="bw-table-actions">
+            <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Meter link display view" />
+          </div>
         </header>
       <div v-show="viewMode === 'table'" class="bw-t-wrap meter-table-wrap">
         <table class="bw-table">

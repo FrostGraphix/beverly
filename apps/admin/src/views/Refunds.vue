@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppShell title="Refunds">
     <section class="bw-kpi-grid bw-mobile-kpi-grid refund-kpis" aria-label="Refund summary" :aria-busy="loading && !summaryLoaded">
       <article class="bw-kpi featured refund-kpi-total">
@@ -29,9 +29,9 @@
     </section>
 
     <div class="bw-filter-bar">
-      <button class="bw-btn bw-btn-sm" :disabled="loading" @click="load">Refresh</button>
-      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportCsvRows">Export CSV</button>
-      <button class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click="exportPdfDoc">PDF</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="loading" @click.prevent="load">Refresh</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportCsvRows">Export CSV</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportPdfDoc">PDF</button>
       <select v-model="statusFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by status" @change="load">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>

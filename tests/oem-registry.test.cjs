@@ -14,6 +14,9 @@ process.env.SESSION_STORE_MODE = "local";
 const crypto = require("../backend/src/services/oem-credential-crypto");
 const ldb = require("../backend/src/services/local-database");
 const registry = require("../backend/src/services/oem-registry-service");
+const storageSource = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "backend", "src", "services", "storage-adapter.js"), "utf8");
+
+assert.match(storageSource, /isUuid\(rawKey\).*slug=eq\.\$\{key\}/s, "slug OEM lookups must not query UUID columns");
 
 // ── 1. Credential encryption round-trips and never leaks plaintext ──────────
 {

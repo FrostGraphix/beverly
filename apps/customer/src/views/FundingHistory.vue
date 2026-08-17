@@ -60,18 +60,24 @@ onMounted(() => load());
 
 <template>
   <AppShell>
-    <div>
-      <p class="bw-page-title">Funding history</p>
-      <p class="bw-page-sub">{{ naira(totalFunded) }} funded all-time</p>
-    </div>
-
-    <div class="bw-segmented">
-      <button v-for="f in (['all','success','pending','failed'] as const)" :key="f"
-              :class="['bw-seg', filter === f ? 'active' : '']"
-              @click="filter = f">{{ f }}</button>
-    </div>
-
     <div class="bw-card flush">
+      <div class="bw-table-head-bar">
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Funding history</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ items.length }}</span>
+          </div>
+          <div class="bw-card-sub">{{ naira(totalFunded) }} funded all-time</div>
+        </div>
+        <div class="bw-table-actions">
+          <div class="bw-segmented">
+            <button v-for="f in (['all','success','pending','failed'] as const)" :key="f"
+                    :class="['bw-seg', filter === f ? 'active' : '']"
+                    @click="filter = f">{{ f }}</button>
+          </div>
+        </div>
+      </div>
       <!-- Desktop -->
       <div class="bw-t-wrap">
         <table class="bw-table">

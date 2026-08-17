@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { api } from '../lib/api';
-import { clearCustomerToken, readCustomerToken, storeCustomerToken, type CustomerTokenOptions } from '../lib/auth-flow';
+import { api, ApiError } from '../lib/api';
+import { clearCustomerToken, readCustomerProfile, readCustomerToken, storeCustomerToken, CUSTOMER_TOKEN_KEY, CUSTOMER_USER_KEY, type CustomerTokenOptions } from '../lib/auth-flow';
 
 export interface CustomerProfile {
     id: string;
@@ -43,10 +43,24 @@ export const useAuthStore = defineStore('auth', {
             this.hydrated = true;
             try {
                 const token = readCustomerToken();
+                const cached = readCustomerProfile<CustomerProfile>();
                 if (!token) return;
                 this.accessToken = token;
-                const me = await api.get<CustomerProfile>('/api/v1/customer/me');
-                this.customer = me;
+                if (cached) this.customer = cached;
+
+                try {
+                    const me = await api.get<CustomerProfile>('/api/v1/customer/me');
+                    this.customer = me;
+                    const remember = localStorage.getItem(CUSTOMER_TOKEN_KEY) !== null;
+                    const storage = remember ? localStorage : sessionStorage;
+                    storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(me));
+                } catch (err: unknown) {
+                    if (err instanceof ApiError && err.status === 401) {
+                        this.accessToken = null;
+                        this.customer = null;
+                        clearCustomerToken();
+                    }
+                }
             } catch {
                 this.accessToken = null;
                 this.customer = null;
@@ -57,12 +71,17 @@ export const useAuthStore = defineStore('auth', {
             if (!this.accessToken) return null;
             const me = await api.get<CustomerProfile>('/api/v1/customer/me');
             this.customer = me;
+            const remember = localStorage.getItem(CUSTOMER_TOKEN_KEY) !== null;
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(me));
             return me;
         },
         setSession(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = {}) {
             this.accessToken = token;
             this.customer = customer;
             storeCustomerToken(token, remember, tokenOptions);
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customer));
         },
         async logout() {
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 /**
  * Wallets admin view (super-admin).
  *
@@ -66,6 +66,7 @@ interface LedgerEntry {
 // â”€ List + filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const summary = ref<WalletSummary | null>(null);
 const wallets = ref<Wallet[]>([]);
+const totalCount = computed(() => summary.value?.walletCount || wallets.value.length);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const viewMode = ref<'list' | 'table'>(
@@ -385,13 +386,19 @@ watch([fOwnerType, fStatus], () => loadList());
     <!-- List -->
     <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
-        <h2 class="bw-h2" style="margin: 0">{{ wallets.length }} wallets</h2>
-        <span class="bw-spacer"></span>
-        <WalletDataViewSwitch v-model="viewMode" label="Wallet display view" />
-        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
-        <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-        <span style="width:6px"></span>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">System wallets</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ totalCount || wallets.length }}</span>
+          </div>
+          <div class="bw-card-sub">Active ledger balances, holds, and limits</div>
+        </div>
+        <div class="bw-table-actions">
+          <WalletDataViewSwitch v-model="viewMode" label="Wallet display view" />
+          <button class="bw-btn sm" :disabled="!wallets.length" @click="exportCsvRows">Export CSV</button>
+          <button class="bw-btn sm" :disabled="!wallets.length" @click="exportPdfDoc">PDF</button>
+        </div>
       </div>
 
       <!-- Desktop table -->

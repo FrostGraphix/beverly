@@ -151,10 +151,22 @@ onMounted(load);
       <div v-if="copied" class="receipt-notice">{{ copied }} copied.</div>
       <div v-if="error" class="receipt-error">{{ error }}</div>
 
-      <div class="bw-card receipt-table-card">
-        <div class="receipt-card-head">
-          <strong>{{ filtered.length }} records</strong>
-          <span>{{ loading ? 'Loading...' : 'Ready' }}</span>
+      <div class="bw-card flush receipt-table-card">
+        <div class="bw-table-head-bar">
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Token receipts</div>
+              <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+              <span v-else class="bw-table-count">{{ filtered.length }}</span>
+            </div>
+            <div class="bw-card-sub">Electricity tokens, VAT breakdowns, and receipt details</div>
+          </div>
+          <div class="bw-table-actions">
+            <input v-model="search" class="bw-input" placeholder="Search receipt / meter / token…" style="width: 240px" />
+            <button class="bw-btn sm" :disabled="loading" @click="load">
+              {{ loading ? 'Refreshing...' : 'Refresh' }}
+            </button>
+          </div>
         </div>
 
         <div class="receipt-mobile-list">

@@ -1,8 +1,6 @@
 name: Monitoring Smoke
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       target_url:

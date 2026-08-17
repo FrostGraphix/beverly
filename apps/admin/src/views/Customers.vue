@@ -50,6 +50,7 @@ const auth = useStaffAuthStore();
 const canDeleteCustomers = computed(() => auth.hasPermission('wallet.funding.approve'));
 const summary = ref<Summary | null>(null);
 const customers = ref<CustomerRow[]>([]);
+const totalCount = computed(() => summary.value?.total || customers.value.length);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const viewMode = ref<'list' | 'table'>(
@@ -260,12 +261,19 @@ watch([fStatus, fTier], () => loadList());
     <!-- List -->
     <div class="bw-card flush bw-data-region" :data-view="viewMode">
       <div class="bw-table-head-bar">
-        <h2 class="bw-h2" style="margin: 0">{{ customers.length }} customers</h2>
-        <span class="bw-spacer"></span>
-        <WalletDataViewSwitch v-model="viewMode" label="Customer display view" />
-        <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
-        <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading…</span>
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Customers</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ totalCount || customers.length }}</span>
+          </div>
+          <div class="bw-card-sub">Registered customer accounts and wallet balances</div>
+        </div>
+        <div class="bw-table-actions">
+          <WalletDataViewSwitch v-model="viewMode" label="Customer display view" />
+          <button class="bw-btn sm" :disabled="!customers.length" @click="exportCsvRows">Export CSV</button>
+          <button class="bw-btn sm" :disabled="!customers.length" @click="exportPdfDoc">PDF</button>
+        </div>
       </div>
 
       <!-- Desktop -->

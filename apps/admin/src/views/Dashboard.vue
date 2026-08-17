@@ -699,12 +699,14 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       <!-- Funding queue -->
       <div class="bw-card flush">
         <div class="bw-table-head-bar">
-          <div>
-            <div class="bw-card-title">Funding queue</div>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Funding queue</div>
+              <span v-if="funding.length" class="bw-table-count">{{ funding.length }}</span>
+              <span v-else class="bw-badge success">Clear</span>
+            </div>
             <div class="bw-card-sub">Pending maker-checker approval</div>
           </div>
-          <span v-if="funding.length" class="bw-badge warn">{{ funding.length }}</span>
-          <span v-else class="bw-badge success">Clear</span>
         </div>
 
         <div v-if="!funding.length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">
@@ -735,12 +737,14 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       <!-- Applications queue -->
       <div class="bw-card flush">
         <div class="bw-table-head-bar">
-          <div>
-            <div class="bw-card-title">Vendor applications</div>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Vendor applications</div>
+              <span v-if="apps.length" class="bw-table-count">{{ apps.length }}</span>
+              <span v-else class="bw-badge success">Clear</span>
+            </div>
             <div class="bw-card-sub">New vendor interest forms</div>
           </div>
-          <span v-if="apps.length" class="bw-badge info">{{ apps.length }}</span>
-          <span v-else class="bw-badge success">Clear</span>
         </div>
 
         <div v-if="!apps.length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">
@@ -790,14 +794,19 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
     <div v-else-if="pendingVending.length" class="bw-card flush">
       <div class="bw-table-head-bar">
-        <div>
-          <div class="bw-card-title">
-            In-flight vending
-            <span class="bw-badge warn" style="font-size: 9px">{{ pendingVending.length }}</span>
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">In-flight vending</div>
+            <span class="bw-table-count">{{ pendingVending.length }}</span>
           </div>
           <div class="bw-card-sub">Orders that haven't resolved yet</div>
         </div>
-        <router-link v-if="auth.hasPermission('wallet.vending.monitor')" to="/vending" class="bw-btn sm" style="text-decoration:none">Open monitor</router-link>
+        <div class="bw-table-actions">
+          <router-link v-if="auth.hasPermission('wallet.vending.monitor')" to="/vending" class="bw-btn sm bw-table-see-all" style="text-decoration:none">
+            <span>Open monitor</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </router-link>
+        </div>
       </div>
 
       <!-- Desktop table -->

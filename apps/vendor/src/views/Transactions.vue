@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
@@ -23,16 +23,36 @@ const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
+const showFilters = ref(false);
+const searchQuery = ref('');
+const currentPage = ref(1);
+const pageSize = ref(10);
 const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
 const exporting = ref(false);
 const exportError = ref<string | null>(null);
 
 const filterPurchases = (rows: PurchaseOrder[]) => {
-    if (filter.value === 'all')       return rows;
-    if (filter.value === 'delivered') return rows.filter(p => p.status === 'delivered');
-    if (filter.value === 'failed')    return rows.filter(p => p.status === 'failed');
-    return rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
+    const q = searchQuery.value.trim().toLowerCase();
+    let result = rows;
+    if (filter.value === 'delivered') result = rows.filter(p => p.status === 'delivered');
+    else if (filter.value === 'failed') result = rows.filter(p => p.status === 'failed');
+    else if (filter.value === 'pending') result = rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
+    
+    if (q) {
+        result = result.filter(p => (
+            (p.customer_name || '').toLowerCase().includes(q) ||
+            (p.meter_id || '').toLowerCase().includes(q) ||
+            (p.station_id || '').toLowerCase().includes(q) ||
+            (p.token || '').toLowerCase().includes(q)
+        ));
+    }
+    return result;
 };
+
+const activeFilterCount = computed(() => [
+    filter.value !== 'all',
+    Boolean(searchQuery.value.trim()),
+].filter(Boolean).length);
 
 const filtered = () => filterPurchases(purchases.value);
 
@@ -83,11 +103,11 @@ async function exportTransactions() {
     exportError.value = null;
     try {
         const rows: PurchaseOrder[] = [];
-        const pageSize = 500;
+        const pageSizeVal = 500;
         let hasMore = true;
         while (hasMore) {
             const response = await api.get<{ purchases: PurchaseOrder[]; has_more: boolean }>(
-                `/api/v1/vendor/transactions?period=${exportRange.value}&limit=${pageSize}&offset=${rows.length}`,
+                `/api/v1/vendor/transactions?period=${exportRange.value}&limit=${pageSizeVal}&offset=${rows.length}`,
             );
             rows.push(...(response.purchases ?? []));
             hasMore = response.has_more;
@@ -112,34 +132,76 @@ onMounted(async () => {
 <template>
   <AppShell title="Transactions">
     <div class="bw-card flush bw-data-region" :data-view="viewMode">
-      <div class="bw-table-head-bar">
-        <div>
-          <div class="bw-card-title">Vending history</div>
-          <div class="bw-card-sub">{{ purchases.length }} records loaded</div>
+      <div class="bw-table-head-bar recent-head-bar">
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Vending history</div>
+            <span v-if="loading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filtered().length }}</span>
+          </div>
+          <div class="bw-card-sub">Meter token vending transactions and receipts</div>
         </div>
-        <div class="transaction-status bw-segmented">
-          <button v-for="f in (['all','delivered','pending','failed'] as const)" :key="f"
-                  :class="['bw-seg', filter === f ? 'active' : '']"
-                  @click="filter = f">{{ f }}</button>
+        <div class="recent-actions">
+          <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
+          <button
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="vendor-tx-filter-panel"
+            title="Filter transactions"
+            @click="showFilters = !showFilters"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeFilterCount" class="recent-filter-count">{{ activeFilterCount }}</span>
+          </button>
         </div>
-        <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
       </div>
 
-      <div class="transaction-toolbar">
-        <label class="export-range-label">
-          <span>Export period</span>
-          <select v-model="exportRange" class="bw-input export-range">
-            <option value="1d">Last day</option>
-            <option value="7d">Last 7 days</option>
-            <option value="30d">Last 30 days</option>
-            <option value="all">All time</option>
-          </select>
-        </label>
-        <button class="bw-btn sm" :disabled="exporting" @click="exportTransactions">
-          {{ exporting ? 'Exporting...' : 'Export CSV' }}
-        </button>
+      <!-- Filter Controls Panel -->
+      <div v-if="showFilters" id="vendor-tx-filter-panel" class="recent-filter-panel">
+        <div class="recent-filter-grid">
+          <div class="filter-group">
+            <label class="filter-label">Search</label>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="bw-input bw-input-sm"
+              placeholder="Search customer, meter, station..."
+            />
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Export period</label>
+            <select v-model="exportRange" class="bw-select bw-select-sm">
+              <option value="1d">Last day</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Actions</label>
+            <button class="bw-btn sm primary" :disabled="exporting" @click="exportTransactions">
+              {{ exporting ? 'Exporting...' : 'Export CSV' }}
+            </button>
+          </div>
+          <div class="filter-group full-width">
+            <label class="filter-label">Status Filter</label>
+            <div class="recent-tabs-row">
+              <button
+                v-for="f in (['all','delivered','pending','failed'] as const)"
+                :key="f"
+                type="button"
+                :class="['bw-btn sm', filter === f ? 'primary' : '']"
+                @click="filter = f"
+              >
+                {{ f.charAt(0).toUpperCase() + f.slice(1) }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div v-if="exportError" class="bw-error-banner transaction-export-error">{{ exportError }}</div>
+      <div v-if="exportError" class="bw-error-banner transaction-export-error" style="margin: var(--s-3) var(--s-4)">{{ exportError }}</div>
 
       <!-- Filter pills (mobile) -->
       <div class="bw-filter-bar">
@@ -250,6 +312,23 @@ onMounted(async () => {
           </div>
         </div>
         <div v-if="!filtered().length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No transactions.</div>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="filtered().length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing 1–{{ filtered().length }} of {{ filtered().length }} matching transactions
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline">
+            <span>Per page</span>
+            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+            </select>
+          </label>
+        </div>
       </div>
     </div>
   </AppShell>

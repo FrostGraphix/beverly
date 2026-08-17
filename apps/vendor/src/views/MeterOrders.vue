@@ -97,12 +97,18 @@ onMounted(load);
 
       <div class="bw-card flush bw-data-region" :data-view="viewMode">
         <div class="bw-table-head-bar">
-          <div>
-            <div class="bw-card-title">Recent orders</div>
-            <div class="bw-card-sub">{{ loading ? 'Loading…' : `${orders.length} orders` }}</div>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Recent orders</div>
+              <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+              <span v-else class="bw-table-count">{{ orders.length }}</span>
+            </div>
+            <div class="bw-card-sub">Meter inventory purchasing and tracking orders</div>
           </div>
-          <button class="bw-btn sm" :disabled="loading" @click="load">{{ loading ? 'Loading…' : 'Refresh' }}</button>
-          <WalletDataViewSwitch v-model="viewMode" label="Meter order display view" />
+          <div class="bw-table-actions">
+            <button class="bw-btn sm" :disabled="loading" @click="load">{{ loading ? 'Loading…' : 'Refresh' }}</button>
+            <WalletDataViewSwitch v-model="viewMode" label="Meter order display view" />
+          </div>
         </div>
 
         <div class="bw-t-wrap">

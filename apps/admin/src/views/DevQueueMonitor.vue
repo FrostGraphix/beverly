@@ -100,8 +100,8 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 <template>
   <AppShell title="Queue Monitor">
     <div class="bw-page-actions">
-      <button v-if="totalFailed > 0" class="bw-btn bw-btn-ghost bw-btn-sm" @click="retryAll">↺ Retry All Failed ({{ totalFailed }})</button>
-      <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="load()">↺ Refresh</button>
+      <button type="button" v-if="totalFailed > 0" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="retryAll">↺ Retry All Failed ({{ totalFailed }})</button>
+      <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="load()">↺ Refresh</button>
     </div>
 
     <div v-if="error" class="bw-error-banner" style="margin-bottom:var(--s-3)">{{ error }}</div>

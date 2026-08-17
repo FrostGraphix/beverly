@@ -80,16 +80,25 @@ onMounted(load);
       <p class="bw-muted" style="font-size: var(--t-xs); margin: var(--s-1) 0 0">{{ items.length }} requests all-time</p>
     </div>
 
-    <div class="funding-toolbar">
-      <div class="bw-segmented funding-filters">
-        <button v-for="f in (['all','approved','pending','rejected'] as const)" :key="f"
-                :class="['bw-seg', filter === f ? 'active' : '']"
-                @click="filter = f">{{ f }}</button>
-      </div>
-      <button class="bw-btn sm" :disabled="!filtered.length" @click="exportFunding">Export CSV</button>
-    </div>
-
     <div class="bw-card flush">
+      <div class="bw-table-head-bar">
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Funding History</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ items.length }}</span>
+          </div>
+          <div class="bw-card-sub">{{ naira(totalApproved) }} total funded (approved)</div>
+        </div>
+        <div class="bw-table-actions">
+          <div class="bw-segmented funding-filters">
+            <button v-for="f in (['all','approved','pending','rejected'] as const)" :key="f"
+                    :class="['bw-seg', filter === f ? 'active' : '']"
+                    @click="filter = f">{{ f }}</button>
+          </div>
+          <button class="bw-btn sm" :disabled="!filtered.length" @click="exportFunding">Export CSV</button>
+        </div>
+      </div>
       <!-- Desktop -->
       <div class="bw-t-wrap">
         <table class="bw-table">

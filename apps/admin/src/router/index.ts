@@ -33,6 +33,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/support', name: 'support', component: () => import('../views/Support.vue'), meta: { auth: true, permission: 'wallet.support.manage' } },
     { path: '/announcements', name: 'announcements', component: () => import('../views/Announcements.vue'), meta: { auth: true, permission: 'wallet.announcements.manage' } },
     { path: '/refunds', name: 'refunds', component: () => import('../views/Refunds.vue'), meta: { auth: true, permission: 'wallet.refunds.manage' } },
+    { path: '/beverly-ai', name: 'beverly-ai', component: () => import('../views/AcobotConsoleView.vue'), meta: { auth: true, permission: 'wallet.dashboard.view' } },
     { path: '/settlement', name: 'settlement', component: () => import('../views/Settlement.vue'), meta: { auth: true, permission: 'wallet.settlement.view' } },
     { path: '/reconciliation', name: 'reconciliation', component: () => import('../views/Reconciliation.vue'), meta: { auth: true, permission: 'wallet.reconciliation.run' } },
     { path: '/feature-flags', name: 'feature-flags', component: () => import('../views/FeatureFlags.vue'), meta: { auth: true, permission: 'wallet.flags.manage' } },

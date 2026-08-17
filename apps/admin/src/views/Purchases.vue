@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 /**
  * Purchases admin view (super-admin / operations).
  *
@@ -21,9 +21,32 @@ import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
+
+const remoteTrackerOpen = ref(false);
+const resendRemoteLoading = ref(false);
+
+async function resendRemoteSendTask() {
+    if (!detail.value?.purchase.id) return;
+    resendRemoteLoading.value = true;
+    try {
+        await api.post(`/api/v1/admin/purchases/${detail.value.purchase.id}/resend-remote`, {});
+        banner.value = { tone: 'success', text: 'Remote send task re-queued successfully.' };
+        detail.value = await api.get<PurchaseDetail>(`/api/v1/admin/purchases/${detail.value.purchase.id}`);
+        remoteTrackerOpen.value = true;
+    } catch (e: any) {
+        banner.value = { tone: 'error', text: e?.message ?? 'Could not resend remote task.' };
+    } finally {
+        resendRemoteLoading.value = false;
+    }
+}
+
+async function fetchAdminRemoteSendStatus(endpoint: string) {
+    return await api.get<any>(endpoint);
+}
 
 interface Purchase {
     id: string;
@@ -45,6 +68,7 @@ interface Purchase {
     token: string | null;
     receipt_id: string | null;
     wallet_id: string | null;
+    remote_task_id?: string | null;
     delivery_state: string | null;
     failure_reason: string | null;
     created_at: string;
@@ -78,6 +102,7 @@ interface PurchaseDetail {
 // â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const summary = ref<PurchaseSummary | null>(null);
 const items = ref<Purchase[]>([]);
+const totalCount = computed(() => summary.value?.todayCount || items.value.length);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
@@ -390,17 +415,19 @@ watch([fStatus, fActorType], () => loadList());
     <!-- List -->
     <div class="bw-card flush bw-data-region" :data-view="cardView">
       <div class="bw-table-head-bar">
-        <h2 class="bw-h2" style="margin: 0">{{ items.length }} purchases</h2>
-        <span class="bw-spacer"></span>
-        <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">Export CSV</button>
-        <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc" style="margin-left:6px">PDF</button>
-        <span style="width:6px"></span>
-        <span v-if="loading" class="bw-muted bw-mono" style="font-size: var(--t-xs)">loading?</span>
-      </div>
-
-      <div class="purchase-layout-bar">
-        <span>Purchase results</span>
-        <WalletDataViewSwitch v-model="cardView" label="Purchase display view" />
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Token Purchases</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ totalCount || items.length }}</span>
+          </div>
+          <div class="bw-card-sub">Electricity vending transactions and token generations</div>
+        </div>
+        <div class="bw-table-actions">
+          <WalletDataViewSwitch v-model="cardView" label="Purchase display view" />
+          <button class="bw-btn sm" :disabled="!items.length" @click="exportCsvRows">Export CSV</button>
+          <button class="bw-btn sm" :disabled="!items.length" @click="exportPdfDoc">PDF</button>
+        </div>
       </div>
 
       <!-- Desktop -->
@@ -586,6 +613,17 @@ watch([fStatus, fActorType], () => loadList());
             <div class="dr-actions">
               <div class="dr-action-buttons">
                 <button
+                  v-if="detail.purchase.purchase_mode === 'remote_send' || detail.purchase.delivery_state"
+                  class="bw-btn primary"
+                  @click="remoteTrackerOpen = true"
+                >Track Remote Send</button>
+                <button
+                  v-if="detail.purchase.purchase_mode === 'remote_send' && detail.purchase.delivery_state !== 'remote_send_delivered'"
+                  class="bw-btn warning"
+                  :disabled="resendRemoteLoading"
+                  @click="resendRemoteSendTask"
+                >{{ resendRemoteLoading ? 'Resending…' : 'Resend Remote Task' }}</button>
+                <button
                   v-if="detail.purchase.token && detail.purchase.actor_type === 'customer'"
                   class="bw-btn"
                   @click="resendOpen = true"
@@ -599,6 +637,16 @@ watch([fStatus, fActorType], () => loadList());
                 >Request refund</button>
               </div>
               <MobileActionMenu label="Purchase actions">
+                <button
+                  v-if="detail.purchase.purchase_mode === 'remote_send' || detail.purchase.delivery_state"
+                  class="mobile-action-item"
+                  @click="remoteTrackerOpen = true"
+                >Track Remote Send</button>
+                <button
+                  v-if="detail.purchase.purchase_mode === 'remote_send' && detail.purchase.delivery_state !== 'remote_send_delivered'"
+                  class="mobile-action-item"
+                  @click="resendRemoteSendTask"
+                >Resend Remote Task</button>
                 <button class="mobile-action-item" @click="viewPurchaseReceipt(detail.purchase)">View receipt</button>
                 <button class="mobile-action-item" @click="printPurchaseReceipt(detail.purchase)">Print receipt</button>
                 <button
@@ -650,6 +698,19 @@ watch([fStatus, fActorType], () => loadList());
       <p class="cd-input-hint">Minimum 5 characters. Recorded in the audit trail.</p>
     </ConfirmDialog>
 
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="detail?.purchase?.id"
+      :meter-id="detail?.purchase?.meter_id"
+      :token="detail?.purchase?.token"
+      :amount-minor="detail?.purchase?.amount_minor"
+      :units-kwh="detail?.purchase?.units_kwh"
+      :customer-name="detail?.purchase?.customer_name"
+      :delivery-state="detail?.purchase?.delivery_state"
+      :remote-task-id="detail?.purchase?.remote_task_id"
+      :api-endpoint="detail?.purchase?.id ? `/api/v1/admin/purchases/${detail.purchase.id}` : null"
+      :fetcher="fetchAdminRemoteSendStatus"
+    />
   </AppShell>
 </template>
 

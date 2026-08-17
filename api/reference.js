@@ -124,8 +124,8 @@ const defaultCorsOrigins = [
 ];
 const rateLimitBuckets = new Map();
 const crmSessionCookieName = "bev_session";
-const defaultCrmIdleTimeoutMs = 30 * 60 * 1000;
-const defaultCrmAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultCrmIdleTimeoutMs = 8 * 60 * 60 * 1000;
+const defaultCrmAbsoluteTimeoutMs = 24 * 60 * 60 * 1000;
 
 loadEnvFile();
 

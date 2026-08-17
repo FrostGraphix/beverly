@@ -114,7 +114,7 @@ onMounted(loadErrors);
 <template>
   <AppShell title="Error Explorer">
     <div class="bw-page-actions">
-      <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="tab === 'errors' ? loadErrors() : loadSlowQueries()">↺ Refresh</button>
+      <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="tab === 'errors' ? loadErrors() : loadSlowQueries()">↺ Refresh</button>
     </div>
 
     <div v-if="error" class="bw-error-banner" style="margin-bottom:var(--s-3)">{{ error }}</div>

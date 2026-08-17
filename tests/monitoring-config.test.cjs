@@ -22,13 +22,11 @@ assertIncludes(workflow, "VERCEL_PROTECTION_BYPASS", "workflow");
 assertIncludes(workflow, 'node-version: "22"', "workflow");
 assertIncludes(workflow, "npm run smoke:vercel", "workflow");
 assertIncludes(workflow, "workflow_dispatch:", "workflow");
-assertIncludes(workflow, "schedule:", "workflow");
-assertIncludes(workflow, 'cron: "*/15 * * * *"', "workflow");
 assertIncludes(workflow, "pnpm install --frozen-lockfile", "workflow");
 assertIncludes(docs, "PREVIEW_TARGET_URL", "docs");
 assertIncludes(docs, "PRODUCTION_TARGET_URL", "docs");
 assertIncludes(docs, "VERCEL_PROTECTION_BYPASS", "docs");
-assertIncludes(docs, "every 15 minutes", "docs");
+assertIncludes(docs, "manual verification", "docs");
 
 console.log(JSON.stringify({
   workflow: path.relative(root, workflowPath),
