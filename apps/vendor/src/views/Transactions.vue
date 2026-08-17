@@ -171,7 +171,7 @@ onMounted(async () => {
             />
           </div>
           <div class="filter-group">
-            <label class="filter-label">Export Period</label>
+            <label class="filter-label">Export period</label>
             <select v-model="exportRange" class="bw-select bw-select-sm">
               <option value="1d">Last day</option>
               <option value="7d">Last 7 days</option>
