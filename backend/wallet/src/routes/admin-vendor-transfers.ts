@@ -10,7 +10,7 @@ import {
 
 const TRANSFER_ROLES = new Set(['super-admin', 'developer']);
 
-async function authorizeTransfer(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+async function authorizeTransfer(req: FastifyRequest, reply: FastifyReply, options: { requireMfa?: boolean } = {}): Promise<boolean> {
     if (!TRANSFER_ROLES.has(req.actor?.role ?? '')) {
         const audit = auditFromRequest(req);
         await logSecurityEvent('permission_denied', {
@@ -23,7 +23,7 @@ async function authorizeTransfer(req: FastifyRequest, reply: FastifyReply): Prom
         });
         return false;
     }
-    if (!req.actor?.mfaVerified) {
+    if (options.requireMfa && !req.actor?.mfaVerified) {
         const audit = auditFromRequest(req);
         await logSecurityEvent('mfa_failure', {
             actorUserId: req.actor?.userId ?? null, severity: 'high', ip: audit.ip, userAgent: audit.userAgent,
@@ -66,7 +66,7 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     fastify.post('/vendor-transfers/preview', async (req, reply) => {
         if (!env.FEATURE_VENDOR_BALANCE_TRANSFERS) return reply.code(404).send({ error: 'not_found' });
-        if (!(await authorizeTransfer(req, reply))) return undefined;
+        if (!(await authorizeTransfer(req, reply, { requireMfa: true }))) return undefined;
         const parsed = previewBody.safeParse(req.body);
         if (!parsed.success) return reply.code(400).send({ error: 'validation_failed', message: 'Check the transfer details and try again.' });
         try {
@@ -99,7 +99,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (!env.FEATURE_VENDOR_BALANCE_TRANSFERS) {
             return reply.code(404).send({ error: 'not_found', message: 'Route not found.' });
         }
-        if (!(await authorizeTransfer(req, reply))) return undefined;
+        if (!(await authorizeTransfer(req, reply, { requireMfa: true }))) return undefined;
 
         if (env.VENDOR_TRANSFER_RATE_LIMIT_MODE !== 'off') {
             const audit = auditFromRequest(req);

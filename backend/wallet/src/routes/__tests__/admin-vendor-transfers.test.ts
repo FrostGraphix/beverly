@@ -153,6 +153,18 @@ describe('Wallet Admin vendor transfer HTTP seam', () => {
         expect(response.json()).toMatchObject({ error: 'mfa_required' });
     });
 
+    it('allows page reads before MFA verification', async () => {
+        const app = await appFor('super-admin', false);
+        const vendors = await app.inject({ method: 'GET', url: '/vendor-transfers/vendors' });
+        const history = await app.inject({ method: 'GET', url: '/vendor-transfers?limit=20' });
+        await app.close();
+
+        expect(vendors.statusCode).toBe(200);
+        expect(history.statusCode).toBe(200);
+        expect(mocks.listTransferVendors).toHaveBeenCalledOnce();
+        expect(mocks.listVendorTransfers).toHaveBeenCalledOnce();
+    });
+
     it('observes first, then enforces safely', async () => {
         mocks.observeVendorTransferRateLimit.mockResolvedValue({ count: 11, limit: 10, exceeded: true, retryAfterSeconds: 27 });
         const observingApp = await appFor('super-admin');

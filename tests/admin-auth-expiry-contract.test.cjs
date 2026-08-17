@@ -15,6 +15,7 @@ const pkg = JSON.parse(read('package.json'));
 
 assert.doesNotMatch(api, /res\.status === 401.*handleUnauthorized/);
 assert.match(api, /Only the auth store may end a session/);
+assert.match(api, /method !== 'GET' && method !== 'HEAD'.*mfa_required/);
 assert.match(api, /transient deployment, route rollout, or backend/);
 assert.match(api, /function parseJson\(text: string\): any/);
 
