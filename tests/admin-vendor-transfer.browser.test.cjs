@@ -106,6 +106,27 @@ function transfer(overrides = {}) {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "mobile layout must not overflow horizontally");
   assert.deepEqual(consoleErrors, [], `browser console errors: ${consoleErrors.join(" | ")}`);
 
+  // A feature-route 401 must surface locally. It must not erase a valid staff
+  // session or redirect the user to login; /me remains auth-store authority.
+  const failureContext = await browser.newContext();
+  await failureContext.addInitScript(() => {
+    localStorage.setItem("beverly.staff.access_token", "valid-session-token");
+    localStorage.setItem("beverly.staff.user", JSON.stringify({ id: "staff-1", email: "dev@example.test", full_name: "Developer", role: "developer", profile_picture_url: null }));
+    localStorage.setItem("beverly.staff.permissions", JSON.stringify(["dev.console", "wallet.vendor_transfers.manage"]));
+  });
+  await failureContext.route("**/api/v1/admin/**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith("/me")) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "staff-1", email: "dev@example.test", full_name: "Developer", role: "developer", profile_picture_url: null }, permissions: ["dev.console", "wallet.vendor_transfers.manage"] }) });
+    return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "route_unavailable", message: "Temporary route failure" }) });
+  });
+  const failurePage = await failureContext.newPage();
+  await failurePage.goto(`${base}/wallet-admin/vendor-transfers`, { waitUntil: "networkidle" });
+  await failurePage.getByRole("heading", { name: "Transfer vendor balance" }).waitFor();
+  await failurePage.getByText("Temporary route failure").waitFor();
+  assert.match(failurePage.url(), /\/wallet-admin\/vendor-transfers$/);
+  assert.equal(await failurePage.evaluate(() => localStorage.getItem("beverly.staff.access_token")), "valid-session-token");
+  await failureContext.close();
+
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
   console.log(JSON.stringify({ status: "admin vendor transfer browser verification passed", coverage: ["developer route", "preview", "approval confirmation", "idempotency", "receipt", "mobile bounds", "console"] }));

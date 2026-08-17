@@ -24,10 +24,7 @@ function normalizeBaseUrl(rawBase: unknown): string {
 const BASE = normalizeBaseUrl(import.meta.env.VITE_API_BASE);
 export const API_BASE = BASE;
 const STAFF_ACCESS_TOKEN_KEY = 'beverly.staff.access_token';
-const STAFF_USER_KEY = 'beverly.staff.user';
-const STAFF_PERMISSIONS_KEY = 'beverly.staff.permissions';
 const REQUEST_TIMEOUT_MS = 20_000;
-let authRedirecting = false;
 
 export class ApiError extends Error {
     constructor(public status: number, public code: string, message: string, public details?: unknown) {
@@ -51,16 +48,6 @@ function unwrapEnvelope<T>(json: any): T {
     return json as T;
 }
 
-function clearStaffSession(): void {
-    try {
-        localStorage.removeItem(STAFF_ACCESS_TOKEN_KEY);
-        localStorage.removeItem(STAFF_USER_KEY);
-        localStorage.removeItem(STAFF_PERMISSIONS_KEY);
-    } catch {
-        // Storage can be unavailable in hardened browsers.
-    }
-}
-
 function adminBasePath(): string {
     const base = String(import.meta.env.BASE_URL || '/').trim();
     if (!base || base === '/') return '/';
@@ -80,28 +67,6 @@ function routerPathFromLocation(): string {
 
 function appUrl(path: string): URL {
     return new URL(`${adminBasePath()}${path.replace(/^\/+/, '')}`, window.location.origin);
-}
-
-function redirectToLogin(): void {
-    if (typeof window === 'undefined' || authRedirecting) return;
-
-    authRedirecting = true;
-    const currentPath = routerPathFromLocation();
-    const loginUrl = appUrl('/login');
-    if (!window.location.pathname.endsWith('/login')) {
-        loginUrl.searchParams.set('redirect', currentPath);
-    }
-    loginUrl.searchParams.set('reason', 'session_expired');
-    window.location.assign(loginUrl.toString());
-}
-
-function handleUnauthorized(): void {
-    clearStaffSession();
-    redirectToLogin();
-}
-
-function shouldRedirectUnauthorized(path: string): boolean {
-    return path !== '/api/v1/admin/me';
 }
 
 let mfaRedirecting = false;
@@ -141,8 +106,11 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const text = await res.text();
         const json = parseJson(text);
         if (!res.ok) {
-            if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
-            else if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
+            // Only the auth store may end a session. A feature route can return
+            // 401 during a transient deployment, route rollout, or backend
+            // policy failure while /me still confirms the session is valid.
+            // Redirecting here logged staff out merely by opening that page.
+            if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
             throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
         }
         return unwrapEnvelope<T>(json);
