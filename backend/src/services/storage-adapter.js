@@ -665,8 +665,12 @@ async function getOemManufacturer(idOrSlug) {
   return runWithFallback(
     () => localDatabase.getOemManufacturer(idOrSlug),
     async () => {
-      const key = encodeURIComponent(String(idOrSlug || ""));
-      const rows = await supabase.restRequest(`/oem_manufacturers?or=(id.eq.${key},slug.eq.${key})&limit=1`);
+      const rawKey = String(idOrSlug || "").trim();
+      const key = encodeURIComponent(rawKey);
+      // `id` is UUID-typed. Including a slug such as "calinmeter" in the
+      // `id.eq` clause makes PostgREST reject the complete OR filter.
+      const filter = isUuid(rawKey) ? `or=(id.eq.${key},slug.eq.${key})` : `slug=eq.${key}`;
+      const rows = await supabase.restRequest(`/oem_manufacturers?${filter}&limit=1`);
       return mapOemManufacturerRow(Array.isArray(rows) ? rows[0] : rows);
     }
   );
