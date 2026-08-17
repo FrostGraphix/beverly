@@ -62,11 +62,10 @@ function resolveExpiresAt(options: CustomerTokenOptions): number | null {
     return null;
 }
 
-export function storeCustomerToken(token: string, remember = true, options: CustomerTokenOptions = {}, customerProfile?: unknown) {
+export function storeCustomerToken(token: string, remember = true, options: CustomerTokenOptions = {}) {
     clearCustomerToken();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(CUSTOMER_TOKEN_KEY, token);
-    if (customerProfile) storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customerProfile));
     if (options.refreshToken) storage.setItem(CUSTOMER_REFRESH_TOKEN_KEY, options.refreshToken);
     const expiresAt = resolveExpiresAt(options);
     if (expiresAt) storage.setItem(CUSTOMER_TOKEN_EXPIRES_AT_KEY, String(expiresAt));

@@ -79,7 +79,9 @@ export const useAuthStore = defineStore('auth', {
         setSession(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = {}) {
             this.accessToken = token;
             this.customer = customer;
-            storeCustomerToken(token, remember, tokenOptions, customer);
+            storeCustomerToken(token, remember, tokenOptions);
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customer));
         },
         async logout() {
             try { await api.post('/api/v1/customer/logout', {}); } catch { /* noop */ }
