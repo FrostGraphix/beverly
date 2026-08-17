@@ -110,7 +110,10 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
             // 401 during a transient deployment, route rollout, or backend
             // policy failure while /me still confirms the session is valid.
             // Redirecting here logged staff out merely by opening that page.
-            if (res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
+            // Reading a protected page must never turn an authorization response
+            // into a login redirect. MFA is challenged only for an explicit
+            // write request, such as previewing or executing a transfer.
+            if (method !== 'GET' && method !== 'HEAD' && res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
             throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
         }
         return unwrapEnvelope<T>(json);
