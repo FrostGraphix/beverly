@@ -13,19 +13,9 @@ const walletAuthPlugin = read('backend/wallet/src/plugins/auth.ts');
 const referenceApi = read('api/reference.js');
 const pkg = JSON.parse(read('package.json'));
 
-assert.match(api, /const STAFF_ACCESS_TOKEN_KEY = 'beverly\.staff\.access_token'/);
-assert.match(api, /const STAFF_USER_KEY = 'beverly\.staff\.user'/);
-assert.match(api, /function clearStaffSession\(\): void/);
-assert.match(api, /localStorage\.removeItem\(STAFF_ACCESS_TOKEN_KEY\)/);
-assert.match(api, /localStorage\.removeItem\(STAFF_USER_KEY\)/);
-assert.match(api, /localStorage\.removeItem\(STAFF_PERMISSIONS_KEY\)/);
-assert.match(api, /function routerPathFromLocation\(\): string/);
-assert.match(api, /function handleUnauthorized\(\): void/);
-assert.match(api, /function shouldRedirectUnauthorized\(path: string\): boolean/);
-assert.match(api, /return path !== '\/api\/v1\/admin\/me'/);
-assert.match(api, /if \(res\.status === 401 && shouldRedirectUnauthorized\(path\)\) handleUnauthorized\(\)/);
-assert.match(api, /loginUrl\.searchParams\.set\('reason', 'session_expired'\)/);
-assert.match(api, /window\.location\.assign\(loginUrl\.toString\(\)\)/);
+assert.doesNotMatch(api, /res\.status === 401.*handleUnauthorized/);
+assert.match(api, /Only the auth store may end a session/);
+assert.match(api, /transient deployment, route rollout, or backend/);
 assert.match(api, /function parseJson\(text: string\): any/);
 
 assert.match(authStore, /import \{ ApiError, api \} from '\.\.\/lib\/api'/);
