@@ -14,6 +14,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import { env, isCorsOriginAllowed, isDev } from './config/env.js';
@@ -62,6 +63,10 @@ export async function build(options: BuildOptions = {}): Promise<FastifyInstance
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    });
+
+    await app.register(multipart, {
+        limits: { files: 1, fileSize: 5 * 1024 * 1024 },
     });
 
     // Rate limit. In development — and in serverless invocations that have no

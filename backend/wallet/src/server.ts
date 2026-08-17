@@ -15,6 +15,7 @@ import Fastify from 'fastify';
 import { pathToFileURL } from 'node:url';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import { corsOrigins, env, isCorsOriginAllowed, isDev } from './config/env.js';
@@ -56,6 +57,10 @@ export async function build() {
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    });
+
+    await app.register(multipart, {
+        limits: { files: 1, fileSize: 5 * 1024 * 1024 },
     });
 
     // Rate limit. In development we intentionally use Fastify's in-memory

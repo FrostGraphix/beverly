@@ -10,6 +10,7 @@ import { adminClient } from '../db/supabase.js';
 import { buildAcobotContext } from '../services/acobot-context.js';
 import { buildBeverlySystemPrompt } from '../services/acobot-prompt.js';
 import { getPermittedIntentsForActor } from '../services/acobot-rbac.js';
+import { roleHasPermission } from '../services/rbac.js';
 
 const ChatBodySchema = z.object({
     prompt: z.string().min(1).max(2000),
@@ -245,6 +246,17 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
             return reply.code(400).send({ error: 'missing_file', message: 'Audio file upload required' });
         }
 
+        if (data.file.truncated) {
+            return reply.code(413).send({ error: 'file_too_large', message: 'Audio uploads cannot exceed 5 MB' });
+        }
+
+        const acceptedMimeTypes = new Set([
+            'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm',
+        ]);
+        if (!acceptedMimeTypes.has(data.mimetype)) {
+            return reply.code(415).send({ error: 'unsupported_media_type', message: 'Upload a supported audio file' });
+        }
+
         const buffer = await data.toBuffer();
         const formData = new FormData();
         formData.append('file', new Blob([buffer], { type: data.mimetype }), data.filename);
@@ -274,6 +286,9 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
         const actor = req.actor;
         if (!actor || actor.type !== 'staff') {
             return reply.code(403).send({ error: 'forbidden', message: 'Staff permission required' });
+        }
+        if (!(await roleHasPermission(actor.role, 'wallet.audit.view'))) {
+            return reply.code(403).send({ error: 'permission_denied', message: 'Missing permission: wallet.audit.view' });
         }
 
         const { data, error } = await adminClient
