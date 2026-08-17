@@ -201,6 +201,86 @@
   color: oklch(70% 0.19 145);
   text-transform: uppercase;
 }
+.bw-dev-console-subtitle {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2px;
+}
+.bw-topbar-dev-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 5px 12px;
+  border-radius: var(--r-full);
+  border: 1px solid oklch(70% 0.19 145 / 0.30);
+  background: color-mix(in oklch, oklch(70% 0.19 145) 8%, var(--surface-1));
+  color: var(--text);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.bw-topbar-dev-btn:hover {
+  background: color-mix(in oklch, oklch(70% 0.19 145) 18%, var(--surface-2));
+  border-color: oklch(70% 0.19 145 / 0.50);
+  box-shadow: 0 0 12px oklch(70% 0.19 145 / 0.20);
+}
+.bw-topbar-dev-btn.active {
+  background: color-mix(in oklch, oklch(70% 0.19 145) 24%, var(--surface-2));
+  border-color: oklch(70% 0.19 145 / 0.70);
+  box-shadow: 0 0 16px oklch(70% 0.19 145 / 0.30);
+}
+.bw-topbar-dev-text {
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+.bw-dev-exit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  width: calc(100% - 1rem);
+  margin: var(--s-2) 0.5rem var(--s-3);
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid oklch(70% 0.19 145 / 0.35);
+  background: color-mix(in oklch, oklch(70% 0.19 145) 10%, var(--surface-2));
+  color: oklch(85% 0.15 145);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.bw-dev-exit-btn:hover {
+  background: color-mix(in oklch, oklch(70% 0.19 145) 20%, var(--surface-3));
+  border-color: oklch(70% 0.19 145 / 0.60);
+}
+.bw-nav-dev-launch-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: calc(100% - 1rem);
+  margin: var(--s-3) 0.5rem var(--s-2);
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  border: 1px dashed oklch(70% 0.19 145 / 0.40);
+  background: color-mix(in oklch, oklch(70% 0.19 145) 6%, transparent);
+  color: var(--text-dim);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.bw-nav-dev-launch-btn:hover {
+  background: color-mix(in oklch, oklch(70% 0.19 145) 15%, var(--surface-2));
+  border-color: oklch(70% 0.19 145 / 0.60);
+  color: var(--text);
+}
+.bw-nav-dev-launch-btn .bw-ic {
+  color: oklch(70% 0.19 145);
+  width: 17px;
+  height: 17px;
+}
 .bw-nav-item {
   display: flex;
   align-items: center;

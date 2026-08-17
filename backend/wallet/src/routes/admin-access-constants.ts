@@ -65,4 +65,13 @@ export const ROLE_LEGACY_NAMES: Record<string, string> = {
     account: 'finance',
 };
 
+import type { FastifyRequest } from 'fastify';
+
+export function staffStations(req: FastifyRequest): string[] | null {
+    if (req.actor?.role === 'super-admin') return null;
+    return [...new Set((req.actor?.stationIds ?? [req.actor?.stationId])
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .filter(Boolean))];
+}
+
 export const SYSTEM_ROLE_KEYS = new Set(Object.keys(DEFAULT_ROLE_PERMISSIONS));

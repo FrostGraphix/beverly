@@ -8,9 +8,10 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 function assertMarkers(file, markers) {
-  const source = read(file);
+  const fileList = Array.isArray(file) ? file : [file];
+  const source = fileList.map((f) => read(f)).join("\n");
   for (const marker of markers) {
-    assert.ok(source.includes(marker), `${file} missing ${marker}`);
+    assert.ok(source.includes(marker), `${fileList.join("+")} missing ${marker}`);
   }
 }
 
@@ -39,7 +40,7 @@ function main() {
   const walletCss = read("packages/tokens/wallet.css");
   const rootPackage = JSON.parse(read("package.json"));
 
-  assertMarkers("backend/wallet/src/routes/admin.ts", [
+  assertMarkers(["backend/wallet/src/routes/admin.ts", "backend/wallet/src/routes/admin-consumption.ts"], [
     "dev.console",
     "fastify.get('/me'",
     "fastify.get('/access'",

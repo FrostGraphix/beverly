@@ -56,7 +56,21 @@ function isGroupCollapsed(label: string, group: { items: Array<{ to: string }> }
     if (isGroupActive(group)) return false;
     return !!collapsedGroups.value[label];
 }
-const navGroups = computed(() => [
+const isDevConsoleMode = computed(() => route.path.startsWith('/dev'));
+
+function openDevConsole() {
+    closeUserMenu();
+    closeDrawer();
+    void router.push('/dev/api-keys');
+}
+
+function exitDevConsole() {
+    closeUserMenu();
+    closeDrawer();
+    void router.push('/');
+}
+
+const standardNavGroups = computed(() => [
     {
         label: 'Overview',
         items: [
@@ -129,25 +143,43 @@ const navGroups = computed(() => [
             { to: '/permissions', text: 'Permissions', permission: 'wallet.access.manage', icon: 'permissions' },
         ],
     },
+].map((group) => ({
+    ...group,
+    items: group.items.filter((item) => auth.hasPermission(item.permission)),
+})).filter((group) => group.items.length));
+
+const devConsoleNavGroups = computed(() => [
     {
-        label: 'Developer',
+        label: 'Core & Integrations',
         items: [
             { to: '/dev/api-keys', text: 'API Keys', permission: 'dev.console', icon: 'dev-api-keys' },
             { to: '/dev/webhooks', text: 'Webhooks', permission: 'dev.console', icon: 'dev-webhooks' },
-            { to: '/dev/api-log', text: 'API Log', permission: 'dev.console', icon: 'dev-api-log' },
             { to: '/dev/sandbox', text: 'Sandbox', permission: 'dev.console', icon: 'dev-sandbox' },
+        ],
+    },
+    {
+        label: 'Observability & Health',
+        items: [
             { to: '/dev/service-health', text: 'Service Health', permission: 'dev.console', icon: 'dev-health' },
+            { to: '/dev/api-log', text: 'API Log', permission: 'dev.console', icon: 'dev-api-log' },
             { to: '/dev/queue-monitor', text: 'Queue Monitor', permission: 'dev.console', icon: 'dev-queue' },
             { to: '/dev/error-explorer', text: 'Error Explorer', permission: 'dev.console', icon: 'dev-errors' },
-            { to: '/dev/toolkit', text: 'Dev Toolkit', permission: 'dev.console', icon: 'dev-toolkit' },
+        ],
+    },
+    {
+        label: 'System & Security',
+        items: [
             { to: '/dev/sys-config', text: 'Sys Config', permission: 'dev.console', icon: 'dev-config' },
             { to: '/dev/schema', text: 'Schema & Matrix', permission: 'dev.console', icon: 'dev-schema' },
+            { to: '/dev/toolkit', text: 'Dev Toolkit', permission: 'dev.console', icon: 'dev-toolkit' },
         ],
     },
 ].map((group) => ({
     ...group,
     items: group.items.filter((item) => auth.hasPermission(item.permission)),
 })).filter((group) => group.items.length));
+
+const navGroups = computed(() => (isDevConsoleMode.value ? devConsoleNavGroups.value : standardNavGroups.value));
 
 const initials = computed(() => {
     const n = auth.user?.full_name ?? auth.user?.email ?? 'ST';
@@ -189,7 +221,7 @@ const navIconPath: Record<string, string> = {
     privacy: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4',
     fraud: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     audit: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
-    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87',
+    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 0 0 -3 -3.87',
     permissions: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
     consumption: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
     'vendor-analytics': 'M3 3v18h18M7 16l4-5 4 3 5-7',
@@ -273,21 +305,36 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         <div class="bw-mark" aria-hidden="true"></div>
         <div class="bw-brand-text">
           <strong>Beverly</strong>
-          <span>Wallet Admin</span>
+          <span v-if="isDevConsoleMode" class="bw-dev-console-subtitle">
+            <span class="bw-nav-dev-badge">DEV CONSOLE</span>
+          </span>
+          <span v-else>Wallet Admin</span>
         </div>
       </div>
+
+      <button
+        v-if="isDevConsoleMode"
+        type="button"
+        class="bw-dev-exit-btn"
+        @click="exitDevConsole"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        <span>Exit Dev Console</span>
+      </button>
 
       <nav ref="navRef" class="bw-nav" aria-label="Admin primary navigation">
         <template v-for="group in navGroups" :key="group.label">
           <div v-if="group.label === 'Developer'" class="bw-nav-dev-divider" />
           <button
             type="button"
-            :class="['bw-nav-section-btn', 'bw-nav-section', { 'bw-nav-section-dev': group.label === 'Developer', active: isGroupActive(group) }]"
+            :class="['bw-nav-section-btn', 'bw-nav-section', { 'bw-nav-section-dev': isDevConsoleMode, active: isGroupActive(group) }]"
             :aria-expanded="!isGroupCollapsed(group.label, group)"
             @click="toggleGroupCollapse(group.label)"
           >
             <span>{{ group.label }}</span>
-            <span v-if="group.label === 'Developer'" class="bw-nav-dev-badge">DEV</span>
+            <span v-if="isDevConsoleMode" class="bw-nav-dev-badge">DEV</span>
             <svg class="bw-nav-section-chevron" :class="{ collapsed: isGroupCollapsed(group.label, group) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="m6 9 6 6 6-6" />
             </svg>
@@ -308,6 +355,19 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
             </RouterLink>
           </div>
         </template>
+
+        <button
+          v-if="!isDevConsoleMode && auth.hasPermission('dev.console')"
+          type="button"
+          class="bw-nav-dev-launch-btn"
+          @click="openDevConsole"
+        >
+          <svg class="bw-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
+          <span>Developer Console</span>
+          <span class="bw-nav-dev-badge">DEV</span>
+        </button>
       </nav>
 
       <footer class="bw-sidebar-foot sidebar-account">
@@ -348,6 +408,21 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         </div>
 
         <span class="bw-spacer" />
+
+        <!-- Developer Console Topbar Button -->
+        <button
+          v-if="!isDevConsoleMode && auth.hasPermission('dev.console')"
+          type="button"
+          class="bw-topbar-dev-btn"
+          title="Enter Developer Console"
+          @click="openDevConsole"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 17l6-6-6-6M12 19h8" />
+          </svg>
+          <span class="bw-topbar-dev-text">Dev Console</span>
+          <span class="bw-nav-dev-badge">DEV</span>
+        </button>
 
         <!-- Notification bell -->
         <RouterLink to="/notifications" class="bw-icon-btn" title="Notifications" aria-label="Notifications" style="border: none">
@@ -417,6 +492,18 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                   <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z" />
                 </svg>
                 <span>Settings</span>
+              </button>
+              <button
+                v-if="!isDevConsoleMode && auth.hasPermission('dev.console')"
+                type="button"
+                class="bw-user-menu-item"
+                role="menuitem"
+                @click="openDevConsole"
+              >
+                <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <path d="M4 17l6-6-6-6M12 19h8" />
+                </svg>
+                <span>Developer Console</span>
               </button>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="toggleTheme">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
