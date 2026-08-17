@@ -63,11 +63,12 @@ function meterTypeLabel(type?: string | null) {
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
 const canRemoteSendToken = computed(() => {
     if (!result.value?.token || !result.value.purchaseOrder?.id || remoteSending.value) return false;
-    return remoteState.value !== 'remote_send_delivered';
+    return !['remote_send_delivered', 'remote_send_failed_needs_manual_entry'].includes(remoteState.value);
 });
 const remoteSendLabel = computed(() => {
     if (remoteSending.value) return 'Sending...';
-    if (remoteState.value === 'remote_send_delivered') return 'Remote sent';
+    if (remoteState.value === 'remote_send_delivered') return 'Remote send delivered';
+    if (remoteState.value === 'remote_send_failed_needs_manual_entry') return 'Remote send needs manual entry';
     if (['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value)) return 'Check remote status';
     if (remoteState.value.includes('failed')) return 'Retry remote send';
     return 'Remote send';
