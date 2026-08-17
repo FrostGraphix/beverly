@@ -96,11 +96,17 @@ onMounted(async () => {
 
       <div v-else class="bw-card flush statement-periods">
         <div class="bw-table-head-bar">
-          <div>
-            <div class="bw-card-title">Settlement periods</div>
-            <div class="bw-card-sub">{{ batches.length }} {{ batches.length === 1 ? 'period' : 'periods' }}</div>
+          <div class="bw-table-heading">
+            <div class="bw-table-title-row">
+              <div class="bw-card-title">Settlement periods</div>
+              <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+              <span v-else class="bw-table-count">{{ batches.length }}</span>
+            </div>
+            <div class="bw-card-sub">Vendor account settlement history and statements</div>
           </div>
-          <button class="bw-btn sm" @click="exportStatement">Export CSV</button>
+          <div class="bw-table-actions">
+            <button class="bw-btn sm" @click="exportStatement">Export CSV</button>
+          </div>
         </div>
 
         <div class="bw-t-wrap">

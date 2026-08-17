@@ -102,7 +102,11 @@ function shouldRefreshUnauthorized(path: string): boolean {
 }
 
 function rememberTokenStorage(): boolean {
-    try { return localStorage.getItem(TOKEN_KEY) !== null; } catch { return true; }
+    try {
+        if (localStorage.getItem(TOKEN_KEY) !== null) return true;
+        if (sessionStorage.getItem(TOKEN_KEY) !== null) return false;
+        return true;
+    } catch { return true; }
 }
 
 function readVendorRefreshToken(): string | null {

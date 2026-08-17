@@ -6,6 +6,7 @@ import { useAuthStore } from './stores/auth';
 import { useIdleTimeout } from './composables/useIdleTimeout';
 import SessionTimeoutWarning from './components/SessionTimeoutWarning.vue';
 import UpdateAvailableToast from './components/UpdateAvailableToast.vue';
+import AcobotWidget from './components/acobot/AcobotWidget.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -43,4 +44,5 @@ const { warningVisible, secondsLeft, stayActive } = useIdleTimeout({
     @logout="auth.logout(); $router.push({ name: 'login' })"
   />
   <UpdateAvailableToast />
+  <AcobotWidget v-if="isAuthed" />
 </template>

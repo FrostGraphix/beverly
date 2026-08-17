@@ -11,6 +11,7 @@ import adminRoutes from './admin.js';
 import staffMfaRoutes from './staff-mfa.js';
 import webhookRoutes from './webhooks.js';
 import customerRoutes from './customer.js';
+import acobotRoutes from './acobot.js';
 
 const routes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(healthRoutes);
@@ -24,6 +25,7 @@ const routes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(adminRoutes,    { prefix: '/api/v1/admin'    });
     await fastify.register(webhookRoutes,  { prefix: '/api/v1/webhook'  });
     await fastify.register(customerRoutes, { prefix: '/api/v1/customer' });
+    await fastify.register(acobotRoutes,   { prefix: '/api/v1/acobot'   });
 };
 
 export default routes;

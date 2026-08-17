@@ -360,10 +360,10 @@ function doExport() {
         <option v-for="o in STATUS_OPTS" :key="o.value" :value="o.value">{{ o.label }}</option>
       </select>
       <div class="mo-toolbar-actions">
-      <button class="bw-btn sm" :disabled="loading" @click="refresh">
+      <button type="button" class="bw-btn sm" :disabled="loading" @click.prevent="refresh">
         {{ loading ? 'Loading…' : 'Refresh' }}
       </button>
-      <button class="bw-btn sm" :disabled="!orders.length" @click="doExport">
+      <button type="button" class="bw-btn sm" :disabled="!orders.length" @click.prevent="doExport">
         Export CSV
       </button>
       </div>

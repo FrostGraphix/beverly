@@ -222,16 +222,20 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
         <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
       <input v-model="search" class="bw-input" placeholder="reference / customer / meter" />
-      <button class="bw-btn" :disabled="loading" @click="load">{{ loading ? 'Loading...' : 'Refresh' }}</button>
+      <button type="button" class="bw-btn" :disabled="loading" @click.prevent="load">{{ loading ? 'Loading...' : 'Refresh' }}</button>
     </section>
 
     <div v-if="error" class="bw-banner error" role="alert">{{ error }}</div>
 
     <section class="bw-card flush dispute-table-card">
       <div class="bw-table-head-bar">
-        <div>
-          <h2 class="bw-h2">{{ filteredDisputes.length }} disputes</h2>
-          <p class="bw-card-sub">Customer and vendor cases</p>
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Disputes</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ filteredDisputes.length }}</span>
+          </div>
+          <div class="bw-card-sub">Customer and vendor transaction dispute cases</div>
         </div>
       </div>
 

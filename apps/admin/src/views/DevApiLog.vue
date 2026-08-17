@@ -99,7 +99,7 @@ onMounted(refresh);
 <template>
   <AppShell title="API Request Log">
     <div class="bw-page-actions">
-      <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="refresh">↺ Refresh</button>
+      <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="refresh">↺ Refresh</button>
     </div>
 
     <!-- Filter bar -->

@@ -4,6 +4,7 @@ import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 import { adminPushNotifications } from '../lib/push-notifications';
+import AcobotWidget from './acobot/AcobotWidget.vue';
 
 defineProps<{ title?: string }>();
 
@@ -92,6 +93,7 @@ const navGroups = computed(() => [
     {
         label: 'Operations',
         items: [
+            { to: '/beverly-ai', text: 'Beverly AI', permission: 'wallet.dashboard.view', icon: 'vending' },
             { to: '/disputes', text: 'Disputes', permission: 'wallet.disputes.manage', icon: 'disputes' },
             { to: '/support', text: 'Support Desk', permission: 'wallet.support.manage', icon: 'support' },
             { to: '/announcements', text: 'Announcements', permission: 'wallet.announcements.manage', icon: 'announcements' },
@@ -447,6 +449,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
       <main class="bw-content">
         <slot />
       </main>
+      <AcobotWidget portal="admin" />
     </div>
   </div>
 </template>

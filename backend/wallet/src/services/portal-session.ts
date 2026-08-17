@@ -2,10 +2,31 @@ import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import type { Actor, ActorType } from '../plugins/auth.js';
 
-const POLICIES: Record<ActorType, { idleSeconds: number; absoluteSeconds: number }> = {
-    staff: { idleSeconds: 30 * 60, absoluteSeconds: 8 * 60 * 60 },
-    vendor_user: { idleSeconds: 30 * 60, absoluteSeconds: 12 * 60 * 60 },
-    customer: { idleSeconds: 60 * 60, absoluteSeconds: 30 * 24 * 60 * 60 },
+const parseEnvNumber = (val: string | undefined, fallback: number): number => {
+    const num = Number(val);
+    return Number.isFinite(num) && num > 0 ? num : fallback;
+};
+
+export const getPortalSessionPolicy = (actorType: ActorType): { idleSeconds: number; absoluteSeconds: number } => {
+    switch (actorType) {
+        case 'staff':
+            return {
+                idleSeconds: parseEnvNumber(process.env.PORTAL_STAFF_IDLE_SECONDS, 1_800),
+                absoluteSeconds: parseEnvNumber(process.env.PORTAL_STAFF_ABSOLUTE_SECONDS, 28_800),
+            };
+        case 'vendor_user':
+            return {
+                idleSeconds: parseEnvNumber(process.env.PORTAL_VENDOR_IDLE_SECONDS, 1_800),
+                absoluteSeconds: parseEnvNumber(process.env.PORTAL_VENDOR_ABSOLUTE_SECONDS, 43_200),
+            };
+        case 'customer':
+            return {
+                idleSeconds: parseEnvNumber(process.env.PORTAL_CUSTOMER_IDLE_SECONDS, 3_600),
+                absoluteSeconds: parseEnvNumber(process.env.PORTAL_CUSTOMER_ABSOLUTE_SECONDS, 2_592_000),
+            };
+        default:
+            return { idleSeconds: 1_800, absoluteSeconds: 28_800 };
+    }
 };
 
 type JwtClaims = { iat?: number; session_id?: string };
@@ -37,7 +58,7 @@ export function portalSessionIdentity(actor: Actor, token: string) {
     return {
         sessionKey: crypto.createHash('sha256').update(stableId).digest('hex'),
         startedAt: new Date(issuedAt).toISOString(),
-        policy: POLICIES[actor.type],
+        policy: getPortalSessionPolicy(actor.type),
     };
 }
 

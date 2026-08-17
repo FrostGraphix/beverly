@@ -91,7 +91,7 @@ onMounted(load);
 <template>
   <AppShell title="Fraud Review">
     <div class="bw-page-actions">
-      <button class="bw-icon-btn" @click="load" title="Refresh">
+      <button type="button" class="bw-icon-btn" @click.prevent="load" title="Refresh">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
       </button>
     </div>
@@ -110,7 +110,7 @@ onMounted(load);
         <option value="true">Resolved</option>
         <option value="">All</option>
       </select>
-      <button class="bw-btn sm" @click="load">Refresh</button>
+      <button type="button" class="bw-btn sm" @click.prevent="load">Refresh</button>
     </div>
 
     <!-- Summary chips -->

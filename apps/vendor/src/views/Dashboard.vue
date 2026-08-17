@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, computed, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import VendorOnboardingChecklist from '../components/VendorOnboardingChecklist.vue';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { useVendorAuthStore } from '../stores/auth';
 import { useWalletStore } from '../stores/wallet';
 import { naira } from '../lib/format';
@@ -12,6 +13,13 @@ const wallet = useWalletStore();
 const vendorName = computed(() => auth.user?.organization_name?.split(' ')[0] || auth.user?.full_name?.split(' ')[0] || 'vendor');
 const activityFilter = ref<'all' | 'credit' | 'debit' | 'reversal'>('all');
 const dashboardLoading = ref(true);
+const showFilters = ref(false);
+const searchQuery = ref('');
+const recentPage = ref(1);
+const recentPageSize = ref(10);
+const viewMode = ref<'grid' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'grid' : 'table',
+);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 async function refreshDashboard() {
@@ -48,8 +56,23 @@ const matchesFilter = (entry: typeof wallet.ledger[number], filter: typeof activ
     return !reversal && entry.direction === filter;
 };
 const filteredLedger = computed(() => {
-    return recentLedger.value.filter((entry) => matchesFilter(entry, activityFilter.value));
+    const q = searchQuery.value.trim().toLowerCase();
+    return recentLedger.value.filter((entry) => {
+        const matchesType = matchesFilter(entry, activityFilter.value);
+        if (!matchesType) return false;
+        if (!q) return true;
+        return (
+            (entry.memo || '').toLowerCase().includes(q) ||
+            (entry.entry_type || '').toLowerCase().includes(q) ||
+            (entry.id || '').toLowerCase().includes(q)
+        );
+    });
 });
+const activeRecentFilterCount = computed(() => [
+    activityFilter.value !== 'all',
+    Boolean(searchQuery.value.trim()),
+].filter(Boolean).length);
+
 const filterCount = (filter: typeof activityFilter.value) => {
     return recentLedger.value.filter((entry) => matchesFilter(entry, filter)).length;
 };
@@ -70,69 +93,107 @@ const filterCount = (filter: typeof activityFilter.value) => {
     <VendorOnboardingChecklist />
 
     <div v-if="dashboardLoading" class="dashboard-skeleton" role="status" aria-label="Loading dashboard">
-      <div class="bw-card dashboard-balance-skeleton" aria-hidden="true">
-        <span class="bw-skeleton vendor-skeleton-label"></span>
-        <span class="bw-skeleton vendor-skeleton-balance"></span>
-        <span class="bw-skeleton vendor-skeleton-available"></span>
-        <div class="vendor-skeleton-actions">
-          <span class="bw-skeleton vendor-skeleton-button primary"></span>
-          <span class="bw-skeleton vendor-skeleton-button"></span>
+      <div class="vendor-hero-grid" aria-hidden="true">
+        <div class="bw-card vendor-hero-card" style="min-height: 140px">
+          <div class="vendor-hero-top-row">
+            <span class="bw-skeleton vendor-skeleton-label"></span>
+            <span class="bw-skeleton vendor-skeleton-badge"></span>
+          </div>
+          <span class="bw-skeleton vendor-skeleton-balance"></span>
+          <span class="bw-skeleton vendor-skeleton-available"></span>
+        </div>
+        <div class="bw-card vendor-action-card" style="min-height: 140px">
+          <span class="bw-skeleton vendor-skeleton-label" style="width: 90px"></span>
+          <div class="vendor-action-buttons">
+            <span class="bw-skeleton vendor-skeleton-button primary"></span>
+            <span class="bw-skeleton vendor-skeleton-button"></span>
+          </div>
         </div>
       </div>
-      <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
-        <div v-for="n in 5" :key="`vendor-kpi-skeleton-${n}`" class="bw-kpi vendor-kpi-skeleton" aria-hidden="true">
+
+      <!-- KPI skeleton grid matching 4-card operational grid -->
+      <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid" aria-label="Loading dashboard metrics" aria-busy="true">
+        <article v-for="n in 4" :key="`vendor-kpi-skeleton-${n}`" class="bw-kpi dashboard-kpi-skeleton" aria-hidden="true">
           <div class="bw-kpi-row">
-            <span class="bw-skeleton vendor-kpi-skeleton-label"></span>
-            <span class="bw-skeleton vendor-kpi-skeleton-icon"></span>
+            <span class="bw-skeleton dashboard-kpi-skeleton-label"></span>
+            <span class="bw-skeleton dashboard-kpi-skeleton-icon"></span>
           </div>
-          <span class="bw-skeleton vendor-kpi-skeleton-value"></span>
-          <span class="bw-skeleton vendor-kpi-skeleton-pill"></span>
-        </div>
+          <span class="bw-skeleton dashboard-kpi-skeleton-value"></span>
+          <div class="bw-kpi-foot dashboard-kpi-skeleton-foot">
+            <span class="bw-skeleton dashboard-kpi-skeleton-pill"></span>
+            <span class="bw-skeleton dashboard-kpi-skeleton-note"></span>
+          </div>
+          <div v-if="n <= 2" class="dashboard-kpi-skeleton-chart">
+            <span class="bw-skeleton dashboard-kpi-skeleton-line line-one"></span>
+            <span class="bw-skeleton dashboard-kpi-skeleton-line line-two"></span>
+          </div>
+        </article>
       </div>
-      <div class="bw-card flush dashboard-activity-skeleton" aria-hidden="true">
-        <div class="bw-table-head-bar vendor-activity-skeleton-head">
-          <span class="vendor-activity-skeleton-copy">
-            <span class="bw-skeleton vendor-activity-skeleton-title"></span>
-            <span class="bw-skeleton vendor-activity-skeleton-subtitle"></span>
-          </span>
-          <span class="bw-skeleton vendor-activity-skeleton-link"></span>
-        </div>
-        <div class="bw-filter-bar vendor-filter-skeleton">
-          <span v-for="n in 4" :key="n" class="bw-skeleton vendor-filter-skeleton-pill"></span>
-        </div>
-        <div class="vendor-activity-skeleton-rows">
-          <div v-for="n in 4" :key="n" class="vendor-activity-skeleton-row">
-            <span class="bw-skeleton"></span>
-            <span class="bw-skeleton"></span>
-            <span class="bw-skeleton wide"></span>
-            <span class="bw-skeleton amount"></span>
-            <span class="bw-skeleton amount"></span>
+
+      <!-- Section table skeleton matching Admin Dashboard -->
+      <div class="bw-card flush dashboard-section-skeleton dashboard-vending-skeleton" aria-label="Loading recent activity" aria-busy="true">
+        <div class="bw-table-head-bar dashboard-section-skeleton-head">
+          <div class="dashboard-section-skeleton-copy">
+            <span class="bw-skeleton dashboard-section-skeleton-title wide"></span>
+            <span class="bw-skeleton dashboard-section-skeleton-subtitle"></span>
           </div>
+          <span class="bw-skeleton dashboard-section-skeleton-action"></span>
+        </div>
+        <div class="dashboard-vending-skeleton-rows" aria-hidden="true">
+          <div v-for="row in 4" :key="row" class="dashboard-vending-skeleton-row">
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton"></span>
+          </div>
+        </div>
+        <div class="bw-pagination-bar dashboard-pagination-skeleton" aria-hidden="true">
+          <span class="bw-skeleton dashboard-pagination-skeleton-copy"></span>
+          <span class="bw-skeleton dashboard-pagination-skeleton-actions"></span>
         </div>
       </div>
     </div>
 
     <template v-else>
-    <!-- Hero balance card -->
-    <div class="bw-card" style="background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg); border-color: oklch(70% 0.19 145 / 0.28); position: relative; overflow: hidden">
-      <div style="position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--brand), transparent)"></div>
-      <p class="bw-label" style="color: var(--brand)">Wallet Float</p>
-      <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-2)">
-        {{ naira(wallet.summary?.balance_minor) }}
+    <!-- Pattern 1: Asymmetric Hero Grid -->
+    <div class="vendor-hero-grid">
+      <!-- Left: Wallet Float Hero Card -->
+      <div class="bw-card vendor-hero-card">
+        <div class="vendor-hero-top-row">
+          <span class="bw-label" style="color: var(--brand)">Wallet Float</span>
+          <span :class="['bw-badge', wallet.summary?.status === 'active' ? 'success' : 'warn']" style="font-size: 11px; text-transform: uppercase">
+            ● {{ wallet.summary?.status || 'Active' }}
+          </span>
+        </div>
+        <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-2)">
+          {{ naira(wallet.summary?.balance_minor) }}
+        </div>
+        <p class="bw-muted bw-mono" style="font-size: var(--t-sm); margin: 0">
+          Available {{ naira(wallet.summary?.available_minor) }}
+          <span v-if="(wallet.summary?.holds_minor ?? 0) > 0" style="opacity: 0.7">
+            · {{ naira(wallet.summary?.holds_minor) }} on hold
+          </span>
+        </p>
       </div>
-      <p class="bw-muted bw-mono" style="font-size: var(--t-sm); margin-bottom: var(--s-4)">
-        Available {{ naira(wallet.summary?.available_minor) }}
-        <span v-if="(wallet.summary?.holds_minor ?? 0) > 0" style="opacity: 0.7">
-          · {{ naira(wallet.summary?.holds_minor) }} on hold
-        </span>
-      </p>
-      <div class="bw-row" style="gap: var(--s-2)">
-        <router-link to="/vend"        class="bw-btn primary" style="text-decoration:none">Buy Token</router-link>
-        <router-link to="/wallet/fund" class="bw-btn"         style="text-decoration:none">Fund Wallet</router-link>
+
+      <!-- Right: Action Hub Card -->
+      <div class="bw-card vendor-action-card">
+        <div class="bw-label">Quick Actions</div>
+        <div class="vendor-action-buttons">
+          <router-link to="/vend" class="bw-btn primary vendor-action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Buy Token</span>
+          </router-link>
+          <router-link to="/wallet/fund" class="bw-btn vendor-action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Fund Wallet</span>
+          </router-link>
+        </div>
       </div>
     </div>
 
-    <!-- KPI tiles -->
+    <!-- 4-Card Operational Metric Grid -->
     <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
       <div class="bw-kpi">
         <div class="bw-kpi-row">
@@ -179,46 +240,78 @@ const filterCount = (filter: typeof activityFilter.value) => {
         </div>
         <div class="bw-kpi-value" style="color: var(--danger)">{{ naira(wallet.summary?.activity?.total_reversed_minor) }}</div>
       </div>
-
-      <div class="bw-kpi">
-        <div class="bw-kpi-row">
-          <span class="bw-kpi-label">Wallet Status</span>
-          <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </div>
-        </div>
-        <div style="margin-top: auto; padding-bottom: var(--s-1)">
-          <span :class="['bw-badge', wallet.summary?.status === 'active' ? 'success' : 'warn']" style="font-size: 11px">
-            {{ wallet.summary?.status || '—' }}
-          </span>
-        </div>
-      </div>
     </div>
 
     <!-- Recent activity -->
-    <div class="bw-card flush">
-      <div class="bw-table-head-bar">
-        <div>
-          <div class="bw-card-title">Recent activity</div>
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
+      <div class="bw-table-head-bar recent-head-bar">
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Recent activity</div>
+            <span v-if="dashboardLoading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filteredLedger.length }}</span>
+          </div>
           <div class="bw-card-sub">Latest 10 wallet movements</div>
         </div>
-        <router-link to="/wallet" class="bw-card-cta" style="text-decoration:none">
-          View all →
-        </router-link>
+        <div class="recent-actions">
+          <WalletDataViewSwitch
+            v-model="viewMode"
+            :modes="['grid', 'table']"
+            label="Recent activity view"
+          />
+          <button
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="vendor-recent-filter-panel"
+            title="Filter activity"
+            @click="showFilters = !showFilters"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeRecentFilterCount" class="recent-filter-count">{{ activeRecentFilterCount }}</span>
+          </button>
+          <router-link
+            to="/wallet"
+            class="bw-btn sm recent-see-all"
+            aria-label="View all activity"
+            title="View all activity"
+          >
+            <span class="recent-action-label">View all</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </router-link>
+        </div>
       </div>
 
-      <div class="bw-filter-bar" aria-label="Filter recent activity">
-        <button
-          v-for="filter in (['all', 'credit', 'debit', 'reversal'] as const)"
-          :key="filter"
-          type="button"
-          :class="['bw-filter-pill', { active: activityFilter === filter }]"
-          :aria-pressed="activityFilter === filter"
-          @click="activityFilter = filter"
-        >
-          {{ filter === 'all' ? 'All' : filter === 'credit' ? 'Credits' : filter === 'debit' ? 'Debits' : 'Reversals' }}
-          <span class="count">{{ filterCount(filter) }}</span>
-        </button>
+      <!-- Filter Controls Panel -->
+      <div v-if="showFilters" id="vendor-recent-filter-panel" class="recent-filter-panel">
+        <div class="recent-filter-grid">
+          <div class="filter-group">
+            <label class="filter-label">Search</label>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="bw-input bw-input-sm"
+              placeholder="Search memo, type..."
+            />
+          </div>
+          <div class="filter-group full-width">
+            <label class="filter-label">Filter Type</label>
+            <div class="recent-tabs-row">
+              <button
+                v-for="filter in (['all', 'credit', 'debit', 'reversal'] as const)"
+                :key="filter"
+                type="button"
+                :class="['bw-btn sm', activityFilter === filter ? 'primary' : '']"
+                @click="activityFilter = filter"
+              >
+                {{ filter === 'all' ? 'All' : filter === 'credit' ? 'Credits' : filter === 'debit' ? 'Debits' : 'Reversals' }} ({{ filterCount(filter) }})
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Desktop table -->
@@ -264,6 +357,22 @@ const filterCount = (filter: typeof activityFilter.value) => {
           </div>
         </div>
         <div v-if="!filteredLedger.length" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No matching activity.</div>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="filteredLedger.length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing 1–{{ filteredLedger.length }} of {{ filteredLedger.length }} matching movements
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline">
+            <span>Per page</span>
+            <select v-model="recentPageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+            </select>
+          </label>
+        </div>
       </div>
     </div>
     </template>
@@ -391,12 +500,69 @@ const filterCount = (filter: typeof activityFilter.value) => {
 }
 .vendor-activity-skeleton-row .wide { width: 90%; }
 .vendor-activity-skeleton-row .amount { width: 68%; margin-left: auto; }
-.vendor-kpi-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.vendor-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+.vendor-hero-card {
+  background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg);
+  border-color: oklch(70% 0.19 145 / 0.28);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--s-5);
+}
+.vendor-hero-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.vendor-action-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--s-5);
+}
+.vendor-action-buttons {
+  display: grid;
+  gap: var(--s-2.5);
+  margin-top: var(--s-3);
+}
+.vendor-action-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 42px;
+  text-decoration: none;
+  font-weight: var(--fw-semibold);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
 }
 
-@media (max-width: 1180px) {
-  .vendor-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vendor-skeleton-badge {
+  width: 58px;
+  height: 20px;
+  border-radius: var(--r-pill);
+}
+
+.vendor-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 980px) {
+  .vendor-hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 840px) {
+  .vendor-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -412,11 +578,10 @@ const filterCount = (filter: typeof activityFilter.value) => {
   .vendor-activity-skeleton-row .bw-skeleton:nth-child(n + 3) { display: none; }
   .vendor-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vendor-kpi-grid .bw-kpi { min-height: 124px; }
-  .vendor-kpi-grid .bw-kpi:last-child { grid-column: 1 / -1; }
+  .vendor-kpi-grid .bw-kpi:last-child { grid-column: auto; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 420px) {
   .vendor-kpi-grid { grid-template-columns: 1fr; }
-  .vendor-kpi-grid .bw-kpi:last-child { grid-column: auto; }
 }
 </style>

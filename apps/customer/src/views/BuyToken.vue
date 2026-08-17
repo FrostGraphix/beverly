@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -30,6 +31,9 @@ const loading  = ref(false);
 const error    = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
 const notice   = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const copied   = ref(false);
+
+// Remote Send Tracker Modal
+const remoteTrackerOpen = ref(false);
 const remoteSending = ref(false);
 const vendPin = ref('');
 
@@ -260,19 +264,17 @@ function downloadResultReceipt() {
     if (row) downloadReceipt(purchaseReceipt(row));
 }
 
+async function fetchRemoteSendStatus(endpoint: string) {
+    return await api.post<any>(endpoint, {});
+}
+
 async function remoteSendGeneratedToken() {
     const current = result.value;
     const orderId = current?.purchaseOrder?.id;
     if (!orderId) return;
+    remoteTrackerOpen.value = true;
     remoteSending.value = true;
     error.value = null;
-    notice.value = {
-        tone: 'info',
-        title: ['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value) ? 'Checking remote delivery' : 'Remote send started',
-        message: ['remote_send_pending', 'remote_send_pending_review'].includes(remoteState.value)
-            ? 'Beverly is checking your meter delivery status now.'
-            : 'Beverly is sending this token to your meter now.',
-    };
     try {
         const response = await api.post<{
             remoteTaskId: string;
@@ -289,15 +291,6 @@ async function remoteSendGeneratedToken() {
                 remote_task_id: response.remoteTaskId,
                 delivery_state: response.deliveryState,
             },
-        };
-        if (response.status === 'success') {
-            notice.value = { tone: 'success', title: 'Remote send delivered', message: 'Your meter accepted the generated token.' };
-            return;
-        }
-        notice.value = {
-            tone: response.status === 'failed' ? 'danger' : 'info',
-            title: response.status === 'failed' ? 'Remote send needs manual entry' : response.status === 'unknown' ? 'Remote status unknown' : 'Remote delivery needs review',
-            message: response.remark || 'The token remains visible for manual entry if needed.',
         };
     } catch (e: any) {
         const details = describeApiError(e, e?.message ?? 'Remote send failed');
@@ -550,6 +543,21 @@ async function remoteSendGeneratedToken() {
         Buy another
       </button>
     </template>
+
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="result?.purchaseOrder?.id"
+      :meter-id="result?.purchaseOrder?.meter_id ?? selMeter?.meter_id"
+      :token="result?.token"
+      :amount-minor="result?.purchaseOrder?.amount_minor ?? preview?.amountMinor"
+      :units-kwh="result?.units"
+      :customer-name="auth.customer?.full_name"
+      :delivery-state="result?.purchaseOrder?.delivery_state"
+      :remote-task-id="result?.purchaseOrder?.remote_task_id"
+      :api-endpoint="result?.purchaseOrder?.id ? `/api/v1/customer/purchase/${result.purchaseOrder.id}/remote-send` : null"
+      :fetcher="fetchRemoteSendStatus"
+      @updated="(res: any) => { if (res.purchaseOrder && result) result.purchaseOrder = { ...result.purchaseOrder, ...res.purchaseOrder }; }"
+    />
   </AppShell>
 </template>
 

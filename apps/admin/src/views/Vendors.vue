@@ -26,6 +26,7 @@ interface Vendor {
 
 const vendors = ref<Vendor[]>([]);
 const summary = ref<{ total: number; byStatus: Record<Vendor['status'], number> } | null>(null);
+const totalCount = computed(() => summary.value?.total || vendors.value.length);
 const q = ref('');
 const status = ref<'' | Vendor['status']>('');
 const loading = ref(false);
@@ -196,19 +197,27 @@ onMounted(() => {
 
     <div class="bw-card bw-data-region" :data-view="viewMode" style="padding: 0">
       <div class="bw-table-head-bar">
-        <h2 class="bw-h2" style="margin: 0">Vendor organizations</h2>
-        <input class="bw-input" v-model="q" placeholder="Search…" style="width: 220px" @keyup.enter="load" />
-        <select class="bw-select" v-model="status" @change="load" style="width: 140px">
-          <option value="">All status</option>
-          <option value="approved">Approved</option>
-          <option value="suspended">Suspended</option>
-          <option value="frozen">Frozen</option>
-          <option value="closed">Closed</option>
-        </select>
-        <span class="bw-spacer"></span>
-        <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
-        <router-link to="/vendors/analytics" class="bw-btn" style="text-decoration: none">View analytics</router-link>
-        <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn primary" style="text-decoration: none">+ Create vendor</router-link>
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Vendor organizations</div>
+            <span v-if="loading" class="bw-skeleton bw-table-count" aria-hidden="true"></span>
+            <span v-else class="bw-table-count">{{ totalCount || vendors.length }}</span>
+          </div>
+          <div class="bw-card-sub">Manage registered vendor partners and access</div>
+        </div>
+        <div class="bw-table-actions">
+          <input class="bw-input" v-model="q" placeholder="Search vendors…" style="width: 200px" @keyup.enter="load" />
+          <select class="bw-select" v-model="status" @change="load" style="width: 130px">
+            <option value="">All status</option>
+            <option value="approved">Approved</option>
+            <option value="suspended">Suspended</option>
+            <option value="frozen">Frozen</option>
+            <option value="closed">Closed</option>
+          </select>
+          <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
+          <router-link to="/vendors/analytics" class="bw-btn sm" style="text-decoration: none">Analytics</router-link>
+          <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn sm primary" style="text-decoration: none">+ Create vendor</router-link>
+        </div>
       </div>
 
       <div class="bw-t-wrap">

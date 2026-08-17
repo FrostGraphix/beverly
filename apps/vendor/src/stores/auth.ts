@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { disableDeviceNotifications } from '../lib/push-notifications';
 
 export interface VendorUserProfile {
@@ -41,6 +41,7 @@ interface State {
 const TOKEN_KEY = 'beverly.vendor.access_token';
 const REFRESH_TOKEN_KEY = 'beverly.vendor.refresh_token';
 const TOKEN_EXPIRES_AT_KEY = 'beverly.vendor.access_token_expires_at';
+const USER_KEY = 'beverly.vendor.user';
 
 export interface VendorTokenOptions {
     refreshToken?: string | null;
@@ -56,6 +57,15 @@ function readStoredToken(): string | null {
     }
 }
 
+function readStoredUser(): VendorUserProfile | null {
+    try {
+        const raw = sessionStorage.getItem(USER_KEY) ?? localStorage.getItem(USER_KEY);
+        return raw ? JSON.parse(raw) as VendorUserProfile : null;
+    } catch {
+        return null;
+    }
+}
+
 function resolveExpiresAt(options: VendorTokenOptions): number | null {
     if (typeof options.expiresAt === 'number' && options.expiresAt > 0) {
         return options.expiresAt > 10_000_000_000 ? options.expiresAt : options.expiresAt * 1000;
@@ -64,10 +74,11 @@ function resolveExpiresAt(options: VendorTokenOptions): number | null {
     return null;
 }
 
-function storeToken(token: string, remember = true, options: VendorTokenOptions = {}) {
+function storeSession(token: string, user: VendorUserProfile, remember = true, options: VendorTokenOptions = {}) {
     clearStoredToken();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(TOKEN_KEY, token);
+    storage.setItem(USER_KEY, JSON.stringify(user));
     if (options.refreshToken) storage.setItem(REFRESH_TOKEN_KEY, options.refreshToken);
     const expiresAt = resolveExpiresAt(options);
     if (expiresAt) storage.setItem(TOKEN_EXPIRES_AT_KEY, String(expiresAt));
@@ -76,6 +87,8 @@ function storeToken(token: string, remember = true, options: VendorTokenOptions 
 function clearStoredToken() {
     try { localStorage.removeItem(TOKEN_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(USER_KEY); } catch { /* noop */ }
+    try { sessionStorage.removeItem(USER_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(REFRESH_TOKEN_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(REFRESH_TOKEN_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(TOKEN_EXPIRES_AT_KEY); } catch { /* noop */ }
@@ -96,10 +109,24 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
             this.hydrated = true;
             try {
                 const token = readStoredToken();
+                const cachedUser = readStoredUser();
                 if (!token) return;
                 this.accessToken = token;
-                const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');
-                this.user = me;
+                if (cachedUser) this.user = cachedUser;
+
+                try {
+                    const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');
+                    this.user = me;
+                    const remember = localStorage.getItem(TOKEN_KEY) !== null;
+                    const storage = remember ? localStorage : sessionStorage;
+                    storage.setItem(USER_KEY, JSON.stringify(me));
+                } catch (err: unknown) {
+                    if (err instanceof ApiError && err.status === 401) {
+                        this.accessToken = null;
+                        this.user = null;
+                        clearStoredToken();
+                    }
+                }
             } catch {
                 this.accessToken = null;
                 this.user = null;
@@ -109,11 +136,14 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
         setSession(token: string, user: VendorUserProfile, remember = true, tokenOptions: VendorTokenOptions = {}) {
             this.accessToken = token;
             this.user = user;
-            storeToken(token, remember, tokenOptions);
+            storeSession(token, user, remember, tokenOptions);
         },
         async refreshMe() {
             const me = await api.get<VendorUserProfile>('/api/v1/vendor/me');
             this.user = me;
+            const remember = localStorage.getItem(TOKEN_KEY) !== null;
+            const storage = remember ? localStorage : sessionStorage;
+            storage.setItem(USER_KEY, JSON.stringify(me));
             return me;
         },
         async logout() {

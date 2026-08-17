@@ -10,6 +10,8 @@
     "tokens.css",
     "theme.css",
     "wallet.css",
+    "RemoteSendTrackerModal.vue",
+    "RemoteSendTrackerModal.vue.d.ts",
     "WalletGreeting.vue",
     "WalletGreeting.vue.d.ts",
     "BeverlyLoader.vue",
@@ -32,6 +34,10 @@
     "./tokens.css": "./tokens.css",
     "./theme.css": "./theme.css",
     "./wallet.css": "./wallet.css",
+    "./RemoteSendTrackerModal.vue": {
+      "types": "./RemoteSendTrackerModal.vue.d.ts",
+      "import": "./RemoteSendTrackerModal.vue"
+    },
     "./WalletGreeting.vue": {
       "types": "./WalletGreeting.vue.d.ts",
       "import": "./WalletGreeting.vue"

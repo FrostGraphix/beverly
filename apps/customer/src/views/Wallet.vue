@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
@@ -9,6 +9,10 @@ import { naira, shortDate } from '../lib/format';
 const wallet  = ref<any>(null);
 const entries = ref<any[]>([]);
 const loading = ref(false);
+const showFilters = ref(false);
+const searchQuery = ref('');
+const activityFilter = ref<'all' | 'credit' | 'debit'>('all');
+const pageSize = ref(10);
 const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
@@ -24,6 +28,34 @@ onMounted(async () => {
         entries.value = l.entries;
     } catch { /* noop */ } finally { loading.value = false; }
 });
+
+const matchesFilter = (entry: any, filter: typeof activityFilter.value) => {
+    if (filter === 'all') return true;
+    return entry.direction === filter;
+};
+
+const filteredLedger = computed(() => {
+    const q = searchQuery.value.trim().toLowerCase();
+    return entries.value.filter((entry) => {
+        const matchesType = matchesFilter(entry, activityFilter.value);
+        if (!matchesType) return false;
+        if (!q) return true;
+        return (
+            (entry.memo || '').toLowerCase().includes(q) ||
+            (entry.entry_type || '').toLowerCase().includes(q) ||
+            (entry.id || '').toLowerCase().includes(q)
+        );
+    });
+});
+
+const activeFilterCount = computed(() => [
+    activityFilter.value !== 'all',
+    Boolean(searchQuery.value.trim()),
+].filter(Boolean).length);
+
+const filterCount = (filter: typeof activityFilter.value) => {
+    return entries.value.filter((entry) => matchesFilter(entry, filter)).length;
+};
 </script>
 
 <template>
@@ -45,26 +77,65 @@ onMounted(async () => {
         </div>
       </div>
       <div class="bw-row" style="gap: var(--s-2)">
-        <router-link to="/wallet/fund" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">
-          Add Money
-        </router-link>
-        <router-link to="/wallet/funding" class="bw-btn" style="text-decoration:none; flex:1; justify-content:center">
-          Funding
-        </router-link>
-        <router-link to="/transactions" class="bw-btn" style="text-decoration:none; flex:1; justify-content:center">
-          Spending
-        </router-link>
+        <router-link to="/wallet/fund" class="bw-btn primary" style="text-decoration:none; flex:1; justify-content:center">Fund Wallet</router-link>
       </div>
     </div>
 
     <!-- Ledger -->
     <div class="bw-card flush bw-data-region" :data-view="viewMode">
-      <div class="bw-table-head-bar">
-        <div>
-          <div class="bw-card-title">Ledger</div>
-          <div class="bw-card-sub">{{ entries.length }} entries</div>
+      <div class="bw-table-head-bar recent-head-bar">
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Ledger</div>
+            <span v-if="loading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filteredLedger.length }}</span>
+          </div>
+          <div class="bw-card-sub">Transaction history and balance changes</div>
         </div>
-        <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
+        <div class="recent-actions">
+          <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
+          <button
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="customer-wallet-filter-panel"
+            title="Filter ledger"
+            @click="showFilters = !showFilters"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeFilterCount" class="recent-filter-count">{{ activeFilterCount }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Controls Panel -->
+      <div v-if="showFilters" id="customer-wallet-filter-panel" class="recent-filter-panel">
+        <div class="recent-filter-grid">
+          <div class="filter-group">
+            <label class="filter-label">Search</label>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="bw-input bw-input-sm"
+              placeholder="Search memo, type..."
+            />
+          </div>
+          <div class="filter-group full-width">
+            <label class="filter-label">Filter Type</label>
+            <div class="recent-tabs-row">
+              <button
+                v-for="filter in (['all', 'credit', 'debit'] as const)"
+                :key="filter"
+                type="button"
+                :class="['bw-btn sm', activityFilter === filter ? 'primary' : '']"
+                @click="activityFilter = filter"
+              >
+                {{ filter === 'all' ? 'All' : filter === 'credit' ? 'Credits' : 'Debits' }} ({{ filterCount(filter) }})
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Desktop table -->
@@ -79,8 +150,8 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
-            <WalletTableSkeleton v-if="loading && !entries.length" :columns="4" />
-            <tr v-for="e in entries" :key="e.id">
+            <WalletTableSkeleton v-if="loading && !filteredLedger.length" :columns="4" />
+            <tr v-for="e in filteredLedger" :key="e.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(e.created_at) }}</td>
               <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g,' ') }}</span></td>
               <td class="bw-money" :style="{ textAlign:'right', color: e.direction === 'credit' ? 'var(--brand)' : 'var(--text)' }">
@@ -88,8 +159,8 @@ onMounted(async () => {
               </td>
               <td class="bw-money" style="text-align:right">{{ naira(e.balance_after_minor) }}</td>
             </tr>
-            <tr v-if="!entries.length && !loading">
-              <td colspan="4" class="bw-muted" style="text-align:center; padding: var(--s-6)">No entries yet.</td>
+            <tr v-if="!filteredLedger.length && !loading">
+              <td colspan="4" class="bw-muted" style="text-align:center; padding: var(--s-6)">No entries matching filters.</td>
             </tr>
           </tbody>
         </table>
@@ -97,8 +168,8 @@ onMounted(async () => {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
-        <WalletTableSkeleton v-if="loading && !entries.length" variant="cards" :rows="4" />
-        <div v-for="e in entries" :key="e.id" class="bw-tc">
+        <WalletTableSkeleton v-if="loading && !filteredLedger.length" variant="cards" :rows="4" />
+        <div v-for="e in filteredLedger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor">{{ e.entry_type.replace(/_/g,' ') }}</div>
@@ -116,8 +187,25 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div v-if="!entries.length && !loading" class="bw-muted"
-             style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No entries yet.</div>
+        <div v-if="!filteredLedger.length && !loading" class="bw-muted"
+             style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No entries matching filters.</div>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="filteredLedger.length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing 1–{{ filteredLedger.length }} of {{ filteredLedger.length }} matching movements
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline">
+            <span>Per page</span>
+            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+            </select>
+          </label>
+        </div>
       </div>
     </div>
   </AppShell>

@@ -2,6 +2,7 @@ export const CUSTOMER_TOKEN_KEY = 'beverly.access_token';
 export const CUSTOMER_REFRESH_TOKEN_KEY = 'beverly.refresh_token';
 export const CUSTOMER_TOKEN_EXPIRES_AT_KEY = 'beverly.access_token_expires_at';
 export const CUSTOMER_REMEMBER_KEY = 'beverly.customer.remembered_login';
+export const CUSTOMER_USER_KEY = 'beverly.customer.profile';
 
 export interface CustomerTokenOptions {
     refreshToken?: string | null;
@@ -21,6 +22,15 @@ export function readCustomerToken(): string | null {
         return sessionStorage.getItem(CUSTOMER_TOKEN_KEY) ?? localStorage.getItem(CUSTOMER_TOKEN_KEY);
     } catch {
         try { return localStorage.getItem(CUSTOMER_TOKEN_KEY); } catch { return null; }
+    }
+}
+
+export function readCustomerProfile<T = unknown>(): T | null {
+    try {
+        const raw = sessionStorage.getItem(CUSTOMER_USER_KEY) ?? localStorage.getItem(CUSTOMER_USER_KEY);
+        return raw ? JSON.parse(raw) as T : null;
+    } catch {
+        return null;
     }
 }
 
@@ -52,10 +62,11 @@ function resolveExpiresAt(options: CustomerTokenOptions): number | null {
     return null;
 }
 
-export function storeCustomerToken(token: string, remember = true, options: CustomerTokenOptions = {}) {
+export function storeCustomerToken(token: string, remember = true, options: CustomerTokenOptions = {}, customerProfile?: unknown) {
     clearCustomerToken();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(CUSTOMER_TOKEN_KEY, token);
+    if (customerProfile) storage.setItem(CUSTOMER_USER_KEY, JSON.stringify(customerProfile));
     if (options.refreshToken) storage.setItem(CUSTOMER_REFRESH_TOKEN_KEY, options.refreshToken);
     const expiresAt = resolveExpiresAt(options);
     if (expiresAt) storage.setItem(CUSTOMER_TOKEN_EXPIRES_AT_KEY, String(expiresAt));
@@ -64,6 +75,8 @@ export function storeCustomerToken(token: string, remember = true, options: Cust
 export function clearCustomerToken() {
     try { localStorage.removeItem(CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(CUSTOMER_USER_KEY); } catch { /* noop */ }
+    try { sessionStorage.removeItem(CUSTOMER_USER_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(CUSTOMER_REFRESH_TOKEN_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(CUSTOMER_REFRESH_TOKEN_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(CUSTOMER_TOKEN_EXPIRES_AT_KEY); } catch { /* noop */ }

@@ -6,11 +6,19 @@ import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 
 const auth    = useAuthStore();
 const wallet  = ref<any>(null);
 const ledger  = ref<any[]>([]);
 const loading = ref(false);
+const showFilters = ref(false);
+const searchQuery = ref('');
+const activityFilter = ref<'all' | 'credit' | 'debit'>('all');
+const recentPageSize = ref(10);
+const viewMode = ref<'grid' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'grid' : 'table',
+);
 const customerName = computed(() => auth.customer?.full_name?.split(' ')[0] || 'there');
 
 onMounted(async () => {
@@ -18,13 +26,40 @@ onMounted(async () => {
     try {
         const [w, l] = await Promise.all([
             api.get<any>('/api/v1/customer/wallet'),
-            api.get<{ entries: any[] }>('/api/v1/customer/wallet/ledger?limit=5'),
+            api.get<{ entries: any[] }>('/api/v1/customer/wallet/ledger?limit=10'),
         ]);
         wallet.value = w;
         ledger.value = l.entries;
     } catch { /* noop */ } finally { loading.value = false; }
 });
 
+const matchesFilter = (entry: any, filter: typeof activityFilter.value) => {
+    if (filter === 'all') return true;
+    return entry.direction === filter;
+};
+
+const filteredLedger = computed(() => {
+    const q = searchQuery.value.trim().toLowerCase();
+    return ledger.value.filter((entry) => {
+        const matchesType = matchesFilter(entry, activityFilter.value);
+        if (!matchesType) return false;
+        if (!q) return true;
+        return (
+            (entry.memo || '').toLowerCase().includes(q) ||
+            (entry.entry_type || '').toLowerCase().includes(q) ||
+            (entry.id || '').toLowerCase().includes(q)
+        );
+    });
+});
+
+const activeRecentFilterCount = computed(() => [
+    activityFilter.value !== 'all',
+    Boolean(searchQuery.value.trim()),
+].filter(Boolean).length);
+
+const filterCount = (filter: typeof activityFilter.value) => {
+    return ledger.value.filter((entry) => matchesFilter(entry, filter)).length;
+};
 </script>
 
 <template>
@@ -67,17 +102,115 @@ onMounted(async () => {
     <!-- Onboarding checklist -->
     <OnboardingChecklist />
 
-    <!-- Recent activity -->
-    <div class="bw-card flush">
-      <div class="bw-table-head-bar">
-        <div>
-          <div class="bw-card-title">Recent activity</div>
+    <!-- Recent activity section -->
+    <div class="bw-card flush bw-data-region" :data-view="viewMode">
+      <div class="bw-table-head-bar recent-head-bar">
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Recent activity</div>
+            <span v-if="loading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filteredLedger.length }}</span>
+          </div>
           <div class="bw-card-sub">Latest wallet movements</div>
         </div>
-        <router-link to="/wallet" class="bw-card-cta" style="text-decoration:none">All →</router-link>
+        <div class="recent-actions">
+          <WalletDataViewSwitch
+            v-model="viewMode"
+            :modes="['grid', 'table']"
+            label="Recent activity view"
+          />
+          <button
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="customer-recent-filter-panel"
+            title="Filter activity"
+            @click="showFilters = !showFilters"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeRecentFilterCount" class="recent-filter-count">{{ activeRecentFilterCount }}</span>
+          </button>
+          <router-link
+            to="/wallet"
+            class="bw-btn sm recent-see-all"
+            aria-label="View all activity"
+            title="View all activity"
+          >
+            <span class="recent-action-label">View all</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </router-link>
+        </div>
       </div>
 
-      <div class="bw-t-cards" style="display:block">
+      <!-- Filter Controls Panel -->
+      <div v-if="showFilters" id="customer-recent-filter-panel" class="recent-filter-panel">
+        <div class="recent-filter-grid">
+          <div class="filter-group">
+            <label class="filter-label">Search</label>
+            <input
+              v-model="searchQuery"
+              type="text"
+              class="bw-input bw-input-sm"
+              placeholder="Search memo, type..."
+            />
+          </div>
+          <div class="filter-group full-width">
+            <label class="filter-label">Filter Type</label>
+            <div class="recent-tabs-row">
+              <button
+                v-for="filter in (['all', 'credit', 'debit'] as const)"
+                :key="filter"
+                type="button"
+                :class="['bw-btn sm', activityFilter === filter ? 'primary' : '']"
+                @click="activityFilter = filter"
+              >
+                {{ filter === 'all' ? 'All' : filter === 'credit' ? 'Credits' : 'Debits' }} ({{ filterCount(filter) }})
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desktop table -->
+      <div class="bw-t-wrap">
+        <table class="bw-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Type</th>
+              <th>Memo</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-if="loading">
+              <tr v-for="n in 3" :key="`customer-skeleton-row-${n}`" class="recent-table-skeleton" aria-hidden="true">
+                <td><span class="bw-skeleton recent-cell-skeleton time"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton badge"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton customer"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton amount"></span></td>
+              </tr>
+            </template>
+            <tr v-for="e in filteredLedger" :key="e.id">
+              <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(e.created_at) }}</td>
+              <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g,' ') }}</span></td>
+              <td class="bw-muted" style="max-width: 240px; overflow:hidden; text-overflow:ellipsis">{{ e.memo || '—' }}</td>
+              <td class="bw-money" :style="{ textAlign:'right', color: e.direction === 'credit' ? 'var(--brand)' : 'var(--text)' }">
+                {{ e.direction === 'credit' ? '+' : '−' }}{{ naira(e.amount_minor) }}
+              </td>
+            </tr>
+            <tr v-if="!filteredLedger.length && !loading">
+              <td colspan="4" class="bw-muted" style="text-align:center; padding: var(--s-6)">No activity matching filters.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile cards -->
+      <div class="bw-t-cards">
         <template v-if="loading">
           <div v-for="n in 3" :key="`customer-ledger-skeleton-${n}`" class="bw-tc customer-ledger-skeleton" aria-hidden="true">
             <div class="bw-tc-top">
@@ -89,7 +222,7 @@ onMounted(async () => {
             </div>
           </div>
         </template>
-        <div v-for="e in ledger" :key="e.id" class="bw-tc">
+        <div v-for="e in filteredLedger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor">{{ e.entry_type.replace(/_/g,' ') }}</div>
@@ -101,9 +234,29 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div v-if="!ledger.length && !loading" class="bw-muted"
+        <div v-if="!filteredLedger.length && !loading" class="bw-muted"
              style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">
-          No activity yet.
+          No activity matching filters.
+        </div>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div v-if="loading" class="bw-pagination-bar dashboard-pagination-skeleton" aria-hidden="true">
+        <span class="bw-skeleton dashboard-pagination-skeleton-copy"></span>
+        <span class="bw-skeleton dashboard-pagination-skeleton-actions"></span>
+      </div>
+      <div v-else-if="filteredLedger.length > 0" class="bw-pagination-bar">
+        <div class="bw-pagination-info">
+          Showing 1–{{ filteredLedger.length }} of {{ filteredLedger.length }} matching movements
+        </div>
+        <div class="bw-pagination-controls">
+          <label class="filter-label inline">
+            <span>Per page</span>
+            <select v-model="recentPageSize" class="bw-select bw-select-sm" style="width: auto">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+            </select>
+          </label>
         </div>
       </div>
     </div>

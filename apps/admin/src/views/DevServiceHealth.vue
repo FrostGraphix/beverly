@@ -96,7 +96,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 <template>
   <AppShell title="Service Health">
     <div class="bw-page-actions">
-      <button class="bw-btn bw-btn-ghost bw-btn-sm" :disabled="loading" @click="load">
+      <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" :disabled="loading" @click.prevent="load">
         {{ loading ? '…' : '↺ Refresh' }}
       </button>
     </div>

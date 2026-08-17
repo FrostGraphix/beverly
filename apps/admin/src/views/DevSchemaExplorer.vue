@@ -272,7 +272,7 @@ onMounted(loadSchema);
           <option value="staging">Staging</option>
           <option value="dev">Dev</option>
         </select>
-        <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadDeploys">↺ Refresh</button>
+        <button type="button" class="bw-btn bw-btn-ghost bw-btn-sm" @click.prevent="loadDeploys">↺ Refresh</button>
       </div>
       <div v-if="deplLoad" class="bw-loading">Loading…</div>
       <div v-else class="bw-table-wrapper">
