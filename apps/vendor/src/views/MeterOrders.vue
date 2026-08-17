@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api, ApiError } from '../lib/api';
 
 interface MeterOrder {
@@ -117,9 +118,7 @@ onMounted(load);
               </tr>
             </thead>
             <tbody>
-              <tr v-if="loading">
-                <td colspan="6" class="bw-muted" style="text-align:center; padding: var(--s-6)">Loading…</td>
-              </tr>
+              <WalletTableSkeleton v-if="loading" :columns="6" />
               <tr v-else-if="!orders.length">
                 <td colspan="6" class="bw-muted" style="text-align:center; padding: var(--s-6)">No vendor meter orders yet.</td>
               </tr>
@@ -147,6 +146,7 @@ onMounted(load);
 
         <!-- Mobile cards -->
         <div class="bw-t-cards">
+          <WalletTableSkeleton v-if="loading" variant="cards" />
           <div v-for="order in orders" :key="`order-card-${order.id}`" class="bw-tc">
             <div class="bw-tc-top">
               <div>

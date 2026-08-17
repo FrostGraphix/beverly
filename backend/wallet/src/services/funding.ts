@@ -632,21 +632,23 @@ export async function rejectFundingRequest(opts: {
 }
 
 export async function listVendorFunding(vendorOrganizationId: string, limit = 50): Promise<FundingRequest[]> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('funding_requests')
         .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
         .eq('vendor_organization_id', vendorOrganizationId)
         .order('created_at', { ascending: false })
         .limit(limit);
+    if (error) throw error;
     return attachProofUrls((data ?? []) as FundingRequest[]);
 }
 
 export async function listPendingFunding(limit = 100): Promise<FundingRequest[]> {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('funding_requests')
         .select('*, vendor_organizations(legal_name, trading_name, contact_email, contact_phone)')
         .in('status', ['proof_uploaded', 'under_review'])
         .order('created_at', { ascending: true })
         .limit(limit);
+    if (error) throw error;
     return attachProofUrls((data ?? []) as FundingRequest[]);
 }

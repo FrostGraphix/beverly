@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 
@@ -78,6 +79,7 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
+            <WalletTableSkeleton v-if="loading && !entries.length" :columns="4" />
             <tr v-for="e in entries" :key="e.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(e.created_at) }}</td>
               <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g,' ') }}</span></td>
@@ -95,6 +97,7 @@ onMounted(async () => {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
+        <WalletTableSkeleton v-if="loading && !entries.length" variant="cards" :rows="4" />
         <div v-for="e in entries" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>

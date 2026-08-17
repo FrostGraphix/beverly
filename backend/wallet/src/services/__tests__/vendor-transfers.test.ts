@@ -57,6 +57,15 @@ describe('vendor balance transfer service', () => {
         });
     });
 
+    it('fails safely when the database returns no transfer receipt', async () => {
+        mocks.rpc.mockResolvedValue({ data: null, error: null });
+
+        await expect(transferVendorBalance(input)).rejects.toMatchObject({
+            code: 'transfer_result_missing',
+            status: 503,
+        });
+    });
+
     it('uses a shared hashed rate-limit key', async () => {
         mocks.rpc.mockResolvedValue({
             data: { count: 3, limit: 10, exceeded: false, retry_after_seconds: 41 },

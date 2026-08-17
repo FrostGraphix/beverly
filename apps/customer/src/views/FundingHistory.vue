@@ -5,6 +5,7 @@
  */
 import { onMounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 
@@ -84,6 +85,7 @@ onMounted(() => load());
             </tr>
           </thead>
           <tbody>
+            <WalletTableSkeleton v-if="loading && !items.length" :columns="5" />
             <tr v-for="f in filtered" :key="f.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(f.created_at) }}</td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ f.gateway_reference }}</td>
@@ -100,6 +102,7 @@ onMounted(() => load());
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
+        <WalletTableSkeleton v-if="loading && !items.length" variant="cards" :rows="4" />
         <div v-for="f in filtered" :key="f.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>

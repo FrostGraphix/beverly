@@ -81,6 +81,7 @@ import {
 } from '../services/idempotency.js';
 import { revokePortalSession } from '../services/portal-session.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
+import { verifiedPrincipalAmount, verifyTransaction } from '../adapters/paystack.js';
 import {
     sendEmailVerification, confirmEmailVerification,
     sendPasswordRecoveryEmail, confirmPasswordReset,
@@ -602,7 +603,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
             const meter = await linkMeter(req.actor!.customerId!, req.actor!.userId, meter_id.trim().toUpperCase(), nickname, meter_type);
             return { meter };
         } catch (e: any) {
-            if (e instanceof CustomerPurchaseError) return reply.code(e.code === 'meter_approval_unavailable' ? 503 : 422).send({ error: e.code, message: e.message });
+            if (e instanceof CustomerPurchaseError) return reply.code(
+                e.code === 'meter_approval_unavailable' ? 503
+                : e.code === 'station_assignment_required' || e.code === 'cross_station_vend_forbidden' ? 403
+                : 422,
+            ).send({ error: e.code, message: e.message });
             throw e;
         }
     });
@@ -624,11 +629,12 @@ const customer: FastifyPluginAsync = async (fastify) => {
         const wallet = await findWalletByOwner('customer', req.actor!.customerId!);
         if (!wallet) return reply.code(404).send({ error: 'wallet_not_found' });
 
-        const { data: summary } = await adminClient
+        const { data: summary, error: summaryError } = await adminClient
             .from('v_wallet_balances')
             .select('*')
             .eq('wallet_id', wallet.id)
             .maybeSingle();
+        if (summaryError) throw summaryError;
 
         return {
             id: wallet.id,
@@ -647,12 +653,13 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!wallet) return { entries: [] };
 
         const { limit = 100, offset = 0 } = req.query as { limit?: number; offset?: number };
-        const { data } = await adminClient
+        const { data, error } = await adminClient
             .from('wallet_ledger_entries')
             .select('*')
             .eq('wallet_id', wallet.id)
             .order('created_at', { ascending: false })
             .range(Number(offset), Number(offset) + Number(limit) - 1);
+        if (error) throw error;
         return { entries: data ?? [] };
     });
 
@@ -833,6 +840,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
+                    : e.code === 'station_assignment_required' || e.code === 'cross_station_vend_forbidden' ? 403
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
                     : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
@@ -916,6 +924,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             if (e instanceof CustomerPurchaseError) {
                 return reply.code(
                     e.code === 'insufficient_balance' ? 402
+                    : e.code === 'station_assignment_required' || e.code === 'cross_station_vend_forbidden' ? 403
                     : e.code === 'wallet_inactive' || e.code === 'wallet_frozen' || e.code === 'wallet_closed' ? 403
                     : e.code === 'meter_approval_unavailable' ? 503
                     : 422,
@@ -977,20 +986,22 @@ const customer: FastifyPluginAsync = async (fastify) => {
             .order('created_at', { ascending: false })
             .limit(Math.min(Number(limit ?? 50), 200));
         if (cursor) query = query.lt('created_at', cursor);
-        const { data } = await query;
+        const { data, error } = await query;
+        if (error) throw error;
         const rows = data ?? [];
         const nextCursor = rows.length === Math.min(Number(limit ?? 50), 200) ? rows[rows.length - 1].created_at : null;
         return { funding: rows, nextCursor };
     });
 
     fastify.get('/receipts', { preHandler: fastify.requireCustomer() }, async (req) => {
-        const { data: purchaseRows } = await adminClient
+        const { data: purchaseRows, error: purchaseError } = await adminClient
             .from('purchase_orders')
             .select('id, meter_id, meter_type, amount_minor, energy_amount_minor, vat_amount_minor, vat_rate_basis_points, units_kwh, tariff_id, station_id, status')
             .eq('customer_id', req.actor!.customerId!);
+        if (purchaseError) throw purchaseError;
         if (!purchaseRows?.length) return { receipts: [] };
         const purchaseById = new Map((purchaseRows ?? []).map((p: any) => [p.id, p]));
-        const { data } = await adminClient
+        const { data, error: receiptError } = await adminClient
             .from('receipts')
             .select('id, receipt_number, purchase_order_id, payload, created_at')
             .in(
@@ -999,6 +1010,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
             )
             .order('created_at', { ascending: false })
             .limit(100);
+        if (receiptError) throw receiptError;
         return { receipts: (data ?? []).map((row: any) => shapeReceipt(row, purchaseById.get(row.purchase_order_id))) };
     });
 
@@ -1081,12 +1093,22 @@ const customer: FastifyPluginAsync = async (fastify) => {
         if (!order) return reply.code(404).send({ error: 'not_found' });
         if ((order as any).status !== 'pending_payment') return order;
 
-        // Verify with Paystack
-        const res = await fetch(`https://api.paystack.co/transaction/verify/${(order as any).payment_reference}`, {
-            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
-        });
-        const ps: any = await res.json();
-        if (ps.data?.status === 'success' && Number(ps.data?.amount) !== Number((order as any).amount_minor)) {
+        let verified;
+        try {
+            verified = await verifyTransaction((order as any).payment_reference);
+        } catch (error) {
+            req.log.error({ err: error, orderId: id }, 'meter order payment verification failed');
+            return reply.code(502).send({
+                error: 'payment_verification_unavailable',
+                message: 'Payment confirmation is temporarily unavailable. Your order remains pending safely.',
+            });
+        }
+        const mismatch = verified.status === 'success' && (
+            verifiedPrincipalAmount(verified) !== Number((order as any).amount_minor)
+            || verified.reference !== (order as any).payment_reference
+            || String(verified.currency).toUpperCase() !== 'NGN'
+        );
+        if (mismatch) {
             await logAction({
                 actorUserId: req.actor!.userId,
                 actorType: 'customer',
@@ -1095,12 +1117,14 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 metadata: {
                     reference: (order as any).payment_reference,
                     expectedAmountMinor: (order as any).amount_minor,
-                    verifiedAmountMinor: ps.data?.amount ?? null,
+                    verifiedAmountMinor: verifiedPrincipalAmount(verified),
+                    verifiedReference: verified.reference,
+                    verifiedCurrency: verified.currency,
                 },
             });
             return reply.code(409).send({ error: 'payment_amount_mismatch', message: 'Verified payment amount does not match this meter order.' });
         }
-        if (ps.data?.status === 'success') {
+        if (verified.status === 'success') {
             const { data: paidOrder, error: paidError } = await adminClient
                 .from('meter_purchase_orders')
                 .update({ status: 'paid', updated_at: new Date().toISOString() })

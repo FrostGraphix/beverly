@@ -89,6 +89,14 @@ const recentViewMode = ref<'grid' | 'table'>(
 );
 const knownStations = ref<string[]>([]);
 
+const activeRecentFilterCount = computed(() => [
+    recentTypeFilter.value !== 'all',
+    recentActorFilter.value !== 'all',
+    Boolean(recentStationFilter.value),
+    recentDateFilter.value !== 'all',
+    Boolean(recentSearchQuery.value.trim()),
+].filter(Boolean).length);
+
 const RECENT_TYPE_FILTERS = [
     { id: 'all', label: 'All' },
     { id: 'purchases', label: 'Purchases' },
@@ -662,9 +670,29 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- Queues row -->
-    <div v-if="loading" class="bw-row-2">
-      <div class="bw-card bw-skeleton" style="min-height:260px"></div>
-      <div class="bw-card bw-skeleton" style="min-height:260px"></div>
+    <div v-if="loading" class="bw-row-2" aria-label="Loading dashboard queues">
+      <div v-for="n in 2" :key="`queue-skeleton-${n}`" class="bw-card flush dashboard-section-skeleton" aria-hidden="true">
+        <div class="bw-table-head-bar dashboard-section-skeleton-head">
+          <div class="dashboard-section-skeleton-copy">
+            <span class="bw-skeleton dashboard-section-skeleton-title"></span>
+            <span class="bw-skeleton dashboard-section-skeleton-subtitle"></span>
+          </div>
+          <span class="bw-skeleton dashboard-section-skeleton-badge"></span>
+        </div>
+        <div class="dashboard-section-skeleton-body">
+          <div v-for="row in 3" :key="row" class="dashboard-section-skeleton-row">
+            <span class="bw-skeleton dashboard-section-skeleton-icon"></span>
+            <span class="dashboard-section-skeleton-lines">
+              <span class="bw-skeleton dashboard-section-skeleton-line"></span>
+              <span class="bw-skeleton dashboard-section-skeleton-line short"></span>
+            </span>
+            <span class="bw-skeleton dashboard-section-skeleton-status"></span>
+          </div>
+        </div>
+        <div class="dashboard-section-skeleton-footer">
+          <span class="bw-skeleton dashboard-section-skeleton-button"></span>
+        </div>
+      </div>
     </div>
     <div v-else class="bw-row-2">
 
@@ -742,7 +770,25 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     </div>
 
     <!-- In-flight vending table -->
-    <div v-if="pendingVending.length" class="bw-card flush">
+    <div v-if="loading" class="bw-card flush dashboard-section-skeleton dashboard-vending-skeleton" aria-label="Loading in-flight vending" aria-busy="true">
+      <div class="bw-table-head-bar dashboard-section-skeleton-head">
+        <div class="dashboard-section-skeleton-copy">
+          <span class="bw-skeleton dashboard-section-skeleton-title wide"></span>
+          <span class="bw-skeleton dashboard-section-skeleton-subtitle"></span>
+        </div>
+        <span class="bw-skeleton dashboard-section-skeleton-action"></span>
+      </div>
+      <div class="dashboard-vending-skeleton-rows" aria-hidden="true">
+        <div v-for="row in 2" :key="row" class="dashboard-vending-skeleton-row">
+          <span class="bw-skeleton"></span>
+          <span class="bw-skeleton"></span>
+          <span class="bw-skeleton"></span>
+          <span class="bw-skeleton"></span>
+          <span class="bw-skeleton"></span>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="pendingVending.length" class="bw-card flush">
       <div class="bw-table-head-bar">
         <div>
           <div class="bw-card-title">
@@ -805,32 +851,41 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
     <!-- Recent transactions -->
     <div class="bw-card flush bw-data-region" :data-view="recentViewMode">
       <div class="bw-table-head-bar recent-head-bar">
-        <div>
-          <div class="bw-card-title">Recent Transactions</div>
-          <div class="bw-card-sub">Most recent vending orders and wallet activity</div>
+        <div class="recent-heading">
+          <div class="recent-title-row">
+            <div class="bw-card-title">Recent Transactions</div>
+            <span v-if="loading" class="bw-skeleton recent-count-skeleton" aria-hidden="true"></span>
+            <span v-else class="recent-count">{{ filteredRecentTransactions.length }}</span>
+          </div>
+          <div class="bw-card-sub">Latest vending and wallet activity</div>
         </div>
-        <div class="bw-row" style="gap: var(--s-2)">
+        <div class="recent-actions">
           <WalletDataViewSwitch
             v-model="recentViewMode"
             :modes="['grid', 'table']"
             label="Recent transaction view"
           />
           <button
-            class="bw-btn sm"
+            class="bw-btn sm recent-filter-button"
             :class="{ active: showRecentFilters }"
+            :aria-expanded="showRecentFilters"
+            aria-controls="recent-filter-panel"
+            title="Filter transactions"
             @click="showRecentFilters = !showRecentFilters"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-            Filter
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            <span class="recent-action-label">Filter</span>
+            <span v-if="activeRecentFilterCount" class="recent-filter-count">{{ activeRecentFilterCount }}</span>
           </button>
           <router-link
             v-if="auth.hasPermission('wallet.vending.monitor')"
             to="/vending"
-            class="bw-btn sm"
-            style="text-decoration:none"
+            class="bw-btn sm recent-see-all"
+            aria-label="View all transactions"
+            title="View all transactions"
           >
-            See more
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <span class="recent-action-label">View all</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7"/>
             </svg>
           </router-link>
@@ -838,7 +893,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       </div>
 
       <!-- Filter Controls Panel -->
-      <div v-if="showRecentFilters" class="recent-filter-panel">
+      <div v-if="showRecentFilters" id="recent-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
           <div class="filter-group">
             <label class="filter-label">Search</label>
@@ -914,7 +969,18 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           </thead>
           <tbody>
             <template v-if="loading">
-              <tr v-for="n in 5" :key="`recent-skeleton-${n}`"><td colspan="7"><div class="bw-skeleton"></div></td></tr>
+              <tr v-for="n in 5" :key="`recent-skeleton-${n}`" class="recent-table-skeleton" aria-hidden="true">
+                <td><span class="bw-skeleton recent-cell-skeleton reference"></span></td>
+                <td>
+                  <span class="bw-skeleton recent-cell-skeleton customer"></span>
+                  <span class="bw-skeleton recent-cell-skeleton meter"></span>
+                </td>
+                <td><span class="bw-skeleton recent-cell-skeleton station"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton badge"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton badge wide"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton amount"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton time"></span></td>
+              </tr>
             </template>
             <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
               <td class="bw-row-id">{{ p.reference }}</td>
@@ -941,9 +1007,21 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       </div>
 
       <!-- Mobile cards -->
-      <div class="bw-t-cards">
+      <div class="bw-t-cards recent-cards">
         <template v-if="loading">
-          <div v-for="n in 3" :key="`recent-card-skeleton-${n}`" class="bw-tc bw-skeleton" aria-hidden="true"></div>
+          <div v-for="n in 4" :key="`recent-card-skeleton-${n}`" class="bw-tc recent-card-skeleton" aria-hidden="true">
+            <div class="bw-tc-top">
+              <span class="recent-card-skeleton-copy">
+                <span class="bw-skeleton recent-cell-skeleton customer"></span>
+                <span class="bw-skeleton recent-cell-skeleton reference"></span>
+              </span>
+              <span class="bw-skeleton recent-cell-skeleton amount"></span>
+            </div>
+            <div class="bw-tc-mid">
+              <span class="bw-skeleton recent-card-skeleton-detail"></span>
+              <span class="bw-skeleton recent-card-skeleton-detail short"></span>
+            </div>
+          </div>
         </template>
         <div v-for="p in recentTransactions" :key="`recent-card-${p.id}`" class="bw-tc">
           <div class="bw-tc-top">
@@ -978,7 +1056,11 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       </div>
 
       <!-- Pagination Bar -->
-      <div v-if="filteredRecentTransactions.length > 0" class="bw-pagination-bar">
+      <div v-if="loading" class="bw-pagination-bar dashboard-pagination-skeleton" aria-hidden="true">
+        <span class="bw-skeleton dashboard-pagination-skeleton-copy"></span>
+        <span class="bw-skeleton dashboard-pagination-skeleton-actions"></span>
+      </div>
+      <div v-else-if="filteredRecentTransactions.length > 0" class="bw-pagination-bar">
         <div class="bw-pagination-info">
           Showing {{ ((recentPage - 1) * recentPageSize) + 1 }}–{{ Math.min(recentPage * recentPageSize, filteredRecentTransactions.length) }} of {{ filteredRecentTransactions.length }} matching transactions
         </div>
@@ -1069,6 +1151,204 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 .dashboard-kpi-skeleton-line.line-three {
   transform: translateY(-9px) rotate(-4deg);
 }
+.dashboard-section-skeleton {
+  overflow: hidden;
+  pointer-events: none;
+}
+.dashboard-section-skeleton .bw-skeleton,
+.recent-table-skeleton .bw-skeleton,
+.recent-card-skeleton .bw-skeleton,
+.dashboard-pagination-skeleton .bw-skeleton {
+  display: block;
+  min-height: 0;
+}
+.dashboard-section-skeleton-head {
+  flex-wrap: nowrap;
+}
+.dashboard-section-skeleton-copy,
+.dashboard-section-skeleton-lines,
+.recent-card-skeleton-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.dashboard-section-skeleton-copy {
+  flex: 1;
+}
+.dashboard-section-skeleton-title {
+  width: 120px;
+  height: 14px;
+  border-radius: var(--r-pill);
+}
+.dashboard-section-skeleton-title.wide {
+  width: 150px;
+}
+.dashboard-section-skeleton-subtitle {
+  width: min(180px, 70%);
+  height: 9px;
+  border-radius: var(--r-pill);
+}
+.dashboard-section-skeleton-badge {
+  width: 46px;
+  height: 22px;
+  border-radius: var(--r-pill);
+}
+.dashboard-section-skeleton-body {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+}
+.dashboard-section-skeleton-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: var(--s-3);
+}
+.dashboard-section-skeleton-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+}
+.dashboard-section-skeleton-lines {
+  width: 100%;
+}
+.dashboard-section-skeleton-line {
+  width: min(150px, 78%);
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.dashboard-section-skeleton-line.short {
+  width: min(100px, 54%);
+  height: 8px;
+}
+.dashboard-section-skeleton-status {
+  width: 58px;
+  height: 22px;
+  border-radius: var(--r-pill);
+}
+.dashboard-section-skeleton-footer {
+  padding: var(--s-3) var(--s-5);
+  border-top: 1px solid var(--border);
+}
+.dashboard-section-skeleton-button {
+  width: 100%;
+  height: 42px;
+  border-radius: var(--r-md);
+}
+.dashboard-section-skeleton-action {
+  width: 104px;
+  height: 40px;
+  border-radius: var(--r-md);
+}
+.dashboard-vending-skeleton-rows {
+  display: grid;
+  padding: var(--s-2) var(--s-5) var(--s-4);
+}
+.dashboard-vending-skeleton-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 0.8fr 1fr 0.8fr;
+  gap: var(--s-4);
+  padding-block: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-vending-skeleton-row:last-child {
+  border-bottom: 0;
+}
+.dashboard-vending-skeleton-row .bw-skeleton {
+  width: 78%;
+  height: 11px;
+  border-radius: var(--r-pill);
+}
+.recent-count-skeleton {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+}
+.recent-cell-skeleton {
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.recent-cell-skeleton.reference { width: 86px; }
+.recent-cell-skeleton.customer { width: 118px; }
+.recent-cell-skeleton.meter { width: 92px; margin-top: 7px; height: 8px; }
+.recent-cell-skeleton.station { width: 68px; }
+.recent-cell-skeleton.badge { width: 70px; height: 22px; }
+.recent-cell-skeleton.badge.wide { width: 92px; }
+.recent-cell-skeleton.amount { width: 72px; margin-left: auto; }
+.recent-cell-skeleton.time { width: 62px; }
+.recent-card-skeleton-copy { flex: 1; }
+.recent-card-skeleton-detail {
+  width: 90px;
+  height: 24px;
+  border-radius: var(--r-sm);
+}
+.recent-card-skeleton-detail.short { width: 64px; }
+.dashboard-pagination-skeleton-copy {
+  width: min(270px, 46%);
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.dashboard-pagination-skeleton-actions {
+  width: 220px;
+  height: 36px;
+  border-radius: var(--r-md);
+}
+.recent-head-bar {
+  padding: var(--s-3) var(--s-4);
+  gap: var(--s-3);
+}
+.recent-heading {
+  min-width: 0;
+}
+.recent-title-row,
+.recent-actions {
+  display: flex;
+  align-items: center;
+}
+.recent-title-row {
+  gap: var(--s-2);
+}
+.recent-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding-inline: 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.recent-actions {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.recent-filter-button,
+.recent-see-all {
+  min-height: 42px;
+  gap: 6px;
+}
+.recent-see-all {
+  text-decoration: none;
+}
+.recent-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 5px;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: var(--on-brand);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+}
 .recent-filter-panel {
   padding: var(--s-3) var(--s-4);
   background: var(--surface-2);
@@ -1129,6 +1409,79 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 }
 
 @media (max-width: 640px) {
+  .dashboard-section-skeleton-body {
+    padding: var(--s-3);
+  }
+  .dashboard-section-skeleton-footer {
+    padding: var(--s-3);
+  }
+  .dashboard-vending-skeleton-rows {
+    padding: 0 var(--s-3) var(--s-3);
+  }
+  .dashboard-vending-skeleton-row {
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: var(--s-3);
+  }
+  .dashboard-vending-skeleton-row .bw-skeleton:nth-child(n + 3) {
+    display: none;
+  }
+  .dashboard-pagination-skeleton {
+    align-items: stretch;
+  }
+  .dashboard-pagination-skeleton-copy,
+  .dashboard-pagination-skeleton-actions {
+    width: 100%;
+  }
+  .recent-head-bar {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+  }
+  .recent-heading {
+    flex: 1 1 auto;
+  }
+  .recent-heading .bw-card-sub {
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .recent-actions {
+    flex: 0 0 auto;
+  }
+  .recent-actions .bw-data-view-switch {
+    padding: 2px;
+  }
+  .recent-filter-button,
+  .recent-see-all {
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .recent-action-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .recent-filter-count {
+    position: absolute;
+    transform: translate(10px, -10px);
+  }
+  .recent-cards .bw-tc {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .recent-cards .bw-tc-mid {
+    gap: 8px 12px;
+    padding-top: 6px;
+  }
   .recent-filter-grid {
     grid-template-columns: 1fr 1fr;
   }

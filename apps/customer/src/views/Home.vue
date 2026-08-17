@@ -36,7 +36,15 @@ onMounted(async () => {
     />
 
     <!-- Balance hero -->
-    <div v-if="loading" class="bw-balance-hero bw-skeleton customer-balance-skeleton" role="status" aria-label="Loading dashboard"></div>
+    <div v-if="loading" class="bw-balance-hero customer-balance-skeleton" role="status" aria-label="Loading dashboard">
+      <span class="bw-skeleton customer-balance-skeleton-label"></span>
+      <span class="bw-skeleton customer-balance-skeleton-value"></span>
+      <span class="bw-skeleton customer-balance-skeleton-available"></span>
+      <div class="customer-balance-skeleton-actions">
+        <span class="bw-skeleton customer-balance-skeleton-button"></span>
+        <span class="bw-skeleton customer-balance-skeleton-button"></span>
+      </div>
+    </div>
     <div v-else class="bw-balance-hero">
       <p class="bw-label" style="color: var(--brand); margin:0 0 var(--s-1)">Wallet balance</p>
       <div class="bw-kpi-value" style="color: var(--brand); font-size: var(--t-4xl); margin-bottom: var(--s-1)">
@@ -71,7 +79,15 @@ onMounted(async () => {
 
       <div class="bw-t-cards" style="display:block">
         <template v-if="loading">
-          <div v-for="n in 3" :key="`customer-ledger-skeleton-${n}`" class="bw-tc bw-skeleton customer-ledger-skeleton" aria-hidden="true"></div>
+          <div v-for="n in 3" :key="`customer-ledger-skeleton-${n}`" class="bw-tc customer-ledger-skeleton" aria-hidden="true">
+            <div class="bw-tc-top">
+              <span class="customer-ledger-skeleton-copy">
+                <span class="bw-skeleton customer-ledger-skeleton-title"></span>
+                <span class="bw-skeleton customer-ledger-skeleton-date"></span>
+              </span>
+              <span class="bw-skeleton customer-ledger-skeleton-amount"></span>
+            </div>
+          </div>
         </template>
         <div v-for="e in ledger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
@@ -95,6 +111,65 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.customer-balance-skeleton { min-height: 190px; }
-.customer-ledger-skeleton { min-height: 76px; margin: var(--s-2) var(--s-3); }
+.customer-balance-skeleton {
+  min-height: 190px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.customer-balance-skeleton .bw-skeleton,
+.customer-ledger-skeleton .bw-skeleton {
+  display: block;
+  min-height: 0;
+}
+.customer-balance-skeleton-label {
+  width: 96px;
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.customer-balance-skeleton-value {
+  width: min(230px, 68%);
+  height: 38px;
+  margin-top: var(--s-3);
+  border-radius: var(--r-sm);
+}
+.customer-balance-skeleton-available {
+  width: min(190px, 56%);
+  height: 9px;
+  margin-top: var(--s-3);
+  border-radius: var(--r-pill);
+}
+.customer-balance-skeleton-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.customer-balance-skeleton-button {
+  flex: 1;
+  height: 42px;
+  border-radius: var(--r-md);
+}
+.customer-ledger-skeleton {
+  min-height: 76px;
+}
+.customer-ledger-skeleton-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+}
+.customer-ledger-skeleton-title {
+  width: 126px;
+  height: 11px;
+  border-radius: var(--r-pill);
+}
+.customer-ledger-skeleton-date {
+  width: 82px;
+  height: 8px;
+  border-radius: var(--r-pill);
+}
+.customer-ledger-skeleton-amount {
+  width: 86px;
+  height: 13px;
+  border-radius: var(--r-pill);
+}
 </style>

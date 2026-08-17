@@ -70,11 +70,46 @@ const filterCount = (filter: typeof activityFilter.value) => {
     <VendorOnboardingChecklist />
 
     <div v-if="dashboardLoading" class="dashboard-skeleton" role="status" aria-label="Loading dashboard">
-      <div class="bw-card bw-skeleton dashboard-balance-skeleton"></div>
-      <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
-        <div v-for="n in 5" :key="`vendor-kpi-skeleton-${n}`" class="bw-kpi bw-skeleton"></div>
+      <div class="bw-card dashboard-balance-skeleton" aria-hidden="true">
+        <span class="bw-skeleton vendor-skeleton-label"></span>
+        <span class="bw-skeleton vendor-skeleton-balance"></span>
+        <span class="bw-skeleton vendor-skeleton-available"></span>
+        <div class="vendor-skeleton-actions">
+          <span class="bw-skeleton vendor-skeleton-button primary"></span>
+          <span class="bw-skeleton vendor-skeleton-button"></span>
+        </div>
       </div>
-      <div class="bw-card bw-skeleton dashboard-activity-skeleton"></div>
+      <div class="bw-kpi-grid bw-mobile-kpi-grid vendor-kpi-grid">
+        <div v-for="n in 5" :key="`vendor-kpi-skeleton-${n}`" class="bw-kpi vendor-kpi-skeleton" aria-hidden="true">
+          <div class="bw-kpi-row">
+            <span class="bw-skeleton vendor-kpi-skeleton-label"></span>
+            <span class="bw-skeleton vendor-kpi-skeleton-icon"></span>
+          </div>
+          <span class="bw-skeleton vendor-kpi-skeleton-value"></span>
+          <span class="bw-skeleton vendor-kpi-skeleton-pill"></span>
+        </div>
+      </div>
+      <div class="bw-card flush dashboard-activity-skeleton" aria-hidden="true">
+        <div class="bw-table-head-bar vendor-activity-skeleton-head">
+          <span class="vendor-activity-skeleton-copy">
+            <span class="bw-skeleton vendor-activity-skeleton-title"></span>
+            <span class="bw-skeleton vendor-activity-skeleton-subtitle"></span>
+          </span>
+          <span class="bw-skeleton vendor-activity-skeleton-link"></span>
+        </div>
+        <div class="bw-filter-bar vendor-filter-skeleton">
+          <span v-for="n in 4" :key="n" class="bw-skeleton vendor-filter-skeleton-pill"></span>
+        </div>
+        <div class="vendor-activity-skeleton-rows">
+          <div v-for="n in 4" :key="n" class="vendor-activity-skeleton-row">
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton"></span>
+            <span class="bw-skeleton wide"></span>
+            <span class="bw-skeleton amount"></span>
+            <span class="bw-skeleton amount"></span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <template v-else>
@@ -238,8 +273,124 @@ const filterCount = (filter: typeof activityFilter.value) => {
 
 <style scoped>
 .dashboard-skeleton { display: grid; gap: var(--s-5); }
-.dashboard-balance-skeleton { min-height: 190px; }
-.dashboard-activity-skeleton { min-height: 280px; }
+.dashboard-skeleton .bw-skeleton {
+  display: block;
+  min-height: 0;
+}
+.dashboard-balance-skeleton {
+  min-height: 190px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.vendor-skeleton-label {
+  width: 92px;
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.vendor-skeleton-balance {
+  width: min(260px, 62%);
+  height: 38px;
+  margin-top: var(--s-3);
+  border-radius: var(--r-sm);
+}
+.vendor-skeleton-available {
+  width: min(210px, 54%);
+  height: 10px;
+  margin-top: var(--s-3);
+  border-radius: var(--r-pill);
+}
+.vendor-skeleton-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.vendor-skeleton-button {
+  width: 116px;
+  height: 42px;
+  border-radius: var(--r-md);
+}
+.vendor-skeleton-button.primary { width: 104px; }
+.vendor-kpi-skeleton {
+  overflow: hidden;
+  pointer-events: none;
+}
+.vendor-kpi-skeleton-label {
+  width: 46%;
+  height: 9px;
+  border-radius: var(--r-pill);
+}
+.vendor-kpi-skeleton-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+}
+.vendor-kpi-skeleton-value {
+  width: 68%;
+  height: 28px;
+  margin-top: var(--s-4);
+  border-radius: var(--r-sm);
+}
+.vendor-kpi-skeleton-pill {
+  width: 70px;
+  height: 24px;
+  margin-top: var(--s-3);
+  border-radius: var(--r-pill);
+}
+.dashboard-activity-skeleton {
+  overflow: hidden;
+  pointer-events: none;
+}
+.vendor-activity-skeleton-head {
+  flex-wrap: nowrap;
+}
+.vendor-activity-skeleton-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+}
+.vendor-activity-skeleton-title {
+  width: 124px;
+  height: 14px;
+  border-radius: var(--r-pill);
+}
+.vendor-activity-skeleton-subtitle {
+  width: 174px;
+  height: 9px;
+  border-radius: var(--r-pill);
+}
+.vendor-activity-skeleton-link {
+  width: 72px;
+  height: 34px;
+  border-radius: var(--r-md);
+}
+.vendor-filter-skeleton {
+  flex-wrap: nowrap;
+}
+.vendor-filter-skeleton-pill {
+  width: 76px;
+  height: 34px;
+  border-radius: var(--r-pill);
+}
+.vendor-activity-skeleton-rows {
+  display: grid;
+  padding: var(--s-2) var(--s-5) var(--s-4);
+}
+.vendor-activity-skeleton-row {
+  display: grid;
+  grid-template-columns: 0.8fr 0.9fr 1.4fr 0.8fr 0.8fr;
+  gap: var(--s-4);
+  padding-block: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.vendor-activity-skeleton-row:last-child { border-bottom: 0; }
+.vendor-activity-skeleton-row .bw-skeleton {
+  width: 76%;
+  height: 10px;
+  border-radius: var(--r-pill);
+}
+.vendor-activity-skeleton-row .wide { width: 90%; }
+.vendor-activity-skeleton-row .amount { width: 68%; margin-left: auto; }
 .vendor-kpi-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -249,6 +400,16 @@ const filterCount = (filter: typeof activityFilter.value) => {
 }
 
 @media (max-width: 640px) {
+  .vendor-skeleton-actions { width: 100%; }
+  .vendor-skeleton-button { flex: 1; }
+  .vendor-filter-skeleton { overflow: hidden; }
+  .vendor-filter-skeleton-pill { flex: 0 0 68px; }
+  .vendor-activity-skeleton-rows { padding-inline: var(--s-3); }
+  .vendor-activity-skeleton-row {
+    grid-template-columns: 1fr 0.7fr;
+    gap: var(--s-3);
+  }
+  .vendor-activity-skeleton-row .bw-skeleton:nth-child(n + 3) { display: none; }
   .vendor-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vendor-kpi-grid .bw-kpi { min-height: 124px; }
   .vendor-kpi-grid .bw-kpi:last-child { grid-column: 1 / -1; }

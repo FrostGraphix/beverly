@@ -219,7 +219,11 @@ function main() {
     "fastify.put('/notifications/preferences'",
   ]);
   const customerRoutes = read("backend/wallet/src/routes/customer.ts");
-  assert.match(customerRoutes, /Number\(ps\.data\?\.amount\) !== Number\(\(order as any\)\.amount_minor\)/);
+  assert.match(customerRoutes, /verifyTransaction\(\(order as any\)\.payment_reference\)/);
+  assert.match(customerRoutes, /verifiedPrincipalAmount\(verified\)/);
+  assert.match(customerRoutes, /verified\.reference !== \(order as any\)\.payment_reference/);
+  assert.match(customerRoutes, /String\(verified\.currency\)\.toUpperCase\(\) !== 'NGN'/);
+  assert.doesNotMatch(customerRoutes, /api\.paystack\.co\/transaction\/verify/);
   assert.match(customerRoutes, /payment_amount_mismatch/);
   assert.match(customerRoutes, /if \(!purchaseRows\?\.length\) return \{ receipts: \[\] \}/);
 

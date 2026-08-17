@@ -34,6 +34,7 @@ import {
     hashIdempotency,
     ledgerKey,
 } from './idempotency.js';
+import { assertStationVendAllowed, StationVendScopeError } from './station-vend-scope.js';
 
 export class VendingError extends Error {
     constructor(message: string, public code: string) { super(message); this.name = 'VendingError'; }
@@ -80,6 +81,7 @@ export function meterTypeFromInfo(meter: Pick<MeterInfo, 'isThreePhase'>): Meter
 export interface VendorPurchaseInput {
     vendorOrganizationId: string;
     vendorUserId: string;
+    vendorStationId: string;
     meterId: string;
     amountMinor: number;
     clientIdempotencyKey: string;
@@ -107,6 +109,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
     const scope = `vendor_purchase:${input.vendorOrganizationId}`;
     const fingerprint = hashIdempotency([
         input.meterId,
+        input.vendorStationId,
         input.amountMinor,
         input.mode,
     ]);
@@ -137,7 +140,7 @@ export async function vendorPurchase(input: VendorPurchaseInput): Promise<Vendor
 async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPurchaseResult> {
     const idemKey = hashIdempotency([
         'vendor_purchase', input.vendorOrganizationId, input.meterId,
-        input.amountMinor, input.mode, input.clientIdempotencyKey,
+        input.vendorStationId, input.amountMinor, input.mode, input.clientIdempotencyKey,
     ]);
 
     // idempotency short-circuit
@@ -178,6 +181,15 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
     catch (e) {
         if (e instanceof TokenEngineError) throw new VendingError(e.message, e.code);
         throw e;
+    }
+
+    try {
+        assertStationVendAllowed(input.vendorStationId, meter.stationId);
+    } catch (error) {
+        if (error instanceof StationVendScopeError) {
+            throw new VendingError(error.message, error.code);
+        }
+        throw error;
     }
 
     const preview = await previewPurchaseWithPolicy(input.amountMinor, meter.tariffId);
@@ -598,10 +610,69 @@ export async function listVendorPurchases(vendorOrganizationId: string, limit = 
 }
 
 export async function getReceiptByOrder(purchaseOrderId: string) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('receipts')
         .select('*')
         .eq('purchase_order_id', purchaseOrderId)
         .maybeSingle();
+    if (error) throw error;
     return data;
+}
+
+/**
+ * Resend a remote-send order that is stuck in delivery_pending_review.
+ * Uses the token already stored in DB — never re-generates.
+ */
+export async function resendRemoteSendOrder(
+    purchaseOrderId: string,
+    staffUserId: string,
+): Promise<{ taskId: string }> {
+    const { data: row } = await adminClient
+        .from('purchase_orders')
+        .select('*')
+        .eq('id', purchaseOrderId)
+        .maybeSingle();
+
+    if (!row) throw new VendingError('Purchase order not found.', 'not_found');
+    if ((row as any).status !== 'delivery_pending_review') {
+        throw new VendingError('Order is not in delivery_pending_review status.', 'invalid_state');
+    }
+    if (!(row as any).token) {
+        throw new VendingError('No stored token — cannot resend without re-generating.', 'no_token');
+    }
+
+    const po = row as PurchaseOrder;
+    let protocolVersion: string | null = null;
+    try {
+        const meter = await lookupMeter(po.meter_id);
+        protocolVersion = meter.protocolVersion ?? null;
+    } catch { /* proceed without protocol version */ }
+
+    const sendRes = await createRemoteSendTask({
+        customerId:      po.customer_id ?? '',
+        customerName:    po.customer_name ?? '',
+        meterId:         po.meter_id,
+        stationId:       po.station_id ?? '',
+        protocolVersion,
+        token:           po.token!,
+        reference:       po.id,
+    });
+
+    await adminClient.from('purchase_orders').update({
+        remote_task_id:  sendRes.taskId,
+        status:          'dispatching',
+        delivery_state:  'remote_send_pending',
+        failure_reason:  null,
+    }).eq('id', purchaseOrderId);
+
+    await logAction({
+        actorUserId: staffUserId,
+        actorType:   'staff',
+        action:      'vending.remote_send.resend',
+        targetType:  'purchase_order',
+        targetId:    purchaseOrderId,
+        metadata:    { taskId: sendRes.taskId },
+    });
+
+    return { taskId: sendRes.taskId };
 }

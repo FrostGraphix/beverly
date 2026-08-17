@@ -16,7 +16,8 @@ assert.match(receipts, /downloadCanonicalReceiptPdf\(canonicalReceipt\(model\)\)
 assert.match(receipts, /data-pdf>PDF Export/);
 assert.match(receipts, /class="brm-btn danger" data-close>Cancel/);
 
-assert.match(vendView, /downloadReceipt, printReceipt, purchaseReceipt, viewReceipt/);
+assert.match(vendView, /downloadReceipt, purchaseReceipt, viewReceipt/);
+assert.doesNotMatch(vendView, /Print receipt|printResultReceipt|printReceipt/);
 assert.match(vendView, /function downloadResultReceipt\(\)/);
 assert.match(vendView, /function remoteSendGeneratedToken\(\)/);
 assert.match(vendView, /const flowSteps = computed/);
@@ -26,10 +27,17 @@ assert.match(vendView, /remoteState\.replace\(/);
 assert.match(vendView, /\/api\/v1\/vendor\/vend\/\$\{orderId\}\/remote-send/);
 assert.match(vendView, /Token generated successfully/);
 assert.match(vendView, /Download receipt/);
+assert.match(vendView, /vend-receipt-summary/);
+assert.match(vendView, /vend-action-grid/);
+assert.match(vendView, /token-outline-orbit/);
+assert.match(vendView, /prefers-reduced-motion: reduce/);
 assert.match(vendView, /bw-recharge-summary/);
 assert.match(vendView, /Remote send/);
 assert.match(vendView, /Remote send delivered/);
 assert.match(vendView, /Remote send needs manual entry/);
+assert.match(vendView, /Meter currently offline/);
+assert.match(vendView, /The token remains valid\. Enter it manually/);
+assert.match(vendView, /meterOffline \? 'info' : 'danger'/);
 
 assert.match(routes, /fastify\.post\('\/vend\/:purchaseOrderId\/remote-send'/);
 assert.match(routes, /dispatchGeneratedVendorToken/);
@@ -41,7 +49,10 @@ assert.match(vending, /remote_send_metadata_missing/);
 assert.match(vending, /remote_send_pending_review/);
 assert.match(vending, /pollRemoteSendStatus\(row\.remote_task_id!, \{/);
 assert.match(vending, /remote_send_failed_needs_manual_entry/);
-assert.doesNotMatch(vending, /status:\s*'dispatching'/);
+const dispatchStart = vending.indexOf('export async function dispatchGeneratedVendorToken');
+const dispatchEnd = vending.indexOf('export async function reconcileRemoteSendOrders', dispatchStart);
+const generatedTokenDispatch = vending.slice(dispatchStart, dispatchEnd);
+assert.doesNotMatch(generatedTokenDispatch, /status:\s*'dispatching'/);
 assert.match(pkg.scripts['test:wallet'], /vendor-vend-generated-token-actions\.test\.cjs/);
 
 console.log('vendor vend generated-token actions contract passed');

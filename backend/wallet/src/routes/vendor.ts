@@ -28,6 +28,7 @@ import {
     buildCreditTokenPreviewPlan,
     buildRemoteTokenTaskPayload,
 } from '../services/token-engine.js';
+import { assertStationVendAllowed, StationVendScopeError } from '../services/station-vend-scope.js';
 import { logSecurityEvent } from '../services/audit.js';
 import { logAction } from '../services/audit.js';
 import { verifyOwnedPaystackPayment } from '../services/payment-webhooks.js';
@@ -146,6 +147,8 @@ function sendTokenEngineError(reply: FastifyReply, error: TokenEngineError) {
         energy_authorization_rejected: 'Vending authorization was rejected upstream. Beverly support must restore the token service.',
         meter_lookup_unavailable:
             'Meter lookup is temporarily unavailable. No wallet was touched and no vend was attempted; retry shortly or bind this meter in the account catalog.',
+        meter_offline:
+            'This meter is offline. No wallet was touched and no vend was attempted; retry after the meter reconnects.',
         energy_query_failed:
             'The energy backend could not complete the meter query. No wallet was touched and no vend was attempted.',
         energy_report_query_failed:
@@ -984,9 +987,14 @@ const route: FastifyPluginAsync = async (fastify) => {
         try {
             assertEnergyVendReady();
             const meter = await lookupMeter(body.meterId);
+            assertStationVendAllowed(req.actor!.stationId, meter.stationId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             return { meter, preview };
         } catch (e: any) {
+            if (e instanceof StationVendScopeError) {
+                const status = e.code === 'meter_station_unavailable' ? 422 : 403;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
             if (e instanceof TokenEngineError) {
                 return sendTokenEngineError(reply, e);
             }
@@ -1005,6 +1013,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         const body = schema.parse(req.body);
         try {
             const meter = await lookupMeter(body.meterId);
+            assertStationVendAllowed(req.actor!.stationId, meter.stationId);
             const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
             const reference = `DRY-RUN-${Date.now()}`;
             const tokenInput = {
@@ -1048,6 +1057,10 @@ const route: FastifyPluginAsync = async (fastify) => {
                     : null,
             };
         } catch (e: any) {
+            if (e instanceof StationVendScopeError) {
+                const status = e.code === 'meter_station_unavailable' ? 422 : 403;
+                return reply.code(status).send({ error: e.code, message: e.message });
+            }
             if (e instanceof TokenEngineError) {
                 return sendTokenEngineError(reply, e);
             }
@@ -1087,6 +1100,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             const purchase = await vendorPurchase({
                 vendorOrganizationId: req.actor!.vendorOrganizationId!,
                 vendorUserId: req.actor!.userId,
+                vendorStationId: req.actor!.stationId ?? '',
                 meterId: body.meterId,
                 amountMinor: body.amountMinor,
                 mode: 'wallet',
@@ -1124,6 +1138,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             if (error instanceof VendingError) {
                 const status = error.code === 'insufficient_balance' ? 402
                     : error.code === 'wallet_missing' ? 404
+                    : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' ? 403
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403
                     : 422;
                 return reply.code(status).send({ error: error.code, message: error.message });

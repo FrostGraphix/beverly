@@ -131,6 +131,9 @@ export async function transferVendorBalance(input: VendorTransferInput): Promise
         p_created_by: input.requestedBy,
     });
     if (error) throw publicError(error.message ?? 'vendor transfer failed');
+    if (!data || typeof data !== 'object') {
+        throw new VendorTransferError('Transfer confirmation is temporarily unavailable.', 'transfer_result_missing', 503);
+    }
     return data as VendorTransfer;
 }
 
@@ -177,6 +180,9 @@ export async function previewVendorTransfer(input: Pick<VendorTransferInput, 'so
         p_amount_minor: input.amountMinor,
     });
     if (error) throw publicError(error.message ?? 'vendor transfer preview failed');
+    if (!data || typeof data !== 'object') {
+        throw new VendorTransferError('Transfer preview is temporarily unavailable.', 'transfer_preview_missing', 503);
+    }
     const row = data as Record<string, unknown>;
     return {
         amountMinor: Number(row.amount_minor),

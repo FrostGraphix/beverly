@@ -45,9 +45,28 @@ function upstreamSucceeded(payload: { code?: number; msg?: string; reason?: stri
     return text.includes('success');
 }
 
-function upstreamFailure(payload: { code?: number; msg?: string; reason?: string }, fallbackCode: string) {
+export function classifyEnergyFailure(
+    payload: { code?: number; msg?: string; reason?: string },
+    fallbackCode: string,
+): { message: string; code: string; retryable: boolean } {
     const message = payload.reason || payload.msg || `energy backend returned code ${payload.code}`;
-    return new TokenEngineError(message, fallbackCode, payload.code === 99 || payload.code === 429);
+    const normalized = message.toLowerCase();
+    const meterOffline = /meter\s*(?:no\.?\s*)?\(?[a-z0-9-]+\)?\s+is\s+offline/.test(normalized)
+        || /reading\s+fail/.test(normalized)
+        || /meter[^.]{0,80}(?:offline|not\s+online|unreachable)/.test(normalized);
+
+    if (meterOffline) return { message, code: 'meter_offline', retryable: true };
+
+    return {
+        message,
+        code: fallbackCode,
+        retryable: payload.code === 99 || payload.code === 429,
+    };
+}
+
+function upstreamFailure(payload: { code?: number; msg?: string; reason?: string }, fallbackCode: string) {
+    const failure = classifyEnergyFailure(payload, fallbackCode);
+    return new TokenEngineError(failure.message, failure.code, failure.retryable);
 }
 
 const ENERGY_AUTHORIZATION_REJECTION_TTL_MS = 5 * 60_000;

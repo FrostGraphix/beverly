@@ -35,6 +35,95 @@ const detail     = ref<any>(null);
 const loading    = ref(true);
 const banner     = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 
+interface StationOption {
+    stationId: string;
+    name: string;
+    status: 'active' | 'disabled';
+}
+
+interface VendorEditForm {
+    legalName: string;
+    tradingName: string;
+    contactEmail: string;
+    contactPhone: string;
+    cacNumber: string;
+    tin: string;
+    businessType: string;
+    operatingAddress: string;
+    stationId: string;
+}
+
+const editing = ref(false);
+const editSaving = ref(false);
+const stations = ref<StationOption[]>([]);
+const editForm = ref<VendorEditForm>({
+    legalName: '', tradingName: '', contactEmail: '', contactPhone: '',
+    cacNumber: '', tin: '', businessType: '', operatingAddress: '', stationId: '',
+});
+
+function hydrateEditForm() {
+    const vendor = detail.value?.vendor;
+    if (!vendor) return;
+    editForm.value = {
+        legalName: vendor.legal_name ?? '',
+        tradingName: vendor.trading_name ?? '',
+        contactEmail: vendor.contact_email ?? '',
+        contactPhone: vendor.contact_phone ?? '',
+        cacNumber: vendor.cac_number ?? vendor.rc_number ?? '',
+        tin: vendor.tin ?? '',
+        businessType: vendor.business_type ?? '',
+        operatingAddress: vendor.operating_address ?? vendor.address ?? '',
+        stationId: vendor.station_id ?? '',
+    };
+}
+
+async function startEditing() {
+    hydrateEditForm();
+    editing.value = true;
+    if (stations.value.length) return;
+    try {
+        const response = await api.get<{ stations: StationOption[] }>('/api/v1/admin/stations');
+        stations.value = response.stations ?? [];
+    } catch (error: unknown) {
+        banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Could not load stations.' };
+    }
+}
+
+async function saveVendorDetails() {
+    if (!editForm.value.stationId) {
+        banner.value = { tone: 'error', text: 'Select a vending station.' };
+        return;
+    }
+    editSaving.value = true;
+    banner.value = null;
+    try {
+        const form = editForm.value;
+        await api.patch(`/api/v1/admin/vendors/${id}`, {
+            legalName: form.legalName,
+            tradingName: form.tradingName || null,
+            contactEmail: form.contactEmail,
+            contactPhone: form.contactPhone,
+            cacNumber: form.cacNumber || null,
+            tin: form.tin || null,
+            businessType: form.businessType || null,
+            operatingAddress: form.operatingAddress || null,
+        });
+        if (form.stationId !== detail.value?.vendor?.station_id) {
+            await api.patch(`/api/v1/admin/vendors/${id}/station`, {
+                stationId: form.stationId,
+                reason: 'Admin vendor details update',
+            });
+        }
+        await loadDetail();
+        editing.value = false;
+        banner.value = { tone: 'success', text: 'Vendor details saved.' };
+    } catch (error: unknown) {
+        banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Vendor update failed.' };
+    } finally {
+        editSaving.value = false;
+    }
+}
+
 // Lazy per-tab data
 const wallet       = ref<any>(null);
 const transactions = ref<any[]>([]);
@@ -340,6 +429,42 @@ onMounted(loadDetail);
 
       <!-- ── Overview ────────────────────────────────────────── -->
       <div v-if="tab === 'overview'" class="bw-card">
+        <div class="overview-heading">
+          <h2>Vendor details</h2>
+          <button
+            v-if="canManageVendors && !editing"
+            class="bw-btn sm"
+            type="button"
+            @click="startEditing"
+          >Edit vendor details</button>
+        </div>
+        <form v-if="editing" class="vendor-edit-form" @submit.prevent="saveVendorDetails">
+          <label>Legal name<input v-model.trim="editForm.legalName" required minlength="2" /></label>
+          <label>Trading name<input v-model.trim="editForm.tradingName" /></label>
+          <label>Contact email<input v-model.trim="editForm.contactEmail" required type="email" /></label>
+          <label>Contact phone<input v-model.trim="editForm.contactPhone" required type="tel" /></label>
+          <label>CAC number<input v-model.trim="editForm.cacNumber" /></label>
+          <label>TIN<input v-model.trim="editForm.tin" /></label>
+          <label>Business type<input v-model.trim="editForm.businessType" /></label>
+          <label class="wide">Operating address<textarea v-model.trim="editForm.operatingAddress" rows="3" /></label>
+          <label class="wide">Vending station
+            <select v-model="editForm.stationId" required>
+              <option value="" disabled>Select station</option>
+              <option
+                v-for="station in stations"
+                :key="station.stationId"
+                :value="station.stationId"
+                :disabled="station.status === 'disabled'"
+              >{{ station.stationId }} · {{ station.name }}</option>
+            </select>
+          </label>
+          <div class="vendor-edit-actions wide">
+            <button class="bw-btn" type="button" :disabled="editSaving" @click="editing = false">Cancel</button>
+            <button class="bw-btn primary" type="submit" :disabled="editSaving">
+              {{ editSaving ? 'Saving…' : 'Save vendor details' }}
+            </button>
+          </div>
+        </form>
         <dl class="ov-dl">
           <dt>Vendor ID</dt>        <dd class="bw-mono">{{ detail.vendor.id }}</dd>
           <dt>Legal name</dt>       <dd>{{ detail.vendor.legal_name }}</dd>
@@ -352,14 +477,20 @@ onMounted(loadDetail);
           <dd><span :class="['bw-badge', vStatusBadge(detail.vendor.status)]">{{ detail.vendor.status }}</span></dd>
           <dt>Approved at</dt>      <dd>{{ detail.vendor.approved_at ? new Date(detail.vendor.approved_at).toLocaleString() : '—' }}</dd>
           <dt>Registered</dt>       <dd>{{ new Date(detail.vendor.created_at).toLocaleString() }}</dd>
-          <template v-if="detail.vendor.rc_number">
-            <dt>RC number</dt>      <dd class="bw-mono">{{ detail.vendor.rc_number }}</dd>
+          <template v-if="detail.vendor.cac_number || detail.vendor.rc_number">
+            <dt>CAC number</dt>     <dd class="bw-mono">{{ detail.vendor.cac_number || detail.vendor.rc_number }}</dd>
+          </template>
+          <template v-if="detail.vendor.tin">
+            <dt>TIN</dt>            <dd class="bw-mono">{{ detail.vendor.tin }}</dd>
+          </template>
+          <template v-if="detail.vendor.business_type">
+            <dt>Business type</dt>  <dd>{{ detail.vendor.business_type }}</dd>
           </template>
           <template v-if="detail.vendor.nin">
             <dt>NIN</dt>            <dd class="bw-mono">{{ detail.vendor.nin }}</dd>
           </template>
-          <template v-if="detail.vendor.address">
-            <dt>Address</dt>        <dd>{{ detail.vendor.address }}</dd>
+          <template v-if="detail.vendor.operating_address || detail.vendor.address">
+            <dt>Address</dt>        <dd>{{ detail.vendor.operating_address || detail.vendor.address }}</dd>
           </template>
           <template v-if="detail.vendor.lga">
             <dt>LGA / State</dt>    <dd>{{ detail.vendor.lga }}{{ detail.vendor.state ? ', ' + detail.vendor.state : '' }}</dd>
@@ -729,6 +860,19 @@ onMounted(loadDetail);
 .ov-dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px var(--s-3); margin: 0; font-size: var(--t-sm); }
 .ov-dl dt { color: var(--text-muted); }
 .ov-dl dd { margin: 0; word-break: break-word; }
+.overview-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
+.overview-heading h2 { margin: 0; font-size: var(--t-lg); }
+.vendor-edit-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); padding-bottom: var(--s-4); margin-bottom: var(--s-4); border-bottom: 1px solid var(--border); }
+.vendor-edit-form label { display: flex; flex-direction: column; gap: var(--s-1); color: var(--text-muted); font-size: var(--t-xs); font-weight: 700; }
+.vendor-edit-form input,
+.vendor-edit-form select,
+.vendor-edit-form textarea { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; color: var(--text); font: inherit; }
+.vendor-edit-form input:focus,
+.vendor-edit-form select:focus,
+.vendor-edit-form textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
+.vendor-edit-form textarea { resize: vertical; }
+.vendor-edit-form .wide { grid-column: 1 / -1; }
+.vendor-edit-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 
 /* ── Wallet ── */
 .wallet-head { display: flex; justify-content: space-between; align-items: start; padding: var(--s-4); border-bottom: 1px solid var(--border); }
@@ -798,6 +942,8 @@ onMounted(loadDetail);
   .head-action-buttons { display: none; }
   .ov-dl       { grid-template-columns: 1fr; }
   .ov-dl dt    { font-weight: 700; margin-top: var(--s-2); }
+  .vendor-edit-form { grid-template-columns: 1fr; }
+  .vendor-edit-form .wide { grid-column: auto; }
   .ledger-row  { grid-template-columns: 1fr auto; }
   .ledger-when, .ledger-bal { grid-column: 1 / -1; opacity: 0.7; }
   .tabs        { overflow-x: auto; }

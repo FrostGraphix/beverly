@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { downloadReceipt, printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
@@ -158,6 +159,7 @@ onMounted(load);
               </tr>
             </thead>
             <tbody>
+              <WalletTableSkeleton v-if="loading && !filtered.length" :columns="7" />
               <tr v-for="r in filtered" :key="r.id">
                 <td class="bw-mono bw-muted">{{ shortDate(r.created_at) }}</td>
                 <td>
@@ -179,12 +181,6 @@ onMounted(load);
                   <button class="bw-btn sm" @click="copy(r.token, 'Token')">Copy</button>
                 </td>
               </tr>
-              <tr v-if="loading && !filtered.length">
-                <td colspan="7" class="receipt-empty">
-                  <strong>Loading receipts...</strong>
-                  <span>Fetching your latest vending records.</span>
-                </td>
-              </tr>
               <tr v-if="!filtered.length && !loading">
                 <td colspan="7" class="receipt-empty">
                   <strong>No receipts yet.</strong>
@@ -196,6 +192,7 @@ onMounted(load);
         </div>
 
         <div class="bw-t-cards receipt-mobile-list">
+          <WalletTableSkeleton v-if="loading && !filtered.length" variant="cards" />
           <button v-for="r in filtered" :key="r.id" class="receipt-mobile-card" @click="openReceipt(r)">
             <span>
               <strong>{{ r.customer_name || 'Customer' }}</strong>
@@ -206,10 +203,6 @@ onMounted(load);
           <div v-if="!filtered.length && !loading" class="receipt-empty">
             <strong>No receipts yet.</strong>
             <span>Delivered vending receipts will appear here.</span>
-          </div>
-          <div v-if="loading && !filtered.length" class="receipt-empty">
-            <strong>Loading receipts...</strong>
-            <span>Fetching your latest vending records.</span>
           </div>
         </div>
       </div>

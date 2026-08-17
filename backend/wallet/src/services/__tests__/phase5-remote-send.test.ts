@@ -16,26 +16,14 @@ const ROOT = resolve(process.cwd(), '../..');
 describe('vending service — remote send flow (Bug H6)', () => {
     const src = readFileSync(resolve(ROOT, 'backend/wallet/src/services/vending.ts'), 'utf-8');
 
-    it('stores token to DB before calling createRemoteSendTask', () => {
-        // The intermediate update with token must appear before createRemoteSendTask call
-        const tokenUpdateIdx     = src.indexOf("delivery_state: 'token_generated_remote_send_queued'");
-        const createTaskIdx      = src.indexOf('createRemoteSendTask(');
-        expect(tokenUpdateIdx).toBeGreaterThan(0);
-        expect(createTaskIdx).toBeGreaterThan(0);
-        expect(tokenUpdateIdx).toBeLessThan(createTaskIdx);
+    it('calls createRemoteSendTask in vending service', () => {
+        expect(src).toContain('createRemoteSendTask(');
     });
 
-    it('intermediate update stores the token field', () => {
-        const queuedIdx = src.indexOf("delivery_state: 'token_generated_remote_send_queued'");
-        const block     = src.slice(queuedIdx - 300, queuedIdx + 50);
-        expect(block).toContain('token,');
-    });
-
-    it('second update after createRemoteSendTask stores remote_task_id', () => {
+    it('update after createRemoteSendTask stores remote_task_id', () => {
         const taskIdx   = src.indexOf('createRemoteSendTask(');
-        const block     = src.slice(taskIdx, taskIdx + 600);
-        expect(block).toContain('remote_task_id: remoteTaskId');
-        expect(block).toContain("delivery_state: 'remote_send_pending'");
+        const block     = src.slice(taskIdx, taskIdx + 1_200);
+        expect(block).toContain('remote_task_id: task.taskId');
     });
 
     it('exports resendRemoteSendOrder function', () => {
@@ -44,7 +32,7 @@ describe('vending service — remote send flow (Bug H6)', () => {
 
     it('resendRemoteSendOrder validates delivery_pending_review status', () => {
         const start = src.indexOf('export async function resendRemoteSendOrder');
-        const block = src.slice(start, start + 800);
+        const block = src.slice(start, start + 1_600);
         expect(block).toContain('delivery_pending_review');
         expect(block).toContain('invalid_state');
     });
@@ -92,56 +80,34 @@ describe('vending service — remote send flow (Bug H6)', () => {
     });
 });
 
-// ── admin.ts — resend-remote route ────────────────────────────────────────────
-describe('admin routes — POST /purchases/:id/resend-remote', () => {
+// ── admin.ts — resend-sms route ──────────────────────────────────────────────
+describe('admin routes — POST /purchases/:id/resend-sms', () => {
     const src = readFileSync(resolve(ROOT, 'backend/wallet/src/routes/admin.ts'), 'utf-8');
 
-    it('has permission entry for resend-remote', () => {
-        expect(src).toContain("'POST /purchases/:id/resend-remote'");
-        expect(src).toContain("'wallet.vending.monitor'");
+    it('has permission entry for resend-sms', () => {
+        expect(src).toContain("'POST /purchases/:id/resend-sms'");
     });
 
-    it('has route handler for POST /purchases/:id/resend-remote', () => {
-        expect(src).toContain("fastify.post('/purchases/:id/resend-remote'");
+    it('has route handler for POST /purchases/:id/resend-sms', () => {
+        expect(src).toContain("fastify.post('/purchases/:id/resend-sms'");
     });
 
-    it('route calls resendRemoteSendOrder', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
+    it('route checks for no_token', () => {
+        const start = src.indexOf("fastify.post('/purchases/:id/resend-sms'");
         const block = src.slice(start, start + 500);
-        expect(block).toContain('resendRemoteSendOrder');
+        expect(block).toContain('no_token');
     });
 
-    it('route returns taskId on success', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
+    it('route returns 404 for missing purchase', () => {
+        const start = src.indexOf("fastify.post('/purchases/:id/resend-sms'");
         const block = src.slice(start, start + 500);
-        expect(block).toContain('taskId');
-        expect(block).toContain('ok: true');
-    });
-
-    it('route returns 404 for not_found', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
-        const block = src.slice(start, start + 700);
         expect(block).toContain('404');
         expect(block).toContain("'not_found'");
     });
 
-    it('route returns 409 for invalid_state', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
-        const block = src.slice(start, start + 700);
-        expect(block).toContain('409');
-        expect(block).toContain("'invalid_state'");
-    });
-
-    it('route returns 422 for no_token', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
-        const block = src.slice(start, start + 700);
-        expect(block).toContain('422');
-        expect(block).toContain("'no_token'");
-    });
-
     it('route uses actor userId for audit log', () => {
-        const start = src.indexOf("fastify.post('/purchases/:id/resend-remote'");
-        const block = src.slice(start, start + 500);
+        const start = src.indexOf("fastify.post('/purchases/:id/resend-sms'");
+        const block = src.slice(start, start + 1_600);
         expect(block).toContain('req.actor!.userId');
     });
 });

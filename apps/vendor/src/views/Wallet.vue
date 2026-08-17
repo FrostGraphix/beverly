@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { useWalletStore, type LedgerEntry } from '../stores/wallet';
 import { naira } from '../lib/format';
 import { downloadReceipt, ledgerReceipt, printReceipt, viewReceipt } from '../lib/receipts';
@@ -86,6 +87,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
+              <WalletTableSkeleton v-if="wallet.loading && !wallet.ledger.length" :columns="7" />
               <tr v-for="e in wallet.ledger" :key="e.id">
                 <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ new Date(e.created_at).toLocaleString('en-NG', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) }}</td>
                 <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g, ' ') }}</span></td>
@@ -103,9 +105,6 @@ onMounted(async () => {
                   </div>
                 </td>
               </tr>
-              <tr v-if="wallet.loading && !wallet.ledger.length">
-                <td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">Loading ledger...</td>
-              </tr>
               <tr v-if="!wallet.ledger.length && !wallet.loading">
                 <td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-6)">No entries yet.</td>
               </tr>
@@ -115,6 +114,7 @@ onMounted(async () => {
 
         <!-- Card view -->
         <div class="bw-t-cards ledger-card-view">
+          <WalletTableSkeleton v-if="wallet.loading && !wallet.ledger.length" variant="cards" />
           <div v-for="e in wallet.ledger" :key="e.id" class="bw-tc">
             <div class="bw-tc-top">
               <div>
@@ -141,7 +141,6 @@ onMounted(async () => {
               <button type="button" class="bw-btn sm" @click="downloadLedgerReceipt(e)">Download</button>
             </div>
           </div>
-          <div v-if="wallet.loading && !wallet.ledger.length" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">Loading ledger...</div>
           <div v-if="!wallet.ledger.length && !wallet.loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No entries yet.</div>
         </div>
       </div>
