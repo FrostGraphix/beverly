@@ -4,6 +4,8 @@ import {
     listStations, listStationDirectory, invalidateStationsCache, buildCreditTokenPayload, buildRemoteTaskConfirmPayload,
     buildRemoteTokenStandbyConfirmPayload, buildRemoteTokenTaskLookupPayload, buildRemoteTokenTaskPayload,
     lookupArchivedMeterSample, createRemoteSendTask,
+    inspectEnergyVendAuthorization, isEnergyAuthorizationRejectedResponse,
+    classifyEnergyFailure,
 } from '../token-engine.js';
 
 describe('token engine pricing', () => {
@@ -157,6 +159,31 @@ describe('listStations', () => {
 });
 
 describe('live token integration payloads', () => {
+    it('rejects reused login credentials before vending', () => {
+        expect(inspectEnergyVendAuthorization('same-secret', 'same-secret')).toEqual({
+            ok: false,
+            code: 'energy_authorization_misconfigured',
+            message: 'Energy vending authorization must differ from the upstream login password.',
+        });
+        expect(inspectEnergyVendAuthorization('vend-secret', 'login-secret')).toEqual({ ok: true });
+    });
+
+    it('classifies upstream authorization rejection safely', () => {
+        expect(isEnergyAuthorizationRejectedResponse({ reason: 'Incorrect authorization password' })).toBe(true);
+        expect(isEnergyAuthorizationRejectedResponse({ reason: 'temporary outage' })).toBe(false);
+    });
+
+    it('classifies offline meter responses safely', () => {
+        expect(classifyEnergyFailure({
+            code: 99,
+            reason: 'The MeterNo(47300482016) is offline,Reading Fail',
+        }, 'remote_send_lookup_failed')).toEqual({
+            message: 'The MeterNo(47300482016) is offline,Reading Fail',
+            code: 'meter_offline',
+            retryable: true,
+        });
+    });
+
     it('uses S2 token generation for three-phase meters', () => {
         const payload = buildCreditTokenPayload({
             customerId: '47005363529',

@@ -5,11 +5,13 @@ const store: {
     dbTxns: Array<{ amount_minor: number }>;
     gatewayPages: Array<Array<{ amount: number; requested_amount?: number }>>;
     fetchCalls: string[];
+    listError: Error | null;
 } = {
     runs: {},
     dbTxns: [],
     gatewayPages: [],
     fetchCalls: [],
+    listError: null,
 };
 
 function makeBuilder(table: string) {
@@ -41,6 +43,9 @@ function makeBuilder(table: string) {
             if (table === 'payment_transactions') {
                 return resolve({ data: store.dbTxns, error: null });
             }
+            if (table === 'reconciliation_runs' && !state.updateData && !state.upsertData) {
+                return resolve({ data: null, error: store.listError });
+            }
             return resolve({ data: null, error: null });
         },
     };
@@ -68,6 +73,7 @@ describe('daily reconciliation', () => {
         store.dbTxns = [];
         store.gatewayPages = [];
         store.fetchCalls = [];
+        store.listError = null;
         process.env.PAYSTACK_SECRET_KEY = 'sk_test_x';
         stubFetch();
     });
@@ -109,9 +115,21 @@ describe('daily reconciliation', () => {
         store.dbTxns = [{ amount_minor: 100_00 }];
         await runDailyReconciliation('2026-07-14');
         const run: any = Object.values(store.runs)[0];
-        expect(run.status).toBe('ok');
+        expect(run.status).toBe('failed');
         expect(run.gateway_total_minor).toBeNull();
         expect(run.notes).toContain('gateway unverified');
+    });
+
+    it('does not skip an unverified reconciliation run', async () => {
+        store.runs['run-2026-07-14'] = {
+            id: 'run-2026-07-14',
+            run_date: '2026-07-14',
+            status: 'failed',
+            notes: 'gateway unverified',
+        };
+        store.gatewayPages = [[]];
+        await runDailyReconciliation('2026-07-14');
+        expect(store.fetchCalls.length).toBe(1);
     });
 
     it('skips a date that already reconciled ok', async () => {
@@ -125,5 +143,11 @@ describe('daily reconciliation', () => {
         store.gatewayPages = [[]];
         await runDailyReconciliation('2026-07-14', { force: true });
         expect(store.fetchCalls.length).toBe(1);
+    });
+
+    it('surfaces reconciliation report query failures', async () => {
+        store.listError = new Error('reconciliation storage unavailable');
+        const { listReconciliationRuns } = await import('../reconciliation.js');
+        await expect(listReconciliationRuns()).rejects.toThrow('reconciliation storage unavailable');
     });
 });

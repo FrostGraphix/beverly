@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -87,6 +88,7 @@ function printPurchaseReceipt(p: any) {
             </tr>
           </thead>
           <tbody>
+            <WalletTableSkeleton v-if="loading && !purchases.length" :columns="7" />
             <tr v-for="p in filtered()" :key="p.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
@@ -111,6 +113,7 @@ function printPurchaseReceipt(p: any) {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
+        <WalletTableSkeleton v-if="loading && !purchases.length" variant="cards" :rows="4" />
         <div v-for="p in filtered()" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>

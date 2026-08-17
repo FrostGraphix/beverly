@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira } from '../lib/format';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
@@ -190,7 +191,13 @@ onMounted(load);
         <span v-if="meterError" id="meter-number-error" class="meter-error" role="alert">{{ meterError }}</span>
       </form>
 
-      <div v-if="loading" class="notice loading" role="status">Loading consumption…</div>
+      <div v-if="loading" class="table-wrap" role="status" aria-label="Loading consumption">
+        <table>
+          <tbody>
+            <WalletTableSkeleton :columns="view === 'meters' ? 7 : 5" />
+          </tbody>
+        </table>
+      </div>
       <div v-else-if="noStation" class="notice" role="status">
         No station is assigned yet. Contact Beverly operations.
       </div>

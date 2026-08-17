@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
@@ -168,6 +169,7 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
+            <WalletTableSkeleton v-if="loading && !filtered().length" :columns="13" />
             <tr v-for="p in filtered()" :key="p.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td>{{ p.customer_name || '—' }}</td>
@@ -202,6 +204,7 @@ onMounted(async () => {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
+        <WalletTableSkeleton v-if="loading && !filtered().length" variant="cards" />
         <div v-for="p in filtered()" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>

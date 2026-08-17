@@ -15,28 +15,30 @@ export async function computeSettlementBatch(
     periodEnd: string,
 ): Promise<string> {
     // Idempotent: skip if batch already exists for this period
-    const { data: existing } = await adminClient
+    const { data: existing, error: existingError } = await adminClient
         .from('settlement_batches')
         .select('id')
         .eq('vendor_organization_id', vendorOrganizationId)
         .eq('period_start', periodStart)
         .eq('period_end', periodEnd)
-        .single();
+        .maybeSingle();
+    if (existingError) throw new Error(`Settlement lookup failed: ${existingError.message}`);
     if (existing) return (existing as any).id;
 
     // Pull all delivered purchase orders in period for this vendor
-    const { data: orders } = await adminClient
+    const { data: orders, error: ordersError } = await adminClient
         .from('purchase_orders')
-        .select('amount_minor, fee_minor')
+        .select('amount_minor')
         .eq('vendor_organization_id', vendorOrganizationId)
         .eq('status', 'delivered')
         .gte('created_at', `${periodStart}T00:00:00Z`)
         .lte('created_at', `${periodEnd}T23:59:59Z`);
+    if (ordersError) throw new Error(`Settlement purchase query failed: ${ordersError.message}`);
 
-    const rows = (orders ?? []) as { amount_minor: number; fee_minor: number | null }[];
+    const rows = (orders ?? []) as { amount_minor: number }[];
     const totalVends      = rows.length;
     const grossMinor      = rows.reduce((s, r) => s + Number(r.amount_minor), 0);
-    const feeMinor        = rows.reduce((s, r) => s + Number(r.fee_minor ?? 0), 0);
+    const feeMinor        = 0;
     const netMinor        = grossMinor - feeMinor;
 
     const { data: batch, error } = await adminClient
@@ -65,17 +67,19 @@ export async function runDailySettlement(): Promise<void> {
     const periodStart = yesterday.toISOString().slice(0, 10);
     const periodEnd   = periodStart;
 
-    const { data: vendors } = await adminClient
+    const { data: vendors, error: vendorError } = await adminClient
         .from('vendor_organizations')
         .select('id')
         .eq('status', 'approved');
 
+    if (vendorError) throw new Error(`Settlement vendor query failed: ${vendorError.message}`);
     if (!vendors) return;
     for (const v of vendors) {
         try {
             await computeSettlementBatch((v as any).id, periodStart, periodEnd);
-        } catch {
+        } catch (error) {
             // one vendor failure must not block others
+            console.error(`[SETTLEMENT] vendor ${(v as any).id} failed:`, error);
         }
     }
 }
@@ -92,6 +96,7 @@ export async function listSettlementBatches(opts: {
     if (opts.vendorOrganizationId) {
         query = query.eq('vendor_organization_id', opts.vendorOrganizationId);
     }
-    const { data } = await query;
+    const { data, error } = await query;
+    if (error) throw new Error(`Settlement list failed: ${error.message}`);
     return data ?? [];
 }

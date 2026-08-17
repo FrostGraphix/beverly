@@ -36,12 +36,13 @@ export async function runDailyReconciliation(runDate?: string, options: { force?
 
         // Our DB: sum of payment_transactions completed on this date, keyed
         // by gateway_reference so we can diff against Paystack's own list.
-        const { data: dbTxns } = await adminClient
+        const { data: dbTxns, error: dbError } = await adminClient
             .from('payment_transactions')
             .select('amount_minor, gateway_reference')
             .in('status', Array.from(PAYMENT_SUCCEEDED_STATUSES))
             .gte('completed_at', since)
             .lte('completed_at', until);
+        if (dbError) throw new Error(`payment reconciliation query failed: ${dbError.message}`);
 
         const dbRows = dbTxns ?? [];
         const dbTotal = dbRows.reduce((s: number, r: any) => s + Number(r.amount_minor), 0);
@@ -65,6 +66,7 @@ export async function runDailyReconciliation(runDate?: string, options: { force?
                         `https://api.paystack.co/transaction?status=success&from=${since}&to=${until}&perPage=${perPage}&page=${page}`,
                         { headers: { Authorization: `Bearer ${paystackKey}` } },
                     );
+                    if (res.ok === false) break;
                     const ps: any = await res.json();
                     if (!ps.status || !Array.isArray(ps.data)) break;
                     for (const t of ps.data as any[]) {
@@ -87,7 +89,7 @@ export async function runDailyReconciliation(runDate?: string, options: { force?
         }
 
         const mismatch = gatewayTotal !== null ? Math.abs(dbTotal - gatewayTotal) : null;
-        const status   = mismatch === null ? 'ok'
+        const status   = mismatch === null ? 'failed'
                        : mismatch > MISMATCH_ALERT_THRESHOLD_MINOR ? 'mismatch'
                        : 'ok';
 
@@ -125,10 +127,11 @@ export async function runDailyReconciliation(runDate?: string, options: { force?
 }
 
 export async function listReconciliationRuns(limit = 30) {
-    const { data } = await adminClient
+    const { data, error } = await adminClient
         .from('reconciliation_runs')
         .select('*')
         .order('run_date', { ascending: false })
         .limit(limit);
+    if (error) throw error;
     return data ?? [];
 }

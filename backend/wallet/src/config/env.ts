@@ -89,12 +89,19 @@ const schema = z.object({
     // (see emails/templates.ts logoUrl()). Email clients can't resolve
     // the SPA's relative /brand/* paths, so this must be an absolute URL.
     EMAIL_ASSET_BASE_URL: z.string().optional(),
-    CUSTOMER_APP_URL: z.string().url(),
     VENDOR_PORTAL_URL: z.string().url(),
     STAFF_PORTAL_URL: z.string().url(),
     CUSTOMER_FUNDING_CALLBACK_URL: z.string().url().optional(),
     VENDOR_FUNDING_CALLBACK_URL: z.string().url().optional(),
     CUSTOMER_METER_ORDER_CALLBACK_URL: z.string().url().optional(),
+
+    // Public app base URLs — used to build password-reset links in emails.
+    CUSTOMER_APP_URL: z.string().url().default('https://customer-acob-beverly.vercel.app'),
+    VENDOR_APP_URL: z.string().url().default('https://vendor-acob-beverly.vercel.app'),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+
+    // Firebase Cloud Messaging — push notifications
+    FCM_SERVER_KEY: z.string().optional(),
 
     APP_ENCRYPTION_KEY: z.string().min(32).optional(),
     // Must be the SAME value as the CRM's OEM_CREDENTIALS_ENCRYPTION_KEY (both
@@ -213,7 +220,14 @@ const parsed = schema.safeParse({
 
 if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  • ${i.path.join('.')}: ${i.message}`).join('\n');
-    console.error(`Env validation failed:\n${issues}`);
+    const message = `Env validation failed:\n${issues}`;
+    console.error(message);
+    // In a serverless invocation (Vercel), a hard process.exit silently kills the
+    // instance and produces an opaque 500. Throw instead so the misconfiguration
+    // is surfaced in the function logs. A long-running server still fails fast.
+    if (process.env.VERCEL || process.env.SERVERLESS === '1' || process.env.SERVERLESS === 'true') {
+        throw new Error(message);
+    }
     process.exit(1);
 }
 

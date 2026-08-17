@@ -28,18 +28,109 @@ const id     = route.params.id as string;
 const canManageVendors = computed(() => auth.hasPermission('wallet.vendors.manage'));
 const canViewWallets = computed(() => auth.hasPermission('wallet.funding.view'));
 
-type Tab = 'overview' | 'wallet' | 'transactions' | 'funding' | 'staff';
+type Tab = 'overview' | 'wallet' | 'transactions' | 'funding' | 'staff' | 'analytics';
 const tab = ref<Tab>('overview');
 
 const detail     = ref<any>(null);
 const loading    = ref(true);
 const banner     = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 
+interface StationOption {
+    stationId: string;
+    name: string;
+    status: 'active' | 'disabled';
+}
+
+interface VendorEditForm {
+    legalName: string;
+    tradingName: string;
+    contactEmail: string;
+    contactPhone: string;
+    cacNumber: string;
+    tin: string;
+    businessType: string;
+    operatingAddress: string;
+    stationId: string;
+}
+
+const editing = ref(false);
+const editSaving = ref(false);
+const stations = ref<StationOption[]>([]);
+const editForm = ref<VendorEditForm>({
+    legalName: '', tradingName: '', contactEmail: '', contactPhone: '',
+    cacNumber: '', tin: '', businessType: '', operatingAddress: '', stationId: '',
+});
+
+function hydrateEditForm() {
+    const vendor = detail.value?.vendor;
+    if (!vendor) return;
+    editForm.value = {
+        legalName: vendor.legal_name ?? '',
+        tradingName: vendor.trading_name ?? '',
+        contactEmail: vendor.contact_email ?? '',
+        contactPhone: vendor.contact_phone ?? '',
+        cacNumber: vendor.cac_number ?? vendor.rc_number ?? '',
+        tin: vendor.tin ?? '',
+        businessType: vendor.business_type ?? '',
+        operatingAddress: vendor.operating_address ?? vendor.address ?? '',
+        stationId: vendor.station_id ?? '',
+    };
+}
+
+async function startEditing() {
+    hydrateEditForm();
+    editing.value = true;
+    if (stations.value.length) return;
+    try {
+        const response = await api.get<{ stations: StationOption[] }>('/api/v1/admin/stations');
+        stations.value = response.stations ?? [];
+    } catch (error: unknown) {
+        banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Could not load stations.' };
+    }
+}
+
+async function saveVendorDetails() {
+    if (!editForm.value.stationId) {
+        banner.value = { tone: 'error', text: 'Select a vending station.' };
+        return;
+    }
+    editSaving.value = true;
+    banner.value = null;
+    try {
+        const form = editForm.value;
+        await api.patch(`/api/v1/admin/vendors/${id}`, {
+            legalName: form.legalName,
+            tradingName: form.tradingName || null,
+            contactEmail: form.contactEmail,
+            contactPhone: form.contactPhone,
+            cacNumber: form.cacNumber || null,
+            tin: form.tin || null,
+            businessType: form.businessType || null,
+            operatingAddress: form.operatingAddress || null,
+        });
+        if (form.stationId !== detail.value?.vendor?.station_id) {
+            await api.patch(`/api/v1/admin/vendors/${id}/station`, {
+                stationId: form.stationId,
+                reason: 'Admin vendor details update',
+            });
+        }
+        await loadDetail();
+        editing.value = false;
+        banner.value = { tone: 'success', text: 'Vendor details saved.' };
+    } catch (error: unknown) {
+        banner.value = { tone: 'error', text: error instanceof Error ? error.message : 'Vendor update failed.' };
+    } finally {
+        editSaving.value = false;
+    }
+}
+
 // Lazy per-tab data
 const wallet       = ref<any>(null);
 const transactions = ref<any[]>([]);
 const funding      = ref<any[]>([]);
 const staff        = ref<any[]>([]);
+const analytics    = ref<any>(null);
+const analyticsPeriod = ref<'7d'|'30d'|'90d'|'all'>('30d');
 const tabLoading   = ref(false);
 
 async function loadDetail() {
@@ -121,6 +212,23 @@ async function switchTab(t: Tab) {
         catch { staff.value = []; }
         finally { tabLoading.value = false; }
     }
+    if (t === 'analytics' && !analytics.value) {
+        await loadAnalytics();
+    }
+}
+
+async function loadAnalytics() {
+    tabLoading.value = true;
+    try {
+        analytics.value = await api.get<any>(`/api/v1/admin/vendors/${id}/analytics?period=${analyticsPeriod.value}`);
+    } catch { analytics.value = null; }
+    finally { tabLoading.value = false; }
+}
+
+async function changeAnalyticsPeriod(p: '7d'|'30d'|'90d'|'all') {
+    analyticsPeriod.value = p;
+    analytics.value = null;
+    await loadAnalytics();
 }
 
 // ─ Status action ─────────────────────────────────────────────
@@ -189,6 +297,18 @@ function staffBadge(s: string) {
     return ({ active: 'success', suspended: 'warn', inactive: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
 }
 function dirSign(d: string) { return d === 'credit' ? '+' : '−'; }
+
+// ── Analytics helpers ─────────────────────────────────────────
+function barHeight(val: number, maxVal: number): number {
+    if (!maxVal) return 0;
+    return Math.round((val / maxVal) * 100);
+}
+function analyticsMaxDaily(daily: any[]): number {
+    return Math.max(...(daily ?? []).map((d: any) => d.count), 1);
+}
+function modePct(count: number, total: number): string {
+    return total ? `${Math.round((count / total) * 100)}%` : '0%';
+}
 
 onMounted(loadDetail);
 </script>
@@ -300,7 +420,7 @@ onMounted(loadDetail);
       <!-- Tabs -->
       <div class="tabs">
         <button
-          v-for="t in (['overview','wallet','transactions','funding','staff'] as const)"
+          v-for="t in (['overview','wallet','transactions','funding','staff','analytics'] as const)"
           :key="t"
           :class="['tab', { active: tab === t }]"
           @click="switchTab(t)"
@@ -309,6 +429,42 @@ onMounted(loadDetail);
 
       <!-- ── Overview ────────────────────────────────────────── -->
       <div v-if="tab === 'overview'" class="bw-card">
+        <div class="overview-heading">
+          <h2>Vendor details</h2>
+          <button
+            v-if="canManageVendors && !editing"
+            class="bw-btn sm"
+            type="button"
+            @click="startEditing"
+          >Edit vendor details</button>
+        </div>
+        <form v-if="editing" class="vendor-edit-form" @submit.prevent="saveVendorDetails">
+          <label>Legal name<input v-model.trim="editForm.legalName" required minlength="2" /></label>
+          <label>Trading name<input v-model.trim="editForm.tradingName" /></label>
+          <label>Contact email<input v-model.trim="editForm.contactEmail" required type="email" /></label>
+          <label>Contact phone<input v-model.trim="editForm.contactPhone" required type="tel" /></label>
+          <label>CAC number<input v-model.trim="editForm.cacNumber" /></label>
+          <label>TIN<input v-model.trim="editForm.tin" /></label>
+          <label>Business type<input v-model.trim="editForm.businessType" /></label>
+          <label class="wide">Operating address<textarea v-model.trim="editForm.operatingAddress" rows="3" /></label>
+          <label class="wide">Vending station
+            <select v-model="editForm.stationId" required>
+              <option value="" disabled>Select station</option>
+              <option
+                v-for="station in stations"
+                :key="station.stationId"
+                :value="station.stationId"
+                :disabled="station.status === 'disabled'"
+              >{{ station.stationId }} · {{ station.name }}</option>
+            </select>
+          </label>
+          <div class="vendor-edit-actions wide">
+            <button class="bw-btn" type="button" :disabled="editSaving" @click="editing = false">Cancel</button>
+            <button class="bw-btn primary" type="submit" :disabled="editSaving">
+              {{ editSaving ? 'Saving…' : 'Save vendor details' }}
+            </button>
+          </div>
+        </form>
         <dl class="ov-dl">
           <dt>Vendor ID</dt>        <dd class="bw-mono">{{ detail.vendor.id }}</dd>
           <dt>Legal name</dt>       <dd>{{ detail.vendor.legal_name }}</dd>
@@ -321,14 +477,20 @@ onMounted(loadDetail);
           <dd><span :class="['bw-badge', vStatusBadge(detail.vendor.status)]">{{ detail.vendor.status }}</span></dd>
           <dt>Approved at</dt>      <dd>{{ detail.vendor.approved_at ? new Date(detail.vendor.approved_at).toLocaleString() : '—' }}</dd>
           <dt>Registered</dt>       <dd>{{ new Date(detail.vendor.created_at).toLocaleString() }}</dd>
-          <template v-if="detail.vendor.rc_number">
-            <dt>RC number</dt>      <dd class="bw-mono">{{ detail.vendor.rc_number }}</dd>
+          <template v-if="detail.vendor.cac_number || detail.vendor.rc_number">
+            <dt>CAC number</dt>     <dd class="bw-mono">{{ detail.vendor.cac_number || detail.vendor.rc_number }}</dd>
+          </template>
+          <template v-if="detail.vendor.tin">
+            <dt>TIN</dt>            <dd class="bw-mono">{{ detail.vendor.tin }}</dd>
+          </template>
+          <template v-if="detail.vendor.business_type">
+            <dt>Business type</dt>  <dd>{{ detail.vendor.business_type }}</dd>
           </template>
           <template v-if="detail.vendor.nin">
             <dt>NIN</dt>            <dd class="bw-mono">{{ detail.vendor.nin }}</dd>
           </template>
-          <template v-if="detail.vendor.address">
-            <dt>Address</dt>        <dd>{{ detail.vendor.address }}</dd>
+          <template v-if="detail.vendor.operating_address || detail.vendor.address">
+            <dt>Address</dt>        <dd>{{ detail.vendor.operating_address || detail.vendor.address }}</dd>
           </template>
           <template v-if="detail.vendor.lga">
             <dt>LGA / State</dt>    <dd>{{ detail.vendor.lga }}{{ detail.vendor.state ? ', ' + detail.vendor.state : '' }}</dd>
@@ -462,6 +624,160 @@ onMounted(loadDetail);
         </div>
       </div>
 
+      <!-- ── Analytics ────────────────────────────────────── -->
+      <div v-else-if="tab === 'analytics'">
+        <!-- Period selector -->
+        <div class="an-period-row">
+          <span class="an-period-label">Period</span>
+          <div class="an-period-pills">
+            <button
+              v-for="p in (['7d','30d','90d','all'] as const)"
+              :key="p"
+              :class="['an-pill', { active: analyticsPeriod === p }]"
+              @click="changeAnalyticsPeriod(p)"
+            >{{ p === 'all' ? 'All time' : p }}</button>
+          </div>
+        </div>
+
+        <div v-if="tabLoading" class="bw-card empty bw-muted">Loading…</div>
+
+        <template v-else-if="analytics">
+          <!-- KPI cards -->
+          <div class="an-kpi-grid">
+            <div class="an-kpi brand">
+              <p class="an-kpi-label">Total revenue</p>
+              <p class="an-kpi-value">{{ naira(analytics.summary.total_amount_minor) }}</p>
+              <p class="an-kpi-sub">{{ analytics.summary.total }} transactions</p>
+            </div>
+            <div class="an-kpi">
+              <p class="an-kpi-label">Success rate</p>
+              <p class="an-kpi-value">{{ analytics.summary.success_rate }}%</p>
+              <p class="an-kpi-sub">{{ analytics.summary.delivered }} delivered · {{ analytics.summary.failed }} failed</p>
+            </div>
+            <div class="an-kpi">
+              <p class="an-kpi-label">Avg transaction</p>
+              <p class="an-kpi-value">{{ naira(analytics.summary.avg_amount_minor) }}</p>
+              <p class="an-kpi-sub">per purchase order</p>
+            </div>
+            <div class="an-kpi">
+              <p class="an-kpi-label">Total kWh vended</p>
+              <p class="an-kpi-value">{{ analytics.summary.total_units_kwh.toLocaleString() }}</p>
+              <p class="an-kpi-sub">kilowatt-hours delivered</p>
+            </div>
+          </div>
+
+          <!-- Daily volume chart -->
+          <div class="bw-card an-chart-card" v-if="analytics.daily?.length">
+            <p class="an-section-title">Daily transaction volume</p>
+            <div class="an-chart-scroll">
+              <div class="an-chart">
+                <div
+                  v-for="day in analytics.daily"
+                  :key="day.date"
+                  class="an-bar-group"
+                  :title="`${day.date}: ${day.count} orders · ${naira(day.amount_minor)}`"
+                >
+                  <div class="an-bar-wrap">
+                    <div
+                      class="an-bar delivered"
+                      :style="{ height: barHeight(day.delivered, analyticsMaxDaily(analytics.daily)) + '%' }"
+                    ></div>
+                    <div
+                      class="an-bar failed"
+                      :style="{ height: barHeight(day.failed, analyticsMaxDaily(analytics.daily)) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="an-bar-date">{{ day.date.slice(5) }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="an-legend">
+              <span class="an-legend-dot delivered"></span><span>Delivered</span>
+              <span class="an-legend-dot failed"></span><span>Failed</span>
+            </div>
+          </div>
+          <div class="bw-card empty bw-muted" v-else>No transaction data for this period.</div>
+
+          <!-- Mode breakdown + Top stations side by side -->
+          <div class="an-two-col">
+            <!-- By mode -->
+            <div class="bw-card">
+              <p class="an-section-title">By purchase mode</p>
+              <div class="an-mode-list">
+                <div
+                  v-for="(v, mode) in analytics.by_mode"
+                  :key="mode"
+                  class="an-mode-row"
+                >
+                  <div class="an-mode-info">
+                    <span class="an-mode-name">{{ String(mode).replace(/_/g, ' ') }}</span>
+                    <span class="an-mode-count">{{ v.count }} orders</span>
+                  </div>
+                  <div class="an-mode-bar-wrap">
+                    <div
+                      class="an-mode-bar"
+                      :style="{ width: modePct(v.count, analytics.summary.total) }"
+                    ></div>
+                  </div>
+                  <span class="an-mode-amt">{{ naira(v.amount_minor) }}</span>
+                </div>
+                <p v-if="!Object.keys(analytics.by_mode ?? {}).length" class="bw-muted" style="font-size:var(--t-sm)">No data.</p>
+              </div>
+            </div>
+
+            <!-- Top stations -->
+            <div class="bw-card flush">
+              <p class="an-section-title" style="padding: var(--s-4) var(--s-4) 0">Top stations</p>
+              <table class="bw-table">
+                <thead>
+                  <tr>
+                    <th>Station</th>
+                    <th style="text-align:right">Orders</th>
+                    <th style="text-align:right">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="s in analytics.top_stations" :key="s.station_id">
+                    <td class="bw-mono" style="font-size:var(--t-xs)">{{ s.station_id }}</td>
+                    <td style="text-align:right">{{ s.count }}</td>
+                    <td class="bw-money" style="text-align:right">{{ naira(s.amount_minor) }}</td>
+                  </tr>
+                  <tr v-if="!analytics.top_stations?.length">
+                    <td colspan="3" class="bw-muted empty">No station data.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Top meters -->
+          <div class="bw-card flush">
+            <p class="an-section-title" style="padding: var(--s-4) var(--s-4) 0">Top meters</p>
+            <table class="bw-table">
+              <thead>
+                <tr>
+                  <th>Meter ID</th>
+                  <th style="text-align:right">Orders</th>
+                  <th style="text-align:right">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in analytics.top_meters" :key="m.meter_id">
+                  <td class="bw-mono">{{ m.meter_id }}</td>
+                  <td style="text-align:right">{{ m.count }}</td>
+                  <td class="bw-money" style="text-align:right">{{ naira(m.amount_minor) }}</td>
+                </tr>
+                <tr v-if="!analytics.top_meters?.length">
+                  <td colspan="3" class="bw-muted empty">No meter data.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+
+        <div v-else class="bw-card empty bw-muted">Analytics unavailable.</div>
+      </div>
+
     </template>
 
     <!-- Status confirm -->
@@ -544,6 +860,19 @@ onMounted(loadDetail);
 .ov-dl { display: grid; grid-template-columns: 160px 1fr; gap: 8px var(--s-3); margin: 0; font-size: var(--t-sm); }
 .ov-dl dt { color: var(--text-muted); }
 .ov-dl dd { margin: 0; word-break: break-word; }
+.overview-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
+.overview-heading h2 { margin: 0; font-size: var(--t-lg); }
+.vendor-edit-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); padding-bottom: var(--s-4); margin-bottom: var(--s-4); border-bottom: 1px solid var(--border); }
+.vendor-edit-form label { display: flex; flex-direction: column; gap: var(--s-1); color: var(--text-muted); font-size: var(--t-xs); font-weight: 700; }
+.vendor-edit-form input,
+.vendor-edit-form select,
+.vendor-edit-form textarea { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; color: var(--text); font: inherit; }
+.vendor-edit-form input:focus,
+.vendor-edit-form select:focus,
+.vendor-edit-form textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
+.vendor-edit-form textarea { resize: vertical; }
+.vendor-edit-form .wide { grid-column: 1 / -1; }
+.vendor-edit-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
 
 /* ── Wallet ── */
 .wallet-head { display: flex; justify-content: space-between; align-items: start; padding: var(--s-4); border-bottom: 1px solid var(--border); }
@@ -564,14 +893,60 @@ onMounted(loadDetail);
 :deep(.cd-body) .cd-input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-glow); }
 :deep(.cd-body) .cd-input-hint { font-size: var(--t-xs); color: var(--text-muted); margin: 6px 0 0; }
 
+/* ── Analytics ── */
+.an-period-row   { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-3); }
+.an-period-label { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.an-period-pills { display: flex; gap: var(--s-1); background: var(--surface-2); border-radius: var(--r-full); padding: 3px; border: 1px solid var(--border); }
+.an-pill         { background: transparent; border: none; border-radius: var(--r-full); padding: 4px 14px; font-size: var(--t-xs); font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.an-pill:hover   { color: var(--text); }
+.an-pill.active  { background: var(--surface); color: var(--brand); box-shadow: 0 1px 4px oklch(0 0 0 / 0.12); }
+
+.an-kpi-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-3); }
+.an-kpi       { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s-4); }
+.an-kpi.brand { background: linear-gradient(135deg, oklch(from var(--brand) l c h / 0.08), transparent); border-color: oklch(from var(--brand) l c h / 0.25); }
+.an-kpi-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 6px; }
+.an-kpi-value { font-family: var(--font-mono); font-weight: 700; font-size: var(--t-lg); margin: 0; }
+.an-kpi.brand .an-kpi-value { color: var(--brand); }
+.an-kpi-sub   { font-size: var(--t-xs); color: var(--text-muted); margin: 4px 0 0; }
+
+.an-section-title { font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 var(--s-3); }
+
+.an-chart-card { margin-bottom: var(--s-3); }
+.an-chart-scroll { overflow-x: auto; }
+.an-chart     { display: flex; align-items: flex-end; gap: 3px; height: 120px; min-width: max-content; padding-bottom: 24px; position: relative; }
+.an-bar-group { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 0 0 auto; }
+.an-bar-wrap  { display: flex; align-items: flex-end; gap: 1px; height: 100px; }
+.an-bar       { width: 10px; border-radius: 2px 2px 0 0; transition: height 0.25s var(--ease-out); min-height: 2px; }
+.an-bar.delivered { background: var(--brand); }
+.an-bar.failed    { background: var(--danger); opacity: 0.7; }
+.an-bar-date  { font-size: 9px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; }
+.an-legend    { display: flex; gap: var(--s-4); margin-top: var(--s-2); font-size: var(--t-xs); color: var(--text-muted); align-items: center; }
+.an-legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.an-legend-dot.delivered { background: var(--brand); }
+.an-legend-dot.failed    { background: var(--danger); opacity: 0.7; }
+
+.an-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); margin-bottom: var(--s-3); }
+
+.an-mode-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.an-mode-row  { display: flex; flex-direction: column; gap: 4px; }
+.an-mode-info { display: flex; justify-content: space-between; font-size: var(--t-xs); }
+.an-mode-name { font-weight: 600; text-transform: capitalize; }
+.an-mode-count { color: var(--text-muted); }
+.an-mode-bar-wrap { background: var(--surface-2); border-radius: var(--r-full); height: 6px; overflow: hidden; }
+.an-mode-bar  { background: var(--brand); height: 100%; border-radius: var(--r-full); transition: width 0.4s var(--ease-out); min-width: 4px; }
+.an-mode-amt  { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); text-align: right; }
+
 @media (max-width: 640px) {
   .head-card   { flex-direction: column; }
   .head-actions { width: 100%; justify-content: flex-end; }
   .head-action-buttons { display: none; }
   .ov-dl       { grid-template-columns: 1fr; }
   .ov-dl dt    { font-weight: 700; margin-top: var(--s-2); }
+  .vendor-edit-form { grid-template-columns: 1fr; }
+  .vendor-edit-form .wide { grid-column: auto; }
   .ledger-row  { grid-template-columns: 1fr auto; }
   .ledger-when, .ledger-bal { grid-column: 1 / -1; opacity: 0.7; }
   .tabs        { overflow-x: auto; }
+  .an-two-col  { grid-template-columns: 1fr; }
 }
 </style>

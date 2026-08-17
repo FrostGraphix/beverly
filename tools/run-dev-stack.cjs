@@ -23,6 +23,7 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const referenceHandler = require("../api/reference");
+const { walletPaymentEnv } = require("./dev-wallet-payment-env.cjs");
 
 const root = path.resolve(__dirname, "..");
 const apiPort = Number(process.env.API_PORT || 9310);
@@ -128,6 +129,7 @@ const services = [
     cwd: path.join(root, "backend/wallet"),
     url: "http://localhost:4000",
     walletGroup: true,
+    env: walletPaymentEnv(process.env),
   },
   {
     name: "admin",
@@ -181,6 +183,14 @@ if (!selected.length) {
 
 // ── Reference API server ───────────────────────────────────────────────────
 const apiServer = createApiServer();
+apiServer.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    log("api", `reference API already listening on port ${apiPort} (reusing existing instance)`);
+  } else {
+    console.error(err);
+    process.exit(1);
+  }
+});
 apiServer.listen(apiPort, "127.0.0.1", () => {
   log("api", `reference API → http://127.0.0.1:${apiPort}`);
 });
@@ -192,7 +202,7 @@ for (const svc of selected) {
   log(svc.name, `→ ${svc.url}  (${svc.cmd} ${svc.args.join(" ")})`);
   const child = spawn(svc.cmd, svc.args, {
     cwd: svc.cwd,
-    env: process.env,
+    env: svc.env || process.env,
     stdio: ["ignore", "pipe", "pipe"],
     shell: isWin,
   });

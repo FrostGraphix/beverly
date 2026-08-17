@@ -15,7 +15,7 @@ assert.match(page, /\/api\/v1\/vendor\/receipts\?limit=300/);
 assert.match(page, /copy\(r\.token, 'Token'\)/);
 assert.match(page, /printReceipt/);
 assert.match(page, /downloadReceiptDoc/);
-assert.match(page, /Loading receipts\.\.\./);
+assert.match(page, /WalletTableSkeleton/);
 assert.match(page, /receipt-mobile-list/);
 assert.match(customerPage, /\/api\/v1\/customer\/receipts/);
 assert.match(customerPage, /receipt-mobile-list/);

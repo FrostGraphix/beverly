@@ -160,6 +160,8 @@ Keep write safety strict.
 - Completed vendor transfers are immutable. Corrections use a separately authorized compensating transfer and never edit ledger history.
 - Vendor MFA remains available for account security and protected administration, but it is not a vending prerequisite. Vending uses the authenticated vendor session, mandatory password-reset enforcement, email verification for credential setup, a dedicated four-digit vending PIN, idempotency, wallet controls, and audit logging.
 - Customer and vendor token purchases require a dedicated four-digit numeric vending PIN. Login passwords and MFA credentials never authorize wallet debits. PIN hashes use salted scrypt storage, constant-time comparison, server-side validation, and security-event logging.
+- Vendor vends require the authenticated vendor's assigned station to match the live meter station before any purchase order or wallet hold is created. Customer vends require the approved customer-meter link station to match the live meter station. Missing or mismatched station authority fails closed.
+- Vendor profile and station changes use Wallet Admin service-role endpoints, require `wallet.vendors.manage`, respect staff station scope, and write immutable audit records.
 - Customer-linked meters default to pending review and token purchases fail closed unless the link is explicitly approved.
 - A physical meter can have only one approved customer owner; staff reviews are station-scoped, atomic, audited, and notify the customer.
 - Meter-link requests use a reusable current association plus an immutable lifecycle history. Rejected links may be resubmitted as pending without losing prior decisions; pending and approved links remain unique blockers.

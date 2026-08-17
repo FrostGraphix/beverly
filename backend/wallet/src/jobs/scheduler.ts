@@ -71,6 +71,7 @@ export async function sweepPendingPayments(): Promise<void> {
     if (!paystackKey) return;
 
     for (const txn of stuck as any[]) {
+        let gatewayPaid = false;
         try {
             if (txn.status === PAYMENT_STATUS.REQUIRES_REVIEW) {
                 const reason = String(txn.metadata?.fulfillment_blocked_reason ?? '');
@@ -80,6 +81,7 @@ export async function sweepPendingPayments(): Promise<void> {
             if (!reference) continue;
             const verified = await verifyTransaction(reference);
             if (verified.status === 'success') {
+                gatewayPaid = true;
                 await fulfillSuccessfulPaystackTransaction({ tx: txn, verified, source: 'scheduler' });
             } else if (['failed', 'abandoned'].includes(verified.status)) {
                 await markUnsuccessfulPaystackTransaction({ tx: txn, verified, source: 'scheduler' });
@@ -88,17 +90,28 @@ export async function sweepPendingPayments(): Promise<void> {
             const attempts = Number(txn.fulfillment_attempts ?? 0) + 1;
             const terminal = attempts >= 5;
             const delayMinutes = Math.min(60, 2 ** Math.min(attempts, 5));
+            const terminalStatus = gatewayPaid ? PAYMENT_STATUS.REQUIRES_REVIEW : PAYMENT_STATUS.FAILED;
             await adminClient
                 .from('payment_transactions')
                 .update({
                     fulfillment_attempts: attempts,
                     fulfillment_last_error: (error instanceof Error ? error.message : 'payment_reconciliation_failed').slice(0, 500),
                     fulfillment_next_retry_at: terminal ? null : new Date(Date.now() + delayMinutes * 60_000).toISOString(),
-                    status: terminal ? PAYMENT_STATUS.FAILED : txn.status,
+                    status: terminal ? terminalStatus : txn.status,
+                    ...(gatewayPaid && terminal ? {
+                        metadata: {
+                            ...(txn.metadata ?? {}),
+                            requires_ops_review: true,
+                            fulfillment_blocked: true,
+                            fulfillment_blocked_reason: 'local_fulfillment_exhausted',
+                            fulfillment_blocked_at: new Date().toISOString(),
+                        },
+                    } : {}),
                     updated_at: new Date().toISOString(),
                 })
-                .eq('id', txn.id);
-            if (terminal && txn.actor_type === 'customer' && txn.actor_id) {
+                .eq('id', txn.id)
+                .in('status', Array.from(PAYMENT_RECONCILABLE_STATUSES));
+            if (terminal && !gatewayPaid && txn.actor_type === 'customer' && txn.actor_id) {
                 const { notifyPaymentFailed } = await import('../services/notifications.js');
                 notifyPaymentFailed(txn.actor_id, { amountMinor: Number(txn.amount_minor ?? 0) }).catch(() => undefined);
             }

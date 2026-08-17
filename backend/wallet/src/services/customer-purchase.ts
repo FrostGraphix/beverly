@@ -10,7 +10,7 @@
 import { adminClient } from '../db/supabase.js';
 import { createHold, captureHold, releaseHold } from './ledger.js';
 import {
-    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus,
+    lookupMeter, previewPurchaseWithPolicy, generateCreditToken, createRemoteSendTask, pollRemoteSendStatus, assertEnergyVendReady,
     TokenEngineError, type MeterInfo,
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
@@ -28,6 +28,7 @@ import {
     type SmsTrafficKind,
 } from './sms-guardrails.js';
 import { notifyTokenPurchased } from './notifications.js';
+import { assertStationVendAllowed, StationVendScopeError } from './station-vend-scope.js';
 
 export class CustomerPurchaseError extends Error {
     constructor(message: string, public code: string) {
@@ -47,10 +48,13 @@ function meterCapForTier(kycTier: number): number {
     return METER_CAP_BY_KYC_TIER[kycTier] ?? METER_CAP_BY_KYC_TIER[0];
 }
 
-async function assertMeterApprovedForPurchase(customerId: string, meterId: string): Promise<void> {
+async function assertMeterApprovedForPurchase(
+    customerId: string,
+    meterId: string,
+): Promise<{ stationId: string | null }> {
     const { data: link, error } = await adminClient
         .from('customer_meters')
-        .select('status')
+        .select('status, station_id')
         .eq('customer_id', customerId)
         .eq('meter_id', meterId)
         .maybeSingle();
@@ -63,7 +67,8 @@ async function assertMeterApprovedForPurchase(customerId: string, meterId: strin
     if (!link) {
         throw new CustomerPurchaseError('This meter is not linked to your account. Add it under My Meters first.', 'meter_not_linked');
     }
-    const status = (link as { status: string }).status;
+    const approvedMeter = link as { status: string; station_id: string | null };
+    const status = approvedMeter.status;
     if (status === 'pending') {
         throw new CustomerPurchaseError('This meter is awaiting admin approval and cannot be used for purchases yet.', 'meter_not_approved');
     }
@@ -75,6 +80,18 @@ async function assertMeterApprovedForPurchase(customerId: string, meterId: strin
             'This meter is not approved for purchases. Contact support before trying again.',
             'meter_not_approved',
         );
+    }
+    return { stationId: String(approvedMeter.station_id ?? '').trim() || null };
+}
+
+function enforceCustomerMeterStation(approvedStationId: string | null, meterStationId: string | null): void {
+    try {
+        assertStationVendAllowed(approvedStationId, meterStationId);
+    } catch (error) {
+        if (error instanceof StationVendScopeError) {
+            throw new CustomerPurchaseError(error.message, error.code);
+        }
+        throw error;
     }
 }
 
@@ -270,6 +287,13 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         };
     }
 
+    try {
+        assertEnergyVendReady();
+    } catch (error) {
+        if (error instanceof TokenEngineError) throw new CustomerPurchaseError(error.message, error.code);
+        throw error;
+    }
+
     // Resolve meter
     let meter: MeterInfo;
     try { meter = await lookupMeter(input.meterId); }
@@ -278,7 +302,15 @@ export async function customerPurchase(input: CustomerPurchaseInput): Promise<Cu
         throw e;
     }
 
-    await assertMeterApprovedForPurchase(input.customerId, meter.meterId);
+    const approvedMeter = await assertMeterApprovedForPurchase(input.customerId, meter.meterId);
+    try {
+        assertStationVendAllowed(approvedMeter.stationId, meter.stationId);
+    } catch (error) {
+        if (error instanceof StationVendScopeError) {
+            throw new CustomerPurchaseError(error.message, error.code);
+        }
+        throw error;
+    }
 
     const preview = await previewPurchaseWithPolicy(input.amountMinor, meter.tariffId);
     // Resolve phase: live record wins; customer's onboarding declaration fills any gap.
@@ -596,7 +628,10 @@ export async function previewCustomerPurchase(meterId: string, amountMinor: numb
         if (e instanceof TokenEngineError) throw new CustomerPurchaseError(e.message, (e as TokenEngineError).code);
         throw e;
     }
-    if (customerId) await assertMeterApprovedForPurchase(customerId, meter.meterId);
+    if (customerId) {
+        const approvedMeter = await assertMeterApprovedForPurchase(customerId, meter.meterId);
+        enforceCustomerMeterStation(approvedMeter.stationId, meter.stationId);
+    }
     const preview = await previewPurchaseWithPolicy(amountMinor, meter.tariffId);
     const declared = customerId ? await declaredMeterType(customerId, meter.meterId) : null;
     const isThreePhase = effectiveThreePhase(meter.isThreePhase, declared);

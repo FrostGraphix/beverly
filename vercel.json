@@ -78,6 +78,8 @@
     { "source": "/wallet", "destination": "/wallet/", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/api/v1/customer/:path*", "destination": "/api/wallet?__pathname=/api/v1/customer/:path*" },
+    { "source": "/api/v1/vendor/:path*", "destination": "/api/wallet?__pathname=/api/v1/vendor/:path*" },
     { "source": "/api/wallet-service/:path*", "destination": "/api/wallet-service" },
     { "source": "/api/receipt-pdf", "destination": "/api/receipt-pdf" },
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },

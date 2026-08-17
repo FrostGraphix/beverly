@@ -28,6 +28,23 @@ const consumptionStatisticsPage = readProjectFile("src/components/ConsumptionSta
 const customerDrawer = readProjectFile("src/components/consumption/CustomerDrawer.vue");
 const suspectLedger = readProjectFile("src/components/consumption/SuspectLedger.vue");
 const tokenFlow = readProjectFile("src/components/ActionModalTokenFlow.vue");
+const adminDashboard = readProjectFile("apps/admin/src/views/Dashboard.vue");
+const walletTableSkeleton = readProjectFile("packages/tokens/WalletTableSkeleton.vue");
+const portalTables = [
+  "apps/customer/src/views/Wallet.vue",
+  "apps/customer/src/views/Transactions.vue",
+  "apps/customer/src/views/FundingHistory.vue",
+  "apps/customer/src/views/Consumption.vue",
+  "apps/customer/src/views/Receipts.vue",
+  "apps/vendor/src/views/Wallet.vue",
+  "apps/vendor/src/views/Transactions.vue",
+  "apps/vendor/src/views/FundingHistory.vue",
+  "apps/vendor/src/views/MeterOrders.vue",
+  "apps/vendor/src/views/Statement.vue",
+  "apps/vendor/src/views/Disputes.vue",
+  "apps/vendor/src/views/Receipts.vue",
+  "apps/vendor/src/views/Consumption.vue",
+].map(readProjectFile);
 
 assertIncludes(globalCss, "TABLE COMMAND CENTER");
 assertIncludes(globalCss, "border-collapse: separate");
@@ -83,6 +100,16 @@ assertIncludes(tokenFlow, "Token generated. Receipt ready:");
 assertIncludes(tokenFlow, "vatBreakdown.vatRateBasisPoints / 100");
 assertIncludes(tokenFlow, "Total payable");
 assertIncludes(tokenFlow, "formattedEnergyAmount");
+
+assertIncludes(adminDashboard, "dashboard-section-skeleton-row");
+assertIncludes(adminDashboard, "dashboard-vending-skeleton-row");
+assertIncludes(adminDashboard, "recent-table-skeleton");
+assertIncludes(adminDashboard, "recent-card-skeleton");
+assertIncludes(adminDashboard, "dashboard-pagination-skeleton");
+assert(!adminDashboard.includes('class="bw-card bw-skeleton" style="min-height:260px"'));
+assertIncludes(walletTableSkeleton, "wallet-table-skeleton-row");
+assertIncludes(walletTableSkeleton, "wallet-card-skeleton");
+portalTables.forEach((table) => assertIncludes(table, "WalletTableSkeleton"));
 
 assertIncludes(loginPage, "data-testid=\"login-user-id\"");
 assertIncludes(loginPage, "data-testid=\"login-password\"");

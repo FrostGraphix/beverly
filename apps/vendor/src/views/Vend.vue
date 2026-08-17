@@ -6,7 +6,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue';
 import StatusPopup from '../components/StatusPopup.vue';
 import { api, ApiError, idempotencyHeaders, newIdempotencyKey } from '../lib/api';
 import { naira, kwh } from '../lib/format';
-import { downloadReceipt, printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
+import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 
 type Step = 'meter' | 'amount' | 'preview' | 'success';
 
@@ -155,7 +155,14 @@ const normalizedMeterId = computed(() => meterId.value.trim());
 const meterIdValid = computed(() => normalizedMeterId.value.length >= 4 && normalizedMeterId.value.length <= 80);
 const amountMinor = computed(() => Math.max(0, Math.round(amountNaira.value * 100)));
 const canVend = computed(() => meter.value?.liveVerified !== false);
+const vendingConfigurationBlocked = computed(() => [
+    'energy_authorization_missing',
+    'energy_authorization_misconfigured',
+    'energy_authorization_rejected',
+].includes(String(error.value?.code ?? '')));
 const remoteState = computed(() => String(result.value?.purchaseOrder?.delivery_state ?? 'token_generated'));
+const tokenGroups = computed(() => String(result.value?.token ?? '').trim().split(/\s+/).filter(Boolean));
+const showReceiptNotice = computed(() => Boolean(notice.value && notice.value.title !== 'Token generated successfully'));
 const canRemoteSendToken = computed(() => {
     if (!result.value?.token || !result.value.purchaseOrder?.id || remoteSending.value) return false;
     return remoteState.value !== 'remote_send_delivered';
@@ -175,6 +182,7 @@ const flowSteps = computed(() => [
 ]);
 const confirmLabel = computed(() => {
     if (loading.value) return 'Generating token...';
+    if (vendingConfigurationBlocked.value) return 'Vending unavailable';
     if (!canVend.value) return 'Bind meter before vend';
     return `Confirm - ${naira(preview.value?.amountMinor)}`;
 });
@@ -183,8 +191,24 @@ function meterTypeLabel(isThreePhase?: boolean | null) {
     return isThreePhase ? 'Three Phase' : 'Single Phase';
 }
 
+function isMeterOfflineError(code: unknown, message: unknown) {
+    if (code === 'meter_offline') return true;
+    const normalized = String(message ?? '').toLowerCase();
+    return /meter\s*(?:no\.?\s*)?\(?[a-z0-9-]+\)?\s+is\s+offline/.test(normalized)
+        || /reading\s+fail/.test(normalized)
+        || /meter[^.]{0,80}(?:offline|not\s+online|unreachable)/.test(normalized);
+}
+
 function describeApiError(e: unknown, fallback: string) {
     if (e instanceof ApiError) {
+        if (isMeterOfflineError(e.code, e.message)) {
+            return {
+                title: 'Meter currently offline',
+                message: 'The meter cannot receive remote commands right now.',
+                action: 'The token remains valid. Enter it manually, or retry after the meter reconnects.',
+                code: 'meter_offline',
+            };
+        }
         if (e.code === 'vend_credential_required') {
             return {
                 title: 'Vendor authorization required',
@@ -214,6 +238,14 @@ function describeApiError(e: unknown, fallback: string) {
                 title: 'Wallet cannot vend',
                 message: e.message,
                 action: 'Contact Beverly admin before retrying this sale.',
+                code: e.code,
+            };
+        }
+        if (['energy_authorization_missing', 'energy_authorization_misconfigured', 'energy_authorization_rejected'].includes(String(e.code))) {
+            return {
+                title: 'Vending temporarily unavailable',
+                message: e.message,
+                action: 'No wallet hold, debit, or token request occurred. Contact Beverly support.',
                 code: e.code,
             };
         }
@@ -396,7 +428,6 @@ async function copyToken() {
     try {
         await navigator.clipboard.writeText(result.value.token);
         copied.value = true;
-        notice.value = { tone: 'success', title: 'Token copied', message: 'Paste it into the meter keypad when needed.' };
         window.setTimeout(() => { copied.value = false; }, 1800);
     } catch {
         notice.value = { tone: 'danger', title: 'Copy failed', message: 'Select the token and copy it manually.' };
@@ -425,11 +456,6 @@ function resultReceiptRow() {
 function viewResultReceipt() {
     const row = resultReceiptRow();
     if (row) viewReceipt(purchaseReceipt(row));
-}
-
-function printResultReceipt() {
-    const row = resultReceiptRow();
-    if (row) printReceipt(purchaseReceipt(row));
 }
 
 function downloadResultReceipt() {
@@ -482,13 +508,14 @@ async function remoteSendGeneratedToken() {
         showResultPopup(response.status === 'failed' ? 'danger' : 'info', followUpTitle, followUpMessage);
     } catch (e: any) {
         const details = describeApiError(e, e?.message ?? 'Remote send failed');
+        const meterOffline = details.code === 'meter_offline';
         notice.value = {
-            tone: 'danger',
+            tone: meterOffline ? 'info' : 'danger',
             title: details.title,
             message: `${details.message}${details.action ? ` ${details.action}` : ''}`,
             code: details.code,
         };
-        showResultPopup('danger', details.title, `${details.message}${details.action ? ` ${details.action}` : ''}`);
+        showResultPopup(meterOffline ? 'info' : 'danger', details.title, `${details.message}${details.action ? ` ${details.action}` : ''}`);
     } finally {
         remoteSending.value = false;
     }
@@ -609,43 +636,61 @@ async function remoteSendGeneratedToken() {
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
         </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
-                @click="confirm" :disabled="loading || !canVend">
+                @click="confirm" :disabled="loading || !canVend || vendingConfigurationBlocked">
           {{ confirmLabel }}
         </button>
       </div>
 
       <!-- Step: success / receipt -->
-      <div v-else-if="step === 'success'" key="success" class="bw-stack">
-        <div v-if="notice" :class="['bw-alert', notice.tone === 'danger' ? 'danger' : '']" style="display: grid; gap: 6px">
-          <strong>{{ notice.title }}</strong>
-          <span>{{ notice.message }}</span>
-          <small v-if="notice.code" class="bw-mono">Code: {{ notice.code }}</small>
+      <div v-else-if="step === 'success'" key="success" class="bw-stack vend-success">
+        <div v-if="showReceiptNotice" :class="['bw-alert', notice?.tone === 'danger' ? 'danger' : notice?.tone === 'info' ? 'info' : 'success']" style="display: grid; gap: 6px">
+          <strong>{{ notice?.title }}</strong>
+          <span>{{ notice?.message }}</span>
+          <small v-if="notice?.code" class="bw-mono">Code: {{ notice.code }}</small>
         </div>
-        <div class="bw-token-box">
-          <p class="bw-label" style="color: var(--brand)">Token generated</p>
-          <p class="bw-token-value">{{ result?.token }}</p>
-          <p class="bw-muted bw-mono" style="font-size: var(--t-sm)">{{ kwh(result?.units) }} · {{ naira(preview?.amountMinor) }}</p>
-          <button class="bw-btn" @click="copyToken" style="margin-top: var(--s-4)">{{ copied ? 'Copied' : 'Copy token' }}</button>
-        </div>
-        <div class="bw-card">
-          <div class="bw-row"><span class="bw-muted">Customer</span><span class="bw-spacer"></span><strong>{{ meter?.customerName }}</strong></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Meter</span><span class="bw-spacer"></span><span class="bw-mono">{{ meter?.meterId }}</span></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Phase</span><span class="bw-spacer"></span><span>{{ meterTypeLabel(meter?.isThreePhase) }}</span></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Amount</span><span class="bw-spacer"></span><strong>{{ naira(preview?.amountMinor) }}</strong></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Remote state</span><span class="bw-spacer"></span><strong>{{ remoteState.replace(/_/g, ' ') }}</strong></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Order</span><span class="bw-spacer"></span><span class="bw-mono">#{{ String(result?.purchaseOrder?.id).slice(0, 8) }}</span></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">Energy value</span><span class="bw-spacer"></span><strong>{{ naira(result?.purchaseOrder?.energy_amount_minor ?? preview?.energyAmountMinor) }}</strong></div>
-          <div class="bw-row" style="margin-top: var(--s-2)"><span class="bw-muted">VAT ({{ Number(result?.purchaseOrder?.vat_rate_basis_points ?? preview?.vatRateBasisPoints ?? 0) / 100 }}%)</span><span class="bw-spacer"></span><strong>{{ naira(result?.purchaseOrder?.vat_amount_minor ?? preview?.taxAmountMinor) }}</strong></div>
-        </div>
-        <div class="vend-actions">
-          <button class="bw-btn primary" @click="remoteSendGeneratedToken" :disabled="!canRemoteSendToken">
-            {{ remoteSendLabel }}
+        <section class="bw-token-box" aria-labelledby="vend-token-title">
+          <div class="token-ready-row">
+            <div>
+              <p class="token-eyebrow">Credit token</p>
+              <h1 id="vend-token-title">Token ready</h1>
+            </div>
+            <span class="token-ready-badge"><span aria-hidden="true"></span>Generated</span>
+          </div>
+          <p class="bw-token-value" :aria-label="`Token ${result?.token ?? ''}`">
+            <span v-for="(group, index) in tokenGroups" :key="`${group}-${index}`">{{ group }}</span>
+          </p>
+          <div class="token-meta">
+            <span>{{ kwh(result?.units) }}</span><span aria-hidden="true">·</span><strong>{{ naira(preview?.amountMinor) }}</strong>
+          </div>
+          <button class="bw-btn primary token-copy-btn" @click="copyToken" aria-live="polite">
+            {{ copied ? 'Token copied' : 'Copy token' }}
           </button>
+          <p class="token-help">Enter this token manually, or send it remotely.</p>
+        </section>
+        <section class="bw-card vend-receipt-summary" aria-labelledby="vend-receipt-title">
+          <div class="receipt-summary-head">
+            <div>
+              <p class="token-eyebrow">Receipt details</p>
+              <h2 id="vend-receipt-title">{{ meter?.customerName }}</h2>
+            </div>
+            <span class="receipt-state">{{ remoteState.replace(/_/g, ' ') }}</span>
+          </div>
+          <dl class="receipt-facts">
+            <div><dt>Meter</dt><dd class="bw-mono">{{ meter?.meterId }}</dd></div>
+            <div><dt>Amount</dt><dd>{{ naira(preview?.amountMinor) }}</dd></div>
+            <div><dt>Phase</dt><dd>{{ meterTypeLabel(meter?.isThreePhase) }}</dd></div>
+            <div><dt>Station</dt><dd>{{ meter?.stationId }}</dd></div>
+            <div><dt>Energy value</dt><dd>{{ naira(result?.purchaseOrder?.energy_amount_minor ?? preview?.energyAmountMinor) }}</dd></div>
+            <div><dt>VAT ({{ Number(result?.purchaseOrder?.vat_rate_basis_points ?? preview?.vatRateBasisPoints ?? 0) / 100 }}%)</dt><dd>{{ naira(result?.purchaseOrder?.vat_amount_minor ?? preview?.taxAmountMinor) }}</dd></div>
+          </dl>
+          <p class="receipt-order bw-mono">Order #{{ String(result?.purchaseOrder?.id).slice(0, 8) }}</p>
+        </section>
+        <div class="vend-action-grid">
+          <button class="bw-btn primary action-remote" @click="remoteSendGeneratedToken" :disabled="!canRemoteSendToken">{{ remoteSendLabel }}</button>
           <button class="bw-btn" @click="downloadResultReceipt">Download receipt</button>
-          <button class="bw-btn" style="flex:1; justify-content:center" @click="viewResultReceipt">View receipt</button>
-          <button class="bw-btn" style="flex:1; justify-content:center" @click="printResultReceipt">Print receipt</button>
+          <button class="bw-btn" @click="viewResultReceipt">View receipt</button>
+          <button class="bw-btn action-new" @click="reset">New vend</button>
         </div>
-        <button class="bw-btn primary" style="justify-content: center; height: 44px" @click="reset">New vend</button>
       </div>
       </Transition>
     </div>
@@ -765,32 +810,153 @@ async function remoteSendGeneratedToken() {
   background: color-mix(in srgb, var(--brand) 12%, var(--surface));
 }
 
-.vend-actions {
+.vend-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s-3);
+  gap: var(--s-2);
 }
 
-.vend-actions .bw-btn {
+.vend-action-grid .bw-btn {
   min-width: 0;
   justify-content: center;
 }
 
+.action-remote,
+.action-new { grid-column: 1 / -1; }
+
 .bw-token-box {
+  --token-ring-angle: 0deg;
   position: relative;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  padding: var(--s-5);
+  border: 1px solid transparent;
   background:
-    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 62%),
-    linear-gradient(145deg, color-mix(in srgb, var(--surface) 90%, #0d3b2a), var(--surface));
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    conic-gradient(
+      from var(--token-ring-angle),
+      transparent 0 72%,
+      color-mix(in srgb, var(--brand) 38%, transparent) 78%,
+      var(--brand) 84%,
+      transparent 92%
+    ) border-box;
+  animation: token-outline-orbit 3.2s linear infinite;
+  text-align: left;
 }
 
-.bw-token-box::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+.token-ready-row,
+.receipt-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.token-eyebrow {
+  margin: 0 0 4px;
+  color: var(--brand);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.token-ready-row h1,
+.receipt-summary-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--t-lg);
+  line-height: 1.2;
+}
+
+.token-ready-badge,
+.receipt-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 48%;
+  padding: 5px 9px;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: right;
+  text-transform: capitalize;
+}
+
+.token-ready-badge span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--brand);
+  box-shadow: 0 0 12px var(--brand);
+}
+
+.bw-token-value {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px 13px;
+  margin: var(--s-5) 0 var(--s-3);
+  word-break: normal;
+}
+
+.bw-token-value span {
+  font-size: clamp(1.2rem, 5.2vw, 1.75rem);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.token-meta {
+  display: flex;
+  justify-content: center;
+  gap: var(--s-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+}
+
+.token-meta strong { color: var(--text); }
+
+.token-copy-btn {
+  width: 100%;
+  min-height: 42px;
+  justify-content: center;
+  margin-top: var(--s-4);
+}
+
+.token-help {
+  margin: var(--s-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  text-align: center;
+}
+
+.vend-receipt-summary { padding: var(--s-4); }
+.receipt-summary-head { padding-bottom: var(--s-3); border-bottom: 1px solid var(--border); }
+.receipt-state { color: var(--text-muted); background: var(--surface-2); }
+
+.receipt-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin: var(--s-3) 0 0;
+}
+
+.receipt-facts div { min-width: 0; }
+.receipt-facts dt { color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.receipt-facts dd { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--text); font-size: var(--t-sm); font-weight: 700; }
+.receipt-order { margin: var(--s-3) 0 0; padding-top: var(--s-3); border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--t-xs); }
+
+@property --token-ring-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes token-outline-orbit {
+  to { --token-ring-angle: 360deg; }
 }
 
 .step-anim-enter-active {
@@ -817,6 +983,10 @@ async function remoteSendGeneratedToken() {
   .vend-flow-icon {
     transition: none !important;
   }
+  .bw-token-box {
+    animation: none;
+    border-color: color-mix(in srgb, var(--brand) 48%, transparent);
+  }
 }
 
 @media (max-width: 520px) {
@@ -836,8 +1006,7 @@ async function remoteSendGeneratedToken() {
     padding: 9px 4px;
   }
 
-  .vend-actions {
-    grid-template-columns: 1fr;
-  }
+  .vend-success { gap: var(--s-3); }
+  .receipt-facts { gap: var(--s-2) var(--s-3); }
 }
 </style>

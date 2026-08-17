@@ -45,9 +45,60 @@ function upstreamSucceeded(payload: { code?: number; msg?: string; reason?: stri
     return text.includes('success');
 }
 
-function upstreamFailure(payload: { code?: number; msg?: string; reason?: string }, fallbackCode: string) {
+export function classifyEnergyFailure(
+    payload: { code?: number; msg?: string; reason?: string },
+    fallbackCode: string,
+): { message: string; code: string; retryable: boolean } {
     const message = payload.reason || payload.msg || `energy backend returned code ${payload.code}`;
-    return new TokenEngineError(message, fallbackCode, payload.code === 99 || payload.code === 429);
+    const normalized = message.toLowerCase();
+    const meterOffline = /meter\s*(?:no\.?\s*)?\(?[a-z0-9-]+\)?\s+is\s+offline/.test(normalized)
+        || /reading\s+fail/.test(normalized)
+        || /meter[^.]{0,80}(?:offline|not\s+online|unreachable)/.test(normalized);
+
+    if (meterOffline) return { message, code: 'meter_offline', retryable: true };
+
+    return {
+        message,
+        code: fallbackCode,
+        retryable: payload.code === 99 || payload.code === 429,
+    };
+}
+
+function upstreamFailure(payload: { code?: number; msg?: string; reason?: string }, fallbackCode: string) {
+    const failure = classifyEnergyFailure(payload, fallbackCode);
+    return new TokenEngineError(failure.message, failure.code, failure.retryable);
+}
+
+const ENERGY_AUTHORIZATION_REJECTION_TTL_MS = 5 * 60_000;
+let energyAuthorizationRejectedUntil = 0;
+
+export type EnergyVendReadiness =
+    | { ok: true }
+    | { ok: false; code: 'energy_authorization_missing' | 'energy_authorization_misconfigured' | 'energy_authorization_rejected'; message: string };
+
+export function inspectEnergyVendAuthorization(
+    authorizationPassword: string | null | undefined,
+    loginPassword: string | null | undefined,
+): EnergyVendReadiness {
+    const authorization = String(authorizationPassword ?? '').trim();
+    const login = String(loginPassword ?? '').trim();
+    if (!authorization) return { ok: false, code: 'energy_authorization_missing', message: 'Energy vending authorization is not configured.' };
+    if (login && authorization === login) {
+        return { ok: false, code: 'energy_authorization_misconfigured', message: 'Energy vending authorization must differ from the upstream login password.' };
+    }
+    return { ok: true };
+}
+
+export function isEnergyAuthorizationRejectedResponse(payload: { msg?: string; reason?: string }): boolean {
+    return /(?:incorrect|invalid)\s+authorization\s+password/i.test(`${payload.reason ?? ''} ${payload.msg ?? ''}`.trim());
+}
+
+export function assertEnergyVendReady(now = Date.now()): void {
+    const configured = inspectEnergyVendAuthorization(env.ENERGY_AUTHORIZATION_PASSWORD, env.UPSTREAM_PASSWORD);
+    if (!configured.ok) throw new TokenEngineError(configured.message, configured.code);
+    if (energyAuthorizationRejectedUntil > now) {
+        throw new TokenEngineError('Energy vending authorization was rejected. Administrator action is required.', 'energy_authorization_rejected');
+    }
 }
 
 // Phase 6 unification: resolves the target OEM's base URL + auth header from the
@@ -650,9 +701,7 @@ async function assertVendingStrategySupported(oemId?: string | null): Promise<vo
 }
 
 export async function generateCreditToken(input: GenerateTokenInput): Promise<GenerateTokenResult> {
-    if (!env.ENERGY_AUTHORIZATION_PASSWORD) {
-        throw new TokenEngineError('energy authorization password not configured', 'energy_authorization_missing');
-    }
+    assertEnergyVendReady();
     await assertVendingStrategySupported(input.oemId);
     const isS2 = await resolveEffectiveIsS2(input);
     const response = await energyCall<{
@@ -665,7 +714,13 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
         method: 'POST',
         body: JSON.stringify(buildCreditTokenPayload(input, { isS2 })),
     }, input.oemId ?? undefined);
-    if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'token_generation_failed');
+    if (!upstreamSucceeded(response)) {
+        if (isEnergyAuthorizationRejectedResponse(response)) {
+            energyAuthorizationRejectedUntil = Date.now() + ENERGY_AUTHORIZATION_REJECTION_TTL_MS;
+            throw new TokenEngineError('Energy vending authorization was rejected. Administrator action is required.', 'energy_authorization_rejected');
+        }
+        throw upstreamFailure(response, 'token_generation_failed');
+    }
     const data = (response.result || response.data || response) as Record<string, unknown>;
     const token = String(data.token || data.tokenFirst || '').trim();
     if (!token) {

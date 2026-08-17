@@ -4,6 +4,7 @@ import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/api';
 import { naira } from '../lib/format';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
 
 // A customer sees only their own meters. The backend resolves that set from
@@ -192,7 +193,7 @@ onMounted(load);
               </tr>
             </thead>
             <tbody>
-              <tr v-if="loading"><td :colspan="showMeterColumn ? 5 : 4" class="empty">Loading…</td></tr>
+              <WalletTableSkeleton v-if="loading" :columns="showMeterColumn ? 5 : 4" />
               <tr v-else-if="!rows.length"><td :colspan="showMeterColumn ? 5 : 4" class="empty">No consumption recorded for this period.</td></tr>
               <tr v-for="(row, index) in pagedRows" v-else :key="`${row.scope_id}-${row.period_start}-${index}`">
                 <td>{{ periodLabel(row) }}</td>

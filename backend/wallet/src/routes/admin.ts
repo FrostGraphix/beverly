@@ -14,9 +14,10 @@ import { createVendorOrganization, setVendorStatus } from '../services/vendor-on
 import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls } from '../services/funding.js';
 import { getBalance } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
-import { logAction } from '../services/audit.js';
+import { auditFromRequest, logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
 import { listStationDirectory, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
+import { resendRemoteSendOrder } from '../services/vending.js';
 import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
 import {
     listFaqCategories, listFaqs, upsertFaqCategory, deleteFaqCategory, upsertFaq, deleteFaq,
@@ -297,6 +298,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /vendors/summary': 'wallet.vendors.review',
     'GET /vendors/analytics': 'wallet.vendors.review',
     'DELETE /vendors/:id': 'wallet.vendors.manage',
+    'PATCH /vendors/:id': 'wallet.vendors.manage',
     'PATCH /vendors/:id/status': 'wallet.vendors.manage',
     'PATCH /vendors/:id/station': 'wallet.vendors.manage',
     'PATCH /vendors/:id/profile-picture': 'wallet.vendors.manage',
@@ -338,6 +340,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /purchases/summary': 'wallet.vending.monitor',
     'GET /purchases/:id': 'wallet.vending.monitor',
     'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
+    'POST /purchases/:id/resend-remote': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
     'GET /meter-orders/customer-search': 'wallet.vendors.manage',
@@ -1428,6 +1431,66 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── freeze / unfreeze ──
+    fastify.patch('/vendors/:id', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const schema = z.object({
+            legalName: z.string().trim().min(2).max(160),
+            tradingName: z.string().trim().max(160).nullable(),
+            contactEmail: z.string().trim().email().max(254),
+            contactPhone: z.string().trim().min(7).max(32),
+            cacNumber: z.string().trim().max(80).nullable(),
+            tin: z.string().trim().max(80).nullable(),
+            businessType: z.string().trim().max(100).nullable(),
+            operatingAddress: z.string().trim().max(500).nullable(),
+        });
+        const parsed = schema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+            return reply.code(400).send({ error: 'validation_error', message: parsed.error.message });
+        }
+
+        const { data: before, error: readError } = await adminClient
+            .from('vendor_organizations')
+            .select('id, legal_name, trading_name, contact_email, contact_phone, cac_number, tin, business_type, operating_address, station_id')
+            .eq('id', id)
+            .maybeSingle();
+        if (readError) throw readError;
+        if (!before) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+        const assignedStations = staffStations(req);
+        if (assignedStations && !assignedStations.includes(String((before as any).station_id ?? '').toUpperCase())) {
+            return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Vendor is outside your station scope.' });
+        }
+
+        const body = parsed.data;
+        const updates = {
+            legal_name: body.legalName,
+            trading_name: body.tradingName || null,
+            contact_email: body.contactEmail.toLowerCase(),
+            contact_phone: body.contactPhone,
+            cac_number: body.cacNumber || null,
+            tin: body.tin || null,
+            business_type: body.businessType || null,
+            operating_address: body.operatingAddress || null,
+            updated_at: new Date().toISOString(),
+        };
+        const { data: vendor, error } = await adminClient
+            .from('vendor_organizations')
+            .update(updates)
+            .eq('id', id)
+            .select('*')
+            .single();
+        if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
+
+        await logAction({
+            ...auditFromRequest(req),
+            action: 'vendor.details_updated',
+            targetType: 'vendor_organization',
+            targetId: id,
+            before,
+            after: updates,
+        });
+        return { ok: true, vendor };
+    });
+
     fastify.patch('/vendors/:id/status', async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const schema = z.object({
@@ -1466,6 +1529,14 @@ const route: FastifyPluginAsync = async (fastify) => {
             .eq('id', id)
             .maybeSingle();
         if (!vendor) return reply.code(404).send({ error: 'not_found', message: 'Vendor not found.' });
+        const assignedStations = staffStations(req);
+        const previous = (vendor as any).station_id ?? null;
+        if (assignedStations && !assignedStations.includes(String(previous ?? '').toUpperCase())) {
+            return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Vendor is outside your station scope.' });
+        }
+        if (assignedStations && (!stationId || !assignedStations.includes(stationId))) {
+            return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Station is outside your assigned scope.' });
+        }
 
         // Reject unknown stations rather than silently assigning a vendor to a
         // site that does not exist and showing them an empty dashboard.
@@ -1479,7 +1550,6 @@ const route: FastifyPluginAsync = async (fastify) => {
             }
         }
 
-        const previous = (vendor as any).station_id ?? null;
         const { error } = await adminClient
             .from('vendor_organizations')
             .update({ station_id: stationId, updated_at: new Date().toISOString() })
@@ -1487,9 +1557,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         if (error) return reply.code(400).send({ error: 'update_failed', message: error.message });
 
         await logAction({
-            actorUserId: req.actor!.userId,
-            actorType: 'staff',
-            actorRole: req.actor!.role,
+            ...auditFromRequest(req),
             action: 'vendor.station_reassigned',
             targetType: 'vendor_organization',
             targetId: id,
@@ -2537,6 +2605,18 @@ const route: FastifyPluginAsync = async (fastify) => {
             return { ok: true, result };
         } catch (e: any) {
             return reply.code(400).send({ error: 'resend_failed', message: e.message ?? 'Could not resend.' });
+        }
+    });
+
+    // Resend a remote-send order that is stuck in delivery_pending_review.
+    fastify.post('/purchases/:id/resend-remote', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        try {
+            const result = await resendRemoteSendOrder(id, req.actor!.userId);
+            return { ok: true, taskId: result.taskId };
+        } catch (e: any) {
+            const status = e.code === 'not_found' ? 404 : e.code === 'invalid_state' ? 409 : e.code === 'no_token' ? 422 : 400;
+            return reply.code(status).send({ error: e.code ?? 'resend_failed', message: e.message });
         }
     });
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { kwh, naira, shortDate } from '../lib/format';
 import { printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
@@ -157,6 +158,7 @@ onMounted(load);
         </div>
 
         <div class="receipt-mobile-list">
+          <WalletTableSkeleton v-if="loading && !filtered.length" variant="cards" />
           <button v-for="receipt in filtered" :key="receipt.id" class="receipt-mobile-card" @click="openReceipt(receipt)">
             <span>
               <strong>{{ receipt.receipt_number }}</strong>
@@ -167,10 +169,6 @@ onMounted(load);
           <div v-if="!filtered.length && !loading" class="receipt-empty">
             <strong>No receipts yet.</strong>
             <span>Completed token purchases will appear here.</span>
-          </div>
-          <div v-if="loading && !filtered.length" class="receipt-empty">
-            <strong>Loading receipts...</strong>
-            <span>Fetching your latest token records.</span>
           </div>
         </div>
       </div>

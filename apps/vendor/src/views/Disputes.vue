@@ -4,8 +4,7 @@
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ Raise Dispute</button>
     </div>
 
-    <div v-if="loading" class="bw-loading">Loading…</div>
-    <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
+    <div v-if="error" class="bw-error-banner">{{ error }}</div>
 
     <div v-else>
       <div class="bw-table-wrapper">
@@ -21,6 +20,7 @@
             </tr>
           </thead>
           <tbody>
+            <WalletTableSkeleton v-if="loading" :columns="6" />
             <tr v-for="d in disputes" :key="d.id">
               <td class="bw-mono bw-text-sm">{{ d.reference }}</td>
               <td class="bw-text-sm" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.subject }}</td>
@@ -29,7 +29,7 @@
               <td class="bw-text-sm">{{ fmtDate(d.created_at) }}</td>
               <td><button class="bw-btn bw-btn-ghost bw-btn-sm" @click="openDetail(d)">View</button></td>
             </tr>
-            <tr v-if="!disputes.length">
+            <tr v-if="!loading && !disputes.length">
               <td colspan="6" class="bw-empty">No disputes yet. Raise one if you have a vending issue.</td>
             </tr>
           </tbody>
@@ -38,7 +38,8 @@
 
       <!-- Mobile cards (≤640px) -->
       <div class="bw-t-cards">
-        <div v-if="!disputes.length" class="bw-empty">No disputes yet.</div>
+        <WalletTableSkeleton v-if="loading" variant="cards" />
+        <div v-if="!loading && !disputes.length" class="bw-empty">No disputes yet.</div>
         <div v-for="d in disputes" :key="d.id" class="bw-tc">
           <div class="bw-tc-head">
             <span class="bw-mono" style="font-size:var(--t-sm)">{{ d.reference }}</span>
@@ -143,6 +144,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira } from '../lib/format';
 

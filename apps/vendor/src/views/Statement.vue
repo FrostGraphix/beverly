@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { naira } from '../lib/format';
@@ -65,8 +66,7 @@ onMounted(async () => {
 
 <template>
   <AppShell title="Statement">
-    <div v-if="loading" class="bw-loading">Loading statement...</div>
-    <div v-else-if="error" class="bw-error-banner">{{ error }}</div>
+    <div v-if="error" class="bw-error-banner">{{ error }}</div>
 
     <template v-else>
       <div class="bw-kpi-grid bw-mobile-kpi-grid statement-stat-grid" aria-label="Statement summary">
@@ -92,7 +92,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="batches.length === 0" class="bw-empty">No settlement batches yet.</div>
+      <div v-if="!loading && batches.length === 0" class="bw-empty">No settlement batches yet.</div>
 
       <div v-else class="bw-card flush statement-periods">
         <div class="bw-table-head-bar">
@@ -117,6 +117,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
+              <WalletTableSkeleton v-if="loading" :columns="7" />
               <tr v-for="batch in batches" :key="batch.id">
                 <td>{{ fmtDate(batch.period_start) }}<template v-if="batch.period_start !== batch.period_end"> - {{ fmtDate(batch.period_end) }}</template></td>
                 <td>{{ batch.total_vends }}</td>
@@ -131,6 +132,7 @@ onMounted(async () => {
         </div>
 
         <div class="bw-t-cards">
+          <WalletTableSkeleton v-if="loading" variant="cards" />
           <article v-for="batch in batches" :key="batch.id" class="bw-tc">
             <div class="bw-tc-top">
               <div>

@@ -8,6 +8,8 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const migration = read('supabase/migrations/20260520121500_vendor_vend_credential.sql');
 const service = read('backend/wallet/src/services/vendor-vend-credential.ts');
 const tokenEngine = read('backend/wallet/src/services/token-engine.ts');
+const vendingService = read('backend/wallet/src/services/vending.ts');
+const customerPurchaseService = read('backend/wallet/src/services/customer-purchase.ts');
 const walletEnv = read('backend/wallet/src/config/env.ts');
 const routes = read('backend/wallet/src/routes/vendor.ts');
 const router = read('apps/vendor/src/router/index.ts');
@@ -59,12 +61,16 @@ assert.match(routes, /credential: body\.authorization/);
 assert.match(routes, /return sendVendCredentialError\(reply, error\)/);
 assert.match(routes, /error\.code === 'vend_credential_required'/);
 assert.match(routes, /error\.code\.endsWith\('_failed'\)/);
+assert.match(routes, /energy_authorization_misconfigured/);
+assert.match(routes, /assertEnergyVendReady\(\)/);
 assert.match(routes, /vend_credential_configured: hasVendorVendCredential\(row\)/);
 assert.match(routes, /vend_credential_hash, vend_credential_salt/);
 assert.doesNotMatch(routes, /allowArchivedFallback/);
 assert.doesNotMatch(routes, /allowHistoricalFallback/);
 assert.match(tokenEngine, /return env\.ENERGY_ENABLE_ARCHIVED_METER_FALLBACK === true/);
 assert.match(walletEnv, /parsed\.data\.UPSTREAM_BEARER_TOKEN \|\| parsed\.data\.ENERGY_BEARER_TOKEN/);
+assert.ok(vendingService.indexOf('assertEnergyVendReady()') < vendingService.indexOf("findWalletByOwner('vendor'"));
+assert.ok(customerPurchaseService.indexOf('assertEnergyVendReady()') < customerPurchaseService.indexOf('// Resolve meter'));
 
 assert.match(router, /\['vend', 'remote-send'\]\.includes\(String\(to\.name\)\)/);
 assert.match(router, /MFA_OPTIONAL_ROUTE_NAMES/);
@@ -84,6 +90,9 @@ assert.doesNotMatch(vendAccess, />Password</);
 assert.match(vendAccess, /credentialProblem/);
 assert.match(vendAccess, /Choose a less predictable PIN/);
 assert.match(vendAccess, /Authorization entries must match/);
+assert.match(vend, /Vending temporarily unavailable/);
+assert.match(vend, /No wallet hold, debit, or token request occurred/);
+assert.match(vend, /vendingConfigurationBlocked/);
 
 for (const view of [vend, remoteSend]) {
   assert.match(view, /ConfirmDialog/);
