@@ -51,6 +51,7 @@ export const VENDOR_INTENTS = new Set([
     'vendorStationScope',
     'vendorWhtCertificates',
     'vendorInvoices',
+    'vendorKycStatus',
 ]);
 
 export const CUSTOMER_INTENTS = new Set([
@@ -69,6 +70,23 @@ export async function checkAcobotIntentPermission(
     actor: Actor,
     intentKey: string,
 ): Promise<{ allowed: boolean; reason?: string }> {
+    // Explicitly block customers and vendors from turning off/controlling meter relays
+    if (intentKey === 'customerMeterRelayControl' || intentKey === 'vendorMeterRelayControl' || intentKey === 'adminMeterRelayControl') {
+        if (actor.type === 'customer' || actor.type === 'vendor_user') {
+            return {
+                allowed: false,
+                reason: 'Customers and vendors are strictly prohibited from turning off meter relays. Relay control is restricted to authorized operations staff.',
+            };
+        }
+    }
+
+    // Explicitly block Tamper Reset Token generation for ALL users via Beverly AI
+    if (intentKey === 'adminTamperToken' || intentKey === 'tamperToken' || intentKey === 'clearTamper') {
+        return {
+            allowed: false,
+            reason: 'Generation of Tamper Reset tokens via Beverly AI is strictly prohibited for all users. Meter tamper clearing requires physical site inspection by utility engineers.',
+        };
+    }
     // 1. Check Wallet Admin Intents
     const walletConfig = WALLET_ADMIN_INTENT_PERMISSIONS[intentKey];
     if (walletConfig) {

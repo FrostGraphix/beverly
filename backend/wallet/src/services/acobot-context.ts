@@ -33,12 +33,15 @@ export interface DetectedIntents {
     vendorFloatBalance?: boolean;
     vendorSettlementHistory?: boolean;
     vendorVendCredentials?: boolean;
+    vendorKycStatus?: boolean;
     
     // Customer Intents
     customerWalletBalance?: boolean;
     customerMeterOrders?: boolean;
     customerVendPin?: boolean;
     customerSupportChat?: boolean;
+    customerKycStatus?: boolean;
+    customerMeterRelayControl?: boolean;
 
     // General
     faqHelp?: boolean;
@@ -74,6 +77,7 @@ export function detectIntentsFromPrompt(prompt: string): DetectedIntents {
         customerMeterOrders: has('my token', 'purchase history', 'last order', 'electricity token', 'meter order'),
         customerVendPin: has('vend pin', 'my pin', 'reset pin'),
         customerSupportChat: has('help', 'support ticket', 'open issue', 'customer care'),
+        customerMeterRelayControl: has('turn off meter', 'disconnect meter', 'turn off my meter', 'shut off meter', 'turn on meter', 'reconnect meter', 'relay control', 'switch off meter', 'switch on meter', 'trip meter'),
 
         // General
         faqHelp: has('faq', 'faqs', 'help', 'how to', 'tariff rate', 'error code', 'meter tamper', 'sgc keychange', 'knowledge base', 'guide', 'support'),
@@ -141,7 +145,7 @@ export async function buildAcobotContext(
                 contextSections.push(`[DATA: DAILY SETTLEMENT ROLLUPS]\n` + JSON.stringify(data ?? [], null, 2));
             }
 
-            // ── 2. Beverly CRM Domain Data ──
+            // ── 2. Beverly CRM Domain Data & KYC Review ──
             if ((portal === 'crm' || portal === 'admin') && intentKey === 'adminCustomerOnboarding') {
                 contextSections.push(
                     `[DATA: BEVERLY CRM CUSTOMER ONBOARDING]\n` +
@@ -151,21 +155,91 @@ export async function buildAcobotContext(
                 );
             }
 
+            if ((portal === 'crm' || portal === 'admin') && (intentKey === 'adminKycReview' || intentKey === 'adminCustomers')) {
+                const { count: pendingKyc } = await adminClient.from('customers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'pending');
+                const { count: verifiedKyc } = await adminClient.from('customers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'verified');
+                contextSections.push(
+                    `[DATA: BEVERLY CRM KYC & COMPLIANCE STATS]\n` +
+                    `- Pending KYC Submissions Awaiting Review: ${pendingKyc ?? 0}\n` +
+                    `- Verified Customers: ${verifiedKyc ?? 0}`
+                );
+            }
+
             if (portal === 'crm' && intentKey === 'adminDisputes') {
                 const { count } = await adminClient.from('disputes').select('id', { count: 'exact', head: true }).eq('status', 'open');
                 contextSections.push(`[DATA: BEVERLY CRM OPEN DISPUTES]\n- Open Disputes Count: ${count ?? 0}`);
             }
 
-            // ── 3. Vendor Merchant Domain Data ──
-            if (portal === 'vendor' && intentKey === 'vendorFloatBalance' && actor.vendorOrganizationId) {
-                const { data } = await adminClient.from('vendor_organizations').select('id, name, float_balance_minor').eq('id', actor.vendorOrganizationId).single();
-                contextSections.push(`[DATA: MERCHANT FLOAT BALANCE]\n` + JSON.stringify(data ?? {}, null, 2));
+            // ── 3. Vendor Merchant Domain Data & KYC ──
+            if (portal === 'vendor' && actor.vendorOrganizationId && (intentKey === 'vendorFloatBalance' || intentKey === 'vendorKycStatus')) {
+                const { data: vendorData } = await adminClient
+                    .from('vendor_organizations')
+                    .select('id, name, status, float_balance_minor, settlement_bank_name, settlement_account_number')
+                    .eq('id', actor.vendorOrganizationId)
+                    .single();
+
+                if (vendorData) {
+                    const floatMajor = ((vendorData.float_balance_minor ?? 0) / 100).toFixed(2);
+                    contextSections.push(
+                        `[LIVE MERCHANT ORGANIZATION & KYC CONTEXT]\n` +
+                        `- Merchant Name: ${vendorData.name ?? 'N/A'}\n` +
+                        `- Organization Status: ${String(vendorData.status).toUpperCase()}\n` +
+                        `- Merchant Float Balance: ₦${floatMajor}\n` +
+                        `- Settlement Account: ${vendorData.settlement_bank_name ?? 'N/A'} (${vendorData.settlement_account_number ?? 'N/A'})`
+                    );
+                }
             }
 
-            // ── 4. Customer Wallet Domain Data ──
-            if (portal === 'customer' && intentKey === 'customerWalletBalance' && actor.customerId) {
-                const { data } = await adminClient.from('customers').select('id, full_name, wallet_balance_minor').eq('id', actor.customerId).single();
-                contextSections.push(`[DATA: CUSTOMER WALLET BALANCE]\n` + JSON.stringify(data ?? {}, null, 2));
+            // ── 4. Customer Wallet Domain Data & KYC ──
+            if (portal === 'customer' && actor.customerId && (intentKey === 'customerWalletBalance' || intentKey === 'customerKycStatus')) {
+                const { data: customerData } = await adminClient
+                    .from('customers')
+                    .select('id, full_name, phone, email, wallet_balance_minor, kyc_tier, kyc_status, status')
+                    .eq('id', actor.customerId)
+                    .single();
+
+                if (customerData) {
+                    const { count: meterCount } = await adminClient
+                        .from('meters')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('customer_id', actor.customerId);
+
+                    const limitByTier: Record<number, string> = {
+                        0: '₦50,000 per purchase / Max 1 meter',
+                        1: '₦100,000 per purchase / Max 5 meters',
+                        2: '₦200,000 per purchase / Max 10 meters',
+                    };
+
+                    const tierLevel = customerData.kyc_tier ?? 0;
+                    const balanceMajor = ((customerData.wallet_balance_minor ?? 0) / 100).toFixed(2);
+
+                    contextSections.push(
+                        `[LIVE CUSTOMER PROFILE & KYC CONTEXT]\n` +
+                        `- Customer Name: ${customerData.full_name ?? 'N/A'}\n` +
+                        `- Email: ${customerData.email ?? 'N/A'}\n` +
+                        `- Phone: ${customerData.phone ?? 'N/A'}\n` +
+                        `- Account Status: ${String(customerData.status).toUpperCase()}\n` +
+                        `- KYC Tier: Tier ${tierLevel} (${tierLevel === 0 ? 'Unverified' : tierLevel === 1 ? 'BVN Verified' : 'NIN & ID Verified'})\n` +
+                        `- KYC Verification Status: ${String(customerData.kyc_status ?? 'unverified').toUpperCase()}\n` +
+                        `- Vending Limit: ${limitByTier[tierLevel] ?? limitByTier[0]}\n` +
+                        `- Wallet Balance: ₦${balanceMajor}\n` +
+                        `- Linked Meters Count: ${meterCount ?? 0}`
+                    );
+                }
+            }
+
+            if (intentKey === 'customerMeterRelayControl' && actor.customerId) {
+                const { data: meters } = await adminClient
+                    .from('meters')
+                    .select('id, meter_number, oem_brand, is_active')
+                    .eq('customer_id', actor.customerId);
+
+                contextSections.push(
+                    `[DATA: CUSTOMER METER RELAY CONTROL]\n` +
+                    `- Linked Smart Meters: ${JSON.stringify(meters ?? [], null, 2)}\n` +
+                    `- Security Policy: Customers ARE PERMITTED to turn off/on their OWN smart meters.\n` +
+                    `- Action Proposal Card Required: Output structured action-card with action "METER_RELAY_OFF" or "METER_RELAY_ON" and meterNumber parameter. User confirms via Vend PIN in UI.`
+                );
             }
 
             // ── 5. General FAQ Knowledge Data ──
