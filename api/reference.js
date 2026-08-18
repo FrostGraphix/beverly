@@ -3304,7 +3304,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ ok: true, id });
   }
 
-  if (methodUpper === "GET" && pathname.startsWith("/api/v1/admin/vendors")) {
+  if (methodUpper === "GET" && (pathname === "/api/v1/admin/vendors" || pathname.startsWith("/api/v1/admin/vendors?"))) {
     const sp = adminQueryParams(request.url);
     const statusFilter = sp.get("status") || "";
     const q = (sp.get("q") || "").toLowerCase();
@@ -3319,6 +3319,26 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     if (statusFilter) rows = rows.filter(v => v.status === statusFilter);
     if (q) rows = rows.filter(v => v.legal_name.toLowerCase().includes(q) || v.contact_email.toLowerCase().includes(q));
     return localJobResponse({ vendors: rows });
+  }
+
+  if (methodUpper === "GET" && pathname.match(/^\/api\/v1\/admin\/vendors\/[^/]+$/)) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+    const row = state.rows.find(v => v.id === id && !v.deleted_at);
+    if (!row) {
+      return {
+        status: 404,
+        body: { code: 404, msg: "Vendor not found.", reason: "Vendor not found.", data: null, result: null, _proxy: { source: "local-db", pathname } }
+      };
+    }
+    return localJobResponse({
+      vendor: row,
+      wallet: { id: `w-${row.id}`, currency: "NGN", status: "active" },
+      balance_minor: row.balance_minor || 0,
+      holds_minor: 0,
+      available_minor: row.available_minor || row.balance_minor || 0,
+      stats: { vendingCount: 0, vendingValueMinor: 0, fundingCount: 0, fundingValueMinor: 0, stationCount: row.station_id ? 1 : 0 }
+    });
   }
 
   if (methodUpper === "DELETE" && pathname.startsWith("/api/v1/admin/vendors/")) {
@@ -3424,6 +3444,51 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
 
   if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/vendors\/[^/]+\/status$/)) {
     return localJobResponse({ updated: true });
+  }
+
+  if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/vendors\/[^/]+\/station$/)) {
+    const parts = pathname.split("/");
+    const id = decodeURIComponent(parts[parts.length - 2] || "");
+    const body = requestData.parsedBody || {};
+    const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+    let row = state.rows.find(v => v.id === id);
+    if (row) {
+      row.station_id = body.stationId ? String(body.stationId).toUpperCase() : null;
+    }
+    return localJobResponse({ ok: true, stationId: body.stationId ? String(body.stationId).toUpperCase() : null });
+  }
+
+  if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/vendors\/[^/]+$/)) {
+    const id = decodeURIComponent(pathname.split("/").pop() || "");
+    const body = requestData.parsedBody || {};
+    const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+    let row = state.rows.find(v => v.id === id);
+    if (!row) {
+      row = {
+        id,
+        legal_name: body.legalName || "Vendor " + id,
+        trading_name: body.tradingName || null,
+        contact_email: body.contactEmail || "",
+        contact_phone: body.contactPhone || "",
+        cac_number: body.cacNumber || null,
+        tin: body.tin || null,
+        business_type: body.businessType || null,
+        operating_address: body.operatingAddress || null,
+        status: "approved",
+        created_at: new Date().toISOString()
+      };
+      state.rows.push(row);
+    } else {
+      if (body.legalName !== undefined) row.legal_name = body.legalName;
+      if (body.tradingName !== undefined) row.trading_name = body.tradingName || null;
+      if (body.contactEmail !== undefined) row.contact_email = body.contactEmail;
+      if (body.contactPhone !== undefined) row.contact_phone = body.contactPhone;
+      if (body.cacNumber !== undefined) row.cac_number = body.cacNumber || null;
+      if (body.tin !== undefined) row.tin = body.tin || null;
+      if (body.businessType !== undefined) row.business_type = body.businessType || null;
+      if (body.operatingAddress !== undefined) row.operating_address = body.operatingAddress || null;
+    }
+    return localJobResponse({ ok: true, vendor: row });
   }
 
   if (methodUpper === "PATCH" && pathname.match(/^\/api\/v1\/admin\/fraud\/[^/]+\/resolve$/)) {

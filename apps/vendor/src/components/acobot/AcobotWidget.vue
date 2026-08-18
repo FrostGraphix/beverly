@@ -117,33 +117,37 @@
       <template v-if="!isMinimized">
         <div ref="messageContainer" class="beverly-ai-messages">
           <div v-if="messages.length === 0" class="beverly-ai-welcome">
-            <div class="beverly-ai-welcome-banner">
-              <div class="beverly-ai-welcome-title-row">
-                <!-- Storefront Outline Icon -->
-                <svg class="beverly-portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            <!-- Pop-up Greeting Card (Matches reference screenshot) -->
+            <div class="beverly-ai-popup-greeting">
+              <div class="beverly-ai-popup-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="5" y="8" width="14" height="12" rx="3"></rect>
+                  <path d="M12 2v6"></path>
+                  <circle cx="9" cy="13" r="1"></circle>
+                  <circle cx="15" cy="13" r="1"></circle>
                 </svg>
-                <h4>Beverly AI Merchant Ops</h4>
               </div>
-              <p>Organization float, settlements, and station credentials.</p>
+              <div class="beverly-ai-popup-body">
+                <p>👋 Hi <strong>{{ userFirstName }}</strong>, I'm <strong>Beverly AI</strong>. I can help you check your merchant float balance, view settlement history, manage station credentials, and download tax invoices.</p>
+              </div>
             </div>
 
-            <!-- Comprehensive Quick Action Chips with Specific Outline Icons -->
-            <div class="beverly-ai-chip-section">
-              <span class="beverly-ai-chip-title">Quick Actions</span>
-              <div class="beverly-ai-chip-grid">
+            <!-- "Try asking" Section -->
+            <div class="beverly-ai-try-asking-section">
+              <span class="beverly-ai-try-asking-title">Try asking</span>
+              <div class="beverly-ai-chip-grid-2x2">
                 <button
                   v-for="chip in quickChips"
                   :key="chip.label"
                   type="button"
-                  class="beverly-ai-chip"
+                  class="beverly-ai-chip-card"
                   @click="sendPrompt(chip.label)"
                 >
-                  <!-- Dynamic Outline Icon per Chip -->
-                  <svg class="beverly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path :d="chip.iconPath"></path>
-                  </svg>
+                  <div class="beverly-chip-icon-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path :d="chip.iconPath"></path>
+                    </svg>
+                  </div>
                   <span>{{ chip.label }}</span>
                 </button>
               </div>
@@ -249,6 +253,14 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted } from 'vue';
 import { api } from '../../lib/api';
+import { useVendorAuthStore } from '../../stores/auth';
+
+const auth = useVendorAuthStore();
+const userFirstName = computed(() => {
+  const name = auth.user?.full_name?.trim();
+  if (!name) return 'there';
+  return name.split(' ')[0];
+});
 
 const isOpen = ref(false);
 const isMinimized = ref(false);
@@ -663,73 +675,99 @@ async function sendPrompt(prompt: string) {
   gap: var(--s-2, 8px);
 }
 
-.beverly-ai-welcome-banner {
-  padding: var(--s-2, 8px) var(--s-3, 12px);
-  border-radius: var(--r-md);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  margin-bottom: var(--s-2, 8px);
+.beverly-ai-popup-greeting {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3, 12px);
+  padding: 14px 16px;
+  border-radius: var(--r-xl, 14px);
+  background: color-mix(in oklab, var(--surface-2) 90%, var(--brand-500) 10%);
+  border: 1px solid var(--brand-glow, rgba(16, 185, 129, 0.3));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  margin-bottom: 16px;
+  animation: modalSlideUp 0.25s ease-out;
 }
 
-.beverly-ai-welcome-title-row {
+.beverly-ai-popup-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--brand-500);
+  border: 1px solid var(--brand-400);
+}
+
+.beverly-ai-popup-avatar svg {
+  width: 18px;
+  height: 18px;
+}
+
+.beverly-ai-popup-body p {
+  margin: 0;
+  font-size: var(--t-sm, 13px);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.beverly-ai-try-asking-section {
+  margin-top: 4px;
+}
+
+.beverly-ai-try-asking-title {
+  display: block;
+  font-size: var(--t-xs, 12px);
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.beverly-ai-chip-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.beverly-ai-chip-card {
   display: flex;
   align-items: center;
-  gap: var(--s-2, 8px);
-  margin-bottom: 4px;
-}
-
-.beverly-ai-welcome-banner h4 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--t-sm);
-  color: var(--brand-400);
-}
-
-.beverly-ai-welcome-banner p {
-  margin: 0;
-  font-size: var(--t-xs);
-  color: var(--text-dim);
-  line-height: 1.4;
-}
-
-.beverly-ai-chip-title {
-  display: block;
-  font-size: var(--t-2xs);
-  font-weight: var(--fw-bold);
-  color: var(--brand-400);
-  margin-bottom: var(--s-1, 4px);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.beverly-ai-chip-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1, 4px);
-}
-
-.beverly-ai-chip {
-  padding: var(--s-2, 8px) var(--s-3, 12px);
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg, 12px);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  text-align: left;
-  font-size: var(--t-sm);
   color: var(--text);
+  font-size: var(--t-xs, 12px);
+  font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: all var(--dur-base) var(--ease-out);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2, 8px);
+  text-align: left;
+  transition: all 0.2s ease;
 }
 
-.beverly-ai-chip:hover {
+.beverly-ai-chip-card:hover {
   background: var(--surface-2);
-  border-color: var(--brand-400);
-  transform: translateX(3px);
-  color: var(--brand-300);
+  border-color: var(--brand-500);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--brand-glow, rgba(16, 185, 129, 0.2));
+  color: var(--brand-400);
+}
+
+.beverly-chip-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--brand-500);
+}
+
+.beverly-chip-icon-box svg {
+  width: 16px;
+  height: 16px;
 }
 
 .beverly-ai-msg-row {

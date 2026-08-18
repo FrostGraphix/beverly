@@ -115,15 +115,10 @@ async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; a
     if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
         return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
     }
-    const isSeedDefault = !oemId || !oemConfig || oemConfig.isSeedDefault || oemConfig.slug === DEFAULT_OEM_SLUG;
-    if (isSeedDefault) {
-        const baseUrl = (oemConfig && oemConfig.baseUrl) ? oemConfig.baseUrl : (env.ENERGY_BACKEND_URL || '');
-        const authHeader = authHeaderFromOem || (env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null);
-        if (baseUrl && authHeader) {
-            return { baseUrl, authHeader };
-        }
-    }
-    if (oemId && !isSeedDefault) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
+    // An explicitly tagged meter must never fall back to a different OEM's
+    // environment credentials. The untagged legacy flow below is the only
+    // path allowed to use the default environment configuration.
+    if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
         authHeader: env.ENERGY_BEARER_TOKEN ? { name: 'Authorization', value: `Bearer ${env.ENERGY_BEARER_TOKEN}` } : null,
