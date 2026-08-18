@@ -7,7 +7,6 @@ import {
     toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
     getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
 } from '@beverly/tokens';
-import ChatWidget from './ChatWidget.vue';
 
 defineProps<{ title?: string; hideTabbar?: boolean }>();
 const auth = useAuthStore();
@@ -286,9 +285,6 @@ async function signOut() {
         Profile
       </RouterLink>
     </nav>
-
-    <!-- Global quick-chat widget -->
-    <ChatWidget />
   </div>
 </template>
 

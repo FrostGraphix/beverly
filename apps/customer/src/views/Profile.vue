@@ -268,6 +268,26 @@ async function doSignOut() {
       </div>
     </router-link>
 
+    <!-- Beverly AI Section -->
+    <div class="bw-card" style="border: 1px solid var(--brand-glow); background: color-mix(in oklab, var(--surface) 92%, var(--brand) 8%)">
+      <div style="display:flex; align-items:center; gap:var(--s-3); margin-bottom:var(--s-2)">
+        <div style="width:36px; height:36px; border-radius:50%; background:var(--surface-3); display:grid; place-items:center; border:1px solid var(--brand); flex-shrink:0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.75" width="20" height="20">
+            <circle cx="12" cy="3" r="1.5"></circle>
+            <path d="M12 4.5v2.5"></path>
+            <rect x="4" y="7" width="16" height="13" rx="4" ry="4"></rect>
+            <circle cx="9" cy="12" r="1.5"></circle>
+            <circle cx="15" cy="12" r="1.5"></circle>
+          </svg>
+        </div>
+        <div style="flex:1; min-width:0">
+          <h4 style="margin:0; font-size:var(--t-base); color:var(--text); font-weight:700">Beverly AI Assistant</h4>
+          <span style="font-size:var(--t-xs); color:var(--brand); display:block">Voice & Chat Customer Support</span>
+        </div>
+      </div>
+      <p style="font-size:var(--t-xs); color:var(--text-dim); margin:0">Instant assistance for meter tokens, wallet funding, and dispute claims.</p>
+    </div>
+
     <!-- Actions -->
     <div class="bw-card">
       <div class="bw-stack" style="gap: var(--s-2)">

@@ -524,7 +524,7 @@ async function sendPrompt(prompt: string) {
 
 .beverly-ai-widget-wrapper {
   position: fixed;
-  bottom: var(--s-5, 20px);
+  bottom: calc(var(--bw-tabbar-height, 0px) + env(safe-area-inset-bottom, 0px) + 16px);
   right: var(--s-5, 20px);
   z-index: var(--z-modal, 1000);
   font-family: var(--font-sans);

@@ -48,6 +48,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/reports', name: 'reports', component: () => import('../views/Reports.vue'), meta: { auth: true, permission: 'wallet.dashboard.view' } },
     // Developer Console
     { path: '/dev', redirect: '/dev/api-keys' },
+    { path: '/dev/oem', name: 'dev-oem', component: () => import('../views/DevOemConsole.vue'), meta: { auth: true, permission: 'dev.console' } },
     { path: '/dev/api-keys', name: 'dev-api-keys', component: () => import('../views/DevApiKeys.vue'), meta: { auth: true, permission: 'dev.console' } },
     { path: '/dev/webhooks', name: 'dev-webhooks', component: () => import('../views/DevWebhooks.vue'), meta: { auth: true, permission: 'dev.console' } },
     { path: '/dev/api-log', name: 'dev-api-log', component: () => import('../views/DevApiLog.vue'), meta: { auth: true, permission: 'dev.console' } },
