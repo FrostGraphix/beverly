@@ -11,6 +11,7 @@
 import type { Actor } from '../plugins/auth.js';
 import { adminClient } from '../db/supabase.js';
 import { checkAcobotIntentPermission } from './acobot-rbac.js';
+import { listFaqs } from './support.js';
 
 export interface DetectedIntents {
     // Wallet Admin Intents
@@ -75,7 +76,7 @@ export function detectIntentsFromPrompt(prompt: string): DetectedIntents {
         customerSupportChat: has('help', 'support ticket', 'open issue', 'customer care'),
 
         // General
-        faqHelp: has('how to', 'tariff rate', 'error code', 'meter tamper', 'sgc keychange'),
+        faqHelp: has('faq', 'faqs', 'help', 'how to', 'tariff rate', 'error code', 'meter tamper', 'sgc keychange', 'knowledge base', 'guide', 'support'),
     };
 }
 
@@ -84,6 +85,7 @@ export interface BuiltAcobotContext {
     detectedIntents: string[];
     deniedIntents: string[];
     permissionStatus: 'granted' | 'denied' | 'partial';
+    directFaqAnswer?: string;
 }
 
 export async function buildAcobotContext(
@@ -165,8 +167,70 @@ export async function buildAcobotContext(
                 const { data } = await adminClient.from('customers').select('id, full_name, wallet_balance_minor').eq('id', actor.customerId).single();
                 contextSections.push(`[DATA: CUSTOMER WALLET BALANCE]\n` + JSON.stringify(data ?? {}, null, 2));
             }
+
+            // ── 5. General FAQ Knowledge Data ──
+            if (intentKey === 'faqHelp') {
+                const faqs = await listFaqs({
+                    audience: portal === 'admin' || portal === 'crm' ? 'all' : (portal as 'customer' | 'vendor'),
+                    limit: 10,
+                });
+                if (faqs.length > 0) {
+                    const faqList = faqs.map((f) => `- Q: ${f.question}\n  A: ${f.answer}`).join('\n');
+                    contextSections.push(`[DATA: PUBLISHED SUPPORT FAQS FOR ${portal.toUpperCase()}]\n${faqList}`);
+                }
+            }
         } catch (err: any) {
             contextSections.push(`[DATA FETCH NOTICE: ${intentKey}]\n${err?.message ?? 'Query skipped.'}`);
+        }
+    }
+
+    // ── 5. Knowledge Base (FAQ) Intent & Direct Answer Interceptor ──
+    let directFaqAnswer: string | undefined = undefined;
+    const trimmedPrompt = userPrompt.trim();
+
+    // Ignore short conversational prompts (e.g. "hi", "hello", "yes", "no") from direct FAQ interception
+    const stopWords = new Set(['hi', 'hello', 'hey', 'yo', 'thanks', 'thank you', 'ok', 'okay', 'yes', 'no', 'how', 'do', 'i', 'the', 'a', 'an', 'what', 'is', 'for', 'to', 'my', 'me', 'in', 'on', 'at', 'with']);
+    const promptWords = trimmedPrompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w));
+
+    if (trimmedPrompt.length >= 4 && promptWords.length > 0) {
+        try {
+            // First try full prompt search
+            let matchingFaqs = await listFaqs({
+                search: trimmedPrompt,
+                audience: portal === 'admin' || portal === 'crm' ? 'all' : (portal as 'customer' | 'vendor'),
+                limit: 5,
+            });
+
+            // Fallback: If full prompt yields no results, search by top significant keywords
+            if (matchingFaqs.length === 0 && promptWords.length > 0) {
+                const keywordTerm = promptWords.join(' ');
+                matchingFaqs = await listFaqs({
+                    search: keywordTerm,
+                    audience: portal === 'admin' || portal === 'crm' ? 'all' : (portal as 'customer' | 'vendor'),
+                    limit: 5,
+                });
+            }
+
+            if (matchingFaqs.length > 0) {
+                const topFaq = matchingFaqs[0];
+                const cleanPrompt = trimmedPrompt.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const cleanFaqQ = topFaq.question.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                // High-confidence direct answer match check
+                const isDirectMatch =
+                    cleanFaqQ.includes(cleanPrompt) ||
+                    cleanPrompt.includes(cleanFaqQ) ||
+                    promptWords.every((word) => cleanFaqQ.includes(word));
+
+                if (isDirectMatch) {
+                    directFaqAnswer = `**${topFaq.question}**\n\n${topFaq.answer}`;
+                }
+
+                const faqSummary = matchingFaqs.map((f) => `- Q: ${f.question}\n  A: ${f.answer}`).join('\n');
+                contextSections.push(`[KNOWLEDGE BASE MATCHES (BEVERLY SUPPORT FAQS)]\n${faqSummary}`);
+            }
+        } catch {
+            // Skip FAQ context gracefully if DB fetch encounters a temporary error
         }
     }
 
@@ -182,5 +246,6 @@ export async function buildAcobotContext(
         detectedIntents,
         deniedIntents,
         permissionStatus,
+        directFaqAnswer,
     };
 }

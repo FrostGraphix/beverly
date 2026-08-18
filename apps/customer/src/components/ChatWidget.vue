@@ -436,7 +436,7 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 .cw {
   position: fixed;
   right: 16px;
-  bottom: calc(var(--bw-tabbar-height, 64px) + env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: calc(var(--bw-tabbar-height, 0px) + env(safe-area-inset-bottom, 0px) + 72px);
   z-index: var(--z-toast, 9000);
   display: flex;
   flex-direction: column;
@@ -444,22 +444,31 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
   gap: 10px;
 }
 
+@media (max-width: 480px) {
+  .cw {
+    bottom: calc(var(--bw-tabbar-height, 64px) + env(safe-area-inset-bottom, 0px) + 72px);
+  }
+}
+
 /* ── Bubble ── */
 .cw-bubble {
   width: 46px; height: 46px;
-  border-radius: 50%; border: 0;
-  background: linear-gradient(180deg, var(--brand-300), var(--brand-600));
-  color: #04140b;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border-strong);
+  background: var(--glass-bg-strong);
+  color: var(--brand-400);
   display: grid; place-items: center;
   cursor: pointer;
-  box-shadow: 0 8px 20px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25);
+  box-shadow: var(--glass-shine), var(--glass-shadow-float);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
   position: relative;
   animation: cw-float 3.8s ease-in-out infinite;
-  transition: transform var(--dur-fast), box-shadow var(--dur-fast);
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast), border-color var(--dur-fast);
 }
-.cw-bubble:hover { animation-play-state: paused; transform: translateY(-3px); box-shadow: 0 12px 26px var(--brand-glow), inset 0 1px 0 oklch(100% 0 0 / 0.25); }
-.cw-bubble:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand); }
-.cw-bubble svg { width: 19px; height: 19px; }
+.cw-bubble:hover { animation-play-state: paused; transform: translateY(-3px); border-color: var(--brand-400); box-shadow: var(--glass-shine), 0 12px 28px var(--brand-glow); }
+.cw-bubble:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand-400); }
+.cw-bubble svg { width: 20px; height: 20px; stroke: var(--brand-400); }
 
 .cw-badge {
   position: absolute; top: -2px; right: -2px;
@@ -505,8 +514,9 @@ function time(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-
 .cw-head-id { display: flex; align-items: center; gap: var(--s-2); }
 .cw-head-actions { display: flex; align-items: center; gap: 4px; }
 .cw-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
-  background: var(--brand-mark-url, url("/brand/beverly-mark-light.png")) center / contain no-repeat, linear-gradient(135deg, var(--brand-300), var(--brand-600));
+  width: 34px; height: 34px; border-radius: var(--r-md);
+  background: var(--brand-mark-url) center / contain no-repeat, var(--surface-2);
+  border: 1px solid var(--border);
   display: block;
 }
 .cw-head-id strong { display: block; font-size: var(--t-md); color: var(--text); }

@@ -56,7 +56,21 @@ function isGroupCollapsed(label: string, group: { items: Array<{ to: string }> }
     if (isGroupActive(group)) return false;
     return !!collapsedGroups.value[label];
 }
-const navGroups = computed(() => [
+const isDevConsoleMode = computed(() => route.path.startsWith('/dev'));
+
+function openDevConsole() {
+    closeUserMenu();
+    closeDrawer();
+    void router.push('/dev/api-keys');
+}
+
+function exitDevConsole() {
+    closeUserMenu();
+    closeDrawer();
+    void router.push('/');
+}
+
+const standardNavGroups = computed(() => [
     {
         label: 'Overview',
         items: [
@@ -129,25 +143,44 @@ const navGroups = computed(() => [
             { to: '/permissions', text: 'Permissions', permission: 'wallet.access.manage', icon: 'permissions' },
         ],
     },
+].map((group) => ({
+    ...group,
+    items: group.items.filter((item) => auth.hasPermission(item.permission)),
+})).filter((group) => group.items.length));
+
+const devConsoleNavGroups = computed(() => [
     {
-        label: 'Developer',
+        label: 'Core & Integrations',
         items: [
+            { to: '/dev/oem', text: 'OEM & Meters', permission: 'dev.console', icon: 'dev-oem' },
             { to: '/dev/api-keys', text: 'API Keys', permission: 'dev.console', icon: 'dev-api-keys' },
             { to: '/dev/webhooks', text: 'Webhooks', permission: 'dev.console', icon: 'dev-webhooks' },
-            { to: '/dev/api-log', text: 'API Log', permission: 'dev.console', icon: 'dev-api-log' },
             { to: '/dev/sandbox', text: 'Sandbox', permission: 'dev.console', icon: 'dev-sandbox' },
+        ],
+    },
+    {
+        label: 'Observability & Health',
+        items: [
             { to: '/dev/service-health', text: 'Service Health', permission: 'dev.console', icon: 'dev-health' },
+            { to: '/dev/api-log', text: 'API Log', permission: 'dev.console', icon: 'dev-api-log' },
             { to: '/dev/queue-monitor', text: 'Queue Monitor', permission: 'dev.console', icon: 'dev-queue' },
             { to: '/dev/error-explorer', text: 'Error Explorer', permission: 'dev.console', icon: 'dev-errors' },
-            { to: '/dev/toolkit', text: 'Dev Toolkit', permission: 'dev.console', icon: 'dev-toolkit' },
+        ],
+    },
+    {
+        label: 'System & Security',
+        items: [
             { to: '/dev/sys-config', text: 'Sys Config', permission: 'dev.console', icon: 'dev-config' },
             { to: '/dev/schema', text: 'Schema & Matrix', permission: 'dev.console', icon: 'dev-schema' },
+            { to: '/dev/toolkit', text: 'Dev Toolkit', permission: 'dev.console', icon: 'dev-toolkit' },
         ],
     },
 ].map((group) => ({
     ...group,
     items: group.items.filter((item) => auth.hasPermission(item.permission)),
 })).filter((group) => group.items.length));
+
+const navGroups = computed(() => (isDevConsoleMode.value ? devConsoleNavGroups.value : standardNavGroups.value));
 
 const initials = computed(() => {
     const n = auth.user?.full_name ?? auth.user?.email ?? 'ST';
@@ -189,10 +222,12 @@ const navIconPath: Record<string, string> = {
     privacy: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4',
     fraud: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     audit: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
-    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87',
+    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 0 0 -3 -3.87',
     permissions: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
     consumption: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
     'vendor-analytics': 'M3 3v18h18M7 16l4-5 4 3 5-7',
+    // Developer Console
+    'dev-oem':      'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 7v5l3 2',
     // Developer Console
     'dev-api-keys': 'M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4',
     'dev-webhooks': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',

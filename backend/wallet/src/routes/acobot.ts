@@ -59,40 +59,14 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
         // Legacy NGC registry keys (for docker login) do not — skip those for the NIM API.
         const nvidiaKeyIsUsable = nvidiaApiKey && nvidiaApiKey.startsWith('nvapi-');
 
+        // 1b. Knowledge Base FAQ Interceptor (Zero-Token Match)
+        if (contextBuild.directFaqAnswer) {
+            botResponse = contextBuild.directFaqAnswer;
+            modelUsed = 'beverly-faq-knowledge-base';
+        }
+
         try {
-            if (nvidiaKeyIsUsable) {
-                const nvidiaRes = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${nvidiaApiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        model: 'meta/llama-3.3-70b-instruct',
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            { role: 'system', content: `[SESSION CONTEXT]\n${contextBuild.contextText}` },
-                            { role: 'user', content: prompt },
-                        ],
-                        temperature: 0.2,
-                        max_tokens: 1024,
-                    }),
-                });
-
-                if (nvidiaRes.ok) {
-                    const data = await nvidiaRes.json() as any;
-                    botResponse = data.choices?.[0]?.message?.content ?? '';
-                    modelUsed = 'meta/llama-3.3-70b-instruct';
-                    promptTokens = data.usage?.prompt_tokens ?? 0;
-                    completionTokens = data.usage?.completion_tokens ?? 0;
-                } else {
-                    const errBody = await nvidiaRes.text().catch(() => '');
-                    req.log.warn({ status: nvidiaRes.status, body: errBody }, '[ACOBOT] NVIDIA NIM API call failed');
-                }
-            } else if (nvidiaApiKey) {
-                req.log.info('[ACOBOT] NVIDIA key detected as NGC legacy — skipping NIM API, trying Groq');
-            }
-
+            // 1st Priority: Groq LPU API (Main / Primary Ultra-Low Latency Inference)
             if (!botResponse && groqApiKey) {
                 const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
@@ -122,6 +96,40 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                     const errBody = await groqRes.text().catch(() => '');
                     req.log.warn({ status: groqRes.status, body: errBody }, '[ACOBOT] Groq API call failed');
                 }
+            }
+
+            // 2nd Priority: NVIDIA NIM API (Fallback)
+            if (!botResponse && nvidiaKeyIsUsable) {
+                const nvidiaRes = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${nvidiaApiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'meta/llama-3.3-70b-instruct',
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'system', content: `[SESSION CONTEXT]\n${contextBuild.contextText}` },
+                            { role: 'user', content: prompt },
+                        ],
+                        temperature: 0.2,
+                        max_tokens: 1024,
+                    }),
+                });
+
+                if (nvidiaRes.ok) {
+                    const data = await nvidiaRes.json() as any;
+                    botResponse = data.choices?.[0]?.message?.content ?? '';
+                    modelUsed = 'meta/llama-3.3-70b-instruct';
+                    promptTokens = data.usage?.prompt_tokens ?? 0;
+                    completionTokens = data.usage?.completion_tokens ?? 0;
+                } else {
+                    const errBody = await nvidiaRes.text().catch(() => '');
+                    req.log.warn({ status: nvidiaRes.status, body: errBody }, '[ACOBOT] NVIDIA NIM API call failed');
+                }
+            } else if (!botResponse && nvidiaApiKey) {
+                req.log.info('[ACOBOT] NVIDIA key detected as NGC legacy — skipping NIM API fallback');
             }
 
             if (!botResponse && openAiApiKey) {
