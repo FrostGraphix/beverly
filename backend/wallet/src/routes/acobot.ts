@@ -74,6 +74,7 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         'Authorization': `Bearer ${groqApiKey}`,
                         'Content-Type': 'application/json',
                     },
+                    signal: AbortSignal.timeout(10000),
                     body: JSON.stringify({
                         model: 'llama-3.3-70b-versatile',
                         messages: [
@@ -84,15 +85,18 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         temperature: 0.3,
                         max_tokens: 1024,
                     }),
+                }).catch((err: any) => {
+                    req.log.warn({ err: err?.message }, '[ACOBOT] Groq fetch timeout/error');
+                    return null;
                 });
 
-                if (groqRes.ok) {
+                if (groqRes && groqRes.ok) {
                     const data = await groqRes.json() as any;
                     botResponse = data.choices?.[0]?.message?.content ?? '';
                     modelUsed = 'llama-3.3-70b-versatile';
                     promptTokens = data.usage?.prompt_tokens ?? 0;
                     completionTokens = data.usage?.completion_tokens ?? 0;
-                } else {
+                } else if (groqRes) {
                     const errBody = await groqRes.text().catch(() => '');
                     req.log.warn({ status: groqRes.status, body: errBody }, '[ACOBOT] Groq API call failed');
                 }
@@ -106,6 +110,7 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         'Authorization': `Bearer ${nvidiaApiKey}`,
                         'Content-Type': 'application/json',
                     },
+                    signal: AbortSignal.timeout(10000),
                     body: JSON.stringify({
                         model: 'meta/llama-3.3-70b-instruct',
                         messages: [
@@ -116,15 +121,18 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         temperature: 0.2,
                         max_tokens: 1024,
                     }),
+                }).catch((err: any) => {
+                    req.log.warn({ err: err?.message }, '[ACOBOT] NVIDIA NIM fetch timeout/error');
+                    return null;
                 });
 
-                if (nvidiaRes.ok) {
+                if (nvidiaRes && nvidiaRes.ok) {
                     const data = await nvidiaRes.json() as any;
                     botResponse = data.choices?.[0]?.message?.content ?? '';
                     modelUsed = 'meta/llama-3.3-70b-instruct';
                     promptTokens = data.usage?.prompt_tokens ?? 0;
                     completionTokens = data.usage?.completion_tokens ?? 0;
-                } else {
+                } else if (nvidiaRes) {
                     const errBody = await nvidiaRes.text().catch(() => '');
                     req.log.warn({ status: nvidiaRes.status, body: errBody }, '[ACOBOT] NVIDIA NIM API call failed');
                 }
@@ -139,6 +147,7 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         'Authorization': `Bearer ${openAiApiKey}`,
                         'Content-Type': 'application/json',
                     },
+                    signal: AbortSignal.timeout(10000),
                     body: JSON.stringify({
                         model: 'gpt-4o-mini',
                         messages: [
@@ -148,15 +157,18 @@ const acobotRoutes: FastifyPluginAsync = async (fastify) => {
                         ],
                         temperature: 0.3,
                     }),
+                }).catch((err: any) => {
+                    req.log.warn({ err: err?.message }, '[ACOBOT] OpenAI fetch timeout/error');
+                    return null;
                 });
 
-                if (openAiRes.ok) {
+                if (openAiRes?.ok) {
                     const data = await openAiRes.json() as any;
                     botResponse = data.choices?.[0]?.message?.content ?? '';
                     modelUsed = 'gpt-4o-mini';
                     promptTokens = data.usage?.prompt_tokens ?? 0;
                     completionTokens = data.usage?.completion_tokens ?? 0;
-                } else {
+                } else if (openAiRes) {
                     const errBody = await openAiRes.text().catch(() => '');
                     req.log.warn({ status: openAiRes.status, body: errBody }, '[ACOBOT] OpenAI API call failed');
                 }

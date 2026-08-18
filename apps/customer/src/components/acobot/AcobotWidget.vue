@@ -117,32 +117,37 @@
       <template v-if="!isMinimized">
         <div ref="messageContainer" class="beverly-ai-messages">
           <div v-if="messages.length === 0" class="beverly-ai-welcome">
-            <div class="beverly-ai-welcome-banner">
-              <div class="beverly-ai-welcome-title-row">
-                <!-- Meter Zap Outline Icon -->
-                <svg class="beverly-portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            <!-- Pop-up Greeting Card (Matches reference screenshot) -->
+            <div class="beverly-ai-popup-greeting">
+              <div class="beverly-ai-popup-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="5" y="8" width="14" height="12" rx="3"></rect>
+                  <path d="M12 2v6"></path>
+                  <circle cx="9" cy="13" r="1"></circle>
+                  <circle cx="15" cy="13" r="1"></circle>
                 </svg>
-                <h4>Beverly AI Customer Care</h4>
               </div>
-              <p>Recharge meters, check balances, or troubleshoot errors.</p>
+              <div class="beverly-ai-popup-body">
+                <p>👋 Hi <strong>{{ userFirstName }}</strong>, I'm <strong>Beverly AI</strong>. I can help you check your wallet balance, manage meter tokens, view receipts, and answer support questions.</p>
+              </div>
             </div>
 
-            <!-- Comprehensive Quick Action Chips with Specific Outline Icons -->
-            <div class="beverly-ai-chip-section">
-              <span class="beverly-ai-chip-title">Quick Actions</span>
-              <div class="beverly-ai-chip-grid">
+            <!-- "Try asking" Section -->
+            <div class="beverly-ai-try-asking-section">
+              <span class="beverly-ai-try-asking-title">Try asking</span>
+              <div class="beverly-ai-chip-grid-2x2">
                 <button
                   v-for="chip in quickChips"
                   :key="chip.label"
                   type="button"
-                  class="beverly-ai-chip"
+                  class="beverly-ai-chip-card"
                   @click="sendPrompt(chip.label)"
                 >
-                  <!-- Dynamic Outline Icon per Chip -->
-                  <svg class="beverly-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path :d="chip.iconPath"></path>
-                  </svg>
+                  <div class="beverly-chip-icon-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path :d="chip.iconPath"></path>
+                    </svg>
+                  </div>
                   <span>{{ chip.label }}</span>
                 </button>
               </div>
@@ -188,6 +193,22 @@
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
                 <span>Restricted by Access Policy</span>
+              </div>
+
+              <!-- Interactive Retry Request Button -->
+              <div v-if="msg.isError && msg.lastPrompt" class="beverly-ai-retry-wrapper">
+                <button
+                  type="button"
+                  class="beverly-ai-retry-btn"
+                  @click="retryPrompt(msg.lastPrompt, index)"
+                  title="Retry sending this request"
+                >
+                  <svg class="beverly-svg-icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                  </svg>
+                  <span>Retry Request</span>
+                </button>
               </div>
             </div>
           </div>
@@ -248,6 +269,14 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted } from 'vue';
 import { api } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth';
+
+const auth = useAuthStore();
+const userFirstName = computed(() => {
+  const name = auth.customer?.full_name?.trim();
+  if (!name) return 'there';
+  return name.split(' ')[0];
+});
 
 const isOpen = ref(false);
 const isMinimized = ref(false);
@@ -262,26 +291,28 @@ interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
   permissionStatus?: 'granted' | 'denied' | 'partial';
+  isError?: boolean;
+  lastPrompt?: string;
 }
 
 const messages = ref<ChatMessage[]>([]);
 
 const quickChips = [
   {
-    label: 'My Meter Balance',
+    label: 'My wallet balance',
+    iconPath: 'M3 6h18M3 12h18M3 18h18',
+  },
+  {
+    label: 'Buy electricity token',
     iconPath: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   },
   {
-    label: 'Buy N5,000 Electricity',
-    iconPath: 'M3 3h18v18H3V3zm4 8h10M7 15h6',
+    label: 'My linked meters',
+    iconPath: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z',
   },
   {
-    label: 'Recent Meter Orders',
-    iconPath: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
-  },
-  {
-    label: 'Fix Meter Error 02',
-    iconPath: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
+    label: 'How do I fund wallet?',
+    iconPath: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   },
 ];
 
@@ -404,8 +435,17 @@ interface ChatResponse {
   permissionStatus?: 'granted' | 'denied' | 'partial';
 }
 
-async function sendPrompt(prompt: string) {
-  messages.value.push({ sender: 'user', text: prompt });
+function retryPrompt(prompt: string, errorIndex: number) {
+  if (errorIndex >= 0 && errorIndex < messages.value.length) {
+    messages.value.splice(errorIndex, 1);
+  }
+  sendPrompt(prompt, true);
+}
+
+async function sendPrompt(prompt: string, isRetry = false) {
+  if (!isRetry) {
+    messages.value.push({ sender: 'user', text: prompt });
+  }
   scrollToBottom();
   isThinking.value = true;
 
@@ -424,10 +464,14 @@ async function sendPrompt(prompt: string) {
   } catch (err: any) {
     const errorMsg = err?.status === 401
       ? 'Authentication required. Please log in to chat with Beverly AI.'
-      : err?.message || 'Sorry, I encountered an error connecting to Beverly AI backend.';
+      : (err?.message?.includes('timeout') || err?.message?.includes('long'))
+        ? 'The server took too long to respond. Please try again.'
+        : err?.message || 'Sorry, I encountered an error connecting to Beverly AI backend.';
     messages.value.push({
       sender: 'bot',
       text: errorMsg,
+      isError: true,
+      lastPrompt: prompt,
     });
   } finally {
     isThinking.value = false;
@@ -662,73 +706,99 @@ async function sendPrompt(prompt: string) {
   gap: var(--s-2, 8px);
 }
 
-.beverly-ai-welcome-banner {
-  padding: var(--s-2, 8px) var(--s-3, 12px);
-  border-radius: var(--r-md);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  margin-bottom: var(--s-2, 8px);
+.beverly-ai-popup-greeting {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3, 12px);
+  padding: 14px 16px;
+  border-radius: var(--r-xl, 14px);
+  background: color-mix(in oklab, var(--surface-2) 90%, var(--brand-500) 10%);
+  border: 1px solid var(--brand-glow, rgba(16, 185, 129, 0.3));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  margin-bottom: 16px;
+  animation: modalSlideUp 0.25s ease-out;
 }
 
-.beverly-ai-welcome-title-row {
+.beverly-ai-popup-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--brand-500);
+  border: 1px solid var(--brand-400);
+}
+
+.beverly-ai-popup-avatar svg {
+  width: 18px;
+  height: 18px;
+}
+
+.beverly-ai-popup-body p {
+  margin: 0;
+  font-size: var(--t-sm, 13px);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.beverly-ai-try-asking-section {
+  margin-top: 4px;
+}
+
+.beverly-ai-try-asking-title {
+  display: block;
+  font-size: var(--t-xs, 12px);
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.beverly-ai-chip-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.beverly-ai-chip-card {
   display: flex;
   align-items: center;
-  gap: var(--s-2, 8px);
-  margin-bottom: 4px;
-}
-
-.beverly-ai-welcome-banner h4 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--t-sm);
-  color: var(--brand-400);
-}
-
-.beverly-ai-welcome-banner p {
-  margin: 0;
-  font-size: var(--t-xs);
-  color: var(--text-dim);
-  line-height: 1.4;
-}
-
-.beverly-ai-chip-title {
-  display: block;
-  font-size: var(--t-2xs);
-  font-weight: var(--fw-bold);
-  color: var(--brand-400);
-  margin-bottom: var(--s-1, 4px);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.beverly-ai-chip-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1, 4px);
-}
-
-.beverly-ai-chip {
-  padding: var(--s-2, 8px) var(--s-3, 12px);
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg, 12px);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  text-align: left;
-  font-size: var(--t-sm);
   color: var(--text);
+  font-size: var(--t-xs, 12px);
+  font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: all var(--dur-base) var(--ease-out);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2, 8px);
+  text-align: left;
+  transition: all 0.2s ease;
 }
 
-.beverly-ai-chip:hover {
+.beverly-ai-chip-card:hover {
   background: var(--surface-2);
-  border-color: var(--brand-400);
-  transform: translateX(3px);
-  color: var(--brand-300);
+  border-color: var(--brand-500);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--brand-glow, rgba(16, 185, 129, 0.2));
+  color: var(--brand-400);
+}
+
+.beverly-chip-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface-3);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--brand-500);
+}
+
+.beverly-chip-icon-box svg {
+  width: 16px;
+  height: 16px;
 }
 
 .beverly-ai-msg-row {
@@ -769,6 +839,34 @@ async function sendPrompt(prompt: string) {
   border-bottom-left-radius: 2px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+.beverly-ai-retry-wrapper {
+  margin-top: 8px;
+  display: flex;
+}
+
+.beverly-ai-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-3);
+  border: 1px solid var(--brand-glow, rgba(16, 185, 129, 0.3));
+  color: var(--brand-400);
+  font-size: var(--t-xs, 12px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.beverly-ai-retry-btn:hover {
+  background: var(--brand-500);
+  color: #ffffff;
+  border-color: var(--brand-400);
+  box-shadow: 0 4px 12px var(--brand-glow, rgba(16, 185, 129, 0.3));
+  transform: translateY(-1px);
 }
 
 .beverly-ai-msg-sender {
