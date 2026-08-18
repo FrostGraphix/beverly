@@ -45,6 +45,7 @@ export interface CreateVendorInput {
     contactEmail: string;
     contactPhone: string;
     operatingAddress?: string;
+    stationId?: string;
     operatingStations?: string[];
     primaryUserEmail: string;
     primaryUserFullName: string;
@@ -63,6 +64,13 @@ export interface CreateVendorResult {
 }
 
 export async function createVendorOrganization(input: CreateVendorInput): Promise<CreateVendorResult> {
+    const rawStation = input.stationId
+        ?? (Array.isArray(input.operatingStations) ? input.operatingStations[0] : null);
+    const primaryStation = rawStation ? rawStation.trim().toUpperCase() : null;
+    const stationsArray = input.operatingStations && input.operatingStations.length
+        ? input.operatingStations.map((s) => s.trim().toUpperCase())
+        : (primaryStation ? [primaryStation] : []);
+
     // 1) create vendor_organizations
     const { data: org, error: orgErr } = await adminClient.from('vendor_organizations').insert({
         legal_name: input.legalName,
@@ -73,7 +81,9 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
         contact_email: input.contactEmail,
         contact_phone: input.contactPhone,
         operating_address: input.operatingAddress ?? null,
-        operating_stations: input.operatingStations ?? [],
+        station_id: primaryStation,
+        operating_stations: stationsArray,
+        station_ids_json: primaryStation ? [primaryStation] : [],
         daily_limit_minor: input.dailyLimitMinor ?? 1000000000,
         status: 'approved',
         approved_at: new Date().toISOString(),

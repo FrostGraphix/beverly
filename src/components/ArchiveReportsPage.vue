@@ -197,6 +197,12 @@ import {
   fetchArchiveReportsSummary,
   requestArchiveDownloadUrl,
 } from "../services/consumption-service.mjs";
+import {
+  pageNumbers,
+  pageSizeOptions,
+  paginateRows,
+  totalPages,
+} from "../services/table-helpers.mjs";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -206,6 +212,12 @@ const MONTH_NAMES = [
 export default {
   name: "ArchiveReportsPage",
   components: { BaseButton, BaseSelect },
+  props: {
+    route: {
+      type: Object,
+      default: () => ({}),
+    },
+  },
   data() {
     return {
       loading: false,
@@ -218,7 +230,7 @@ export default {
       monthNames: MONTH_NAMES,
       filters: { stationId: "", year: "", month: "", reportType: "", granularity: "" },
       currentPage: 1,
-      pageSize: 25,
+      pageSize: 20,
       pageSizeOptions,
     };
   },
@@ -262,6 +274,7 @@ export default {
   },
   methods: {
     async load() {
+      this.currentPage = 1;
       this.loading = true;
       this.error = "";
       this.notProvisioned = false;

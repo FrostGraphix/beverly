@@ -214,6 +214,12 @@ export default {
     }
   },
   mounted() {
+    if (typeof window !== "undefined" && window.location && window.location.hash.includes("?")) {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const initialTerm = params.get("q") || params.get("search") || params.get("searchTerm") || "";
+      if (initialTerm) this.searchTerm = initialTerm;
+      if (params.get("alarm")) this.alarmType = params.get("alarm");
+    }
     fetchStations()
       .then((stations) => { if (stations.length) this.stations = stations; })
       .catch(() => { /* registry unreachable — keep the seeded list */ });

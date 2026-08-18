@@ -40,7 +40,7 @@
         <nav class="sidebar-menu" aria-label="Main navigation" @click="closeSidebar">
           <template v-for="group in sidebarGroups" :key="`section-${group.name}`">
             <a
-              v-if="group.routes.length === 1"
+              v-if="!sidebarQuery && group.routes.length === 1"
               :class="sidebarClass(group.routes[0], false)"
               :href="group.routes[0].external ? resolveExternalUrl(group.routes[0]) : group.routes[0].hash"
               :target="group.routes[0].external ? '_blank' : null"
@@ -332,7 +332,7 @@
               v-for="r in group.routes"
               :key="r.hash"
               class="search-result-item"
-              :href="r.hash"
+              :href="r.targetHash || r.hash"
               @click="searchOpen = false; searchQuery = ''"
             >{{ r.title }}</a>
           </div>
@@ -345,6 +345,7 @@
       </div>
     </div>
   </div>
+  <AcobotWidget v-if="!isLogin" />
   </div>
 </template>
 
@@ -370,6 +371,7 @@ import RefundsPage from "./components/wallet/RefundsPage.vue";
 import SettlementPage from "./components/wallet/SettlementPage.vue";
 import ReconciliationPage from "./components/wallet/ReconciliationPage.vue";
 import WalletFundingPage from "./components/wallet/WalletFundingPage.vue";
+import AcobotWidget from "./components/acobot/AcobotWidget.vue";
 
 const sidebarDefaultWidth = 252;
 const sidebarMinWidth = 220;
@@ -413,7 +415,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AbnormalAlarmPage, ArchiveReportsPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AcobotWidget, AbnormalAlarmPage, ArchiveReportsPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -497,12 +499,8 @@ export default {
     sidebarGroups() {
       const query = this.sidebarQuery.trim().toLowerCase();
       if (!query) return this.groups;
-      return this.groups
-        .map((group) => ({
-          ...group,
-          routes: group.routes.filter((route) => group.name.toLowerCase().includes(query) || route.title.toLowerCase().includes(query))
-        }))
-        .filter((group) => group.routes.length);
+      const match = (r, g) => r.title.toLowerCase().includes(query) || g.toLowerCase().includes(query) || (Array.isArray(r.actions) && r.actions.some(a => String(a).toLowerCase().includes(query))) || (Array.isArray(r.columns) && r.columns.some(c => String(c).toLowerCase().includes(query)));
+      return this.groups.map(group => ({ ...group, routes: group.routes.filter(r => match(r, group.name)) })).filter(g => g.routes.length);
     },
     breadcrumb() {
       return this.route.group === "Dashboard" ? "Dashboard" : `${this.route.group} / ${this.route.title}`;
@@ -526,9 +524,15 @@ export default {
       const q = this.searchQuery.trim().toLowerCase();
       if (!q) return [];
       const results = [];
+      const match = (r, g) => r.title.toLowerCase().includes(q) || g.toLowerCase().includes(q) || (Array.isArray(r.actions) && r.actions.some(a => String(a).toLowerCase().includes(q))) || (Array.isArray(r.columns) && r.columns.some(c => String(c).toLowerCase().includes(q)));
       for (const group of this.groups) {
-        const matched = group.routes.filter(r => r.title.toLowerCase().includes(q) || group.name.toLowerCase().includes(q));
-        if (matched.length) results.push({ group: group.name, routes: matched });
+        const matched = group.routes.filter(r => match(r, group.name));
+        if (matched.length) {
+          results.push({
+            group: group.name,
+            routes: matched.map(r => ({ ...r, targetHash: (r.title.toLowerCase() === q || group.name.toLowerCase() === q) ? r.hash : `${r.hash}?q=${encodeURIComponent(this.searchQuery.trim())}` }))
+          });
+        }
       }
       return results;
     },
@@ -997,7 +1001,7 @@ export default {
     },
     goFirstSearchResult() {
       if (this.firstSearchResult) {
-        window.location.hash = this.firstSearchResult.hash;
+        window.location.hash = this.firstSearchResult.targetHash || this.firstSearchResult.hash;
         this.searchOpen = false;
         this.searchQuery = '';
       }

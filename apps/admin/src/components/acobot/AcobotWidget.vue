@@ -553,6 +553,17 @@ async function retryPrompt(prompt: string, index: number) {
   }
   await sendPrompt(prompt);
 }
+
+onMounted(() => {
+  window.addEventListener('beverly-ai-open-prompt', (e: any) => {
+    const promptText = e.detail?.prompt;
+    if (promptText) {
+      isOpen.value = true;
+      isMinimized.value = false;
+      sendPrompt(promptText);
+    }
+  });
+});
 </script>
 
 <style scoped>

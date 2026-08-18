@@ -245,6 +245,10 @@ function saveEndpoint() {
 function deleteEndpoint(key: string) {
   endpoints.value = endpoints.value.filter(e => e.logicalKey !== key);
 }
+
+function openAcobotWithPrompt(prompt: string) {
+  window.dispatchEvent(new CustomEvent('beverly-ai-open-prompt', { detail: { prompt } }));
+}
 </script>
 
 <template>
@@ -308,8 +312,16 @@ function deleteEndpoint(key: string) {
               </div>
             </div>
 
-            <div class="oem-card-foot">
+            <div class="oem-card-foot" style="display: flex; justify-content: space-between; align-items: center;">
               <span>Configure Connection & Credentials →</span>
+              <button
+                type="button"
+                class="bw-btn bw-btn-ghost bw-btn-xs"
+                style="color: var(--brand-400); gap: 4px;"
+                @click.stop="openAcobotWithPrompt(`Diagnose ${oem.displayName} API connection and upstream status`)"
+              >
+                🤖 Beverly AI
+              </button>
             </div>
           </div>
         </div>
@@ -317,6 +329,51 @@ function deleteEndpoint(key: string) {
 
       <!-- Active OEM Detail Settings Panel -->
       <div v-if="activeOem" class="oem-detail-body">
+        <!-- Beverly AI OEM Diagnostic Assistant Card -->
+        <div class="bw-card oem-sec-card" style="border: 1px solid var(--brand-glow, rgba(16, 185, 129, 0.3)); background: color-mix(in oklab, var(--surface-2) 95%, var(--brand-500) 5%);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="margin: 0; color: var(--brand-400); display: flex; align-items: center; gap: 8px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="5" y="8" width="14" height="12" rx="3"></rect>
+                <path d="M12 2v6"></path>
+                <circle cx="9" cy="13" r="1"></circle>
+                <circle cx="15" cy="13" r="1"></circle>
+              </svg>
+              Beverly AI — {{ activeOem.displayName }} Assistant
+            </h3>
+            <span class="bw-badge bw-badge-success">Grounded OEM Context Active</span>
+          </div>
+
+          <p class="bw-text-muted bw-text-sm" style="margin-bottom: 14px;">
+            Beverly AI has deep architectural knowledge of {{ activeOem.displayName }} STS vending protocols, rate limits, and gateway authentication strategies.
+          </p>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <button
+              type="button"
+              class="bw-btn bw-btn-outline bw-btn-sm"
+              style="border-color: var(--brand-400); color: var(--brand-400);"
+              @click="openAcobotWithPrompt(`Diagnose ${activeOem.displayName} API connection and upstream gateway status`)"
+            >
+              ⚡ Diagnose Gateway Connection
+            </button>
+            <button
+              type="button"
+              class="bw-btn bw-btn-outline bw-btn-sm"
+              @click="openAcobotWithPrompt(`Explain ${activeOem.displayName} STS tariffs and token generation strategy`)"
+            >
+              📑 STS Tariffs & Vending Strategy
+            </button>
+            <button
+              type="button"
+              class="bw-btn bw-btn-outline bw-btn-sm"
+              @click="openAcobotWithPrompt(`Review ${activeOem.displayName} authentication strategy and security limits`)"
+            >
+              🔒 Security & Auth Inspection
+            </button>
+          </div>
+        </div>
+
         <!-- Overview & Strategy Card -->
         <div class="bw-card oem-sec-card">
           <h3>Overview & Strategy</h3>

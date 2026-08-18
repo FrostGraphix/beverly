@@ -342,6 +342,41 @@ import { isCreditTokenRoute, meterPhaseFromRow } from "../services/token-flow.mj
 import { discardPendingAccountBindings, fetchMeterStats, fetchPendingAccountBindings, retryPendingAccountBindings, summarizeSyncResult } from "../services/account-sync-service.mjs";
 import { toastError, toastSuccess, toastWarn } from "../services/toast.js";
 
+function extractSearchQueryFromHash(routeHash = "") {
+  let hash = (typeof window !== "undefined" && window.location && window.location.hash) || "";
+  if (!hash.includes("?") && routeHash && routeHash.includes("?")) {
+    hash = routeHash;
+  }
+  if (!hash.includes("?")) return "";
+  const queryStr = hash.split("?")[1] || "";
+  const params = new URLSearchParams(queryStr);
+  return params.get("q") || params.get("search") || params.get("searchTerm") || "";
+}
+
+function syncHashSearchQuery(term = "", routeHash = "") {
+  if (typeof window === "undefined" || !window.location) return;
+  const currentHash = window.location.hash || routeHash || "";
+  const [basePath, existingQuery] = currentHash.split("?");
+  const params = new URLSearchParams(existingQuery || "");
+  const trimmed = String(term || "").trim();
+  if (trimmed) {
+    params.set("q", trimmed);
+  } else {
+    params.delete("q");
+    params.delete("search");
+    params.delete("searchTerm");
+  }
+  const queryString = params.toString();
+  const newHash = queryString ? `${basePath}?${queryString}` : basePath;
+  if (window.location.hash !== newHash) {
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${newHash}`);
+    } else {
+      window.location.hash = newHash;
+    }
+  }
+}
+
 export default {
   name: "TablePage",
   components: { ActionModal, BaseButton, BaseCheckbox, BaseInput, BaseSelect, BaseTableShell, ExportRangeMenu, TaskOutputModal },
@@ -502,7 +537,7 @@ export default {
         this.selectedSite = "";
         this.sortDirection = routeSortDirection(this.route);
         this.sortField = "";
-        this.searchTerm = "";
+        this.searchTerm = extractSearchQueryFromHash(this.route?.hash);
         this.meterPhaseFilter = "all";
         this.exportRange = "all";
         this.exportError = "";
@@ -590,6 +625,7 @@ export default {
       }
     },
     applyControls(options = {}) {
+      syncHashSearchQuery(this.searchTerm, this.route?.hash);
       if (this.serverPaginated && options.reloadServer !== false) {
         this.currentPage = 1;
         this.gotoPageInput = "1";
@@ -597,9 +633,11 @@ export default {
         return;
       }
       if (this.serverPaginated) {
-        this.filteredRows = this.allRows;
-        this.filteredTotal = this.total;
-        this.visibleRows = this.allRows;
+        const searchedRows = searchRows(this.route, this.allRows, this.searchTerm);
+        const phaseRows = this.filterRowsByPhase(searchedRows);
+        this.filteredRows = phaseRows;
+        this.filteredTotal = this.searchTerm ? phaseRows.length : this.total;
+        this.visibleRows = phaseRows;
         this.selectedRow = this.visibleRows[0] || null;
         this.gotoPageInput = String(this.currentPage);
         return;
@@ -656,36 +694,42 @@ export default {
       }
     },
     async loadManagementStats() {
-      const hash = String(this.route.hash || "");
-      if (!["#/management/customer", "#/management/account"].includes(hash)) return;
-      const key = `${hash}|${this.selectedSite}`;
+      const hash = this.route?.hash || "";
+      if (hash !== "#/management/customer" && hash !== "#/management/account") return;
+      const key = `${hash}::${this.selectedSite}`;
       if (this.managementStatsKey === key) return;
       this.managementStatsKey = key;
-      const stationRoute = { hash: "#/admin/station", title: "Station", apis: ["/api/station/read"], columns: ["id"] };
+
+      await loadDynamicStationOptions(undefined, true).catch(() => null);
+      const stationTotalCount = tableSiteOptions.filter((opt) => opt.value !== "").length;
+
+      let stats = null;
       try {
-        const stationTable = await fetchTableData(stationRoute, { pageNumber: 1, pageSize: 50 }).catch(() => ({ total: 9, rows: [] }));
-        if (key !== this.managementStatsKey) return;
-        const stationTotalCount = stationTable?.total || (Array.isArray(stationTable?.rows) && stationTable.rows.length ? stationTable.rows.length : 9);
-
-        if (hash === "#/management/customer") {
-          this.managementStats = { totalCustomers: this.total, stations: stationTotalCount };
-          return;
-        }
-
-        // Account page KPIs are about meters, counted exactly rather than
-        // extrapolated from one page of samples.
-        const stats = await fetchMeterStats({ stationId: this.selectedSite || "" });
-        if (key !== this.managementStatsKey) return;
-        this.managementStats = { ...stats, stations: stationTotalCount };
+        stats = await fetchMeterStats({ stationId: this.selectedSite || "" });
       } catch {
-        if (key === this.managementStatsKey) {
-          this.managementStats = hash === "#/management/customer"
-            ? { totalCustomers: this.total, stations: 9 }
-            : { totalMeters: 0, connectedMeters: 0, activeMeters: 0, inactiveMeters: 0, unassignedMeters: 0, stations: 9 };
-          // Clear the memo so a failed attempt (e.g. the session was not ready
-          // yet) is retried on the next load instead of pinning zeros.
-          this.managementStatsKey = "";
-        }
+        stats = null;
+      }
+
+      const rows = Array.isArray(this.allRows) ? this.allRows : [];
+      const hasLoadedRows = rows.length > 0;
+      const connectedCount = rows.filter((r) => r.customerId && r.meterId).length;
+      const activeCount = rows.filter((r) => r.customerId && r.meterId && r.status === true).length;
+      const inactiveCount = rows.filter((r) => r.customerId && r.meterId && r.status !== true).length;
+      const unassignedCount = rows.filter((r) => !r.customerId && r.meterId).length;
+      const totalMeterCount = rows.filter((r) => r.meterId).length || rows.length;
+
+      if (hash === "#/management/customer") {
+        const customerCount = (stats?.totalCustomers || (hasLoadedRows ? rows.filter((r) => r.customerId || r.customerName).length : 0)) || this.total;
+        this.managementStats = { totalCustomers: customerCount, stations: stationTotalCount };
+      } else {
+        this.managementStats = {
+          totalMeters: (stats && stats.totalMeters) ? stats.totalMeters : (hasLoadedRows ? totalMeterCount : 0),
+          connectedMeters: (stats && stats.connectedMeters) ? stats.connectedMeters : (hasLoadedRows ? connectedCount : 0),
+          activeMeters: (stats && stats.activeMeters) ? stats.activeMeters : (hasLoadedRows ? activeCount : 0),
+          inactiveMeters: (stats && stats.inactiveMeters) ? stats.inactiveMeters : (hasLoadedRows ? inactiveCount : 0),
+          unassignedMeters: (stats && stats.unassignedMeters) ? stats.unassignedMeters : (hasLoadedRows ? unassignedCount : 0),
+          stations: stationTotalCount
+        };
       }
     },
     filterRowsByPhase(rows) {
@@ -706,6 +750,7 @@ export default {
       this.pageSize = 10;
       this.currentPage = 1;
       this.checkedMeterIds = new Set();
+      syncHashSearchQuery("", this.route?.hash);
       if (this.supportsSiteFilter || this.serverPaginated) {
         this.load();
         return;

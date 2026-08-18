@@ -9,6 +9,7 @@ import {
 import { PORTAL_URLS } from '../lib/portals';
 import { api } from '../lib/api';
 import { syncDeviceNotifications } from '../lib/push-notifications';
+import ChatWidget from './ChatWidget.vue';
 defineProps<{ title?: string }>();
 
 const auth = useVendorAuthStore();

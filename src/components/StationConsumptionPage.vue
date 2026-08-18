@@ -751,6 +751,16 @@ export default {
   },
 
   mounted() {
+    if (typeof window !== "undefined" && window.location && window.location.hash.includes("?")) {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const initialMeter = params.get("q") || params.get("search") || params.get("searchTerm") || params.get("meterId") || "";
+      if (initialMeter) {
+        this.meterQuery = initialMeter;
+        this.$nextTick(() => {
+          this.analyzeMeter();
+        });
+      }
+    }
     // Refresh the estate before/alongside the first load so a newly onboarded
     // station is selectable without a redeploy.
     fetchStations()

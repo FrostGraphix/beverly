@@ -4,7 +4,7 @@ import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapp
 import { normalizeCollection } from "./response-normalizers.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
-import { fetchStationOptions } from "./station-registry.mjs";
+import { fetchStationOptions, invalidateStations } from "./station-registry.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "./token-flow.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
@@ -19,6 +19,10 @@ export const tableSiteOptions = reactive([
 let stationLoadingPromise = null;
 
 export async function loadDynamicStationOptions(api = defaultTableApi, forceRefresh = false) {
+  if (forceRefresh) {
+    invalidateStations();
+    stationLoadingPromise = null;
+  }
   if (stationLoadingPromise && !forceRefresh) return stationLoadingPromise;
   stationLoadingPromise = (async () => {
     try {
@@ -622,7 +626,7 @@ async function fetchAllTableRows(request, route, api = defaultTableApi, rowLimit
   }
 
   // Normal logic for well-behaved endpoints
-  if (!request.pagination || rows.length >= total || rows.length >= rowLimit) {
+  if (!request.pagination || rows.length >= total || rows.length >= rowLimit || rows.length < requestedSize) {
     return { rows, total };
   }
 

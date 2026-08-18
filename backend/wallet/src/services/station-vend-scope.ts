@@ -10,8 +10,8 @@ export class StationVendScopeError extends Error {
     }
 }
 
-function normalizeStationId(value: string | null | undefined): string {
-    return String(value ?? '').trim().toUpperCase();
+export function normalizeStationId(value: string | null | undefined): string {
+    return String(value ?? '').trim().toUpperCase().replace(/[\s_\-&]+/g, '');
 }
 
 export function assertStationVendAllowed(
