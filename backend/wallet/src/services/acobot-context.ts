@@ -28,6 +28,7 @@ export interface DetectedIntents {
     adminDisputes?: boolean;
     adminSupport?: boolean;
     adminKycReview?: boolean;
+    adminOemConfig?: boolean;
     
     // Vendor Intents
     vendorFloatBalance?: boolean;
@@ -66,6 +67,7 @@ export function detectIntentsFromPrompt(prompt: string): DetectedIntents {
         adminDisputes: has('dispute', 'chargeback', 'refund claim', 'disputed transaction'),
         adminSupport: has('support ticket', 'helpdesk', 'live chat', 'support desk'),
         adminKycReview: has('kyc', 'compliance', 'document review', 'identity verification'),
+        adminOemConfig: has('oem', 'sparkmeter', 'calinmeter', 'ihemeter', 'hexing', 'conlog', 'sanxing', 'oem credentials', 'meter manufacturer', 'oem endpoints'),
 
         // Vendor
         vendorFloatBalance: has('my float', 'merchant balance', 'vendor balance', 'organization balance'),
@@ -162,6 +164,23 @@ export async function buildAcobotContext(
                     `[DATA: BEVERLY CRM KYC & COMPLIANCE STATS]\n` +
                     `- Pending KYC Submissions Awaiting Review: ${pendingKyc ?? 0}\n` +
                     `- Verified Customers: ${verifiedKyc ?? 0}`
+                );
+            }
+
+            if ((portal === 'crm' || portal === 'admin') && intentKey === 'adminOemConfig') {
+                const { data: oemList } = await adminClient
+                    .from('oem_manufacturers')
+                    .select('id, slug, display_name, status, vending_strategy, capabilities');
+
+                const { data: oemCreds } = await adminClient
+                    .from('oem_credentials')
+                    .select('oem_id, auth_strategy, base_url');
+
+                contextSections.push(
+                    `[DATA: BEVERLY CRM OEM MANUFACTURERS & CREDENTIALS REGISTRY]\n` +
+                    `- Registered OEMs: ${JSON.stringify(oemList ?? [], null, 2)}\n` +
+                    `- OEM Credentials: ${JSON.stringify(oemCreds ?? [], null, 2)}\n` +
+                    `- Operational Mode: Beverly AI is natively active for diagnosing and querying all OEM meter integrations.`
                 );
             }
 

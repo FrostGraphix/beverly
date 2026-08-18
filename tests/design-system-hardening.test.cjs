@@ -85,6 +85,7 @@ const rawControlAllowlist = new Set([
   "src/components/oem-hub/OemFormModal.vue",
   "src/components/oem-hub/OemSettingsPage.vue",
   "src/components/oem-hub/OemEndpointEditModal.vue",
+  "src/components/acobot/AcobotWidget.vue",
 ]);
 for (const filePath of walkVueFiles(path.join(root, "src", "components"))) {
   const relativePath = path.relative(root, filePath).replace(/\\/g, "/");

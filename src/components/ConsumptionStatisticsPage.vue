@@ -648,6 +648,17 @@ export default {
   },
 
   mounted() {
+    if (typeof window !== "undefined" && window.location && window.location.hash.includes("?")) {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const initialTerm = params.get("q") || params.get("search") || params.get("searchTerm") || params.get("customerId") || "";
+      if (initialTerm) {
+        this.custFilters.customerId = initialTerm;
+        this.activeView = "customer";
+        this.$nextTick(() => {
+          this.loadCustomer();
+        });
+      }
+    }
     this.syncTheme();
     this.watchTheme();
     this._loadStationDirectory();

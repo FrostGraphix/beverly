@@ -94,11 +94,21 @@ async function resolveActor(token: string): Promise<Actor | null> {
     const mfaVerified = false;
 
     // 1. Vendor user lookup
-    const { data: vu } = await adminClient
+    let vuResult = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
         .eq('auth_user_id', userId)
         .maybeSingle();
+
+    if (!vuResult.data && email) {
+        vuResult = await adminClient
+            .from('vendor_users')
+            .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
+            .eq('email', email)
+            .maybeSingle();
+    }
+
+    const vu = vuResult.data;
 
     if (vu && (vu as any).status === 'active') {
         const organization = (vu as any).vendor_organizations;
@@ -107,7 +117,13 @@ async function resolveActor(token: string): Promise<Actor | null> {
         const appMfaVerified = mfaEnrolled && await vendorMfaSessionVerified(userId, token);
         // A vendor holds exactly one station. Carry it on the actor so
         // consumption reads scope without a second lookup per request.
-        const vendorStationId = String(organization?.station_id ?? '').trim().toUpperCase();
+        const rawStation = organization?.station_id
+            ?? (Array.isArray(organization?.operating_stations) ? organization?.operating_stations[0] : null)
+            ?? (Array.isArray(organization?.station_ids_json) ? organization?.station_ids_json[0] : null)
+            ?? (typeof organization?.station_ids_json === 'string' ? JSON.parse(organization.station_ids_json)[0] : null)
+            ?? (user.user_metadata as any)?.station_id
+            ?? (user.user_metadata as any)?.station;
+        const vendorStationId = String(rawStation ?? '').trim().toUpperCase();
         const emailVerified = Boolean((vu as any).email_verified_at || user.email_confirmed_at);
         return {
             userId,

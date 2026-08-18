@@ -143,11 +143,51 @@ export function resolveRowValue(route, row, column) {
   return "";
 }
 
+export function stationIdMatch(a, b) {
+  if (!a || !b) return !a && !b;
+  const normA = String(a || "").toUpperCase().replace(/[\s_\-&]+/g, "");
+  const normB = String(b || "").toUpperCase().replace(/[\s_\-&]+/g, "");
+  return Boolean(normA && normB && normA === normB);
+}
+
+function collectRowStrings(val, acc = []) {
+  if (val === null || val === undefined) return acc;
+  if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+    acc.push(String(val).toLowerCase());
+  } else if (Array.isArray(val)) {
+    for (const item of val) collectRowStrings(item, acc);
+  } else if (typeof val === "object") {
+    for (const item of Object.values(val)) collectRowStrings(item, acc);
+  }
+  return acc;
+}
+
 export function searchRows(route, rows, searchTerm) {
-  const query = String(searchTerm || "").trim().toLowerCase();
-  if (!query) return rows.slice();
-  const searchableColumns = route.columns.filter((column) => column !== "Actions");
-  return rows.filter((row) => searchableColumns.some((column) => String(resolveRowValue(route, row, column) || "").toLowerCase().includes(query)));
+  const normalizedQuery = String(searchTerm || "").replace(/\+/g, " ").trim().toLowerCase();
+  if (!normalizedQuery) return rows.slice();
+
+  const tokens = normalizedQuery.split(/[\s_\-]+/).filter(Boolean);
+  if (!tokens.length) return rows.slice();
+
+  const searchableColumns = Array.isArray(route?.columns)
+    ? route.columns.filter((column) => column !== "Actions")
+    : [];
+
+  return rows.filter((row) => {
+    if (!row || typeof row !== "object") return false;
+    const pool = [];
+    for (const column of searchableColumns) {
+      const resolved = resolveRowValue(route, row, column);
+      if (resolved !== undefined && resolved !== null && resolved !== "") {
+        pool.push(String(resolved).toLowerCase());
+      }
+    }
+    collectRowStrings(row, pool);
+    const combinedText = pool.join(" ");
+
+    if (combinedText.includes(normalizedQuery)) return true;
+    return tokens.every((token) => combinedText.includes(token));
+  });
 }
 
 const fixedSortPolicies = [

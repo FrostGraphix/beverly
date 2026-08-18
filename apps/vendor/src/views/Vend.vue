@@ -287,6 +287,30 @@ function describeApiError(e: unknown, fallback: string) {
                 code: e.code,
             };
         }
+        if (e.code === 'station_assignment_required') {
+            return {
+                title: 'Station not assigned',
+                message: 'Your account does not have a vending station assigned.',
+                action: 'Contact your Beverly administrator to assign a station to your account before you can vend.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'cross_station_vend_forbidden') {
+            return {
+                title: 'Station mismatch',
+                message: e.message,
+                action: 'You can only vend meters that belong to your assigned station. Contact support if this is incorrect.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'meter_station_unavailable') {
+            return {
+                title: 'Meter station unavailable',
+                message: e.message,
+                action: 'The meter\'s station could not be verified. Ask an admin to check the meter binding.',
+                code: e.code,
+            };
+        }
         return {
             title: 'Request failed',
             message: e.message,

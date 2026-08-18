@@ -390,6 +390,11 @@ export default {
     }
   },
   mounted() {
+    if (typeof window !== "undefined" && window.location && window.location.hash.includes("?")) {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const initialTerm = params.get("q") || params.get("search") || params.get("searchTerm") || "";
+      if (initialTerm) this.searchTerm = initialTerm;
+    }
     this.reload();
   },
   beforeUnmount() {

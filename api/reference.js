@@ -1668,7 +1668,11 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
 
   const stationId = payload.stationId || payload.SITE_ID || "";
   if (stationId) {
-    filtered = filtered.filter((row) => String(row.stationId || row.station || "").toUpperCase() === String(stationId).toUpperCase());
+    const normStation = String(stationId).toUpperCase().replace(/[\s_\-&]+/g, "");
+    filtered = filtered.filter((row) => {
+      const rowStation = String(row.stationId || row.station || row.station_id || row.siteId || row.SITE_ID || "").toUpperCase().replace(/[\s_\-&]+/g, "");
+      return !normStation || !rowStation || normStation === rowStation;
+    });
   }
 
   if (pathname === "/api/user/read" || pathname === "/api/user/info") {
@@ -1689,6 +1693,15 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
         || String(row.en || "").toLowerCase().includes(query)
       );
     }
+  }
+
+  const searchTerm = String(payload.searchTerm || payload.search || payload.q || "").replace(/\+/g, " ").trim().toLowerCase();
+  if (searchTerm) {
+    const tokens = searchTerm.split(/[\s_\-]+/).filter(Boolean);
+    filtered = filtered.filter((row) => {
+      const text = Object.values(row || {}).map((v) => String(v ?? "").toLowerCase()).join(" ");
+      return tokens.every((token) => text.includes(token));
+    });
   }
 
   const pageNumber = Math.max(1, Number(payload.pageNumber || 1));
@@ -3304,15 +3317,29 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ ok: true, id });
   }
 
+  if (methodUpper === "GET" && (pathname === "/api/v1/admin/stations" || pathname.startsWith("/api/v1/admin/stations?"))) {
+    try {
+      const stations = await fetchLiveStationDirectory(request);
+      return localJobResponse({ stations, count: stations.length });
+    } catch {
+      const fallback = [
+        { stationId: "TUNGA", name: "TUNGA · TUNGA", status: "active" },
+        { stationId: "LAGOS-ISLAND", name: "Lagos Island", status: "active" },
+        { stationId: "ABUJA-CENTRAL", name: "Abuja Central", status: "active" },
+      ];
+      return localJobResponse({ stations: fallback, count: fallback.length });
+    }
+  }
+
   if (methodUpper === "GET" && (pathname === "/api/v1/admin/vendors" || pathname.startsWith("/api/v1/admin/vendors?"))) {
     const sp = adminQueryParams(request.url);
     const statusFilter = sp.get("status") || "";
     const q = (sp.get("q") || "").toLowerCase();
     const state = globalThis.__beverlyVendorsState ||= {
       rows: [
-        { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
-        { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
-        { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
+        { id: "vo-001", legal_name: "Sunrise Energy Ltd", trading_name: "Sunrise Power", contact_email: "ops@sunrise.ng", contact_phone: "+2348011223344", risk_level: "low", status: "approved", station_id: "TUNGA", approved_at: new Date(Date.now() - 30 * 86400000).toISOString(), created_at: new Date(Date.now() - 45 * 86400000).toISOString() },
+        { id: "vo-002", legal_name: "GreenPower Co", trading_name: null, contact_email: "admin@greenpower.ng", contact_phone: "+2348099887766", risk_level: "medium", status: "approved", station_id: "TUNGA", approved_at: new Date(Date.now() - 10 * 86400000).toISOString(), created_at: new Date(Date.now() - 20 * 86400000).toISOString() },
+        { id: "vo-003", legal_name: "Bright Connections", trading_name: null, contact_email: "chidi@bright.ng", contact_phone: "+2349012345678", risk_level: "low", status: "pending", station_id: null, approved_at: null, created_at: new Date(Date.now() - 3 * 86400000).toISOString() },
       ],
     };
     let rows = state.rows.filter(v => !v.deleted_at);
@@ -4037,6 +4064,57 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ authorizationUrl: "https://checkout.paystack.com/demo-beverly-funding-local" });
   }
 
+  // ── Remote Send (Vendor & Customer) ──
+  const vendorRemoteSendMatch = pathname.match(/^\/api\/v1\/vendor\/vend\/([^/]+)\/remote-send$/);
+  if (vendorRemoteSendMatch) {
+    const purchaseOrderId = vendorRemoteSendMatch[1];
+    const taskId = "RT-" + Math.floor(100000 + Math.random() * 900000);
+    let order = null;
+    try { order = walletPurchase.findOrderById(purchaseOrderId); } catch {}
+    const po = order || {
+      id: purchaseOrderId,
+      status: "delivered",
+      delivery_state: "remote_send_delivered",
+      remote_task_id: taskId,
+    };
+    return localJobResponse({
+      purchaseOrder: {
+        ...po,
+        delivery_state: "remote_send_delivered",
+        remote_task_id: po.remote_task_id || taskId,
+      },
+      remoteTaskId: po.remote_task_id || taskId,
+      deliveryState: "remote_send_delivered",
+      status: "success",
+      remark: null,
+    });
+  }
+
+  const customerRemoteSendMatch = pathname.match(/^\/api\/v1\/customer\/purchase\/([^/]+)\/remote-send$/);
+  if (customerRemoteSendMatch) {
+    const purchaseOrderId = customerRemoteSendMatch[1];
+    const taskId = "RT-" + Math.floor(100000 + Math.random() * 900000);
+    let order = null;
+    try { order = walletPurchase.findOrderById(purchaseOrderId); } catch {}
+    const po = order || {
+      id: purchaseOrderId,
+      status: "delivered",
+      delivery_state: "remote_send_delivered",
+      remote_task_id: taskId,
+    };
+    return localJobResponse({
+      purchaseOrder: {
+        ...po,
+        delivery_state: "remote_send_delivered",
+        remote_task_id: po.remote_task_id || taskId,
+      },
+      remoteTaskId: po.remote_task_id || taskId,
+      deliveryState: "remote_send_delivered",
+      status: "success",
+      remark: null,
+    });
+  }
+
   // ── Admin v1 REST POST endpoints ────────────────────────────────────────────
   {
     const fundingApproveMatch = pathname.match(/^\/api\/v1\/admin\/funding\/([^/]+)\/approve$/);
@@ -4089,7 +4167,21 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     }
     if (pathname === "/api/v1/admin/vendors") {
       const id = "vo-" + Math.random().toString(36).slice(2, 8);
-      return localJobResponse({ id, ...payload, status: "pending", created_at: new Date().toISOString() });
+      const rawStation = payload.stationId || (Array.isArray(payload.operatingStations) ? payload.operatingStations[0] : null);
+      const station_id = rawStation ? String(rawStation).trim().toUpperCase() : null;
+      const vendorRow = { id, ...payload, station_id, status: payload.status || "approved", approved_at: new Date().toISOString(), created_at: new Date().toISOString() };
+      const state = globalThis.__beverlyVendorsState ||= { rows: [] };
+      state.rows.unshift(vendorRow);
+      return localJobResponse({ id, vendor: vendorRow, temporaryPassword: "BeverlyTempPass123!", status: vendorRow.status, created_at: vendorRow.created_at });
+    }
+  }
+
+  if (pathname === "/api/receipt-pdf") {
+    try {
+      const pdfHandler = require("./receipt-pdf");
+      return await pdfHandler(request, response);
+    } catch {
+      return { status: 200, headers: { "Content-Type": "application/pdf" }, body: Buffer.from("%PDF-1.4 Mock Receipt PDF") };
     }
   }
 

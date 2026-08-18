@@ -188,6 +188,31 @@ async function staffActorFromAuthUser(user = {}, fallback = {}) {
   };
 }
 
+async function vendorActorFromAuthUser(user = {}, fallback = {}) {
+  if (!serviceConfigured() || !user.id) return null;
+  const encodedUserId = encodeURIComponent(user.id);
+  const userEmail = encodeURIComponent(user.email || "");
+  let rows = await restRequest(`/vendor_users?select=id,vendor_organization_id,role,email,status,vendor_organizations(id,legal_name,trading_name,status,station_id,operating_stations,station_ids_json)&auth_user_id=eq.${encodedUserId}&limit=1`).catch(() => null);
+  if ((!rows || !rows.length) && userEmail) {
+    rows = await restRequest(`/vendor_users?select=id,vendor_organization_id,role,email,status,vendor_organizations(id,legal_name,trading_name,status,station_id,operating_stations,station_ids_json)&email=eq.${userEmail}&limit=1`).catch(() => null);
+  }
+  const vu = Array.isArray(rows) ? rows[0] : null;
+  if (!vu) return null;
+  const org = vu.vendor_organizations || {};
+  const rawStation = org.station_id
+    || (Array.isArray(org.operating_stations) ? org.operating_stations[0] : null)
+    || (Array.isArray(org.station_ids_json) ? org.station_ids_json[0] : null)
+    || fallback.stationId
+    || "";
+  const stationId = String(rawStation || "").trim().toUpperCase();
+  return {
+    ...fallback,
+    stationId,
+    vendorOrganizationId: vu.vendor_organization_id || org.id || "",
+    roleId: vu.role || fallback.roleId || "vendor"
+  };
+}
+
 async function listAuthUsers() {
   const key = serviceRoleKey();
   if (!supabaseUrl() || !key) return [];
@@ -356,6 +381,14 @@ async function authUserFromAccessToken(accessToken) {
   }));
   if (!response.ok) return null;
   const actor = normalizedActorFromAuthUser(body || {});
+  if (actor.roleId === "vendor" || actor.roleId === "vendor_user" || actor.roleId === "vendor-user") {
+    try {
+      const vendorActor = await vendorActorFromAuthUser(body || {}, actor);
+      if (vendorActor) return vendorActor;
+    } catch {
+      return actor;
+    }
+  }
   if (actor.roleId) return actor;
   try {
     return await staffActorFromAuthUser(body || {}, actor);
