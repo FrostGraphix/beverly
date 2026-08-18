@@ -1317,6 +1317,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             contactEmail: z.string().email(),
             contactPhone: z.string().min(8),
             operatingAddress: z.string().optional(),
+            stationId: z.string().optional(),
             operatingStations: z.array(z.string()).optional(),
             primaryUserEmail: z.string().email(),
             primaryUserFullName: z.string().min(2),
@@ -1538,15 +1539,23 @@ const route: FastifyPluginAsync = async (fastify) => {
             return reply.code(403).send({ error: 'station_scope_forbidden', message: 'Station is outside your assigned scope.' });
         }
 
-        // Reject unknown stations rather than silently assigning a vendor to a
-        // site that does not exist and showing them an empty dashboard.
+        // Reject clearly unknown stations to prevent assigning vendors to phantom sites.
+        // If the upstream station directory is unavailable (throws or returns empty),
+        // we allow the assignment — an offline token engine must not block admin operations.
         if (stationId) {
-            const { listStations: listKnownStations } = await import('../services/token-engine.js');
-            const known = await listKnownStations();
-            const match = (known as any[]).some((station) =>
-                String(station.stationId ?? station.id ?? station).toUpperCase() === stationId);
-            if (!match) {
-                return reply.code(400).send({ error: 'unknown_station', message: `Station ${stationId} does not exist.` });
+            try {
+                const { listStationDirectory: listKnownStations } = await import('../services/token-engine.js');
+                const known = await listKnownStations();
+                if (known.length > 0) {
+                    const match = known.some((station) =>
+                        String(station.stationId ?? '').toUpperCase() === stationId);
+                    if (!match) {
+                        return reply.code(400).send({ error: 'unknown_station', message: `Station ${stationId} does not exist.` });
+                    }
+                }
+                // known.length === 0 means upstream is offline — allow assignment and log
+            } catch (stationErr: any) {
+                req.log.warn({ err: stationErr, stationId }, 'Station directory unavailable; skipping station validation for vendor assignment');
             }
         }
 

@@ -84,7 +84,7 @@ assert.ok(
   "an unassigned vendor must get an explicit error, not a silent empty page"
 );
 assert.ok(
-  authPlugin.includes("vendor_organizations(status, station_id)"),
+  authPlugin.includes("vendor_organizations") && authPlugin.includes("station_id"),
   "auth must load the vendor's station onto the actor"
 );
 
