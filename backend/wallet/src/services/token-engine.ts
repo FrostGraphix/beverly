@@ -52,7 +52,7 @@ export function cleanFloatingNumbersInMessage(raw: string): string {
     });
 }
 
-function classifyEnergyFailure(
+export function classifyEnergyFailure(
     payload: { code?: number; msg?: string; reason?: string },
     fallbackCode: string,
 ): { message: string; code: string; retryable: boolean } {
