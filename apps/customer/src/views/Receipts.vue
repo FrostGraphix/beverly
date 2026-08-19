@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { kwh, naira, shortDate } from '../lib/format';
@@ -30,6 +31,8 @@ const loadingDetail = ref(false);
 const error = ref('');
 const copied = ref('');
 const search = ref('');
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 const filtered = computed(() => {
     const term = search.value.trim().toLowerCase();
@@ -39,6 +42,11 @@ const filtered = computed(() => {
             .filter(Boolean)
             .some((value) => String(value).toLowerCase().includes(term)),
     );
+});
+
+const paginatedReceipts = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filtered.value.slice(start, start + pageSize.value);
 });
 
 const total = computed(() => receipts.value.reduce((sum, receipt) => sum + (receipt.amount_minor ?? 0), 0));
@@ -171,7 +179,7 @@ onMounted(load);
 
         <div class="receipt-mobile-list">
           <WalletTableSkeleton v-if="loading && !filtered.length" variant="cards" />
-          <button v-for="receipt in filtered" :key="receipt.id" class="receipt-mobile-card" @click="openReceipt(receipt)">
+          <button v-for="receipt in paginatedReceipts" :key="receipt.id" class="receipt-mobile-card" @click="openReceipt(receipt)">
             <span>
               <strong>{{ receipt.receipt_number }}</strong>
               <small>{{ shortDate(receipt.created_at) }} - {{ receipt.meter_id || 'Meter' }}</small>
@@ -183,6 +191,13 @@ onMounted(load);
             <span>Completed token purchases will appear here.</span>
           </div>
         </div>
+
+        <WalletTablePagination
+          v-model:page="currentPage"
+          v-model:pageSize="pageSize"
+          :total-items="filtered.length"
+          item-label="receipts"
+        />
       </div>
     </section>
 

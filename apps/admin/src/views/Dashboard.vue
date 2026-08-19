@@ -5,6 +5,7 @@ import { api, naira, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; actor_id?: string | null; reference?: string | null; }
 interface FundingHistoryRow {
@@ -263,6 +264,33 @@ const recentTransactions = computed(() => {
 watch([recentTypeFilter, recentActorFilter, recentStationFilter, recentDateFilter, recentSearchQuery, recentPageSize], () => {
     recentPage.value = 1;
 });
+
+type DashboardActivityRow = typeof recentActivityRows.value[number];
+
+function copyRefText(text: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+    }
+}
+
+function buildDashboardRowActions(p: DashboardActivityRow) {
+    const actions = [];
+    if (p.reference) {
+        actions.push({
+            label: 'Copy reference',
+            icon: 'copy' as const,
+            action: () => copyRefText(p.reference),
+        });
+    }
+    if (p.meterId) {
+        actions.push({
+            label: 'View details',
+            icon: 'details' as const,
+            action: () => { window.location.hash = `#/customers?search=${encodeURIComponent(p.meterId)}`; },
+        });
+    }
+    return actions;
+}
 const totalWalletFloatMinor = computed(() =>
     walletSummary.value.totalFloatMinor ?? walletSummary.value.totalBalanceMinor ?? 0,
 );
@@ -551,7 +579,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Vendor Transactions</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 3-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
         </div>
         <div class="bw-kpi-value" style="color: var(--info)">
@@ -637,7 +665,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <div class="bw-kpi-row">
           <span class="bw-kpi-label">Vendor Float</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 3-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
         </div>
         <div class="bw-kpi-value" style="color: var(--info)">{{ naira(statVendorFloatMinor) }}</div>
@@ -904,7 +932,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
       <!-- Filter Controls Panel -->
       <div v-if="showRecentFilters" id="recent-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
-          <div class="filter-group">
+          <div class="filter-group search-group">
             <label class="filter-label">Search</label>
             <input
               v-model="recentSearchQuery"
@@ -974,6 +1002,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
               <th>Status</th>
               <th style="text-align:right">Amount</th>
               <th>Time</th>
+              <th class="action-column bw-align-center" style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -989,6 +1018,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
                 <td><span class="bw-skeleton recent-cell-skeleton badge wide"></span></td>
                 <td><span class="bw-skeleton recent-cell-skeleton amount"></span></td>
                 <td><span class="bw-skeleton recent-cell-skeleton time"></span></td>
+                <td><span class="bw-skeleton recent-cell-skeleton action"></span></td>
               </tr>
             </template>
             <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
@@ -1007,9 +1037,18 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
               <td><span :class="['bw-badge', p.statusTone]">{{ p.status }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amountMinor) }}</td>
               <td class="bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.createdAt) }}</td>
+              <td class="action-column bw-align-center" style="text-align:center">
+                <WalletRowActions
+                  v-if="buildDashboardRowActions(p).length"
+                  :items="buildDashboardRowActions(p)"
+                  label="Transaction actions"
+                  align="center"
+                />
+                <span v-else class="bw-muted">-</span>
+              </td>
             </tr>
             <tr v-if="!recentTransactions.length && !loading">
-              <td colspan="7" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions match filters.</td>
+              <td colspan="8" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions match filters.</td>
             </tr>
           </tbody>
         </table>
@@ -1078,8 +1117,9 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             <span>Per page</span>
             <select v-model="recentPageSize" class="bw-select bw-select-sm" style="width: auto">
               <option :value="10">10</option>
-              <option :value="25">25</option>
+              <option :value="20">20</option>
               <option :value="50">50</option>
+              <option :value="100">100</option>
             </select>
           </label>
           <button class="bw-btn sm ghost" :disabled="recentPage <= 1" @click="recentPage--">

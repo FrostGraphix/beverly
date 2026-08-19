@@ -108,7 +108,6 @@ const standardNavGroups = computed(() => [
     {
         label: 'Operations',
         items: [
-            { to: '/beverly-ai', text: 'Beverly AI', permission: 'wallet.dashboard.view', icon: 'vending' },
             { to: '/disputes', text: 'Disputes', permission: 'wallet.disputes.manage', icon: 'disputes' },
             { to: '/support', text: 'Support Desk', permission: 'wallet.support.manage', icon: 'support' },
             { to: '/announcements', text: 'Announcements', permission: 'wallet.announcements.manage', icon: 'announcements' },
@@ -223,7 +222,7 @@ const navIconPath: Record<string, string> = {
     privacy: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4',
     fraud: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     audit: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
-    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 0 0 -3 -3.87',
+    roles: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75',
     permissions: 'M3 11h18v11H3zM7 11V7a5 5 0 0110 0v4',
     consumption: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
     'vendor-analytics': 'M3 3v18h18M7 16l4-5 4 3 5-7',

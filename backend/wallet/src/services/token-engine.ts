@@ -646,6 +646,9 @@ export interface GenerateTokenInput {
     reference: string;
     /** Phase 6: which OEM to vend against (see MeterInfo.oemId). */
     oemId?: string | null;
+    /** Vendor/Operator name for OEM token records. */
+    vendorName?: string | null;
+    operatorName?: string | null;
 }
 
 export interface GenerateTokenResult {
@@ -659,6 +662,7 @@ export interface GenerateTokenResult {
 
 export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
     const amount = Math.round((input.amountMinor / 100) * 100) / 100;
+    const operatorName = input.operatorName || input.vendorName || input.customerName || 'Beverly Vend';
     return {
         customerId: input.customerId,
         meterId: input.meterId,
@@ -672,6 +676,10 @@ export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPre
         payDebtPercent: 0,
         paymentMethod: 'Cash',
         isS2: typeof opts.isS2 === 'boolean' ? opts.isS2 : input.isThreePhase === true,
+        operatorName,
+        userName: operatorName,
+        vendorName: operatorName,
+        operator: operatorName,
     };
 }
 
@@ -889,17 +897,44 @@ function taskRowForRemoteSend(response: unknown, input: Pick<RemoteSendInput, 'm
         .find((row) => String(row.meterId || '').trim() === meterId && (!token || cleanToken(String(row.data || row.token || '')) === token)) ?? null;
 }
 
+export function normalizeRemoteRemark(rawRemark: unknown): string {
+    const text = String(rawRemark ?? '').trim();
+    const lower = text.toLowerCase();
+
+    if (!text) return 'Remote send completed.';
+    if (lower.includes('token used') || lower.includes('used token') || lower.includes('token already used') || lower.includes('old token') || lower.includes('duplicate token')) {
+        return 'Token has already been used or entered into the meter.';
+    }
+    if (lower.includes('already sent') || lower.includes('already exists') || lower.includes('task exists') || lower.includes('no data has been changed')) {
+        return 'Token was already sent over the air to this meter.';
+    }
+    if (lower.includes('keypad') || lower.includes('manual entry')) {
+        return 'Token was entered manually via meter keypad.';
+    }
+    if (lower.includes('offline') || lower.includes('unreachable') || lower.includes('timeout')) {
+        return 'Meter is currently offline or unconfirmed over the air. Token remains valid for manual keypad entry.';
+    }
+    return text;
+}
+
 function taskResultFromRow(row: Record<string, unknown>, fallbackTaskId: string): RemoteSendResult {
+    const rawRemark = row.remark == null ? null : String(row.remark);
     return {
         taskId: String(row.id ?? row.taskId ?? row.recordId ?? fallbackTaskId),
         status: normalizeRemoteTaskStatus(row.status),
-        remark: row.remark == null ? null : String(row.remark),
+        remark: rawRemark ? normalizeRemoteRemark(rawRemark) : null,
     };
 }
 
 function tokenRejectError(task: RemoteSendResult) {
-    const reason = task.remark ? `Remote meter rejected token: ${task.remark}` : 'Remote meter rejected token.';
-    return new TokenEngineError(`${reason} Verify SGC/KRN/KEN/TI/KT/baseYear before vending again.`, 'remote_token_rejected');
+    const normalized = normalizeRemoteRemark(task.remark);
+    if (normalized.includes('already been used') || normalized.includes('already used')) {
+        return new TokenEngineError('Token has already been used or entered into the meter.', 'token_already_used');
+    }
+    if (normalized.includes('already sent') || normalized.includes('already exists')) {
+        return new TokenEngineError('Token has already been sent over the air to this meter.', 'token_already_sent');
+    }
+    return new TokenEngineError(`Remote meter rejected token: ${normalized}`, 'remote_token_rejected');
 }
 
 async function waitForRemoteTokenTerminal(input: RemoteSendInput & { taskId: string }, attempts = 12, intervalMs = 5000): Promise<RemoteSendResult> {
@@ -930,6 +965,42 @@ async function waitForRemoteTokenTerminal(input: RemoteSendInput & { taskId: str
 }
 
 export async function createRemoteSendTask(input: RemoteSendInput): Promise<RemoteSendResult> {
+    // Deduplication check: query Calinmeter for pre-existing task row before sending CreateTokenTask
+    if (input.meterId && input.token) {
+        const existingLookup = await energyCall<{
+            code?: number;
+            msg?: string;
+            reason?: string;
+            data?: Record<string, unknown>;
+            result?: Record<string, unknown>;
+        }>(
+            '/API/RemoteMeterTask/GetTokenTask',
+            {
+                method: 'POST',
+                body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
+            },
+            input.oemId ?? undefined,
+        ).catch(() => null);
+
+        if (existingLookup && upstreamSucceeded(existingLookup)) {
+            const existingRow = taskRowForRemoteSend(existingLookup, input);
+            if (existingRow) {
+                const existingTaskId = String(existingRow.id ?? existingRow.taskId ?? existingRow.recordId);
+                const existingResult = taskResultFromRow(existingRow, existingTaskId);
+                if (existingResult.status === 'success') {
+                    return {
+                        taskId: existingTaskId,
+                        status: 'success',
+                        remark: existingResult.remark || 'Token was already sent over the air to this meter.',
+                    };
+                }
+                if (existingResult.status === 'pending') {
+                    return await waitForRemoteTokenTerminal({ ...input, taskId: existingTaskId });
+                }
+            }
+        }
+    }
+
     const response = await energyCall<{
         code?: number;
         msg?: string;

@@ -5,12 +5,17 @@ import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
 const router = useRouter();
 const auth = useStaffAuthStore();
 const canManageVendors = computed(() => auth.hasPermission('wallet.vendors.manage'));
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 interface Vendor {
     id: string;
@@ -128,6 +133,23 @@ async function deleteVendor() {
     }
 }
 
+function buildVendorRowActions(v: Vendor): ActionItem[] {
+    const actions: ActionItem[] = [
+        { label: 'View Vendor', icon: 'view', action: () => router.push(`/vendors/${v.id}`) },
+    ];
+    if (canManageVendors.value && v.status === 'approved') {
+        actions.push({ label: 'Freeze Vendor', icon: 'edit', action: () => ask(v, 'frozen') });
+        actions.push({ label: 'Suspend Vendor', icon: 'edit', action: () => ask(v, 'suspended') });
+    }
+    if (canManageVendors.value && (v.status === 'frozen' || v.status === 'suspended')) {
+        actions.push({ label: 'Reactivate Vendor', icon: 'approve', action: () => ask(v, 'approved') });
+    }
+    if (canManageVendors.value) {
+        actions.push({ label: 'Delete Vendor', icon: 'delete', action: () => askDelete(v) });
+    }
+    return actions;
+}
+
 async function load() {
     loading.value = true;
     try {
@@ -206,17 +228,19 @@ onMounted(() => {
           <div class="bw-card-sub">Manage registered vendor partners and access</div>
         </div>
         <div class="bw-table-actions">
-          <input class="bw-input" v-model="q" placeholder="Search vendors…" style="width: 200px" @keyup.enter="load" />
-          <select class="bw-select" v-model="status" @change="load" style="width: 130px">
+          <input class="bw-input search-input" v-model="q" placeholder="Search vendors…" @keyup.enter="load" />
+          <select class="bw-select status-select" v-model="status" @change="load">
             <option value="">All status</option>
             <option value="approved">Approved</option>
             <option value="suspended">Suspended</option>
             <option value="frozen">Frozen</option>
             <option value="closed">Closed</option>
           </select>
-          <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
-          <router-link to="/vendors/analytics" class="bw-btn sm" style="text-decoration: none">Analytics</router-link>
-          <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn sm primary" style="text-decoration: none">+ Create vendor</router-link>
+          <div class="bw-action-btns">
+            <WalletDataViewSwitch v-model="viewMode" label="Vendor display view" />
+            <router-link to="/vendors/analytics" class="bw-btn sm" style="text-decoration: none">Analytics</router-link>
+            <router-link v-if="canManageVendors" to="/vendors/new" class="bw-btn sm primary" style="text-decoration: none">+ Create vendor</router-link>
+          </div>
         </div>
       </div>
 
@@ -229,7 +253,7 @@ onMounted(() => {
               <th>Contact</th>
               <th>Risk</th>
               <th>Status</th>
-              <th class="actions-col"></th>
+              <th class="actions-col action-column bw-align-center" style="text-align: center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -245,21 +269,12 @@ onMounted(() => {
               </td>
               <td><span class="bw-badge neutral">{{ v.risk_level }}</span></td>
               <td><span :class="['bw-badge', statusBadge(v.status)]">{{ v.status }}</span></td>
-              <td class="actions-col" @click.stop>
-                <div class="action-cluster">
-                  <router-link :to="`/vendors/${v.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
-                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'frozen')">Freeze</button>
-                  <button v-if="canManageVendors && v.status === 'approved'" class="bw-btn sm" @click="ask(v, 'suspended')">Suspend</button>
-                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="bw-btn sm primary" @click="ask(v, 'approved')">Reactivate</button>
-                  <button v-if="canManageVendors" class="bw-btn sm danger" @click="askDelete(v)">Delete</button>
-                </div>
-                <MobileActionMenu label="Vendor actions">
-                  <router-link :to="`/vendors/${v.id}`" class="mobile-action-item">View</router-link>
-                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'frozen')">Freeze</button>
-                  <button v-if="canManageVendors && v.status === 'approved'" class="mobile-action-item" @click="ask(v, 'suspended')">Suspend</button>
-                  <button v-if="canManageVendors && (v.status === 'frozen' || v.status === 'suspended')" class="mobile-action-item primary" @click="ask(v, 'approved')">Reactivate</button>
-                  <button v-if="canManageVendors" class="mobile-action-item danger" @click="askDelete(v)">Delete</button>
-                </MobileActionMenu>
+              <td class="actions-col action-column bw-align-center" style="text-align: center" @click.stop>
+                <WalletRowActions
+                  :items="buildVendorRowActions(v)"
+                  label="Vendor actions"
+                  align="center"
+                />
               </td>
             </tr>
             <tr v-if="!vendors.length && !loading">
@@ -394,6 +409,10 @@ onMounted(() => {
 
 .vendor-kpis { margin-bottom: var(--s-3); }
 
+.search-input { width: 200px; }
+.status-select { width: 130px; }
+.bw-action-btns { display: flex; align-items: center; gap: 6px; }
+
 .v-row { cursor: pointer; }
 .v-row:hover { background: var(--surface-2); }
 .actions-col { min-width: 260px; }
@@ -404,7 +423,55 @@ onMounted(() => {
   flex-wrap: nowrap;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
+  .bw-table-head-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+  }
+
+  .bw-table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .search-input {
+    flex: 1 1 160px;
+    width: 100% !important;
+    min-width: 130px;
+  }
+
+  .status-select {
+    flex: 1 1 120px;
+    width: 100% !important;
+    min-width: 110px;
+  }
+
+  .bw-action-btns {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .vendor-kpis {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: var(--s-2) !important;
+  }
+
+  .vendor-kpis .bw-kpi {
+    min-width: 0 !important;
+    padding: var(--s-3) !important;
+  }
+
   .actions-col {
     min-width: 72px;
     position: sticky;
@@ -418,7 +485,26 @@ onMounted(() => {
   .action-cluster {
     display: none;
   }
+}
 
+@media (max-width: 440px) {
+  .vendor-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .bw-action-btns {
+    flex-wrap: wrap;
+  }
+
+  .bw-tc-vendor {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .bw-tc-pair-val {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
 }
 
 :deep(.cd-body) .cd-input-label {

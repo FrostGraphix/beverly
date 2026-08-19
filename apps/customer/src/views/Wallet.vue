@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
@@ -12,6 +13,7 @@ const loading = ref(false);
 const showFilters = ref(false);
 const searchQuery = ref('');
 const activityFilter = ref<'all' | 'credit' | 'debit'>('all');
+const currentPage = ref(1);
 const pageSize = ref(10);
 const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
@@ -22,7 +24,7 @@ onMounted(async () => {
     try {
         const [w, l] = await Promise.all([
             api.get<any>('/api/v1/customer/wallet'),
-            api.get<{ entries: any[] }>('/api/v1/customer/wallet/ledger?limit=50'),
+            api.get<{ entries: any[] }>('/api/v1/customer/wallet/ledger?limit=100'),
         ]);
         wallet.value = w;
         entries.value = l.entries;
@@ -46,6 +48,11 @@ const filteredLedger = computed(() => {
             (entry.id || '').toLowerCase().includes(q)
         );
     });
+});
+
+const paginatedLedger = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filteredLedger.value.slice(start, start + pageSize.value);
 });
 
 const activeFilterCount = computed(() => [
@@ -112,7 +119,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
       <!-- Filter Controls Panel -->
       <div v-if="showFilters" id="customer-wallet-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
-          <div class="filter-group">
+          <div class="filter-group search-group">
             <label class="filter-label">Search</label>
             <input
               v-model="searchQuery"
@@ -151,7 +158,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
           </thead>
           <tbody>
             <WalletTableSkeleton v-if="loading && !filteredLedger.length" :columns="4" />
-            <tr v-for="e in filteredLedger" :key="e.id">
+            <tr v-for="e in paginatedLedger" :key="e.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(e.created_at) }}</td>
               <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g,' ') }}</span></td>
               <td class="bw-money" :style="{ textAlign:'right', color: e.direction === 'credit' ? 'var(--brand)' : 'var(--text)' }">
@@ -169,7 +176,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
       <!-- Mobile cards -->
       <div class="bw-t-cards">
         <WalletTableSkeleton v-if="loading && !filteredLedger.length" variant="cards" :rows="4" />
-        <div v-for="e in filteredLedger" :key="e.id" class="bw-tc">
+        <div v-for="e in paginatedLedger" :key="e.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor">{{ e.entry_type.replace(/_/g,' ') }}</div>
@@ -192,21 +199,12 @@ const filterCount = (filter: typeof activityFilter.value) => {
       </div>
 
       <!-- Pagination Bar -->
-      <div v-if="filteredLedger.length > 0" class="bw-pagination-bar">
-        <div class="bw-pagination-info">
-          Showing 1–{{ filteredLedger.length }} of {{ filteredLedger.length }} matching movements
-        </div>
-        <div class="bw-pagination-controls">
-          <label class="filter-label inline">
-            <span>Per page</span>
-            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-            </select>
-          </label>
-        </div>
-      </div>
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="filteredLedger.length"
+        item-label="movements"
+      />
     </div>
   </AppShell>
 </template>

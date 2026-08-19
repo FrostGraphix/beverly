@@ -516,38 +516,32 @@ export async function dispatchGeneratedCustomerToken(
         .maybeSingle();
     if (error) throw new CustomerPurchaseError(error.message, 'purchase_lookup_failed');
     if (!data) throw new CustomerPurchaseError('Purchase order was not found for this customer.', 'purchase_not_found');
+    const po = data as any;
 
-    const po = data as PurchaseOrder;
-    if (!po.token) throw new CustomerPurchaseError('This purchase has no generated token to send.', 'token_missing');
+    let token = po.token;
+    if (!token) {
+        const { data: receipt } = await adminClient.from('receipts').select('*').eq('purchase_order_id', po.id).maybeSingle();
+        token = (receipt?.payload?.token as string) || (receipt?.payload?.credit_token as string) || null;
+        if (token) {
+            await adminClient.from('purchase_orders').update({ token }).eq('id', po.id);
+            po.token = token;
+        }
+    }
+    if (!token) throw new CustomerPurchaseError('This purchase has no generated token to send.', 'token_missing');
     if (po.status === 'reversed') throw new CustomerPurchaseError('Reversed token purchases cannot be remote sent.', 'purchase_reversed');
-    if (po.remote_task_id && po.delivery_state === 'remote_send_delivered') {
-        return {
-            purchaseOrder: po,
-            remoteTaskId: po.remote_task_id,
-            deliveryState: 'remote_send_delivered',
-            status: 'success',
-            remark: null,
-        };
-    }
-    if (po.remote_task_id && ['remote_send_failed_needs_manual_entry', 'remote_send_failed'].includes(String(po.delivery_state))) {
-        return {
-            purchaseOrder: po,
-            remoteTaskId: po.remote_task_id,
-            deliveryState: po.delivery_state || 'remote_send_failed_needs_manual_entry',
-            status: 'failed',
-            remark: po.failure_reason || 'Remote send failed. Enter token manually.',
-        };
-    }
-    if (po.remote_task_id && ['remote_send_pending', 'remote_send_pending_review'].includes(String(po.delivery_state))) {
+    if (po.remote_task_id) {
         const status = await pollRemoteSendStatus(po.remote_task_id, {
             meterId: po.meter_id,
             token: po.token,
+            oemId: po.oem_id,
         }).catch(() => ({ taskId: po.remote_task_id!, status: 'pending' as const, remark: null }));
+
         const deliveryState = status.status === 'success'
             ? 'remote_send_delivered'
             : status.status === 'failed'
                 ? 'remote_send_failed_needs_manual_entry'
                 : 'remote_send_pending_review';
+
         if (deliveryState !== po.delivery_state) {
             await adminClient.from('purchase_orders').update({
                 delivery_state: deliveryState,
@@ -556,12 +550,17 @@ export async function dispatchGeneratedCustomerToken(
                     : {}),
             }).eq('id', po.id);
         }
+
+        const explicitRemark = status.status === 'success'
+            ? 'Token was already sent and delivered over the air to this meter.'
+            : status.remark || (status.status === 'pending' ? 'Token remote send is currently running in meter system.' : 'Remote send failed. Enter token manually.');
+
         return {
             purchaseOrder: { ...po, delivery_state: deliveryState },
             remoteTaskId: status.taskId,
             deliveryState,
             status: status.status,
-            remark: status.remark ?? null,
+            remark: explicitRemark,
         };
     }
 
@@ -600,6 +599,10 @@ export async function dispatchGeneratedCustomerToken(
         await adminClient.from('purchase_orders').update({
             remote_task_id: task.taskId,
             delivery_state: deliveryState,
+            ...(deliveryState === 'remote_send_delivered' ? { status: 'delivered' } : {}),
+            ...(task.status === 'failed'
+                ? { failure_reason: `remote_send_failed: ${task.remark ?? 'Meter rejected the token.'}`.slice(0, 500) }
+                : {}),
         }).eq('id', po.id);
         await logAction({
             actorUserId: customerUserId,

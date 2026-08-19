@@ -72,14 +72,14 @@
             <th>Requested By</th>
             <th>Expires</th>
             <th>Created</th>
-            <th>Actions</th>
+            <th class="action-column bw-align-center" style="text-align: center">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
             <td colspan="9"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
           </tr>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
+          <tr v-for="row in paginatedRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ row.referenceCode || shortId(row.id) }}</code></td>
             <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
@@ -88,13 +88,25 @@
             <td>{{ row.requestedBy || '-' }}</td>
             <td>{{ row.expiresAt ? formatDate(row.expiresAt) : '-' }}</td>
             <td>{{ formatDate(row.createdAt) }}</td>
-            <td class="action-cell">
-              <BaseButton v-if="canApprove(row)" size="sm" variant="primary" @click.stop="openApprove(row)">Approve</BaseButton>
-              <BaseButton v-if="canApprove(row)" size="sm" class="btn-danger-sm" @click.stop="openReject(row)">Reject</BaseButton>
+            <td class="action-cell action-column bw-align-center" style="text-align: center" @click.stop>
+              <WalletRowActions
+                v-if="buildFundingPageRowActions(row).length"
+                :items="buildFundingPageRowActions(row)"
+                label="Funding actions"
+                align="center"
+              />
+              <span v-else class="bw-muted">-</span>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <WalletTablePagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total-items="filteredRows.length"
+        item-label="funding requests"
+      />
     </div>
 
     <!-- Detail drawer -->
@@ -155,6 +167,8 @@ import BaseConfirmDialog from "../base/BaseConfirmDialog.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
+import WalletRowActions from "@beverly/tokens/WalletRowActions.vue";
+import WalletTablePagination from "@beverly/tokens/WalletTablePagination.vue";
 import { postApi } from "../../services/api.js";
 
 function formatMoney(amountMinor = 0) {
@@ -164,13 +178,15 @@ function formatMoney(amountMinor = 0) {
 
 export default {
   name: "WalletFundingPage",
-  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar, WalletRowActions, WalletTablePagination },
   data() {
     return {
       rows: [],
       summary: {},
       filterStatus: "",
       search: "",
+      page: 1,
+      pageSize: 10,
       selected: null,
       loading: false,
       initialLoading: true,
@@ -191,6 +207,10 @@ export default {
         (r.referenceCode || "").toLowerCase().includes(q) ||
         (r.id || "").toLowerCase().includes(q)
       );
+    },
+    paginatedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredRows.slice(start, start + this.pageSize);
     },
     exportColumns() {
       return [
@@ -286,6 +306,14 @@ export default {
       } finally {
         this.submitting = false;
       }
+    },
+    buildFundingPageRowActions(row) {
+      const actions = [];
+      if (this.canApprove(row)) {
+        actions.push({ label: 'Approve Funding', icon: 'approve', action: () => this.openApprove(row) });
+        actions.push({ label: 'Reject Funding', icon: 'reject', action: () => this.openReject(row) });
+      }
+      return actions;
     },
     formatMoney,
     shortId: (id) => String(id || "").slice(0, 8).toUpperCase(),

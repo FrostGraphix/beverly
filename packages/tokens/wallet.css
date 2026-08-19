@@ -1626,6 +1626,12 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
 }
 .bw-table tbody tr:last-child td { border-bottom: none; }
 .bw-table tbody tr:hover td { background: var(--surface-2); }
+.bw-table th.bw-align-center,
+.bw-table td.bw-align-center,
+.bw-table th.action-column,
+.bw-table td.action-column {
+  text-align: center;
+}
 
 .bw-row-id {
   font-family: var(--font-mono);
@@ -2245,14 +2251,18 @@ textarea.bw-input { height: auto; padding: var(--s-3); resize: vertical; line-he
 .recent-filter-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding-inline: 5px; border-radius: var(--r-pill); background: var(--brand); color: var(--on-brand); font-family: var(--font-mono); font-size: 9px; font-weight: 800; }
 
 .recent-filter-panel { padding: var(--s-3) var(--s-4); background: var(--surface-2); border-bottom: 1px solid var(--border); }
-.recent-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-3); }
+.recent-filter-grid { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-3) var(--s-4); }
 .filter-group { display: flex; flex-direction: column; gap: 4px; }
-.filter-group.full-width { grid-column: 1 / -1; }
+.filter-group.search-group { flex: 0 1 240px; min-width: 180px; }
+.filter-group.full-width { flex: 1 1 auto; grid-column: auto; }
 .filter-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .filter-label.inline { margin: 0; flex-direction: row; align-items: center; gap: 6px; }
-.recent-tabs-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.recent-tabs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 
 .bw-pagination-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); background: var(--surface-1); gap: var(--s-3); flex-wrap: wrap; }
 .bw-pagination-info { font-size: var(--t-xs); color: var(--text-muted); font-weight: 500; }
 .bw-pagination-controls { display: flex; align-items: center; gap: var(--s-3); }
+.bw-pagination-pages { display: flex; align-items: center; gap: var(--s-2); }
+.bw-page-indicator { font-size: var(--t-xs); color: var(--text-muted); font-weight: 600; padding: 0 var(--s-2); white-space: nowrap; }
+
 

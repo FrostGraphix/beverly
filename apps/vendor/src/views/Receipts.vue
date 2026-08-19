@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { downloadReceipt, printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
@@ -30,6 +33,8 @@ const loading = ref(false);
 const error = ref('');
 const copied = ref('');
 const search = ref('');
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 const filtered = computed(() => {
   const term = search.value.trim().toLowerCase();
@@ -39,6 +44,11 @@ const filtered = computed(() => {
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(term)),
   );
+});
+
+const paginatedReceipts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filtered.value.slice(start, start + pageSize.value);
 });
 
 const total = computed(() => receipts.value.reduce((sum, r) => sum + r.amount_minor, 0));
@@ -94,6 +104,19 @@ function tokenPreview(token: string | null) {
   if (!token) return '-';
   if (token.length <= 16) return token;
   return `${token.slice(0, 8)} ${token.slice(8, 16)}...`;
+}
+
+function buildReceiptRowActions(r: Receipt): ActionItem[] {
+  const actions: ActionItem[] = [
+    { label: 'View Receipt', icon: 'view', action: () => viewReceiptDoc(r) },
+    { label: 'Details', icon: 'details', action: () => openReceipt(r) },
+    { label: 'Print Receipt', icon: 'print', action: () => printReceiptDoc(r) },
+    { label: 'Download PDF', icon: 'download', action: () => downloadReceiptDoc(r) },
+  ];
+  if (r.token) {
+    actions.push({ label: 'Copy Token', icon: 'copy', action: () => copy(r.token, 'Token') });
+  }
+  return actions;
 }
 
 onMounted(load);
@@ -157,22 +180,23 @@ onMounted(load);
           </div>
         </div>
 
-        <div class="bw-t-wrap receipt-table-wrap">
+        <!-- Desktop table -->
+        <div class="bw-t-wrap">
           <table class="bw-table">
             <thead>
               <tr>
                 <th>When</th>
                 <th>Customer</th>
                 <th>Meter</th>
-                <th style="text-align:right">Amount</th>
+                <th style="text-align:right">Paid</th>
                 <th style="text-align:right">Units</th>
                 <th>Token</th>
-                <th></th>
+                <th class="action-column bw-align-center" style="text-align:center">Actions</th>
               </tr>
             </thead>
             <tbody>
               <WalletTableSkeleton v-if="loading && !filtered.length" :columns="7" />
-              <tr v-for="r in filtered" :key="r.id">
+              <tr v-for="r in paginatedReceipts" :key="r.id">
                 <td class="bw-mono bw-muted">{{ shortDate(r.created_at) }}</td>
                 <td>
                   <strong>{{ r.customer_name || 'Customer' }}</strong>
@@ -185,12 +209,12 @@ onMounted(load);
                 <td class="bw-money" style="text-align:right">{{ naira(r.amount_minor) }}</td>
                 <td class="bw-mono" style="text-align:right">{{ kwh(r.units_kwh) }}</td>
                 <td class="bw-mono token-cell">{{ tokenPreview(r.token) }}</td>
-                <td class="actions-cell">
-                  <button class="bw-btn sm" @click="viewReceiptDoc(r)">View</button>
-                  <button class="bw-btn sm" @click="openReceipt(r)">Details</button>
-                  <button class="bw-btn sm" @click="printReceiptDoc(r)">Print</button>
-                  <button class="bw-btn sm" @click="downloadReceiptDoc(r)">Download</button>
-                  <button class="bw-btn sm" @click="copy(r.token, 'Token')">Copy</button>
+                <td class="actions-cell action-column bw-align-center" style="text-align:center">
+                  <WalletRowActions
+                    :items="buildReceiptRowActions(r)"
+                    label="Receipt actions"
+                    align="center"
+                  />
                 </td>
               </tr>
               <tr v-if="!filtered.length && !loading">
@@ -205,7 +229,7 @@ onMounted(load);
 
         <div class="bw-t-cards receipt-mobile-list">
           <WalletTableSkeleton v-if="loading && !filtered.length" variant="cards" />
-          <button v-for="r in filtered" :key="r.id" class="receipt-mobile-card" @click="openReceipt(r)">
+          <button v-for="r in paginatedReceipts" :key="r.id" class="receipt-mobile-card" @click="openReceipt(r)">
             <span>
               <strong>{{ r.customer_name || 'Customer' }}</strong>
               <small>{{ shortDate(r.created_at) }} - {{ r.meter_id }}</small>
@@ -217,6 +241,13 @@ onMounted(load);
             <span>Delivered vending receipts will appear here.</span>
           </div>
         </div>
+
+        <WalletTablePagination
+          v-model:page="currentPage"
+          v-model:pageSize="pageSize"
+          :total-items="filtered.length"
+          item-label="receipts"
+        />
       </div>
     </section>
 

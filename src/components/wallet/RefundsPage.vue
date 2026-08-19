@@ -71,14 +71,14 @@
             <th>Reason</th>
             <th>Status</th>
             <th>Created</th>
-            <th>Actions</th>
+            <th class="action-column bw-align-center" style="text-align: center">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
             <td colspan="9"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
           </tr>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
+          <tr v-for="row in paginatedRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td><code class="mono-id">{{ shortId(row.purchaseOrderId) }}</code></td>
             <td>{{ row.organizationId || '-' }}</td>
@@ -87,13 +87,25 @@
             <td>{{ reasonLabel(row.reason) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatDate(row.createdAt) }}</td>
-            <td class="action-cell">
-              <BaseButton v-if="row.status === 'requested'" size="sm" @click.stop="openApprove(row)">Approve</BaseButton>
-              <BaseButton v-if="['requested','under_review'].includes(row.status)" size="sm" class="btn-danger-sm" @click.stop="openReject(row)">Reject</BaseButton>
+            <td class="action-cell action-column bw-align-center" style="text-align: center" @click.stop>
+              <WalletRowActions
+                v-if="buildRefundRowActions(row).length"
+                :items="buildRefundRowActions(row)"
+                label="Refund actions"
+                align="center"
+              />
+              <span v-else class="bw-muted">-</span>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <WalletTablePagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total-items="filteredRows.length"
+        item-label="refunds"
+      />
     </div>
 
     <!-- Detail drawer -->
@@ -150,17 +162,21 @@ import BaseConfirmDialog from "../base/BaseConfirmDialog.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
+import WalletRowActions from "@beverly/tokens/WalletRowActions.vue";
+import WalletTablePagination from "@beverly/tokens/WalletTablePagination.vue";
 import { listRefunds, approveRefund, rejectRefund, refundSummary, formatMoney } from "../../services/wallet-refunds-service.mjs";
 
 export default {
   name: "RefundsPage",
-  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseConfirmDialog, BaseInput, BaseSelect, ExportToolbar, WalletRowActions, WalletTablePagination },
   data() {
     return {
       rows: [],
       summary: {},
       filterStatus: "",
       search: "",
+      page: 1,
+      pageSize: 10,
       selected: null,
       loading: false,
       initialLoading: true,
@@ -180,6 +196,10 @@ export default {
         (r.id || "").toLowerCase().includes(q) ||
         (r.purchaseOrderId || "").toLowerCase().includes(q)
       );
+    },
+    paginatedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredRows.slice(start, start + this.pageSize);
     },
     exportColumns() {
       return [
@@ -255,6 +275,16 @@ export default {
       } finally {
         this.submitting = false;
       }
+    },
+    buildRefundRowActions(row) {
+      const actions = [];
+      if (row.status === 'requested') {
+        actions.push({ label: 'Approve Refund', icon: 'approve', action: () => this.openApprove(row) });
+      }
+      if (['requested', 'under_review'].includes(row.status)) {
+        actions.push({ label: 'Reject Refund', icon: 'reject', action: () => this.openReject(row) });
+      }
+      return actions;
     },
     formatMoney,
     shortId(id) { return String(id || "").slice(0, 8).toUpperCase(); },

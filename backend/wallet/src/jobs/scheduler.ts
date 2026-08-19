@@ -49,9 +49,55 @@ export async function sweepExpiredHolds(): Promise<void> {
             console.error(`[JOB:holds] release failed for ${hold.id}:`, error);
             continue;
         }
+        await adminClient
+            .from('purchase_orders')
+            .update({
+                status: 'failed',
+                failure_reason: 'hold_expired_swept',
+            })
+            .eq('hold_id', hold.id)
+            .in('status', ['created', 'hold_active']);
         released++;
     }
     console.info(`[JOB:holds] released ${released} expired holds`);
+}
+
+// ── Auto-reconcile hold_active orders with generated tokens ───────────────────
+export async function reconcileGeneratedHoldOrders(): Promise<void> {
+    const { data: rows } = await adminClient
+        .from('purchase_orders')
+        .select('*')
+        .eq('status', 'hold_active')
+        .not('token', 'is', null)
+        .limit(50);
+
+    if (!rows?.length) return;
+    let count = 0;
+    for (const po of rows as any[]) {
+        try {
+            if (po.hold_id) {
+                const { captureHold } = await import('../services/ledger.js');
+                const { ledgerKey } = await import('../services/idempotency.js');
+                await captureHold({
+                    holdId: po.hold_id,
+                    entryType: 'purchase_debit',
+                    referenceType: 'purchase_order',
+                    referenceId: po.id,
+                    idempotencyKey: ledgerKey('purchase', 'capture', po.id, 'reconcile-auto'),
+                    memo: `Auto Reconcile · ${po.meter_id}`,
+                    createdBy: po.created_by ?? 'system',
+                }).catch(() => undefined);
+            }
+            await adminClient.from('purchase_orders').update({
+                status: 'delivered',
+                delivery_state: po.delivery_state || 'token_generated',
+            }).eq('id', po.id);
+            count++;
+        } catch { /* noop */ }
+    }
+    if (count > 0) {
+        console.info(`[JOB:hold-reconcile] auto-fulfilled ${count} hold_active orders with generated tokens`);
+    }
 }
 
 // ── Payment status sweeper ────────────────────────────────────────────────────
@@ -126,7 +172,7 @@ export async function scanStuckPurchases(): Promise<void> {
     const { data: stuck } = await adminClient
         .from('purchase_orders')
         .select('id, meter_id, amount_minor')
-        .eq('status', 'pending')
+        .in('status', ['created', 'hold_active', 'pending'])
         .lt('created_at', cutoff)
         .limit(20);
     if (!stuck?.length) return;

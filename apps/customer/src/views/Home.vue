@@ -148,7 +148,7 @@ const filterCount = (filter: typeof activityFilter.value) => {
       <!-- Filter Controls Panel -->
       <div v-if="showFilters" id="customer-recent-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
-          <div class="filter-group">
+          <div class="filter-group search-group">
             <label class="filter-label">Search</label>
             <input
               v-model="searchQuery"
