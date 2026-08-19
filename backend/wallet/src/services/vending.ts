@@ -67,6 +67,7 @@ export interface PurchaseOrder {
     idempotency_key: string;
     failure_reason: string | null;
     created_by: string;
+    vended_by?: string | null;
     created_at: string;
     /** Phase 6: which OEM this meter/vend belongs to (station/meter identity namespacing). */
     oem_id?: string | null;
@@ -276,11 +277,23 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
             });
             ledgerEntryId = ledgerEntry.id;
 
+            const [{ data: vendorUser }, { data: vendorOrg }] = await Promise.all([
+                Promise.resolve(adminClient.from('vendor_users').select('full_name').eq('id', input.vendorUserId).maybeSingle()).catch(() => ({ data: null })),
+                Promise.resolve(adminClient.from('vendor_organizations').select('legal_name, trading_name, station_id').eq('id', input.vendorOrganizationId).maybeSingle()).catch(() => ({ data: null })),
+            ]);
+
+            const vName = vendorUser?.full_name || 'Authorized Vendor';
+            const vBiz = vendorOrg?.trading_name || vendorOrg?.legal_name || 'Vendor Enterprise';
+            const vStation = meter.stationId || vendorOrg?.station_id || input.vendorStationId;
+            const vendedByResolved = `${vName} — ${vBiz}${vStation ? ` (${vStation})` : ''}`;
+
             const receipt = await createReceipt({
                 purchaseOrderId: po.id,
                 payload: {
                     receiptNumber: shortReceipt(po.id),
                     vendorOrganizationId: input.vendorOrganizationId,
+                    vendedBy: vendedByResolved,
+                    vendedByName: vendedByResolved,
                     customerId: meter.customerId,
                     customerName: meter.customerName,
                     meterId: meter.meterId,
@@ -304,8 +317,9 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
                 receipt_id: receiptId,
                 status: 'delivered',
                 delivery_state: 'token_generated',
+                vended_by: vendedByResolved,
             }).eq('id', po.id);
-            po = { ...po, token, receipt_id: receiptId, status: 'delivered', delivery_state: 'token_generated' };
+            po = { ...po, token, receipt_id: receiptId, status: 'delivered', delivery_state: 'token_generated', vended_by: vendedByResolved };
 
         } catch (e: any) {
             // token engine or capture failed → release hold and mark failed
@@ -363,7 +377,7 @@ export async function dispatchGeneratedVendorToken(
 
     const po = data as PurchaseOrder;
     if (!po.token) throw new VendingError('This purchase has no generated token to send.', 'token_missing');
-    if (po.status !== 'delivered') throw new VendingError('Only delivered token purchases can be remote sent.', 'purchase_not_delivered');
+    if (po.status === 'reversed') throw new VendingError('Reversed token purchases cannot be remote sent.', 'purchase_reversed');
     if (po.remote_task_id && po.delivery_state === 'remote_send_delivered') {
         return {
             purchaseOrder: po,
@@ -371,6 +385,15 @@ export async function dispatchGeneratedVendorToken(
             deliveryState: 'remote_send_delivered',
             status: 'success',
             remark: null,
+        };
+    }
+    if (po.remote_task_id && ['remote_send_failed_needs_manual_entry', 'remote_send_failed'].includes(String(po.delivery_state))) {
+        return {
+            purchaseOrder: po,
+            remoteTaskId: po.remote_task_id,
+            deliveryState: po.delivery_state || 'remote_send_failed_needs_manual_entry',
+            status: 'failed',
+            remark: po.failure_reason || 'Remote send failed. Enter token manually.',
         };
     }
     if (po.remote_task_id && ['remote_send_pending', 'remote_send_pending_review'].includes(String(po.delivery_state))) {

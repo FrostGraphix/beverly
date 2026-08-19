@@ -59,8 +59,13 @@ router.beforeEach(async (to) => {
     if (requiredKyc > 0 && (auth.customer?.kyc_tier ?? 0) < requiredKyc) {
         return { name: 'kyc', query: { reason: `tier_${requiredKyc}` } };
     }
-    if (to.name === 'buy-token' && !auth.customer?.vend_pin_configured) {
-        return { name: 'vend-pin', query: { redirect: to.fullPath } };
+    if (to.name === 'buy-token') {
+        if (auth.customer && auth.customer.vend_pin_configured === undefined) {
+            await auth.refreshProfile();
+        }
+        if (!auth.customer?.vend_pin_configured) {
+            return { name: 'vend-pin', query: { redirect: to.fullPath } };
+        }
     }
     return true;
 });

@@ -4,7 +4,7 @@ import { mapTableCollection, normalizeTableResponse } from "./mappers/table-mapp
 import { normalizeCollection } from "./response-normalizers.mjs";
 import { mapExportRows } from "./record-mappers.mjs";
 import { buildReceiptModel } from "./receipt-tools.mjs";
-import { fetchStationOptions, invalidateStations } from "./station-registry.mjs";
+import { fetchStationOptions, formatStationDisplayLabel, invalidateStations, notifyStationMutation, onStationMutation } from "./station-registry.mjs";
 import { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, rowActionButtons, searchRows, sortRows, totalPages } from "./table-helpers.mjs";
 import { isCreditTokenRoute, meterPhaseFromRow } from "./token-flow.mjs";
 import { isWriteEndpoint } from "./write-helpers.mjs";
@@ -15,6 +15,10 @@ const maxTableRows = 20000;
 export const tableSiteOptions = reactive([
   { value: "", label: "All sites" }
 ]);
+
+onStationMutation(() => {
+  loadDynamicStationOptions(undefined, true).catch(() => null);
+});
 
 let stationLoadingPromise = null;
 
@@ -33,10 +37,7 @@ export async function loadDynamicStationOptions(api = defaultTableApi, forceRefr
         const fetched = rows.map((s) => {
           const id = String(s.stationId || s.id || s.station_id || s.name || "").trim();
           const rawName = String(s.label || s.name || s.stationName || s.station_name || s.communityLabel || id).trim();
-          let label = rawName;
-          if (rawName && rawName === rawName.toUpperCase() && rawName.length > 1 && !/^\d+$/.test(rawName)) {
-            label = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
-          }
+          const label = formatStationDisplayLabel(id, rawName);
           return {
             value: id,
             label: label || id,
@@ -851,4 +852,4 @@ export function printModelForRoute(route, row) {
 }
 
 
-export { columnKey, createFormSeed, isBatchCheckableRoute, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, totalPages };
+export { columnKey, createFormSeed, isBatchCheckableRoute, notifyStationMutation, onStationMutation, pageNumbers, pageSizeOptions, paginateRows, resolveRowValue, routeSortDirection, routeSortPolicy, routeUsesServerPagination, rowActionButtons, searchRows, sortRows, totalPages };

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, ApiError } from '../lib/api';
@@ -12,26 +12,45 @@ interface WalletCustomer {
 }
 
 const router = useRouter();
-const step = ref<1 | 2 | 3>(1);
+const step = ref<1 | 2 | 3 | 4>(1);
 const loading = ref(false);
 const searching = ref(false);
 const error = ref('');
 const search = ref('');
 const results = ref<WalletCustomer[]>([]);
 const selectedCustomer = ref<WalletCustomer | null>(null);
+const propertyCategory = ref<'residential' | 'commercial' | ''>('');
 const meterType = ref<'single_phase' | 'three_phase' | ''>('');
 const propertyAddress = ref('');
 const serviceArea = ref('');
 const contactPhone = ref('');
 
-const prices: Record<'single_phase' | 'three_phase', number> = {
-    single_phase: 50000,
-    three_phase: 75000,
-};
+const prices = ref<{ residential_minor: number; commercial_minor: number }>({
+    residential_minor: 3_000_000,
+    commercial_minor: 15_000_000,
+});
+
+async function loadPrices() {
+    try {
+        const res = await api.get<{ residential_minor: number; commercial_minor: number }>('/api/v1/vendor/meter-pricing');
+        if (res.residential_minor) prices.value = res;
+    } catch {
+        // use fallback default
+    }
+}
+
+onMounted(() => {
+    loadPrices();
+});
+
+const activePriceMinor = computed(() => {
+    if (!propertyCategory.value) return 0;
+    return propertyCategory.value === 'commercial' ? prices.value.commercial_minor : prices.value.residential_minor;
+});
 
 const priceLabel = computed(() => {
-    if (!meterType.value) return '';
-    return `NGN ${prices[meterType.value].toLocaleString()}`;
+    if (!activePriceMinor.value) return '';
+    return `NGN ${(activePriceMinor.value / 100).toLocaleString()}`;
 });
 
 async function lookupCustomers() {
@@ -55,13 +74,18 @@ function chooseCustomer(customer: WalletCustomer) {
     step.value = 2;
 }
 
-function pickMeter(type: 'single_phase' | 'three_phase') {
-    meterType.value = type;
+function pickCategory(category: 'residential' | 'commercial') {
+    propertyCategory.value = category;
     step.value = 3;
 }
 
+function pickMeter(type: 'single_phase' | 'three_phase') {
+    meterType.value = type;
+    step.value = 4;
+}
+
 async function submit() {
-    if (!selectedCustomer.value || !meterType.value) return;
+    if (!selectedCustomer.value || !meterType.value || !propertyCategory.value) return;
     if (!propertyAddress.value.trim() || !serviceArea.value.trim() || !contactPhone.value.trim()) {
         error.value = 'Complete every field.';
         return;
@@ -72,6 +96,7 @@ async function submit() {
         await api.post('/api/v1/vendor/meter-orders', {
             customer_id: selectedCustomer.value.id,
             meter_type: meterType.value,
+            property_category: propertyCategory.value,
             property_address: propertyAddress.value.trim(),
             service_area: serviceArea.value.trim(),
             contact_phone: contactPhone.value.trim(),
@@ -98,7 +123,9 @@ async function submit() {
         <div class="bw-step-line"></div>
         <div :class="['bw-step', { active: step >= 2, done: step > 2 }]">2</div>
         <div class="bw-step-line"></div>
-        <div :class="['bw-step', { active: step >= 3 }]">3</div>
+        <div :class="['bw-step', { active: step >= 3, done: step > 3 }]">3</div>
+        <div class="bw-step-line"></div>
+        <div :class="['bw-step', { active: step >= 4 }]">4</div>
       </div>
 
       <div v-if="step === 1" class="bw-card bw-stack" style="gap: var(--s-3)">
@@ -130,26 +157,48 @@ async function submit() {
           <button class="bw-text-btn" @click="step = 1">Back</button>
           <span class="bw-muted">{{ selectedCustomer?.full_name || 'Customer selected' }}</span>
         </div>
-        <label class="bw-label">Select meter type</label>
+        <label class="bw-label">Select property type</label>
+        <button class="bw-option-card" @click="pickCategory('residential')">
+          <div class="bw-option-body">
+            <strong>Residential Property</strong>
+            <p class="bw-muted" style="margin: 4px 0 0">Private residences, apartments, estates.</p>
+          </div>
+          <div class="bw-option-price">NGN {{ (prices.residential_minor / 100).toLocaleString() }}</div>
+        </button>
+        <button class="bw-option-card" @click="pickCategory('commercial')">
+          <div class="bw-option-body">
+            <strong>Commercial Property</strong>
+            <p class="bw-muted" style="margin: 4px 0 0">Offices, shops, commercial complexes.</p>
+          </div>
+          <div class="bw-option-price">NGN {{ (prices.commercial_minor / 100).toLocaleString() }}</div>
+        </button>
+      </div>
+
+      <div v-else-if="step === 3" class="bw-card bw-stack" style="gap: var(--s-3)">
+        <div class="bw-back-row">
+          <button class="bw-text-btn" @click="step = 2">Back</button>
+          <span class="bw-muted">{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }} — {{ priceLabel }}</span>
+        </div>
+        <label class="bw-label">Select meter phase</label>
         <button class="bw-option-card" @click="pickMeter('single_phase')">
           <div class="bw-option-body">
             <strong>Single Phase</strong>
-            <p class="bw-muted" style="margin: 4px 0 0">Residential meter order.</p>
+            <p class="bw-muted" style="margin: 4px 0 0">Standard load connections.</p>
           </div>
-          <div class="bw-option-price">NGN 50,000</div>
+          <div class="bw-option-price">{{ priceLabel }}</div>
         </button>
         <button class="bw-option-card" @click="pickMeter('three_phase')">
           <div class="bw-option-body">
             <strong>Three Phase</strong>
-            <p class="bw-muted" style="margin: 4px 0 0">Commercial meter order.</p>
+            <p class="bw-muted" style="margin: 4px 0 0">Heavy duty load connections.</p>
           </div>
-          <div class="bw-option-price">NGN 75,000</div>
+          <div class="bw-option-price">{{ priceLabel }}</div>
         </button>
       </div>
 
       <div v-else class="bw-card bw-stack" style="gap: var(--s-3)">
         <div class="bw-back-row">
-          <button class="bw-text-btn" @click="step = 2">Back</button>
+          <button class="bw-text-btn" @click="step = 3">Back</button>
           <span class="bw-muted">{{ priceLabel }}</span>
         </div>
         <div class="bw-field">
@@ -166,6 +215,7 @@ async function submit() {
         </div>
         <div class="bw-card" style="padding: var(--s-4)">
           <div class="bw-review-row"><span class="bw-muted">Customer</span><strong>{{ selectedCustomer?.full_name || '—' }}</strong></div>
+          <div class="bw-review-row"><span class="bw-muted">Property category</span><strong>{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }}</strong></div>
           <div class="bw-review-row"><span class="bw-muted">Meter type</span><strong>{{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }}</strong></div>
           <div class="bw-review-row"><span class="bw-muted">Charge source</span><strong>Vendor wallet</strong></div>
           <div class="bw-review-row"><span class="bw-muted">Amount</span><strong>{{ priceLabel }}</strong></div>

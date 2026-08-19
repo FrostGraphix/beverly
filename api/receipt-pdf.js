@@ -85,7 +85,7 @@ function sanitizeModel(input, brand) {
   if (!fields.length) return null;
   return {
     title: sanitizeString(input.title) || "Transaction Receipt",
-    subtitle: sanitizeString(input.subtitle) || "Energy Operations & Management System",
+    subtitle: sanitizeString(input.subtitle) || "",
     amount: sanitizeString(input.amount),
     generatedAt: sanitizeString(input.generatedAt),
     receiptId: sanitizeString(input.receiptId) || "no-id",

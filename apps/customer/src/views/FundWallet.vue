@@ -42,15 +42,24 @@ async function verifyReference(reference: string): Promise<boolean> {
     );
     if (payment.status === 'succeeded' && ['fulfilled', 'already_fulfilled'].includes(payment.fulfillmentStatus)) {
         success.value = 'Payment confirmed. Your wallet has been credited.';
+        error.value = null;
         clearPendingTopup();
         return true;
     }
     if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
         error.value = 'Payment confirmed, but the wallet credit needs review. Support has been notified; do not pay again.';
+        success.value = null;
         clearPendingTopup();
         return true;
     }
-    success.value = 'Payment is still processing. Your wallet will update automatically after confirmation.';
+    if (payment.status === 'failed' || payment.fulfillmentStatus === 'failed' || payment.status === 'abandoned') {
+        error.value = 'Payment was not completed or failed on Paystack. Your wallet was not charged.';
+        success.value = null;
+        clearPendingTopup();
+        return false;
+    }
+    error.value = 'Payment is pending. Your wallet will update automatically once confirmed by Paystack.';
+    success.value = null;
     return false;
 }
 

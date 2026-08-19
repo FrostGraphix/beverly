@@ -194,7 +194,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
                 res.status,
                 json?.error ?? 'http_error',
                 json?.message ?? res.statusText,
-                json?.details,
+                json?.details ?? json,
             );
         }
         return unwrapEnvelope<T>(json);

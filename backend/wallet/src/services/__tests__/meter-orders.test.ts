@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     rpc: vi.fn(),
+    from: vi.fn(),
 }));
 
 vi.mock('../../db/supabase.js', () => ({
     adminClient: {
         rpc: mocks.rpc,
+        from: mocks.from,
     },
 }));
 
@@ -15,6 +17,9 @@ import {
     assertMeterOrderTransition,
     deterministicMeterOrderReference,
     runIdempotentMeterOrder,
+    getMeterPrices,
+    updateMeterPrices,
+    meterOrderAmountMinor,
 } from '../meter-orders.js';
 
 describe('meter order safeguards', () => {
@@ -98,5 +103,23 @@ describe('meter order safeguards', () => {
             code: 'idempotency_in_progress',
             status: 409,
         });
+    });
+
+    it('calculates meter order amount by property category', async () => {
+        mocks.from.mockReturnValue({
+            select: vi.fn().mockReturnValue({
+                in: vi.fn().mockResolvedValue({
+                    data: [
+                        { key: 'meter_price_residential_minor', value: 3000000 },
+                        { key: 'meter_price_commercial_minor', value: 15000000 },
+                    ],
+                }),
+            }),
+        });
+
+        const resPrice = await meterOrderAmountMinor('residential');
+        const commPrice = await meterOrderAmountMinor('commercial');
+        expect(resPrice).toBe(3_000_000);
+        expect(commPrice).toBe(15_000_000);
     });
 });

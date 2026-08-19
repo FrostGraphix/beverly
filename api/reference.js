@@ -4054,7 +4054,29 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       const units = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
       const token = Array.from({ length: 20 }, () => Math.floor(Math.random() * 10)).join("").replace(/(.{4})/g, "$1-").slice(0, -1);
       try { walletPurchase.completeTokenPurchase({ purchaseOrderId: order.id, token, unitsKwh: units, actorId: "system", idempotencyKey: `complete:${ikey}` }); } catch {}
-      return localJobResponse({ token, units, receiptId: order.receiptNumber, purchaseOrder: order });
+      let realVendedBy = "SALMANU ABUBAKAR ABDULSALAM — SALMANU PARISI TUNGA COMMUNICATION ENTERPRISE (TUNGA)";
+      if (orgId === "22372704-8969-4556-a6cb-49d46fad5944") {
+        realVendedBy = "MUHAMMED HUDU ASO — ASO BUSINESS (TUNGA)";
+      } else {
+        try {
+          const { data: orgData } = await supabase.from("vendor_organizations").select("legal_name, trading_name, station_id").eq("id", orgId).maybeSingle();
+          const { data: usrData } = await supabase.from("vendor_users").select("full_name").eq("id", actorId).maybeSingle();
+          if (orgData || usrData) {
+            const vName = usrData?.full_name || "SALMANU ABUBAKAR ABDULSALAM";
+            const vBiz = orgData?.trading_name || orgData?.legal_name || "SALMANU PARISI TUNGA COMMUNICATION ENTERPRISE";
+            const vSt = orgData?.station_id || "TUNGA";
+            realVendedBy = `${vName} — ${vBiz} (${vSt})`;
+          }
+        } catch {}
+      }
+
+      const enrichedOrder = {
+        ...order,
+        vended_by: realVendedBy,
+        vended_by_name: realVendedBy,
+        vendor_name: realVendedBy,
+      };
+      return localJobResponse({ token, units, receiptId: order.receiptNumber, purchaseOrder: enrichedOrder });
     } catch (e) {
       return { status: 400, body: { code: 400, msg: e.message, reason: e.message, data: null, result: null, _proxy: { source: "local", pathname } } };
     }
@@ -4113,6 +4135,21 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       status: "success",
       remark: null,
     });
+  }
+
+  if (pathname === "/api/v1/customer/vend-pin") {
+    const globalPinState = globalThis.__beverlyCustomerPins ||= new Map();
+    const customerId = request.__auth?.customerId || payload.customerId || "demo-customer";
+    const setAt = new Date().toISOString();
+    globalPinState.set(customerId, { pin: payload.pin, setAt });
+    return localJobResponse({ ok: true, configured: true, set_at: setAt });
+  }
+
+  if (pathname === "/api/v1/customer/vend-pin/status") {
+    const globalPinState = globalThis.__beverlyCustomerPins ||= new Map();
+    const customerId = request.__auth?.customerId || payload.customerId || "demo-customer";
+    const existing = globalPinState.get(customerId);
+    return localJobResponse({ configured: Boolean(existing), set_at: existing?.setAt || null });
   }
 
   // ── Admin v1 REST POST endpoints ────────────────────────────────────────────
@@ -5003,7 +5040,7 @@ async function handler(request, response) {
     if (isCanonicalWalletRequest(pathname)) {
       const requestData = await readRequest(request);
       const canonicalResult = await proxyCanonicalWallet(request, pathname, requestData);
-      if (canonicalResult) {
+      if (canonicalResult && (canonicalResult.status < 400 || !pathname.includes('/remote-send'))) {
         response.status(canonicalResult.status).json(canonicalResult.body);
         return;
       }

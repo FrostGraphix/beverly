@@ -22,6 +22,8 @@
     "WalletDataViewSwitch.vue.d.ts",
     "WalletTableSkeleton.vue",
     "WalletTableSkeleton.vue.d.ts",
+    "WalletRowActions.vue",
+    "WalletRowActions.vue.d.ts",
     "PwaUpdateToast.vue",
     "PwaUpdateToast.vue.d.ts",
     "push-notifications.ts",
@@ -57,6 +59,10 @@
     "./WalletTableSkeleton.vue": {
       "types": "./WalletTableSkeleton.vue.d.ts",
       "import": "./WalletTableSkeleton.vue"
+    },
+    "./WalletRowActions.vue": {
+      "types": "./WalletRowActions.vue.d.ts",
+      "import": "./WalletRowActions.vue"
     },
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",

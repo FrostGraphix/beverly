@@ -286,7 +286,7 @@ export function buildReceiptModel(route, row, columnKey, receiptType = "") {
 
   const model = {
     title,
-    subtitle: "Energy Operations & Management System",
+    subtitle: "",
     amount: totalPaid ? normalizeMoney(totalPaid) : "",
     generatedAt: now.toISOString().replace("T", " ").slice(0, 19),
     routeTitle: route?.title || "",
@@ -341,6 +341,9 @@ export function receiptHtml(model, options = {}) {
   const summaryBorder = "rgba(22,163,74,.24)";
   const detailBorder = "rgba(22,163,74,.18)";
   const receiptShadow = "0 18px 46px rgba(16, 42, 27, .10), 0 0 0 6px rgba(22,163,74,.035)";
+
+  const isDarkTheme = Boolean(theme.isDark || theme.dark || (theme.panel && theme.panel.toLowerCase() !== "#ffffff"));
+  const logoSrc = isDarkTheme ? "/brand/beverly-lockup-light.png" : "/brand/beverly-lockup.png";
 
   return `<!doctype html>
 <html>
@@ -423,22 +426,11 @@ export function receiptHtml(model, options = {}) {
       gap: 10px;
       margin-bottom: 10px;
     }
-    .brand-mark {
-      width: 28px;
-      height: 28px;
-      background: var(--primary);
-      color: #ffffff;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 15px;
-    }
-    .brand-name {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--ink);
+    .brand-logo-img {
+      height: 38px;
+      width: auto;
+      max-width: 220px;
+      object-fit: contain;
     }
     .receipt-time {
       min-width: 0;
@@ -453,9 +445,6 @@ export function receiptHtml(model, options = {}) {
       font-size: 11px;
       color: var(--ink);
       font-weight: 750;
-      white-space: nowrap;
-      overflow: hidden;
-      width: fit-content;
       margin-top: 10px;
     }
     .receipt-time span {
@@ -509,14 +498,12 @@ export function receiptHtml(model, options = {}) {
       font-size: 36px;
       font-weight: 900;
       color: var(--primary);
-      display: block;
       line-height: 1;
     }
     .summary-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
+      gap: 8px;
     }
     .summary-box {
       padding: 11px 12px;
@@ -541,27 +528,33 @@ export function receiptHtml(model, options = {}) {
     .token-box {
       background: ${tokenBackground};
       border: 1px solid var(--border);
-      padding: 15px;
+      padding: 14px 10px;
       border-radius: 16px;
       text-align: center;
       margin-bottom: 14px;
     }
     .token-label {
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: .1em;
-      color: var(--primary);
+      letter-spacing: .12em;
+      color: #000000;
       font-weight: 850;
       margin-bottom: 8px;
       display: block;
     }
     .token-value {
-      font-family: "Cascadia Mono", "Courier New", monospace;
-      font-size: 20px;
-      font-weight: 850;
+      font-family: "Cascadia Code", "Fira Code", "Courier New", monospace;
+      font-size: clamp(14px, 4.5vw, 22px);
+      font-weight: 900;
       letter-spacing: 2px;
-      color: var(--primary);
-      word-break: break-all;
+      color: var(--primary, #16a34a);
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow: hidden;
+      text-overflow: clip;
+      line-height: 1.2;
+      text-align: center;
+      margin: 0 auto;
     }
     .detail-section {
       display: grid;
@@ -642,11 +635,10 @@ export function receiptHtml(model, options = {}) {
   <div class="receipt">
     <div class="header">
       <div class="brand">
-        <div class="brand-mark">B</div>
-        <div class="brand-name">${escapeHtml(model.brand.name)}</div>
+        <img class="brand-logo-img" src="${logoSrc}" alt="Beverly Logo" />
       </div>
       <h1 class="title">${escapeHtml(model.title)}</h1>
-      <p class="subtitle">${escapeHtml(model.subtitle)}</p>
+      ${model.subtitle ? `<p class="subtitle">${escapeHtml(model.subtitle)}</p>` : ''}
       <div class="receipt-time"><span>Time</span><strong>${escapeHtml(displayTime)}</strong></div>
     </div>
 
@@ -695,65 +687,95 @@ export function receiptHtml(model, options = {}) {
 }
 
 export function buildReceiptPdfBytes(model) {
-  const tokenField = model.fields.find(f => f.isToken);
+  const tokenField = model.fields.find(f => f.isToken || f.token);
   const receiptId = receiptFieldValue(model, ["Receipt Id", "Id"]) || model.receiptId || "Pending";
-  const customerName = receiptFieldValue(model, ["Customer Name"]) || "Not supplied";
-  const meterId = receiptFieldValue(model, ["Meter Id"]) || "Not supplied";
-  const stationId = receiptFieldValue(model, ["Station Id"]) || "Not supplied";
-  const totalUnit = receiptFieldValue(model, ["Total Unit"]) || "0";
-  const tariffId = receiptFieldValue(model, ["Tariff Id"]) || "Not supplied";
-  const tariffPrice = receiptFieldValue(model, ["Tariff Price"]) || "Not supplied";
-  const paymentMethod = receiptFieldValue(model, ["Payment Method"]) || "Not supplied";
-  const purchaseWay = receiptFieldValue(model, ["Purchase Way"]) || "Not supplied";
-  const auditStatus = receiptFieldValue(model, ["Audit Status"]) || "Not supplied";
-  const supportReference = receiptFieldValue(model, ["Support Reference"]) || "Not supplied";
-  const textLines = [
-    model.brand.name.toUpperCase(),
-    model.brand.company,
-    model.title,
-    model.subtitle,
-    `Receipt: ${receiptId}`,
-    `Time: ${receiptTime(model)}`,
-    `${model.subject || "Amount"}: ${model.amount || "0.00"}`,
-    `Token: ${tokenField?.value || ""}`,
-    "----------------------------------------",
-    `Customer: ${customerName}`,
-    `Meter: ${meterId}`,
-    `Unit: ${totalUnit}`,
-    `Tariff: ${tariffId}`,
-    `Tariff Price: ${tariffPrice}`,
-    `Payment: ${paymentMethod}`,
-    `Purchase Way: ${purchaseWay}`,
-    `Audit Status: ${auditStatus}`,
-    `Support Ref: ${supportReference}`,
-    `Station: ${stationId}`,
-    "----------------------------------------",
-    model.brand.email,
-    model.brand.phone,
-    model.brand.web,
-    model.brand.address
-  ].filter(Boolean);
-  const printableLines = textLines.flatMap((line) => {
-    const text = stringValue(line);
-    if (text.length <= 86) return [text];
-    return text.match(/.{1,86}/g) || [text];
-  }).slice(0, 38);
-  const content = [
-    "BT",
-    "/F1 12 Tf",
-    "50 770 Td",
-    ...printableLines.flatMap((line, index) => (index === 0
-      ? [`(${String(line).replace(/[()\\]/g, "\\$&")}) Tj`]
-      : ["0 -18 Td", `(${String(line).replace(/[()\\]/g, "\\$&")}) Tj`])),
-    "ET"
-  ].join("\n");
+  const displayTime = receiptTime(model) || model.issuedAt || new Date().toLocaleString('en-GB');
+  const amountVal = model.amount || (model.amountMinor != null ? `NGN ${(model.amountMinor / 100).toFixed(2)}` : '0.00');
+
+  const pdfEscape = (str) => String(str ?? '').replace(/[()\\]/g, '\\$&');
+
+  // Filter out token field from detail items
+  const detailItems = model.fields.filter(f => !f.isToken && !f.token);
+
+  let stream = [];
+
+  // 1) Top Green Accent Bar (A4 page width = 595pt, height = 842pt)
+  stream.push("0.086 0.639 0.29 rg 0 836 595 6 re f");
+
+  // 2) Brand Logo Badge (Green Box + White 'B')
+  stream.push("0.086 0.639 0.29 rg 40 774 36 36 re f");
+  stream.push("BT 1 1 1 rg /F1 22 Tf 51 785 Td (B) Tj ET");
+
+  // 3) Brand Title & Subtitle
+  stream.push(`BT 0.062 0.165 0.106 rg /F1 18 Tf 86 794 Td (${pdfEscape(model.brand?.name || 'Beverly')}) Tj ET`);
+  stream.push(`BT 0.37 0.43 0.39 rg /F2 8.5 Tf 86 778 Td (${pdfEscape(model.brand?.company || 'ACOB Lighting Technology Limited')} - Energy System) Tj ET`);
+
+  // 4) Receipt ID Box (Right Aligned)
+  stream.push("0.086 0.639 0.29 RG 420 774 135 36 re S");
+  stream.push(`BT 0.086 0.639 0.29 rg /F1 11 Tf 430 792 Td (#${pdfEscape(receiptId)}) Tj ET`);
+  stream.push(`BT 0.37 0.43 0.39 rg /F2 7.5 Tf 430 780 Td (RECEIPT ID · ${pdfEscape(displayTime.slice(0, 16))}) Tj ET`);
+
+  let currentY = 745;
+
+  // 5) Amount Card
+  stream.push(`0.95 0.98 0.96 rg 40 ${currentY - 55} 515 55 re f`);
+  stream.push(`0.086 0.639 0.29 RG 40 ${currentY - 55} 515 55 re S`);
+  stream.push(`BT 0.086 0.639 0.29 rg /F1 8.5 Tf 55 ${currentY - 18} Td (${pdfEscape((model.subject || 'AMOUNT PURCHASED').toUpperCase())}) Tj ET`);
+  stream.push(`BT 0.086 0.639 0.29 rg /F1 24 Tf 55 ${currentY - 45} Td (${pdfEscape(amountVal)}) Tj ET`);
+  currentY -= 68;
+
+  // 6) Token Card (if token field present)
+  if (tokenField && tokenField.value) {
+    stream.push(`0.94 0.97 0.95 rg 40 ${currentY - 55} 515 55 re f`);
+    stream.push(`0.086 0.639 0.29 RG 40 ${currentY - 55} 515 55 re S`);
+    stream.push(`BT 0 0 0 rg /F1 8.5 Tf 55 ${currentY - 18} Td (YOUR TOKEN) Tj ET`);
+    stream.push(`BT 0.086 0.639 0.29 rg /F1 18 Tf 55 ${currentY - 44} Td (${pdfEscape(String(tokenField.value))}) Tj ET`);
+    currentY -= 68;
+  }
+
+  // 7) Grid Items (2 Columns of Detail Boxes)
+  const colWidth = 250;
+  const rowHeight = 32;
+  for (let i = 0; i < detailItems.length; i += 2) {
+    const leftItem = detailItems[i];
+    const rightItem = detailItems[i + 1];
+
+    if (currentY < 120) break; // Ensure footer fits
+
+    // Left Column Box
+    if (leftItem) {
+      stream.push(`0.97 0.98 0.97 rg 40 ${currentY - rowHeight} ${colWidth} ${rowHeight} re f`);
+      stream.push(`0.88 0.92 0.89 RG 40 ${currentY - rowHeight} ${colWidth} ${rowHeight} re S`);
+      stream.push(`BT 0.45 0.50 0.47 rg /F2 7.5 Tf 48 ${currentY - 12} Td (${pdfEscape(String(leftItem.label).toUpperCase())}) Tj ET`);
+      stream.push(`BT 0.06 0.16 0.10 rg /F1 9.5 Tf 48 ${currentY - 25} Td (${pdfEscape(String(leftItem.value ?? '-'))}) Tj ET`);
+    }
+
+    // Right Column Box
+    if (rightItem) {
+      stream.push(`0.97 0.98 0.97 rg 305 ${currentY - rowHeight} ${colWidth} ${rowHeight} re f`);
+      stream.push(`0.88 0.92 0.89 RG 305 ${currentY - rowHeight} ${colWidth} ${rowHeight} re S`);
+      stream.push(`BT 0.45 0.50 0.47 rg /F2 7.5 Tf 313 ${currentY - 12} Td (${pdfEscape(String(rightItem.label).toUpperCase())}) Tj ET`);
+      stream.push(`BT 0.06 0.16 0.10 rg /F1 9.5 Tf 313 ${currentY - 25} Td (${pdfEscape(String(rightItem.value ?? '-'))}) Tj ET`);
+    }
+
+    currentY -= (rowHeight + 6);
+  }
+
+  // 8) Footer
+  stream.push("0.85 0.90 0.86 RG 40 70 515 0.5 re S");
+  stream.push(`BT 0.06 0.16 0.10 rg /F1 9.5 Tf 175 52 Td (${pdfEscape(model.brand?.company || 'ACOB Lighting Technology Limited')}) Tj ET`);
+  stream.push(`BT 0.40 0.45 0.42 rg /F2 8 Tf 155 38 Td (support@acoblighting.com  |  +234 800 BEVERLY  |  www.acoblighting.com) Tj ET`);
+
+  const content = stream.join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>",
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
   ];
+
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
   for (let index = 0; index < objects.length; index += 1) {
@@ -763,7 +785,7 @@ export function buildReceiptPdfBytes(model) {
   const xrefStart = pdf.length;
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   for (let index = 1; index < offsets.length; index += 1) {
-    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+    pdf += `${String(offsets[index]).padStart(10, "0")} 0000 n \n`;
   }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
   return new TextEncoder().encode(pdf);

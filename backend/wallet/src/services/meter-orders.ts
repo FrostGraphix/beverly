@@ -21,6 +21,8 @@ export type MeterOrderStatus =
 export type MeterOrderSourceChannel = 'customer_portal' | 'vendor_portal' | 'admin_portal';
 export type MeterOrderActorType = 'customer' | 'vendor_user' | 'staff';
 export type MeterOrderType = 'single_phase' | 'three_phase';
+export type PropertyCategory = 'residential' | 'commercial';
+
 const METER_ORDER_TRANSITIONS: Record<MeterOrderStatus, MeterOrderStatus[]> = {
     pending_payment: ['paid', 'cancelled'],
     paid: ['assigned', 'cancelled'],
@@ -38,6 +40,7 @@ export interface MeterOrderRecord {
     wallet_id: string | null;
     ledger_entry_id: string | null;
     meter_type: MeterOrderType;
+    property_category?: PropertyCategory | null;
     property_address: string;
     service_area: string;
     contact_phone: string;
@@ -61,8 +64,64 @@ export class MeterOrderError extends Error {
     }
 }
 
-export function meterOrderAmountMinor(meterType: MeterOrderType): number {
-    return meterType === 'three_phase' ? 7_500_000 : 5_000_000;
+export interface MeterPrices {
+    residential_minor: number;
+    commercial_minor: number;
+}
+
+export async function getMeterPrices(): Promise<MeterPrices> {
+    try {
+        const { data } = await adminClient
+            .from('system_settings')
+            .select('key, value')
+            .in('key', ['meter_price_residential_minor', 'meter_price_commercial_minor']);
+
+        let residential = 3_000_000;
+        let commercial = 15_000_000;
+
+        if (data && Array.isArray(data)) {
+            for (const row of data) {
+                if (row.key === 'meter_price_residential_minor' && row.value != null) {
+                    residential = Number(row.value);
+                } else if (row.key === 'meter_price_commercial_minor' && row.value != null) {
+                    commercial = Number(row.value);
+                }
+            }
+        }
+        return { residential_minor: residential, commercial_minor: commercial };
+    } catch {
+        return { residential_minor: 3_000_000, commercial_minor: 15_000_000 };
+    }
+}
+
+export async function updateMeterPrices(
+    prices: { residential_minor?: number; commercial_minor?: number },
+    updatedBy?: string,
+): Promise<MeterPrices> {
+    if (prices.residential_minor !== undefined) {
+        if (prices.residential_minor <= 0) throw new MeterOrderError('Residential price must be positive', 'invalid_price', 400);
+        await adminClient.from('system_settings').upsert({
+            key: 'meter_price_residential_minor',
+            value: prices.residential_minor,
+            updated_at: new Date().toISOString(),
+            updated_by: updatedBy ?? null,
+        });
+    }
+    if (prices.commercial_minor !== undefined) {
+        if (prices.commercial_minor <= 0) throw new MeterOrderError('Commercial price must be positive', 'invalid_price', 400);
+        await adminClient.from('system_settings').upsert({
+            key: 'meter_price_commercial_minor',
+            value: prices.commercial_minor,
+            updated_at: new Date().toISOString(),
+            updated_by: updatedBy ?? null,
+        });
+    }
+    return getMeterPrices();
+}
+
+export async function meterOrderAmountMinor(propertyCategory: PropertyCategory = 'residential'): Promise<number> {
+    const prices = await getMeterPrices();
+    return propertyCategory === 'commercial' ? prices.commercial_minor : prices.residential_minor;
 }
 
 export function assertMeterOrderTransition(from: MeterOrderStatus, to: MeterOrderStatus): void {
@@ -125,6 +184,7 @@ async function createOrderRow(input: {
     customerId: string;
     customerName: string | null;
     meterType: MeterOrderType;
+    propertyCategory?: PropertyCategory | null;
     propertyAddress: string;
     serviceArea: string;
     contactPhone: string;
@@ -145,6 +205,7 @@ async function createOrderRow(input: {
             customer_id: input.customerId,
             customer_name_snapshot: input.customerName,
             meter_type: input.meterType,
+            property_category: input.propertyCategory ?? 'residential',
             property_address: input.propertyAddress,
             service_area: input.serviceArea,
             contact_phone: input.contactPhone,
@@ -169,6 +230,7 @@ export async function createCustomerPortalMeterOrder(input: {
     customerId: string;
     customerUserId: string;
     meterType: MeterOrderType;
+    propertyCategory?: PropertyCategory;
     propertyAddress: string;
     serviceArea: string;
     contactPhone: string;
@@ -181,6 +243,7 @@ export async function createCustomerPortalMeterOrder(input: {
         [
             input.customerId,
             input.meterType,
+            input.propertyCategory ?? 'residential',
             input.propertyAddress,
             input.serviceArea,
             input.contactPhone,
@@ -191,7 +254,8 @@ export async function createCustomerPortalMeterOrder(input: {
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
                 throw new MeterOrderError('A valid customer email is required for meter order payment.', 'email_required', 422);
             }
-            const amountMinor = meterOrderAmountMinor(input.meterType);
+            const category = input.propertyCategory ?? 'residential';
+            const amountMinor = await meterOrderAmountMinor(category);
             const reference = deterministicMeterOrderReference('mord', [
                 'customer_meter_order',
                 input.customerId,
@@ -213,6 +277,7 @@ export async function createCustomerPortalMeterOrder(input: {
                 customerId: input.customerId,
                 customerName: customer.full_name,
                 meterType: input.meterType,
+                propertyCategory: category,
                 propertyAddress: input.propertyAddress,
                 serviceArea: input.serviceArea,
                 contactPhone: input.contactPhone,
@@ -235,6 +300,7 @@ type VendorMeterOrderInput = {
     actorType?: 'vendor_user' | 'staff';
     customerId: string;
     meterType: MeterOrderType;
+    propertyCategory?: PropertyCategory;
     propertyAddress: string;
     serviceArea: string;
     contactPhone: string;
@@ -249,7 +315,8 @@ async function createVendorSponsoredMeterOrderOnce(input: VendorMeterOrderInput)
     } catch (error: any) {
         throw new MeterOrderError(error.message, error.code ?? 'wallet_inactive', error.status ?? 403);
     }
-    const amountMinor = meterOrderAmountMinor(input.meterType);
+    const category = input.propertyCategory ?? 'residential';
+    const amountMinor = await meterOrderAmountMinor(category);
     const idemKey = deterministicMeterOrderReference('mordv', [
         'vendor_meter_order',
         input.vendorOrganizationId,
@@ -266,6 +333,7 @@ async function createVendorSponsoredMeterOrderOnce(input: VendorMeterOrderInput)
         customerId: input.customerId,
         customerName: customer.full_name,
         meterType: input.meterType,
+        propertyCategory: category,
         propertyAddress: input.propertyAddress,
         serviceArea: input.serviceArea,
         contactPhone: input.contactPhone,
@@ -319,6 +387,7 @@ export async function createVendorSponsoredMeterOrder(input: VendorMeterOrderInp
         [
             input.customerId,
             input.meterType,
+            input.propertyCategory ?? 'residential',
             input.propertyAddress,
             input.serviceArea,
             input.contactPhone,
@@ -331,6 +400,7 @@ export async function createAdminMeterOrder(input: {
     staffUserId: string;
     customerId: string;
     meterType: MeterOrderType;
+    propertyCategory?: PropertyCategory;
     propertyAddress: string;
     serviceArea: string;
     contactPhone: string;
@@ -349,6 +419,7 @@ export async function createAdminMeterOrder(input: {
             actorType: 'staff',
             customerId: input.customerId,
             meterType: input.meterType,
+            propertyCategory: input.propertyCategory,
             propertyAddress: input.propertyAddress,
             serviceArea: input.serviceArea,
             contactPhone: input.contactPhone,
@@ -375,6 +446,7 @@ export async function createAdminMeterOrder(input: {
         [
             input.customerId,
             input.meterType,
+            input.propertyCategory ?? 'residential',
             input.propertyAddress,
             input.serviceArea,
             input.contactPhone,
@@ -384,11 +456,13 @@ export async function createAdminMeterOrder(input: {
         ],
         async () => {
             const customer = await readCustomer(input.customerId);
-            const amountMinor = meterOrderAmountMinor(input.meterType);
+            const category = input.propertyCategory ?? 'residential';
+            const amountMinor = await meterOrderAmountMinor(category);
             return createOrderRow({
                 customerId: input.customerId,
                 customerName: customer.full_name,
                 meterType: input.meterType,
+                propertyCategory: category,
                 propertyAddress: input.propertyAddress,
                 serviceArea: input.serviceArea,
                 contactPhone: input.contactPhone,

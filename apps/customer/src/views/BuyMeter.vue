@@ -1,31 +1,61 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { useAuthStore } from '../stores/auth';
 import { api, ApiError, redirectToPayment } from '../lib/api';
 
 const auth = useAuthStore();
 
-const step = ref<1 | 2 | 3>(1);
+const step = ref<1 | 2 | 3 | 4>(1);
 const loading = ref(false);
 const error = ref('');
 
-// Step 1
+// Step 1: Property category
+const propertyCategory = ref<'residential' | 'commercial' | ''>('');
+
+// Step 2: Meter type
 const meterType = ref<'single_phase' | 'three_phase' | ''>('');
 
-// Step 2
+// Step 3: Property details
 const propertyAddress = ref('');
 const serviceArea = ref('');
 const contactPhone = ref(auth.customer?.phone ?? '');
 
-const METER_PRICES: Record<string, number> = { single_phase: 50000, three_phase: 75000 };
+const prices = ref<{ residential_minor: number; commercial_minor: number }>({
+    residential_minor: 3_000_000,
+    commercial_minor: 15_000_000,
+});
+
+async function loadPrices() {
+    try {
+        const res = await api.get<{ residential_minor: number; commercial_minor: number }>('/api/v1/customer/meter-pricing');
+        if (res.residential_minor) prices.value = res;
+    } catch {
+        // use fallback default
+    }
+}
+
+onMounted(() => {
+    loadPrices();
+});
+
+const activePriceMinor = computed(() => {
+    if (!propertyCategory.value) return 0;
+    return propertyCategory.value === 'commercial' ? prices.value.commercial_minor : prices.value.residential_minor;
+});
+
 const priceLabel = computed(() =>
-    meterType.value ? `₦${METER_PRICES[meterType.value].toLocaleString()}` : ''
+    activePriceMinor.value ? `₦${(activePriceMinor.value / 100).toLocaleString()}` : ''
 );
+
+function pickCategory(category: 'residential' | 'commercial') {
+    propertyCategory.value = category;
+    step.value = 2;
+}
 
 function pickMeter(type: 'single_phase' | 'three_phase') {
     meterType.value = type;
-    step.value = 2;
+    step.value = 3;
 }
 
 async function submitOrder() {
@@ -38,6 +68,7 @@ async function submitOrder() {
     try {
         const data = await api.post<{ order: any; authorization_url: string }>('/api/v1/customer/meter-orders', {
             meter_type: meterType.value,
+            property_category: propertyCategory.value,
             property_address: propertyAddress.value.trim(),
             service_area: serviceArea.value.trim(),
             contact_phone: contactPhone.value.trim(),
@@ -62,33 +93,35 @@ async function submitOrder() {
       <div class="bw-step-line" />
       <div :class="['bw-step', { active: step >= 2, done: step > 2 }]">2</div>
       <div class="bw-step-line" />
-      <div :class="['bw-step', { active: step >= 3 }]">3</div>
+      <div :class="['bw-step', { active: step >= 3, done: step > 3 }]">3</div>
+      <div class="bw-step-line" />
+      <div :class="['bw-step', { active: step >= 4 }]">4</div>
     </div>
 
-    <!-- Step 1: Meter type -->
+    <!-- Step 1: Property Category -->
     <template v-if="step === 1">
-      <p style="font-weight:600; margin-bottom: var(--s-3)">Select meter type</p>
+      <p style="font-weight:600; margin-bottom: var(--s-3)">Select property type</p>
 
-      <button class="bw-option-card" :class="{ selected: meterType === 'single_phase' }" @click="pickMeter('single_phase')">
+      <button class="bw-option-card" :class="{ selected: propertyCategory === 'residential' }" @click="pickCategory('residential')">
         <div class="bw-option-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </div>
         <div class="bw-option-body">
-          <strong>Single Phase</strong>
-          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Residential homes, small offices</p>
+          <strong>Residential Property</strong>
+          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Private residences, apartments, residential estates</p>
         </div>
-        <div class="bw-option-price">₦50,000</div>
+        <div class="bw-option-price">₦{{ (prices.residential_minor / 100).toLocaleString() }}</div>
       </button>
 
-      <button class="bw-option-card" :class="{ selected: meterType === 'three_phase' }" @click="pickMeter('three_phase')">
+      <button class="bw-option-card" :class="{ selected: propertyCategory === 'commercial' }" @click="pickCategory('commercial')">
         <div class="bw-option-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
         </div>
         <div class="bw-option-body">
-          <strong>Three Phase</strong>
-          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Commercial properties, heavy equipment</p>
+          <strong>Commercial Property</strong>
+          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Offices, shops, factories, commercial complexes</p>
         </div>
-        <div class="bw-option-price">₦75,000</div>
+        <div class="bw-option-price">₦{{ (prices.commercial_minor / 100).toLocaleString() }}</div>
       </button>
 
       <div class="bw-info-row">
@@ -97,14 +130,49 @@ async function submitOrder() {
       </div>
     </template>
 
-    <!-- Step 2: Property details -->
+    <!-- Step 2: Meter type -->
     <template v-else-if="step === 2">
       <div class="bw-back-row">
         <button class="bw-text-btn" @click="step = 1">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back
         </button>
-        <span class="bw-muted" style="font-size:var(--t-sm)">{{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }} — {{ priceLabel }}</span>
+        <span class="bw-muted" style="font-size:var(--t-sm)">{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }} — {{ priceLabel }}</span>
+      </div>
+
+      <p style="font-weight:600; margin-bottom: var(--s-3)">Select meter phase</p>
+
+      <button class="bw-option-card" :class="{ selected: meterType === 'single_phase' }" @click="pickMeter('single_phase')">
+        <div class="bw-option-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </div>
+        <div class="bw-option-body">
+          <strong>Single Phase</strong>
+          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Standard load connections</p>
+        </div>
+        <div class="bw-option-price">{{ priceLabel }}</div>
+      </button>
+
+      <button class="bw-option-card" :class="{ selected: meterType === 'three_phase' }" @click="pickMeter('three_phase')">
+        <div class="bw-option-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="bw-option-body">
+          <strong>Three Phase</strong>
+          <p class="bw-muted" style="font-size:var(--t-sm); margin:2px 0 0">Heavy duty & multi-phase load connections</p>
+        </div>
+        <div class="bw-option-price">{{ priceLabel }}</div>
+      </button>
+    </template>
+
+    <!-- Step 3: Property details -->
+    <template v-else-if="step === 3">
+      <div class="bw-back-row">
+        <button class="bw-text-btn" @click="step = 2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back
+        </button>
+        <span class="bw-muted" style="font-size:var(--t-sm)">{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }} ({{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }}) — {{ priceLabel }}</span>
       </div>
 
       <p style="font-weight:600; margin-bottom: var(--s-3)">Property details</p>
@@ -126,15 +194,15 @@ async function submitOrder() {
 
       <p v-if="error" class="bw-error">{{ error }}</p>
 
-      <button class="bw-btn primary" style="width:100%" @click="step = 3" :disabled="!propertyAddress || !serviceArea || !contactPhone">
+      <button class="bw-btn primary" style="width:100%" @click="step = 4" :disabled="!propertyAddress || !serviceArea || !contactPhone">
         Review order
       </button>
     </template>
 
-    <!-- Step 3: Review + Pay -->
+    <!-- Step 4: Review + Pay -->
     <template v-else>
       <div class="bw-back-row">
-        <button class="bw-text-btn" @click="step = 2">
+        <button class="bw-text-btn" @click="step = 3">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back
         </button>
@@ -143,8 +211,9 @@ async function submitOrder() {
       <p style="font-weight:600; margin-bottom: var(--s-3)">Review your order</p>
 
       <div class="bw-card">
+        <div class="bw-review-row"><span class="bw-muted">Property category</span><strong>{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }}</strong></div>
         <div class="bw-review-row"><span class="bw-muted">Meter type</span><strong>{{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }}</strong></div>
-        <div class="bw-review-row"><span class="bw-muted">Property</span><span>{{ propertyAddress }}</span></div>
+        <div class="bw-review-row"><span class="bw-muted">Property address</span><span>{{ propertyAddress }}</span></div>
         <div class="bw-review-row"><span class="bw-muted">Service area</span><span>{{ serviceArea }}</span></div>
         <div class="bw-review-row"><span class="bw-muted">Contact</span><span>{{ contactPhone }}</span></div>
         <div class="bw-divider" />

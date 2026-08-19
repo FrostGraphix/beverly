@@ -90,7 +90,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scc-select-icon"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
             <select v-model="stationFilter" class="scc-select" aria-label="Station" @change="load">
               <option value="">All stations</option>
-              <option v-for="s in STATIONS" :key="s" :value="s">{{ s }}</option>
+              <option v-for="s in STATIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
             </select>
           </div>
         </div>
@@ -482,7 +482,8 @@ import {
   triggerMeterAggregateRefresh,
 } from "../services/consumption-service.mjs";
 
-import { fetchStations, stationsSync } from "../services/station-registry.mjs";
+import { fetchStations, formatStationDisplayLabel, stationsSync } from "../services/station-registry.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
 
 const PALETTE = ["#059669", "#2563eb", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9", "#ec4899"];
 
@@ -510,10 +511,7 @@ export default {
         { key: "weekly",  label: "Weekly" },
         { key: "monthly", label: "Monthly" },
       ],
-      // Seeded from the last known estate for first paint, then replaced with
-      // the discovered list on mount — a station onboarded today appears in
-      // this dropdown today, with no redeploy.
-      STATIONS: stationsSync(),
+      fetchedStations: [],
       granularity: "daily",
       stationFilter: "",
       from: fmtDate(addDays(today, -29)),
@@ -543,6 +541,18 @@ export default {
   },
 
   computed: {
+    STATIONS() {
+      const dynamic = tableSiteOptions.filter((s) => s.value).map((s) => ({ value: s.value, label: s.label }));
+      const synced = stationsSync().map((id) => ({ value: id, label: formatStationDisplayLabel(id) }));
+      const fetched = (this.fetchedStations || []).map((id) => ({ value: id, label: formatStationDisplayLabel(id) }));
+      const map = new Map();
+      [...synced, ...dynamic, ...fetched].forEach((item) => {
+        if (item.value) map.set(item.value, item.label || item.value);
+      });
+      return Array.from(map.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
     granularityLabel() {
       // Reflect the granularity the server actually used (it may coarsen wide ranges).
       const effective = (this.data && this.data.range && this.data.range.granularity) || this.granularity;
@@ -761,10 +771,9 @@ export default {
         });
       }
     }
-    // Refresh the estate before/alongside the first load so a newly onboarded
-    // station is selectable without a redeploy.
+    loadDynamicStationOptions(undefined, true).catch(() => null);
     fetchStations()
-      .then((stations) => { if (stations.length) this.STATIONS = stations; })
+      .then((stations) => { if (stations.length) this.fetchedStations = stations; })
       .catch(() => { /* registry unreachable — keep the seeded list */ });
     this.load();
     this.themeObserver = new MutationObserver(() => { this.themeTick++; });
@@ -797,8 +806,10 @@ export default {
     },
 
     colorFor(station) {
-      const idx = this.STATIONS.indexOf(String(station || "").toUpperCase());
-      return PALETTE[(idx >= 0 ? idx : this.STATIONS.length) % PALETTE.length];
+      const target = String(station || "").toUpperCase();
+      const list = this.STATIONS || [];
+      const idx = list.findIndex((s) => String(s.value || s).toUpperCase() === target);
+      return PALETTE[(idx >= 0 ? idx : list.length) % PALETTE.length];
     },
 
     fmt(value, decimals = 2) {
@@ -854,7 +865,8 @@ export default {
       this.refreshingAgg = true;
       this.error = "";
       try {
-        const stationIds = this.stationFilter ? [this.stationFilter] : this.STATIONS;
+        const stationList = this.STATIONS || [];
+        const stationIds = this.stationFilter ? [this.stationFilter] : stationList.map((s) => s.value || s);
         await triggerMeterAggregateRefresh(stationIds);
         this.lastAggRefresh = new Date().toLocaleTimeString();
         await this.load();

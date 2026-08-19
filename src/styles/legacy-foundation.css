@@ -19,7 +19,7 @@
     button { cursor: pointer; }
     a { color: inherit; text-decoration: none; }
 
-    .svg-icon, .sidebar-icon svg, .topbar-tool svg, .field-icon svg, .password-eye svg, .language-button svg, .card-panel-icon { width: 1em; height: 1em; fill: currentColor; overflow: hidden; vertical-align: -.15em; }
+    .svg-icon, .topbar-tool svg, .field-icon svg, .password-eye svg, .language-button svg, .card-panel-icon { width: 1em; height: 1em; fill: currentColor; overflow: hidden; vertical-align: -.15em; }
 
     #app { min-height: 100vh; }
     #app-root { display: contents; }

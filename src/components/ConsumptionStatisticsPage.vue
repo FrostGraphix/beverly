@@ -420,7 +420,7 @@ import BaseIconButton from "./base/BaseIconButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { postApi } from "../services/api.js";
-import { fetchStationOptions } from "../services/station-registry.mjs";
+import { fetchStationOptions, onStationMutation } from "../services/station-registry.mjs";
 import { downloadTextFile, exportReportCsvText, exportReportExcelXml } from "../services/import-export.mjs";
 import {
   aggregateConsumptionRows,
@@ -661,17 +661,19 @@ export default {
     }
     this.syncTheme();
     this.watchTheme();
+    this.unsubStationMutation = onStationMutation(() => this._loadStationDirectory(true));
     this._loadStationDirectory();
   },
 
   beforeUnmount() {
     if (this.themeObserver) this.themeObserver.disconnect();
+    if (this.unsubStationMutation) this.unsubStationMutation();
   },
 
   methods: {
-    async _loadStationDirectory() {
+    async _loadStationDirectory(force = false) {
       try {
-        const options = await fetchStationOptions();
+        const options = await fetchStationOptions({ force });
         this.stationList = options.map((station, index) => ({
           id: station.stationId,
           label: station.label,

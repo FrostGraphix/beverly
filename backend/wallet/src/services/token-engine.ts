@@ -156,13 +156,36 @@ export interface TariffInfo {
 }
 
 export function resolveTariffPricing(tariffId: string): TariffInfo {
-    const id = tariffId.toUpperCase();
+    const id = tariffId.toUpperCase().trim();
     const base = PRICE_BY_TARIFF[id] ?? 350;
     return {
         tariffId: id,
         basePricePerKwh: base,
         effectivePricePerKwh: base,
     };
+}
+
+export async function resolveTariffPricingAsync(tariffId: string): Promise<TariffInfo> {
+    const id = tariffId.toUpperCase().trim();
+    try {
+        const { data } = await adminClient
+            .from('tariff_rate_history')
+            .select('unit_price_ngn, effective_price_ngn, tariff_name')
+            .eq('tariff_id', id)
+            .maybeSingle();
+
+        if (data && typeof data.unit_price_ngn === 'number' && data.unit_price_ngn > 0) {
+            const price = Number(data.effective_price_ngn || data.unit_price_ngn);
+            return {
+                tariffId: id,
+                basePricePerKwh: price,
+                effectivePricePerKwh: price,
+            };
+        }
+    } catch {
+        // Fall back to static map if DB lookup is unavailable
+    }
+    return resolveTariffPricing(id);
 }
 
 export interface PurchasePreview {
@@ -204,7 +227,20 @@ export async function previewPurchaseWithPolicy(
     at = new Date(),
 ): Promise<PurchasePreview> {
     const vatRateBasisPoints = await resolveVatRateBasisPoints(at);
-    return previewPurchase(amountMinor, tariffId, vatRateBasisPoints);
+    const t = await resolveTariffPricingAsync(tariffId);
+    const vat = calculateVendingVatBreakdown(amountMinor, vatRateBasisPoints);
+    const naira = vat.energyAmountMinor / 100;
+    const units = naira / t.basePricePerKwh;
+    return {
+        amountMinor: vat.grossAmountMinor,
+        units: Number(units.toFixed(4)),
+        effectivePricePerKwh: t.effectivePricePerKwh,
+        taxAmountMinor: vat.vatAmountMinor,
+        energyAmountMinor: vat.energyAmountMinor,
+        grossAmountMinor: vat.grossAmountMinor,
+        vatRateBasisPoints: vat.vatRateBasisPoints,
+        tariffId: t.tariffId,
+    };
 }
 
 export interface MeterInfo {

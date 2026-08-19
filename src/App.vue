@@ -857,11 +857,15 @@ export default {
       return sidebarSectionLabels[groupName] || groupName;
     },
     routeIconPath(route) {
-      const directIcon = routeIconOverrides[route?.hash];
+      if (!route) return routeIconPaths.meter;
+      const hashKey = route.hash;
+      const titleKey = route.title;
+      const groupKey = route.group;
+      const directIcon = routeIconOverrides[hashKey] || routeIconOverrides[titleKey] || routeIconOverrides[groupKey];
       if (directIcon) {
         return directIcon;
       }
-      const text = `${route?.group || ""} ${route?.title || ""} ${route?.hash || ""}`.toLowerCase();
+      const text = `${groupKey || ""} ${titleKey || ""} ${hashKey || ""}`.toLowerCase();
       let icon = "meter";
       if (text.includes("dashboard")) icon = "dashboard";
       else if (text.includes("report") || text.includes("consumption") || text.includes("nonpurchase") || text.includes("abnormal") || text.includes("interval")) icon = "reports";

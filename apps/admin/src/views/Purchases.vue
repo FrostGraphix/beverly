@@ -22,6 +22,8 @@ import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';

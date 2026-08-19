@@ -118,8 +118,10 @@ onMounted(async () => {
                 notice.value = { tone: 'success', title: 'Payment confirmed', message: 'Your token is ready in Transactions and Receipts.' };
             } else if (payment.fulfillmentStatus === 'blocked' || payment.status === 'requires_review') {
                 notice.value = { tone: 'danger', title: 'Delivery needs review', message: 'Payment was confirmed, but token delivery needs support review. Do not pay again.' };
+            } else if (payment.status === 'failed' || payment.fulfillmentStatus === 'failed' || payment.status === 'abandoned') {
+                notice.value = { tone: 'danger', title: 'Payment unconfirmed', message: 'Payment was not completed or failed on Paystack. You were not charged.' };
             } else {
-                notice.value = { tone: 'info', title: 'Payment processing', message: 'Your token will be delivered automatically after confirmation.' };
+                notice.value = { tone: 'info', title: 'Payment pending', message: 'Your payment status is being verified with Paystack.' };
             }
         } catch (e: any) {
             notice.value = { tone: 'danger', title: 'Verification delayed', message: e?.message ?? 'Automatic reconciliation is still running.' };
@@ -266,7 +268,39 @@ function downloadResultReceipt() {
 }
 
 async function fetchRemoteSendStatus(endpoint: string) {
-    return await api.post<any>(endpoint, {});
+    try {
+        return await api.get<any>(endpoint);
+    } catch (err: any) {
+        const data = err?.details || err?.data || err?.response?.data;
+        if (data && typeof data === 'object') {
+            return {
+                status: 'failed',
+                deliveryState: data.delivery_state || data.deliveryState || 'remote_send_failed_needs_manual_entry',
+                remark: data.message || data.remark || data.error || err.message || 'Remote send failed',
+                purchaseOrder: data.purchaseOrder,
+                remoteTaskId: data.remoteTaskId || data.remote_task_id,
+            };
+        }
+        try {
+            return await api.post<any>(endpoint, {});
+        } catch (postErr: any) {
+            const postData = postErr?.details || postErr?.data || postErr?.response?.data;
+            if (postData && typeof postData === 'object') {
+                return {
+                    status: 'failed',
+                    deliveryState: postData.delivery_state || postData.deliveryState || 'remote_send_failed_needs_manual_entry',
+                    remark: postData.message || postData.remark || postData.error || postErr.message || 'Remote send failed',
+                    purchaseOrder: postData.purchaseOrder,
+                    remoteTaskId: postData.remoteTaskId || postData.remote_task_id,
+                };
+            }
+            return {
+                status: 'failed',
+                deliveryState: 'remote_send_failed_needs_manual_entry',
+                remark: postErr?.message || err?.message || 'Remote send failed',
+            };
+        }
+    }
 }
 
 async function remoteSendGeneratedToken() {
@@ -519,7 +553,7 @@ async function remoteSendGeneratedToken() {
         <p class="bw-page-title" style="margin-bottom: var(--s-2)">Token generated!</p>
         <p class="bw-muted" style="font-size: var(--t-sm); margin-bottom: var(--s-5)">{{ kwh(result.units) }} credited to meter {{ result.purchaseOrder?.meter_id }}</p>
         <div class="bw-token-box">
-          <div class="bw-token-value">{{ result.token }}</div>
+          <div class="bw-token-value bw-token-shimmer">{{ result.token }}</div>
           <div class="bw-token-units">{{ kwh(result.units) }} · {{ naira(result.purchaseOrder?.amount_minor ?? preview?.amountMinor) }}</div>
         </div>
         <div class="bw-card" style="text-align:left; margin-top: var(--s-3)">

@@ -205,7 +205,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const json = parseJson(text);
         if (!res.ok) {
             if (res.status === 401 && shouldRedirectUnauthorized(path)) handleUnauthorized();
-            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
+            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details ?? json);
         }
         return unwrapEnvelope<T>(json);
     } catch (error) {

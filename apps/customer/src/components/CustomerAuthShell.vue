@@ -6,6 +6,7 @@ defineProps<{
   subtitle?: string;
   back?: string | null;
   compact?: boolean;
+  hideLegal?: boolean;
 }>();
 </script>
 
@@ -45,10 +46,12 @@ defineProps<{
       </div>
     </div>
 
-    <p class="auth-legal">
-      By continuing you agree to Beverly's
-      <router-link to="/terms" class="auth-link">Terms of Service</router-link> &amp;
-      <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>.
+    <p v-if="!hideLegal" class="auth-legal">
+      <slot name="legal">
+        By continuing you agree to Beverly's
+        <router-link to="/terms" class="auth-link">Terms of Service</router-link> &amp;
+        <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>.
+      </slot>
     </p>
   </main>
 </template>
@@ -205,9 +208,16 @@ defineProps<{
   font-size: var(--t-xs);
   color: var(--text-2);
   text-align: center;
-  max-width: 320px;
+  max-width: 520px;
   line-height: 1.6;
 }
+
+.auth-inline-link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-inline-link:hover { text-decoration: underline; }
 
 .auth-link {
   color: var(--text-2);

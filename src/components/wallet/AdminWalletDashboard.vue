@@ -182,6 +182,7 @@ import BaseSelect from "../base/BaseSelect.vue";
 import EChartPanel from "../EChartPanel.vue";
 import WalletKpiCard from "./WalletKpiCard.vue";
 import { createBarOption, dashboardSeries } from "../../services/dashboard-chart-options.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../../services/table-service.js";
 
 export default {
   name: "AdminWalletDashboard",
@@ -190,6 +191,9 @@ export default {
     query: { type: String, default: "" }
   },
   emits: ["audit"],
+  mounted() {
+    loadDynamicStationOptions(undefined, true).catch(() => null);
+  },
   data() {
     return {
       chartMode: "Daily",
@@ -297,7 +301,11 @@ export default {
         { id: "failed", label: "Failed", count: count("failed") }
       ];
     },
-    activityStations() { return [...new Set(this.recentActivities.map(r => r.station).filter(Boolean))].sort(); },
+    activityStations() {
+      const activitySet = this.recentActivities.map((r) => r.station).filter(Boolean);
+      const dynamicSet = tableSiteOptions.map((s) => s.value).filter(Boolean);
+      return Array.from(new Set([...activitySet, ...dynamicSet])).sort();
+    },
     filteredRecentActivities() {
       return this.recentActivities.filter(row => {
         const matchesType = this.activeActivityType === "all" || row.kind === this.activeActivityType;
