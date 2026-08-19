@@ -18,6 +18,10 @@
     "BeverlyLoader.vue.d.ts",
     "WalletPagination.vue",
     "WalletPagination.vue.d.ts",
+    "WalletTablePagination.vue",
+    "WalletTablePagination.vue.d.ts",
+    "WalletTableFilterBar.vue",
+    "WalletTableFilterBar.vue.d.ts",
     "WalletDataViewSwitch.vue",
     "WalletDataViewSwitch.vue.d.ts",
     "WalletTableSkeleton.vue",
@@ -51,6 +55,14 @@
     "./WalletPagination.vue": {
       "types": "./WalletPagination.vue.d.ts",
       "import": "./WalletPagination.vue"
+    },
+    "./WalletTablePagination.vue": {
+      "types": "./WalletTablePagination.vue.d.ts",
+      "import": "./WalletTablePagination.vue"
+    },
+    "./WalletTableFilterBar.vue": {
+      "types": "./WalletTableFilterBar.vue.d.ts",
+      "import": "./WalletTableFilterBar.vue"
     },
     "./WalletDataViewSwitch.vue": {
       "types": "./WalletDataViewSwitch.vue.d.ts",

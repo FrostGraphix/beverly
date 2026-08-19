@@ -15,12 +15,17 @@ import { ref, computed, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { useStaffAuthStore } from '../stores/auth';
 
 const auth = useStaffAuthStore();
 const canManageMeterOrders = computed(() => auth.hasPermission('wallet.vendors.manage'));
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 interface CustomerUser {
     full_name?: string | null;
@@ -282,6 +287,35 @@ const actionDisabled = computed(() =>
     actionVerb.value === 'cancel' && actionNotes.value.trim().length < 3
 );
 
+function buildMeterOrderRowActions(o: MeterOrder): ActionItem[] {
+    const actions: ActionItem[] = [];
+    if (STATUS_NEXT[o.status]) {
+        actions.push({
+            label: `Advance to ${STATUS_LABEL[STATUS_NEXT[o.status]]}`,
+            icon: 'approve',
+            action: () => askAdvance(o),
+        });
+    }
+    actions.push({
+        label: 'Edit Order',
+        icon: 'edit',
+        action: () => askCustomStatus(o),
+    });
+    if (['paid', 'assigned', 'dispatched'].includes(o.status)) {
+        actions.push({
+            label: 'Cancel Order',
+            icon: 'reject',
+            action: () => askCancel(o),
+        });
+    }
+    return actions;
+}
+
+const paginatedOrders = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return orders.value.slice(start, start + pageSize.value);
+});
+
 // ── export ────────────────────────────────────────────────────────
 const CSV_COLS: Column<MeterOrder>[] = [
     { key: 'created_at',  header: 'Date',         value: (r) => r.created_at },
@@ -391,7 +425,7 @@ function doExport() {
               <th>Status</th>
               <th>Date</th>
               <th>Technician</th>
-              <th v-if="canManageMeterOrders" class="mo-actions-col"></th>
+              <th v-if="canManageMeterOrders" class="mo-actions-col action-column bw-align-center" style="text-align: center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -401,7 +435,7 @@ function doExport() {
             <tr v-else-if="!orders.length">
               <td :colspan="canManageMeterOrders ? 10 : 9" class="mo-center-cell">No orders match the current filters.</td>
             </tr>
-            <tr v-for="o in orders" :key="o.id">
+            <tr v-for="o in paginatedOrders" :key="o.id">
               <td>
                 <div class="mo-customer-name">{{ customerName(o) }}</div>
                 <div class="mo-customer-sub">{{ customerContact(o) }}</div>
@@ -424,46 +458,12 @@ function doExport() {
                 {{ shortDate(o.created_at) }}
               </td>
               <td class="bw-muted" style="font-size: var(--t-sm)">{{ o.technician_name ?? '—' }}</td>
-              <td v-if="canManageMeterOrders" class="mo-actions-col">
-                <div class="mo-row-acts">
-                  <!-- Advance button (natural next step) -->
-                  <button
-                    v-if="STATUS_NEXT[o.status]"
-                    class="bw-btn sm primary"
-                    @click="askAdvance(o)"
-                  >
-                    → {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
-                  </button>
-                  <!-- Edit / manual update -->
-                  <button class="bw-btn sm" @click="askCustomStatus(o)" title="Edit">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>
-                  <!-- Cancel (only for actionable states) -->
-                  <button
-                    v-if="['paid','assigned','dispatched'].includes(o.status)"
-                    class="bw-btn sm danger"
-                    @click="askCancel(o)"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <MobileActionMenu label="Meter order actions">
-                  <button
-                    v-if="STATUS_NEXT[o.status]"
-                    class="mobile-action-item primary"
-                    @click="askAdvance(o)"
-                  >
-                    {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
-                  </button>
-                  <button class="mobile-action-item" @click="askCustomStatus(o)">Edit</button>
-                  <button
-                    v-if="['paid','assigned','dispatched'].includes(o.status)"
-                    class="mobile-action-item danger"
-                    @click="askCancel(o)"
-                  >
-                    Cancel
-                  </button>
-                </MobileActionMenu>
+              <td v-if="canManageMeterOrders" class="mo-actions-col action-column bw-align-center" style="text-align: center">
+                <WalletRowActions
+                  :items="buildMeterOrderRowActions(o)"
+                  label="Meter order actions"
+                  align="center"
+                />
               </td>
             </tr>
           </tbody>
@@ -472,7 +472,7 @@ function doExport() {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards mo-cards">
-        <div v-for="o in orders" :key="o.id" class="mo-card">
+        <div v-for="o in paginatedOrders" :key="o.id" class="mo-card">
           <div class="mo-card-top">
             <div>
               <div class="mo-card-customer">{{ customerName(o) }}</div>
@@ -511,23 +511,11 @@ function doExport() {
           </div>
 
           <div v-if="canManageMeterOrders" class="mo-card-acts">
-            <MobileActionMenu label="Meter order actions">
-              <button
-                v-if="STATUS_NEXT[o.status]"
-                class="mobile-action-item primary"
-                @click="askAdvance(o)"
-              >
-                {{ STATUS_LABEL[STATUS_NEXT[o.status]] }}
-              </button>
-              <button class="mobile-action-item" @click="askCustomStatus(o)">Edit</button>
-              <button
-                v-if="['paid','assigned','dispatched'].includes(o.status)"
-                class="mobile-action-item danger"
-                @click="askCancel(o)"
-              >
-                Cancel
-              </button>
-            </MobileActionMenu>
+            <WalletRowActions
+              :items="buildMeterOrderRowActions(o)"
+              label="Meter order actions"
+              align="right"
+            />
           </div>
         </div>
 
@@ -535,6 +523,13 @@ function doExport() {
           No orders match the current filters.
         </div>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="orders.length"
+        item-label="orders"
+      />
 
       <!-- Load more -->
       <div v-if="nextCursor" class="mo-load-more">

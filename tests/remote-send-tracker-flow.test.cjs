@@ -29,9 +29,9 @@ assert.match(customerTransactions, /deliveryState: data\.delivery_state \|\| dat
 
 // 3. Verify backend vending & customer services allow valid statuses & handle failed delivery state
 assert.match(vendingService, /po\.status === 'reversed'/);
-assert.match(vendingService, /'remote_send_failed_needs_manual_entry',\s*'remote_send_failed'/);
+assert.match(vendingService, /if \(po\.remote_task_id\)/);
 assert.match(customerPurchaseService, /po\.status === 'reversed'/);
-assert.match(customerPurchaseService, /'remote_send_failed_needs_manual_entry',\s*'remote_send_failed'/);
+assert.match(customerPurchaseService, /if \(po\.remote_task_id\)/);
 
 // 4. Verify Fastify route error payloads include deliveryState & remark
 assert.match(vendorRoutes, /deliveryState: 'remote_send_failed_needs_manual_entry'/);

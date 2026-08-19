@@ -31,7 +31,7 @@ function main() {
   assert(page.includes("function vendorEmail"), "Funding page must render vendor emails.");
   assert(page.includes("vendor_organizations"), "Funding page must read hydrated vendor identity.");
 
-  assert(route.includes("import { getBalance }"), "Funding route must import balance lookup.");
+  assert(route.includes("getBalance"), "Funding route must import balance lookup.");
   assert(route.includes("const balance = await getBalance(r.funding.wallet_id)"), "Funding route must fetch updated balance.");
   assert(route.includes("availableBalanceMinor: balance.availableMinor"), "Funding route must return available balance.");
   assert(route.includes("ledgerEntryId: r.ledgerEntry.id"), "Funding route must return ledger receipt.");

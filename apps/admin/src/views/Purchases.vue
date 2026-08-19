@@ -23,6 +23,7 @@ import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
@@ -70,6 +71,7 @@ interface Purchase {
     token: string | null;
     receipt_id: string | null;
     wallet_id: string | null;
+    hold_id?: string | null;
     remote_task_id?: string | null;
     delivery_state: string | null;
     failure_reason: string | null;
@@ -107,6 +109,13 @@ const items = ref<Purchase[]>([]);
 const totalCount = computed(() => summary.value?.todayCount || items.value.length);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+const paginatedItems = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return items.value.slice(start, start + pageSize.value);
+});
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const cardView = ref<'table' | 'list'>('table');
 
@@ -256,6 +265,40 @@ async function doRefund() {
     } finally { refundBusy.value = false; }
 }
 
+// ── Manual Hold Release & Retry Vending ────────────────────────
+const retryBusy = ref(false);
+const releaseBusy = ref(false);
+
+async function doRetryVend() {
+    if (!detail.value) return;
+    retryBusy.value = true;
+    banner.value = null;
+    try {
+        const res = await api.post<any>(`/api/v1/admin/purchases/${detail.value.purchase.id}/retry-vend`);
+        banner.value = { tone: 'success', text: res.message || 'Token generated and purchase completed.' };
+        await openDetail(detail.value.purchase);
+        await loadList(true);
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Retry vending failed.';
+        banner.value = { tone: 'error', text: msg };
+    } finally { retryBusy.value = false; }
+}
+
+async function doReleaseHold() {
+    if (!detail.value) return;
+    releaseBusy.value = true;
+    banner.value = null;
+    try {
+        const res = await api.post<any>(`/api/v1/admin/purchases/${detail.value.purchase.id}/release-hold`);
+        banner.value = { tone: 'success', text: res.message || 'Hold released successfully and wallet funds restored.' };
+        await openDetail(detail.value.purchase);
+        await loadList(true);
+    } catch (e: any) {
+        const msg = e instanceof ApiError ? `${e.message} (${e.code})` : e?.message ?? 'Release hold failed.';
+        banner.value = { tone: 'error', text: msg };
+    } finally { releaseBusy.value = false; }
+}
+
 // â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function statusBadge(s: string) {
     return ({
@@ -269,6 +312,36 @@ function meterTypeLabel(type?: string | null) {
     if (type === 'three_phase') return 'Three Phase';
     if (type === 'single_phase') return 'Single Phase';
     return 'Unknown';
+}
+
+function copyTokenVal(token: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(token);
+    }
+}
+
+function buildPurchaseRowActions(p: Purchase): ActionItem[] {
+    const actions: ActionItem[] = [
+        { label: 'View Receipt', icon: 'view', action: () => viewPurchaseReceipt(p) },
+        { label: 'Print Receipt', icon: 'print', action: () => printPurchaseReceipt(p) },
+        { label: 'Details', icon: 'details', action: () => openDetail(p) },
+    ];
+    if (p.token) {
+        actions.push({
+            label: 'Copy Token',
+            icon: 'copy',
+            action: () => copyTokenVal(p.token!),
+        });
+    }
+    if (p.token && p.status !== 'reversed') {
+        actions.push({
+            label: 'Remote Send',
+            icon: 'send',
+            tone: 'primary',
+            action: () => void openDetail(p).then(() => { remoteTrackerOpen.value = true; }),
+        });
+    }
+    return actions;
 }
 
 function exportCsvRows() {
@@ -445,15 +518,14 @@ watch([fStatus, fActorType], () => loadList());
               <th style="text-align: right">Amount</th>
               <th style="text-align: right">VAT</th>
               <th>Status</th>
-              <th>Receipt</th>
-              <th></th>
+              <th class="action-column bw-align-center" style="text-align: center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="p in items" :key="p.id" @click="openDetail(p)" class="p-row">
+            <tr v-for="p in paginatedItems" :key="p.id" @click="openDetail(p)" class="p-row">
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td>
-                <div class="bw-truncate" style="max-width: 180px">{{ p.customer_name || 'â€”' }}</div>
+                <div class="bw-truncate" style="max-width: 180px">{{ p.customer_name || '—' }}</div>
                 <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span>
               </td>
               <td class="bw-mono">{{ p.meter_id }}</td>
@@ -462,17 +534,17 @@ watch([fStatus, fActorType], () => loadList());
                   {{ meterTypeLabel(p.meter_type) }}
                 </span>
               </td>
-              <td class="bw-mono bw-muted">{{ p.station_id || 'â€”' }}</td>
+              <td class="bw-mono bw-muted">{{ p.station_id || '—' }}</td>
               <td class="bw-money" style="text-align: right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-money" style="text-align: right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
-              <td>
-                <div class="receipt-actions">
-                  <button class="bw-btn sm" @click.stop="viewPurchaseReceipt(p)">View</button>
-                  <button class="bw-btn sm" @click.stop="printPurchaseReceipt(p)">Print</button>
-                </div>
+              <td class="action-column bw-align-center" style="text-align: center" @click.stop>
+                <WalletRowActions
+                  :items="buildPurchaseRowActions(p)"
+                  label="Purchase actions"
+                  align="center"
+                />
               </td>
-              <td class="row-arrow">â†’</td>
             </tr>
             <tr v-if="!items.length && !loading">
               <td colspan="10" class="bw-muted empty">No purchases match the filters.</td>
@@ -483,22 +555,22 @@ watch([fStatus, fActorType], () => loadList());
 
       <!-- Mobile -->
       <div class="bw-t-cards p-cards">
-        <div v-for="p in items" :key="p.id" class="p-card" @click="openDetail(p)">
+        <div v-for="p in paginatedItems" :key="p.id" class="p-card" @click="openDetail(p)">
           <div class="pc-head">
             <div>
               <div class="bw-money pc-amount">{{ naira(p.amount_minor) }}</div>
               <div class="bw-muted pc-meta">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
-              <div class="bw-mono pc-meta">{{ p.meter_id }} Â· {{ shortDate(p.created_at) }}</div>
+              <div class="bw-mono pc-meta">{{ p.meter_id }} · {{ shortDate(p.created_at) }}</div>
             </div>
             <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Buyer</span>
-            <span>{{ p.customer_name || 'â€”' }} <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span></span>
+            <span>{{ p.customer_name || '—' }} <span :class="['bw-badge', actorBadge(p.actor_type)]" style="font-size: 10px">{{ p.actor_type }}</span></span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Station</span>
-            <span class="bw-mono">{{ p.station_id || 'â€”' }}</span>
+            <span class="bw-mono">{{ p.station_id || '—' }}</span>
           </div>
           <div class="pc-row">
             <span class="pc-label">Phase</span>
@@ -514,9 +586,16 @@ watch([fStatus, fActorType], () => loadList());
         <div v-if="!items.length && !loading" class="bw-muted empty">No purchases.</div>
       </div>
 
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="items.length"
+        item-label="purchases"
+      />
+
       <div v-if="cursor" class="load-more">
         <button class="bw-btn" :disabled="loading" @click="loadList(false)">
-          {{ loading ? 'Loadingâ€¦' : 'Load more' }}
+          {{ loading ? 'Loading…' : 'Load more' }}
         </button>
       </div>
     </div>
@@ -615,6 +694,18 @@ watch([fStatus, fActorType], () => loadList());
             <div class="dr-actions">
               <div class="dr-action-buttons">
                 <button
+                  v-if="['hold_active', 'dispatching'].includes(detail.purchase.status)"
+                  class="bw-btn primary"
+                  :disabled="retryBusy"
+                  @click="doRetryVend"
+                >{{ retryBusy ? 'Retrying…' : 'Retry Vending' }}</button>
+                <button
+                  v-if="['created', 'hold_active'].includes(detail.purchase.status) && detail.purchase.hold_id"
+                  class="bw-btn danger"
+                  :disabled="releaseBusy"
+                  @click="doReleaseHold"
+                >{{ releaseBusy ? 'Releasing…' : 'Release Hold & Refund' }}</button>
+                <button
                   v-if="detail.purchase.purchase_mode === 'remote_send' || detail.purchase.delivery_state"
                   class="bw-btn primary"
                   @click="remoteTrackerOpen = true"
@@ -639,6 +730,16 @@ watch([fStatus, fActorType], () => loadList());
                 >Request refund</button>
               </div>
               <MobileActionMenu label="Purchase actions">
+                <button
+                  v-if="['hold_active', 'dispatching'].includes(detail.purchase.status)"
+                  class="mobile-action-item"
+                  @click="doRetryVend"
+                >Retry Vending</button>
+                <button
+                  v-if="['created', 'hold_active'].includes(detail.purchase.status) && detail.purchase.hold_id"
+                  class="mobile-action-item danger"
+                  @click="doReleaseHold"
+                >Release Hold & Refund</button>
                 <button
                   v-if="detail.purchase.purchase_mode === 'remote_send' || detail.purchase.delivery_state"
                   class="mobile-action-item"

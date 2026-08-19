@@ -66,29 +66,39 @@
             <th>Amount</th>
             <th>Status</th>
             <th>Created</th>
-            <th>Actions</th>
+            <th class="action-column bw-align-center" style="text-align: center">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
             <td colspan="7"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
           </tr>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
+          <tr v-for="row in paginatedRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td>{{ disputeTypeLabel(row.disputeType) }}</td>
             <td>{{ row.organizationId || '-' }}</td>
             <td>{{ formatMoney(row.amountMinor) }}</td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatDate(row.createdAt) }}</td>
-            <td class="action-cell">
-              <BaseButton v-if="row.status === 'open'" size="sm" @click.stop="setStatus(row, 'under_review')">Review</BaseButton>
-              <BaseButton v-if="row.status === 'under_review'" size="sm" variant="primary" @click.stop="openResolve(row, 'resolved_approved')">Approve</BaseButton>
-              <BaseButton v-if="row.status === 'under_review'" size="sm" class="btn-danger-sm" @click.stop="openResolve(row, 'resolved_rejected')">Reject</BaseButton>
-              <BaseButton v-if="['open','under_review'].includes(row.status)" size="sm" @click.stop="setStatus(row, 'escalated')">Escalate</BaseButton>
+            <td class="action-cell action-column bw-align-center" style="text-align: center" @click.stop>
+              <WalletRowActions
+                v-if="buildDisputeRowActions(row).length"
+                :items="buildDisputeRowActions(row)"
+                label="Dispute actions"
+                align="center"
+              />
+              <span v-else class="bw-muted">-</span>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <WalletTablePagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total-items="filteredRows.length"
+        item-label="disputes"
+      />
     </div>
 
     <!-- Detail drawer -->
@@ -159,17 +169,21 @@ import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
+import WalletRowActions from "@beverly/tokens/WalletRowActions.vue";
+import WalletTablePagination from "@beverly/tokens/WalletTablePagination.vue";
 import { listDisputes, openDispute, updateDisputeStatus, addDisputeNote, disputeSummary, formatMoney } from "../../services/wallet-disputes-service.mjs";
 
 export default {
   name: "DisputesPage",
-  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar, WalletRowActions, WalletTablePagination },
   data() {
     return {
       rows: [],
       summary: {},
       filterStatus: "",
       search: "",
+      page: 1,
+      pageSize: 10,
       selected: null,
       noteText: "",
       loading: false,
@@ -191,6 +205,10 @@ export default {
         (r.id || "").toLowerCase().includes(q) ||
         (r.purchaseOrderId || "").toLowerCase().includes(q)
       );
+    },
+    paginatedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredRows.slice(start, start + this.pageSize);
     },
     exportColumns() {
       return [
@@ -259,6 +277,20 @@ export default {
       } finally {
         this.submitting = false;
       }
+    },
+    buildDisputeRowActions(row) {
+      const actions = [];
+      if (row.status === 'open') {
+        actions.push({ label: 'Review', icon: 'details', action: () => this.setStatus(row, 'under_review') });
+      }
+      if (row.status === 'under_review') {
+        actions.push({ label: 'Approve', icon: 'approve', action: () => this.openResolve(row, 'resolved_approved') });
+        actions.push({ label: 'Reject', icon: 'reject', action: () => this.openResolve(row, 'resolved_rejected') });
+      }
+      if (['open', 'under_review'].includes(row.status)) {
+        actions.push({ label: 'Escalate', icon: 'dots', action: () => this.setStatus(row, 'escalated') });
+      }
+      return actions;
     },
     async submitNote() {
       if (!this.noteText.trim() || !this.selected) return;

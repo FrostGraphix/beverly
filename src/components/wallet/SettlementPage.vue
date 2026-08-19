@@ -71,14 +71,14 @@
             <th>Orders</th>
             <th>Period</th>
             <th>Settled At</th>
-            <th>Actions</th>
+            <th class="action-column bw-align-center" style="text-align: center">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
             <td colspan="9"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
           </tr>
-          <tr v-for="row in rows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
+          <tr v-for="row in paginatedRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ row.batchRef }}</code></td>
             <td><span :class="['status-pill', statusTone(row.status)]">{{ statusLabel(row.status) }}</span></td>
             <td>{{ formatMoney(row.totalPurchaseMinor) }}</td>
@@ -87,12 +87,19 @@
             <td>{{ row.purchaseCount }}</td>
             <td class="period-cell">{{ formatDate(row.periodEnd) }}</td>
             <td>{{ row.settledAt ? formatDate(row.settledAt) : '-' }}</td>
-            <td class="action-cell">
+            <td class="action-cell action-column bw-align-center" style="text-align: center">
               <BaseButton v-if="row.status === 'pending'" size="sm" variant="primary" :loading="submitting" :disabled="submitting" @click.stop="runSettle(row)">Settle</BaseButton>
             </td>
           </tr>
         </tbody>
       </table>
+
+      <WalletTablePagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total-items="rows.length"
+        item-label="batches"
+      />
     </div>
 
     <!-- Batch detail drawer -->
@@ -125,16 +132,19 @@
 import BaseButton from "../base/BaseButton.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
+import WalletTablePagination from "@beverly/tokens/WalletTablePagination.vue";
 import { listSettlementBatches, generateSettlementBatch, settleSettlementBatch, settlementSummary, formatMoney } from "../../services/wallet-settlement-service.mjs";
 
 export default {
   name: "SettlementPage",
-  components: { BaseButton, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseSelect, ExportToolbar, WalletTablePagination },
   data() {
     return {
       rows: [],
       summary: {},
       filterStatus: "",
+      page: 1,
+      pageSize: 10,
       selected: null,
       loading: false,
       initialLoading: true,
@@ -145,6 +155,10 @@ export default {
     };
   },
   computed: {
+    paginatedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.rows.slice(start, start + this.pageSize);
+    },
     exportColumns() {
       return [
         { key: "batchRef", label: "Batch Ref" },

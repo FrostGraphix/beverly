@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
@@ -103,9 +104,19 @@ async function fetchRemoteSendStatus(endpoint: string) {
     }
 }
 
-function isUndeliveredWithToken(p: PurchaseOrder) {
-    const isDelivered = (p.status === 'delivered' || (p.delivery_state && p.delivery_state.toUpperCase() === 'DELIVERED'));
-    return Boolean(p.token && !isDelivered);
+function formatToken(token?: string | null): string {
+    if (!token) return '—';
+    const cleaned = token.replace(/\s+/g, '');
+    if (cleaned.length === 20) {
+        return cleaned.match(/.{1,4}/g)?.join(' ') || token;
+    }
+    return token;
+}
+
+function canRemoteSend(p: PurchaseOrder) {
+    if (!p.token) return false;
+    if (p.status === 'reversed' || p.status === 'failed') return false;
+    return true;
 }
 
 function canReceipt(p: PurchaseOrder) {
@@ -133,7 +144,7 @@ function buildRowActions(p: PurchaseOrder): ActionItem[] {
             action: () => copyRowToken(p),
         });
     }
-    if (isUndeliveredWithToken(p)) {
+    if (canRemoteSend(p)) {
         items.push({
             label: 'Remote Send',
             icon: 'send',
@@ -147,9 +158,9 @@ function buildRowActions(p: PurchaseOrder): ActionItem[] {
 const filterPurchases = (rows: PurchaseOrder[]) => {
     const q = searchQuery.value.trim().toLowerCase();
     let result = rows;
-    if (filter.value === 'delivered') result = rows.filter(p => p.status === 'delivered');
+    if (filter.value === 'delivered') result = rows.filter(p => p.status === 'delivered' || p.delivery_state === 'remote_send_delivered');
     else if (filter.value === 'failed') result = rows.filter(p => p.status === 'failed');
-    else if (filter.value === 'pending') result = rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status));
+    else if (filter.value === 'pending') result = rows.filter(p => ['created', 'hold_active', 'dispatching', 'delivery_pending_review', 'remote_send_pending'].includes(p.status) || (p.delivery_state && p.delivery_state.includes('pending')));
     
     if (q) {
         result = result.filter(p => (
@@ -169,6 +180,11 @@ const activeFilterCount = computed(() => [
 
 const filtered = () => filterPurchases(purchases.value);
 
+const paginatedPurchases = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filtered().slice(start, start + pageSize.value);
+});
+
 const CSV_COLUMNS: Column<PurchaseOrder>[] = [
     { key: 'created_at', header: 'Date', value: (row) => row.created_at },
     { key: 'customer', header: 'Customer', value: (row) => row.customer_name ?? '' },
@@ -180,17 +196,69 @@ const CSV_COLUMNS: Column<PurchaseOrder>[] = [
     { key: 'energy', header: 'Energy (NGN)', value: (row) => ((row.energy_amount_minor ?? row.amount_minor) / 100).toFixed(2) },
     { key: 'vat', header: 'VAT (NGN)', value: (row) => ((row.vat_amount_minor ?? 0) / 100).toFixed(2) },
     { key: 'units', header: 'Units (kWh)', value: (row) => row.units_kwh ?? '' },
-    { key: 'status', header: 'Status', value: (row) => row.status },
-    { key: 'token', header: 'Token', value: (row) => row.token ?? '' },
+    { key: 'status', header: 'Status', value: (row) => statusLabelText(row) },
+    { key: 'token', header: 'Token', value: (row) => formatToken(row.token) },
 ];
 
-function statusBadge(s: string) {
-    if (s === 'delivered')                return 'success';
-    if (s === 'failed')                   return 'danger';
-    if (s === 'dispatching' || s === 'hold_active') return 'info';
-    if (s === 'delivery_pending_review')  return 'warn';
-    if (s === 'reversed')                 return 'warn';
+function statusLabelText(p: PurchaseOrder): string {
+    const ds = String(p.delivery_state || '').toLowerCase();
+    const st = String(p.status || '').toLowerCase();
+    if (ds === 'remote_send_delivered' || st === 'delivered') return 'Delivered';
+    if (ds === 'remote_send_pending' || ds === 'remote_send_pending_review') return 'Remote Send Pending';
+    if (ds === 'remote_send_failed_needs_manual_entry') return 'Remote Send Unconfirmed (Token Ready)';
+    if (p.token && (st === 'hold_active' || st === 'created' || st === 'dispatching')) return 'Token Generated (Hold Active)';
+    if (st === 'failed') return 'Failed';
+    if (st === 'reversed') return 'Reversed';
+    return p.delivery_state || p.status || 'Unknown';
+}
+
+function statusDisplay(p: PurchaseOrder): string {
+    return statusLabelText(p);
+}
+
+function statusBadge(p: PurchaseOrder | string) {
+    const s = typeof p === 'string' ? p : statusLabelText(p);
+    if (s === 'Delivered') return 'success';
+    if (s === 'Failed') return 'danger';
+    if (s === 'Remote Send Pending' || s === 'Token Generated (Hold Active)') return 'info';
+    if (s.includes('Unconfirmed') || s.includes('Pending') || s === 'Reversed') return 'warn';
     return 'neutral';
+}
+
+async function loadTransactions() {
+    loading.value = true;
+    try {
+        const res = await api.get<{ purchases: PurchaseOrder[] }>('/api/v1/vendor/transactions?limit=200');
+        purchases.value = res.purchases;
+    } catch { /* noop */ } finally { loading.value = false; }
+}
+
+function onRemoteSendUpdated(res: any) {
+    if (!selectedRemoteOrder.value) return;
+    const nextState = res.deliveryState || res.delivery_state || res.purchaseOrder?.delivery_state;
+    const isDelivered = res.status === 'success' || nextState === 'remote_send_delivered';
+
+    if (res.purchaseOrder) {
+        selectedRemoteOrder.value = { ...selectedRemoteOrder.value, ...res.purchaseOrder };
+    } else if (nextState) {
+        selectedRemoteOrder.value.delivery_state = nextState;
+        if (isDelivered) selectedRemoteOrder.value.status = 'delivered';
+    }
+
+    const idx = purchases.value.findIndex((p: PurchaseOrder) => p.id === selectedRemoteOrder.value?.id);
+    if (idx !== -1) {
+        purchases.value[idx] = {
+            ...purchases.value[idx],
+            ...(res.purchaseOrder || {}),
+            delivery_state: nextState || purchases.value[idx].delivery_state,
+            status: isDelivered ? 'delivered' : (res.purchaseOrder?.status || purchases.value[idx].status),
+        };
+    }
+}
+
+async function onRemoteSendClose() {
+    remoteTrackerOpen.value = false;
+    await loadTransactions();
 }
 
 function meterTypeLabel(type?: string | null) {
@@ -270,7 +338,7 @@ onMounted(async () => {
       <!-- Filter Controls Panel -->
       <div v-if="showFilters" id="vendor-tx-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
-          <div class="filter-group">
+          <div class="filter-group search-group">
             <label class="filter-label">Search</label>
             <input
               v-model="searchQuery"
@@ -336,12 +404,12 @@ onMounted(async () => {
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
-              <th style="text-align:center">Actions</th>
+              <th class="action-column bw-align-center" style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
             <WalletTableSkeleton v-if="loading && !filtered().length" :columns="13" />
-            <tr v-for="p in filtered()" :key="p.id">
+            <tr v-for="p in paginatedPurchases" :key="p.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td>{{ p.customer_name || '—' }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
@@ -356,13 +424,28 @@ onMounted(async () => {
               <td class="bw-money" style="text-align:right">{{ naira(p.energy_amount_minor ?? p.amount_minor) }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
-              <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
-              <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0, 12) + '...' : '-' }}</td>
-              <td style="text-align:center">
+              <td><span :class="['bw-badge', statusBadge(p)]">{{ statusDisplay(p) }}</span></td>
+              <td class="bw-mono" style="font-size: var(--t-xs); white-space: nowrap">
+                <div v-if="p.token" style="display: inline-flex; align-items: center; gap: var(--s-2)">
+                  <span>{{ formatToken(p.token) }}</span>
+                  <button
+                    type="button"
+                    class="bw-btn sm"
+                    style="padding: 1px 6px; font-size: 10px; min-height: unset; line-height: 1.2"
+                    :title="copiedId === p.id ? 'Copied' : 'Copy Token'"
+                    @click.stop="copyRowToken(p)"
+                  >
+                    {{ copiedId === p.id ? '✓' : 'Copy' }}
+                  </button>
+                </div>
+                <span v-else class="bw-muted">—</span>
+              </td>
+              <td class="action-column bw-align-center" style="text-align:center">
                 <WalletRowActions
                   v-if="buildRowActions(p).length"
                   :items="buildRowActions(p)"
                   label="Transaction actions"
+                  align="center"
                 />
                 <span v-else class="bw-muted">-</span>
               </td>
@@ -377,7 +460,7 @@ onMounted(async () => {
       <!-- Mobile cards -->
       <div class="bw-t-cards">
         <WalletTableSkeleton v-if="loading && !filtered().length" variant="cards" />
-        <div v-for="p in filtered()" :key="p.id" class="bw-tc">
+        <div v-for="p in paginatedPurchases" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor">{{ p.customer_name || p.meter_id }}</div>
@@ -388,7 +471,11 @@ onMounted(async () => {
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Status</span>
-              <span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span>
+              <span :class="['bw-badge', statusBadge(p)]">{{ statusDisplay(p) }}</span>
+            </div>
+            <div class="bw-tc-pair" v-if="p.token">
+              <span class="bw-tc-pair-label">Token</span>
+              <span class="bw-tc-pair-val bw-mono" style="font-size: var(--t-xs)">{{ formatToken(p.token) }}</span>
             </div>
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Mode</span>
@@ -426,21 +513,12 @@ onMounted(async () => {
       </div>
 
       <!-- Pagination Bar -->
-      <div v-if="filtered().length > 0" class="bw-pagination-bar">
-        <div class="bw-pagination-info">
-          Showing 1–{{ filtered().length }} of {{ filtered().length }} matching transactions
-        </div>
-        <div class="bw-pagination-controls">
-          <label class="filter-label inline">
-            <span>Per page</span>
-            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-            </select>
-          </label>
-        </div>
-      </div>
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="filtered().length"
+        item-label="transactions"
+      />
     </div>
 
     <!-- Toast Notification for Action Feedback -->
@@ -461,7 +539,8 @@ onMounted(async () => {
       :remote-task-id="selectedRemoteOrder?.remote_task_id"
       :api-endpoint="selectedRemoteOrder?.id ? `/api/v1/vendor/vend/${selectedRemoteOrder.id}/remote-send` : null"
       :fetcher="fetchRemoteSendStatus"
-      @updated="(res: any) => { if (res.purchaseOrder && selectedRemoteOrder) selectedRemoteOrder = { ...selectedRemoteOrder, ...res.purchaseOrder }; }"
+      @updated="onRemoteSendUpdated"
+      @close="onRemoteSendClose"
     />
   </AppShell>
 </template>

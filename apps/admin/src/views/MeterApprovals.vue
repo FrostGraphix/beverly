@@ -96,7 +96,7 @@
               <th>Service</th>
               <th>Submitted</th>
               <th>Status</th>
-              <th class="meter-actions-col"><span class="sr-only">Actions</span></th>
+              <th class="meter-actions-col action-column bw-align-center" style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -115,13 +115,12 @@
               </td>
               <td class="bw-text-sm">{{ fmtDate(meter.created_at) }}</td>
               <td><span :class="['bw-badge', statusClass(meter.status)]">{{ statusLabel(meter.status) }}</span></td>
-              <td class="bw-action-cell meter-actions-col">
-                <div v-if="meter.status === 'pending'" class="meter-row-actions">
-                  <button class="bw-btn bw-btn-primary bw-btn-sm" :disabled="saving" @click="openApprove(meter)">Review & approve</button>
-                  <button class="bw-btn bw-btn-danger bw-btn-sm" :disabled="saving" @click="openReject(meter)">Reject</button>
-                  <button class="bw-btn bw-btn-sm" :disabled="saving" @click="openUnlink(meter)">Unlink</button>
-                </div>
-                <button v-else class="bw-btn bw-btn-danger bw-btn-sm" :disabled="saving" @click="openUnlink(meter)">Unlink</button>
+              <td class="bw-action-cell meter-actions-col action-column bw-align-center" style="text-align:center">
+                <WalletRowActions
+                  :items="buildMeterApprovalRowActions(meter)"
+                  label="Meter approval actions"
+                  align="center"
+                />
               </td>
             </tr>
             <tr v-if="!meters.length">
@@ -276,6 +275,8 @@ import { api } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 
 type MeterStatus = 'pending' | 'approved' | 'rejected';
 type MeterStatusFilter = MeterStatus | 'all';
@@ -513,6 +514,18 @@ function phaseLabel(type: CustomerMeterRecord['meter_type']) {
   if (type === 'three_phase') return 'Three phase';
   if (type === 'single_phase') return 'Single phase';
   return 'Phase unavailable';
+}
+
+function buildMeterApprovalRowActions(meter: CustomerMeterRecord): ActionItem[] {
+  const actions: ActionItem[] = [];
+  if (meter.status === 'pending') {
+    actions.push(
+      { label: 'Review & Approve', icon: 'approve', action: () => openApprove(meter) },
+      { label: 'Reject', icon: 'reject', action: () => openReject(meter) },
+    );
+  }
+  actions.push({ label: 'Unlink', icon: 'delete', action: () => openUnlink(meter) });
+  return actions;
 }
 
 function namesMatch(meter: CustomerMeterRecord) {

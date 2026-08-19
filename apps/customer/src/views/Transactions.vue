@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
@@ -145,22 +146,78 @@ const activeFilterCount = computed(() => [
     Boolean(searchQuery.value.trim()),
 ].filter(Boolean).length);
 
+const currentPage = ref(1);
+
 const filtered = () => filterPurchases(purchases.value);
 
-function statusBadge(s: string) {
-    if (s === 'delivered') return 'success';
-    if (s === 'failed')    return 'danger';
+const paginatedPurchases = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filtered().slice(start, start + pageSize.value);
+});
+
+async function loadTransactions() {
+    loading.value = true;
+    try {
+        const r = await api.get<{ purchases: any[] }>('/api/v1/customer/transactions?limit=200');
+        purchases.value = r.purchases;
+    } catch { /* noop */ } finally { loading.value = false; }
+}
+
+function getItemStatus(p: any): string {
+    const ds = String(p.delivery_state || '').toLowerCase();
+    const st = String(p.status || '').toLowerCase();
+    if (ds === 'remote_send_delivered' || ds === 'delivered' || st === 'delivered') return 'delivered';
+    if (ds.includes('failed') || st === 'failed') return 'failed';
+    if (ds.includes('pending') || st === 'delivery_pending_review') return 'delivery_pending_review';
+    return st || ds || 'unknown';
+}
+
+function statusBadge(p: any) {
+    const s = typeof p === 'string' ? p : getItemStatus(p);
+    if (s === 'delivered' || s === 'remote_send_delivered') return 'success';
+    if (s === 'failed' || s.includes('failed')) return 'danger';
     if (s === 'dispatching' || s === 'hold_active') return 'info';
-    if (s === 'delivery_pending_review') return 'warn';
+    if (s.includes('pending') || s === 'delivery_pending_review' || s === 'reversed') return 'warn';
     return 'neutral';
 }
 
 function statusLabel(p: any) {
-    if (p.status === 'delivered') return 'Token ready';
+    const ds = String(p.delivery_state || '').toLowerCase();
+    if (ds === 'remote_send_delivered' || p.status === 'delivered') return 'DELIVERED';
+    if (ds === 'remote_send_pending_review' || p.delivery_state === 'remote_send_pending_review') return 'DELIVERY_PENDING_REVIEW';
+    if (ds.includes('failed')) return 'FAILED';
     if (p.failure_reason?.includes('payment_amount_mismatch')) return 'Payment needs review';
     if (p.delivery_state === 'token_generated_needs_reconciliation') return 'Token generated; reconciling';
     if (p.delivery_state === 'awaiting_payment') return 'Payment awaiting confirmation';
-    return String(p.status ?? '').replace(/_/g, ' ');
+    return String(p.status ?? '').replace(/_/g, ' ').toUpperCase();
+}
+
+function onRemoteSendUpdated(res: any) {
+    if (!selectedRemoteOrder.value) return;
+    const nextState = res.deliveryState || res.delivery_state || res.purchaseOrder?.delivery_state;
+    const isDelivered = res.status === 'success' || nextState === 'remote_send_delivered';
+
+    if (res.purchaseOrder) {
+        selectedRemoteOrder.value = { ...selectedRemoteOrder.value, ...res.purchaseOrder };
+    } else if (nextState) {
+        selectedRemoteOrder.value.delivery_state = nextState;
+        if (isDelivered) selectedRemoteOrder.value.status = 'delivered';
+    }
+
+    const idx = purchases.value.findIndex(p => p.id === selectedRemoteOrder.value?.id);
+    if (idx !== -1) {
+        purchases.value[idx] = {
+            ...purchases.value[idx],
+            ...(res.purchaseOrder || {}),
+            delivery_state: nextState || purchases.value[idx].delivery_state,
+            status: isDelivered ? 'delivered' : (res.purchaseOrder?.status || purchases.value[idx].status),
+        };
+    }
+}
+
+async function onRemoteSendClose() {
+    remoteTrackerOpen.value = false;
+    await loadTransactions();
 }
 
 function canReceipt(p: any) {
@@ -208,7 +265,7 @@ function printPurchaseReceipt(p: any) {
       <!-- Filter Controls Panel -->
       <div v-if="showFilters" id="customer-tx-filter-panel" class="recent-filter-panel">
         <div class="recent-filter-grid">
-          <div class="filter-group">
+          <div class="filter-group search-group">
             <label class="filter-label">Search</label>
             <input
               v-model="searchQuery"
@@ -244,23 +301,24 @@ function printPurchaseReceipt(p: any) {
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
-              <th style="text-align:center">Actions</th>
+              <th class="action-column bw-align-center" style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
             <WalletTableSkeleton v-if="loading && !purchases.length" :columns="7" />
-            <tr v-for="p in filtered()" :key="p.id">
+            <tr v-for="p in paginatedPurchases" :key="p.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(p.created_at) }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
-              <td><span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span></td>
+              <td><span :class="['bw-badge', statusBadge(p)]">{{ statusLabel(p) }}</span></td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0,12) + '...' : '-' }}</td>
-              <td style="text-align:center">
+              <td class="action-column bw-align-center" style="text-align:center">
                 <WalletRowActions
                   v-if="buildCustomerRowActions(p).length"
                   :items="buildCustomerRowActions(p)"
                   label="Transaction actions"
+                  align="center"
                 />
                 <span v-else class="bw-muted">-</span>
               </td>
@@ -275,7 +333,7 @@ function printPurchaseReceipt(p: any) {
       <!-- Mobile cards -->
       <div class="bw-t-cards">
         <WalletTableSkeleton v-if="loading && !purchases.length" variant="cards" :rows="4" />
-        <div v-for="p in filtered()" :key="p.id" class="bw-tc">
+        <div v-for="p in paginatedPurchases" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor bw-mono">{{ p.meter_id }}</div>
@@ -286,7 +344,7 @@ function printPurchaseReceipt(p: any) {
           <div class="bw-tc-mid">
             <div class="bw-tc-pair">
               <span class="bw-tc-pair-label">Status</span>
-              <span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span>
+              <span :class="['bw-badge', statusBadge(p)]">{{ statusLabel(p) }}</span>
             </div>
             <div class="bw-tc-pair" v-if="p.units_kwh">
               <span class="bw-tc-pair-label">Units</span>
@@ -311,21 +369,12 @@ function printPurchaseReceipt(p: any) {
       </div>
 
       <!-- Pagination Bar -->
-      <div v-if="filtered().length > 0" class="bw-pagination-bar">
-        <div class="bw-pagination-info">
-          Showing 1–{{ filtered().length }} of {{ filtered().length }} matching transactions
-        </div>
-        <div class="bw-pagination-controls">
-          <label class="filter-label inline">
-            <span>Per page</span>
-            <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-            </select>
-          </label>
-        </div>
-      </div>
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="filtered().length"
+        item-label="transactions"
+      />
     </div>
 
     <!-- Toast Notification for Action Feedback -->
@@ -345,7 +394,8 @@ function printPurchaseReceipt(p: any) {
       :remote-task-id="selectedRemoteOrder?.remote_task_id"
       :api-endpoint="selectedRemoteOrder?.id ? `/api/v1/customer/purchase/${selectedRemoteOrder.id}/remote-send` : null"
       :fetcher="fetchRemoteSendStatus"
-      @updated="(res: any) => { if (res.purchaseOrder && selectedRemoteOrder) selectedRemoteOrder = { ...selectedRemoteOrder, ...res.purchaseOrder }; }"
+      @updated="onRemoteSendUpdated"
+      @close="onRemoteSendClose"
     />
   </AppShell>
 </template>

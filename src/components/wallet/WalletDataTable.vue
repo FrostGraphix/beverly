@@ -15,7 +15,11 @@
       <table>
         <thead>
           <tr>
-            <th v-for="col in columns" :key="col">{{ col }}</th>
+            <th
+              v-for="col in columns"
+              :key="col"
+              :class="{ 'action-column bw-align-center': col === 'Actions' || col === 'Action' }"
+            >{{ col }}</th>
           </tr>
         </thead>
         <tbody>

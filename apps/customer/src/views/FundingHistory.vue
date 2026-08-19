@@ -5,6 +5,7 @@
  */
 import { onMounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
@@ -23,6 +24,8 @@ const items = ref<Funding[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
 const filter = ref<'all' | 'success' | 'pending' | 'failed'>('all');
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 function isSuccessfulStatus(status: string) {
     return ['succeeded', 'success'].includes(status);
@@ -32,7 +35,7 @@ async function load(reset = true) {
     loading.value = true;
     try {
         const p = new URLSearchParams();
-        p.set('limit', '50');
+        p.set('limit', '100');
         if (!reset && cursor.value) p.set('cursor', cursor.value);
         const r = await api.get<{ funding: Funding[]; nextCursor: string | null }>(`/api/v1/customer/funding?${p}`);
         items.value = reset ? r.funding : [...items.value, ...r.funding];
@@ -45,6 +48,11 @@ const filtered = computed(() => {
     if (filter.value === 'success') return items.value.filter((f) => isSuccessfulStatus(f.status));
     if (filter.value === 'failed') return items.value.filter((f) => ['failed', 'abandoned'].includes(f.status));
     return items.value.filter((f) => ['initiated', 'pending'].includes(f.status));
+});
+
+const paginatedFunding = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filtered.value.slice(start, start + pageSize.value);
 });
 
 const totalFunded = computed(() =>
@@ -92,7 +100,7 @@ onMounted(() => load());
           </thead>
           <tbody>
             <WalletTableSkeleton v-if="loading && !items.length" :columns="5" />
-            <tr v-for="f in filtered" :key="f.id">
+            <tr v-for="f in paginatedFunding" :key="f.id">
               <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ shortDate(f.created_at) }}</td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ f.gateway_reference }}</td>
               <td><span class="bw-badge neutral">{{ f.gateway }}</span></td>
@@ -109,7 +117,7 @@ onMounted(() => load());
       <!-- Mobile cards -->
       <div class="bw-t-cards">
         <WalletTableSkeleton v-if="loading && !items.length" variant="cards" :rows="4" />
-        <div v-for="f in filtered" :key="f.id" class="bw-tc">
+        <div v-for="f in paginatedFunding" :key="f.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor bw-money">{{ naira(f.amount_minor) }}</div>
@@ -131,6 +139,13 @@ onMounted(() => load());
         <div v-if="!filtered.length && !loading" class="bw-muted"
              style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No funding yet.</div>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="filtered.length"
+        item-label="top-ups"
+      />
 
       <div v-if="cursor" style="padding: var(--s-3); text-align: center">
         <button class="bw-btn" :disabled="loading" @click="load(false)">

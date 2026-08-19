@@ -113,7 +113,7 @@ const schema = z.object({
     FEATURE_CUSTOMER_WALLET: envBoolean.default(true),
     FEATURE_METER_PURCHASE: envBoolean.default(true),
     FEATURE_VENDOR_VENDING: envBoolean.default(true),
-    FEATURE_VENDOR_BALANCE_TRANSFERS: envBoolean.default(false),
+    FEATURE_VENDOR_BALANCE_TRANSFERS: envBoolean.default(true),
     VENDOR_TRANSFER_RATE_LIMIT_MODE: z.enum(['off', 'observe', 'enforce']).default('off'),
     VENDOR_TRANSFER_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100).default(10),
     VENDOR_TRANSFER_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),

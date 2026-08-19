@@ -90,7 +90,7 @@
           <tr v-if="refreshing" class="ops-refresh-row" aria-live="polite">
             <td colspan="8"><span class="ops-refresh-spinner" aria-hidden="true"></span><span>Refreshing…</span></td>
           </tr>
-          <tr v-for="row in filteredRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
+          <tr v-for="row in paginatedRows" :key="row.id" :class="{ 'row-selected': selected?.id === row.id }" role="button" tabindex="0" @click="selected = row" @keydown.enter.prevent="selected = row" @keydown.space.prevent="selected = row">
             <td><code class="mono-id">{{ shortId(row.id) }}</code></td>
             <td><span class="mode-badge">{{ row.mode || '-' }}</span></td>
             <td>{{ row.targetMeter || '-' }}</td>
@@ -102,6 +102,13 @@
           </tr>
         </tbody>
       </table>
+
+      <WalletTablePagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total-items="filteredRows.length"
+        item-label="vending orders"
+      />
     </div>
 
     <!-- Detail drawer -->
@@ -134,13 +141,14 @@ import BaseButton from "../base/BaseButton.vue";
 import BaseInput from "../base/BaseInput.vue";
 import BaseSelect from "../base/BaseSelect.vue";
 import ExportToolbar from "../base/ExportToolbar.vue";
+import WalletTablePagination from "@beverly/tokens/WalletTablePagination.vue";
 import { vendMonitorSummary, listVendOrders, formatMoney, vendStatusLabel, vendStatusTone } from "../../services/wallet-vending-monitor-service.mjs";
 
 const REFRESH_INTERVAL_MS = 30000;
 
 export default {
   name: "VendingMonitorPage",
-  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar },
+  components: { BaseButton, BaseInput, BaseSelect, ExportToolbar, WalletTablePagination },
   data() {
     return {
       rows: [],
@@ -148,6 +156,8 @@ export default {
       summary: {},
       filterStatus: "",
       search: "",
+      page: 1,
+      pageSize: 10,
       selected: null,
       loading: false,
       initialLoading: true,
@@ -168,6 +178,10 @@ export default {
         (r.id || "").toLowerCase().includes(q) ||
         (r.organizationId || "").toLowerCase().includes(q)
       );
+    },
+    paginatedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredRows.slice(start, start + this.pageSize);
     },
     exportColumns() {
       return [

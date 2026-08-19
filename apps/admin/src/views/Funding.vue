@@ -18,6 +18,9 @@ import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
@@ -265,6 +268,28 @@ function printFundingReceipt(f: FundingRequest) {
     printReceipt(fundingReceipt(f));
 }
 
+function buildReceiptRowActions(f: FundingRequest): ActionItem[] {
+    return [
+        { label: 'View Receipt', icon: 'view', action: () => viewFundingReceipt(f) },
+        { label: 'Print Receipt', icon: 'print', action: () => printFundingReceipt(f) },
+    ];
+}
+
+function buildFundingApprovalRowActions(f: FundingRequest): ActionItem[] {
+    return [
+        { label: 'Approve Funding', icon: 'approve', action: () => askApprove(f) },
+        { label: 'Reject Funding', icon: 'reject', action: () => askReject(f) },
+    ];
+}
+
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+const paginatedItems = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return items.value.slice(start, start + pageSize.value);
+});
+
 onMounted(() => {
     void load();
     void loadHeldPayments();
@@ -389,12 +414,12 @@ onMounted(() => {
               <th>Proof</th>
               <th style="text-align:right">Amount</th>
               <th>Status</th>
-              <th>Receipt</th>
-              <th v-if="canApproveFunding" class="actions-col"></th>
+              <th class="action-column bw-align-center" style="text-align: center">Receipt</th>
+              <th v-if="canApproveFunding" class="action-column bw-align-center actions-col" style="text-align: center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="f in items" :key="f.id" :class="{ 'row-busy': busyId === f.id }">
+            <tr v-for="f in paginatedItems" :key="f.id" :class="{ 'row-busy': busyId === f.id }">
               <td class="bw-mono bw-muted">{{ shortDate(f.created_at) }}</td>
               <td>
                 <strong>{{ vendorName(f) }}</strong>
@@ -408,25 +433,19 @@ onMounted(() => {
               </td>
               <td class="bw-money" style="text-align: right">{{ naira(f.amount_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(f.status)]">{{ f.status }}</span></td>
-              <td>
-                <div class="receipt-actions">
-                  <button class="bw-btn sm" @click="viewFundingReceipt(f)">View</button>
-                  <button class="bw-btn sm" @click="printFundingReceipt(f)">Print</button>
-                </div>
+              <td class="action-column bw-align-center" style="text-align: center">
+                <WalletRowActions
+                  :items="buildReceiptRowActions(f)"
+                  label="Funding receipt actions"
+                  align="center"
+                />
               </td>
-              <td v-if="canApproveFunding" class="actions-col">
-                <div class="action-cluster">
-                  <button class="bw-btn sm primary" :disabled="busyId === f.id" @click="askApprove(f)">
-                    Approve
-                  </button>
-                  <button class="bw-btn sm danger" :disabled="busyId === f.id" @click="askReject(f)">
-                    Reject
-                  </button>
-                </div>
-                <MobileActionMenu label="Funding actions">
-                  <button class="mobile-action-item primary" :disabled="busyId === f.id" @click="askApprove(f)">Approve</button>
-                  <button class="mobile-action-item danger" :disabled="busyId === f.id" @click="askReject(f)">Reject</button>
-                </MobileActionMenu>
+              <td v-if="canApproveFunding" class="actions-col action-column bw-align-center" style="text-align: center">
+                <WalletRowActions
+                  :items="buildFundingApprovalRowActions(f)"
+                  label="Funding approval actions"
+                  align="center"
+                />
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
@@ -438,7 +457,7 @@ onMounted(() => {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards fund-cards">
-        <div v-for="f in items" :key="f.id" class="fund-card" :class="{ 'row-busy': busyId === f.id }">
+        <div v-for="f in paginatedItems" :key="f.id" class="fund-card" :class="{ 'row-busy': busyId === f.id }">
           <div class="fc-head">
             <div>
               <div class="fc-amount">{{ naira(f.amount_minor) }}</div>
@@ -468,6 +487,13 @@ onMounted(() => {
         </div>
         <div v-if="!items.length && !loading" class="bw-muted empty-card">Queue clear.</div>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="items.length"
+        item-label="funding requests"
+      />
     </div>
 
     <!-- Approve confirm -->

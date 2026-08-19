@@ -5,7 +5,9 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const servicePath = path.join(root, "backend", "wallet", "src", "services", "consumption.ts");
-const routePath = path.join(root, "backend", "wallet", "src", "routes", "admin.ts");
+const routePath = fs.existsSync(path.join(root, "backend", "wallet", "src", "routes", "admin-consumption.ts"))
+  ? path.join(root, "backend", "wallet", "src", "routes", "admin-consumption.ts")
+  : path.join(root, "backend", "wallet", "src", "routes", "admin.ts");
 const viewPath = path.join(root, "apps", "admin", "src", "views", "Consumption.vue");
 const migrationPath = path.join(root, "supabase", "migrations", "20260521231000_fix_station_aggregate_refresh.sql");
 

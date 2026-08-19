@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { useWalletStore, type LedgerEntry } from '../stores/wallet';
 import { naira } from '../lib/format';
@@ -11,6 +12,7 @@ const wallet = useWalletStore();
 const showFilters = ref(false);
 const searchQuery = ref('');
 const activityFilter = ref<'all' | 'credit' | 'debit' | 'reversal'>('all');
+const currentPage = ref(1);
 const pageSize = ref(10);
 const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
@@ -32,12 +34,13 @@ function displayMemo(value: string | null) {
     return value?.replace(/\uFFFD+/g, ' • ') || '—';
 }
 
-const matchesFilter = (entry: LedgerEntry, filter: typeof activityFilter.value) => {
-    const reversal = entry.entry_type.startsWith('reversal_');
+function matchesFilter(entry: LedgerEntry, filter: typeof activityFilter.value) {
     if (filter === 'all') return true;
-    if (filter === 'reversal') return reversal;
-    return !reversal && entry.direction === filter;
-};
+    if (filter === 'credit') return entry.direction === 'credit';
+    if (filter === 'debit') return entry.direction === 'debit';
+    if (filter === 'reversal') return entry.entry_type.includes('reversal');
+    return true;
+}
 
 const filteredLedger = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
@@ -51,6 +54,11 @@ const filteredLedger = computed(() => {
             (entry.id || '').toLowerCase().includes(q)
         );
     });
+});
+
+const paginatedLedger = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filteredLedger.value.slice(start, start + pageSize.value);
 });
 
 const activeFilterCount = computed(() => [
@@ -124,7 +132,7 @@ onMounted(async () => {
         <!-- Filter Controls Panel -->
         <div v-if="showFilters" id="vendor-wallet-filter-panel" class="recent-filter-panel">
           <div class="recent-filter-grid">
-            <div class="filter-group">
+            <div class="filter-group search-group">
               <label class="filter-label">Search</label>
               <input
                 v-model="searchQuery"
@@ -169,7 +177,7 @@ onMounted(async () => {
             </thead>
             <tbody>
               <WalletTableSkeleton v-if="wallet.loading && !filteredLedger.length" :columns="7" />
-              <tr v-for="e in filteredLedger" :key="e.id">
+              <tr v-for="e in paginatedLedger" :key="e.id">
                 <td class="bw-mono bw-dim" style="font-size: var(--t-xs)">{{ new Date(e.created_at).toLocaleString('en-NG', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) }}</td>
                 <td><span :class="['bw-badge', e.direction === 'credit' ? 'success' : 'neutral']">{{ e.entry_type.replace(/_/g, ' ') }}</span></td>
                 <td class="bw-muted" style="max-width:220px; overflow:hidden; text-overflow:ellipsis">{{ displayMemo(e.memo) }}</td>
@@ -196,7 +204,7 @@ onMounted(async () => {
         <!-- Card view -->
         <div class="bw-t-cards ledger-card-view">
           <WalletTableSkeleton v-if="wallet.loading && !filteredLedger.length" variant="cards" />
-          <div v-for="e in filteredLedger" :key="e.id" class="bw-tc">
+          <div v-for="e in paginatedLedger" :key="e.id" class="bw-tc">
             <div class="bw-tc-top">
               <div>
                 <div class="bw-tc-vendor">{{ e.entry_type.replace(/_/g, ' ') }}</div>
@@ -226,21 +234,12 @@ onMounted(async () => {
         </div>
 
         <!-- Pagination Bar -->
-        <div v-if="filteredLedger.length > 0" class="bw-pagination-bar">
-          <div class="bw-pagination-info">
-            Showing 1–{{ filteredLedger.length }} of {{ filteredLedger.length }} matching movements
-          </div>
-          <div class="bw-pagination-controls">
-            <label class="filter-label inline">
-              <span>Per page</span>
-              <select v-model="pageSize" class="bw-select bw-select-sm" style="width: auto">
-                <option :value="10">10</option>
-                <option :value="25">25</option>
-                <option :value="50">50</option>
-              </select>
-            </label>
-          </div>
-        </div>
+        <WalletTablePagination
+          v-model:page="currentPage"
+          v-model:pageSize="pageSize"
+          :total-items="filteredLedger.length"
+          item-label="movements"
+        />
       </div>
 
     </div>

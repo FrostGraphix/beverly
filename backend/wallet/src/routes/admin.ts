@@ -12,11 +12,11 @@ import { assertClientIdempotencyKey } from '../services/idempotency.js';
 import { adminClient } from '../db/supabase.js';
 import { createVendorOrganization, setVendorStatus } from '../services/vendor-onboarding.js';
 import { approveFundingRequest, rejectFundingRequest, listPendingFunding, reconcileApprovedFundingCredits, attachProofUrls } from '../services/funding.js';
-import { getBalance } from '../services/ledger.js';
+import { getBalance, captureHold, releaseHold } from '../services/ledger.js';
 import { setOwnerWalletStatus, setWalletStatus, WalletStateError } from '../services/wallets.js';
 import { auditFromRequest, logAction } from '../services/audit.js';
 import { resolveAssessment } from '../services/fraud-engine.js';
-import { listStationDirectory, invalidateStationsCache, TokenEngineError } from '../services/token-engine.js';
+import { listStationDirectory, invalidateStationsCache, TokenEngineError, generateCreditToken, lookupMeter } from '../services/token-engine.js';
 import { resendRemoteSendOrder } from '../services/vending.js';
 import { listAllDisputes, updateDisputeStatus, addMessage, getDispute } from '../services/disputes.js';
 import {
@@ -43,6 +43,7 @@ import adminDevRoutes from './admin-dev.js';
 import adminReportsRoutes from './admin-reports.js';
 import adminMeterApprovalsRoutes from './admin-meter-approvals.js';
 import adminPaymentRecoveryRoutes from './admin-payment-recovery.js';
+import { adminConsumptionRoutes } from './admin-consumption.js';
 import { isCorporateStaffEmail } from '../services/email-validation.js';
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_CATALOG, ROLE_LABELS, ROLE_LEGACY_NAMES, SYSTEM_ROLE_KEYS } from './admin-access-constants.js';
 function csvEscape(v: unknown): string {
@@ -341,6 +342,8 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /purchases/:id': 'wallet.vending.monitor',
     'POST /purchases/:id/resend-sms': 'wallet.vending.monitor',
     'POST /purchases/:id/resend-remote': 'wallet.vending.monitor',
+    'POST /purchases/:id/release-hold': 'wallet.funding.approve',
+    'POST /purchases/:id/retry-vend': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
     'GET /meter-pricing': 'wallet.vendors.manage',
@@ -2631,6 +2634,120 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
+    // Manually release a stuck hold_active order and restore wallet funds.
+    fastify.post('/purchases/:id/release-hold', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { data: po, error } = await adminClient
+            .from('purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error || !po) {
+            return reply.code(404).send({ error: 'not_found', message: 'Purchase order not found.' });
+        }
+        if (!['created', 'hold_active'].includes(po.status)) {
+            return reply.code(409).send({ error: 'invalid_state', message: `Order status '${po.status}' cannot be released.` });
+        }
+        if (!po.hold_id) {
+            return reply.code(400).send({ error: 'no_hold', message: 'Purchase order has no associated hold ID.' });
+        }
+
+        try {
+            await releaseHold(po.hold_id);
+            await adminClient
+                .from('purchase_orders')
+                .update({
+                    status: 'reversed',
+                    failure_reason: 'manually_released_by_staff',
+                })
+                .eq('id', id);
+
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                action: 'vending.hold.manual_release',
+                targetType: 'purchase_order',
+                targetId: id,
+                metadata: { holdId: po.hold_id },
+            });
+
+            return { ok: true, message: 'Hold released successfully and wallet funds restored.' };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'release_failed', message: e.message });
+        }
+    });
+
+    // Retry vending for an order stuck in hold_active or dispatching.
+    fastify.post('/purchases/:id/retry-vend', async (req, reply) => {
+        const id = (req.params as { id: string }).id;
+        const { data: po, error } = await adminClient
+            .from('purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error || !po) {
+            return reply.code(404).send({ error: 'not_found', message: 'Purchase order not found.' });
+        }
+        if (!['hold_active', 'dispatching'].includes(po.status)) {
+            return reply.code(409).send({ error: 'invalid_state', message: `Order status '${po.status}' cannot be retried.` });
+        }
+
+        try {
+            let token = po.token;
+            if (!token) {
+                const meter = await lookupMeter(po.meter_id);
+                const tokenRes = await generateCreditToken({
+                    meterId: meter.meterId,
+                    customerId: meter.customerId,
+                    customerName: meter.customerName,
+                    stationId: meter.stationId,
+                    amountMinor: po.energy_amount_minor ?? po.amount_minor,
+                    units: po.units_kwh ?? 0,
+                    tariffId: meter.tariffId,
+                    isThreePhase: meter.isThreePhase,
+                    sgc: meter.sgc,
+                    oemId: meter.oemId,
+                    reference: po.id,
+                });
+                token = tokenRes.token;
+            }
+
+            if (po.hold_id) {
+                await captureHold({
+                    holdId: po.hold_id,
+                    entryType: 'purchase_debit',
+                    referenceType: 'purchase_order',
+                    referenceId: po.id,
+                    idempotencyKey: `purchase:capture:${po.id}:retry`,
+                    memo: `Vending Retry · ${po.meter_id}`,
+                    createdBy: req.actor!.userId,
+                }).catch(() => undefined);
+            }
+
+            await adminClient.from('purchase_orders').update({
+                token,
+                status: 'delivered',
+                delivery_state: po.delivery_state || 'token_generated',
+                failure_reason: null,
+            }).eq('id', id);
+
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                action: 'vending.retry.success',
+                targetType: 'purchase_order',
+                targetId: id,
+                metadata: { token },
+            });
+
+            return { ok: true, token, message: 'Token delivery completed and purchase order updated.' };
+        } catch (e: any) {
+            return reply.code(400).send({ error: e.code ?? 'retry_failed', message: e.message });
+        }
+    });
+
 
     // ── meter purchase orders ──
     fastify.get('/meter-pricing', async () => {
@@ -3603,117 +3720,11 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { requests: await listDeletionRequests({ status, limit: 200 }) };
     });
 
-    // ── Consumption analytics ────────────────────────────────────────────────
-
-    fastify.get('/consumption', async (req, reply) => {
-        const qs = req.query as Record<string, string>;
-        const assignedStations = staffStations(req);
-        const scope      = (assignedStations ? 'station' : qs.scope) as 'meter' | 'station' | 'cumulative' ?? 'station';
-        const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
-        const scope_id   = qs.scope_id || undefined;
-        const from       = qs.from ?? undefined;
-        const to         = qs.to ?? undefined;
-        const limit      = Math.min(Number(qs.limit ?? 120), 500);
-
-        if (!['meter','station','cumulative'].includes(scope)) {
-            return reply.code(400).send({ error: 'bad_scope', message: 'scope must be meter | station | cumulative' });
-        }
-        if (!['day','week','month','year'].includes(period)) {
-            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
-        }
-
-        // super-admin -> every station; any other staff role -> only their
-        // assignment. staffStations() returns [] for an unassigned staffer,
-        // which stationsAuthority treats as "see nothing".
-        const { queryConsumption, allStations, stationsAuthority } = await import('../services/consumption.js');
-        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
-        const rows = await queryConsumption(
-            { scope, scope_id, period_type: period, from, to, limit, withSpend: qs.spend === 'true' },
-            authority,
-        );
-        return { rows, count: rows.length };
-    });
-
-    fastify.get('/consumption/meters', async (req, reply) => {
-        const qs         = req.query as Record<string, string>;
-        const assignedStations = staffStations(req);
-        const station_id = qs.station_id;
-        const period     = qs.period as 'day' | 'week' | 'month' | 'year' ?? 'month';
-        const from       = qs.from ?? undefined;
-        const to         = qs.to ?? undefined;
-
-        if (!station_id) {
-            return reply.code(400).send({ error: 'missing_station_id', message: 'station_id is required' });
-        }
-        if (assignedStations && !assignedStations.includes(station_id.toUpperCase())) {
-            return reply.code(404).send({ error: 'not_found', message: 'Station not found for your assignment.' });
-        }
-        if (!['day','week','month','year'].includes(period)) {
-            return reply.code(400).send({ error: 'bad_period', message: 'period must be day | week | month | year' });
-        }
-
-        const { queryMeterBreakdown, allStations, stationsAuthority } = await import('../services/consumption.js');
-        const authority = assignedStations ? stationsAuthority(assignedStations) : allStations();
-        const rows = await queryMeterBreakdown(station_id, period, authority, from, to);
-        return { rows, count: rows.length };
-    });
-
-    fastify.post('/consumption/refresh', async (req, reply) => {
-        try {
-            const body = (req.body ?? {}) as { stationId?: string; station_id?: string; stationIds?: string[]; station_ids?: string[] };
-            const assignedStations = staffStations(req);
-            const stationIds = assignedStations ?? body.stationIds ?? body.station_ids ?? (body.stationId || body.station_id ? [body.stationId ?? body.station_id ?? ''] : undefined);
-            const { refreshConsumptionAggregates } = await import('../services/consumption.js');
-            const result = await refreshConsumptionAggregates(stationIds);
-            return { ...result, ok: true };
-        } catch (e: any) {
-            return reply.code(500).send({ error: 'refresh_failed', message: e.message, result: e.result });
-        }
-    });
-
-    fastify.get('/abnormal-alarms', async (req, reply) => {
-        const qs = req.query as Record<string, string>;
-        const alarm = String(qs.alarm ?? '').trim();
-        const stationId = String(qs.station_id ?? '').trim();
-        const from = String(qs.from ?? '').trim();
-        const to = String(qs.to ?? '').trim();
-        const limit = Math.min(Number(qs.limit ?? qs.pageLimit ?? 200), 1000);
-        const offset = Math.max(0, Number(qs.offset ?? 0));
-        let query = adminClient
-            .from('daily_meter_readings')
-            .select('meter_id, customer_id, customer_name, station_id, gateway_id, current_date, total1, usage1, battery_low, magnetic_interference, terminal_cover_open, cover_open, current_reverse, current_unbalance, update_date')
-            .order('current_date', { ascending: false })
-            .range(offset, offset + limit - 1);
-        if (stationId) query = query.eq('station_id', stationId);
-        if (from) query = query.gte('current_date', from);
-        if (to) query = query.lte('current_date', to);
-        const { data, error } = await query;
-        if (error) return reply.code(500).send({ error: 'read_failed', message: error.message });
-        const rows = (data ?? []).flatMap((r: any) => {
-            const signals = [
-                { key: 'noData', label: 'No Data Report', hit: Number(r.usage1 ?? 0) === 0 },
-                { key: 'magneticInterference', label: 'Magnetic Interference', hit: Number(r.magnetic_interference ?? 0) > 0 },
-                { key: 'batteryLow', label: 'Battery Low', hit: Number(r.battery_low ?? 0) > 0 },
-                { key: 'terminalCoverOpen', label: 'Terminal Cover Open', hit: Number(r.terminal_cover_open ?? 0) > 0 },
-                { key: 'coverOpen', label: 'Upper Open', hit: Number(r.cover_open ?? 0) > 0 },
-                { key: 'currentReverse', label: 'Current Reverse', hit: Number(r.current_reverse ?? 0) > 0 },
-                { key: 'currentUnbalance', label: 'Current Unbalance', hit: Number(r.current_unbalance ?? 0) > 0 },
-            ].filter((s) => s.hit).map((s) => ({
-                alarmKey: s.key, alarmLabel: s.label,
-                meterId: r.meter_id, customerId: r.customer_id, customerName: r.customer_name, stationId: r.station_id, gatewayId: r.gateway_id,
-                total1: r.total1, usage1: r.usage1, batteryLow: r.battery_low, magneticInterference: r.magnetic_interference,
-                terminalCoverOpen: r.terminal_cover_open, coverOpen: r.cover_open, currentReverse: r.current_reverse, currentUnbalance: r.current_unbalance,
-                currentDate: r.current_date, updateDate: r.update_date,
-            }));
-            return signals;
-        }).filter((row: any) => !alarm || row.alarmKey === alarm);
-        return { rows, total: rows.length, count: rows.length };
-    });
-
     await fastify.register(adminVendorAnalyticsRoutes);
     await fastify.register(adminVendorTransferRoutes);
     await fastify.register(adminDevRoutes);
     await fastify.register(adminReportsRoutes);
+    await fastify.register(adminConsumptionRoutes);
 
     fastify.patch('/privacy/deletions/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;

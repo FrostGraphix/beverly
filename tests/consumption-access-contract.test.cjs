@@ -14,7 +14,7 @@ const root = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
 const service = read("backend/wallet/src/services/consumption.ts");
-const adminRoutes = read("backend/wallet/src/routes/admin.ts");
+const adminRoutes = read("backend/wallet/src/routes/admin.ts") + "\n" + (fs.existsSync(path.join(root, "backend/wallet/src/routes/admin-consumption.ts")) ? read("backend/wallet/src/routes/admin-consumption.ts") : "");
 const vendorRoutes = read("backend/wallet/src/routes/vendor.ts");
 const customerRoutes = read("backend/wallet/src/routes/customer.ts");
 const authPlugin = read("backend/wallet/src/plugins/auth.ts");

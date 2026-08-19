@@ -19,6 +19,9 @@ import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, printPdf } from '../lib/export';
 import { useStaffAuthStore } from '../stores/auth';
@@ -184,6 +187,24 @@ function exportPdfDoc() {
     });
 }
 
+function buildCustomerRowActions(c: CustomerRow): ActionItem[] {
+    const actions: ActionItem[] = [
+        { label: 'View Customer', icon: 'view', action: () => router.push(`/customers/${c.id}`) },
+    ];
+    if (canDeleteCustomers.value) {
+        actions.push({ label: 'Delete Customer', icon: 'delete', action: () => askDeleteCustomer(c) });
+    }
+    return actions;
+}
+
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+const paginatedCustomers = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return customers.value.slice(start, start + pageSize.value);
+});
+
 onMounted(() => { void loadSummary(); void loadList(); });
 watch([fStatus, fTier], () => loadList());
 </script>
@@ -287,11 +308,11 @@ watch([fStatus, fTier], () => loadList());
               <th style="text-align: right">Balance</th>
               <th>Status</th>
               <th>Joined</th>
-              <th class="actions-col"></th>
+              <th class="actions-col action-column bw-align-center" style="text-align: center">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="c in customers" :key="c.id" @click="router.push(`/customers/${c.id}`)" class="c-row">
+            <tr v-for="c in paginatedCustomers" :key="c.id" @click="router.push(`/customers/${c.id}`)" class="c-row">
               <td>
                 <div class="bw-truncate" style="max-width: 200px; font-weight: 600">{{ c.full_name || '—' }}</div>
                 <div class="bw-mono row-sub">{{ c.email || c.id.slice(0, 8) }}</div>
@@ -301,15 +322,12 @@ watch([fStatus, fTier], () => loadList());
               <td class="bw-money" style="text-align: right">{{ naira(c.balance_minor) }}</td>
               <td><span :class="['bw-badge', statusBadge(c.status)]">{{ c.status }}</span></td>
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(c.created_at) }}</td>
-              <td class="actions-col" @click.stop>
-                <div class="action-cluster">
-                  <router-link :to="`/customers/${c.id}`" class="bw-btn sm" style="text-decoration:none">View</router-link>
-                  <button v-if="canDeleteCustomers" class="bw-btn sm danger" @click="askDeleteCustomer(c)">Delete</button>
-                </div>
-                <MobileActionMenu label="Customer actions">
-                  <router-link :to="`/customers/${c.id}`" class="mobile-action-item">View</router-link>
-                  <button v-if="canDeleteCustomers" class="mobile-action-item danger" @click="askDeleteCustomer(c)">Delete</button>
-                </MobileActionMenu>
+              <td class="actions-col action-column bw-align-center" style="text-align: center" @click.stop>
+                <WalletRowActions
+                  :items="buildCustomerRowActions(c)"
+                  label="Customer actions"
+                  align="center"
+                />
               </td>
             </tr>
             <tr v-if="!customers.length && !loading">
@@ -321,7 +339,7 @@ watch([fStatus, fTier], () => loadList());
 
       <!-- Mobile -->
       <div class="bw-t-cards c-cards">
-        <div v-for="c in customers" :key="c.id" class="c-card" @click="router.push(`/customers/${c.id}`)">
+        <div v-for="c in paginatedCustomers" :key="c.id" class="c-card" @click="router.push(`/customers/${c.id}`)">
           <div class="cc-head">
             <div>
               <div style="font-weight: 700">{{ c.full_name || '—' }}</div>
@@ -340,14 +358,22 @@ watch([fStatus, fTier], () => loadList());
             </div>
           </div>
           <div class="cc-actions" @click.stop>
-            <MobileActionMenu label="Customer actions">
-              <router-link :to="`/customers/${c.id}`" class="mobile-action-item">View</router-link>
-              <button v-if="canDeleteCustomers" class="mobile-action-item danger" @click="askDeleteCustomer(c)">Delete</button>
-            </MobileActionMenu>
+            <WalletRowActions
+              :items="buildCustomerRowActions(c)"
+              label="Customer actions"
+              align="right"
+            />
           </div>
         </div>
         <div v-if="!customers.length && !loading" class="bw-muted empty">No customers.</div>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="customers.length"
+        item-label="customers"
+      />
 
       <div v-if="cursor" class="load-more">
         <button class="bw-btn" :disabled="loading" @click="loadList(false)">

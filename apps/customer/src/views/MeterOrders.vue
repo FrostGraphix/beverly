@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import { api, ApiError } from '../lib/api';
-
-const route = useRoute();
 
 interface MeterOrder {
     id: string;
@@ -22,10 +21,18 @@ interface MeterOrder {
     updated_at: string;
 }
 
+const route = useRoute();
 const orders = ref<MeterOrder[]>([]);
 const loading = ref(true);
 const verifying = ref(false);
 const verifyNotice = ref<{ orderId: string; message: string; type: 'success' | 'warning' | 'error' } | null>(null);
+const currentPage = ref(1);
+const pageSize = ref(10);
+
+const paginatedOrders = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return orders.value.slice(start, start + pageSize.value);
+});
 
 const STATUS_LABEL: Record<string, string> = {
     pending_payment: 'Awaiting Payment',
@@ -129,7 +136,7 @@ onMounted(async () => {
     </div>
 
     <div v-else class="bw-stack" style="gap: var(--s-3)">
-      <div v-for="order in orders" :key="order.id" class="bw-card">
+      <div v-for="order in paginatedOrders" :key="order.id" class="bw-card">
         <div class="bw-order-head">
           <div>
             <strong>{{ order.meter_type === 'three_phase' ? 'Three Phase' : 'Single Phase' }} Meter</strong>
@@ -177,6 +184,13 @@ onMounted(async () => {
           {{ verifying ? 'Verifying…' : 'Check payment status' }}
         </button>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="orders.length"
+        item-label="orders"
+      />
     </div>
   </AppShell>
 </template>

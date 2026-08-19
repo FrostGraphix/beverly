@@ -1,7 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate } from '../lib/api';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
@@ -23,6 +25,7 @@ interface Purchase {
     delivery_state: string | null;
     created_at: string;
     failure_reason: string | null;
+    token?: string | null;
 }
 
 interface Station { stationId: string; name: string; }
@@ -75,10 +78,17 @@ function statusBadge(s: string) {
 
 function statusLabel(p: Purchase) {
     if (p.status === 'delivered') return 'Token ready';
+    if (p.token && p.status === 'hold_active') return 'Token generated (Hold active)';
     if (p.failure_reason?.includes('payment_amount_mismatch')) return 'Payment needs review';
     if (p.delivery_state === 'token_generated_needs_reconciliation') return 'Token generated; reconciling';
     if (p.delivery_state === 'awaiting_payment') return 'Payment awaiting confirmation';
     return p.status.replace(/_/g, ' ');
+}
+
+function copyToken(token: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(token);
+    }
 }
 
 function meterTypeLabel(type?: string | null) {
@@ -148,15 +158,17 @@ function clearFilters() {
     void load();
 }
 
-async function loadRecovery() {
-    recoveryLoading.value = true;
+async function loadRecovery(isSilent = false) {
+    if (!isSilent) recoveryLoading.value = true;
     try {
         const response = await api.get<{ payments: RecoveryPayment[] }>('/api/v1/admin/vending/payment-recovery');
         recoveryItems.value = response.payments ?? [];
     } catch (e: any) {
-        recoveryNotice.value = { tone: 'error', text: e?.message ?? 'Recovery queue failed to load.' };
+        if (!isSilent) {
+            recoveryNotice.value = { tone: 'error', text: e?.message ?? 'Recovery queue failed to load.' };
+        }
     } finally {
-        recoveryLoading.value = false;
+        if (!isSilent) recoveryLoading.value = false;
     }
 }
 
@@ -180,6 +192,81 @@ async function retryRecovery(payment: RecoveryPayment) {
     }
 }
 
+async function retryVendOrder(p: Purchase) {
+    if (actionBusyId.value) return;
+    actionBusyId.value = p.id;
+    error.value = '';
+    try {
+        if (p.status === 'delivery_pending_review') {
+            await api.post(`/api/v1/admin/purchases/${p.id}/resend-remote`, {});
+        } else {
+            await api.post(`/api/v1/admin/purchases/${p.id}/retry-vend`, {});
+        }
+        await load();
+    } catch (e: any) {
+        error.value = e?.message ?? 'Retry failed.';
+    } finally {
+        actionBusyId.value = null;
+    }
+}
+
+async function releaseVendHold(p: Purchase) {
+    if (actionBusyId.value) return;
+    actionBusyId.value = p.id;
+    error.value = '';
+    try {
+        await api.post(`/api/v1/admin/purchases/${p.id}/release-hold`, {});
+        await load();
+    } catch (e: any) {
+        error.value = e?.message ?? 'Release hold failed.';
+    } finally {
+        actionBusyId.value = null;
+    }
+}
+
+const actionBusyId = ref<string | null>(null);
+
+function buildVendingRowActions(p: Purchase): ActionItem[] {
+    const actions: ActionItem[] = [
+        { label: 'View Receipt', icon: 'view', action: () => viewVendReceipt(p) },
+        { label: 'Print Receipt', icon: 'print', action: () => printVendReceipt(p) },
+    ];
+    if (p.token) {
+        actions.push({
+            label: 'Copy Token',
+            icon: 'copy',
+            action: () => copyToken(p.token!),
+        });
+        if (p.status !== 'reversed') {
+            actions.push({
+                label: 'Remote Send',
+                icon: 'send',
+                tone: 'primary',
+                action: () => void retryVendOrder(p),
+            });
+        }
+    }
+    if (['hold_active', 'dispatching', 'delivery_pending_review'].includes(p.status)) {
+        actions.push({
+            label: actionBusyId.value === p.id ? 'Retrying…' : 'Retry Delivery',
+            icon: 'refresh',
+            tone: 'primary',
+            disabled: actionBusyId.value === p.id,
+            action: () => void retryVendOrder(p),
+        });
+    }
+    if (['hold_active', 'created'].includes(p.status)) {
+        actions.push({
+            label: actionBusyId.value === p.id ? 'Releasing…' : 'Release Hold',
+            icon: 'danger',
+            tone: 'danger',
+            disabled: actionBusyId.value === p.id,
+            action: () => void releaseVendHold(p),
+        });
+    }
+    return actions;
+}
+
 watch([status, station, meterType], () => load());
 watch(q, () => {
     if (searchTimer) clearTimeout(searchTimer);
@@ -190,7 +277,7 @@ onMounted(async () => {
     await Promise.all([load(), loadStations(), loadRecovery()]);
     pollTimer = setInterval(() => {
         if (!loading.value) void load();
-        if (!recoveryLoading.value) void loadRecovery();
+        if (!recoveryLoading.value) void loadRecovery(true);
     }, POLL_INTERVAL_MS);
 });
 onUnmounted(() => {
@@ -215,7 +302,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <section v-if="recoveryItems.length || recoveryLoading" class="bw-card recovery-panel" aria-labelledby="recovery-title">
+    <section v-if="recoveryItems.length || recoveryNotice" class="bw-card recovery-panel" aria-labelledby="recovery-title">
       <div class="recovery-head">
         <div>
           <p id="recovery-title" class="recovery-title">Token payment recovery</p>
@@ -316,7 +403,7 @@ onUnmounted(() => {
               <th style="text-align:right">Amount</th>
               <th style="text-align:right">VAT</th>
               <th>Status</th>
-              <th>Receipt</th>
+              <th style="text-align:right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -328,14 +415,14 @@ onUnmounted(() => {
             <tr v-for="p in items" :key="p.id">
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs); white-space:nowrap">{{ shortDate(p.created_at) }}</td>
               <td class="bw-mono" style="font-size: var(--t-xs)">#{{ p.actor_id.slice(0, 8) }}</td>
-              <td>{{ p.customer_name || 'â€”' }}</td>
+              <td>{{ p.customer_name || '—' }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
               <td>
                 <span :class="['bw-badge', p.meter_type === 'three_phase' ? 'info' : 'neutral']">
                   {{ meterTypeLabel(p.meter_type) }}
                 </span>
               </td>
-              <td>{{ p.station_id || 'â€”' }}</td>
+              <td>{{ p.station_id || '—' }}</td>
               <td><span class="bw-badge neutral">{{ p.purchase_mode }}</span></td>
               <td class="bw-money" style="text-align:right">{{ naira(p.amount_minor) }}</td>
               <td class="bw-money" style="text-align:right">{{ naira(p.vat_amount_minor ?? 0) }}</td>
@@ -343,11 +430,11 @@ onUnmounted(() => {
                 <span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span>
                 <div v-if="p.failure_reason" class="bw-muted" style="font-size: 10px; margin-top: 2px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ p.failure_reason }}</div>
               </td>
-              <td>
-                <div class="receipt-actions">
-                  <button class="bw-btn sm" @click="viewVendReceipt(p)">View</button>
-                  <button class="bw-btn sm" @click="printVendReceipt(p)">Print</button>
-                </div>
+              <td style="text-align:right">
+                <WalletRowActions
+                  :items="buildVendingRowActions(p)"
+                  :label="`Actions for purchase #${p.id.slice(0, 8)}`"
+                />
               </td>
             </tr>
             <tr v-if="!items.length && !loading">
@@ -363,7 +450,7 @@ onUnmounted(() => {
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor bw-mono">{{ p.meter_id }}</div>
-              <div class="bw-tc-id bw-mono">#{{ p.actor_id.slice(0, 8) }} Â· {{ shortDate(p.created_at) }}</div>
+              <div class="bw-tc-id bw-mono">#{{ p.actor_id.slice(0, 8) }} · {{ shortDate(p.created_at) }}</div>
             </div>
             <div class="bw-tc-amt bw-money">{{ naira(p.amount_minor) }}</div>
             <div class="bw-muted" style="font-size: var(--t-xs)">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
@@ -388,11 +475,11 @@ onUnmounted(() => {
               <span class="bw-tc-pair-val bw-muted" style="font-size: var(--t-xs)">{{ p.failure_reason }}</span>
             </div>
             <div class="bw-tc-pair">
-              <span class="bw-tc-pair-label">Receipt</span>
-              <span class="receipt-actions">
-                <button class="bw-btn sm" @click="viewVendReceipt(p)">View</button>
-                <button class="bw-btn sm" @click="printVendReceipt(p)">Print</button>
-              </span>
+              <span class="bw-tc-pair-label">Actions</span>
+              <WalletRowActions
+                :items="buildVendingRowActions(p)"
+                :label="`Actions for purchase #${p.id.slice(0, 8)}`"
+              />
             </div>
           </div>
         </div>
