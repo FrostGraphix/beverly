@@ -393,6 +393,7 @@ export async function dispatchGeneratedVendorToken(
             meterId: po.meter_id,
             token: po.token,
             oemId: po.oem_id,
+            stationId: po.station_id,
         }).catch(() => ({ taskId: po.remote_task_id!, status: 'pending' as const, remark: null }));
 
         const deliveryState = status.status === 'success'

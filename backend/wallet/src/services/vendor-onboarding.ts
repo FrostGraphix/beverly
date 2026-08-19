@@ -15,6 +15,7 @@ import { isFlagEnabled } from './feature-flags.js';
 import { env } from '../config/env.js';
 import { normalizeSmsPhone } from './sms-guardrails.js';
 import crypto from 'node:crypto';
+import { encryptSecret } from './oem-registry.js';
 
 export class OnboardingError extends Error {
     constructor(message: string, public code: string) { super(message); this.name = 'OnboardingError'; }
@@ -160,6 +161,34 @@ export async function createVendorOrganization(input: CreateVendorInput): Promis
             vendor_organization_id: organization.id,
         },
     });
+    // 6) Auto-provision OEM credentials profile so vendor name appears on Calinmeter token records
+    try {
+        const oemName = (input.tradingName || input.legalName || 'Beverly Vendor')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '_')
+            .replace(/_+/g, '_')
+            .slice(0, 32);
+
+        const { data: defaultOem } = await adminClient
+            .from('oem_manufacturers')
+            .select('id')
+            .eq('is_seed_default', true)
+            .maybeSingle();
+
+        if (defaultOem) {
+            await adminClient.from('oem_credentials').insert({
+                oem_id: defaultOem.id,
+                station_id: primaryStation,
+                auth_strategy: 'bearer_static',
+                encrypted_username: encryptSecret(oemName),
+                encrypted_password: encryptSecret(tempPwd),
+                encrypted_bearer_token: encryptSecret(env.ENERGY_BEARER_TOKEN),
+                base_url: env.ENERGY_BACKEND_URL,
+            });
+        }
+    } catch {
+        /* Non-blocking: fail-safe if OEM tables unmigrated */
+    }
 
     try {
         let flagOn = false;
