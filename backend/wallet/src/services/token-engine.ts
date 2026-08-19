@@ -109,15 +109,12 @@ export function assertEnergyVendReady(now = Date.now()): void {
 // nothing usable — this is what keeps the live Calinmeter vending flow
 // zero-regression whether or not the registry has been seeded in a given
 // environment. Set OEM_REGISTRY_DISABLED=true to force the legacy path instantly.
-async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
-    const oemConfig = await resolveOemConfig(oemId);
+async function resolveEnergyTarget(oemId?: string, stationId?: string | null): Promise<{ baseUrl: string; authHeader: { name: string; value: string } | null }> {
+    const oemConfig = await resolveOemConfig(oemId, stationId);
     const authHeaderFromOem = resolveOemAuthHeader(oemConfig);
     if (oemConfig && oemConfig.baseUrl && authHeaderFromOem) {
         return { baseUrl: oemConfig.baseUrl, authHeader: authHeaderFromOem };
     }
-    // An explicitly tagged meter must never fall back to a different OEM's
-    // environment credentials. The untagged legacy flow below is the only
-    // path allowed to use the default environment configuration.
     if (oemId) throw new TokenEngineError('OEM energy backend not configured', 'oem_energy_not_configured');
     return {
         baseUrl: env.ENERGY_BACKEND_URL || '',
@@ -125,8 +122,8 @@ async function resolveEnergyTarget(oemId?: string): Promise<{ baseUrl: string; a
     };
 }
 
-async function energyCall<T>(path: string, init: RequestInit = {}, oemId?: string): Promise<T> {
-    const { baseUrl, authHeader } = await resolveEnergyTarget(oemId);
+async function energyCall<T>(path: string, init: RequestInit = {}, oemId?: string, stationId?: string | null): Promise<T> {
+    const { baseUrl, authHeader } = await resolveEnergyTarget(oemId, stationId);
     if (!baseUrl || !authHeader) {
         throw new TokenEngineError('energy backend not configured', 'energy_not_configured');
     }
@@ -752,7 +749,7 @@ export async function generateCreditToken(input: GenerateTokenInput): Promise<Ge
     }>('/api/token/creditToken/generate', {
         method: 'POST',
         body: JSON.stringify(buildCreditTokenPayload(input, { isS2 })),
-    }, input.oemId ?? undefined);
+    }, input.oemId ?? undefined, input.stationId ?? undefined);
     if (!upstreamSucceeded(response)) {
         if (isEnergyAuthorizationRejectedResponse(response)) {
             energyAuthorizationRejectedUntil = Date.now() + ENERGY_AUTHORIZATION_REJECTION_TTL_MS;
@@ -954,6 +951,7 @@ async function waitForRemoteTokenTerminal(input: RemoteSendInput & { taskId: str
                 body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
             },
             input.oemId ?? undefined,
+            input.stationId ?? undefined,
         );
         if (!upstreamSucceeded(lookupResponse)) throw upstreamFailure(lookupResponse, 'remote_status_failed');
         const row = taskRowForRemoteSend(lookupResponse, input);
@@ -980,6 +978,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
                 body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
             },
             input.oemId ?? undefined,
+            input.stationId ?? undefined,
         ).catch(() => null);
 
         if (existingLookup && upstreamSucceeded(existingLookup)) {
@@ -1014,6 +1013,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
             body: JSON.stringify(buildRemoteTokenTaskPayload(input)),
         },
         input.oemId ?? undefined,
+        input.stationId ?? undefined,
     );
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_send_failed');
     let confirmPayload = buildRemoteTaskConfirmPayload(response);
@@ -1031,6 +1031,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
                 body: JSON.stringify(buildRemoteTokenTaskLookupPayload(input)),
             },
             input.oemId ?? undefined,
+            input.stationId ?? undefined,
         );
         if (!upstreamSucceeded(lookupResponse)) throw upstreamFailure(lookupResponse, 'remote_send_lookup_failed');
         confirmPayload = buildRemoteTokenStandbyConfirmPayload(lookupResponse, input);
@@ -1044,6 +1045,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
                 body: JSON.stringify(confirmPayload),
             },
             input.oemId ?? undefined,
+            input.stationId ?? undefined,
         );
         if (!upstreamSucceeded(confirmResponse) && !isAcceptedRemoteConfirm(confirmResponse)) {
             throw upstreamFailure(confirmResponse, 'remote_send_confirm_failed');
@@ -1056,7 +1058,7 @@ export async function createRemoteSendTask(input: RemoteSendInput): Promise<Remo
     return finalTask;
 }
 
-export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick<RemoteSendInput, 'meterId' | 'token' | 'oemId'>> = {}): Promise<RemoteSendResult> {
+export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick<RemoteSendInput, 'meterId' | 'token' | 'oemId' | 'stationId'>> = {}): Promise<RemoteSendResult> {
     const response = await energyCall<{
         code?: number;
         msg?: string;
@@ -1070,6 +1072,7 @@ export async function pollRemoteSendStatus(taskId: string, context: Partial<Pick
             body: JSON.stringify(context.meterId ? buildRemoteTokenTaskLookupPayload({ meterId: context.meterId }) : { taskId, pageNumber: 1, pageSize: 10, orderBy: 'createDate desc' }),
         },
         context.oemId ?? undefined,
+        context.stationId ?? undefined,
     );
     if (!upstreamSucceeded(response)) throw upstreamFailure(response, 'remote_status_failed');
     const row = taskRowForRemoteSend(response, { meterId: context.meterId ?? '', token: context.token ?? '', taskId }) || collectTaskRows(response).find((item) => Number(item.id ?? item.taskId ?? item.recordId) === Number(taskId));
