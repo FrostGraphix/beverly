@@ -215,7 +215,7 @@ async function copyToken() {
 }
 
 async function forceResend() {
-    if (!props.apiEndpoint || !props.fetcher) return;
+    if (!props.apiEndpoint || !props.fetcher || polling.value) return;
     polling.value = true;
     currentState.value = 'remote_send_pending';
     currentRemark.value = 'Re-transmitting credit payload over-the-air to meter...';

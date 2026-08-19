@@ -45,20 +45,37 @@ function upstreamSucceeded(payload: { code?: number; msg?: string; reason?: stri
     return text.includes('success');
 }
 
+export function cleanFloatingNumbersInMessage(raw: string): string {
+    return raw.replace(/(\d+\.\d{4,})/g, (match) => {
+        const val = parseFloat(match);
+        return isNaN(val) ? match : val.toFixed(2);
+    });
+}
+
 export function classifyEnergyFailure(
     payload: { code?: number; msg?: string; reason?: string },
     fallbackCode: string,
 ): { message: string; code: string; retryable: boolean } {
-    const message = payload.reason || payload.msg || `energy backend returned code ${payload.code}`;
-    const normalized = message.toLowerCase();
+    const rawMessage = payload.reason || payload.msg || `energy backend returned code ${payload.code}`;
+    const cleanedMessage = cleanFloatingNumbersInMessage(rawMessage);
+    const normalized = cleanedMessage.toLowerCase();
     const meterOffline = /meter\s*(?:no\.?\s*)?\(?[a-z0-9-]+\)?\s+is\s+offline/.test(normalized)
         || /reading\s+fail/.test(normalized)
         || /meter[^.]{0,80}(?:offline|not\s+online|unreachable)/.test(normalized);
 
-    if (meterOffline) return { message, code: 'meter_offline', retryable: true };
+    if (meterOffline) return { message: cleanedMessage, code: 'meter_offline', retryable: true };
+
+    const isQuotaError = normalized.includes('available balance is') || normalized.includes('insufficient balance') || normalized.includes('balance not enough') || normalized.includes('quota');
+    if (isQuotaError) {
+        return {
+            message: `Calinmeter HES vending quota is insufficient (${cleanedMessage}). Administrator action is required to top up OEM quota.`,
+            code: 'oem_insufficient_quota',
+            retryable: false,
+        };
+    }
 
     return {
-        message,
+        message: cleanedMessage,
         code: fallbackCode,
         retryable: payload.code === 99 || payload.code === 429,
     };
