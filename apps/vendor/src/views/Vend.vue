@@ -538,7 +538,7 @@ function downloadResultReceipt() {
 async function remoteSendGeneratedToken() {
     const current = result.value;
     const orderId = current?.purchaseOrder?.id;
-    if (!orderId) return;
+    if (!orderId || remoteSending.value) return;
     remoteSending.value = true;
     remoteTrackerOpen.value = true;
     error.value = null;
