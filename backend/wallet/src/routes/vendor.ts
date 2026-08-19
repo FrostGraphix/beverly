@@ -1148,6 +1148,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         } catch (error) {
             if (error instanceof VendingError) {
                 const status = error.code === 'insufficient_balance' ? 402
+                    : error.code === 'oem_insufficient_quota' ? 422
                     : error.code === 'wallet_missing' ? 404
                     : error.code === 'station_assignment_required' || error.code === 'cross_station_vend_forbidden' ? 403
                     : error.code === 'wallet_inactive' || error.code === 'wallet_frozen' || error.code === 'wallet_closed' ? 403

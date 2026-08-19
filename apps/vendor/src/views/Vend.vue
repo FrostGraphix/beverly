@@ -271,6 +271,14 @@ function describeApiError(e: unknown, fallback: string) {
                 code: e.code,
             };
         }
+        if (e.code === 'oem_insufficient_quota') {
+            return {
+                title: 'OEM Vending Quota Low',
+                message: e.message,
+                action: 'No wallet debit occurred on your Beverly account. Contact Beverly administrator to top up OEM station quota.',
+                code: e.code,
+            };
+        }
         if (['wallet_inactive', 'wallet_frozen', 'wallet_closed'].includes(String(e.code))) {
             return {
                 title: 'Wallet cannot vend',
