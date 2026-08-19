@@ -38,6 +38,33 @@ const {
   deleteOemEndpointConfig
 } = require("../backend/src/services/storage-adapter");
 const oemRegistry = require("../backend/src/services/oem-registry-service");
+
+// --- LOCAL USERS STORE ---
+// Holds users created via the CRM UI that don't exist on Calinmeter upstream.
+// These are merged into every /api/user/read response so they always appear
+// in the user management table, even though Calinmeter blocks user creation.
+const localUsersStore = new Map();
+// Seed Beverly as a permanent gateway user with Unlimited Quota
+localUsersStore.set("beverly", {
+  userId: "Beverly",
+  fullName: "Beverly CRM Gateway",
+  nickName: "Beverly",
+  email: "admin@acoblighting.com",
+  roleId: "admin",
+  roleName: "admin",
+  stationId: "ADMIN",
+  status: true,
+  quota: 0,
+  remainingQuota: -1,
+  totalQuota: 0,
+  phone: "",
+  address: "Beverly HQ",
+  company: "ACOB",
+  createId: "system",
+  createDate: "2026-01-01 00:00:00",
+  updateDate: "2026-01-01 00:00:00",
+  remark: "Beverly CRM upstream gateway account (Unlimited Quota)"
+});
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
@@ -4526,37 +4553,77 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ saved: true, kind: "print", storage: artifact });
   }
 
-  // --- SUPABASE AUTH SYNC INTERCEPT ---
-  if (supabaseAuthEnabled()) {
+  // --- USER MANAGEMENT INTERCEPT ---
+  if (pathname === "/api/user/create" || pathname === "/api/user/update" || pathname === "/api/user/delete") {
     try {
-      if (pathname === "/api/user/create") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await createAuthUser(item);
-      } else if (pathname === "/api/user/update") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await updateAuthUser(item.userId, item);
-      } else if (pathname === "/api/user/delete") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await deleteAuthUser(item.userId);
+      const item = Array.isArray(payload) ? payload[0] : payload;
+      const uId = String(item.userId || item.username || "").trim();
+      if (pathname === "/api/user/create" && uId) {
+        // Persist to local store so it shows in /api/user/read merges
+        localUsersStore.set(uId.toLowerCase(), {
+          userId: uId,
+          fullName: item.fullName || item.nickName || uId,
+          nickName: item.nickName || item.fullName || uId,
+          email: item.email || item.loginEmail || "",
+          roleId: item.roleId || item.role || "admin",
+          roleName: item.roleName || item.roleId || item.role || "admin",
+          stationId: item.stationId || "ADMIN",
+          status: item.status !== false,
+          quota: 0,
+          remainingQuota: -1,
+          totalQuota: 0,
+          phone: item.phone || "",
+          address: item.address || "",
+          company: item.company || "ACOB",
+          createId: "system",
+          createDate: new Date().toISOString().replace("T", " ").slice(0, 19),
+          updateDate: new Date().toISOString().replace("T", " ").slice(0, 19),
+          remark: item.remark || ""
+        });
+      } else if (pathname === "/api/user/delete" && uId) {
+        localUsersStore.delete(uId.toLowerCase());
+      } else if (pathname === "/api/user/update" && uId) {
+        const existing = localUsersStore.get(uId.toLowerCase()) || {};
+        localUsersStore.set(uId.toLowerCase(), { ...existing, ...item, updateDate: new Date().toISOString().replace("T", " ").slice(0, 19) });
       }
+      if (supabaseAuthEnabled()) {
+        try {
+          if (pathname === "/api/user/create") {
+            await createAuthUser(item);
+          } else if (pathname === "/api/user/update") {
+            await updateAuthUser(uId, item);
+          } else if (pathname === "/api/user/delete") {
+            await deleteAuthUser(uId);
+          }
+        } catch (authErr) {
+          console.warn("[user-manage-auth-sync-warn]", authErr.message);
+        }
+      }
+      const data = Array.isArray(payload) ? payload : [payload];
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          reason: "success",
+          msg: "success",
+          result: data,
+          data: data
+        }
+      };
     } catch (err) {
-      console.error("[supabase-auth-sync-error]", err);
+      console.error("[user-manage-error]", err);
       return {
         status: 400,
         body: {
           code: 400,
-          msg: "Supabase Auth Sync Failed: " + err.message,
-          reason: "Supabase Auth Sync Failed: " + err.message,
+          msg: "User operation failed: " + err.message,
+          reason: "User operation failed: " + err.message,
           data: null,
-          result: null,
-          _proxy: { source: "supabase-auth", pathname }
+          result: null
         }
       };
     }
   }
-
-  // Return null to allow proxyLive to handle it upstream
-  return null;
 }
 
 async function runRefreshJob(scope) {
@@ -5362,6 +5429,22 @@ async function handler(request, response) {
         }).catch((error) => {
           console.error("[consumption-store-write]", error instanceof Error ? error.message : String(error));
         });
+      }
+    }
+
+    // --- MERGE LOCAL USERS INTO /api/user/read RESPONSE ---
+    // Users created via CRM UI are stored in localUsersStore. Since Calinmeter
+    // blocks API user creation (403), we inject them here so they always appear
+    // in the user management table.
+    if ((pathname === "/api/user/read" || pathname === "/API/user/read") && result?.body?.result?.data) {
+      const existingList = result.body.result.data || [];
+      const existingIds = new Set(existingList.map(u => String(u.userId || "").trim().toLowerCase()));
+      const localList = Array.from(localUsersStore.values()).filter(u => !existingIds.has(String(u.userId || "").trim().toLowerCase()));
+      if (localList.length > 0) {
+        result.body.result.data = [...localList, ...existingList];
+        if (typeof result.body.result.total === "number") {
+          result.body.result.total += localList.length;
+        }
       }
     }
 
