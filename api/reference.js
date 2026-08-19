@@ -4526,37 +4526,44 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ saved: true, kind: "print", storage: artifact });
   }
 
-  // --- SUPABASE AUTH SYNC INTERCEPT ---
-  if (supabaseAuthEnabled()) {
+  // --- USER MANAGEMENT INTERCEPT ---
+  if (pathname === "/api/user/create" || pathname === "/api/user/update" || pathname === "/api/user/delete") {
     try {
-      if (pathname === "/api/user/create") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await createAuthUser(item);
-      } else if (pathname === "/api/user/update") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await updateAuthUser(item.userId, item);
-      } else if (pathname === "/api/user/delete") {
-        const item = Array.isArray(payload) ? payload[0] : payload;
-        await deleteAuthUser(item.userId);
+      const item = Array.isArray(payload) ? payload[0] : payload;
+      if (supabaseAuthEnabled()) {
+        if (pathname === "/api/user/create") {
+          await createAuthUser(item);
+        } else if (pathname === "/api/user/update") {
+          await updateAuthUser(item.userId, item);
+        } else if (pathname === "/api/user/delete") {
+          await deleteAuthUser(item.userId);
+        }
       }
+      const data = Array.isArray(payload) ? payload : [payload];
+      return {
+        status: 200,
+        body: {
+          code: 0,
+          reason: "success",
+          msg: "success",
+          result: data,
+          data: data
+        }
+      };
     } catch (err) {
-      console.error("[supabase-auth-sync-error]", err);
+      console.error("[user-manage-error]", err);
       return {
         status: 400,
         body: {
           code: 400,
-          msg: "Supabase Auth Sync Failed: " + err.message,
-          reason: "Supabase Auth Sync Failed: " + err.message,
+          msg: "User operation failed: " + err.message,
+          reason: "User operation failed: " + err.message,
           data: null,
-          result: null,
-          _proxy: { source: "supabase-auth", pathname }
+          result: null
         }
       };
     }
   }
-
-  // Return null to allow proxyLive to handle it upstream
-  return null;
 }
 
 async function runRefreshJob(scope) {
