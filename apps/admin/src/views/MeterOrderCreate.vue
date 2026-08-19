@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, ApiError } from '../lib/api';
@@ -25,6 +25,7 @@ const vendorResults = ref<VendorOrg[]>([]);
 const selectedCustomer = ref<WalletCustomer | null>(null);
 const selectedVendor = ref<VendorOrg | null>(null);
 const sponsorMode = ref<'manual_paid' | 'vendor_wallet'>('manual_paid');
+const propertyCategory = ref<'residential' | 'commercial'>('residential');
 const meterType = ref<'single_phase' | 'three_phase'>('single_phase');
 const propertyAddress = ref('');
 const serviceArea = ref('');
@@ -35,18 +36,33 @@ const searchBusy = ref(false);
 const vendorBusy = ref(false);
 const error = ref('');
 
-const priceMinor = computed(() => meterType.value === 'three_phase' ? 7_500_000 : 5_000_000);
+const prices = ref<{ residential_minor: number; commercial_minor: number }>({
+    residential_minor: 3_000_000,
+    commercial_minor: 15_000_000,
+});
+
+async function loadPrices() {
+    try {
+        const res = await api.get<{ residential_minor: number; commercial_minor: number }>('/api/v1/admin/meter-pricing');
+        if (res.residential_minor) prices.value = res;
+    } catch {
+        // use fallback default
+    }
+}
+
+onMounted(() => {
+    loadPrices();
+});
+
+const priceMinor = computed(() =>
+    propertyCategory.value === 'commercial' ? prices.value.commercial_minor : prices.value.residential_minor
+);
 const priceLabel = computed(() => `NGN ${(priceMinor.value / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 async function lookupCustomers() {
     searchBusy.value = true;
     error.value = '';
     try {
-        // Deliberately NOT /admin/customers — that list is station-scoped for
-        // staff, which would hide the customer we're about to onboard a first
-        // meter for (they have no customer_meters row, and therefore no
-        // station, yet). This endpoint searches all customers instead, gated
-        // by the same permission required to create the order.
         const response = await api.get<{ customers: WalletCustomer[]; error?: string }>(
             `/api/v1/admin/meter-orders/customer-search?limit=12&q=${encodeURIComponent(customerSearch.value.trim())}`,
         );
@@ -96,6 +112,7 @@ async function submit() {
         await api.post('/api/v1/admin/meter-orders', {
             customer_id: selectedCustomer.value.id,
             meter_type: meterType.value,
+            property_category: propertyCategory.value,
             property_address: propertyAddress.value.trim(),
             service_area: serviceArea.value.trim(),
             contact_phone: contactPhone.value.trim(),
@@ -115,9 +132,12 @@ async function submit() {
 <template>
   <AppShell title="New Meter Order">
     <div class="bw-stack" style="gap: var(--s-4)">
-      <div class="bw-card">
-        <div class="bw-page-title">Create meter order</div>
-        <p class="bw-page-sub">Staff can log assisted orders or charge a vendor wallet for a customer.</p>
+      <div class="bw-card bw-row" style="justify-content: space-between; align-items: center">
+        <div>
+          <div class="bw-page-title">Create meter order</div>
+          <p class="bw-page-sub">Staff can log assisted orders or charge a vendor wallet for a customer.</p>
+        </div>
+        <router-link to="/meter-pricing" class="bw-btn sm">Edit meter prices →</router-link>
       </div>
 
       <div class="bw-card bw-stack" style="gap: var(--s-3)">
@@ -163,6 +183,13 @@ async function submit() {
       </div>
 
       <div class="bw-card bw-stack" style="gap: var(--s-3)">
+        <label class="bw-label">Property category (pricing axis)</label>
+        <div class="bw-row" style="gap: var(--s-2); flex-wrap: wrap">
+          <button :class="['bw-btn', propertyCategory === 'residential' ? 'primary' : '']" @click="propertyCategory = 'residential'">Residential (NGN {{ (prices.residential_minor / 100).toLocaleString() }})</button>
+          <button :class="['bw-btn', propertyCategory === 'commercial' ? 'primary' : '']" @click="propertyCategory = 'commercial'">Commercial (NGN {{ (prices.commercial_minor / 100).toLocaleString() }})</button>
+        </div>
+
+        <label class="bw-label" style="margin-top: var(--s-2)">Meter type</label>
         <div class="bw-row" style="gap: var(--s-2); flex-wrap: wrap">
           <button :class="['bw-btn', meterType === 'single_phase' ? 'primary' : '']" @click="meterType = 'single_phase'">Single phase</button>
           <button :class="['bw-btn', meterType === 'three_phase' ? 'primary' : '']" @click="meterType = 'three_phase'">Three phase</button>
@@ -188,6 +215,7 @@ async function submit() {
       <div class="bw-card">
         <div class="bw-review-row"><span class="bw-muted">Customer</span><strong>{{ selectedCustomer?.full_name || '—' }}</strong></div>
         <div class="bw-review-row"><span class="bw-muted">Sponsor</span><strong>{{ sponsorMode === 'vendor_wallet' ? (selectedVendor?.trading_name || selectedVendor?.legal_name || '—') : 'Staff assisted' }}</strong></div>
+        <div class="bw-review-row"><span class="bw-muted">Property category</span><strong>{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }}</strong></div>
         <div class="bw-review-row"><span class="bw-muted">Meter type</span><strong>{{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }}</strong></div>
         <div class="bw-review-row"><span class="bw-muted">Amount</span><strong>{{ priceLabel }}</strong></div>
       </div>

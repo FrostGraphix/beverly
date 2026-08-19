@@ -519,7 +519,7 @@ export async function dispatchGeneratedCustomerToken(
 
     const po = data as PurchaseOrder;
     if (!po.token) throw new CustomerPurchaseError('This purchase has no generated token to send.', 'token_missing');
-    if (po.status !== 'delivered') throw new CustomerPurchaseError('Only delivered token purchases can be remote sent.', 'purchase_not_delivered');
+    if (po.status === 'reversed') throw new CustomerPurchaseError('Reversed token purchases cannot be remote sent.', 'purchase_reversed');
     if (po.remote_task_id && po.delivery_state === 'remote_send_delivered') {
         return {
             purchaseOrder: po,
@@ -527,6 +527,15 @@ export async function dispatchGeneratedCustomerToken(
             deliveryState: 'remote_send_delivered',
             status: 'success',
             remark: null,
+        };
+    }
+    if (po.remote_task_id && ['remote_send_failed_needs_manual_entry', 'remote_send_failed'].includes(String(po.delivery_state))) {
+        return {
+            purchaseOrder: po,
+            remoteTaskId: po.remote_task_id,
+            deliveryState: po.delivery_state || 'remote_send_failed_needs_manual_entry',
+            status: 'failed',
+            remark: po.failure_reason || 'Remote send failed. Enter token manually.',
         };
     }
     if (po.remote_task_id && ['remote_send_pending', 'remote_send_pending_review'].includes(String(po.delivery_state))) {

@@ -3,6 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -16,6 +19,101 @@ const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
 const filter    = ref<'all' | 'delivered' | 'failed' | 'pending'>('all');
+
+const selectedRemoteOrder = ref<any | null>(null);
+const remoteTrackerOpen = ref(false);
+const copiedId = ref<string | null>(null);
+const toastNotice = ref<{ message: string; tone: string } | null>(null);
+
+function triggerRemoteSend(p: any) {
+    selectedRemoteOrder.value = p;
+    remoteTrackerOpen.value = true;
+}
+
+async function copyRowToken(p: any) {
+    if (!p.token) return;
+    try {
+        await navigator.clipboard.writeText(p.token);
+        copiedId.value = p.id;
+        toastNotice.value = { message: `Token copied for meter ${p.meter_id}`, tone: 'success' };
+        setTimeout(() => { copiedId.value = null; toastNotice.value = null; }, 2000);
+    } catch {
+        toastNotice.value = { message: 'Copy failed.', tone: 'danger' };
+    }
+}
+
+async function fetchRemoteSendStatus(endpoint: string) {
+    try {
+        return await api.get<any>(endpoint);
+    } catch (err: any) {
+        const data = err?.details || err?.data || err?.response?.data;
+        if (data && typeof data === 'object') {
+            return {
+                status: 'failed',
+                deliveryState: data.delivery_state || data.deliveryState || 'remote_send_failed_needs_manual_entry',
+                remark: data.message || data.remark || data.error || err.message || 'Remote send failed',
+                purchaseOrder: data.purchaseOrder,
+                remoteTaskId: data.remoteTaskId || data.remote_task_id,
+            };
+        }
+        try {
+            return await api.post<any>(endpoint, {});
+        } catch (postErr: any) {
+            const postData = postErr?.details || postErr?.data || postErr?.response?.data;
+            if (postData && typeof postData === 'object') {
+                return {
+                    status: 'failed',
+                    deliveryState: postData.delivery_state || postData.deliveryState || 'remote_send_failed_needs_manual_entry',
+                    remark: postData.message || postData.remark || postData.error || postErr.message || 'Remote send failed',
+                    purchaseOrder: postData.purchaseOrder,
+                    remoteTaskId: postData.remoteTaskId || postData.remote_task_id,
+                };
+            }
+            return {
+                status: 'failed',
+                deliveryState: 'remote_send_failed_needs_manual_entry',
+                remark: postErr?.message || err?.message || 'Remote send failed',
+            };
+        }
+    }
+}
+
+function isUndeliveredWithToken(p: any) {
+    const isDelivered = (p.status === 'delivered' || (p.delivery_state && String(p.delivery_state).toUpperCase() === 'DELIVERED'));
+    return Boolean(p.token && !isDelivered);
+}
+
+function buildCustomerRowActions(p: any): ActionItem[] {
+    const items: ActionItem[] = [];
+    if (canReceipt(p)) {
+        items.push({
+            label: 'View receipt',
+            icon: 'view',
+            action: () => viewPurchaseReceipt(p),
+        });
+        items.push({
+            label: 'Print receipt',
+            icon: 'print',
+            action: () => printPurchaseReceipt(p),
+        });
+    }
+    if (p.token) {
+        items.push({
+            label: copiedId.value === p.id ? '✓ Copied' : 'Copy token',
+            icon: 'copy',
+            action: () => copyRowToken(p),
+        });
+    }
+    if (isUndeliveredWithToken(p)) {
+        items.push({
+            label: 'Remote Send',
+            icon: 'send',
+            tone: 'primary',
+            action: () => triggerRemoteSend(p),
+        });
+    }
+    return items;
+}
 
 onMounted(async () => {
     loading.value = true;
@@ -66,7 +164,7 @@ function statusLabel(p: any) {
 }
 
 function canReceipt(p: any) {
-    return p.status === 'delivered' && !!p.receipt_id;
+    return Boolean(p.token || p.status === 'delivered' || p.receipt_id || (p.amount_minor && p.amount_minor > 0));
 }
 
 function viewPurchaseReceipt(p: any) {
@@ -146,7 +244,7 @@ function printPurchaseReceipt(p: any) {
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
-              <th>Receipt</th>
+              <th style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -158,11 +256,12 @@ function printPurchaseReceipt(p: any) {
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ statusLabel(p) }}</span></td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0,12) + '...' : '-' }}</td>
-              <td>
-                <div v-if="canReceipt(p)" class="receipt-actions">
-                  <button class="bw-btn bw-btn-sm" @click="viewPurchaseReceipt(p)">View</button>
-                  <button class="bw-btn bw-btn-sm" @click="printPurchaseReceipt(p)">Print</button>
-                </div>
+              <td style="text-align:center">
+                <WalletRowActions
+                  v-if="buildCustomerRowActions(p).length"
+                  :items="buildCustomerRowActions(p)"
+                  label="Transaction actions"
+                />
                 <span v-else class="bw-muted">-</span>
               </td>
             </tr>
@@ -197,12 +296,13 @@ function printPurchaseReceipt(p: any) {
               <span class="bw-tc-pair-label">Token</span>
               <span class="bw-tc-pair-val bw-mono" style="font-size: var(--t-xs)">{{ p.token.slice(0,16) }}…</span>
             </div>
-            <div class="bw-tc-pair" v-if="canReceipt(p)">
-              <span class="bw-tc-pair-label">Receipt</span>
-              <span class="receipt-actions">
-                <button class="bw-btn bw-btn-sm" @click="viewPurchaseReceipt(p)">View</button>
-                <button class="bw-btn bw-btn-sm" @click="printPurchaseReceipt(p)">Print</button>
-              </span>
+            <div class="bw-tc-pair" v-if="buildCustomerRowActions(p).length">
+              <span class="bw-tc-pair-label">Actions</span>
+              <WalletRowActions
+                :items="buildCustomerRowActions(p)"
+                label="Transaction actions"
+                align="right"
+              />
             </div>
           </div>
         </div>
@@ -227,5 +327,25 @@ function printPurchaseReceipt(p: any) {
         </div>
       </div>
     </div>
+
+    <!-- Toast Notification for Action Feedback -->
+    <div v-if="toastNotice" class="bw-toast-bar" :class="toastNotice.tone" style="position: fixed; bottom: 24px; right: 24px; z-index: 1000; padding: 12px 20px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--brand); color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.4)">
+      <span>{{ toastNotice.message }}</span>
+    </div>
+
+    <!-- Remote Send Tracker Modal for Customer -->
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="selectedRemoteOrder?.id"
+      :meter-id="selectedRemoteOrder?.meter_id"
+      :token="selectedRemoteOrder?.token"
+      :amount-minor="selectedRemoteOrder?.amount_minor"
+      :units-kwh="selectedRemoteOrder?.units_kwh"
+      :delivery-state="selectedRemoteOrder?.delivery_state"
+      :remote-task-id="selectedRemoteOrder?.remote_task_id"
+      :api-endpoint="selectedRemoteOrder?.id ? `/api/v1/customer/purchase/${selectedRemoteOrder.id}/remote-send` : null"
+      :fetcher="fetchRemoteSendStatus"
+      @updated="(res: any) => { if (res.purchaseOrder && selectedRemoteOrder) selectedRemoteOrder = { ...selectedRemoteOrder, ...res.purchaseOrder }; }"
+    />
   </AppShell>
 </template>

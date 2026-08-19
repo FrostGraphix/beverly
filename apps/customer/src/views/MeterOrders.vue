@@ -2,13 +2,14 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 
 const route = useRoute();
 
 interface MeterOrder {
     id: string;
     meter_type: 'single_phase' | 'three_phase';
+    property_category?: 'residential' | 'commercial';
     property_address: string;
     service_area: string;
     contact_phone: string;
@@ -24,7 +25,7 @@ interface MeterOrder {
 const orders = ref<MeterOrder[]>([]);
 const loading = ref(true);
 const verifying = ref(false);
-const verifiedRef = ref('');
+const verifyNotice = ref<{ orderId: string; message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
 const STATUS_LABEL: Record<string, string> = {
     pending_payment: 'Awaiting Payment',
@@ -59,12 +60,32 @@ async function load() {
 
 async function verifyPayment(orderId: string) {
     verifying.value = true;
+    verifyNotice.value = null;
     try {
         const updated = await api.post<MeterOrder>(`/api/v1/customer/meter-orders/${orderId}/verify-payment`);
         const idx = orders.value.findIndex(o => o.id === orderId);
         if (idx >= 0) orders.value[idx] = updated;
-        verifiedRef.value = orderId;
-    } catch { /* noop */ } finally {
+
+        if (['paid', 'assigned', 'dispatched', 'installed'].includes(updated.status)) {
+            verifyNotice.value = {
+                orderId,
+                type: 'success',
+                message: 'Payment confirmed! Beverly will contact you within 2 business days to schedule installation.',
+            };
+        } else {
+            verifyNotice.value = {
+                orderId,
+                type: 'warning',
+                message: 'Payment has not been completed on Paystack yet. Order remains awaiting payment.',
+            };
+        }
+    } catch (e: any) {
+        verifyNotice.value = {
+            orderId,
+            type: 'error',
+            message: e instanceof ApiError ? e.message : 'Could not verify payment status.',
+        };
+    } finally {
         verifying.value = false;
     }
 }
@@ -90,10 +111,11 @@ onMounted(async () => {
       <RouterLink to="/buy-meter" class="bw-btn small primary" style="text-decoration:none">+ New order</RouterLink>
     </div>
 
-    <!-- Success banner after payment -->
-    <div v-if="verifiedRef" class="bw-success-banner">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      Payment confirmed! Beverly will contact you within 2 business days to schedule installation.
+    <!-- Notice banner after payment verification -->
+    <div v-if="verifyNotice" :class="['bw-notice-banner', verifyNotice.type]">
+      <svg v-if="verifyNotice.type === 'success'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>{{ verifyNotice.message }}</span>
     </div>
 
     <div v-if="loading" class="bw-spinner-wrap">
@@ -120,6 +142,10 @@ onMounted(async () => {
 
         <div class="bw-order-details">
           <div class="bw-detail-row">
+            <span class="bw-muted">Property category</span>
+            <span style="font-weight:600">{{ order.property_category === 'commercial' ? 'Commercial' : 'Residential' }}</span>
+          </div>
+          <div class="bw-detail-row">
             <span class="bw-muted">Address</span>
             <span>{{ order.property_address }}</span>
           </div>
@@ -129,7 +155,7 @@ onMounted(async () => {
           </div>
           <div class="bw-detail-row">
             <span class="bw-muted">Amount</span>
-            <span style="font-weight:600">{{ fmt(order.amount_minor) }}</span>
+            <span style="font-weight:600; color:var(--brand)">{{ fmt(order.amount_minor) }}</span>
           </div>
           <div v-if="order.technician_name" class="bw-detail-row">
             <span class="bw-muted">Technician</span>
@@ -157,15 +183,28 @@ onMounted(async () => {
 
 <style scoped>
 .bw-page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--s-4); }
-.bw-success-banner {
+.bw-notice-banner {
   display: flex; align-items: center; gap: var(--s-2);
   padding: var(--s-3) var(--s-4);
-  background: oklch(70% 0.19 145 / 0.12);
-  border: 1px solid oklch(70% 0.19 145 / 0.25);
   border-radius: var(--r-md);
   margin-bottom: var(--s-4);
   font-size: var(--t-sm);
+  font-weight: 500;
+}
+.bw-notice-banner.success {
+  background: color-mix(in srgb, var(--brand) 15%, transparent);
   color: var(--brand);
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+}
+.bw-notice-banner.warning {
+  background: color-mix(in srgb, oklch(75% 0.18 70) 15%, transparent);
+  color: oklch(75% 0.18 70);
+  border: 1px solid color-mix(in srgb, oklch(75% 0.18 70) 30%, transparent);
+}
+.bw-notice-banner.error {
+  background: color-mix(in srgb, oklch(60% 0.22 25) 15%, transparent);
+  color: oklch(60% 0.22 25);
+  border: 1px solid color-mix(in srgb, oklch(60% 0.22 25) 30%, transparent);
 }
 .bw-spinner-wrap { display: grid; place-items: center; padding: var(--s-10); }
 .bw-spinner { width: 28px; height: 28px; border: 2.5px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.7s linear infinite; }

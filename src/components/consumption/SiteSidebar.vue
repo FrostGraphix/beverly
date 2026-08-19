@@ -17,6 +17,7 @@
 <script>
 import BaseButton from "../base/BaseButton.vue";
 import { stationOptionsSync } from "../../services/station-registry.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../../services/table-service.js";
 
 const COLORS = ["#40c9c6", "#10b981", "#f4516c", "#34bfa3", "#ffb822"];
 
@@ -27,11 +28,21 @@ export default {
     activeStation: { type: String, default: null },
     accountCounts: { type: Object, default: () => ({}) }
   },
+  mounted() {
+    loadDynamicStationOptions(undefined, true).catch(() => null);
+  },
   computed: {
     stations() {
+      const dynamic = tableSiteOptions.filter((s) => s.value).map((s) => ({ stationId: s.value, label: s.label }));
+      const synced = stationOptionsSync();
+      const map = new Map();
+      [...synced, ...dynamic].forEach((item) => {
+        if (item.stationId) map.set(item.stationId, item.label || item.stationId);
+      });
+      const list = Array.from(map.entries()).map(([id, label]) => ({ stationId: id, label }));
       return [
         { id: null,      label: "All Sites", color: "var(--primary)",  count: null },
-        ...stationOptionsSync().map((station, index) => ({
+        ...list.map((station, index) => ({
           id: station.stationId,
           label: station.label,
           color: COLORS[index % COLORS.length],

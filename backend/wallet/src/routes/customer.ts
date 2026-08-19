@@ -71,7 +71,7 @@ import {
     signDisputeEvidencePaths, toDisputeEvidencePath, DisputeEvidenceError,
 } from '../services/dispute-evidence.js';
 import { runMalwareScan } from '../services/file-scan.js';
-import { createCustomerPortalMeterOrder } from '../services/meter-orders.js';
+import { createCustomerPortalMeterOrder, getMeterPrices } from '../services/meter-orders.js';
 import {
     abandonWalletIdempotency,
     assertClientIdempotencyKey,
@@ -936,7 +936,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── TRANSACTIONS & RECEIPTS ───────────────────────────────────────────────
 
-    fastify.post('/purchase/:purchaseOrderId/remote-send', { preHandler: fastify.requireKycTier(1) }, async (req, reply) => {
+    const handleCustomerRemoteSend = async (req: any, reply: any) => {
         const params = z.object({
             purchaseOrderId: z.string().uuid(),
         }).parse(req.params);
@@ -951,11 +951,21 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 const status = e.code === 'purchase_not_found' ? 404
                     : e.code === 'token_missing' || e.code === 'purchase_not_delivered' ? 409
                     : 422;
-                return reply.code(status).send({ error: e.code, message: e.message });
+                return reply.code(status).send({
+                    error: e.code,
+                    message: e.message,
+                    status: 'failed',
+                    deliveryState: 'remote_send_failed_needs_manual_entry',
+                    delivery_state: 'remote_send_failed_needs_manual_entry',
+                    remark: e.message,
+                });
             }
             throw e;
         }
-    });
+    };
+
+    fastify.post('/purchase/:purchaseOrderId/remote-send', { preHandler: fastify.requireKycTier(1) }, handleCustomerRemoteSend);
+    fastify.get('/purchase/:purchaseOrderId/remote-send', { preHandler: fastify.requireKycTier(1) }, handleCustomerRemoteSend);
 
     fastify.post('/profile-picture/activate', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const { path } = z.object({ path: z.string().min(1).max(500) }).parse(req.body ?? {});
@@ -1016,9 +1026,14 @@ const customer: FastifyPluginAsync = async (fastify) => {
 
     // ── METER ORDERS ─────────────────────────────────────────────────────────
 
+    fastify.get('/meter-pricing', async () => {
+        return getMeterPrices();
+    });
+
     fastify.post('/meter-orders', { preHandler: fastify.requireCustomer() }, async (req, reply) => {
         const schema = z.object({
             meter_type: z.enum(['single_phase', 'three_phase']),
+            property_category: z.enum(['residential', 'commercial']).optional(),
             property_address: z.string().min(5),
             service_area: z.string().min(2),
             contact_phone: z.string().min(8),
@@ -1035,6 +1050,7 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 customerId: req.actor!.customerId!,
                 customerUserId: req.actor!.userId,
                 meterType: body.meter_type,
+                propertyCategory: body.property_category,
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
@@ -1049,7 +1065,11 @@ const customer: FastifyPluginAsync = async (fastify) => {
                 actorType: 'customer',
                 action: 'meter_order.created',
                 targetId: result.order.id,
-                metadata: { meter_type: body.meter_type, source_channel: 'customer_portal' },
+                metadata: {
+                    meter_type: body.meter_type,
+                    property_category: body.property_category ?? 'residential',
+                    source_channel: 'customer_portal',
+                },
             });
             return { order: result.order, authorization_url: result.authorizationUrl };
         } catch (error: any) {

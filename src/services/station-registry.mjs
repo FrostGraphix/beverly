@@ -17,6 +17,21 @@ export function canonicalStationId(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 
+export function formatStationDisplayLabel(stationId, rawLabel = "") {
+  const normId = String(stationId || "").trim();
+  const normLabel = String(rawLabel || "").trim();
+  const target = normLabel || normId;
+  if (!target) return "";
+  const upper = target.toUpperCase();
+  if (upper === "MILE 9" || upper === "MILE_9" || upper === "MILE 9 & 10" || upper === "MILE 9 AND 10") {
+    return "Mile 9 & 10";
+  }
+  if (target === upper && target.length > 1 && !/^\d+$/.test(target)) {
+    return target.charAt(0).toUpperCase() + target.slice(1).toLowerCase();
+  }
+  return target;
+}
+
 function normalize(rows) {
   const byId = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -86,7 +101,28 @@ export function isKnownStation(stationId) {
   return Boolean(id) && stationsSync().includes(id);
 }
 
+const mutationListeners = new Set();
+
+export function onStationMutation(listener) {
+  if (typeof listener === "function") {
+    mutationListeners.add(listener);
+    return () => mutationListeners.delete(listener);
+  }
+  return () => {};
+}
+
 export function invalidateStations() {
   cachedOptions = null;
   cachedAt = 0;
+}
+
+export function notifyStationMutation() {
+  invalidateStations();
+  for (const listener of mutationListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore listener error
+    }
+  }
 }

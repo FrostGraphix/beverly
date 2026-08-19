@@ -199,8 +199,10 @@
 }
 
 .bw-balance-hero {
-  background: radial-gradient(100% 80% at 0% 0%, var(--brand-glow), transparent 60%), var(--glass-bg);
-  border: 1px solid oklch(70% 0.19 145 / 0.28);
+  background: 
+    radial-gradient(120% 100% at 0% 0%, var(--brand-glow, rgba(34, 197, 94, 0.18)), transparent 65%),
+    var(--glass-bg);
+  border: 1px solid oklch(70% 0.19 145 / 0.32);
   border-radius: var(--r-xl);
   padding: var(--s-5);
   position: relative;
@@ -214,10 +216,47 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: -100%;
+  width: 300%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--brand), #86efac, var(--brand), transparent);
+  animation: bw-shimmer-sweep 4s linear infinite;
+}
+
+@keyframes bw-shimmer-sweep {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(50%); }
+}
+
+/* Shimmering Text Effect */
+.bw-token-shimmer {
+  background: linear-gradient(90deg, #86efac 0%, #ffffff 50%, #22c55e 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: bw-text-shimmer 3s ease infinite;
+}
+
+@keyframes bw-text-shimmer {
+  0% { background-position: 0% center; }
+  50% { background-position: 100% center; }
+  100% { background-position: 0% center; }
+}
+
+/* Shimmering Card Accent */
+.bw-card-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.bw-card-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 300%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  background: linear-gradient(90deg, transparent, oklch(70% 0.19 145 / 0.45), transparent);
+  animation: bw-shimmer-sweep 5s linear infinite;
 }
 
 .bw-otp-row {

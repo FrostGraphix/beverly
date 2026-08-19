@@ -10,11 +10,38 @@
         <span>Showing cached / offline data — live connection unavailable.</span>
         <BaseButton variant="ghost" size="sm" class="stale-refresh-link" @click="load">Refresh</BaseButton>
       </div>
-      <section v-if="managementStatCards.length" class="management-stat-grid" aria-label="Management summary">
-        <article v-for="card in managementStatCards" :key="card.label" class="management-stat-card" :class="`tone-${card.tone}`">
-          <span>{{ card.label }}</span>
-          <strong>{{ formatStatValue(card.value) }}</strong>
-          <small v-if="card.hint" class="management-stat-hint">{{ card.hint }}</small>
+      <section v-if="managementStatCards.length || statsLoading" class="management-stat-grid" aria-label="Management summary">
+        <!-- skeleton placeholders shown while stats are loading -->
+        <template v-if="statsLoading && !managementStatCards.length">
+          <article v-for="n in skeletonCardCount" :key="'sk-' + n" class="management-stat-card management-stat-card--skeleton">
+            <div class="msc-skeleton-icon"></div>
+            <div class="msc-skeleton-label"></div>
+            <div class="msc-skeleton-value"></div>
+            <div class="msc-skeleton-hint"></div>
+          </article>
+        </template>
+        <!-- real cards -->
+        <article
+          v-for="card in managementStatCards"
+          :key="card.label"
+          class="management-stat-card"
+          :class="`tone-${card.tone}`"
+        >
+          <!-- top row: label left · icon chip right -->
+          <div class="msc-top">
+            <span class="msc-label">{{ card.label }}</span>
+            <span class="msc-icon-wrap" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path :d="card.icon" />
+              </svg>
+            </span>
+          </div>
+          <!-- hero metric -->
+          <strong class="msc-value">{{ formatStatValue(card.value) }}</strong>
+          <!-- footer: hint + delta badge -->
+          <div class="msc-footer">
+            <small v-if="card.hint" class="msc-hint">{{ card.hint }}</small>
+          </div>
         </article>
       </section>
     </template>
@@ -413,6 +440,7 @@ export default {
       loadToken: 0,
       managementStats: null,
       managementStatsKey: "",
+      statsLoading: false,
       dataSource: "",
       pendingBindings: [],
       showPendingDetail: false,
@@ -467,10 +495,17 @@ export default {
     managementStatCards() {
       const hash = String(this.route.hash || "");
       const defaultStations = Number(this.managementStats?.stations ?? 9);
+      // SVG icon paths — same stroke system used in the Wallet portal sidebar
+      const ICON_METERS    = "M3 7h18v12H3zm0 4h18m-5 4h2";
+      const ICON_CONNECTED = "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z";
+      const ICON_ACTIVE    = "M13 10V3L4 14h7v7l9-11h-7z";
+      const ICON_INACTIVE  = "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z";
+      const ICON_STATION   = "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z";
+      const ICON_CUSTOMERS = "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75";
 
       if (hash === "#/management/customer") return [
-        { label: "Total Customers", value: this.managementStats?.totalCustomers ?? this.total, tone: "primary" },
-        { label: "Stations", value: defaultStations, tone: "neutral" }
+        { label: "Total Customers", value: this.managementStats?.totalCustomers ?? this.total, tone: "primary", icon: ICON_CUSTOMERS },
+        { label: "Stations",        value: defaultStations, tone: "neutral", icon: ICON_STATION }
       ];
 
       if (hash === "#/management/account") {
@@ -481,14 +516,20 @@ export default {
         const stats = this.managementStats || {};
         const stationCount = stats.stations ?? defaultStations;
         return [
-          { label: "Total Meters", value: stats.totalMeters ?? 0, tone: "primary", hint: `${stats.unassignedMeters ?? 0} unassigned` },
-          { label: "Connected Meters", value: stats.connectedMeters ?? 0, tone: "primary", hint: "customer attached" },
-          { label: "Active Meters", value: stats.activeMeters ?? 0, tone: "success", hint: "connected and on" },
-          { label: "Inactive Meters", value: stats.inactiveMeters ?? 0, tone: "danger", hint: "connected but off" },
-          { label: "Stations", value: stationCount, tone: "neutral" }
+          { label: "Total Meters",    value: stats.totalMeters    ?? 0, tone: "primary", hint: `${stats.unassignedMeters ?? 0} unassigned`,  icon: ICON_METERS },
+          { label: "Connected Meters",value: stats.connectedMeters?? 0, tone: "primary", hint: "customer attached",                           icon: ICON_CONNECTED },
+          { label: "Active Meters",   value: stats.activeMeters   ?? 0, tone: "success", hint: "connected and on",                            icon: ICON_ACTIVE },
+          { label: "Inactive Meters", value: stats.inactiveMeters ?? 0, tone: "danger",  hint: "connected but off",                           icon: ICON_INACTIVE },
+          { label: "Stations",        value: stationCount,               tone: "neutral",                                                       icon: ICON_STATION }
         ];
       }
       return [];
+    },
+    skeletonCardCount() {
+      const hash = String(this.route.hash || "");
+      if (hash === "#/management/account") return 5;
+      if (hash === "#/management/customer") return 2;
+      return 0;
     },
     serverPaginated() {
       return routeUsesServerPagination(this.route);
@@ -589,6 +630,20 @@ export default {
       const token = ++this.loadToken;
       this.errorMessage = "";
       this.loading = true;
+
+      // Reset stats so skeleton renders immediately while the fetch is in-flight
+      const hash = this.route?.hash || "";
+      if (hash === "#/management/customer" || hash === "#/management/account") {
+        this.managementStats   = null;
+        this.managementStatsKey = "";
+      }
+
+      // ── Detached concurrent tasks ────────────────────────────────────────
+      // These run fully independently — they NEVER block the table from rendering.
+      this.loadManagementStats().catch(() => null);
+      this.loadPendingBindings().catch(() => null);
+      // ────────────────────────────────────────────────────────────────────
+
       try {
         if (this.serverPaginated && this.pageSize > 20) this.pageSize = 20;
         const requestOptions = {
@@ -603,23 +658,23 @@ export default {
           requestOptions.pageNumber = this.currentPage;
           requestOptions.pageSize = this.pageSize;
         }
+
+        // Table fetch is now the ONLY thing load() waits on
         const table = await fetchTableData(this.route, requestOptions);
         if (token !== this.loadToken) return;
-        this.allRows = table.rows;
-        this.total = table.total;
+        this.allRows    = table.rows;
+        this.total      = table.total;
         this.dataSource = table.meta?.source || "";
         this.applyControls({ reloadServer: false });
-        this.loadManagementStats();
-        this.loadPendingBindings();
       } catch (error) {
         if (token !== this.loadToken) return;
-        this.allRows = [];
+        this.allRows       = [];
         this.total = 0;
-        this.filteredRows = [];
-        this.visibleRows = [];
+        this.filteredRows  = [];
+        this.visibleRows   = [];
         this.filteredTotal = 0;
-        this.selectedRow = null;
-        this.errorMessage = error?.message || "Unable to load data";
+        this.selectedRow   = null;
+        this.errorMessage  = error?.message || "Unable to load data";
       } finally {
         if (token === this.loadToken) this.loading = false;
       }
@@ -699,37 +754,40 @@ export default {
       const key = `${hash}::${this.selectedSite}`;
       if (this.managementStatsKey === key) return;
       this.managementStatsKey = key;
+      this.statsLoading = true;
 
-      await loadDynamicStationOptions(undefined, true).catch(() => null);
-      const stationTotalCount = tableSiteOptions.filter((opt) => opt.value !== "").length;
-
-      let stats = null;
       try {
-        stats = await fetchMeterStats({ stationId: this.selectedSite || "" });
-      } catch {
-        stats = null;
-      }
+        // Fire station-list and meter-stats fetches in parallel — no more sequential wait
+        const [, statsResult] = await Promise.all([
+          loadDynamicStationOptions(undefined, true).catch(() => null),
+          fetchMeterStats({ stationId: this.selectedSite || "" }).catch(() => null)
+        ]);
+        const stationTotalCount = tableSiteOptions.filter((opt) => opt.value !== "").length;
+        const stats = statsResult;
 
-      const rows = Array.isArray(this.allRows) ? this.allRows : [];
-      const hasLoadedRows = rows.length > 0;
-      const connectedCount = rows.filter((r) => r.customerId && r.meterId).length;
-      const activeCount = rows.filter((r) => r.customerId && r.meterId && r.status === true).length;
-      const inactiveCount = rows.filter((r) => r.customerId && r.meterId && r.status !== true).length;
-      const unassignedCount = rows.filter((r) => !r.customerId && r.meterId).length;
-      const totalMeterCount = rows.filter((r) => r.meterId).length || rows.length;
+        const rows = Array.isArray(this.allRows) ? this.allRows : [];
+        const hasLoadedRows = rows.length > 0;
+        const connectedCount  = rows.filter((r) => r.customerId && r.meterId).length;
+        const activeCount     = rows.filter((r) => r.customerId && r.meterId && r.status === true).length;
+        const inactiveCount   = rows.filter((r) => r.customerId && r.meterId && r.status !== true).length;
+        const unassignedCount = rows.filter((r) => !r.customerId && r.meterId).length;
+        const totalMeterCount = rows.filter((r) => r.meterId).length || rows.length;
 
-      if (hash === "#/management/customer") {
-        const customerCount = (stats?.totalCustomers || (hasLoadedRows ? rows.filter((r) => r.customerId || r.customerName).length : 0)) || this.total;
-        this.managementStats = { totalCustomers: customerCount, stations: stationTotalCount };
-      } else {
-        this.managementStats = {
-          totalMeters: (stats && stats.totalMeters) ? stats.totalMeters : (hasLoadedRows ? totalMeterCount : 0),
-          connectedMeters: (stats && stats.connectedMeters) ? stats.connectedMeters : (hasLoadedRows ? connectedCount : 0),
-          activeMeters: (stats && stats.activeMeters) ? stats.activeMeters : (hasLoadedRows ? activeCount : 0),
-          inactiveMeters: (stats && stats.inactiveMeters) ? stats.inactiveMeters : (hasLoadedRows ? inactiveCount : 0),
-          unassignedMeters: (stats && stats.unassignedMeters) ? stats.unassignedMeters : (hasLoadedRows ? unassignedCount : 0),
-          stations: stationTotalCount
-        };
+        if (hash === "#/management/customer") {
+          const customerCount = (stats?.totalCustomers || (hasLoadedRows ? rows.filter((r) => r.customerId || r.customerName).length : 0)) || this.total;
+          this.managementStats = { totalCustomers: customerCount, stations: stationTotalCount };
+        } else {
+          this.managementStats = {
+            totalMeters:     (stats && stats.totalMeters)     ? stats.totalMeters     : (hasLoadedRows ? totalMeterCount  : 0),
+            connectedMeters: (stats && stats.connectedMeters) ? stats.connectedMeters : (hasLoadedRows ? connectedCount   : 0),
+            activeMeters:    (stats && stats.activeMeters)    ? stats.activeMeters    : (hasLoadedRows ? activeCount      : 0),
+            inactiveMeters:  (stats && stats.inactiveMeters)  ? stats.inactiveMeters  : (hasLoadedRows ? inactiveCount    : 0),
+            unassignedMeters:(stats && stats.unassignedMeters)? stats.unassignedMeters: (hasLoadedRows ? unassignedCount  : 0),
+            stations: stationTotalCount
+          };
+        }
+      } finally {
+        this.statsLoading = false;
       }
     },
     filterRowsByPhase(rows) {
@@ -993,50 +1051,136 @@ export default {
   margin-left: auto;
   flex-shrink: 0;
 }
+/* ─── KPI stat grid ─────────────────────────────────────────────────── */
 .management-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
   gap: 12px;
-  padding: 0 24px 18px;
+  /* Cancel the parent .base-table-shell__alert padding so cards sit
+     flush with the shell border — same edge as the toolbar/table below */
+  margin: 0 calc(-1 * var(--bev-space-4, 16px));
+  padding: 0 0 18px;
 }
 
+/* ─── Tone tokens ────────────────────────────────────────────────────── */
+.tone-primary { --msc-accent: var(--primary); }
+.tone-success { --msc-accent: var(--success); }
+.tone-danger  { --msc-accent: var(--danger);  }
+.tone-neutral { --msc-accent: var(--text-muted); }
+
+/* ─── KPI card base — Linear / Stripe / Vercel dark style ───────────── */
 .management-stat-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border-color);
+  padding: 18px 16px 14px;
+  overflow: hidden;
+  /* Left accent border — hallmark of Stripe/Linear stat panels */
+  border: 1px solid color-mix(in srgb, var(--msc-accent, var(--primary)) 22%, var(--border-color));
+  border-left: 3px solid var(--msc-accent, var(--primary));
   border-radius: var(--radius-md);
   background: var(--bg-card);
+  /* Subtle radial glow from accent colour — Vercel dark metric style */
+  background-image: radial-gradient(
+    ellipse at top right,
+    color-mix(in srgb, var(--msc-accent, var(--primary)) 7%, transparent) 0%,
+    transparent 65%
+  );
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.management-stat-card:hover {
+  border-color: color-mix(in srgb, var(--msc-accent, var(--primary)) 55%, var(--border-color));
+  box-shadow: 0 6px 24px -6px color-mix(in srgb, var(--msc-accent, var(--primary)) 28%, rgba(0,0,0,.4));
+  transform: translateY(-1px);
 }
 
-.management-stat-card span {
-  display: block;
+/* top row: label (left) · icon chip (right) */
+.msc-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.msc-label {
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
 }
 
-.management-stat-card strong {
+/* icon chip — wallet portal SVG pattern, top-right */
+.msc-icon-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--msc-accent, var(--primary)) 25%, transparent);
+  background: color-mix(in srgb, var(--msc-accent, var(--primary)) 10%, transparent);
+  color: var(--msc-accent, var(--primary));
+}
+.msc-icon-wrap svg { width: 15px; height: 15px; }
+
+/* hero metric value */
+.msc-value {
   display: block;
-  margin-top: 8px;
+  flex: 1;
   color: var(--text-strong);
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
+.tone-primary .msc-value { color: var(--primary); }
+.tone-success .msc-value { color: var(--success); }
+.tone-danger  .msc-value { color: var(--danger);  }
 
-.management-stat-hint {
-  display: block;
-  margin-top: 4px;
+/* footer row: hint text */
+.msc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+}
+.msc-hint {
   color: var(--text-muted);
-  font-size: 11px;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 10.5px;
+  line-height: 1.3;
 }
 
-.management-stat-card.tone-primary { border-color: color-mix(in srgb, var(--primary) 45%, var(--border-color)); }
-.management-stat-card.tone-primary strong,
-.management-stat-card.tone-success strong { color: var(--success); }
-.management-stat-card.tone-danger strong { color: var(--danger); }
+/* ─── skeleton shimmer ──────────────────────────────────────────────── */
+@keyframes msc-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.management-stat-card--skeleton { pointer-events: none; }
+.management-stat-card--skeleton .msc-skeleton-icon,
+.management-stat-card--skeleton .msc-skeleton-label,
+.management-stat-card--skeleton .msc-skeleton-value,
+.management-stat-card--skeleton .msc-skeleton-hint {
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--border-color) 55%, transparent) 25%,
+    color-mix(in srgb, var(--border-color) 18%, transparent) 50%,
+    color-mix(in srgb, var(--border-color) 55%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: msc-shimmer 1.4s ease-in-out infinite;
+}
+.management-stat-card--skeleton .msc-skeleton-label { height: 9px;  width: 55%; margin-bottom: 10px; }
+.management-stat-card--skeleton .msc-skeleton-icon  { width: 30px;  height: 30px; border-radius: 8px; margin-left: auto; }
+.management-stat-card--skeleton .msc-skeleton-value { height: 24px; width: 45%; margin: 12px 0 10px; }
+.management-stat-card--skeleton .msc-skeleton-hint  { height: 8px;  width: 70%; margin-top: 10px; }
 
 .table-scroll table {
   table-layout: auto;
@@ -1411,11 +1555,13 @@ export default {
   .management-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    padding: 0 16px 14px;
+    margin: 0 calc(-1 * var(--bev-space-4, 16px));
+    padding: 0 0 14px;
   }
-
-  .management-stat-card { padding: 12px; }
-  .management-stat-card strong { font-size: 20px; }
+  .management-stat-card { padding: 12px 12px 10px; }
+  .msc-value            { font-size: 22px; }
+  .msc-footer           { margin-top: 6px; padding-top: 6px; }
+  .msc-hint   { padding: 0 10px 10px; }
   .ddm-toolbar {
     grid-template-columns: minmax(0, 1fr) 52px minmax(92px, auto);
     gap: 8px;

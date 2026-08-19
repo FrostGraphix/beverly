@@ -102,6 +102,7 @@ const standardNavGroups = computed(() => [
         label: 'Field Ops',
         items: [
             { to: '/meter-orders', text: 'Meter Orders', permission: 'wallet.vendors.review', icon: 'meter' },
+            { to: '/meter-pricing', text: 'Meter Pricing', permission: 'wallet.vendors.manage', icon: 'flags' },
         ],
     },
     {

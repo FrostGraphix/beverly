@@ -1,6 +1,7 @@
 import axios from "axios";
 import { validateApiEnvelope, validateCurrentUserResponse, validateLoginResponse } from "./runtime-schemas.mjs";
 import { recordClientError } from "./error-logger.mjs";
+import { notifyStationMutation } from "./station-registry.mjs";
 
 export const apiClient = axios.create({
   baseURL: "/api",
@@ -311,6 +312,13 @@ function writeSessionCookies(session) {
   if (normalized.email) setCookie("userEmail", normalized.email);
 }
 
+function checkStationMutation(path = "") {
+  const norm = String(path || "").toLowerCase();
+  if (/(?:station|oem\/station-mappings|onboard|account\/import)/.test(norm) && !norm.includes("/read") && !norm.includes("/list") && !norm.includes("/summary")) {
+    notifyStationMutation();
+  }
+}
+
 export async function postApi(path, payload = {}, options = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.post(cleanPath, payload, {
@@ -319,7 +327,9 @@ export async function postApi(path, payload = {}, options = {}) {
     ...(options.silent !== undefined ? { silent: options.silent } : {}),
     ...(options.skipAuthRedirect !== undefined ? { skipAuthRedirect: options.skipAuthRedirect } : {})
   });
-  return validateApiEnvelope(response.data, cleanPath || "postApi");
+  const validated = validateApiEnvelope(response.data, cleanPath || "postApi");
+  checkStationMutation(cleanPath);
+  return validated;
 }
 
 export async function getApi(path, params = {}, options = {}) {
@@ -337,13 +347,17 @@ export async function getApi(path, params = {}, options = {}) {
 export async function putApi(path, payload = {}) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.put(cleanPath, payload);
-  return validateApiEnvelope(response.data, cleanPath || "putApi");
+  const validated = validateApiEnvelope(response.data, cleanPath || "putApi");
+  checkStationMutation(cleanPath);
+  return validated;
 }
 
 export async function deleteApi(path) {
   const cleanPath = normalizeApiPath(path).replace(/^\/api/, "");
   const response = await apiClient.delete(cleanPath);
-  return validateApiEnvelope(response.data, cleanPath || "deleteApi");
+  const validated = validateApiEnvelope(response.data, cleanPath || "deleteApi");
+  checkStationMutation(cleanPath);
+  return validated;
 }
 
 export async function uploadApi(path, formData, options = {}) {
@@ -357,7 +371,9 @@ export async function uploadApi(path, formData, options = {}) {
   const response = await apiClient.post(cleanPath, formData, {
     headers: { ...(options.headers || {}) }
   });
-  return validateApiEnvelope(response.data, cleanPath || "uploadApi");
+  const validated = validateApiEnvelope(response.data, cleanPath || "uploadApi");
+  checkStationMutation(cleanPath);
+  return validated;
 }
 
 export async function login(payload) {

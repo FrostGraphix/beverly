@@ -75,7 +75,7 @@ function legacyReceiptHtml(model: ReceiptModel): string {
 function canonicalReceipt(model: ReceiptModel) {
   return {
     ...model,
-    subtitle: model.subtitle || 'Energy Operations & Management System',
+    subtitle: model.subtitle || '',
     generatedAt: model.issuedAt || date(new Date().toISOString()),
     brand: {
       name: 'Beverly', company: 'ACOB Lighting Technology Limited', email: 'info@acoblighting.com',
@@ -88,8 +88,8 @@ function canonicalReceipt(model: ReceiptModel) {
   };
 }
 
-function receiptHtml(model: ReceiptModel): string {
-  return canonicalReceiptHtml(canonicalReceipt(model));
+function receiptHtml(model: ReceiptModel, options: any = {}): string {
+  return canonicalReceiptHtml(canonicalReceipt(model), options);
 }
 
 function removeReceiptModal(): void {
@@ -104,11 +104,23 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
     <div class="brm-backdrop">
       <section class="brm-sheet" role="dialog" aria-modal="true" aria-label="Receipt preview">
         <header class="brm-head">
-          <div class="brm-title"><span class="brm-print-icon">&#128438;</span><strong>Receipt Preview · ${escapeHtml(model.title)}</strong></div>
-          <button class="brm-icon" data-close aria-label="Close">X</button>
+          <div class="brm-title">
+            <span class="brm-print-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </span>
+            <div>
+              <strong>${escapeHtml(model.title)}</strong>
+              <span class="brm-subtitle">Official ACOB Billing Voucher · ${escapeHtml(model.receiptId)}</span>
+            </div>
+          </div>
+          <button class="brm-close-btn" data-close aria-label="Close">×</button>
         </header>
         <iframe class="brm-frame" title="Receipt preview"></iframe>
         <footer class="brm-actions">
+          <button class="brm-btn secondary" data-print-btn>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print
+          </button>
           <button class="brm-btn primary" data-pdf>PDF Export</button>
           <button class="brm-btn danger" data-close>Cancel</button>
           <span class="brm-status" role="status" aria-live="polite"></span>
@@ -116,23 +128,51 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
       </section>
     </div>
     <style>
-      #beverly-receipt-modal{position:fixed;inset:0;z-index:9999}
-      .brm-backdrop{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.62);backdrop-filter:blur(10px)}
-      .brm-sheet{width:min(840px,calc(100vw - 32px));height:min(92dvh,900px);display:grid;grid-template-rows:auto 1fr auto;background:#fff;border:1px solid rgba(22,163,74,.34);border-radius:18px;box-shadow:0 24px 70px rgba(16,42,27,.20);overflow:hidden}
-      .brm-head,.brm-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border,rgba(255,214,0,.18))}
-      .brm-actions{border-top:1px solid var(--border,rgba(255,214,0,.18));border-bottom:0;justify-content:flex-end}
-      .brm-title{display:flex;align-items:center;gap:12px;min-width:0}.brm-print-icon{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(22,163,74,.24);border-radius:10px;background:#f3fbf5;color:#166534;font-size:20px}.brm-head strong{display:block;color:#102a1b;font-size:18px;overflow-wrap:anywhere}
-      .brm-icon{width:44px;height:44px;border:0;border-radius:var(--r-lg);background:transparent;color:var(--brand-900);font-size:24px;cursor:pointer}
-      .brm-icon:hover,.brm-btn:hover{background:var(--brand-100)}
-      .brm-frame{width:100%;height:100%;border:0;background:#050608}
-      .brm-btn{min-height:44px;border:1px solid var(--brand-200);border-radius:var(--r-lg);background:var(--brand-50);color:var(--brand-900);padding:9px 14px;font-weight:800;cursor:pointer}.brm-btn:disabled{cursor:wait;opacity:.65}.brm-btn:focus-visible,.brm-icon:focus-visible{outline:0;box-shadow:0 0 0 3px var(--brand-glow),0 0 0 5px var(--brand)}
-      .brm-btn.primary{background:linear-gradient(180deg,var(--brand) 0%,var(--brand-600) 100%);border-color:var(--brand-600);color:oklch(8% 0.04 145);box-shadow:0 4px 12px var(--brand-glow)}.brm-btn.primary:hover{background:linear-gradient(180deg,var(--brand-400) 0%,var(--brand-500) 100%)}.brm-btn.danger{background:#fff1f2;border-color:#fecdd3;color:#be123c}.brm-btn.danger:hover{background:#ffe4e6}.brm-status{width:100%;color:var(--brand-800);font-size:12px;text-align:right}
-      .brm-sheet{background:#fff;border-color:var(--brand-200)}.brm-head,.brm-actions{background:#fff;border-color:var(--brand-100)}.brm-head span{color:var(--brand-800)}.brm-head strong{color:var(--brand-900)}.brm-frame{background:var(--brand-50)}
-      @media(max-width:720px){.brm-backdrop{padding:8px}.brm-sheet{width:calc(100vw - 16px);height:calc(100dvh - 16px);border-radius:18px}.brm-head,.brm-actions{padding:10px 12px}.brm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.brm-btn{width:100%;min-width:0}.brm-status{grid-column:1/-1;text-align:center}.brm-print-icon{width:38px;height:38px}}
+      #beverly-receipt-modal{position:fixed;inset:0;z-index:99999}
+      .brm-backdrop{position:absolute;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.75);backdrop-filter:blur(12px)}
+      .brm-sheet{width:min(860px,calc(100vw - 24px));height:min(90dvh,860px);display:grid;grid-template-rows:auto 1fr auto;background:#0d1117;border:1px solid oklch(70% 0.19 145 / 0.35);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.06);overflow:hidden}
+      .brm-head,.brm-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;background:#11151d;border-bottom:1px solid rgba(255,255,255,.08)}
+      .brm-actions{border-top:1px solid rgba(255,255,255,.08);border-bottom:0;justify-content:flex-end}
+      .brm-title{display:flex;align-items:center;gap:12px;min-width:0}
+      .brm-print-icon{width:38px;height:38px;display:grid;place-items:center;border:1px solid oklch(70% 0.19 145 / 0.35);border-radius:10px;background:oklch(70% 0.19 145 / 0.12);color:var(--brand,#22c55e);flex-shrink:0}
+      .brm-head strong{display:block;color:#f8fafc;font-size:16px;font-weight:700}
+      .brm-subtitle{display:block;font-size:12px;color:#94a3b8;font-weight:400;margin-top:1px}
+      .brm-close-btn{width:32px;height:32px;border:1px solid rgba(239,68,68,.4);border-radius:8px;background:rgba(239,68,68,.16);color:#fca5a5;font-size:20px;display:grid;place-items:center;cursor:pointer;transition:all .15s ease}
+      .brm-close-btn:hover{background:#dc2626;color:#ffffff;border-color:#dc2626}
+      .brm-frame{width:100%;height:100%;border:0;background:#090d14}
+      .brm-btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s ease}
+      .brm-btn:disabled{cursor:wait;opacity:.65}
+      .brm-btn.primary{background:var(--brand,#22c55e);color:#000;border-color:var(--brand,#22c55e);box-shadow:0 4px 14px oklch(70% 0.19 145 / 0.25)}
+      .brm-btn.primary:hover{filter:brightness(1.1)}
+      .brm-btn.secondary{background:rgba(255,255,255,.08);color:#f8fafc;border-color:rgba(255,255,255,.14)}
+      .brm-btn.secondary:hover{background:rgba(255,255,255,.14)}
+      .brm-btn.danger{background:#dc2626 !important;color:#ffffff !important;border-color:#dc2626 !important;box-shadow:0 4px 12px rgba(220,38,38,.35)}
+      .brm-btn.danger:hover{background:#b91c1c !important;border-color:#b91c1c !important}
+      .brm-status{color:#22c55e;font-size:12px;font-weight:500;margin-left:auto}
+
+      /* Light Theme Overrides */
+      [data-theme="light"] .brm-sheet { background: #ffffff !important; border-color: rgba(0,0,0,.15) !important; box-shadow: 0 20px 60px rgba(0,0,0,.15) !important; }
+      [data-theme="light"] .brm-head, [data-theme="light"] .brm-actions { background: #f8fafc !important; border-color: rgba(0,0,0,.08) !important; }
+      [data-theme="light"] .brm-head strong { color: #0f172a !important; }
+      [data-theme="light"] .brm-subtitle { color: #64748b !important; }
+      [data-theme="light"] .brm-frame { background: #f1f5f9 !important; }
+      [data-theme="light"] .brm-btn.secondary { background: #f1f5f9 !important; color: #334155 !important; border-color: #cbd5e1 !important; }
+      [data-theme="light"] .brm-btn.secondary:hover { background: #e2e8f0 !important; }
+
+      @media(max-width:640px){
+        .brm-backdrop{padding:0}
+        .brm-sheet{width:100vw;height:100dvh;border-radius:0;border:0}
+        .brm-head,.brm-actions{padding:10px 14px}
+        .brm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+        .brm-btn{width:100%;justify-content:center;height:42px;font-size:13px}
+        .brm-btn.danger{grid-column:1/-1;order:3}
+        .brm-status{grid-column:1/-1;text-align:center;margin:0}
+      }
     </style>`;
   document.body.appendChild(host);
   const frame = host.querySelector<HTMLIFrameElement>('.brm-frame');
-  const html = receiptHtml(model);
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const html = receiptHtml(model, { theme: { isDark: !isLight } });
   let frameLoaded = false;
   const previousFocus = document.activeElement as HTMLElement | null;
   const previousOverflow = document.body.style.overflow;
@@ -176,6 +216,7 @@ function openReceipt(model: ReceiptModel, shouldPrint: boolean): void {
     frame.srcdoc = html;
   }
   host.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', cleanup));
+  host.querySelector('[data-print-btn]')?.addEventListener('click', () => printFrame());
   host.querySelector('[data-pdf]')?.addEventListener('click', async (event) => {
     const button = event.currentTarget as HTMLButtonElement;
     const status = host.querySelector<HTMLElement>('.brm-status');
@@ -204,7 +245,58 @@ export function downloadReceipt(model: ReceiptModel): void {
   void downloadCanonicalReceiptPdf(canonicalReceipt(model));
 }
 
+export function resolveTariffDetails(row: any): { tariffName: string; tariffPrice: string } {
+  const rawId = String(row?.tariffName || row?.tariff_name || row?.tariffId || row?.tariff_id || row?.tariff_display_name || row?.tariff || 'RESIDENTIAL').trim();
+  const tariffName = rawId;
+
+  let rateNaira = 0;
+  if (typeof row?.price === 'number' && row.price > 0) {
+    rateNaira = row.price;
+  } else if (typeof row?.price === 'string' && Number(row.price) > 0) {
+    rateNaira = Number(row.price);
+  } else if (typeof row?.tariff_price === 'number' && row.tariff_price > 0) {
+    rateNaira = row.tariff_price;
+  } else if (typeof row?.tariff_naira_per_kwh === 'number' && row.tariff_naira_per_kwh > 0) {
+    rateNaira = row.tariff_naira_per_kwh;
+  } else if (typeof row?.effective_price_ngn === 'number' && row.effective_price_ngn > 0) {
+    rateNaira = row.effective_price_ngn;
+  } else if (typeof row?.unit_price_ngn === 'number' && row.unit_price_ngn > 0) {
+    rateNaira = row.unit_price_ngn;
+  } else if (row?.units_kwh && Number(row.units_kwh) > 0) {
+    const grossNaira = (row.amount_minor != null ? Number(row.amount_minor) : 0) / 100;
+    const energyNaira = (row.energy_amount_minor != null ? Number(row.energy_amount_minor) : grossNaira * 0.93023) / 100;
+    const grossRate = grossNaira > 0 ? Math.round((grossNaira / Number(row.units_kwh)) * 100) / 100 : 0;
+    const energyRate = energyNaira > 0 ? Math.round((energyNaira / Number(row.units_kwh)) * 100) / 100 : 0;
+
+    if (grossRate === 350 || grossRate === 450 || grossRate === 400 || grossRate === 300 || grossRate === 500) {
+      rateNaira = grossRate;
+    } else if (energyRate > 0) {
+      rateNaira = energyRate;
+    } else {
+      rateNaira = grossRate;
+    }
+  }
+
+  if (!rateNaira || rateNaira <= 0) {
+    const upper = rawId.toUpperCase();
+    rateNaira = upper.includes('KOLO') || upper.includes('MAST') ? 450 : 350;
+  }
+
+  const tariffPrice = `₦${rateNaira.toFixed(2)} / kWh`;
+  return { tariffName, tariffPrice };
+}
+
 export function purchaseReceipt(row: any): ReceiptModel {
+  const vendedBy = row.vended_by
+    || row.vended_by_name
+    || row.vendor_name
+    || row.operator_name
+    || row.created_by_name
+    || (row.customer_name ? `Customer Self-Vend (${row.customer_name})` : null)
+    || 'Customer Self-Vend';
+
+  const { tariffName, tariffPrice } = resolveTariffDetails(row);
+
   return {
     title: 'Purchase Receipt',
     receiptId: clean(row.receipt_number || row.receipt_id || row.id || row.purchase_order_id, 'PENDING').toUpperCase(),
@@ -216,13 +308,17 @@ export function purchaseReceipt(row: any): ReceiptModel {
       field('Token', row.token, { token: true }),
       field('Customer', row.customer_name || row.customer_phone),
       field('Customer Phone', row.customer_phone),
+      field('Vended By', vendedBy, { wide: true }),
       field('Meter ID', row.meter_id),
-      field('Meter Type', row.meter_type),
+      field('Meter Type', row.meter_type || 'Prepaid Single Phase'),
+      field('Station', row.station_id || row.station_name || 'TUNGA'),
+      field('Tariff', tariffName),
+      field('Tariff Price', tariffPrice),
+      field('Payment', row.payment_method || (row.mode === 'remote_send' ? 'Wallet & Wireless Remote' : 'Wallet Self-Vend')),
+      field('Purchase Way', row.purchase_way || (row.mode === 'remote_send' ? 'Wireless Remote Send' : 'Customer Portal Self-Vend')),
       field('Energy Value', row.energy_amount_minor != null ? money(row.energy_amount_minor) : ''),
       field(`VAT (${Number(row.vat_rate_basis_points ?? 0) / 100}%)`, row.vat_amount_minor != null ? money(row.vat_amount_minor) : ''),
       field('Units', row.units_kwh != null ? `${Number(row.units_kwh).toFixed(4)} kWh` : ''),
-      field('Order', row.purchase_order_id),
-      field('Created', date(row.created_at)),
     ],
   };
 }

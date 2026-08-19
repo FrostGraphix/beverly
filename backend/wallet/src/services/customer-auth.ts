@@ -211,6 +211,15 @@ function customerAuthUserId(customer: CustomerProfile): string {
     return authUserId;
 }
 
+export function shapeAuthCustomer(row: any): CustomerProfile {
+    if (!row) return row;
+    const configured = Boolean(row.vend_pin_hash && row.vend_pin_salt && row.vend_pin_set_at);
+    return {
+        ...row,
+        vend_pin_configured: configured,
+    };
+}
+
 function usesTwilioVerify(): boolean {
     return Boolean(env.TWILIO_VERIFY_SERVICE_SID);
 }
@@ -647,7 +656,7 @@ export async function loginWithEmail(
         refresh_token: session.refreshToken,
         expires_at: session.expiresAt,
         expires_in: session.expiresIn,
-        customer: customer as CustomerProfile,
+        customer: shapeAuthCustomer(customer),
         isNew: false,
     };
 }
@@ -976,7 +985,7 @@ async function signUpCustomer(
 
     return {
         access_token: issueJwt(customerAuthUserId(customer as CustomerProfile)),
-        customer: customer as CustomerProfile,
+        customer: shapeAuthCustomer(customer),
         isNew: true,
     };
 }
@@ -1006,7 +1015,7 @@ async function signInCustomer(
 
     return {
         access_token: issueJwt(customerAuthUserId(customer as CustomerProfile)),
-        customer: customer as CustomerProfile,
+        customer: shapeAuthCustomer(customer),
         isNew: false,
     };
 }

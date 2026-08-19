@@ -134,6 +134,7 @@ async function submit() {
   <CustomerAuthShell
     title="Welcome back"
     :subtitle="loginMode === 'email' ? 'Enter your email and password' : 'Enter your phone number to receive a sign-in code'"
+    :hide-legal="true"
   >
     <div v-if="sessionEnded" class="session-banner" role="status">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -236,16 +237,16 @@ async function submit() {
               {{ showPassword ? 'Hide' : 'Show' }}
             </button>
           </div>
-          <div class="forgot-row">
-            <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
-          </div>
         </div>
       </template>
 
-      <label class="remember-row">
-        <input v-model="rememberLogin" type="checkbox" />
-        Remember this login
-      </label>
+      <div class="remember-row">
+        <label class="remember-label">
+          <input v-model="rememberLogin" type="checkbox" />
+          Remember this login
+        </label>
+        <router-link to="/recover" class="forgot-link">Forgot password?</router-link>
+      </div>
 
       <!-- Error -->
       <div v-if="error" class="auth-error" role="alert">
@@ -263,14 +264,17 @@ async function submit() {
         {{ loading ? loadingLabel : submitLabel }}
       </button>
 
-    </form>
+      <!-- Footer grid inside card -->
+      <div class="auth-footer-grid">
+        <router-link to="/signup" class="auth-inline-link">Create account</router-link>
+        <p class="auth-legal-inline">
+          By continuing you agree to Beverly's
+          <router-link to="/terms" class="auth-link">Terms of Service</router-link> &amp;
+          <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>.
+        </p>
+      </div>
 
-    <!-- Footer links -->
-    <div class="auth-links">
-      <router-link to="/signup" class="auth-inline-link">Create account</router-link>
-      <span aria-hidden="true">•</span>
-      <router-link to="/recover" class="auth-inline-link">Forget password</router-link>
-    </div>
+    </form>
   </CustomerAuthShell>
 </template>
 
@@ -348,11 +352,20 @@ async function submit() {
   padding: 4px 6px;
 }
 .remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-top: -4px;
+  margin-bottom: -4px;
+}
+.remember-label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--text-2);
   font-size: var(--t-sm);
+  cursor: pointer;
 }
 
 .field-label {
@@ -453,16 +466,35 @@ async function submit() {
   flex-shrink: 0;
 }
 
-.auth-links {
-  margin-top: var(--s-5);
-  display: flex;
+.auth-footer-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: center;
-  gap: var(--s-2);
-  font-size: var(--t-sm);
-  color: var(--text-2);
-  white-space: nowrap;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
 }
+
+.auth-legal-inline {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.4;
+  text-align: right;
+  margin: 0;
+}
+
+@media (max-width: 420px) {
+  .auth-footer-grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: var(--s-2);
+  }
+  .auth-legal-inline {
+    text-align: center;
+  }
+}
+
 .auth-inline-link {
   color: var(--brand);
   font-weight: 600;
@@ -470,7 +502,6 @@ async function submit() {
 }
 .auth-inline-link:hover { text-decoration: underline; }
 
-.forgot-row { text-align: right; margin-top: var(--s-1); }
 .forgot-link { font-size: var(--t-xs); color: var(--brand); text-decoration: none; font-weight: 600; }
 .forgot-link:hover { text-decoration: underline; }
 </style>

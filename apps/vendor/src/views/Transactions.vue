@@ -3,10 +3,21 @@ import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import { api } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
+
+interface ActionItem {
+    id?: string;
+    label: string;
+    action: () => void;
+    icon?: 'view' | 'print' | 'copy' | 'send' | 'download' | 'dots';
+    tone?: 'neutral' | 'brand' | 'warn' | 'danger' | 'success';
+    disabled?: boolean;
+}
 
 interface PurchaseOrder {
     id: string; meter_id: string; customer_name: string | null;
@@ -14,7 +25,7 @@ interface PurchaseOrder {
     station_id: string | null; amount_minor: number; energy_amount_minor?: number | null;
     vat_amount_minor?: number | null; vat_rate_basis_points?: number | null; units_kwh: number | null;
     token: string | null; purchase_mode: 'wallet' | 'direct_pay' | 'remote_send';
-    status: string; delivery_state: string | null; receipt_id?: string | null; created_at: string;
+    status: string; delivery_state: string | null; remote_task_id?: string | null; receipt_id?: string | null; created_at: string;
 }
 
 const purchases = ref<PurchaseOrder[]>([]);
@@ -30,6 +41,108 @@ const pageSize = ref(10);
 const exportRange = ref<'1d' | '7d' | '30d' | 'all'>('30d');
 const exporting = ref(false);
 const exportError = ref<string | null>(null);
+
+const selectedRemoteOrder = ref<PurchaseOrder | null>(null);
+const remoteTrackerOpen = ref(false);
+const copiedId = ref<string | null>(null);
+const toastNotice = ref<{ message: string; tone: string } | null>(null);
+
+function triggerRemoteSend(p: PurchaseOrder) {
+    selectedRemoteOrder.value = p;
+    remoteTrackerOpen.value = true;
+}
+
+async function copyRowToken(p: PurchaseOrder) {
+    if (!p.token) return;
+    try {
+        await navigator.clipboard.writeText(p.token);
+        copiedId.value = p.id;
+        toastNotice.value = { message: `Token copied for meter ${p.meter_id}`, tone: 'success' };
+        setTimeout(() => {
+            copiedId.value = null;
+            toastNotice.value = null;
+        }, 2000);
+    } catch {
+        toastNotice.value = { message: 'Copy failed. Select token manually.', tone: 'danger' };
+    }
+}
+
+async function fetchRemoteSendStatus(endpoint: string) {
+    try {
+        return await api.get<any>(endpoint);
+    } catch (err: any) {
+        const data = err?.details || err?.data || err?.response?.data;
+        if (data && typeof data === 'object') {
+            return {
+                status: 'failed',
+                deliveryState: data.delivery_state || data.deliveryState || 'remote_send_failed_needs_manual_entry',
+                remark: data.message || data.remark || data.error || err.message || 'Remote send failed',
+                purchaseOrder: data.purchaseOrder,
+                remoteTaskId: data.remoteTaskId || data.remote_task_id,
+            };
+        }
+        try {
+            return await api.post<any>(endpoint, {});
+        } catch (postErr: any) {
+            const postData = postErr?.details || postErr?.data || postErr?.response?.data;
+            if (postData && typeof postData === 'object') {
+                return {
+                    status: 'failed',
+                    deliveryState: postData.delivery_state || postData.deliveryState || 'remote_send_failed_needs_manual_entry',
+                    remark: postData.message || postData.remark || postData.error || postErr.message || 'Remote send failed',
+                    purchaseOrder: postData.purchaseOrder,
+                    remoteTaskId: postData.remoteTaskId || postData.remote_task_id,
+                };
+            }
+            return {
+                status: 'failed',
+                deliveryState: 'remote_send_failed_needs_manual_entry',
+                remark: postErr?.message || err?.message || 'Remote send failed',
+            };
+        }
+    }
+}
+
+function isUndeliveredWithToken(p: PurchaseOrder) {
+    const isDelivered = (p.status === 'delivered' || (p.delivery_state && p.delivery_state.toUpperCase() === 'DELIVERED'));
+    return Boolean(p.token && !isDelivered);
+}
+
+function canReceipt(p: PurchaseOrder) {
+    return Boolean(p.token || p.status === 'delivered' || p.receipt_id || p.amount_minor > 0);
+}
+
+function buildRowActions(p: PurchaseOrder): ActionItem[] {
+    const items: ActionItem[] = [];
+    if (canReceipt(p)) {
+        items.push({
+            label: 'View receipt',
+            icon: 'view',
+            action: () => viewPurchaseReceipt(p),
+        });
+        items.push({
+            label: 'Print receipt',
+            icon: 'print',
+            action: () => printPurchaseReceipt(p),
+        });
+    }
+    if (p.token) {
+        items.push({
+            label: copiedId.value === p.id ? '✓ Copied' : 'Copy token',
+            icon: 'copy',
+            action: () => copyRowToken(p),
+        });
+    }
+    if (isUndeliveredWithToken(p)) {
+        items.push({
+            label: 'Remote Send',
+            icon: 'send',
+            tone: 'brand',
+            action: () => triggerRemoteSend(p),
+        });
+    }
+    return items;
+}
 
 const filterPurchases = (rows: PurchaseOrder[]) => {
     const q = searchQuery.value.trim().toLowerCase();
@@ -84,10 +197,6 @@ function meterTypeLabel(type?: string | null) {
     if (type === 'three_phase') return 'Three Phase';
     if (type === 'single_phase') return 'Single Phase';
     return 'Unknown';
-}
-
-function canReceipt(p: PurchaseOrder) {
-    return p.status === 'delivered' && !!p.receipt_id;
 }
 
 function viewPurchaseReceipt(p: PurchaseOrder) {
@@ -227,7 +336,7 @@ onMounted(async () => {
               <th style="text-align:right">Units</th>
               <th>Status</th>
               <th>Token</th>
-              <th>Receipt</th>
+              <th style="text-align:center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -249,11 +358,12 @@ onMounted(async () => {
               <td class="bw-mono" style="text-align:right">{{ kwh(p.units_kwh) }}</td>
               <td><span :class="['bw-badge', statusBadge(p.status)]">{{ p.status }}</span></td>
               <td class="bw-mono" style="font-size: var(--t-xs)">{{ p.token ? p.token.slice(0, 12) + '...' : '-' }}</td>
-              <td>
-                <div v-if="canReceipt(p)" class="receipt-actions">
-                  <button class="bw-btn sm" @click="viewPurchaseReceipt(p)">View</button>
-                  <button class="bw-btn sm" @click="printPurchaseReceipt(p)">Print</button>
-                </div>
+              <td style="text-align:center">
+                <WalletRowActions
+                  v-if="buildRowActions(p).length"
+                  :items="buildRowActions(p)"
+                  label="Transaction actions"
+                />
                 <span v-else class="bw-muted">-</span>
               </td>
             </tr>
@@ -302,12 +412,13 @@ onMounted(async () => {
               <span class="bw-tc-pair-label">VAT</span>
               <span class="bw-tc-pair-val bw-money">{{ naira(p.vat_amount_minor ?? 0) }}</span>
             </div>
-            <div class="bw-tc-pair" v-if="canReceipt(p)">
-              <span class="bw-tc-pair-label">Receipt</span>
-              <span class="receipt-actions">
-                <button class="bw-btn sm" @click="viewPurchaseReceipt(p)">View</button>
-                <button class="bw-btn sm" @click="printPurchaseReceipt(p)">Print</button>
-              </span>
+            <div class="bw-tc-pair" v-if="buildRowActions(p).length">
+              <span class="bw-tc-pair-label">Actions</span>
+              <WalletRowActions
+                :items="buildRowActions(p)"
+                label="Transaction actions"
+                align="right"
+              />
             </div>
           </div>
         </div>
@@ -331,6 +442,27 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Toast Notification for Action Feedback -->
+    <div v-if="toastNotice" class="bw-toast-bar" :class="toastNotice.tone" style="position: fixed; bottom: 24px; right: 24px; z-index: 1000; padding: 12px 20px; border-radius: 10px; background: var(--surface-1); border: 1px solid var(--brand); color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.4)">
+      <span>{{ toastNotice.message }}</span>
+    </div>
+
+    <!-- Remote Send Live Tracking & Dispatch Modal -->
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="selectedRemoteOrder?.id"
+      :meter-id="selectedRemoteOrder?.meter_id"
+      :token="selectedRemoteOrder?.token"
+      :amount-minor="selectedRemoteOrder?.amount_minor"
+      :units-kwh="selectedRemoteOrder?.units_kwh"
+      :customer-name="selectedRemoteOrder?.customer_name"
+      :delivery-state="selectedRemoteOrder?.delivery_state"
+      :remote-task-id="selectedRemoteOrder?.remote_task_id"
+      :api-endpoint="selectedRemoteOrder?.id ? `/api/v1/vendor/vend/${selectedRemoteOrder.id}/remote-send` : null"
+      :fetcher="fetchRemoteSendStatus"
+      @updated="(res: any) => { if (res.purchaseOrder && selectedRemoteOrder) selectedRemoteOrder = { ...selectedRemoteOrder, ...res.purchaseOrder }; }"
+    />
   </AppShell>
 </template>
 

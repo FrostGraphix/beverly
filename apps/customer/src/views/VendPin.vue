@@ -34,6 +34,7 @@ async function savePin() {
         await api.post('/api/v1/customer/vend-pin', { pin: pin.value });
         if (auth.customer) auth.customer.vend_pin_configured = true;
         await auth.refreshProfile();
+        if (auth.customer) auth.customer.vend_pin_configured = true;
         await router.replace(safeRedirect());
     } catch (cause) {
         error.value = cause instanceof ApiError ? cause.message : 'Could not save your PIN.';
@@ -45,7 +46,7 @@ async function savePin() {
 
 <template>
   <AppShell>
-    <form class="bw-card vend-pin-card" @submit.prevent="savePin">
+    <form class="bw-card bw-card-shimmer vend-pin-card" @submit.prevent="savePin">
       <p class="bw-label">Required before vending</p>
       <h1 class="bw-page-title">Create vending PIN</h1>
       <p class="bw-muted">This confirms wallet purchases.</p>

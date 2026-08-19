@@ -46,6 +46,17 @@ const deleting = ref(false);
 const history = ref<MeterLinkHistoryEvent[]>([]);
 const historyLoading = ref(false);
 const historyError = ref('');
+const prices = ref<{ residential_minor: number; commercial_minor: number }>({
+    residential_minor: 3_000_000,
+    commercial_minor: 15_000_000,
+});
+
+async function loadPrices() {
+    try {
+        const res = await api.get<{ residential_minor: number; commercial_minor: number }>('/api/v1/customer/meter-pricing');
+        if (res.residential_minor) prices.value = res;
+    } catch { /* noop */ }
+}
 
 function meterTypeLabel(type?: string | null) {
     if (type === 'three_phase') return 'Three Phase';
@@ -73,7 +84,7 @@ async function loadHistory() {
 }
 
 onMounted(() => {
-    void Promise.all([loadMeters(), loadHistory()]);
+    void Promise.all([loadMeters(), loadHistory(), loadPrices()]);
 });
 
 async function unlink(id: string) {
@@ -139,8 +150,8 @@ function formatHistoryDate(value: string) {
         <p>Choose a prepaid meter, track installation, and start buying tokens after activation.</p>
       </div>
       <div class="meter-install-prices" aria-label="Meter prices">
-        <span><strong>NGN 50k</strong> 1-phase</span>
-        <span><strong>NGN 75k</strong> 3-phase</span>
+        <span><strong>NGN {{ Math.round(prices.residential_minor / 100000) }}k</strong> Residential</span>
+        <span><strong>NGN {{ Math.round(prices.commercial_minor / 100000) }}k</strong> Commercial</span>
       </div>
       <div class="meter-install-actions">
         <router-link to="/meter-orders" class="bw-btn meter-install-secondary">

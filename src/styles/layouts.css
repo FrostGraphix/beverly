@@ -69,7 +69,6 @@ a {
 }
 
 .svg-icon,
-.sidebar-icon svg,
 .topbar-tool svg,
 .field-icon svg,
 .password-eye svg,
@@ -78,6 +77,18 @@ a {
   width: 1em;
   height: 1em;
   fill: currentColor;
+  overflow: hidden;
+  vertical-align: -.15em;
+}
+
+.sidebar-icon svg {
+  width: 1em;
+  height: 1em;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   overflow: hidden;
   vertical-align: -.15em;
 }

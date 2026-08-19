@@ -58,7 +58,7 @@
         <span>Station</span>
         <BaseSelect v-model="filters.stationId" @change="load">
           <option value="">All stations</option>
-          <option v-for="station in stationOptions" :key="station" :value="station">{{ station }}</option>
+          <option v-for="station in stationOptions" :key="station.value" :value="station.value">{{ station.label }}</option>
         </BaseSelect>
       </label>
       <label class="archive-filter">
@@ -129,7 +129,7 @@
           </tr>
           <tr v-for="report in pagedReports" v-else :key="report.id">
             <td class="archive-table__muted">{{ report.oemSlug || '—' }}</td>
-            <td class="archive-table__station">{{ report.stationId }}</td>
+            <td class="archive-table__station">{{ formatStationLabel(report.stationId) }}</td>
             <td>
               <span :class="['archive-table__type', `archive-table__type--${report.reportType}`]">
                 {{ titleCase(report.reportType) }}
@@ -203,6 +203,8 @@ import {
   paginateRows,
   totalPages,
 } from "../services/table-helpers.mjs";
+import { formatStationDisplayLabel } from "../services/station-registry.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -239,7 +241,17 @@ export default {
       return Object.values(this.filters).some(Boolean);
     },
     stationOptions() {
-      return Object.keys(this.summary?.byStation || {}).sort();
+      const summaryStations = Object.keys(this.summary?.byStation || {});
+      const dynamicStations = tableSiteOptions.map((s) => s.value).filter(Boolean);
+      const allIds = Array.from(new Set([...summaryStations, ...dynamicStations])).sort();
+      const map = new Map();
+      for (const id of allIds) {
+        const label = this.formatStationLabel(id);
+        if (!map.has(label)) {
+          map.set(label, { value: id, label });
+        }
+      }
+      return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
     },
     pageCount() {
       return totalPages(this.reports.length, this.pageSize);
@@ -270,9 +282,16 @@ export default {
     },
   },
   mounted() {
+    loadDynamicStationOptions(undefined, true).catch(() => null);
     this.load();
   },
   methods: {
+    formatStationLabel(rawId) {
+      const norm = String(rawId || "").trim();
+      if (!norm) return "";
+      const match = tableSiteOptions.find((opt) => String(opt.value || "").toUpperCase() === norm.toUpperCase());
+      return formatStationDisplayLabel(rawId, match?.label);
+    },
     async load() {
       this.currentPage = 1;
       this.loading = true;

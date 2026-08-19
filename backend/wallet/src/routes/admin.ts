@@ -34,7 +34,7 @@ import { listDeletionRequests, reviewDeletionRequest } from '../services/data-pr
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
-import { createAdminMeterOrder, assertMeterOrderTransition } from '../services/meter-orders.js';
+import { createAdminMeterOrder, assertMeterOrderTransition, getMeterPrices, updateMeterPrices } from '../services/meter-orders.js';
 import { revokePortalSession } from '../services/portal-session.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
@@ -343,6 +343,8 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'POST /purchases/:id/resend-remote': 'wallet.vending.monitor',
     'GET /meter-orders': 'wallet.vendors.review',
     'GET /meter-orders/stats': 'wallet.vendors.review',
+    'GET /meter-pricing': 'wallet.vendors.manage',
+    'PUT /meter-pricing': 'wallet.vendors.manage',
     'GET /meter-orders/customer-search': 'wallet.vendors.manage',
     'GET /meter-orders/:id': 'wallet.vendors.review',
     'POST /meter-orders': 'wallet.vendors.manage',
@@ -2631,10 +2633,40 @@ const route: FastifyPluginAsync = async (fastify) => {
 
 
     // ── meter purchase orders ──
+    fastify.get('/meter-pricing', async () => {
+        return getMeterPrices();
+    });
+
+    fastify.put('/meter-pricing', async (req, reply) => {
+        const body = z.object({
+            residential_minor: z.number().int().positive().optional(),
+            commercial_minor: z.number().int().positive().optional(),
+        }).parse(req.body ?? {});
+        try {
+            const updated = await updateMeterPrices(body, req.actor?.userId);
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'meter_pricing.updated',
+                targetType: 'system_settings',
+                targetId: 'meter_pricing',
+                metadata: body,
+            });
+            return updated;
+        } catch (error: any) {
+            return reply.code(error?.status ?? 400).send({
+                error: error?.code ?? 'update_pricing_failed',
+                message: error?.message ?? 'Could not update meter prices.',
+            });
+        }
+    });
+
     fastify.post('/meter-orders', async (req, reply) => {
         const body = z.object({
             customer_id: z.string().uuid(),
             meter_type: z.enum(['single_phase', 'three_phase']),
+            property_category: z.enum(['residential', 'commercial']).optional(),
             property_address: z.string().trim().min(5).max(240),
             service_area: z.string().trim().min(2).max(120),
             contact_phone: z.string().trim().min(8).max(32),
@@ -2649,6 +2681,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 staffUserId: req.actor!.userId,
                 customerId: body.customer_id,
                 meterType: body.meter_type,
+                propertyCategory: body.property_category,
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
@@ -2666,6 +2699,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 targetId: order.id,
                 metadata: {
                     meter_type: body.meter_type,
+                    property_category: body.property_category ?? 'residential',
                     sponsor_mode: body.sponsor_mode,
                     source_channel: 'admin_portal',
                     vendor_organization_id: body.vendor_organization_id ?? null,

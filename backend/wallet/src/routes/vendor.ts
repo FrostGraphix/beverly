@@ -61,7 +61,7 @@ import {
 } from '../services/vendor-vend-credential.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
-import { createVendorSponsoredMeterOrder } from '../services/meter-orders.js';
+import { createVendorSponsoredMeterOrder, getMeterPrices } from '../services/meter-orders.js';
 import {
     abandonWalletIdempotency,
     assertClientIdempotencyKey,
@@ -798,10 +798,15 @@ const route: FastifyPluginAsync = async (fastify) => {
         return { customers: data ?? [] };
     });
 
+    fastify.get('/meter-pricing', { preHandler: fastify.requireVendor() }, async () => {
+        return getMeterPrices();
+    });
+
     fastify.post('/meter-orders', { preHandler: fastify.requireVendor() }, async (req, reply) => {
         const body = z.object({
             customer_id: z.string().uuid(),
             meter_type: z.enum(['single_phase', 'three_phase']),
+            property_category: z.enum(['residential', 'commercial']).optional(),
             property_address: z.string().trim().min(5).max(240),
             service_area: z.string().trim().min(2).max(120),
             contact_phone: z.string().trim().min(8).max(32),
@@ -815,6 +820,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                 actorType: 'vendor_user',
                 customerId: body.customer_id,
                 meterType: body.meter_type,
+                propertyCategory: body.property_category,
                 propertyAddress: body.property_address,
                 serviceArea: body.service_area,
                 contactPhone: body.contact_phone,
@@ -826,7 +832,12 @@ const route: FastifyPluginAsync = async (fastify) => {
                 action: 'meter_order.created',
                 targetType: 'meter_order',
                 targetId: order.id,
-                metadata: { meter_type: body.meter_type, source_channel: 'vendor_portal', customer_id: body.customer_id },
+                metadata: {
+                    meter_type: body.meter_type,
+                    property_category: body.property_category ?? 'residential',
+                    source_channel: 'vendor_portal',
+                    customer_id: body.customer_id,
+                },
             });
             return { order };
         } catch (error: any) {
@@ -1147,7 +1158,7 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.post('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor({ requireMfa: false }) }, async (req, reply) => {
+    const handleRemoteSend = async (req: any, reply: any) => {
         const params = z.object({
             purchaseOrderId: z.string().uuid(),
         }).parse(req.params);
@@ -1162,11 +1173,21 @@ const route: FastifyPluginAsync = async (fastify) => {
                 const status = error.code === 'purchase_not_found' ? 404
                     : error.code === 'token_missing' || error.code === 'purchase_not_delivered' ? 409
                     : 422;
-                return reply.code(status).send({ error: error.code, message: error.message });
+                return reply.code(status).send({
+                    error: error.code,
+                    message: error.message,
+                    status: 'failed',
+                    deliveryState: 'remote_send_failed_needs_manual_entry',
+                    delivery_state: 'remote_send_failed_needs_manual_entry',
+                    remark: error.message,
+                });
             }
             throw error;
         }
-    });
+    };
+
+    fastify.post('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor({ requireMfa: false }) }, handleRemoteSend);
+    fastify.get('/vend/:purchaseOrderId/remote-send', { preHandler: fastify.requireVendor({ requireMfa: false }) }, handleRemoteSend);
 
     // ── purchases history ──
     fastify.get('/transactions', { preHandler: fastify.requireVendor() }, async (req) => {

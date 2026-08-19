@@ -73,11 +73,13 @@ function formatNaira(minor?: number | null): string {
 
 const formattedToken = computed(() => formatToken(currentToken.value ?? props.token));
 
-const isSuccess = computed(() => ['remote_send_delivered', 'delivered'].includes(currentState.value));
-const isFailed = computed(() => String(currentState.value).includes('failed'));
+const isAlreadyUsed = computed(() => ['already_delivered', 'already_credited', 'already_used', 'token_already_used'].includes(currentState.value));
+const isSuccess = computed(() => ['remote_send_delivered', 'delivered', 'already_delivered', 'already_credited', 'already_used', 'token_already_used'].includes(currentState.value));
+const isFailed = computed(() => String(currentState.value).includes('failed') || String(currentState.value).includes('error'));
 const isPending = computed(() => ['remote_send_pending', 'remote_send_pending_review', 'token_generated', 'dispatching', 'hold_active'].includes(currentState.value));
 
 const statusHeadline = computed(() => {
+    if (isAlreadyUsed.value) return 'Token already credited to meter';
     if (isSuccess.value) return 'Token delivered to meter';
     if (isFailed.value) return 'Remote send failed — manual entry required';
     if (polling.value) return 'Dispatching token to physical meter…';
@@ -85,6 +87,7 @@ const statusHeadline = computed(() => {
 });
 
 const statusSubhead = computed(() => {
+    if (isAlreadyUsed.value) return 'This token has already been entered or confirmed on the physical meter. No further action is required.';
     if (isSuccess.value) return 'The physical meter acknowledged receiving this credit token.';
     if (isFailed.value) return currentRemark.value || 'Wireless delivery encountered an issue. The token below is 100% valid for keypad entry.';
     if (polling.value) return 'Beverly is transmitting the credit payload over-the-air to your meter.';
@@ -148,20 +151,33 @@ async function triggerPoll(attempt: number) {
     try {
         const res = await props.fetcher(props.apiEndpoint);
         if (res) {
-            if (res.deliveryState) currentState.value = res.deliveryState;
-            else if (res.purchaseOrder?.delivery_state) currentState.value = res.purchaseOrder.delivery_state;
-            if (res.remoteTaskId) currentTaskId.value = res.remoteTaskId;
-            if (res.remark) currentRemark.value = res.remark;
-            if (res.token) currentToken.value = res.token;
+            const nextState = res.deliveryState || res.delivery_state || res.purchaseOrder?.delivery_state;
+            if (nextState) currentState.value = nextState;
+            const nextTaskId = res.remoteTaskId || res.remote_task_id || res.purchaseOrder?.remote_task_id;
+            if (nextTaskId) currentTaskId.value = nextTaskId;
+            const nextRemark = res.remark || res.message || res.failure_reason;
+            if (nextRemark) currentRemark.value = nextRemark;
+            const nextToken = res.token || res.purchaseOrder?.token;
+            if (nextToken) currentToken.value = nextToken;
             emit('updated', res);
         }
-    } catch {
-        // Transient error — backoff continues
+    } catch (err: any) {
+        const errData = err?.details || err?.data || err?.response?.data || err;
+        const fallbackState = errData?.deliveryState || errData?.delivery_state || errData?.purchaseOrder?.delivery_state || (attempt + 1 >= POLL_DELAYS_MS.length ? 'remote_send_failed_needs_manual_entry' : null);
+        if (fallbackState) currentState.value = fallbackState;
+        const fallbackRemark = errData?.remark || errData?.message || errData?.error || err?.message;
+        if (fallbackRemark) currentRemark.value = fallbackRemark;
     }
 
     if (!isSuccess.value && !isFailed.value && attempt + 1 < POLL_DELAYS_MS.length) {
         pollTimer = window.setTimeout(() => triggerPoll(attempt + 1), POLL_DELAYS_MS[attempt]);
     } else {
+        if (!isSuccess.value && !isFailed.value) {
+            currentState.value = 'remote_send_failed_needs_manual_entry';
+            if (!currentRemark.value) {
+                currentRemark.value = 'Meter delivery acknowledgement pending over-the-air. The 20-digit token is valid for keypad entry.';
+            }
+        }
         stopPolling();
     }
 }
@@ -206,6 +222,16 @@ watch(
     { immediate: true }
 );
 
+watch(
+    () => [props.deliveryState, props.remoteTaskId, props.remark, props.token],
+    ([ds, tid, rem, tok]) => {
+        if (ds) currentState.value = ds as string;
+        if (tid) currentTaskId.value = tid as string;
+        if (rem) currentRemark.value = rem as string;
+        if (tok) currentToken.value = tok as string;
+    }
+);
+
 onUnmounted(() => {
     stopPolling();
 });
@@ -215,13 +241,119 @@ onUnmounted(() => {
   <Teleport to="body">
     <Transition name="rst-fade">
       <div v-if="open" class="rst-scrim" @click.self="closeModal">
-        <div class="rst-dialog" role="dialog" aria-modal="true">
+        <!-- SUCCESS MODAL (When Remote Send is Confirmed Delivered) -->
+        <div v-if="isSuccess" class="rst-dialog rst-dialog--success" role="dialog" aria-modal="true">
+          <header class="rst-head text-center">
+            <div class="rst-success-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--brand, #22c55e)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <h3 class="rst-title bold-title" style="color: var(--brand, #22c55e)">Remote Send Confirmed & Delivered!</h3>
+            <p class="rst-subtitle">The physical meter acknowledged wireless dispatch and updated its credit balance.</p>
+          </header>
+
+          <div class="rst-success-details-card">
+            <div class="rst-detail-row">
+              <span class="rst-detail-label">Meter Number</span>
+              <strong class="rst-detail-val mono">{{ meterId || '—' }}</strong>
+            </div>
+            <div v-if="customerName" class="rst-detail-row">
+              <span class="rst-detail-label">Customer</span>
+              <strong class="rst-detail-val">{{ customerName }}</strong>
+            </div>
+            <div v-if="amountMinor" class="rst-detail-row">
+              <span class="rst-detail-label">Amount Paid</span>
+              <strong class="rst-detail-val">{{ formatNaira(amountMinor) }}</strong>
+            </div>
+            <div v-if="unitsKwh" class="rst-detail-row">
+              <span class="rst-detail-label">Credited Units</span>
+              <strong class="rst-detail-val mono" style="color: var(--brand, #22c55e)">{{ Number(unitsKwh).toFixed(2) }} kWh</strong>
+            </div>
+            <div v-if="currentTaskId" class="rst-detail-row">
+              <span class="rst-detail-label">Transmission Task</span>
+              <strong class="rst-detail-val mono">#{{ String(currentTaskId).slice(0, 10) }}</strong>
+            </div>
+          </div>
+
+          <!-- Token Box -->
+          <div class="rst-token-card">
+            <div class="rst-token-header">
+              <span class="rst-token-tag">Delivered Credit Token</span>
+              <span v-if="meterId" class="rst-token-meter">Meter: {{ meterId }}</span>
+            </div>
+            <div class="rst-token-value bw-token-shimmer">{{ formattedToken }}</div>
+            <div class="rst-token-actions">
+              <button class="rst-btn primary sm" @click="copyToken">
+                {{ copied ? 'Copied to Clipboard ✓' : 'Copy 20-Digit Token' }}
+              </button>
+            </div>
+          </div>
+
+          <footer class="rst-foot">
+            <button class="rst-btn primary" style="width: 100%; justify-content: center" @click="closeModal">
+              Done & Close
+            </button>
+          </footer>
+        </div>
+
+        <!-- FAILURE MODAL WITH REASONS (When Remote Send encounters an error) -->
+        <div v-else-if="isFailed" class="rst-dialog rst-dialog--failed" role="dialog" aria-modal="true">
+          <header class="rst-head text-center">
+            <div class="rst-failed-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h3 class="rst-title bold-title" style="color: #ef4444">Remote Dispatch Unconfirmed</h3>
+            <p class="rst-subtitle">Wireless payload delivery could not be verified by the physical meter.</p>
+          </header>
+
+          <!-- Failure Reasons Card -->
+          <div class="rst-reason-card">
+            <div class="rst-reason-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <strong>Failure Cause & Diagnostics</strong>
+            </div>
+            <p class="rst-reason-text">
+              {{ currentRemark || 'The physical meter was offline or GPRS signal timed out before payload acknowledgement.' }}
+            </p>
+            <ul class="rst-reason-bullets">
+              <li>Signal status: Meter un-acknowledged over GPRS/PLC.</li>
+              <li>Token status: <strong>100% Valid</strong> for manual keypad entry.</li>
+            </ul>
+          </div>
+
+          <!-- Token Box for Manual Fallback -->
+          <div class="rst-token-card">
+            <div class="rst-token-header">
+              <span class="rst-token-tag" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5">Manual Keypad Token</span>
+              <span v-if="meterId" class="rst-token-meter">Meter: {{ meterId }}</span>
+            </div>
+            <div class="rst-token-value">{{ formattedToken }}</div>
+            <div class="rst-token-actions">
+              <button class="rst-btn primary sm" @click="copyToken">
+                {{ copied ? 'Copied to Clipboard ✓' : 'Copy Token for Manual Entry' }}
+              </button>
+            </div>
+          </div>
+
+          <footer class="rst-foot">
+            <button class="rst-btn secondary" @click="closeModal">Close</button>
+            <button v-if="apiEndpoint && fetcher" class="rst-btn primary" :disabled="polling" @click="startPolling">
+              {{ polling ? 'Retrying dispatch…' : 'Retry Remote Send' }}
+            </button>
+          </footer>
+        </div>
+
+        <!-- TRACKING / PROGRESS PIPELINE MODAL (In progress) -->
+        <div v-else class="rst-dialog" role="dialog" aria-modal="true">
           <header class="rst-head">
             <div class="rst-head-title">
-              <span class="rst-badge-icon" :class="{ success: isSuccess, danger: isFailed, pending: isPending }">
-                <svg v-if="isSuccess" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-                <svg v-else-if="isFailed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                <svg v-else class="rst-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+              <span class="rst-badge-icon pending">
+                <svg class="rst-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
               </span>
               <div>
                 <h3 class="rst-title">{{ statusHeadline }}</h3>
@@ -289,9 +421,6 @@ onUnmounted(() => {
 
           <footer class="rst-foot">
             <button class="rst-btn secondary" @click="closeModal">Close</button>
-            <button v-if="isFailed && apiEndpoint && fetcher" class="rst-btn primary" :disabled="polling" @click="startPolling">
-              {{ polling ? 'Retrying dispatch…' : 'Retry Remote Send' }}
-            </button>
           </footer>
         </div>
       </div>
@@ -304,46 +433,46 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
 }
 
 .rst-dialog {
-  background: var(--bg-surface, #12161f);
+  background: var(--bg-surface, #0f131c);
   border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
-  border-radius: 16px;
+  border-radius: 14px;
   width: 100%;
-  max-width: 540px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  max-width: 440px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   color: var(--text-main, #f3f4f6);
   font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
-  padding: 24px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 .rst-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .rst-head-title {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .rst-badge-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -353,8 +482,8 @@ onUnmounted(() => {
 }
 
 .rst-badge-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .rst-badge-icon.success {
@@ -383,26 +512,26 @@ onUnmounted(() => {
 
 .rst-title {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 0.98rem;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .rst-subtitle {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
+  margin: 2px 0 0;
+  font-size: 0.78rem;
   color: var(--text-dim, #9ca3af);
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 .rst-close {
   background: none;
   border: none;
   color: #9ca3af;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
   line-height: 1;
 }
 .rst-close:hover {
@@ -410,30 +539,30 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* 4-Step Stepper */
+/* Compact 4-Step Stepper */
 .rst-pipeline {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   position: relative;
-  padding-left: 4px;
+  padding-left: 2px;
 }
 
 .rst-step {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 10px;
   position: relative;
 }
 
 .rst-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: 28px;
-  left: 13px;
+  top: 22px;
+  left: 10px;
   width: 2px;
-  height: calc(100% + 4px);
-  background: rgba(255, 255, 255, 0.12);
+  height: calc(100% + 0px);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .rst-step.completed:not(:last-child)::after {
@@ -441,16 +570,16 @@ onUnmounted(() => {
 }
 
 .rst-step-icon {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: #9ca3af;
   z-index: 1;
 }
@@ -463,7 +592,7 @@ onUnmounted(() => {
 .rst-step.active .rst-step-icon {
   background: #3b82f6;
   color: #fff;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }
 
 .rst-step.failed .rst-step-icon {
@@ -472,8 +601,8 @@ onUnmounted(() => {
 }
 
 .rst-active-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #fff;
   animation: rst-pulse 1s infinite alternate;
@@ -487,123 +616,133 @@ onUnmounted(() => {
 .rst-step-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-top: 3px;
+  gap: 1px;
+  padding-top: 1px;
 }
 
 .rst-step-label {
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .rst-step-desc {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   color: var(--text-dim, #9ca3af);
+  line-height: 1.25;
 }
 
-/* Token Box */
+/* Compact Token Box */
 .rst-token-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  border-radius: 12px;
-  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .rst-token-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
 .rst-token-tag {
   color: #4ade80;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .rst-token-meter {
   color: #9ca3af;
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-family: monospace;
 }
 
 .rst-token-value {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: 1.25rem;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 1.12rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-align: center;
-  padding: 8px 0;
   color: #fff;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rst-token-actions {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
 }
 
 .rst-token-note {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #9ca3af;
 }
 
-/* Meta grid */
+/* Compact Order Summary Meta Grid */
 .rst-meta-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  gap: 6px;
   background: rgba(0, 0, 0, 0.2);
-  padding: 12px;
+  padding: 8px 10px;
   border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .rst-meta-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .rst-meta-label {
-  font-size: 0.7rem;
-  color: #9ca3af;
+  font-size: 0.68rem;
   text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.03em;
 }
 
 .rst-meta-val {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
+  color: #e5e7eb;
 }
 
 .rst-meta-val.mono {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-family: monospace;
 }
 
 .rst-foot {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .rst-btn {
-  padding: 10px 18px;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   font-weight: 600;
+  padding: 6px 14px;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   transition: all 0.15s ease;
 }
 
+.rst-btn.sm {
+  padding: 4px 10px;
+  font-size: 0.74rem;
+}
+
 .rst-btn.primary {
-  background: var(--brand, #22c55e);
   color: #000;
 }
 .rst-btn.primary:hover {
@@ -621,6 +760,165 @@ onUnmounted(() => {
 .rst-btn.sm {
   padding: 6px 12px;
   font-size: 0.8rem;
+}
+
+/* Success & Failure Modal Variants */
+.rst-dialog--success {
+  border-color: oklch(70% 0.19 145 / 0.45);
+  box-shadow: 0 0 40px oklch(70% 0.19 145 / 0.15), 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.rst-dialog--failed {
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.15), 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.rst-success-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: oklch(70% 0.19 145 / 0.15);
+  display: grid;
+  place-items: center;
+  margin: 4px auto 10px;
+  box-shadow: 0 0 20px oklch(70% 0.19 145 / 0.25);
+}
+.rst-success-icon-wrap svg {
+  width: 28px;
+  height: 28px;
+}
+
+.rst-failed-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  display: grid;
+  place-items: center;
+  margin: 4px auto 10px;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+}
+.rst-failed-icon-wrap svg {
+  width: 28px;
+  height: 28px;
+}
+
+.text-center {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bold-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.rst-success-details-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid oklch(70% 0.19 145 / 0.22);
+}
+
+.rst-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+.rst-detail-label {
+  color: #9ca3af;
+}
+.rst-detail-val {
+  color: #f3f4f6;
+}
+
+.rst-reason-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+}
+
+.rst-reason-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fca5a5;
+  font-size: 0.84rem;
+}
+
+.rst-reason-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #e5e7eb;
+  line-height: 1.4;
+}
+
+.rst-reason-bullets {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.76rem;
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Light Theme Overrides */
+[data-theme="light"] .rst-dialog {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18) !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .rst-title {
+  color: #0f172a !important;
+}
+[data-theme="light"] .rst-subtitle {
+  color: #475569 !important;
+}
+[data-theme="light"] .rst-token-card {
+  background: #f8fafc !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+[data-theme="light"] .rst-token-value {
+  color: #0f172a !important;
+}
+[data-theme="light"] .rst-meta-grid {
+  background: #f1f5f9 !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .rst-meta-val {
+  color: #0f172a !important;
+}
+[data-theme="light"] .rst-success-details-card {
+  background: #f0fdf4 !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+}
+[data-theme="light"] .rst-detail-label {
+  color: #475569 !important;
+}
+[data-theme="light"] .rst-detail-val {
+  color: #0f172a !important;
+}
+[data-theme="light"] .rst-reason-card {
+  background: #fef2f2 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+[data-theme="light"] .rst-reason-header {
+  color: #991b1b !important;
+}
+[data-theme="light"] .rst-reason-text {
+  color: #1e293b !important;
 }
 
 /* Transition */

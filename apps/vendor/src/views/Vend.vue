@@ -25,7 +25,39 @@ const vendIntentKey = ref(newIdempotencyKey());
 const vendIntentFingerprint = ref('');
 
 async function fetchRemoteSendStatus(endpoint: string) {
-    return await api.get<any>(endpoint);
+    try {
+        return await api.get<any>(endpoint);
+    } catch (err: any) {
+        const data = err?.details || err?.data || err?.response?.data;
+        if (data && typeof data === 'object') {
+            return {
+                status: 'failed',
+                deliveryState: data.delivery_state || data.deliveryState || 'remote_send_failed_needs_manual_entry',
+                remark: data.message || data.remark || data.error || err.message || 'Remote send failed',
+                purchaseOrder: data.purchaseOrder,
+                remoteTaskId: data.remoteTaskId || data.remote_task_id,
+            };
+        }
+        try {
+            return await api.post<any>(endpoint, {});
+        } catch (postErr: any) {
+            const postData = postErr?.details || postErr?.data || postErr?.response?.data;
+            if (postData && typeof postData === 'object') {
+                return {
+                    status: 'failed',
+                    deliveryState: postData.delivery_state || postData.deliveryState || 'remote_send_failed_needs_manual_entry',
+                    remark: postData.message || postData.remark || postData.error || postErr.message || 'Remote send failed',
+                    purchaseOrder: postData.purchaseOrder,
+                    remoteTaskId: postData.remoteTaskId || postData.remote_task_id,
+                };
+            }
+            return {
+                status: 'failed',
+                deliveryState: 'remote_send_failed_needs_manual_entry',
+                remark: postErr?.message || err?.message || 'Remote send failed',
+            };
+        }
+    }
 }
 
 function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
@@ -690,7 +722,7 @@ async function remoteSendGeneratedToken() {
             </div>
             <span class="token-ready-badge"><span aria-hidden="true"></span>Generated</span>
           </div>
-          <p class="bw-token-value" :aria-label="`Token ${result?.token ?? ''}`">
+          <p class="bw-token-value bw-token-shimmer" :aria-label="`Token ${result?.token ?? ''}`">
             <span v-for="(group, index) in tokenGroups" :key="`${group}-${index}`">{{ group }}</span>
           </p>
           <div class="token-meta">

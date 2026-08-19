@@ -114,7 +114,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
             // into a login redirect. MFA is challenged only for an explicit
             // write request, such as previewing or executing a transfer.
             if (method !== 'GET' && method !== 'HEAD' && res.status === 403 && json?.error === 'mfa_required') handleMfaRequired();
-            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details);
+            throw new ApiError(res.status, json?.error ?? 'http_error', json?.message ?? res.statusText, json?.details ?? json);
         }
         return unwrapEnvelope<T>(json);
     } catch (error) {

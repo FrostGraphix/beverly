@@ -35,7 +35,7 @@
         <span>Station</span>
         <BaseSelect v-model="stationId" @change="applyFilters">
           <option value="">All stations</option>
-          <option v-for="station in stations" :key="station" :value="station">{{ station }}</option>
+          <option v-for="station in stations" :key="station.value || station" :value="station.value || station">{{ station.label || station }}</option>
         </BaseSelect>
       </label>
       <label>
@@ -173,8 +173,9 @@ import BaseButton from "./base/BaseButton.vue";
 import BaseInput from "./base/BaseInput.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import ExportRangeMenu from "./base/ExportRangeMenu.vue";
-import { fetchStations, stationsSync } from "../services/station-registry.mjs";
+import { fetchStations, formatStationDisplayLabel, stationsSync } from "../services/station-registry.mjs";
 import { downloadTextFile } from "../services/import-export.mjs";
+import { loadDynamicStationOptions, tableSiteOptions } from "../services/table-service.js";
 
 const DAY = 86400000;
 
@@ -189,19 +190,28 @@ export default {
   data() {
     return {
       rows: [], total: 0, summary: {}, meta: {}, loading: false, error: "", selected: null,
-      viewMode: typeof window !== "undefined" && window.innerWidth <= 680 ? "list" : "table",
+      viewMode: "table",
       stationId: "", alarmType: "", severity: "", searchTerm: "", page: 1, pageSize: 20,
       from: dateInput(Date.now() - (7 * DAY)), to: dateInput(Date.now()),
       exportRange: "30d", exportLoading: false, exportError: "",
-      // Discovered estate; seeded for first paint and refreshed on mount so a
-      // newly onboarded station can be filtered on immediately.
-      stations: stationsSync(),
+      fetchedStations: [],
       alarmTypes: [],
-      severityOptions: [{ value: "", label: "All" }, { value: "critical", label: "Critical" }, { value: "warning", label: "Warning" }],
-      userToggledView: false
+      severityOptions: [{ value: "", label: "All" }, { value: "critical", label: "Critical" }, { value: "warning", label: "Warning" }]
     };
   },
   computed: {
+    stations() {
+      const dynamic = tableSiteOptions.filter((s) => s.value).map((s) => ({ value: s.value, label: s.label }));
+      const synced = stationsSync().map((id) => ({ value: id, label: formatStationDisplayLabel(id) }));
+      const fetched = (this.fetchedStations || []).map((id) => ({ value: id, label: formatStationDisplayLabel(id) }));
+      const map = new Map();
+      [...synced, ...dynamic, ...fetched].forEach((item) => {
+        if (item.value) map.set(item.value, item.label || item.value);
+      });
+      return Array.from(map.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
     pageCount() { return Math.max(1, Math.ceil(this.total / this.pageSize)); },
     statCards() {
       return [
@@ -214,6 +224,7 @@ export default {
     }
   },
   mounted() {
+    loadDynamicStationOptions(undefined, true).catch(() => null);
     if (typeof window !== "undefined" && window.location && window.location.hash.includes("?")) {
       const params = new URLSearchParams(window.location.hash.split("?")[1]);
       const initialTerm = params.get("q") || params.get("search") || params.get("searchTerm") || "";
@@ -221,26 +232,11 @@ export default {
       if (params.get("alarm")) this.alarmType = params.get("alarm");
     }
     fetchStations()
-      .then((stations) => { if (stations.length) this.stations = stations; })
+      .then((stations) => { if (stations.length) this.fetchedStations = stations; })
       .catch(() => { /* registry unreachable — keep the seeded list */ });
     this.load();
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", this.handleResize, { passive: true });
-    }
-  },
-  beforeUnmount() {
-    if (typeof window !== "undefined") {
-      window.removeEventListener("resize", this.handleResize);
-    }
   },
   methods: {
-    handleResize() {
-      if (!this.userToggledView && typeof window !== "undefined") {
-        if (window.innerWidth <= 680 && this.viewMode === "table") {
-          this.viewMode = "list";
-        }
-      }
-    },
     requestBody(overrides = {}) {
       return { stationId: this.stationId, alarm: this.alarmType, severity: this.severity, searchTerm: this.searchTerm, from: new Date(`${this.from}T00:00:00`).toISOString(), to: new Date(`${this.to}T23:59:59.999`).toISOString(), offset: (this.page - 1) * this.pageSize, pageLimit: this.pageSize, sortBy: "currentDate", sortDirection: "desc", ...overrides };
     },
@@ -267,7 +263,7 @@ export default {
     },
     applyFilters() { this.page = 1; this.load(); },
     setSeverity(value) { this.severity = value; this.applyFilters(); },
-    setViewMode(value) { this.viewMode = value; this.userToggledView = true; },
+    setViewMode(value) { this.viewMode = value; },
     resetFilters() { this.stationId = ""; this.alarmType = ""; this.severity = ""; this.searchTerm = ""; this.from = dateInput(Date.now() - (7 * DAY)); this.to = dateInput(Date.now()); this.applyFilters(); },
     goPage(page) { this.page = Math.max(1, Math.min(this.pageCount, page)); this.load(); },
     exportDates() { const to = new Date(); const from = new Date(to); if (this.exportRange === "all") from.setTime(0); else if (this.exportRange === "1d") from.setDate(from.getDate() - 1); else if (this.exportRange === "7d") from.setDate(from.getDate() - 7); else if (this.exportRange === "30d") from.setDate(from.getDate() - 30); else from.setFullYear(from.getFullYear() - 1); return { from: from.toISOString(), to: to.toISOString() }; },
