@@ -79,8 +79,10 @@ function portalBasePath(): string {
         ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/`
         : '/';
 
-    if (typeof window === 'undefined' || normalized === '/') return normalized;
-    return window.location.pathname.startsWith(normalized) ? normalized : '/';
+    // DEACTIVATED: Automatic pathname rewrite override — allow explicit navigation across portal links
+    // if (typeof window === 'undefined' || normalized === '/') return normalized;
+    // return window.location.pathname.startsWith(normalized) ? normalized : '/';
+    return normalized;
 }
 
 function redirectToLogin(): void {

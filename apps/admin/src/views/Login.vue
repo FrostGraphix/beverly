@@ -51,8 +51,8 @@ function readableError(err: unknown, fallback: string): string {
     if (err instanceof ApiError && err.status >= 500) {
         return 'Authentication service is temporarily unavailable. Retry shortly.';
     }
-    if (err instanceof ApiError && err.status === 401) {
-        return 'This Supabase account signed in, but no active Beverly Wallet Admin staff profile is linked.';
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        return 'Access Denied: Vendor and Customer accounts cannot sign in to Beverly Wallet Admin. Please use your designated portal.';
     }
     if (err instanceof ApiError) return err.message || fallback;
     if (err instanceof Error) return err.message || fallback;
