@@ -189,6 +189,9 @@ const initials = computed(() => {
 });
 const profilePictureUrl = computed(() => auth.user?.profile_picture_url?.trim() || '');
 const isSuperAdmin = computed(() => auth.user?.role === 'super-admin' || auth.user?.role === 'super_admin');
+const isCrmEligible = computed(() =>
+    ['super-admin', 'super_admin', 'operations-manager', 'operations_manager'].includes(String(auth.user?.role ?? '').toLowerCase())
+);
 const displayName = computed(() => auth.user?.full_name || auth.user?.email || 'Administrator');
 const currentUserFirstName = computed(() => {
     const raw = auth.user?.full_name || auth.user?.email || 'Beverly';
@@ -347,7 +350,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
       </nav>
 
       <footer class="bw-sidebar-foot sidebar-account">
-        <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-back">
+        <a v-if="isCrmEligible" :href="CRM_URL" class="bw-back">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
           Back to CRM
         </a>
@@ -474,8 +477,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 <span>Wallet Landing</span>
               </a>
-              <div v-if="isSuperAdmin" class="bw-user-menu-separator"></div>
-              <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu">
+              <div v-if="isCrmEligible" class="bw-user-menu-separator"></div>
+              <a v-if="isCrmEligible" :href="CRM_URL" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M19 12H5" />
                   <path d="m12 19-7-7 7-7" />
