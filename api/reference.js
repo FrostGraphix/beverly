@@ -5139,6 +5139,18 @@ async function handler(request, response) {
         response.status(401).json({ code: 401, msg: "Invalid session", reason: "Invalid session", data: null, result: null });
         return;
       }
+      const actorRole = String(actor?.roleId || '').toLowerCase();
+      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(actorRole)) {
+        clearCrmSessionCookies(response);
+        response.status(403).json({
+          code: 403,
+          msg: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+          reason: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+          data: null,
+          result: null
+        });
+        return;
+      }
       const previousToken = cookieValue(request, "bev_token");
       const previousSession = readCrmSession(cookieValue(request, crmSessionCookieName));
       const previousStatus = previousToken && previousSession ? crmSessionStatus(previousSession, previousToken) : null;
@@ -5519,15 +5531,21 @@ async function handler(request, response) {
     if (pathname.toLowerCase() === "/api/user/login" && result.status === 200) {
       const token = result.body?.data?.token || result.body?.result?.token;
       const refreshToken = result.body?.data?.refreshToken || result.body?.result?.refreshToken || "";
-      const session = token ? establishCrmSession(response, token, refreshToken) : null;
-      if (!session) {
+      const roleId = String(result.body?.data?.roleId || result.body?.result?.roleId || "").toLowerCase();
+      if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(roleId)) {
         clearCrmSessionCookies(response);
-        result = authFailure(401, pathname, "Session establishment failed");
+        result = authFailure(403, pathname, "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.");
       } else {
-        for (const key of ["data", "result"]) {
-          if (result.body?.[key]) {
-            result.body[key].startedAt = session.startedAt;
-            result.body[key].absoluteExpiresAt = session.startedAt + crmSessionLimits().absoluteMs;
+        const session = token ? establishCrmSession(response, token, refreshToken) : null;
+        if (!session) {
+          clearCrmSessionCookies(response);
+          result = authFailure(401, pathname, "Session establishment failed");
+        } else {
+          for (const key of ["data", "result"]) {
+            if (result.body?.[key]) {
+              result.body[key].startedAt = session.startedAt;
+              result.body[key].absoluteExpiresAt = session.startedAt + crmSessionLimits().absoluteMs;
+            }
           }
         }
       }

@@ -55,6 +55,12 @@ export const useStaffAuthStore = defineStore('staff-auth', {
         async hydrate(force = false) {
             if (this.hydrated && !force) return;
             this.hydrated = true;
+            try {
+                if (typeof window !== 'undefined' && !localStorage.getItem('beverly.routing_deactivated_v1')) {
+                    localStorage.removeItem('beverly.access_token');
+                    localStorage.setItem('beverly.routing_deactivated_v1', '1');
+                }
+            } catch { /* noop */ }
             let token: string | null = null;
             let userJson: string | null = null;
             try {
@@ -139,9 +145,22 @@ export const useStaffAuthStore = defineStore('staff-auth', {
             this.lastValidatedAt = null;
             this.permissionsStale = false;
             lastRefreshAttemptAt = 0;
-            localStorage.removeItem('beverly.staff.access_token');
-            localStorage.removeItem('beverly.staff.user');
-            localStorage.removeItem('beverly.staff.permissions');
+            try {
+                const lsKeys: string[] = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('beverly.')) lsKeys.push(k);
+                }
+                lsKeys.forEach((k) => localStorage.removeItem(k));
+            } catch { /* noop */ }
+            try {
+                const ssKeys: string[] = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const k = sessionStorage.key(i);
+                    if (k && k.startsWith('beverly.')) ssKeys.push(k);
+                }
+                ssKeys.forEach((k) => sessionStorage.removeItem(k));
+            } catch { /* noop */ }
         },
     },
 });

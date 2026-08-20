@@ -302,6 +302,23 @@ async function signInWithPassword({ userId, password }) {
 
   const user = body.user || {};
   const actor = normalizedActorFromAuthUser(user, email);
+  const normalizedRole = String(actor.roleId || '').toLowerCase();
+  if (['vendor', 'vendor_user', 'vendor-user', 'customer'].includes(normalizedRole)) {
+    return {
+      status: 403,
+      body: {
+        code: 403,
+        msg: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+        reason: "Access Denied: Vendor and Customer accounts cannot sign in to Beverly CRM. Please use your designated portal.",
+        data: null,
+        result: null,
+        _proxy: {
+          source: "supabase-auth-gate",
+          pathname: "/api/user/login"
+        }
+      }
+    };
+  }
   return {
     status: 200,
     body: {
