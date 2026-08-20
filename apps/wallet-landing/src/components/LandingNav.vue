@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { toggleTheme } from '@beverly/tokens';
 import IconSvg from './IconSvg.vue';
 import { PORTALS } from '../content';
+import { PORTAL_URLS } from '../portals';
 
 const emit = defineEmits<{ (e: 'launch'): void }>();
 
@@ -10,6 +11,8 @@ const scrolled = ref(false);
 const menuOpen = ref(false);
 const isDark = ref(true);
 const activeSection = ref('');
+const activeSessionHref = ref<string | null>(null);
+const activeSessionLabel = ref<string | null>(null);
 
 const NAV_LINKS = [
     { id: 'how',      label: 'How it works' },
@@ -36,6 +39,24 @@ onMounted(() => {
     onScroll();
     isDark.value = document.documentElement.getAttribute('data-theme') !== 'light';
     window.addEventListener('scroll', onScroll, { passive: true });
+
+    try {
+        if (localStorage.getItem('beverly.staff.access_token') || sessionStorage.getItem('beverly.staff.access_token')) {
+            activeSessionHref.value = PORTAL_URLS.admin;
+            activeSessionLabel.value = '👑 Admin CRM';
+        } else if (localStorage.getItem('beverly.vendor.access_token') || sessionStorage.getItem('beverly.vendor.access_token')) {
+            activeSessionHref.value = PORTAL_URLS.vendor;
+            activeSessionLabel.value = '🛒 Vendor Portal';
+        } else if (
+            localStorage.getItem('beverly.customer.access_token') ||
+            sessionStorage.getItem('beverly.customer.access_token') ||
+            localStorage.getItem('beverly.access_token') ||
+            sessionStorage.getItem('beverly.access_token')
+        ) {
+            activeSessionHref.value = PORTAL_URLS.customer;
+            activeSessionLabel.value = '⚡ Customer Portal';
+        }
+    } catch { /* noop */ }
 
     // Track which section is in the centre of the viewport
     observer = new IntersectionObserver(
@@ -91,7 +112,10 @@ onBeforeUnmount(() => {
         >
           <IconSvg :name="isDark ? 'sun' : 'moon'" />
         </button>
-        <button class="lp-btn lp-btn--primary lp-nav-cta" type="button" @click="emit('launch')">
+        <a v-if="activeSessionHref" :href="activeSessionHref" class="lp-btn lp-btn--primary lp-nav-cta" style="background: var(--brand-accent, #22c55e);">
+          {{ activeSessionLabel }} <IconSvg name="arrow" />
+        </a>
+        <button v-else class="lp-btn lp-btn--primary lp-nav-cta" type="button" @click="emit('launch')">
           Get started <IconSvg name="arrow" />
         </button>
         <button

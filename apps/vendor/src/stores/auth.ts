@@ -120,7 +120,7 @@ export const useVendorAuthStore = defineStore('vendor-auth', {
                     const storage = remember ? localStorage : sessionStorage;
                     storage.setItem(USER_KEY, JSON.stringify(me));
                 } catch (err: unknown) {
-                    if (err instanceof ApiError && err.status === 401) {
+                    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
                         this.accessToken = null;
                         this.user = null;
                         clearStoredToken();

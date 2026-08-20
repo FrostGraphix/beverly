@@ -29,7 +29,7 @@ interface State {
 }
 
 function isSessionTerminalError(error: unknown): boolean {
-    return error instanceof ApiError && error.status === 401;
+    return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
 
 let sessionRefreshPromise: Promise<void> | null = null;

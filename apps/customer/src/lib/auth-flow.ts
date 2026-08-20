@@ -1,4 +1,5 @@
-export const CUSTOMER_TOKEN_KEY = 'beverly.access_token';
+export const CUSTOMER_TOKEN_KEY = 'beverly.customer.access_token';
+export const LEGACY_CUSTOMER_TOKEN_KEY = 'beverly.access_token';
 export const CUSTOMER_REFRESH_TOKEN_KEY = 'beverly.refresh_token';
 export const CUSTOMER_TOKEN_EXPIRES_AT_KEY = 'beverly.access_token_expires_at';
 export const CUSTOMER_REMEMBER_KEY = 'beverly.customer.remembered_login';
@@ -19,9 +20,14 @@ export function safeAuthRedirect(raw: unknown, fallback = '/'): string {
 
 export function readCustomerToken(): string | null {
     try {
-        return sessionStorage.getItem(CUSTOMER_TOKEN_KEY) ?? localStorage.getItem(CUSTOMER_TOKEN_KEY);
+        return sessionStorage.getItem(CUSTOMER_TOKEN_KEY) ??
+               localStorage.getItem(CUSTOMER_TOKEN_KEY) ??
+               sessionStorage.getItem(LEGACY_CUSTOMER_TOKEN_KEY) ??
+               localStorage.getItem(LEGACY_CUSTOMER_TOKEN_KEY);
     } catch {
-        try { return localStorage.getItem(CUSTOMER_TOKEN_KEY); } catch { return null; }
+        try {
+            return localStorage.getItem(CUSTOMER_TOKEN_KEY) ?? localStorage.getItem(LEGACY_CUSTOMER_TOKEN_KEY);
+        } catch { return null; }
     }
 }
 
@@ -74,6 +80,8 @@ export function storeCustomerToken(token: string, remember = true, options: Cust
 export function clearCustomerToken() {
     try { localStorage.removeItem(CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(LEGACY_CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
+    try { sessionStorage.removeItem(LEGACY_CUSTOMER_TOKEN_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(CUSTOMER_USER_KEY); } catch { /* noop */ }
     try { sessionStorage.removeItem(CUSTOMER_USER_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(CUSTOMER_REFRESH_TOKEN_KEY); } catch { /* noop */ }
