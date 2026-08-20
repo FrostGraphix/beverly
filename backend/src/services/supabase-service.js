@@ -197,8 +197,9 @@ async function vendorActorFromAuthUser(user = {}, fallback = {}) {
     rows = await restRequest(`/vendor_users?select=id,vendor_organization_id,role,email,status,vendor_organizations(id,legal_name,trading_name,status,station_id,operating_stations,station_ids_json)&email=eq.${userEmail}&limit=1`).catch(() => null);
   }
   const vu = Array.isArray(rows) ? rows[0] : null;
-  if (!vu) return null;
+  if (!vu || vu.status !== "active") return null;
   const org = vu.vendor_organizations || {};
+  if (org.status && org.status !== "approved") return null;
   const rawStation = org.station_id
     || (Array.isArray(org.operating_stations) ? org.operating_stations[0] : null)
     || (Array.isArray(org.station_ids_json) ? org.station_ids_json[0] : null)

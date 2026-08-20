@@ -4,6 +4,7 @@ import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { toggleTheme } from '@beverly/tokens';
 import { adminPushNotifications } from '../lib/push-notifications';
+import { PORTAL_URLS } from '../lib/portals';
 import AcobotWidget from './acobot/AcobotWidget.vue';
 
 defineProps<{ title?: string }>();
@@ -460,6 +461,19 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                 </svg>
                 <span>Theme</span>
               </button>
+              <div class="bw-user-menu-separator"></div>
+              <a :href="PORTAL_URLS.vendor" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Open Vendor Portal">
+                <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span>Vendor Portal</span>
+              </a>
+              <a :href="PORTAL_URLS.customer" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Open Customer Portal">
+                <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <span>Customer Portal</span>
+              </a>
+              <a :href="PORTAL_URLS.landing" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Public Wallet Landing">
+                <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <span>Wallet Landing</span>
+              </a>
               <div v-if="isSuperAdmin" class="bw-user-menu-separator"></div>
               <a v-if="isSuperAdmin" :href="CRM_URL" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">

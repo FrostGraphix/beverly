@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { api, ApiError } from '../lib/api';
+import { PORTAL_URLS } from '../lib/portals';
 import { unlockLoginVoice, playLoginVoice } from '../utils/voice';
 
 const REMEMBERED_EMAIL_KEY = 'beverly.staff.remembered_email';
@@ -32,6 +33,8 @@ const challengeCode = ref('');
 const useRecovery = ref(false);
 const error = ref<string | null>(null);
 const loading = ref(false);
+const hasVendorSession = ref(false);
+const hasCustomerSession = ref(false);
 
 const redirectTarget = computed(() => {
     return safeRedirectTarget(route.query.redirect);
@@ -174,6 +177,15 @@ function backToPassword() {
 }
 
 onMounted(async () => {
+    try {
+        hasVendorSession.value = !!(localStorage.getItem('beverly.vendor.access_token') || sessionStorage.getItem('beverly.vendor.access_token'));
+        hasCustomerSession.value = !!(
+            localStorage.getItem('beverly.customer.access_token') ||
+            sessionStorage.getItem('beverly.customer.access_token') ||
+            localStorage.getItem('beverly.access_token') ||
+            sessionStorage.getItem('beverly.access_token')
+        );
+    } catch { /* noop */ }
     const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
     if (rememberedEmail) email.value = rememberedEmail;
     rememberEmail.value = Boolean(rememberedEmail);
@@ -196,6 +208,20 @@ onMounted(async () => {
         <div class="bw-mark login-mark" aria-hidden="true"></div>
         <div class="bw-h1 login-title">Wallet Admin</div>
         <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Your Smart Power Partner.' }}</p>
+      </div>
+
+      <div v-if="hasVendorSession" class="login-flash warn" style="background: rgba(234, 88, 12, 0.12); border: 1px solid rgba(234, 88, 12, 0.3); color: #c2410c; margin-bottom: 16px;">
+        🛒 <strong>Vendor Session Active</strong>: You are signed in to Vendor Portal.
+        <div style="margin-top: 4px;">
+          <a :href="PORTAL_URLS.vendor" style="font-weight: 600; text-decoration: underline;">Go to Vendor Dashboard &rarr;</a>
+        </div>
+      </div>
+
+      <div v-else-if="hasCustomerSession" class="login-flash warn" style="background: rgba(14, 165, 233, 0.12); border: 1px solid rgba(14, 165, 233, 0.3); color: #0284c7; margin-bottom: 16px;">
+        ⚡ <strong>Customer Session Active</strong>: You are signed in as a Customer.
+        <div style="margin-top: 4px;">
+          <a :href="PORTAL_URLS.customer" style="font-weight: 600; text-decoration: underline;">Go to Customer Portal &rarr;</a>
+        </div>
       </div>
 
       <div v-if="showSessionEnded" class="login-flash warn" role="status" aria-live="polite">

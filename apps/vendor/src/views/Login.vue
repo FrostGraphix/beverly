@@ -22,6 +22,8 @@ const showPassword = ref(false);
 const rememberLogin = ref(true);
 const loading  = ref(false);
 const error    = ref<string | null>(null);
+const hasStaffSession = ref(false);
+const hasCustomerSession = ref(false);
 
 function safeRedirectTarget(raw: unknown, fallback = '/') {
     if (typeof raw !== 'string') return fallback;
@@ -115,9 +117,22 @@ async function submit() {
     }
 }
 
-const rememberedEmail = localStorage.getItem(REMEMBERED_VENDOR_EMAIL_KEY);
+const rememberedEmail = (function () {
+    try { return localStorage.getItem(REMEMBERED_VENDOR_EMAIL_KEY) ?? ''; }
+    catch { return ''; }
+})();
 if (rememberedEmail) identifier.value = rememberedEmail;
 rememberLogin.value = Boolean(rememberedEmail);
+
+try {
+    hasStaffSession.value = !!(localStorage.getItem('beverly.staff.access_token') || sessionStorage.getItem('beverly.staff.access_token'));
+    hasCustomerSession.value = !!(
+        localStorage.getItem('beverly.customer.access_token') ||
+        sessionStorage.getItem('beverly.customer.access_token') ||
+        localStorage.getItem('beverly.access_token') ||
+        sessionStorage.getItem('beverly.access_token')
+    );
+} catch { /* noop */ }
 </script>
 
 <template>
@@ -129,6 +144,21 @@ rememberLogin.value = Boolean(rememberedEmail);
         </a>
         <div class="bw-h1 login-title">Vendor Portal</div>
         <p class="bw-muted login-subtitle">Sign in to start vending</p>
+      </div>
+
+      <div v-if="hasStaffSession" class="bw-alert success login-session-ended" style="margin-bottom: 16px;">
+        👑 <strong>Staff Session Active</strong>: You are signed in as Staff/Admin.
+        <div style="margin-top: 6px; display: flex; gap: 12px;">
+          <a :href="PORTAL_URLS.admin" style="font-weight: 600; text-decoration: underline;">Open Admin CRM &rarr;</a>
+          <a :href="PORTAL_URLS.customer" style="font-weight: 600; text-decoration: underline;">Customer Portal &rarr;</a>
+        </div>
+      </div>
+
+      <div v-else-if="hasCustomerSession" class="bw-alert info login-session-ended" style="margin-bottom: 16px;">
+        ⚡ <strong>Customer Session Active</strong>: You are currently signed in as a Customer.
+        <div style="margin-top: 6px;">
+          <a :href="PORTAL_URLS.customer" style="font-weight: 600; text-decoration: underline;">Go to Customer Portal &rarr;</a>
+        </div>
       </div>
 
       <div v-if="sessionEnded" class="bw-alert warn login-session-ended">

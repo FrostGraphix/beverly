@@ -96,19 +96,29 @@ async function resolveActor(token: string): Promise<Actor | null> {
     // 1. Vendor user lookup
     let vuResult = await adminClient
         .from('vendor_users')
-        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
+        .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
         .eq('auth_user_id', userId)
         .maybeSingle();
 
     if (!vuResult.data && email) {
         vuResult = await adminClient
             .from('vendor_users')
-            .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
+            .select('id, vendor_organization_id, role, status, mfa_enrolled, password_reset_required, email, email_verified_at, vendor_organizations(status, station_id, operating_stations, station_ids_json)')
             .eq('email', email)
             .maybeSingle();
     }
 
-    const vu = vuResult.data;
+    let vu = vuResult.data;
+    if (vu && (vu as any).email && email && String((vu as any).email).trim().toLowerCase() !== String(email).trim().toLowerCase()) {
+        const { data: staffCheck } = await adminClient
+            .from('users')
+            .select('id, role_key')
+            .or(`auth_user_id.eq.${userId},user_id.eq.${userId}`)
+            .maybeSingle();
+        if (staffCheck?.role_key && STAFF_ROLES.has(staffCheck.role_key)) {
+            vu = null;
+        }
+    }
 
     if (vu && (vu as any).status === 'active') {
         const organization = (vu as any).vendor_organizations;
