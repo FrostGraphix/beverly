@@ -18,7 +18,20 @@ export function safeAuthRedirect(raw: unknown, fallback = '/'): string {
     return value;
 }
 
+export const ROUTING_DEACTIVATED_KEY = 'beverly.routing_deactivated_v1';
+
+export function ensureRoutingDeactivatedCleanup() {
+    try {
+        if (typeof window === 'undefined') return;
+        if (localStorage.getItem(ROUTING_DEACTIVATED_KEY)) return;
+        localStorage.removeItem(LEGACY_CUSTOMER_TOKEN_KEY);
+        sessionStorage.removeItem(LEGACY_CUSTOMER_TOKEN_KEY);
+        localStorage.setItem(ROUTING_DEACTIVATED_KEY, '1');
+    } catch { /* noop */ }
+}
+
 export function readCustomerToken(): string | null {
+    ensureRoutingDeactivatedCleanup();
     try {
         return sessionStorage.getItem(CUSTOMER_TOKEN_KEY) ??
                localStorage.getItem(CUSTOMER_TOKEN_KEY) ??
