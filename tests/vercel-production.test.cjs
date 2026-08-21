@@ -119,6 +119,7 @@ async function main() {
     });
     try {
       await withEnv({
+        VERCEL_ENV: "production",
         LIVE_API_PROXY_ENABLED: "true",
         LIVE_READ_MODE: "live",
         LIVE_API_BASE_URL: `http://127.0.0.1:${upstream.address().port}`,
@@ -130,8 +131,8 @@ async function main() {
         const chart = await request(port, "POST", "/api/dashboard/readLineChart", { type: 3 });
         const stations = await request(port, "POST", "/api/station/read", { pageNumber: 1, pageSize: 10 });
 
-        assert.strictEqual(chart.status, 200);
-        assert.strictEqual(chart.body._proxy.source, "sample-after-live-failure");
+        assert.strictEqual(chart.status, 502);
+        assert.strictEqual(chart.body._proxy.source, "live-required");
         // station/read is a mutable admin CRUD table (see api/reference.js
         // canUseSampleFallback): on a live outage it must fail loudly with a
         // real 502, never mask the outage behind a frozen fixture presented

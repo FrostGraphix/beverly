@@ -151,8 +151,32 @@ async function main() {
       SUPABASE_URL: `http://127.0.0.1:${authPort}`,
       SUPABASE_ANON_KEY: "anon-test",
       LIVE_API_PROXY_ENABLED: "false",
-      ALLOW_LIVE_WRITES: "false"
+      ALLOW_LIVE_WRITES: "false",
+      WEBHOOK_SECRET: ""
     }, async () => {
+      const publicTelemetryIngest = await request(port, "POST", "/api/system/client-errors", {
+        errors: [{ message: "bounded browser telemetry", event: "test" }]
+      });
+      assert.strictEqual(publicTelemetryIngest.status, 200);
+
+      const privateTelemetryRead = await request(port, "GET", "/api/system/client-errors?limit=1");
+      assert.strictEqual(privateTelemetryRead.status, 401);
+      assert.strictEqual(privateTelemetryRead.body.reason, "Server session required");
+
+      const privateOemInventory = await request(port, "GET", "/api/system/oem/list");
+      assert.strictEqual(privateOemInventory.status, 401);
+
+      delete process.env.WEBHOOK_SECRET;
+      const disabledWebhook = await request(port, "POST", "/api/webhooks/meter-readings", { readings: [] });
+      assert.strictEqual(disabledWebhook.status, 503);
+      assert.strictEqual(disabledWebhook.body.msg, "Webhook unavailable");
+
+      process.env.WEBHOOK_SECRET = "a-webhook-secret-used-only-by-this-test";
+      const rejectedWebhook = await request(port, "POST", "/api/webhooks/meter-readings", { readings: [] }, {
+        "X-Webhook-Secret": "wrong-secret"
+      });
+      assert.strictEqual(rejectedWebhook.status, 401);
+
       const unauthenticated = await request(port, "POST", "/api/user/read", { userId: "admin", pageNumber: 1, pageSize: 1 });
       assert.strictEqual(unauthenticated.status, 401);
       assert.strictEqual(unauthenticated.body._proxy.source, "authz");
@@ -176,6 +200,12 @@ async function main() {
       });
       assert.strictEqual(readableLiveWriteStatus.status, 200);
       assert.strictEqual(readableLiveWriteStatus.body.data.canManage, false);
+
+      const readableTelemetry = await request(port, "GET", "/api/system/client-errors?limit=1", null, {
+        Authorization: "Bearer ops-token",
+        Cookie: sessionCookie("ops-token")
+      });
+      assert.strictEqual(readableTelemetry.status, 200);
 
       const forbiddenLiveWriteChange = await request(port, "PUT", "/api/system/live-write-control", {
         enabled: true,

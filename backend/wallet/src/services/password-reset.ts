@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { adminClient } from '../db/supabase.js';
 import { sendEmail } from '../adapters/resend.js';
 import { env } from '../config/env.js';
+import { passwordResetLinkEmail } from '../emails/templates.js';
 
 export type ResetUserType = 'customer' | 'vendor_user';
 
@@ -59,11 +60,43 @@ async function lookupAuthUserId(email: string, userType: ResetUserType): Promise
     return (data as any).auth_user_id ?? null;
 }
 
+async function lookupResetDisplayName(email: string, userType: ResetUserType): Promise<string> {
+    const table = userType === 'customer' ? 'customers' : 'vendor_users';
+    const nameColumn = userType === 'customer' ? 'full_name' : 'full_name';
+    const { data } = await adminClient
+        .from(table)
+        .select(nameColumn)
+        .eq('email', email)
+        .maybeSingle();
+    return String((data as Record<string, unknown> | null)?.[nameColumn] ?? email);
+}
+
 export async function requestPasswordReset(
     email: string,
     userType: ResetUserType,
 ): Promise<void> {
     const normalizedEmail = email.trim().toLowerCase();
+
+    // Fail consistently for every address when delivery is unavailable. This
+    // prevents false success messages without turning configuration failures
+    // into an account-enumeration signal.
+    if (!env.RESEND_API_KEY) {
+        throw new PasswordResetError(
+            'Password reset email delivery is not configured.',
+            'email_delivery_unconfigured',
+        );
+    }
+
+    const { error: readinessError } = await adminClient
+        .from('password_reset_tokens')
+        .select('id')
+        .limit(1);
+    if (readinessError) {
+        throw new PasswordResetError(
+            'Password reset storage is unavailable.',
+            'token_store_unavailable',
+        );
+    }
 
     // Always succeed visibly — never reveal whether an account exists.
     const authUserId = await lookupAuthUserId(normalizedEmail, userType).catch(() => null);
@@ -88,39 +121,46 @@ export async function requestPasswordReset(
         user_type:    userType,
         expires_at:   expiresAt,
     });
-    if (error) return; // still silent — don't expose DB errors to callers
+    if (error) {
+        throw new PasswordResetError(
+            'Password reset storage is unavailable.',
+            'token_store_failed',
+        );
+    }
 
     const link = resetUrl(userType, raw);
-    const ttlLabel = `${env.PASSWORD_RESET_TTL_MINUTES} minute${env.PASSWORD_RESET_TTL_MINUTES === 1 ? '' : 's'}`;
+    const fullName = await lookupResetDisplayName(normalizedEmail, userType).catch(() => normalizedEmail);
+    const content = passwordResetLinkEmail({
+        fullName,
+        resetUrl: link,
+        expiresMinutes: env.PASSWORD_RESET_TTL_MINUTES,
+        accountLabel: userType === 'vendor_user' ? 'vendor' : undefined,
+    });
 
     try {
         await sendEmail({
             to:      normalizedEmail,
-            subject: 'Reset your Beverly password',
-            text: [
-                `You requested a password reset for your Beverly account.`,
-                ``,
-                `Click the link below to set a new password. This link expires in ${ttlLabel}.`,
-                ``,
-                link,
-                ``,
-                `If you didn't request this, you can safely ignore this email.`,
-                ``,
-                `— The Beverly Team`,
-            ].join('\n'),
-            html: `
-<p>You requested a password reset for your Beverly account.</p>
-<p>
-  <a href="${link}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">
-    Reset my password
-  </a>
-</p>
-<p style="color:#6b7280;font-size:13px">This link expires in ${ttlLabel}. If you didn't request this, you can safely ignore this email.</p>
-            `.trim(),
+            subject: content.subject,
+            text: content.text,
+            html: content.html,
             tag: 'password-reset',
         });
     } catch {
-        // Non-fatal: token is stored, email delivery failed gracefully.
+        // Invalidate the undelivered token. A later retry must receive a fresh
+        // link, and the frontend must never claim this message was delivered.
+        try {
+            await adminClient
+                .from('password_reset_tokens')
+                .update({ used_at: new Date().toISOString() })
+                .eq('token_hash', hashToken(raw))
+                .is('used_at', null);
+        } catch {
+            // Preserve the original delivery failure.
+        }
+        throw new PasswordResetError(
+            'Password reset email could not be sent.',
+            'email_delivery_failed',
+        );
     }
 }
 
@@ -156,18 +196,27 @@ export async function confirmPasswordReset(
         throw new PasswordResetError('Reset link has expired. Please request a new one.', 'token_expired');
     }
 
-    // Update password via Supabase service role
+    // Claim the one-time token before changing credentials. This prevents two
+    // concurrent confirmations from both resetting the same account.
+    const { data: claimed, error: claimError } = await adminClient
+        .from('password_reset_tokens')
+        .update({ used_at: new Date().toISOString() })
+        .eq('id', (row as any).id)
+        .is('used_at', null)
+        .select('id')
+        .maybeSingle();
+    if (claimError) throw new PasswordResetError(claimError.message, 'db_error');
+    if (!claimed) throw new PasswordResetError('Reset link is invalid or has already been used.', 'invalid_token');
+
+    // Update password via Supabase service role.
     const { error: authErr } = await adminClient.auth.admin.updateUserById(
         (row as any).auth_user_id,
         { password: newPassword },
     );
     if (authErr) throw new PasswordResetError(authErr.message, 'password_update_failed');
 
-    // Mark token used atomically (optimistic — if this fails, Supabase unique index prevents reuse)
-    await adminClient
-        .from('password_reset_tokens')
-        .update({ used_at: new Date().toISOString() })
-        .eq('token_hash', hash);
+    // Revoke existing sessions after recovery.
+    await adminClient.auth.admin.signOut((row as any).auth_user_id, 'global').catch(() => undefined);
 
     // For vendors, also clear the forced-reset flag if set
     if (userType === 'vendor_user') {

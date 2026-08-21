@@ -6,6 +6,7 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const vercelJson = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+const previewJson = JSON.parse(fs.readFileSync(path.join(root, "vercel.preview.json"), "utf8"));
 const vercelIgnore = fs.readFileSync(path.join(root, ".vercelignore"), "utf8");
 
 function assert(condition, message) {
@@ -31,19 +32,19 @@ assert(!vercelJson.env?.ALLOW_LIVE_WRITES, "vercel must not enable live writes")
 assert(!vercelJson.env?.APPROVED_LIVE_WRITES, "vercel must not approve live writes");
 assert(!vercelJson.env?.VITE_ALLOW_LIVE_WRITES, "vercel must not expose live write flags");
 assert(
-  vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://customer-acob-beverly.vercel.app/wallet/fund?payment=return",
+  vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-customer/wallet/fund?payment=return",
   "customer funding must return to the customer portal"
 );
 assert(
-  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://vendor-acob-beverly.vercel.app/wallet/fund?payment=return",
+  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return",
   "vendor funding must return to the vendor portal"
 );
 assert(
-  vercelJson.env?.CUSTOMER_METER_ORDER_CALLBACK_URL === "https://customer-acob-beverly.vercel.app/meter-orders",
+  vercelJson.env?.CUSTOMER_METER_ORDER_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-customer/meter-orders",
   "meter payments must return to customer meter orders"
 );
 assert(
-  vercelJson.env?.PAYSTACK_WEBHOOK_URL === "https://acob-beverly.vercel.app/api/v1/webhook/paystack",
+  vercelJson.env?.PAYSTACK_WEBHOOK_URL === "https://beverly.acoblighting.com/api/v1/webhook/paystack",
   "Paystack webhooks must target the canonical API host"
 );
 assert(
@@ -83,6 +84,38 @@ assert(
     cspHeader.includes("https://fonts.googleapis.com") &&
     cspHeader.includes("https://fonts.gstatic.com"),
   "vercel.json Content-Security-Policy connect-src must allow Google Fonts for Workbox service worker caching"
+);
+for (const config of [vercelJson, previewJson]) {
+  for (const namespace of ["admin", "public", "webhook", "acobot", "customer", "vendor"]) {
+    assert(
+      config.rewrites.some((entry) =>
+        entry.source === `/api/v1/${namespace}/:path*` &&
+        entry.destination === `/api/wallet?__pathname=/api/v1/${namespace}/:path*`
+      ),
+      `the canonical ${namespace} API must use the real wallet backend in production and preview`
+    );
+  }
+}
+assert(!cspHeader.includes("'unsafe-eval'"), "production CSP must not allow eval");
+assert(!cspHeader.includes("script-src 'self' 'unsafe-inline'"), "production scripts must not allow inline execution");
+assert(
+  vercelJson.redirects.some((entry) =>
+    entry.destination === "https://beverly.acoblighting.com/:path*" &&
+    entry.has?.some((condition) => condition.type === "host" && condition.value === "acob-beverly.vercel.app")
+  ),
+  "the public Vercel alias must redirect to the canonical custom domain"
+);
+for (const [source, destination] of [
+  ["/health", "/api/wallet?__pathname=/health"],
+  ["/ready", "/api/wallet?__pathname=/ready"],
+  ["/api/v1/health", "/api/wallet?__pathname=/health"],
+  ["/api/v1/ready", "/api/wallet?__pathname=/ready"],
+]) {
+  assert(vercelJson.rewrites.some((entry) => entry.source === source && entry.destination === destination), `${source} must reach the wallet health backend`);
+}
+assert(
+  !vercelJson.rewrites.some((entry) => entry.has?.some((condition) => /\.\*/.test(String(condition.value || "")))),
+  "portal host routing must use exact hosts, not broad regexes"
 );
 
 console.log(JSON.stringify({

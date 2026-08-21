@@ -6,7 +6,8 @@ Status: branch preview rolling.
 
 Current Vercel truth:
 
-- Production alias: `https://acob-beverly.vercel.app`
+- Canonical production URL: `https://beverly.acoblighting.com`
+- Public Vercel alias: `https://acob-beverly.vercel.app` (redirects to the canonical domain after this release)
 - Production deployment: `dpl_8G3DXooMiE8YCDoGiiDJbzNZsopf`
 - Production URL: `https://beverly-ko88e8hyh-danmusa-abdulsamads-projects.vercel.app`
 - Production commit: `af455ac2741d4ceb89a89902c517bc49b4e652f1`
@@ -55,7 +56,7 @@ Production smoke checklist:
 
 ```powershell
 cd "C:\Users\ACOB\Desktop\VS Code\Beverly"
-$env:TARGET_URL="https://acob-beverly.vercel.app"
+$env:TARGET_URL="https://beverly.acoblighting.com"
 $env:VERCEL_PROTECTION_BYPASS="<production-bypass-secret>"
 $env:SMOKE_AUTH_TOKEN="<smoke-token>"
 npm run smoke:vercel

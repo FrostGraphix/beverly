@@ -2,10 +2,10 @@
 
 Current production host:
 
-- CRM: `https://acob-beverly.vercel.app/`
-- Staff wallet admin: `https://acob-beverly.vercel.app/wallet-admin/`
-- Vendor wallet: `https://acob-beverly.vercel.app/wallet-vendor/`
-- Customer wallet: `https://acob-beverly.vercel.app/wallet-customer/`
+- CRM: `https://beverly.acoblighting.com/`
+- Staff wallet admin: `https://beverly.acoblighting.com/wallet-admin/`
+- Vendor wallet: `https://beverly.acoblighting.com/wallet-vendor/`
+- Customer wallet: `https://beverly.acoblighting.com/wallet-customer/`
 
 Current deployment truth, checked 2026-07-10:
 
@@ -18,12 +18,12 @@ Current deployment truth, checked 2026-07-10:
 - Separate avatar preview: `https://beverly-ce61s6h78-danmusa-abdulsamads-projects.vercel.app`
 - Separate avatar branch: `codex/mobile-avatar-dropdown-fix`
 
-Recommended domain map:
+Canonical domain map:
 
-- CRM: `acob-beverly.vercel.app`
-- Staff wallet admin: `admin-acob-beverly.vercel.app`
-- Vendor wallet: `vendor-acob-beverly.vercel.app`
-- Customer wallet: `customer-acob-beverly.vercel.app`
+- CRM: `beverly.acoblighting.com`
+- Staff wallet admin: `beverly.acoblighting.com/wallet-admin/`
+- Vendor wallet: `beverly.acoblighting.com/wallet-vendor/`
+- Customer wallet: `beverly.acoblighting.com/wallet-customer/`
 
 All four portals are produced by one Vercel deployment. The CRM owns `/api`.
 The three wallet portals call the same `/api/v1/...` endpoints through the
@@ -53,7 +53,7 @@ Smoke command:
 
 ```powershell
 cd "C:\Users\ACOB\Desktop\VS Code\Beverly"
-$env:TARGET_URL="https://acob-beverly.vercel.app"
+$env:TARGET_URL="https://beverly.acoblighting.com"
 $env:VERCEL_PROTECTION_BYPASS="<bypass-secret>"
 $env:SMOKE_AUTH_TOKEN="<smoke-token>"
 npm run smoke:vercel
@@ -74,4 +74,4 @@ Custom domain rollout:
    - admin host to `/wallet-admin/`
    - vendor host to `/wallet-vendor/`
    - customer host to `/wallet-customer/`
-4. Keep `acob-beverly.vercel.app` as the canonical API host.
+4. Keep `beverly.acoblighting.com` as the canonical UI and API host; the public Vercel alias redirects to it.

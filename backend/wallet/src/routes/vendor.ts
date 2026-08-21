@@ -623,25 +623,60 @@ const route: FastifyPluginAsync = async (fastify) => {
     });
 
     // ── password reset (self-service, unauthenticated) ──────────────────────
-    fastify.post('/auth/reset-request', async (req, reply) => {
-        const { email } = req.body as { email?: string };
-        if (!email?.trim()) {
-            return reply.code(400).send({ error: 'email_required', message: 'email is required.' });
+    fastify.post('/auth/reset-request', {
+        config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+    }, async (req, reply) => {
+        const { email } = z.object({
+            email: z.string().trim().email().max(320),
+        }).parse(req.body);
+        try {
+            await requestPasswordReset(email.toLowerCase(), 'vendor_user');
+            await logSecurityEvent('password_reset_requested', {
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: { userType: 'vendor_user' },
+            });
+            return { ok: true };
+        } catch (error) {
+            const code = error instanceof PasswordResetError
+                ? error.code
+                : 'password_reset_request_failed';
+            await logSecurityEvent('password_reset_failed', {
+                severity: 'high',
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: { userType: 'vendor_user', code },
+            });
+            return reply.code(503).send({
+                error: 'password_reset_unavailable',
+                message: 'Password reset is temporarily unavailable. Please try again shortly.',
+            });
         }
-        await requestPasswordReset(email.trim().toLowerCase(), 'vendor_user').catch(() => null);
-        return { ok: true };
     });
 
-    fastify.post('/auth/reset-confirm', async (req, reply) => {
-        const { token, new_password } = req.body as { token?: string; new_password?: string };
-        if (!token || !new_password) {
-            return reply.code(400).send({ error: 'missing_fields', message: 'token and new_password are required.' });
-        }
+    fastify.post('/auth/reset-confirm', {
+        config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    }, async (req, reply) => {
+        const { token, new_password } = z.object({
+            token: z.string().regex(/^[a-f0-9]{64}$/i),
+            new_password: z.string().min(12).max(128),
+        }).parse(req.body);
         try {
             await confirmPasswordReset(token, new_password, 'vendor_user');
+            await logSecurityEvent('password_reset_completed', {
+                ip: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: { userType: 'vendor_user' },
+            });
             return { ok: true };
         } catch (e: any) {
             if (e instanceof PasswordResetError) {
+                await logSecurityEvent('password_reset_failed', {
+                    severity: 'medium',
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent'],
+                    metadata: { userType: 'vendor_user', code: e.code },
+                });
                 const status = e.code === 'invalid_token' || e.code === 'token_expired' ? 400 : 422;
                 return reply.code(status).send({ error: e.code, message: e.message });
             }
