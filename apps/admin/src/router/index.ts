@@ -2,11 +2,15 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useStaffAuthStore } from '../stores/auth';
 
 function portalHistoryBase(configuredBase: string): string {
-    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '/';
-    // DEACTIVATED: Automatic pathname rewrite override — allow explicit navigation across portal links
-    // if (typeof window === 'undefined' || base === '/') return base;
-    // return window.location.pathname.startsWith(base) ? base : '/';
-    return base;
+    if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path.startsWith('/admin/')) return '/admin/';
+        if (path.startsWith('/admin')) return '/admin/';
+        if (path.startsWith('/wallet-admin/')) return '/wallet-admin/';
+        if (path.startsWith('/wallet-admin')) return '/wallet-admin/';
+    }
+    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '';
+    return base || '/wallet-admin/';
 }
 
 const routes: RouteRecordRaw[] = [

@@ -29,7 +29,7 @@ export const getPortalSessionPolicy = (actorType: ActorType): { idleSeconds: num
     }
 };
 
-type JwtClaims = { iat?: number; session_id?: string };
+type JwtClaims = { iat?: number; session_id?: string; sub?: string };
 
 export class PortalSessionError extends Error {
     constructor(public code: string, message: string, public unavailable = false) {
@@ -51,7 +51,7 @@ export function portalSessionIdentity(actor: Actor, token: string) {
     if (!Number.isFinite(issuedAt) || issuedAt <= 0) {
         throw new PortalSessionError('invalid_session', 'Session issue time is invalid.');
     }
-    const stableId = String(claims?.session_id || '').trim();
+    const stableId = String(claims?.session_id || claims?.sub || '').trim();
     if (!stableId) {
         throw new PortalSessionError('invalid_session', 'Session identifier is invalid.');
     }

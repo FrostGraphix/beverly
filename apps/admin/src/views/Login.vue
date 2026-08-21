@@ -210,20 +210,6 @@ onMounted(async () => {
         <p class="bw-muted login-sub">{{ step === 'challenge' ? 'Two-factor verification' : 'Your Smart Power Partner.' }}</p>
       </div>
 
-      <div v-if="hasVendorSession" class="login-flash warn" style="background: rgba(234, 88, 12, 0.12); border: 1px solid rgba(234, 88, 12, 0.3); color: #c2410c; margin-bottom: 16px;">
-        🛒 <strong>Vendor Session Active</strong>: You are signed in to Vendor Portal.
-        <div style="margin-top: 4px;">
-          <a :href="PORTAL_URLS.vendor" style="font-weight: 600; text-decoration: underline;">Go to Vendor Dashboard &rarr;</a>
-        </div>
-      </div>
-
-      <div v-else-if="hasCustomerSession" class="login-flash warn" style="background: rgba(14, 165, 233, 0.12); border: 1px solid rgba(14, 165, 233, 0.3); color: #0284c7; margin-bottom: 16px;">
-        ⚡ <strong>Customer Session Active</strong>: You are signed in as a Customer.
-        <div style="margin-top: 4px;">
-          <a :href="PORTAL_URLS.customer" style="font-weight: 600; text-decoration: underline;">Go to Customer Portal &rarr;</a>
-        </div>
-      </div>
-
       <div v-if="showSessionEnded" class="login-flash warn" role="status" aria-live="polite">
         <svg class="login-flash-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <circle cx="10" cy="10" r="7.5" />

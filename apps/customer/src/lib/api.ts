@@ -6,7 +6,9 @@
  */
 import {
     clearCustomerToken,
+    CUSTOMER_TOKEN_KEY,
     readCustomerRefreshToken,
+    readCustomerToken,
     readCustomerTokenExpiresAt,
     storeCustomerToken,
 } from './auth-flow';
@@ -35,7 +37,7 @@ function normalizeBaseUrl(rawBase: unknown): string {
 const BASE = normalizeBaseUrl(import.meta.env.VITE_API_BASE);
 export const API_BASE = BASE;
 const REQUEST_TIMEOUT_MS = 20_000;
-const TOKEN_KEY = 'beverly.access_token';
+const TOKEN_KEY = CUSTOMER_TOKEN_KEY;
 const REFRESH_SKEW_MS = 60_000;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -50,11 +52,7 @@ export class ApiError extends Error {
 }
 
 function getToken(): string | null {
-    try {
-        return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
-    } catch {
-        try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
-    }
+    return readCustomerToken() ?? (sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY));
 }
 
 function newIdemKey(): string {
@@ -74,15 +72,18 @@ function unwrapEnvelope<T>(json: any): T {
 }
 
 function portalBasePath(): string {
-    const configuredBase = String(import.meta.env.BASE_URL ?? '/');
-    const normalized = configuredBase && configuredBase !== '/'
-        ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/`
-        : '/';
-
-    // DEACTIVATED: Automatic pathname rewrite override — allow explicit navigation across portal links
-    // if (typeof window === 'undefined' || normalized === '/') return normalized;
-    // return window.location.pathname.startsWith(normalized) ? normalized : '/';
-    return normalized;
+    if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path.startsWith('/customer/')) return '/customer/';
+        if (path.startsWith('/customer')) return '/customer/';
+        if (path.startsWith('/wallet-customer/')) return '/wallet-customer/';
+        if (path.startsWith('/wallet-customer')) return '/wallet-customer/';
+    }
+    const configuredBase = String(import.meta.env.BASE_URL ?? '');
+    if (configuredBase && configuredBase !== '/') {
+        return `/${configuredBase.replace(/^\/+|\/+$/g, '')}/`;
+    }
+    return '/wallet-customer/';
 }
 
 function redirectToLogin(): void {

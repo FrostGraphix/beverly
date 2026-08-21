@@ -24,6 +24,7 @@ assert.match(customerAuthService, /refresh_token: session\.refreshToken/);
 assert.match(customerAuthService, /expires_at: session\.expiresAt/);
 assert.match(customerLogin, /refreshToken: r\.refresh_token/);
 assert.match(customerStore, /setSession\(token: string, customer: CustomerProfile, remember = true, tokenOptions: CustomerTokenOptions = \{\}\)/);
+assert.match(customerApi, /readCustomerToken/);
 assert.match(customerApi, /grant_type=refresh_token/);
 assert.match(customerApi, /function shouldRedirectUnauthorized\(path: string\): boolean/);
 assert.match(customerApi, /path !== '\/api\/v1\/customer\/me'/);

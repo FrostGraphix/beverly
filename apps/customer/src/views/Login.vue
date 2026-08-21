@@ -28,8 +28,6 @@ const rememberLogin = ref(true);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const errorCode = ref<string | null>(null);
-const hasStaffSession = ref(false);
-const hasVendorSession = ref(false);
 
 const sessionEnded = computed(() => ['session_timeout', 'session_expired'].includes(String(route.query.reason ?? '')));
 const passwordReset = computed(() => route.query.reason === 'password_reset');
@@ -38,10 +36,6 @@ const submitLabel = computed(() => loginMode.value === 'email' ? 'Sign in' : 'Se
 const loadingLabel = computed(() => loginMode.value === 'email' ? 'Signing in...' : 'Sending code...');
 
 onMounted(() => {
-    try {
-        hasStaffSession.value = !!(localStorage.getItem('beverly.staff.access_token') || sessionStorage.getItem('beverly.staff.access_token'));
-        hasVendorSession.value = !!(localStorage.getItem('beverly.vendor.access_token') || sessionStorage.getItem('beverly.vendor.access_token'));
-    } catch { /* noop */ }
     const remembered = readRememberedLogin();
     if (remembered.includes('@')) email.value = remembered;
     else if (remembered) phone.value = remembered;
@@ -143,20 +137,6 @@ async function submit() {
     :subtitle="loginMode === 'email' ? 'Enter your email and password' : 'Enter your phone number to receive a sign-in code'"
     :hide-legal="true"
   >
-    <div v-if="hasStaffSession" class="session-banner staff-banner" role="status" style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #15803d; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;">
-      <span>👑 <strong>Staff Session Active</strong>: You are signed in as Staff/Admin.</span>
-      <div style="margin-top: 6px; display: flex; gap: 12px;">
-        <a :href="PORTAL_URLS.admin" style="color: #15803d; text-decoration: underline; font-weight: 600;">Open Admin CRM &rarr;</a>
-        <a :href="PORTAL_URLS.vendor" style="color: #15803d; text-decoration: underline; font-weight: 600;">Vendor Portal &rarr;</a>
-      </div>
-    </div>
-
-    <div v-else-if="hasVendorSession" class="session-banner vendor-banner" role="status" style="background: rgba(234, 88, 12, 0.12); border: 1px solid rgba(234, 88, 12, 0.3); color: #c2410c; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;">
-      <span>🛒 <strong>Vendor Session Active</strong>: You are currently signed in to the Vendor Portal.</span>
-      <div style="margin-top: 6px;">
-        <a :href="PORTAL_URLS.vendor" style="color: #c2410c; text-decoration: underline; font-weight: 600;">Go to Vendor Dashboard &rarr;</a>
-      </div>
-    </div>
     <div v-if="sessionEnded" class="session-banner" role="status">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
         <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
