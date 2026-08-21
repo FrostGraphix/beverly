@@ -463,3 +463,41 @@ export async function refreshLiveWriteStatus() {
 export function liveWritesAllowed() {
   return runtimeLiveWritesAllowed;
 }
+
+const ONE_TIME_PURGE_VERSION_KEY = "beverly.storage_purged_v2";
+
+export function runOneTimeStorageCleanup() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    if (localStorage.getItem(ONE_TIME_PURGE_VERSION_KEY)) return;
+
+    const keysToRemove = [
+      "beverly_redirect",
+      "beverly_portal_target",
+      "legacy_token",
+      "beverly_auth_redirect",
+      "wallet_redirect_url",
+      "customer_token_legacy",
+      "vendor_token_legacy",
+      "acob_session_v1",
+      "beverly.auth_redirect",
+      "beverly.last_portal",
+      "beverly.pending_route",
+      "beverly_session_redirect"
+    ];
+
+    keysToRemove.forEach((key) => {
+      try { localStorage.removeItem(key); } catch {}
+    });
+
+    try { sessionStorage.clear(); } catch {}
+
+    localStorage.setItem(ONE_TIME_PURGE_VERSION_KEY, String(Date.now()));
+  } catch (err) {
+    console.warn("[storage-cleanup] Storage cleanup warning:", err);
+  }
+}
+
+// Automatically execute one-time storage cleanup on module import
+runOneTimeStorageCleanup();
+
