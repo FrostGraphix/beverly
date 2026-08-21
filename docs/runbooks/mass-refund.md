@@ -43,7 +43,7 @@ Export to CSV for Finance sign-off.
 Use the admin API to create refund requests (each requires approval):
 ```bash
 for ORDER_ID in $ORDER_IDS; do
-  curl -X POST https://api.beverly.acoblighting.com/api/v1/admin/refunds \
+  curl -X POST https://beverly.acoblighting.com/api/v1/admin/refunds \
     -H "Authorization: Bearer $STAFF_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"purchase_order_id\": \"$ORDER_ID\", \"reason\": \"system-error-INCIDENT-123\"}"

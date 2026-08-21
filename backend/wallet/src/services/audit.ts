@@ -20,6 +20,7 @@ export type SecurityEventType =
     | 'suspicious_activity' | 'rate_limit_hit' | 'permission_denied'
     | 'impersonation_start' | 'impersonation_end' | 'session_revoked'
     | 'session_timeout' | 'temp_password_issued' | 'temp_password_used'
+    | 'password_reset_requested' | 'password_reset_completed' | 'password_reset_failed'
     | 'vend_credential_set' | 'vend_credential_failure'
     | 'vend_pin_set' | 'vend_pin_failure'
     | 'sms_allowed' | 'sms_blocked';

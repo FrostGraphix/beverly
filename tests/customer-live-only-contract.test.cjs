@@ -16,7 +16,8 @@ assert.match(reference, /\/\\\/api\\\/dashboard\\\/read\(\?:PanelGroup\|LineChar
 // a live failure would hide real edits from the admin. See
 // tests/station-live-fallback-contract.test.cjs for the full fix contract.
 assert.doesNotMatch(reference, /\/\\\/api\\\/station\\\/read\$\/i\.test\(normalizedPath\)/);
-assert.match(reference, /function sampleReadResponse\(pathname, requestData\) \{\s*if \(requiresLiveRead\(pathname\) && !canUseSampleFallback\(pathname\)\) return null;/s);
+assert.match(reference, /function sampleReadResponse\(pathname, requestData\) \{\s*if \(process\.env\.NODE_ENV === "production" \|\| process\.env\.VERCEL_ENV === "production"\) return null;/s);
+assert.match(reference, /if \(requiresLiveRead\(pathname\) && !canUseSampleFallback\(pathname\)\) return null;/);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/customer\/read"/);
 assert.doesNotMatch(reference, /lowerPath === "\/api\/account\/read"/);
 assert.doesNotMatch(reference, /clone\.customerName = rowIndex < 20/);

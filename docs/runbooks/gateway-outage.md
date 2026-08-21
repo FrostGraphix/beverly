@@ -24,7 +24,7 @@
    ```
 4. **Check backend health**
    ```bash
-   curl https://api.beverly.acoblighting.com/health
+   curl https://beverly.acoblighting.com/health
    ```
 
 ## If Paystack is Down
@@ -39,7 +39,7 @@
 If the sweeper is stuck:
 ```bash
 # Trigger a manual sweep via admin API
-curl -X POST https://api.beverly.acoblighting.com/api/v1/admin/jobs/payment-sweep \
+curl -X POST https://beverly.acoblighting.com/api/v1/admin/jobs/payment-sweep \
   -H "Authorization: Bearer $STAFF_TOKEN"
 ```
 

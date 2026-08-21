@@ -55,6 +55,9 @@ function checkProductionConfig(env = process.env) {
   if (production && encryptionKey.length < 32) {
     failures.push("APP_ENCRYPTION_KEY must be at least 32 characters in production");
   }
+  if (production && String(env.WEBHOOK_SECRET || "").trim().length < 32) {
+    failures.push("WEBHOOK_SECRET must be at least 32 characters in production");
+  }
   if (production && !corsOrigins.length) {
     failures.push("CORS_ORIGINS must be set in production");
   }

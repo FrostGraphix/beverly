@@ -104,7 +104,7 @@ const {
   signedDownloadUrl: archiveSignedDownloadUrl
 } = require("../backend/src/services/reading-archive-service");
 const { streamIntervalXlsx } = require("../backend/src/services/interval-export-service");
-const { acknowledgeAlert, refreshGatewayHealth, silenceGateway } = require("../backend/src/services/gateway-health-service");
+const { acknowledgeAlert, diagnoseGateway, refreshGatewayHealth, silenceGateway } = require("../backend/src/services/gateway-health-service");
 const { syncReferenceRead } = require("../backend/src/services/tariff-snapshot-service");
 const { automationReport } = require("../backend/src/services/automation-catalog");
 const {
@@ -543,12 +543,14 @@ function stationFromPayload(payload) {
   return String(value || "").trim();
 }
 
-function protectedPath(pathname) {
+function protectedPath(pathname, method = "GET") {
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
   // Live-read paths are always protected regardless of supabaseAuthEnabled() —
   // they expose sensitive operational data and must never be publicly accessible.
   if (requiresLiveRead(pathname)) return true;
+  if (lowerPath === "/api/system/oem/list") return true;
+  if (lowerPath === "/api/system/client-errors" && String(method).toUpperCase() !== "POST") return true;
   // New session-management endpoints are self-validating — they handle their own auth.
   if (lowerPath === "/api/auth/session") return false;
   if (lowerPath === "/api/auth/me") return false;
@@ -558,7 +560,6 @@ function protectedPath(pathname) {
   if (isAuthRefreshPath(lowerPath)) return false;
   if (lowerPath === "/api/auth/mfa/factors") return false;
   if (lowerPath === "/api/system/health") return false;
-  if (lowerPath === "/api/system/oem/list") return false;
   if (lowerPath === "/api/system/client-errors") return false;
   if (lowerPath === "/api/notifications/sms/status") return false;
   if (lowerPath === "/api/webhooks/meter-readings") return false;
@@ -627,7 +628,7 @@ async function matchingRouteForRequest(pathname, request) {
 }
 
 async function authorizeRequest(request, pathname, requestData) {
-  if (!protectedPath(pathname)) return null;
+  if (!protectedPath(pathname, request.method)) return null;
   const token = authHeaderToken(request);
   const trustedLiveActor = trustedLiveReadActor(pathname, request);
   if (!token && !trustedLiveActor) return authFailure(401, pathname, "Authentication required");
@@ -675,6 +676,12 @@ async function authorizeRequest(request, pathname, requestData) {
 
   if (lowerPath === "/api/system/live-write-control" && String(request.method || "GET").toUpperCase() === "GET") {
     return null;
+  }
+
+  if (lowerPath === "/api/system/client-errors" && String(request.method || "GET").toUpperCase() === "GET") {
+    return (normalizedRole === "super-admin" || normalizedRole === "operations-manager")
+      ? null
+      : authFailure(403, pathname, "Client error telemetry requires staff role");
   }
 
   if (lowerPath.startsWith("/api/system/")) {
@@ -898,6 +905,7 @@ function trustedLiveReadActor(pathname, request) {
 }
 
 function canUseSampleFallback(pathname) {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return false;
   const normalizedPath = String(pathname || "");
   // NOTE: /api/station/read is intentionally excluded. It is an admin CRUD
   // table whose rows are actively edited (add/delete/rename). Serving a
@@ -1741,6 +1749,7 @@ function filterSampleRows(pathname, rows, requestData, declaredTotal = rows.leng
 }
 
 function sampleReadResponse(pathname, requestData) {
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return null;
   if (requiresLiveRead(pathname) && !canUseSampleFallback(pathname)) return null;
   for (const candidate of candidatePaths(pathname)) {
     const filePath = path.join(samplesDir, `${sampleName(candidate)}.json`);
@@ -2890,13 +2899,13 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       return localJobResponse(result);
     }
     if (method === "GET") {
-      // Reads expose operational telemetry — staff roles only when auth is active.
-      if (actor.roleId) {
-        const access = await getAccessControlModule();
-        const normalizedRole = access.normalizeRoleId(actor.roleId);
-        if (!["super-admin", "operations-manager"].includes(normalizedRole)) {
-          return authFailure(403, pathname, "Client error telemetry requires staff role");
-        }
+      // Ingestion remains public and bounded, but reads always expose privileged
+      // operational telemetry and therefore fail closed even if auth is disabled.
+      if (!actor.roleId) return authFailure(401, pathname, "Authentication required");
+      const access = await getAccessControlModule();
+      const normalizedRole = access.normalizeRoleId(actor.roleId);
+      if (!["super-admin", "operations-manager"].includes(normalizedRole)) {
+        return authFailure(403, pathname, "Client error telemetry requires staff role");
       }
       const query = new URLSearchParams(String(request.url || "").split("?")[1] || "");
       const limit = Number(query.get("limit") || 100);
@@ -2915,9 +2924,13 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       || localJobResponse({ total: 0, data: [] });
   }
   if (pathname === "/api/webhooks/meter-readings" && (request.method || "GET").toUpperCase() === "POST") {
-    const configuredSecret = process.env.WEBHOOK_SECRET;
+    const configuredSecret = String(process.env.WEBHOOK_SECRET || "").trim();
+    if (!configuredSecret) {
+      console.error("[meter-reading-webhook] WEBHOOK_SECRET is not configured");
+      return { status: 503, body: { code: 503, msg: "Webhook unavailable" } };
+    }
     const providedSecret = request.headers["x-webhook-secret"] || request.headers["authorization"];
-    if (configuredSecret && providedSecret !== configuredSecret && providedSecret !== `Bearer ${configuredSecret}`) {
+    if (providedSecret !== configuredSecret && providedSecret !== `Bearer ${configuredSecret}`) {
       return { status: 401, body: { code: 401, msg: "Unauthorized webhook access" } };
     }
     return await ingestWebhookReadings(requestData.parsedBody);
@@ -5232,7 +5245,7 @@ async function handler(request, response) {
     // itself enforces cronAuthorized + LIVE_API_BEARER_TOKEN, so this is not a bypass.
     const trustedLiveRead = trustedLiveReadActor(pathname, request);
     if (lowerPathForSession !== "/api/user/login" && !trustedLiveRead) {
-      result = enforceCrmSession(request, response, Date.now(), protectedPath(pathname));
+      result = enforceCrmSession(request, response, Date.now(), protectedPath(pathname, request.method));
       if (result) {
         await auditResult(request, pathname, result);
         response.status(result.status).json(result.body);
@@ -5286,19 +5299,13 @@ async function handler(request, response) {
       } catch (error) {
         console.error("[gateway-health]", error instanceof Error ? error.message : String(error));
         response.setHeader("Cache-Control", "no-store");
-        response.status(200).json({
-          code: 0,
-          msg: "success",
-          reason: "Gateway health fallback",
-          result: { data: [], total: 0 },
-          data: { data: [], total: 0 },
-          meta: {
-            checkedAt: Date.now(),
-            gatewayCount: 0,
-            eventIds: [],
-            warning: error instanceof Error ? error.message : String(error),
-          },
-          _proxy: { source: "fallback", pathname },
+        response.status(502).json({
+          code: 502,
+          msg: "Gateway health unavailable",
+          reason: "Live gateway health read failed",
+          result: null,
+          data: null,
+          _proxy: { source: "live-required", pathname },
         });
       }
       return;
@@ -5319,21 +5326,42 @@ async function handler(request, response) {
     }
     if (String(request.method || "GET").toUpperCase() === "POST" && pathname.toLowerCase() === "/api/notifications/gateway-health/diagnose") {
       const gatewayId = String(requestData?.parsedBody?.gatewayId || requestData?.parsedBody?.gateway || requestData?.gatewayId || requestData?.gateway || "").trim();
-      const now = new Date();
-      response.status(200).json({
-        ok: true,
-        code: 0,
-        result: {
+      if (!gatewayId) {
+        response.status(400).json({ ok: false, code: 400, msg: "Gateway ID is required", result: null });
+        return;
+      }
+      try {
+        const actorRole = String(request.__auth?.roleId || "").trim().toLowerCase();
+        const stationId = actorRole === "super-admin" ? "" : String(request.__auth?.stationId || "").trim();
+        const result = await diagnoseGateway({
           gatewayId,
-          pingMs: Math.floor(Math.random() * 45) + 12,
-          uplink: "4G / LTE (SIM Active)",
-          signalDbm: -84,
-          firmware: "v3.14.2-prod",
-          packetLossPercent: 0.0,
-          diagnosedAt: now.toISOString(),
-          status: "Healthy / Responsive",
+          stationId,
+          fetchPage: (payload) => {
+            const rawBody = Buffer.from(JSON.stringify(payload));
+            return proxyLive(
+              { method: "POST", url: "/api/gateway/read", headers: request.headers || {}, __timeoutMs: 15000 },
+              "/api/gateway/read",
+              { parsedBody: payload, rawBody, contentType: jsonContentType },
+            );
+          },
+        });
+        if (!result) {
+          response.status(404).json({ ok: false, code: 404, msg: "Gateway not found", result: null });
+          return;
         }
-      });
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json({ ok: true, code: 0, result });
+      } catch (error) {
+        console.error("[gateway-diagnose]", error instanceof Error ? error.message : String(error));
+        response.setHeader("Cache-Control", "no-store");
+        response.status(502).json({
+          ok: false,
+          code: 502,
+          msg: "Live gateway diagnostic unavailable",
+          result: null,
+          _proxy: { source: "live-required", pathname },
+        });
+      }
       return;
     }
     if (String(request.method || "GET").toUpperCase() === "GET" && pathname.toLowerCase() === "/api/dailydatameter/export.xlsx") {

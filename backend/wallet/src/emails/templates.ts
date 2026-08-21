@@ -203,6 +203,29 @@ export function passwordRecoveryEmail(opts: { fullName: string; code: string }):
     };
 }
 
+export function passwordResetLinkEmail(opts: { fullName: string; resetUrl: string; expiresMinutes: number; accountLabel?: string }): EmailContent {
+    const name = firstName(opts.fullName);
+    const accountLabel = opts.accountLabel?.trim() ? `${opts.accountLabel.trim()} ` : '';
+    const heading = `Reset your ${accountLabel}password`;
+    const ttlLabel = `${opts.expiresMinutes} minute${opts.expiresMinutes === 1 ? '' : 's'}`;
+    const body = `<p>Hi ${esc(name)},</p>
+        <p>We received a request to reset your Beverly ${esc(accountLabel)}password. Use the secure link below to choose a new password.</p>`;
+    return {
+        subject: `Reset your Beverly ${accountLabel}password`,
+        html: layout({
+            eyebrow: 'Vendor password reset',
+            heading,
+            preheader: `Your ${accountLabel}password reset link expires in ${ttlLabel}.`,
+            bodyHtml: body,
+            ctaLabel: 'Reset my password',
+            ctaUrl: opts.resetUrl,
+            cautionHtml: `<strong>Wasn't you?</strong> Your password stays unchanged unless this one-time link is used. You can safely ignore this email.`,
+            footerNote: `This one-time link expires in ${ttlLabel}.`,
+        }),
+        text: `Hi ${name},\n\nWe received a request to reset your Beverly ${accountLabel}password. Use this secure link to choose a new password:\n\n${opts.resetUrl}\n\nThis one-time link expires in ${ttlLabel}. If you didn't request this, you can safely ignore this email.\n\n— The Beverly Team\n\nNeed help? info@acoblighting.com · infoacob@gmail.com · +234 704 920 2634 · +234 803 290 2825 · www.acoblighting.com`,
+    };
+}
+
 // ── Wallet funded ─────────────────────────────────────────────────────────────
 
 export function walletFundedEmail(opts: { fullName: string; amountLabel: string; reference: string }): EmailContent {

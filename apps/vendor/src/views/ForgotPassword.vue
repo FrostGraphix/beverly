@@ -7,6 +7,7 @@ const email   = ref('');
 const loading = ref(false);
 const error   = ref<string | null>(null);
 const sent    = ref(false);
+const requestedEmail = ref('');
 
 async function submit() {
     const trimmed = email.value.trim().toLowerCase();
@@ -18,11 +19,13 @@ async function submit() {
     error.value   = null;
     try {
         await api.post('/api/v1/vendor/auth/reset-request', { email: trimmed });
+        requestedEmail.value = trimmed;
         sent.value = true;
     } catch (e: any) {
         if (e instanceof ApiError && e.status >= 500) {
-            error.value = 'Something went wrong. Please try again.';
+            error.value = 'Password reset is temporarily unavailable. Please try again shortly.';
         } else {
+            requestedEmail.value = trimmed;
             sent.value = true;
         }
     } finally {
@@ -47,7 +50,7 @@ async function submit() {
       </div>
       <p class="success-title">Check your inbox</p>
       <p class="success-sub">
-        If a vendor account exists for <strong>{{ email }}</strong>, a reset link has been sent. It expires in 30 minutes.
+        If a vendor account exists for <strong>{{ requestedEmail }}</strong>, a reset link has been sent. It expires in 30 minutes.
       </p>
       <router-link to="/login" class="bw-btn primary auth-btn">
         Back to sign in
@@ -65,13 +68,17 @@ async function submit() {
           type="email"
           inputmode="email"
           autocomplete="email"
+          required
+          maxlength="320"
           placeholder="you@company.com"
           :disabled="loading"
+          :aria-invalid="Boolean(error)"
+          :aria-describedby="error ? 'forgot-password-error' : undefined"
           @input="error = null"
         />
       </div>
 
-      <div v-if="error" class="auth-error" role="alert">
+      <div v-if="error" id="forgot-password-error" class="auth-error" role="alert" aria-live="polite">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
           <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
           <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

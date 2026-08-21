@@ -93,7 +93,7 @@ Find the last known-good deployment ID in:
 | `VERCEL_PROJECT_ID` | secret | Vercel project ID |
 | `VERCEL_PROTECTION_BYPASS` | secret | Bypass password protection for smoke tests |
 | `SMOKE_AUTH_TOKEN` | secret | Bearer token for smoke test auth |
-| `PRODUCTION_DOMAIN` | variable | e.g. `acob-beverly.vercel.app` |
+| `PRODUCTION_DOMAIN` | variable | e.g. `beverly.acoblighting.com` |
 | `LAST_STABLE_DEPLOYMENT_URL` | variable | Auto-updated on every successful promote |
 
 ---

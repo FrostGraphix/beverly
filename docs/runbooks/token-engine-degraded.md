@@ -21,7 +21,7 @@ curl -H "Authorization: Bearer $ENERGY_BEARER_TOKEN" \
   http://8.208.16.168:9310/api/health
 
 # Check stuck purchase orders
-curl https://api.beverly.acoblighting.com/api/v1/admin/jobs/stuck-purchases \
+curl https://beverly.acoblighting.com/api/v1/admin/jobs/stuck-purchases \
   -H "Authorization: Bearer $STAFF_TOKEN"
 ```
 
@@ -38,7 +38,7 @@ The energy backend at `ENERGY_BACKEND_URL` is the CRM token engine proxy.
 If automatic retry/refund does not trigger within 30 min:
 ```bash
 # Trigger manual refund sweep
-curl -X POST https://api.beverly.acoblighting.com/api/v1/admin/jobs/refund-failed-purchases \
+curl -X POST https://beverly.acoblighting.com/api/v1/admin/jobs/refund-failed-purchases \
   -H "Authorization: Bearer $STAFF_TOKEN"
 ```
 

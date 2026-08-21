@@ -157,7 +157,7 @@ rememberLogin.value = Boolean(rememberedEmail);
             <input v-model="rememberLogin" type="checkbox" />
             Remember sign in
           </label>
-          <button type="button" class="login-link" @click="error = 'Ask your Beverly account manager to reset your password.'">Forgot password?</button>
+          <router-link to="/forgot-password" class="login-link">Forgot password?</router-link>
         </div>
 
         <div v-if="error" class="bw-alert danger login-error">{{ error }}</div>

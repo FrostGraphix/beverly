@@ -229,6 +229,36 @@ async function fetchAllGateways(fetchPage, stationId, pageSize = 500) {
   return rows;
 }
 
+async function diagnoseGateway(options = {}) {
+  const gatewayId = String(options.gatewayId || "").trim();
+  if (!gatewayId) throw new Error("Gateway ID is required");
+
+  const rows = await fetchAllGateways(
+    options.fetchPage,
+    options.stationId || "",
+    options.pageSize || 500,
+  );
+  const row = rows.find((candidate) => String(candidate?.gatewayId || candidate?.id || "").trim() === gatewayId);
+  if (!row) return null;
+
+  const numberOrNull = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+  return {
+    gatewayId,
+    gatewayName: String(row.gatewayName || row.name || gatewayId).trim() || gatewayId,
+    stationId: String(row.stationId || row.siteId || row.station || "").trim() || null,
+    status: String(row.status ?? "unknown"),
+    online: !gatewayIsDown(row),
+    successRate: numberOrNull(row.successRate),
+    signalDbm: numberOrNull(row.rssiDbm ?? row.rssi),
+    packetLossPercent: numberOrNull(row.packetLossPercent ?? row.packetLoss),
+    firmware: String(row.firmware || row.firmwareVersion || "").trim() || null,
+    uplink: String(row.uplink || row.networkType || row.connectionType || "").trim() || null,
+    lastReportedAt: row.updateDate || row.updatedAt || row.lastReportedAt || null,
+    diagnosedAt: (options.now instanceof Date ? options.now : new Date()).toISOString(),
+    source: "live-gateway",
+  };
+}
+
 async function loadPersistence(stationId) {
   if (!supabase.serviceConfigured()) return { source: "memory", warning: "Supabase service role is not configured" };
   try {
@@ -505,6 +535,7 @@ function resetGatewayHealthMemory() {
 
 module.exports = {
   acknowledgeAlert,
+  diagnoseGateway,
   deriveStationIds,
   fetchAllGateways,
   gatewayIsDown,

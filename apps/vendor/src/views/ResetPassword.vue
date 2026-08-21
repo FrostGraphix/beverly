@@ -30,15 +30,16 @@ const canSubmit = computed(() => strong.value && password.value === confirm.valu
 
 const strengthLabel = computed(() => (['', 'Weak', 'Fair', 'Good', 'Strong', 'Strong'] as const)[score.value]);
 const strengthColor = computed(() => (['', 'var(--danger)', 'var(--warn)', 'var(--brand)', 'var(--success)', 'var(--success)'] as const)[score.value]);
+const validToken = computed(() => /^[a-f0-9]{64}$/i.test(token.value));
 
 onMounted(() => {
     const t = route.query.token as string | undefined;
-    if (t) { token.value = t; }
+    if (t && /^[a-f0-9]{64}$/i.test(t)) { token.value = t; }
     else { error.value = 'Invalid reset link. Please request a new one.'; }
 });
 
 async function submit() {
-    if (!canSubmit.value) return;
+    if (!canSubmit.value || !validToken.value) return;
     loading.value = true;
     error.value   = null;
     try {
@@ -104,6 +105,9 @@ async function submit() {
             class="bw-input"
             :type="showPass ? 'text' : 'password'"
             autocomplete="new-password"
+            minlength="12"
+            maxlength="128"
+            required
             placeholder="At least 12 characters"
             :disabled="loading"
             @input="error = null"
@@ -143,8 +147,13 @@ async function submit() {
             class="bw-input"
             :type="showConfirm ? 'text' : 'password'"
             autocomplete="new-password"
+            minlength="12"
+            maxlength="128"
+            required
             placeholder="Same password again"
             :disabled="loading"
+            :aria-invalid="confirm ? !match : undefined"
+            :aria-describedby="confirm && !match ? 'reset-password-match-error' : undefined"
           />
           <button
             type="button"
@@ -153,10 +162,10 @@ async function submit() {
             @click="showConfirm = !showConfirm"
           >{{ showConfirm ? 'Hide' : 'Show' }}</button>
         </div>
-        <p v-if="confirm && !match" class="field-error">Passwords don't match.</p>
+        <p v-if="confirm && !match" id="reset-password-match-error" class="field-error" role="alert">Passwords don't match.</p>
       </div>
 
-      <div v-if="error" class="auth-error" role="alert">
+      <div v-if="error" class="auth-error" role="alert" aria-live="polite">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" class="error-icon">
           <circle cx="7" cy="7" r="6.5" stroke="currentColor"/>
           <path d="M7 4v3.5M7 9.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

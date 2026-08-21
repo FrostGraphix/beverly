@@ -26,6 +26,15 @@ function testVercelFallbackRewrites() {
     "/wallet/index.html",
     "vercel.preview.json fallback rewrite must point domain mismatches to /wallet/index.html"
   );
+
+  // Assert host matching rules evaluate before static app path rules
+  const hostIndex = vercelJson.rewrites.findIndex((r) => Array.isArray(r.has) && r.has.some((h) => h.type === "host"));
+  const walletPathIndex = vercelJson.rewrites.findIndex((r) => r.source === "/wallet");
+  assert(hostIndex < walletPathIndex, "Host matching rules in vercel.json must evaluate before path rules");
+  assert.ok(
+    !vercelJson.rewrites.some((rule) => rule.has?.some((condition) => /\.\*/.test(String(condition.value || "")))),
+    "Host matching must be exact; broad admin/vendor/customer regexes can hijack preview domains"
+  );
 }
 
 function testCrmAppVueFallback() {

@@ -4,12 +4,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "env": {
-    "CUSTOMER_APP_URL": "https://customer-acob-beverly.vercel.app",
-    "VENDOR_PORTAL_URL": "https://vendor-acob-beverly.vercel.app",
-    "CUSTOMER_FUNDING_CALLBACK_URL": "https://customer-acob-beverly.vercel.app/wallet/fund?payment=return",
-    "VENDOR_FUNDING_CALLBACK_URL": "https://vendor-acob-beverly.vercel.app/wallet/fund?payment=return",
-    "CUSTOMER_METER_ORDER_CALLBACK_URL": "https://customer-acob-beverly.vercel.app/meter-orders",
-    "PAYSTACK_WEBHOOK_URL": "https://acob-beverly.vercel.app/api/v1/webhook/paystack"
+    "CUSTOMER_APP_URL": "https://beverly.acoblighting.com/wallet-customer/",
+    "VENDOR_PORTAL_URL": "https://beverly.acoblighting.com/wallet-vendor/",
+    "CUSTOMER_FUNDING_CALLBACK_URL": "https://beverly.acoblighting.com/wallet-customer/wallet/fund?payment=return",
+    "VENDOR_FUNDING_CALLBACK_URL": "https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return",
+    "CUSTOMER_METER_ORDER_CALLBACK_URL": "https://beverly.acoblighting.com/wallet-customer/meter-orders",
+    "PAYSTACK_WEBHOOK_URL": "https://beverly.acoblighting.com/api/v1/webhook/paystack"
   },
   "functions": {
     "api/reference.js": {
@@ -57,7 +57,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://qpoipyqgrjsjdvfqmxok.supabase.co wss://qpoipyqgrjsjdvfqmxok.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' https://qpoipyqgrjsjdvfqmxok.supabase.co wss://qpoipyqgrjsjdvfqmxok.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
         }
       ]
     },
@@ -72,17 +72,36 @@
     }
   ],
   "redirects": [
+    { "source": "/:path*", "has": [{ "type": "host", "value": "acob-beverly.vercel.app" }], "destination": "https://beverly.acoblighting.com/:path*", "permanent": true },
     { "source": "/wallet-admin", "destination": "/wallet-admin/", "permanent": true },
     { "source": "/wallet-vendor", "destination": "/wallet-vendor/", "permanent": true },
     { "source": "/wallet-customer", "destination": "/wallet-customer/", "permanent": true },
     { "source": "/wallet", "destination": "/wallet/", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/health", "destination": "/api/wallet?__pathname=/health" },
+    { "source": "/ready", "destination": "/api/wallet?__pathname=/ready" },
+    { "source": "/api/v1/health", "destination": "/api/wallet?__pathname=/health" },
+    { "source": "/api/v1/ready", "destination": "/api/wallet?__pathname=/ready" },
+    { "source": "/assets/beverly-logo.png", "destination": "/api/wallet?__pathname=/assets/beverly-logo.png" },
+    { "source": "/api/v1/admin/:path*", "destination": "/api/wallet?__pathname=/api/v1/admin/:path*" },
+    { "source": "/api/v1/public/:path*", "destination": "/api/wallet?__pathname=/api/v1/public/:path*" },
+    { "source": "/api/v1/webhook/:path*", "destination": "/api/wallet?__pathname=/api/v1/webhook/:path*" },
+    { "source": "/api/v1/acobot/:path*", "destination": "/api/wallet?__pathname=/api/v1/acobot/:path*" },
     { "source": "/api/v1/customer/:path*", "destination": "/api/wallet?__pathname=/api/v1/customer/:path*" },
     { "source": "/api/v1/vendor/:path*", "destination": "/api/wallet?__pathname=/api/v1/vendor/:path*" },
     { "source": "/api/wallet-service/:path*", "destination": "/api/wallet-service" },
     { "source": "/api/receipt-pdf", "destination": "/api/receipt-pdf" },
     { "source": "/api/:path*", "destination": "/api/reference?__pathname=/api/:path*" },
+    { "source": "/:path*", "has": [{ "type": "host", "value": "admin-acob-beverly.vercel.app" }], "destination": "/wallet-admin/index.html" },
+    { "source": "/:path*", "has": [{ "type": "host", "value": "vendor-acob-beverly.vercel.app" }], "destination": "/wallet-vendor/index.html" },
+    { "source": "/:path*", "has": [{ "type": "host", "value": "customer-acob-beverly.vercel.app" }], "destination": "/wallet-customer/index.html" },
+    { "source": "/crm", "destination": "/index.html" },
+    { "source": "/crm/", "destination": "/index.html" },
+    { "source": "/crm/:path*", "destination": "/index.html" },
+    { "source": "/beverly", "destination": "/index.html" },
+    { "source": "/beverly/", "destination": "/index.html" },
+    { "source": "/beverly/:path*", "destination": "/index.html" },
     { "source": "/wallet", "destination": "/wallet/index.html" },
     { "source": "/wallet/", "destination": "/wallet/index.html" },
     { "source": "/wallet/:path*", "destination": "/wallet/index.html" },
@@ -104,9 +123,6 @@
     { "source": "/admin", "destination": "/wallet-admin/index.html" },
     { "source": "/admin/", "destination": "/wallet-admin/index.html" },
     { "source": "/admin/:path*", "destination": "/wallet-admin/index.html" },
-    { "source": "/:path*", "has": [{ "type": "host", "value": "admin-acob-beverly.vercel.app" }], "destination": "/wallet-admin/index.html" },
-    { "source": "/:path*", "has": [{ "type": "host", "value": "vendor-acob-beverly.vercel.app" }], "destination": "/wallet-vendor/index.html" },
-    { "source": "/:path*", "has": [{ "type": "host", "value": "customer-acob-beverly.vercel.app" }], "destination": "/wallet-customer/index.html" },
     { "source": "/((?!api/).*)", "destination": "/wallet/index.html" }
   ]
 }

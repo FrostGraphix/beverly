@@ -115,7 +115,11 @@
               <!-- Diagnostic Result Banner -->
               <div v-if="diagResults[alert.id]" class="station-alert-diag-banner">
                 <span class="station-alert-diag-dot"></span>
-                <span>Ping: <strong>{{ diagResults[alert.id].pingMs }}ms</strong> • Signal: {{ diagResults[alert.id].signalDbm }} dBm</span>
+                <span>
+                  {{ diagResults[alert.id].status }}
+                  <template v-if="diagResults[alert.id].signalDbm != null"> • Signal: {{ diagResults[alert.id].signalDbm }} dBm</template>
+                  <template v-if="diagResults[alert.id].packetLossPercent != null"> • Packet loss: {{ diagResults[alert.id].packetLossPercent }}%</template>
+                </span>
               </div>
 
               <!-- Compact Action Bar -->
@@ -323,7 +327,7 @@ export default {
       } catch {
         this.diagResults = {
           ...this.diagResults,
-          [alert.id]: { status: 'Responsive', pingMs: 24, uplink: '4G / Cellular', signalDbm: alert.rssiDbm || -88 }
+          [alert.id]: { status: 'Live diagnostic unavailable' }
         };
       } finally {
         this.diagnosingId = null;

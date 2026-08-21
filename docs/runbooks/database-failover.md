@@ -18,7 +18,7 @@ Supabase handles primary→replica failover automatically for managed instances.
 
 ```bash
 # Check backend health (includes DB ping)
-curl https://api.beverly.acoblighting.com/health
+curl https://beverly.acoblighting.com/ready
 
 # Direct DB connectivity test (requires psql)
 psql $SUPABASE_DB_URL -c "SELECT 1;"

@@ -43,13 +43,15 @@ describe('password-reset service', () => {
         expect(src).toContain("update({ used_at:");
     });
 
-    it('always returns silently when account not found (no user enumeration)', () => {
-        // requestPasswordReset must catch the lookup and return early — not throw
+    it('returns silently when account not found but exposes infrastructure failures', () => {
         const start = src.indexOf('export async function requestPasswordReset');
         const end   = src.indexOf('\nexport async function ', start + 1);
         const body  = end > 0 ? src.slice(start, end) : src.slice(start);
-        expect(body).toContain('return;');
-        expect(body).not.toContain('throw new');
+        expect(body).toContain('if (!authUserId) return;');
+        expect(body).toContain("'email_delivery_unconfigured'");
+        expect(body).toContain("'token_store_unavailable'");
+        expect(body).toContain("'email_delivery_failed'");
+        expect(body).toContain("update({ used_at:");
     });
 
     it('confirmPasswordReset throws invalid_token on missing/used token', () => {
@@ -80,6 +82,7 @@ describe('password-reset service', () => {
     it('sends reset email via postmark sendEmail', () => {
         expect(src).toContain('sendEmail');
         expect(src).toContain("tag: 'password-reset'");
+        expect(src).toContain('passwordResetLinkEmail');
     });
 
     it('reset link includes raw token in query param', () => {
@@ -152,6 +155,34 @@ describe('vendor password reset route', () => {
         const block = src.slice(start, start + 200);
         expect(block).not.toContain('preHandler');
     });
+
+    it('rate limits public vendor reset routes', () => {
+        const start = src.indexOf("'/auth/reset-request'");
+        const block = src.slice(start, start + 1200);
+        expect(block).toContain('rateLimit');
+        expect(block).toContain("timeWindow: '15 minutes'");
+    });
+
+    it('validates reset request and confirmation payloads', () => {
+        const start = src.indexOf("'/auth/reset-request'");
+        const block = src.slice(start, start + 2200);
+        expect(block).toContain('z.string().trim().email().max(320)');
+        expect(block).toContain("z.string().regex(/^[a-f0-9]{64}$/i)");
+        expect(block).toContain('z.string().min(12).max(128)');
+    });
+
+    it('records password reset security events', () => {
+        expect(src).toContain("logSecurityEvent('password_reset_requested'");
+        expect(src).toContain("logSecurityEvent('password_reset_completed'");
+        expect(src).toContain("logSecurityEvent('password_reset_failed'");
+    });
+
+    it('returns a truthful service error when delivery fails', () => {
+        const start = src.indexOf("'/auth/reset-request'");
+        const block = src.slice(start, start + 2200);
+        expect(block).toContain("reply.code(503)");
+        expect(block).toContain("error: 'password_reset_unavailable'");
+    });
 });
 
 // ── DB migration ──────────────────────────────────────────────────────────────
@@ -187,6 +218,32 @@ describe('password_reset_tokens migration', () => {
 
     it('enables RLS', () => {
         expect(sql).toContain('enable row level security');
+    });
+});
+
+describe('password reset delivery repair migration', () => {
+    const sql = readFileSync(
+        resolve(ROOT, 'supabase/migrations/20260821170000_password_reset_delivery_repair.sql'),
+        'utf-8',
+    );
+
+    it('repairs missing storage idempotently', () => {
+        expect(sql).toContain('create table if not exists public.password_reset_tokens');
+        expect(sql).toContain('force row level security');
+        expect(sql).toContain('notify pgrst');
+    });
+});
+
+describe('password reset audit repair migration', () => {
+    const sql = readFileSync(
+        resolve(ROOT, 'supabase/migrations/20260821171000_wallet_security_event_delivery_columns.sql'),
+        'utf-8',
+    );
+
+    it('restores security request context columns', () => {
+        expect(sql).toContain('add column if not exists ip_address');
+        expect(sql).toContain('add column if not exists user_agent');
+        expect(sql).toContain('notify pgrst');
     });
 });
 
@@ -230,6 +287,7 @@ describe('frontend password reset routes', () => {
     it('vendor Login.vue contains password reset help option', () => {
         const src = readFileSync(resolve(ROOT, 'apps/vendor/src/views/Login.vue'), 'utf-8');
         expect(src).toContain('Forgot password?');
+        expect(src).toContain('to="/forgot-password"');
     });
 
     it('customer ResetPassword.vue enforces 8-char minimum', () => {

@@ -59,6 +59,7 @@ async function main() {
   assert.ok(gateway.includes("/api/system/client-errors"), "gateway exposes client-errors endpoint");
   assert.ok(gateway.includes("ingestClientErrors"), "gateway ingests client errors");
   assert.ok(gateway.includes("Client error telemetry requires staff role"), "gateway gates telemetry reads by staff role");
+  assert.match(gateway, /if \(!actor\.roleId\) return authFailure\(401, pathname, "Authentication required"\)/, "anonymous telemetry reads fail closed");
 
   // Frontend contract.
   const logger = read("src/services/error-logger.mjs");

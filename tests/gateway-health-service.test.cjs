@@ -9,6 +9,7 @@ delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 delete process.env.SUPABASE_SECRET_KEY;
 
 const {
+  diagnoseGateway,
   normalizeGateway,
   refreshGatewayHealth,
   resetGatewayHealthMemory,
@@ -44,6 +45,50 @@ function gatewayResponse(status, updateDate) {
     ["KYAKALE", "MUSHA", "UMAISHA", "TUNGA", "OGUFA", "NEWSTATION"]
   );
   assert.equal(dynamicDerivationTest.stationId, "NEWSTATION");
+
+  const diagnosis = await diagnoseGateway({
+    gatewayId: "GW-REAL",
+    now: new Date("2026-07-14T07:55:00.000Z"),
+    fetchPage: async () => ({
+      status: 200,
+      body: {
+        result: {
+          total: 1,
+          data: [{
+            gatewayId: "GW-REAL",
+            gatewayName: "Measured Gateway",
+            stationId: "MUSHA",
+            status: "online",
+            successRate: 97.5,
+            rssiDbm: -91,
+            packetLossPercent: 2.5,
+            firmwareVersion: "v4.2.0",
+            networkType: "LTE",
+            updateDate: "2026-07-14T07:54:30.000Z",
+          }],
+        },
+      },
+    }),
+  });
+  assert.deepEqual(diagnosis, {
+    gatewayId: "GW-REAL",
+    gatewayName: "Measured Gateway",
+    stationId: "MUSHA",
+    status: "online",
+    online: true,
+    successRate: 97.5,
+    signalDbm: -91,
+    packetLossPercent: 2.5,
+    firmware: "v4.2.0",
+    uplink: "LTE",
+    lastReportedAt: "2026-07-14T07:54:30.000Z",
+    diagnosedAt: "2026-07-14T07:55:00.000Z",
+    source: "live-gateway",
+  });
+  assert.equal(await diagnoseGateway({
+    gatewayId: "GW-MISSING",
+    fetchPage: async () => ({ status: 200, body: { result: { total: 0, data: [] } } }),
+  }), null);
 
   resetGatewayHealthMemory();
   const down = await refreshGatewayHealth({
@@ -83,9 +128,18 @@ function gatewayResponse(status, updateDate) {
 
   // Incident transitions must flow into the automation alert pipeline.
   const serviceSource = fs.readFileSync(path.join(__dirname, "../backend/src/services/gateway-health-service.js"), "utf8");
+  const referenceSource = fs.readFileSync(path.join(__dirname, "../api/reference.js"), "utf8");
+  const alertsSource = fs.readFileSync(path.join(__dirname, "../src/components/StationAlertsBell.vue"), "utf8");
   assert.match(serviceSource, /handleAutomationIncident/);
   assert.match(serviceSource, /gateway-down/);
   assert.match(serviceSource, /gateway-recovered/);
+  assert.doesNotMatch(serviceSource, /Math\.random\(\)/, "gateway diagnostics must never fabricate telemetry");
+  const diagnoseRoute = referenceSource.match(/pathname\.toLowerCase\(\) === "\/api\/notifications\/gateway-health\/diagnose"[\s\S]*?\n\s*return;\n\s*\}/)?.[0] || "";
+  assert.ok(diagnoseRoute, "gateway diagnostic route must exist");
+  assert.doesNotMatch(diagnoseRoute, /Math\.random\(\)/, "gateway diagnostics must never fabricate telemetry");
+  assert.doesNotMatch(referenceSource, /Gateway health fallback/, "gateway outages must not be disguised as an empty healthy response");
+  assert.match(referenceSource, /response\.status\(502\)\.json\(\{[\s\S]*?source: "live-required"/, "gateway outages must fail loudly");
+  assert.doesNotMatch(alertsSource, /status: 'Responsive', pingMs:/, "the UI must not fabricate a successful diagnostic after an API failure");
   console.log("gateway-health-service ok");
 })().catch((error) => {
   console.error(error);
