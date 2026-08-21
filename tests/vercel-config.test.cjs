@@ -32,19 +32,27 @@ assert(!vercelJson.env?.ALLOW_LIVE_WRITES, "vercel must not enable live writes")
 assert(!vercelJson.env?.APPROVED_LIVE_WRITES, "vercel must not approve live writes");
 assert(!vercelJson.env?.VITE_ALLOW_LIVE_WRITES, "vercel must not expose live write flags");
 assert(
-  vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-customer/wallet/fund?payment=return",
+  vercelJson.env?.CUSTOMER_APP_URL === "https://acob-beverly.vercel.app/wallet-customer/",
+  "customer password resets must return to the deployed customer portal"
+);
+assert(
+  vercelJson.env?.VENDOR_APP_URL === "https://acob-beverly.vercel.app/wallet-vendor/",
+  "vendor password resets must return to the deployed vendor portal"
+);
+assert(
+  vercelJson.env?.CUSTOMER_FUNDING_CALLBACK_URL === "https://acob-beverly.vercel.app/wallet-customer/wallet/fund?payment=return",
   "customer funding must return to the customer portal"
 );
 assert(
-  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-vendor/wallet/fund?payment=return",
+  vercelJson.env?.VENDOR_FUNDING_CALLBACK_URL === "https://acob-beverly.vercel.app/wallet-vendor/wallet/fund?payment=return",
   "vendor funding must return to the vendor portal"
 );
 assert(
-  vercelJson.env?.CUSTOMER_METER_ORDER_CALLBACK_URL === "https://beverly.acoblighting.com/wallet-customer/meter-orders",
+  vercelJson.env?.CUSTOMER_METER_ORDER_CALLBACK_URL === "https://acob-beverly.vercel.app/wallet-customer/meter-orders",
   "meter payments must return to customer meter orders"
 );
 assert(
-  vercelJson.env?.PAYSTACK_WEBHOOK_URL === "https://beverly.acoblighting.com/api/v1/webhook/paystack",
+  vercelJson.env?.PAYSTACK_WEBHOOK_URL === "https://acob-beverly.vercel.app/api/v1/webhook/paystack",
   "Paystack webhooks must target the canonical API host"
 );
 assert(
@@ -98,13 +106,14 @@ for (const config of [vercelJson, previewJson]) {
 }
 assert(!cspHeader.includes("'unsafe-eval'"), "production CSP must not allow eval");
 assert(!cspHeader.includes("script-src 'self' 'unsafe-inline'"), "production scripts must not allow inline execution");
-assert(
-  vercelJson.redirects.some((entry) =>
-    entry.destination === "https://beverly.acoblighting.com/:path*" &&
-    entry.has?.some((condition) => condition.type === "host" && condition.value === "acob-beverly.vercel.app")
-  ),
-  "the public Vercel alias must redirect to the canonical custom domain"
-);
+for (const config of [vercelJson, previewJson]) {
+  assert(
+    !config.redirects?.some((entry) =>
+      entry.has?.some((condition) => condition.type === "host" && condition.value === "acob-beverly.vercel.app")
+    ),
+    "the public Vercel alias must serve wallet routes without leaving its origin"
+  );
+}
 for (const [source, destination] of [
   ["/health", "/api/wallet?__pathname=/health"],
   ["/ready", "/api/wallet?__pathname=/ready"],

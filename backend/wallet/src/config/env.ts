@@ -96,8 +96,8 @@ const schema = z.object({
     CUSTOMER_METER_ORDER_CALLBACK_URL: z.string().url().optional(),
 
     // Public app base URLs — used to build password-reset links in emails.
-    CUSTOMER_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-customer/'),
-    VENDOR_APP_URL: z.string().url().default('https://beverly.acoblighting.com/wallet-vendor/'),
+    CUSTOMER_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-customer/'),
+    VENDOR_APP_URL: z.string().url().default('https://acob-beverly.vercel.app/wallet-vendor/'),
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
 
     // Firebase Cloud Messaging — push notifications
