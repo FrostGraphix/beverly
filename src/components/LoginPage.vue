@@ -68,6 +68,7 @@
                 autofocus
                 @focus="focused = 'user'"
                 @blur="focused = ''"
+                @input="clearFieldError('userId')"
               />
             </span>
             <span v-if="fieldErrors.userId" class="auth-field-error">{{ fieldErrors.userId }}</span>
@@ -85,6 +86,7 @@
                 autocomplete="current-password"
                 @focus="focused = 'pass'"
                 @blur="focused = ''"
+                @input="clearFieldError('password')"
               />
               <BaseIconButton
                 class="auth-eye"
@@ -172,12 +174,29 @@ export default {
     const rememberedUser = localStorage.getItem(rememberedUserKey);
     this.rememberUsername = Boolean(rememberedUser);
     if (rememberedUser) this.form.userId = rememberedUser;
-    if (window.location.hash.includes("timeout=true")) {
-      this.sessionMessage = "Session expired. Please sign in again.";
+
+    const hash = String(window.location.hash || "");
+    const search = String(window.location.search || "");
+    if (hash.includes("timeout=true") || search.includes("timeout=true")) {
+      this.sessionMessage = "Your session expired due to inactivity. Please sign in again.";
+    } else if (hash.includes("denied=true") || search.includes("denied=true")) {
+      this.sessionMessage = "Access denied. You do not have permission to view that resource.";
+    } else if (hash.includes("expired=true") || search.includes("expired=true")) {
+      this.sessionMessage = "Your session token expired. Please sign in again.";
     }
     this.maintenanceNotice = import.meta.env?.VITE_AUTH_NOTICE || "";
   },
   methods: {
+    clearFieldError(field) {
+      if (this.fieldErrors[field]) {
+        const next = { ...this.fieldErrors };
+        delete next[field];
+        this.fieldErrors = next;
+        if (!Object.keys(next).length && this.error === "Check the highlighted fields.") {
+          this.error = "";
+        }
+      }
+    },
     async submit() {
       unlockLoginVoice();
       this.error = "";
@@ -227,16 +246,44 @@ export default {
       return errors;
     },
     loginErrorMessage(error) {
-      const status = Number(error?.response?.status);
+      const status = Number(error?.response?.status || error?.status);
+      const serverMsg = String(
+        error?.response?.data?.msg ||
+        error?.response?.data?.reason ||
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        ""
+      ).trim();
+
       const transportFailure = ["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT"].includes(String(error?.code || ""))
-        || /network error|timeout/i.test(String(error?.message || ""));
-      if (transportFailure) return "Beverly is unreachable. Check your connection, then retry.";
-      if (status === 401 || status === 403 || (status === 400 && /invalid.*credentials/i.test(String(error?.message || "")))) {
-        return "Email or password is incorrect.";
+        || /network error|timeout/i.test(String(error?.message || ""))
+        || (typeof navigator !== "undefined" && !navigator.onLine);
+
+      if (transportFailure) {
+        return "Beverly is unreachable. Check your connection, then retry.";
       }
-      if (status === 429) return "Too many attempts. Wait briefly, then retry.";
-      if (status >= 500) return "The sign-in service is unavailable. Try again shortly.";
-      return error?.message || "Check your details, then retry.";
+
+      // Preserve exact server-provided access denial / role restriction messages (e.g. 403 blocks)
+      if (status === 403 || /access denied|cannot sign in|permission|forbidden/i.test(serverMsg)) {
+        return serverMsg || "Access Denied: You do not have permission to sign in to Beverly CRM.";
+      }
+
+      if (status === 401 || (status === 400 && /invalid.*credentials/i.test(serverMsg))) {
+        return serverMsg && !/request failed|bad request/i.test(serverMsg)
+          ? serverMsg
+          : "Invalid email or password. Please verify your credentials.";
+      }
+
+      if (status === 429) {
+        return serverMsg || "Too many sign-in attempts. Please wait a moment before trying again.";
+      }
+
+      if (status >= 500) {
+        return "The sign-in service is currently unavailable or undergoing maintenance. Please try again shortly.";
+      }
+
+      return serverMsg || "Check your details, then retry.";
     },
     clearError() {
       this.error = "";

@@ -8,7 +8,7 @@
         :role="item.type === 'error' || item.type === 'warning' ? 'alert' : 'status'"
       >
         <!-- Icon -->
-        <div class="toast-icon">
+        <div class="toast-icon" aria-hidden="true">
           <svg v-if="item.type === 'success'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>
           <svg v-else-if="item.type === 'error'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>
           <svg v-else-if="item.type === 'warning'" viewBox="0 0 24 24"><path d="M10.3 4.2 2.8 17.1A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.9L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 3h.01"/></svg>
@@ -72,77 +72,102 @@ export default {
 <style scoped>
 .toast-portal {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: var(--s-4, 16px);
+  right: var(--s-4, 16px);
   z-index: var(--z-toast, 9999);
   pointer-events: none;
-  font-family: var(--font-family);
+  font-family: var(--font-sans, 'Inter', -apple-system, sans-serif);
 }
 
 .toast-stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--s-3, 12px);
   align-items: flex-end;
 }
 
 /* ── Toast item ─────────────────────────────── */
 .toast-item {
-  --toast-accent: var(--info);
+  --toast-accent: var(--semantic-info, oklch(72% 0.13 220));
+  --toast-accent-soft: color-mix(in oklch, var(--toast-accent) 15%, transparent);
   pointer-events: all;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  width: min(360px, calc(100vw - 32px));
-  padding: 14px 12px 17px;
-  border: 1px solid color-mix(in srgb, var(--toast-accent) 35%, var(--border-color));
+  gap: var(--s-3, 12px);
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px 14px 18px 12px;
+  border: 1px solid color-mix(in oklch, var(--toast-accent) 30%, color-mix(in oklch, var(--surface, #151a22) 80%, var(--border-color, #273142)));
   border-left: 4px solid var(--toast-accent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--r-lg, 10px);
+  background: color-mix(in oklch, var(--surface, #0f141c) 88%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    0 14px 36px -8px oklch(0% 0 0 / 0.45),
+    0 0 0 1px color-mix(in oklch, var(--toast-accent) 18%, transparent);
   position: relative;
   overflow: hidden;
-  color: var(--text-main);
+  color: var(--text-main, #f0f4f8);
 }
 
-/* Type accents */
-.toast-success { --toast-accent: var(--success); }
-.toast-error   { --toast-accent: var(--danger); }
-.toast-warning { --toast-accent: var(--warning); }
+/* Type accents using Wallet Portal semantic design tokens */
+.toast-success {
+  --toast-accent: var(--semantic-positive, var(--success, oklch(70% 0.19 145)));
+}
+.toast-error {
+  --toast-accent: var(--semantic-negative, var(--danger, oklch(68% 0.20 25)));
+}
+.toast-warning {
+  --toast-accent: var(--semantic-warning, var(--warn, oklch(78% 0.16 75)));
+}
+.toast-info {
+  --toast-accent: var(--semantic-info, var(--info, oklch(72% 0.13 220)));
+}
 
 /* ── Icon ───────────────────────────────────── */
 .toast-icon {
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--r-md, 8px);
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--toast-accent) 14%, transparent);
+  background: var(--toast-accent-soft);
   color: var(--toast-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--toast-accent) 25%, transparent);
 }
 
-.toast-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.toast-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* ── Body ───────────────────────────────────── */
-.toast-body { flex: 1; min-width: 0; }
+.toast-body {
+  flex: 1;
+  min-width: 0;
+}
 
 .toast-label {
   display: block;
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0;
-  margin-bottom: 2px;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
   color: var(--toast-accent);
 }
 
 .toast-msg {
   margin: 0;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-main);
+  font-weight: var(--fw-medium, 500);
+  color: var(--text-main, #f0f4f8);
   line-height: 1.45;
   word-break: break-word;
 }
@@ -150,20 +175,30 @@ export default {
 /* ── Close ──────────────────────────────────── */
 .toast-close {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-muted, #8b99a8);
   cursor: pointer;
   display: grid;
   place-items: center;
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  border-radius: var(--r-sm, 6px);
+  transition: all var(--dur-fast, 120ms) var(--ease-out, ease-out);
   padding: 0;
 }
-.toast-close:hover { background: color-mix(in srgb, var(--text-main) 8%, transparent); color: var(--text-main); }
-.toast-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.toast-close:hover {
+  background: color-mix(in oklch, var(--text-main, #fff) 12%, transparent);
+  color: var(--text-main, #f0f4f8);
+}
+.toast-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
 
 /* ── Progress bar ───────────────────────────── */
 .toast-progress {
@@ -172,10 +207,11 @@ export default {
   left: 0;
   height: 3px;
   width: 100%;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 var(--r-lg, 10px) var(--r-lg, 10px);
   animation: toast-shrink linear forwards;
   transform-origin: left center;
-  background: var(--toast-accent);
+  background: linear-gradient(90deg, var(--toast-accent), color-mix(in oklch, var(--toast-accent) 60%, #fff));
+  box-shadow: 0 0 8px var(--toast-accent);
 }
 
 @keyframes toast-shrink {
@@ -185,21 +221,21 @@ export default {
 
 /* ── List transitions ───────────────────────── */
 .toast-list-enter-active {
-  animation: toast-in 0.24s ease-out;
+  animation: toast-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .toast-list-leave-active {
-  animation: toast-out 0.28s ease forwards;
+  animation: toast-out 0.24s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
 }
 .toast-list-move {
-  transition: transform 0.3s ease;
+  transition: transform 0.3s var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(60px) scale(0.92); }
+  from { opacity: 0; transform: translateX(80px) scale(0.92); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes toast-out {
-  to { opacity: 0; transform: translateX(60px) scale(0.88); }
+  to { opacity: 0; transform: translateX(80px) scale(0.88); }
 }
 
 @media (max-width: 640px) {
@@ -214,3 +250,4 @@ export default {
   .toast-progress { animation: none; }
 }
 </style>
+

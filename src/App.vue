@@ -770,21 +770,53 @@ export default {
         }
         this.syncHash();
       } catch (error) {
-        // On any auth failure, fail closed — do not keep a stale super-admin role.
-        this.currentRoleId = null;
-        clearSessionCookies();
-        if (!this.isLogin) window.location.hash = "#/login";
-        this.syncHash();
+        const status = Number(error?.status || error?.response?.status);
+        if (status === 401 || status === 403 || !readSessionState()) {
+          // Explicit 401/403 session rejection — clear cookies and redirect to sign in.
+          this.currentRoleId = null;
+          clearSessionCookies();
+          if (!this.isLogin) window.location.hash = "#/login";
+          this.syncHash();
+        } else {
+          // Transient network error / temporary server issue — preserve session state
+          console.warn("[auth-load] Transient error during session verification:", error?.message || error);
+        }
       }
     },
     syncHash() {
       const nextHash = window.location.hash || "#/login?redirect=%2Fdashboard";
-      if (normalizeHash(nextHash).startsWith("#/wallet/admin/")) {
+      const normalized = normalizeHash(nextHash);
+
+      if (normalized.startsWith("#/wallet/admin") || normalized.startsWith("#/wallet-admin") || normalized === "#/admin") {
         const configured = String(import.meta.env?.VITE_ADMIN_URL || "").trim();
         const adminUrl = configured || (import.meta.env?.DEV
           ? `${window.location.protocol}//${window.location.hostname}:5175/`
           : `${window.location.origin}/wallet-admin/`);
         window.location.assign(adminUrl);
+        return;
+      }
+      if (normalized.startsWith("#/wallet/customer") || normalized.startsWith("#/wallet-customer") || normalized === "#/customer") {
+        const configured = String(import.meta.env?.VITE_CUSTOMER_URL || "").trim();
+        const customerUrl = configured || (import.meta.env?.DEV
+          ? `${window.location.protocol}//${window.location.hostname}:5173/`
+          : `${window.location.origin}/wallet-customer/`);
+        window.location.assign(customerUrl);
+        return;
+      }
+      if (normalized.startsWith("#/wallet/vendor") || normalized.startsWith("#/wallet-vendor") || normalized === "#/vendor") {
+        const configured = String(import.meta.env?.VITE_VENDOR_URL || "").trim();
+        const vendorUrl = configured || (import.meta.env?.DEV
+          ? `${window.location.protocol}//${window.location.hostname}:5174/`
+          : `${window.location.origin}/wallet-vendor/`);
+        window.location.assign(vendorUrl);
+        return;
+      }
+      if (normalized === "#/wallet" || normalized === "#/wallet/landing") {
+        const configured = String(import.meta.env?.VITE_LANDING_URL || "").trim();
+        const landingUrl = configured || (import.meta.env?.DEV
+          ? `${window.location.protocol}//${window.location.hostname}:5176/`
+          : `${window.location.origin}/wallet/`);
+        window.location.assign(landingUrl);
         return;
       }
       if (normalizeHash(nextHash) === "#/prepay-report/site-consumption") {
@@ -795,9 +827,15 @@ export default {
         window.location.hash = "#/system/automation-command";
         return;
       }
-      this.hash = nextHash.startsWith("#/login")
-        ? nextHash
-        : (this.routeExists(nextHash) ? nextHash : this.nextRoute(nextHash).hash);
+      if (!nextHash.startsWith("#/login") && !this.routeExists(nextHash)) {
+        const configured = String(import.meta.env?.VITE_LANDING_URL || "").trim();
+        const landingUrl = configured || (import.meta.env?.DEV
+          ? `${window.location.protocol}//${window.location.hostname}:5176/`
+          : `${window.location.origin}/wallet/`);
+        window.location.assign(landingUrl);
+        return;
+      }
+      this.hash = nextHash.startsWith("#/login") ? nextHash : nextHash;
       if (!this.hash.startsWith("#/login") && window.location.hash !== this.hash) window.location.hash = this.hash;
       document.title = `${this.route.title} - Beverly`;
 
