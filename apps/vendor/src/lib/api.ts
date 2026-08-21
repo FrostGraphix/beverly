@@ -68,15 +68,18 @@ function clearVendorSession(): void {
 }
 
 function portalBasePath(): string {
-    const configuredBase = String(import.meta.env.BASE_URL ?? '/');
-    const normalized = configuredBase && configuredBase !== '/'
-        ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/`
-        : '/';
-
-    // DEACTIVATED: Automatic pathname rewrite override — allow explicit navigation across portal links
-    // if (typeof window === 'undefined' || normalized === '/') return normalized;
-    // return window.location.pathname.startsWith(normalized) ? normalized : '/';
-    return normalized;
+    if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path.startsWith('/vendor/')) return '/vendor/';
+        if (path.startsWith('/vendor')) return '/vendor/';
+        if (path.startsWith('/wallet-vendor/')) return '/wallet-vendor/';
+        if (path.startsWith('/wallet-vendor')) return '/wallet-vendor/';
+    }
+    const configuredBase = String(import.meta.env.BASE_URL ?? '');
+    if (configuredBase && configuredBase !== '/') {
+        return `/${configuredBase.replace(/^\/+|\/+$/g, '')}/`;
+    }
+    return '/wallet-vendor/';
 }
 
 function redirectToLogin(): void {

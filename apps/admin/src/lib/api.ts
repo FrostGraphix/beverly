@@ -49,11 +49,18 @@ function unwrapEnvelope<T>(json: any): T {
 }
 
 function adminBasePath(): string {
-    const base = String(import.meta.env.BASE_URL || '/').trim();
-    if (!base || base === '/') return '/';
-    const normalized = `/${base.replace(/^\/+|\/+$/g, '')}/`;
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith(normalized)) return '/';
-    return normalized;
+    if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path.startsWith('/admin/')) return '/admin/';
+        if (path.startsWith('/admin')) return '/admin/';
+        if (path.startsWith('/wallet-admin/')) return '/wallet-admin/';
+        if (path.startsWith('/wallet-admin')) return '/wallet-admin/';
+    }
+    const base = String(import.meta.env.BASE_URL || '').trim();
+    if (base && base !== '/') {
+        return `/${base.replace(/^\/+|\/+$/g, '')}/`;
+    }
+    return '/wallet-admin/';
 }
 
 function routerPathFromLocation(): string {

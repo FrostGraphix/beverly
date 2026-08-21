@@ -271,6 +271,7 @@ function issueJwt(userId: string): string {
     const header  = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const payload = b64url(JSON.stringify({
         sub: userId,
+        session_id: crypto.randomUUID(),
         role: 'authenticated',
         aud: 'authenticated',
         iat: now,

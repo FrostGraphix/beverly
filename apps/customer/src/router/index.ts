@@ -2,11 +2,15 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth';
 
 function portalHistoryBase(configuredBase: string): string {
-    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '/';
-    // DEACTIVATED: Automatic pathname rewrite override — allow explicit navigation across portal links
-    // if (typeof window === 'undefined' || base === '/') return base;
-    // return window.location.pathname.startsWith(base) ? base : '/';
-    return base;
+    if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path.startsWith('/customer/')) return '/customer/';
+        if (path.startsWith('/customer')) return '/customer/';
+        if (path.startsWith('/wallet-customer/')) return '/wallet-customer/';
+        if (path.startsWith('/wallet-customer')) return '/wallet-customer/';
+    }
+    const base = configuredBase && configuredBase !== '/' ? `/${configuredBase.replace(/^\/+|\/+$/g, '')}/` : '';
+    return base || '/wallet-customer/';
 }
 
 const routes: RouteRecordRaw[] = [

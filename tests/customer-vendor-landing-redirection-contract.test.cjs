@@ -33,27 +33,15 @@ function main() {
   assert.match(adminAppShell, /:href="PORTAL_URLS\.landing"/);
   assert.match(adminAppShell, /isCrmEligible/);
 
-  // 3. Verify landing chooser & nav session awareness
-  assert.match(landingChooser, /hasStaffSession\.value/);
-  assert.match(landingChooser, /hasCustomerSession\.value/);
-  assert.match(landingChooser, /hasVendorSession\.value/);
-  assert.match(landingChooser, /Open Admin CRM/);
-  assert.match(landingNav, /activeSessionHref/);
-  assert.match(landingNav, /activeSessionLabel/);
-
-  // 4. Verify login cross-portal active session banners & vendor/customer rejection
-  assert.match(customerLogin, /hasStaffSession\.value/);
-  assert.match(customerLogin, /hasVendorSession\.value/);
-  assert.match(vendorLogin, /hasStaffSession\.value/);
-  assert.match(vendorLogin, /hasCustomerSession\.value/);
-  assert.match(adminLogin, /hasVendorSession\.value/);
-  assert.match(adminLogin, /hasCustomerSession\.value/);
+  // 3. Verify total deactivation of automatic routing & session sniffing
+  assert.match(adminRouter, /portalHistoryBase/);
   assert.match(adminLogin, /Access Denied: Vendor and Customer accounts cannot sign in to Beverly Wallet Admin/);
+  assert.doesNotMatch(customerLogin, /hasStaffSession/);
+  assert.doesNotMatch(vendorLogin, /hasStaffSession/);
+  assert.doesNotMatch(landingChooser, /hasStaffSession/);
+  assert.doesNotMatch(landingNav, /activeSessionHref/);
 
-  // 5. Verify deactivated automatic pathname override in router
-  assert.match(adminRouter, /DEACTIVATED: Automatic pathname rewrite override/);
-
-  // 6. Verify package.json test script registration
+  // 4. Verify package.json test script registration
   assert.match(pkg.scripts["test:auth"], /tests\/customer-vendor-landing-redirection-contract\.test\.cjs/);
 
   console.log({
