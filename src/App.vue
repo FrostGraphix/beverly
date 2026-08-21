@@ -787,7 +787,7 @@ export default {
       const nextHash = window.location.hash || "#/login?redirect=%2Fdashboard";
       const normalized = normalizeHash(nextHash);
 
-      if (normalized.startsWith("#/wallet/admin") || normalized.startsWith("#/wallet-admin") || normalized === "#/admin") {
+      if (normalizeHash(nextHash).startsWith("#/wallet/admin/") || normalized.startsWith("#/wallet/admin") || normalized.startsWith("#/wallet-admin") || normalized === "#/admin") {
         const configured = String(import.meta.env?.VITE_ADMIN_URL || "").trim();
         const adminUrl = configured || (import.meta.env?.DEV
           ? `${window.location.protocol}//${window.location.hostname}:5175/`
