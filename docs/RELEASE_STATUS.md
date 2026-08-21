@@ -1,16 +1,17 @@
 # Release Status
 
-Evidence date: 2026-07-10.
+Evidence date: 2026-08-21.
 
 Status: branch preview rolling.
 
 Current Vercel truth:
 
-- Canonical production URL: `https://beverly.acoblighting.com`
-- Public Vercel alias: `https://acob-beverly.vercel.app` (redirects to the canonical domain after this release)
-- Production deployment: `dpl_8G3DXooMiE8YCDoGiiDJbzNZsopf`
-- Production URL: `https://beverly-ko88e8hyh-danmusa-abdulsamads-projects.vercel.app`
-- Production commit: `af455ac2741d4ceb89a89902c517bc49b4e652f1`
+- CRM production URL: `https://beverly.acoblighting.com`
+- Canonical wallet URL: `https://acob-beverly.vercel.app`
+- The wallet alias serves portal routes directly.
+- Production deployment: `dpl_Fuk7ZM9oz5gUMAi6cRF2GaHJ5xvK`
+- Production URL: `https://beverly-rf4cfq2of-danmusa-abdulsamads-projects.vercel.app`
+- Production source: audited working tree deployed 2026-08-21
 - PR #9 preview deployment: `dpl_FLQH1voAnWntR5TnYLdnF2oTQF3K`
 - PR #9 preview URL: `https://beverly-kpdyn47c9-danmusa-abdulsamads-projects.vercel.app`
 - PR #9 commit: `de989ef7919144e927f079289e96926bf5c10930`
@@ -56,7 +57,7 @@ Production smoke checklist:
 
 ```powershell
 cd "C:\Users\ACOB\Desktop\VS Code\Beverly"
-$env:TARGET_URL="https://beverly.acoblighting.com"
+$env:TARGET_URL="https://acob-beverly.vercel.app"
 $env:VERCEL_PROTECTION_BYPASS="<production-bypass-secret>"
 $env:SMOKE_AUTH_TOKEN="<smoke-token>"
 npm run smoke:vercel

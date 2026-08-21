@@ -12,7 +12,6 @@
     }
   },
   "redirects": [
-    { "source": "/:path*", "has": [{ "type": "host", "value": "acob-beverly.vercel.app" }], "destination": "https://beverly.acoblighting.com/:path*", "permanent": true },
     { "source": "/wallet-admin", "destination": "/wallet-admin/", "permanent": true },
     { "source": "/wallet-vendor", "destination": "/wallet-vendor/", "permanent": true },
     { "source": "/wallet-customer", "destination": "/wallet-customer/", "permanent": true },

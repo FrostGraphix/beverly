@@ -29,8 +29,8 @@ Accept live Paystack payments for customer wallet top-ups, customer direct token
 
 ## Phase 4 - Production activation
 
-- Set the Paystack dashboard callback URL to `https://beverly.acoblighting.com`.
-- Set the Paystack dashboard webhook URL to `https://beverly.acoblighting.com/api/v1/webhook/paystack`.
+- Set the Paystack callback URLs to their exact `https://acob-beverly.vercel.app/wallet-customer/...` or `wallet-vendor/...` return paths.
+- Set the Paystack dashboard webhook URL to `https://acob-beverly.vercel.app/api/v1/webhook/paystack`.
 - Provision the variables from `.env.example` in the production wallet backend. Never copy `.env` into source control.
 - Apply all Supabase migrations, including payment transaction status, webhook deduplication, and fulfillment leases.
 - Deploy the separate BullMQ wallet worker and verify its heartbeat before relying on scheduled payment recovery.

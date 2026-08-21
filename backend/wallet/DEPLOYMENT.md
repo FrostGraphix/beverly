@@ -46,4 +46,4 @@ Never point previews upstream.
 
 Keep `WALLET_PROXY_MONEY_WRITES_ENABLED=false` in previews and local environments that must not forward real money writes.
 
-Supabase Cron calls `https://beverly.acoblighting.com/api/cron/wallet-maintenance?task=<task>` with `Authorization: Bearer <CRON_SECRET>`. Do not put the secret in migrations or query parameters.
+Supabase Cron calls `https://acob-beverly.vercel.app/api/cron/wallet-maintenance?task=<task>` with `Authorization: Bearer <CRON_SECRET>`. Do not put the secret in migrations or query parameters.
