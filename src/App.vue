@@ -399,7 +399,7 @@ import BeverlyLoader from "@beverly/tokens/BeverlyLoader.vue";
 import PwaUpdateToast from "@beverly/tokens/PwaUpdateToast.vue";
 import { useOemStore } from "./stores/oem-store";
 import { warmAllOems } from "./services/oem-prefetch.mjs";
-import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 import { groupIcons, routeIconOverrides, routeIconPaths, sidebarSectionLabels } from "./data/shell-chrome.mjs";
@@ -591,6 +591,7 @@ export default {
     }
   },
   created() {
+    runOneTimeStorageCleanup();
     window.addEventListener("hashchange", this.syncHash);
     window.addEventListener("resize", this.syncWidth);
     window.addEventListener("keydown", this.handleGlobalKeydown);
