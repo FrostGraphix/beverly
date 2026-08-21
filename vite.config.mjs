@@ -172,8 +172,51 @@ function embeddedReferenceApi() {
   };
 }
 
+function devPortalRedirect() {
+  return {
+    name: "beverly-dev-portal-redirect",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const url = request.url || "";
+        if (url.startsWith("/api") || url.startsWith("/docs") || url.startsWith("/@") || url.startsWith("/src") || url.startsWith("/node_modules")) {
+          next();
+          return;
+        }
+
+        const [pathname, search] = url.split("?");
+        const query = search ? `?${search}` : "";
+
+        let targetPort = null;
+        if (pathname.startsWith("/wallet-customer") || pathname.startsWith("/customer")) {
+          targetPort = process.env.CUSTOMER_PORT || 5173;
+        } else if (pathname.startsWith("/wallet-vendor") || pathname.startsWith("/vendor")) {
+          targetPort = process.env.VENDOR_PORT || 5174;
+        } else if (pathname.startsWith("/wallet-admin") || pathname.startsWith("/admin")) {
+          targetPort = process.env.ADMIN_PORT || 5175;
+        } else if (pathname === "/wallet" || pathname === "/wallet/") {
+          targetPort = process.env.LANDING_PORT || 5176;
+        }
+
+        if (targetPort && String(server.config.server.port) !== String(targetPort)) {
+          const rawHost = request.headers.host || "127.0.0.1";
+          const host = rawHost.split(":")[0];
+          const protocol = (request.socket && request.socket.encrypted) ? "https" : "http";
+          const targetUrl = `${protocol}://${host}:${targetPort}${pathname}${query}`;
+          response.statusCode = 302;
+          response.setHeader("Location", targetUrl);
+          response.end();
+          return;
+        }
+
+        next();
+      });
+    }
+  };
+}
+
 export default defineConfig({
   plugins: [
+    devPortalRedirect(),
     serveRawDocs(),
     receiptPdfApi(),
     embeddedReferenceApi(),

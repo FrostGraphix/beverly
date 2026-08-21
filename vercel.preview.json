@@ -34,6 +34,6 @@
     { "source": "/:path*", "has": [{ "type": "host", "value": "admin-acob-beverly.vercel.app" }], "destination": "/wallet-admin/index.html" },
     { "source": "/:path*", "has": [{ "type": "host", "value": "vendor-acob-beverly.vercel.app" }], "destination": "/wallet-vendor/index.html" },
     { "source": "/:path*", "has": [{ "type": "host", "value": "customer-acob-beverly.vercel.app" }], "destination": "/wallet-customer/index.html" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/wallet/index.html" }
   ]
 }
