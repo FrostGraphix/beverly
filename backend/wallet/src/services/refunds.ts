@@ -7,6 +7,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { logAction } from './audit.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 
 export class RefundError extends Error {
     constructor(message: string, public code: string) {
@@ -43,6 +44,17 @@ export async function createRefundRequest(input: {
         targetId:    (data as any).id,
         metadata:    { wallet_id: input.walletId, amount_minor: input.amountMinor },
     });
+
+    await notifyOperationalStaff({
+        permission: 'wallet.refunds.manage',
+        type: 'refund_approval',
+        title: 'Refund approval requested',
+        body: `A ${input.amountMinor / 100} NGN refund requires review.`,
+        path: '/refunds',
+        dedupeKey: `refund.requested.${(data as any).id}`,
+        excludeRecipientId: input.requestedByUserId,
+        metadata: { refundRequestId: (data as any).id, disputeId: input.disputeId ?? null, amountMinor: input.amountMinor },
+    }).catch(() => undefined);
 
     return (data as any).id;
 }
@@ -117,7 +129,7 @@ export async function listRefundRequests(opts: { status?: string; limit?: number
 }
 
 export async function getRefundSummary() {
-    const statuses = ['pending', 'approved', 'rejected'] as const;
+    const statuses = ['pending', 'approved', 'rejected', 'expired'] as const;
     const [total, ...statusCounts] = await Promise.all([
         adminClient.from('refund_requests').select('id', { count: 'exact', head: true }),
         ...statuses.map((status) => adminClient
@@ -132,5 +144,6 @@ export async function getRefundSummary() {
         pending: statusCounts[0].count ?? 0,
         approved: statusCounts[1].count ?? 0,
         rejected: statusCounts[2].count ?? 0,
+        expired: statusCounts[3].count ?? 0,
     };
 }

@@ -13,22 +13,22 @@
           <h1 class="oem-hub__title">Welcome back</h1>
           <p class="oem-hub__subtitle">Choose an OEM below to continue, or add a new one.</p>
         </div>
-        <button type="button" class="bw-btn primary" @click="handleAddOem">
+        <BaseButton class="bw-btn primary" variant="primary" @click="handleAddOem">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
           Add OEM
-        </button>
+        </BaseButton>
       </header>
 
       <div class="oem-hub__toolbar">
         <label class="oem-hub__search">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-          <input v-model="searchQuery" type="search" placeholder="Search OEM…" aria-label="Search OEM" />
+          <BaseInput v-model="searchQuery" type="search" placeholder="Search OEM…" aria-label="Search OEM" />
         </label>
-        <button type="button" class="bw-btn ghost oem-hub__refresh" :disabled="store.status === 'loading'" aria-label="Refresh OEM list" @click="store.loadOems()">
+        <BaseButton class="bw-btn ghost oem-hub__refresh" variant="ghost" :disabled="store.status === 'loading'" aria-label="Refresh OEM list" @click="store.loadOems()">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" :class="{ 'oem-hub__refresh-icon--spin': store.status === 'loading' }">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
           </svg>
-        </button>
+        </BaseButton>
       </div>
 
       <div v-if="store.status === 'loading' && !store.hasOems" class="oem-hub__grid" aria-busy="true">
@@ -37,12 +37,12 @@
 
       <div v-else-if="store.status === 'error'" class="bw-error-banner" role="alert">
         Couldn't load OEMs: {{ store.error }}
-        <button type="button" class="bw-btn ghost sm" @click="store.loadOems()">Retry</button>
+        <BaseButton class="bw-btn ghost sm" variant="ghost" size="sm" @click="store.loadOems()">Retry</BaseButton>
       </div>
 
       <div v-else-if="!store.hasOems" class="bw-empty">
         <p>No OEMs configured yet.</p>
-        <button type="button" class="bw-btn primary" @click="handleAddOem">Add your first OEM</button>
+        <BaseButton class="bw-btn primary" variant="primary" @click="handleAddOem">Add your first OEM</BaseButton>
       </div>
 
       <div v-else-if="!filteredOems.length" class="bw-empty">
@@ -76,10 +76,10 @@
         <p class="oem-hub__confirm-text">This removes the OEM, its credentials, and endpoint configuration. It cannot be undone.</p>
         <p v-if="deleteError" class="oem-hub__confirm-error" role="alert">{{ deleteError }}</p>
         <div class="oem-hub__confirm-actions">
-          <button type="button" class="bw-btn ghost" @click="deletingOem = null">Cancel</button>
-          <button type="button" class="bw-btn danger" :disabled="deleting" @click="confirmDelete">
+          <BaseButton class="bw-btn ghost" variant="ghost" @click="deletingOem = null">Cancel</BaseButton>
+          <BaseButton class="bw-btn danger" variant="danger" :disabled="deleting" @click="confirmDelete">
             {{ deleting ? "Deleting…" : "Delete OEM" }}
-          </button>
+          </BaseButton>
         </div>
       </div>
     </div>
@@ -88,13 +88,15 @@
 
 <script>
 import { useOemStore } from "../../stores/oem-store";
+import BaseButton from "../base/BaseButton.vue";
+import BaseInput from "../base/BaseInput.vue";
 import OemCard from "./OemCard.vue";
 import OemFormModal from "./OemFormModal.vue";
 import OemSettingsPage from "./OemSettingsPage.vue";
 
 export default {
   name: "OemHubPage",
-  components: { OemCard, OemFormModal, OemSettingsPage },
+  components: { BaseButton, BaseInput, OemCard, OemFormModal, OemSettingsPage },
   emits: ["oem-selected"],
   setup() {
     return { store: useOemStore() };

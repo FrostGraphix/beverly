@@ -61,7 +61,7 @@ import {
 } from '../services/vendor-vend-credential.js';
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
-import { createVendorSponsoredMeterOrder, getMeterPrices } from '../services/meter-orders.js';
+import { cancelVendorMeterOrder, createVendorSponsoredMeterOrder, getMeterPrices, vendorMeterOrderCancellationEligibility } from '../services/meter-orders.js';
 import {
     abandonWalletIdempotency,
     assertClientIdempotencyKey,
@@ -802,7 +802,50 @@ const route: FastifyPluginAsync = async (fastify) => {
             limit: Math.min(Number(q.limit ?? 50), 200),
             cursorAt: q.cursor,
         });
-        return { entries };
+        const orderIds = entries
+            .filter((entry: any) => entry.reference_type === 'meter_order' && entry.reference_id)
+            .map((entry: any) => entry.reference_id);
+        if (!orderIds.length) return { entries };
+        const [{ data: orders }, { data: organization }] = await Promise.all([
+            adminClient.from('meter_purchase_orders')
+                .select('id, customer_id, customer_name_snapshot, meter_type, property_category, property_address, service_area, contact_phone, amount_minor, status, sponsor_mode, created_by_actor_id, created_at, rejection_reason, rejection_refund_destination, rejected_at, customers(full_name, phone, email)')
+                .eq('vendor_organization_id', orgId)
+                .in('id', orderIds),
+            adminClient.from('vendor_organizations').select('legal_name, trading_name').eq('id', orgId).maybeSingle(),
+        ]);
+        const actorIds = Array.from(new Set((orders ?? []).map((order: any) => order.created_by_actor_id).filter(Boolean)));
+        const { data: actors } = actorIds.length
+            ? await adminClient.from('vendor_users').select('auth_user_id, full_name, email, phone').in('auth_user_id', actorIds)
+            : { data: [] as any[] };
+        const actorMap = new Map((actors ?? []).map((actor: any) => [actor.auth_user_id, actor]));
+        const orderMap = new Map((orders ?? []).map((order: any) => [order.id, order]));
+        return { entries: entries.map((entry: any) => {
+            const order: any = entry.reference_type === 'meter_order' ? orderMap.get(entry.reference_id) : null;
+            if (!order) return entry;
+            const actor: any = actorMap.get(order.created_by_actor_id);
+            const customer: any = Array.isArray(order.customers) ? order.customers[0] : order.customers;
+            return { ...entry, meter_order: {
+                id: order.id,
+                ordered_by_name: actor?.full_name ?? 'Vendor operator',
+                ordered_by_email: actor?.email ?? null,
+                vendor_name: organization?.trading_name ?? organization?.legal_name ?? 'Vendor',
+                customer_id: order.customer_id,
+                customer_name: customer?.full_name ?? order.customer_name_snapshot,
+                customer_phone: customer?.phone ?? order.contact_phone,
+                customer_email: customer?.email ?? null,
+                meter_type: order.meter_type,
+                property_category: order.property_category,
+                property_address: order.property_address,
+                service_area: order.service_area,
+                contact_phone: order.contact_phone,
+                status: order.status,
+                sponsor_mode: order.sponsor_mode,
+                created_at: order.created_at,
+                rejection_reason: order.rejection_reason,
+                rejection_refund_destination: order.rejection_refund_destination,
+                rejected_at: order.rejected_at,
+            } };
+        }) };
     });
 
     fastify.get('/customers', { preHandler: fastify.requireVendor() }, async (req) => {
@@ -902,7 +945,28 @@ const route: FastifyPluginAsync = async (fastify) => {
             query = query.or(`property_address.ilike.%${safeQ}%,service_area.ilike.%${safeQ}%,contact_phone.ilike.%${safeQ}%,customer_name_snapshot.ilike.%${safeQ}%`);
         }
         const { data } = await query;
-        return { orders: data ?? [] };
+        return { orders: (data ?? []).map((order: any) => ({
+            ...order,
+            cancellation_eligible: vendorMeterOrderCancellationEligibility(order).eligible,
+            cancellation_deadline: vendorMeterOrderCancellationEligibility(order).deadline,
+            cancellation_ineligible_reason: vendorMeterOrderCancellationEligibility(order).reason,
+        })) };
+    });
+
+    fastify.post('/meter-orders/:id/cancel', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { reason } = z.object({ reason: z.string().trim().min(5).max(500) }).parse(req.body);
+        try {
+            const order = await cancelVendorMeterOrder({
+                orderId: id,
+                vendorOrganizationId: req.actor!.vendorOrganizationId!,
+                actorUserId: req.actor!.userId,
+                reason,
+            });
+            return { order };
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({ error: error?.code ?? 'meter_order_cancellation_failed', message: error?.message });
+        }
     });
 
     fastify.get('/meter-orders/:id', { preHandler: fastify.requireVendor() }, async (req, reply) => {

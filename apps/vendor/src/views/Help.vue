@@ -206,21 +206,22 @@ onMounted(() => { loadFaqs(); loadTickets(); });
     </template>
 
     <!-- New ticket modal -->
-    <div v-if="showNew" class="bw-modal-backdrop" @click.self="showNew = false">
-      <div class="bw-modal">
+    <Teleport to="body">
+    <div v-if="showNew" class="bw-modal-backdrop support-modal-backdrop" @click.self="showNew = false">
+      <form class="bw-modal support-modal" role="dialog" aria-modal="true" aria-labelledby="new-ticket-title" @submit.prevent="submitNew">
         <div class="bw-modal-header">
-          <h2>New support ticket</h2>
-          <button class="bw-btn ghost sm" @click="showNew = false">✕</button>
+          <div><p class="bw-label support-kicker">Support request</p><h2 id="new-ticket-title">How can we help?</h2><p class="bw-muted support-intro">Share enough detail for faster help.</p></div>
+          <button type="button" class="bw-btn ghost sm" aria-label="Close ticket form" @click="showNew = false">Close</button>
         </div>
-        <div class="bw-modal-body">
+        <div class="bw-modal-body support-form-body">
           <div class="bw-form-group">
-            <label class="bw-label">Subject</label>
-            <input v-model="form.subject" class="bw-input" placeholder="e.g. Float not credited" />
+            <div class="support-label-row"><label class="bw-label" for="support-subject">Subject</label><span>{{ form.subject.length }}/120</span></div>
+            <input id="support-subject" v-model="form.subject" class="bw-input" maxlength="120" placeholder="Example: Wallet funding missing" autofocus />
           </div>
           <div class="help-form-row">
             <div class="bw-form-group">
-              <label class="bw-label">Category</label>
-              <select v-model="form.category" class="bw-select">
+              <label class="bw-label" for="support-category">Category</label>
+              <select id="support-category" v-model="form.category" class="bw-select">
                 <option value="general">General</option>
                 <option value="funding">Funding &amp; float</option>
                 <option value="vending">Vending</option>
@@ -228,8 +229,8 @@ onMounted(() => { loadFaqs(); loadTickets(); });
               </select>
             </div>
             <div class="bw-form-group">
-              <label class="bw-label">Priority</label>
-              <select v-model="form.priority" class="bw-select">
+              <label class="bw-label" for="support-priority">Priority</label>
+              <select id="support-priority" v-model="form.priority" class="bw-select">
                 <option value="low">Low</option>
                 <option value="normal">Normal</option>
                 <option value="high">High</option>
@@ -238,17 +239,19 @@ onMounted(() => { loadFaqs(); loadTickets(); });
             </div>
           </div>
           <div class="bw-form-group">
-            <label class="bw-label">Describe the issue</label>
-            <textarea v-model="form.description" class="bw-textarea" rows="4" placeholder="Tell us what happened…"></textarea>
+            <div class="support-label-row"><label class="bw-label" for="support-description">What happened?</label><span>{{ form.description.length }}/2000</span></div>
+            <textarea id="support-description" v-model="form.description" class="bw-textarea support-description" rows="5" maxlength="2000" placeholder="Include dates, references, and expected outcome."></textarea>
           </div>
+          <div class="support-next"><strong>What happens next?</strong><span>Support receives your account context. Replies appear inside My tickets.</span></div>
           <div v-if="newError" class="bw-error-banner">{{ newError }}</div>
         </div>
         <div class="bw-modal-footer">
-          <button class="bw-btn ghost" @click="showNew = false">Cancel</button>
-          <button class="bw-btn primary" :disabled="saving" @click="submitNew">{{ saving ? 'Submitting…' : 'Submit ticket' }}</button>
+          <button type="button" class="bw-btn ghost" @click="showNew = false">Cancel</button>
+          <button type="submit" class="bw-btn primary" :disabled="saving || form.subject.trim().length < 5 || form.description.trim().length < 10">{{ saving ? 'Sending…' : 'Send support request' }}</button>
         </div>
-      </div>
+      </form>
     </div>
+    </Teleport>
 
     <!-- Ticket thread modal -->
     <div v-if="selected" class="bw-modal-backdrop" @click.self="selected = null">
@@ -336,6 +339,17 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-empty { text-align: center; padding: var(--s-6) var(--s-4); color: var(--text-muted); display: flex; flex-direction: column; gap: var(--s-3); align-items: center; }
 
 .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.support-modal-backdrop { z-index: 100000; padding: var(--s-3); }
+.support-modal { width: min(580px, 100%); max-height: calc(100dvh - 24px); overflow: hidden; }
+.support-kicker { color: var(--brand); margin: 0 0 4px; }
+.support-intro { margin: 4px 0 0; font-size: var(--t-sm); }
+.support-form-body { display:grid; gap:var(--s-3); overflow-y:auto; }
+.support-label-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s-2); }
+.support-label-row span { color:var(--text-muted); font-family:var(--font-mono); font-size:var(--t-2xs); }
+.support-description { min-height: 124px; resize: vertical; }
+.support-next { display:grid; gap:4px; padding:var(--s-3); border:1px solid color-mix(in srgb, var(--brand) 24%, var(--border)); border-radius:var(--r-lg); background:color-mix(in srgb, var(--brand) 7%, var(--surface)); }
+.support-next strong { color:var(--brand); font-size:var(--t-sm); }
+.support-next span { color:var(--text-2); font-size:var(--t-xs); line-height:1.5; }
 
 .help-thread { display: flex; flex-direction: column; gap: var(--s-2); max-height: 320px; overflow-y: auto; border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--s-3); background: var(--glass-bg); }
 .help-thread-loading { display: flex; align-items: center; gap: var(--s-2); color: var(--text-muted); font-size: var(--t-sm); padding: var(--s-4); justify-content: center; }
@@ -347,4 +361,10 @@ onMounted(() => { loadFaqs(); loadTickets(); });
 .help-msg-time { font-size: var(--t-2xs); color: var(--text-muted); }
 
 .bw-modal-lg { max-width: 560px; }
+@media (max-width: 520px) {
+  .help-form-row { grid-template-columns:1fr; }
+  .support-modal-backdrop { padding:6px; align-items:flex-end; }
+  .support-modal { max-height:calc(100dvh - 12px); border-radius:var(--r-xl) var(--r-xl) 0 0; }
+  .support-modal .bw-modal-footer { display:grid; grid-template-columns:1fr; }
+}
 </style>

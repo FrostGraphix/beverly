@@ -10,6 +10,8 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { api, shortDate, API_BASE, ApiError } from '../lib/api';
 
 // ─ Types ──────────────────────────────────────────────────────────
@@ -66,7 +68,25 @@ const fTargetType = ref('');
 const fTarget = ref('');
 const fSince = ref('');
 const fUntil = ref('');
-const showAdvancedFilters = ref(false);
+const showAuditFilters = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
+const pagedEntries = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return entries.value.slice(start, start + pageSize.value);
+});
+const activeAuditFilterCount = computed(() => [
+    fActor.value,
+    fActorType.value,
+    fAction.value,
+    fTargetType.value,
+    fTarget.value,
+    fSince.value,
+    fUntil.value,
+].filter(Boolean).length);
 
 async function loadAudit(reset = true) {
     loading.value = true;
@@ -77,6 +97,7 @@ async function loadAudit(reset = true) {
         if (!reset && cursor.value) p.set('cursor', cursor.value);
         const r = await api.get<{ entries: AuditEntry[]; nextCursor: string | null }>(`/api/v1/admin/audit?${p}`);
         entries.value = reset ? r.entries : [...entries.value, ...r.entries];
+        if (reset) currentPage.value = 1;
         cursor.value = r.nextCursor;
         lastAuditLoadedAt.value = new Date().toISOString();
     } catch (error) {
@@ -145,6 +166,17 @@ const sevFilter = ref<'' | 'info' | 'low' | 'medium' | 'high' | 'critical'>('');
 const evtFilter = ref('');
 const loadingSec = ref(false);
 const securityError = ref('');
+const showSecurityFilters = ref(false);
+const activeSecurityFilterCount = computed(() => [evtFilter.value, sevFilter.value].filter(Boolean).length);
+const securityPage = ref(1);
+const securityPageSize = ref(10);
+const securityViewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
+const pagedSecurityEvents = computed(() => {
+    const start = (securityPage.value - 1) * securityPageSize.value;
+    return events.value.slice(start, start + securityPageSize.value);
+});
 
 async function loadSecurity() {
     loadingSec.value = true;
@@ -156,10 +188,13 @@ async function loadSecurity() {
         p.set('limit', '200');
         const r = await api.get<{ events: SecurityEvent[] }>(`/api/v1/admin/security-events?${p}`);
         events.value = r.events;
+        securityPage.value = 1;
     } catch (error) {
         securityError.value = readableError(error, 'Security events failed to load.');
     } finally { loadingSec.value = false; }
 }
+
+watch(securityPageSize, () => { securityPage.value = 1; });
 
 // ─ Summary ───────────────────────────────────────────────────────
 const summary = ref<SummaryResp | null>(null);
@@ -271,92 +306,38 @@ onMounted(() => {
   <AppShell title="Audit Log">
 
     <!-- Tabs -->
-    <div class="audit-tabs">
-      <button :class="['tab', { active: tab === 'audit' }]"    @click="tab = 'audit'">
+    <div class="bw-segmented audit-tabs">
+      <button :class="['bw-seg', { active: tab === 'audit' }]"    @click="tab = 'audit'">
         Audit trail
       </button>
-      <button :class="['tab', { active: tab === 'security' }]" @click="tab = 'security'">
+      <button :class="['bw-seg', { active: tab === 'security' }]" @click="tab = 'security'">
         Security events
       </button>
-      <button :class="['tab', { active: tab === 'summary' }]"  @click="tab = 'summary'">
+      <button :class="['bw-seg', { active: tab === 'summary' }]"  @click="tab = 'summary'">
         Summary (last {{ summaryDays }}d)
       </button>
     </div>
 
-    <div v-if="tab === 'audit'" class="audit-overview" aria-label="Audit log health">
-      <div class="audit-stat">
-        <span>Loaded entries</span>
-        <strong>{{ entries.length.toLocaleString() }}</strong>
-        <small>{{ cursor ? 'More available' : 'Current page complete' }}</small>
-      </div>
-      <div class="audit-stat">
-        <span>Newest event</span>
-        <strong>{{ newestEntry ? shortDate(newestEntry) : 'None' }}</strong>
-        <small>{{ lastAuditLoadedAt ? `Loaded ${shortDate(lastAuditLoadedAt)}` : 'Waiting for data' }}</small>
-      </div>
-      <div class="audit-stat">
-        <span>Oldest loaded</span>
-        <strong>{{ oldestEntry ? shortDate(oldestEntry) : 'None' }}</strong>
-        <small>{{ actorTypeCount }} actor types visible</small>
-      </div>
+    <div v-if="tab === 'audit'" class="bw-kpi-grid bw-mobile-kpi-grid audit-overview" aria-label="Audit log health">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Loaded entries</span>
+        <strong class="bw-kpi-value">{{ entries.length.toLocaleString() }}</strong>
+        <small class="bw-kpi-note">{{ cursor ? 'More available' : 'Current page complete' }}</small>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Newest event</span>
+        <strong class="bw-kpi-value">{{ newestEntry ? shortDate(newestEntry) : 'None' }}</strong>
+        <small class="bw-kpi-note">{{ lastAuditLoadedAt ? `Loaded ${shortDate(lastAuditLoadedAt)}` : 'Waiting for data' }}</small>
+      </article>
+      <article class="bw-kpi">
+        <span class="bw-kpi-label">Oldest loaded</span>
+        <strong class="bw-kpi-value">{{ oldestEntry ? shortDate(oldestEntry) : 'None' }}</strong>
+        <small class="bw-kpi-note">{{ actorTypeCount }} actor types visible</small>
+      </article>
     </div>
 
     <!-- ═══ TAB: AUDIT TRAIL ═══ -->
     <section v-if="tab === 'audit'">
-      <div class="bw-card filter-card">
-        <div :class="['filter-grid', { 'show-advanced': showAdvancedFilters }]">
-          <div>
-            <label class="bw-label">Action prefix</label>
-            <input class="bw-input bw-mono" v-model="fAction" placeholder="e.g. wallet.funding" @keyup.enter="loadAudit()" />
-          </div>
-          <div>
-            <label class="bw-label">Actor type</label>
-            <select class="bw-input" v-model="fActorType" @change="loadAudit()">
-              <option value="">All</option>
-              <option value="staff">staff</option>
-              <option value="vendor_user">vendor_user</option>
-              <option value="customer">customer</option>
-              <option value="webhook">webhook</option>
-              <option value="system">system</option>
-            </select>
-          </div>
-          <div class="filter-toggle-wrap">
-            <button class="bw-btn sm" type="button" @click="showAdvancedFilters = !showAdvancedFilters">
-              {{ showAdvancedFilters ? 'Hide advanced' : 'More filters' }}
-            </button>
-          </div>
-          <div class="advanced-field">
-            <label class="bw-label">Actor user id</label>
-            <input class="bw-input bw-mono" v-model="fActor" placeholder="uuid" @keyup.enter="loadAudit()" />
-          </div>
-          <div class="advanced-field">
-            <label class="bw-label">Target type</label>
-            <input class="bw-input bw-mono" v-model="fTargetType" placeholder="vendor_organization, wallet…" @keyup.enter="loadAudit()" />
-          </div>
-          <div class="advanced-field">
-            <label class="bw-label">Target id</label>
-            <input class="bw-input bw-mono" v-model="fTarget" placeholder="uuid" @keyup.enter="loadAudit()" />
-          </div>
-          <div>
-            <label class="bw-label">Since</label>
-            <input class="bw-input" type="datetime-local" v-model="fSince" @change="loadAudit()" />
-          </div>
-          <div>
-            <label class="bw-label">Until</label>
-            <input class="bw-input" type="datetime-local" v-model="fUntil" @change="loadAudit()" />
-          </div>
-          <div class="filter-actions">
-            <button class="bw-btn" @click="resetFilters">Reset</button>
-            <button class="bw-btn primary" :disabled="loading" @click="loadAudit()">
-              {{ loading ? 'Loading...' : 'Apply' }}
-            </button>
-            <button class="bw-btn" :disabled="exporting || loading" @click="exportCsv">
-              {{ exporting ? 'Exporting...' : 'Export CSV' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div v-if="auditError" class="audit-alert danger" role="alert">
         <strong>{{ auditError }}</strong>
         <button class="bw-btn" :disabled="loading" @click="loadAudit()">Retry</button>
@@ -373,8 +354,76 @@ onMounted(() => {
             </div>
             <div class="bw-card-sub">System-wide admin and operator activity events</div>
           </div>
+          <div class="bw-table-actions">
+            <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Audit log display view" />
+            <button
+              type="button"
+              class="bw-btn sm recent-filter-button"
+              :class="{ active: showAuditFilters || activeAuditFilterCount > 0 }"
+              :aria-expanded="showAuditFilters"
+              aria-controls="audit-log-filter-panel"
+              @click="showAuditFilters = !showAuditFilters"
+            >
+              Filter <span v-if="activeAuditFilterCount" class="recent-filter-count">{{ activeAuditFilterCount }}</span>
+            </button>
+          </div>
         </div>
 
+        <section
+          v-if="showAuditFilters"
+          id="audit-log-filter-panel"
+          class="recent-filter-panel"
+          aria-label="Audit log filters"
+        >
+          <div class="filter-grid">
+            <div>
+              <label class="bw-label">Action prefix</label>
+              <input class="bw-input bw-mono" v-model="fAction" placeholder="e.g. wallet.funding" @keyup.enter="loadAudit()" />
+            </div>
+            <div>
+              <label class="bw-label">Actor type</label>
+              <select class="bw-input" v-model="fActorType">
+                <option value="">All</option>
+                <option value="staff">staff</option>
+                <option value="vendor_user">vendor_user</option>
+                <option value="customer">customer</option>
+                <option value="webhook">webhook</option>
+                <option value="system">system</option>
+              </select>
+            </div>
+            <div>
+              <label class="bw-label">Actor user id</label>
+              <input class="bw-input bw-mono" v-model="fActor" placeholder="uuid" @keyup.enter="loadAudit()" />
+            </div>
+            <div>
+              <label class="bw-label">Target type</label>
+              <input class="bw-input bw-mono" v-model="fTargetType" placeholder="vendor_organization, wallet…" @keyup.enter="loadAudit()" />
+            </div>
+            <div>
+              <label class="bw-label">Target id</label>
+              <input class="bw-input bw-mono" v-model="fTarget" placeholder="uuid" @keyup.enter="loadAudit()" />
+            </div>
+            <div>
+              <label class="bw-label">Since</label>
+              <input class="bw-input" type="datetime-local" v-model="fSince" />
+            </div>
+            <div>
+              <label class="bw-label">Until</label>
+              <input class="bw-input" type="datetime-local" v-model="fUntil" />
+            </div>
+            <div class="filter-actions">
+              <button class="bw-btn" @click="resetFilters">Reset</button>
+              <button class="bw-btn primary" :disabled="loading" @click="loadAudit()">
+                {{ loading ? 'Loading...' : 'Apply' }}
+              </button>
+              <button class="bw-btn" :disabled="exporting || loading" @click="exportCsv">
+                {{ exporting ? 'Exporting...' : 'Export CSV' }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="bw-data-region" :data-view="viewMode">
         <div class="bw-t-wrap">
           <table class="bw-table audit-table">
             <thead>
@@ -390,7 +439,7 @@ onMounted(() => {
             </thead>
             <tbody>
               <tr
-                v-for="e in entries"
+                v-for="e in pagedEntries"
                 :key="e.id"
                 class="audit-row"
                 tabindex="0"
@@ -423,7 +472,7 @@ onMounted(() => {
         </div>
         <!-- Mobile cards -->
         <div class="bw-t-cards">
-          <div v-for="e in entries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
+          <div v-for="e in pagedEntries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
             <div class="bw-tc-top">
               <div>
                 <div class="bw-tc-vendor">{{ e.action }}</div>
@@ -448,36 +497,15 @@ onMounted(() => {
             </div>
           </div>
           <div v-if="!entries.length && !loading" class="bw-muted empty" style="padding: var(--s-6); text-align: center;">No matching entries.</div>
+        </div>
         </div>
 
-        <!-- Mobile cards -->
-        <div class="bw-t-cards">
-          <div v-for="e in entries" :key="`audit-card-${e.id}`" class="bw-tc" @click="openDetail(e)">
-            <div class="bw-tc-top">
-              <div>
-                <div class="bw-tc-vendor">{{ e.action }}</div>
-                <div class="bw-tc-id">{{ shortDate(e.created_at) }}</div>
-              </div>
-              <span :class="['bw-badge', actorBadge(e.actor_type)]">{{ e.actor_type || 'system' }}</span>
-            </div>
-            <div class="bw-tc-mid">
-              <div class="bw-tc-pair">
-                <span class="bw-tc-pair-label">Actor Name</span>
-                <span class="bw-tc-pair-val">{{ actorName(e) }}</span>
-                <span class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ e.actor_role || shortId(e.actor_user_id) }}</span>
-              </div>
-              <div class="bw-tc-pair" v-if="e.target_type">
-                <span class="bw-tc-pair-label">Target</span>
-                <span class="bw-tc-pair-val">{{ e.target_type }} (#{{ shortId(e.target_id) }})</span>
-              </div>
-              <div class="bw-tc-pair" v-if="e.ip">
-                <span class="bw-tc-pair-label">IP Address</span>
-                <span class="bw-tc-pair-val bw-mono">{{ e.ip }}</span>
-              </div>
-            </div>
-          </div>
-          <div v-if="!entries.length && !loading" class="bw-muted empty" style="padding: var(--s-6); text-align: center;">No matching entries.</div>
-        </div>
+        <WalletTablePagination
+          v-model:page="currentPage"
+          v-model:pageSize="pageSize"
+          :total-items="entries.length"
+          item-label="audit entries"
+        />
 
         <div v-if="cursor" class="load-more">
           <button class="bw-btn" :disabled="loading" @click="loadAudit(false)">
@@ -489,36 +517,6 @@ onMounted(() => {
 
     <!-- ═══ TAB: SECURITY EVENTS ═══ -->
     <section v-else-if="tab === 'security'">
-      <div class="bw-card filter-card">
-        <div class="filter-grid">
-          <div>
-            <label class="bw-label">Event type</label>
-            <select class="bw-input" v-model="evtFilter" @change="loadSecurity">
-              <option value="">All</option>
-              <option v-for="t in ['login_success','login_failure','logout','password_change',
-                'mfa_enabled','mfa_disabled','mfa_failure','suspicious_activity',
-                'rate_limit_hit','permission_denied','session_timeout','temp_password_issued','temp_password_used']" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="bw-label">Severity</label>
-            <select class="bw-input" v-model="sevFilter" @change="loadSecurity">
-              <option value="">All</option>
-              <option value="info">info</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="critical">critical</option>
-            </select>
-          </div>
-          <div class="filter-actions">
-            <button class="bw-btn primary" :disabled="loadingSec" @click="loadSecurity">
-              {{ loadingSec ? 'Loading...' : 'Refresh' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div v-if="securityError" class="audit-alert danger" role="alert">
         <strong>{{ securityError }}</strong>
         <button class="bw-btn" :disabled="loadingSec" @click="loadSecurity">Retry</button>
@@ -534,15 +532,68 @@ onMounted(() => {
             </div>
             <div class="bw-card-sub">Security, authentication, and access control audit records</div>
           </div>
+          <div class="bw-table-actions">
+            <WalletDataViewSwitch
+              v-model="securityViewMode"
+              :modes="['list', 'table']"
+              label="Security events display view"
+            />
+            <button
+              type="button"
+              class="bw-btn sm recent-filter-button"
+              :class="{ active: showSecurityFilters || activeSecurityFilterCount > 0 }"
+              :aria-expanded="showSecurityFilters"
+              aria-controls="security-event-filter-panel"
+              @click="showSecurityFilters = !showSecurityFilters"
+            >
+              Filter <span v-if="activeSecurityFilterCount" class="recent-filter-count">{{ activeSecurityFilterCount }}</span>
+            </button>
+          </div>
         </div>
 
+        <section
+          v-if="showSecurityFilters"
+          id="security-event-filter-panel"
+          class="recent-filter-panel"
+          aria-label="Security event filters"
+        >
+          <div class="filter-grid">
+            <div>
+              <label class="bw-label">Event type</label>
+              <select class="bw-input" v-model="evtFilter">
+                <option value="">All</option>
+                <option v-for="t in ['login_success','login_failure','logout','password_change',
+                  'mfa_enabled','mfa_disabled','mfa_failure','suspicious_activity',
+                  'rate_limit_hit','permission_denied','session_timeout','temp_password_issued','temp_password_used']" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="bw-label">Severity</label>
+              <select class="bw-input" v-model="sevFilter">
+                <option value="">All</option>
+                <option value="info">info</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="critical">critical</option>
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="bw-btn primary" :disabled="loadingSec" @click="loadSecurity">
+                {{ loadingSec ? 'Loading...' : 'Apply' }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="bw-data-region" :data-view="securityViewMode">
         <div class="bw-t-wrap">
           <table class="bw-table">
             <thead>
               <tr><th>When</th><th>Event</th><th>Severity</th><th>Actor</th><th>IP</th></tr>
             </thead>
             <tbody>
-              <tr v-for="e in events" :key="e.id">
+              <tr v-for="e in pagedSecurityEvents" :key="e.id">
                 <td class="bw-mono bw-muted" style="font-size: var(--t-xs)">{{ shortDate(e.created_at) }}</td>
                 <td class="bw-mono">{{ e.event_type }}</td>
                 <td><span :class="['bw-badge', sevBadge(e.severity)]">{{ e.severity }}</span></td>
@@ -555,6 +606,37 @@ onMounted(() => {
             </tbody>
           </table>
         </div>
+        <div class="bw-t-cards">
+          <div v-for="e in pagedSecurityEvents" :key="`security-card-${e.id}`" class="bw-tc">
+            <div class="bw-tc-top">
+              <div>
+                <div class="bw-tc-vendor bw-mono">{{ e.event_type }}</div>
+                <div class="bw-tc-id">{{ shortDate(e.created_at) }}</div>
+              </div>
+              <span :class="['bw-badge', sevBadge(e.severity)]">{{ e.severity }}</span>
+            </div>
+            <div class="bw-tc-mid">
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">Actor</span>
+                <span class="bw-tc-pair-val bw-mono">{{ shortId(e.actor_user_id) }}</span>
+              </div>
+              <div class="bw-tc-pair">
+                <span class="bw-tc-pair-label">IP address</span>
+                <span class="bw-tc-pair-val bw-mono">{{ e.ip_address || '—' }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="!events.length && !loadingSec" class="bw-muted empty">No matching events.</div>
+        </div>
+        </div>
+
+        <WalletTablePagination
+          v-model:page="securityPage"
+          v-model:pageSize="securityPageSize"
+          :total-items="events.length"
+          item-label="security events"
+          :loading="loadingSec"
+        />
       </div>
     </section>
 
@@ -655,24 +737,8 @@ onMounted(() => {
 
 <style scoped>
 .audit-tabs {
-  display: flex;
-  gap: var(--s-2);
   margin-bottom: var(--s-4);
-  border-bottom: 1px solid var(--border);
 }
-.tab {
-  background: transparent;
-  border: none;
-  padding: 10px 16px;
-  color: var(--text-muted);
-  font-weight: 600;
-  font-size: var(--t-sm);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color var(--dur-fast), border-color var(--dur-fast);
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 
 .filter-card {
   margin-bottom: var(--s-3);
@@ -726,7 +792,6 @@ onMounted(() => {
   gap: var(--s-3);
   align-items: end;
 }
-.filter-toggle-wrap { display: none; }
 .filter-actions {
   display: flex;
   gap: var(--s-2);
@@ -873,9 +938,6 @@ onMounted(() => {
   .audit-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .audit-alert { align-items: stretch; flex-direction: column; }
   .filter-grid { grid-template-columns: 1fr; }
-  .filter-toggle-wrap { display: block; }
-  .advanced-field { display: none; }
-  .filter-grid.show-advanced .advanced-field { display: block; }
   .filter-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; }
   .filter-actions .bw-btn { min-height: 34px; font-size: 12px; }
   .drawer { width: 100%; padding: var(--s-4); }

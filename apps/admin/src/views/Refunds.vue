@@ -66,7 +66,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in refunds" :key="r.id">
+            <tr v-for="r in pagedRefunds" :key="r.id">
               <td>
                 <strong class="refund-owner">{{ walletOwnerLabel(r) }}</strong>
                 <span class="bw-mono bw-text-sm">{{ shortId(r.wallet_id) }}</span>
@@ -110,7 +110,7 @@
       <!-- Mobile cards (â‰¤640px) -->
       <div class="bw-t-cards">
         <div v-if="!refunds.length" class="bw-empty">{{ emptyMessage }}</div>
-        <div v-for="r in refunds" :key="r.id" class="bw-tc">
+        <div v-for="r in pagedRefunds" :key="r.id" class="bw-tc">
           <div class="bw-tc-head">
             <span>{{ naira(r.amount_minor) }}</span>
             <span :class="statusClass(r.status)" class="bw-badge">{{ statusLabel(r.status) }}</span>
@@ -131,6 +131,12 @@
           </div>
         </div>
       </div>
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="refunds.length"
+        item-label="refund requests"
+      />
     </div>
 
     <ConfirmDialog
@@ -186,6 +192,7 @@ import { api, naira } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, refundReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
@@ -222,6 +229,12 @@ const statusFilter = ref<RefundStatus | ''>('pending');
 const saving       = ref(false);
 const summaryLoaded = ref(false);
 const summary      = ref<RefundSummary>({ total: 0, pending: 0, approved: 0, rejected: 0, expired: 0 });
+const currentPage  = ref(1);
+const pageSize     = ref(10);
+const pagedRefunds = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return refunds.value.slice(start, start + pageSize.value);
+});
 
 const approving    = ref<RefundRecord | null>(null);
 const rejecting    = ref<RefundRecord | null>(null);
@@ -246,6 +259,7 @@ async function load() {
       api.get<{ summary?: RefundSummary }>('/api/v1/admin/refunds/summary'),
     ]);
     refunds.value = res.refunds ?? [];
+    currentPage.value = 1;
     summary.value = summaryRes.summary ?? summary.value;
     summaryLoaded.value = Boolean(summaryRes.summary);
   } catch (e: any) {
@@ -409,7 +423,7 @@ onMounted(load);
     padding: var(--s-4);
   }
   .refund-kpis .bw-kpi-value { font-size: clamp(1.25rem, 7vw, 1.75rem); }
-  .refund-kpi-total { grid-column: 1 / -1; }
+  .refund-kpi-total { grid-column: auto; }
   .refund-error { align-items: stretch; flex-direction: column; }
   .refund-actions-col {
     min-width: 72px;

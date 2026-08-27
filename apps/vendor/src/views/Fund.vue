@@ -26,6 +26,19 @@ const proofFile = ref<File | null>(null);
 const funding = ref<FundingRequest[]>([]);
 const fundingLoading = ref(false);
 const fundingLoadError = ref(false);
+const copiedText = ref<string | null>(null);
+
+async function copyToClipboard(text: string, label: string) {
+    try {
+        await navigator.clipboard.writeText(text);
+        copiedText.value = label;
+        setTimeout(() => {
+            if (copiedText.value === label) copiedText.value = null;
+        }, 2000);
+    } catch {
+        copiedText.value = null;
+    }
+}
 
 const MAX_AMOUNT_MINOR = 1_000_000_000;
 const PROOF_MAX_BYTES = 8 * 1024 * 1024;
@@ -250,27 +263,100 @@ onMounted(async () => {
         </p>
       </div>
 
-      <div v-if="mode === 'bank'" class="bw-card">
-        <p class="bw-label">Bank details</p>
-        <p class="bw-mono" style="font-size: var(--t-lg); margin: 0">ACOB Lighting - 0123456789</p>
-        <p class="bw-muted" style="font-size: var(--t-sm); margin-top: 4px">Reference: include your organization name in narration.</p>
+      <div v-if="mode === 'bank'" class="bw-card bank-transfer-card">
+        <div class="bw-row" style="justify-content: space-between; align-items: flex-start; margin-bottom: var(--s-3)">
+          <div>
+            <h2 class="bw-h2" style="margin: 0; font-size: var(--t-md)">Bank Transfer Details</h2>
+            <p class="bw-muted" style="font-size: var(--t-xs); margin: 2px 0 0">
+              Transfer to the bank account below and upload your payment proof.
+            </p>
+          </div>
+          <span class="bw-badge success" style="font-family: var(--font-mono); letter-spacing: 0.05em">
+            FIDELITY BANK
+          </span>
+        </div>
+
+        <!-- Bank Account Details Hero Box -->
+        <div class="bank-details-box">
+          <div class="bank-account-hero">
+            <div class="account-number-group">
+              <span class="account-number-label">ACCOUNT NUMBER</span>
+              <div class="account-number-row">
+                <span class="account-number-value bw-mono">4011606766</span>
+                <button
+                  type="button"
+                  class="bw-btn sm copy-btn"
+                  @click="copyToClipboard('4011606766', 'account_number')"
+                  :title="copiedText === 'account_number' ? 'Copied to clipboard' : 'Copy account number'"
+                >
+                  <svg v-if="copiedText !== 'account_number'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span>{{ copiedText === 'account_number' ? 'Copied!' : 'Copy' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bank-info-grid">
+            <div class="bank-info-item">
+              <span class="info-label">BANK NAME</span>
+              <strong class="info-value">FIDELITY BANK</strong>
+            </div>
+            <div class="bank-info-item">
+              <span class="info-label">ACCOUNT NAME</span>
+              <strong class="info-value">ACOB LIGHTING TECHNOLOGY LTD</strong>
+            </div>
+            <div class="bank-info-item wide-item">
+              <span class="info-label">ACCOUNT PURPOSE</span>
+              <strong class="info-value">SALES COLLECTION ACCOUNT</strong>
+            </div>
+          </div>
+
+          <div class="narration-notice">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span><strong>Narration Reference:</strong> Please include your organization name in the bank transfer remarks/narration.</span>
+          </div>
+        </div>
 
         <label class="bw-label" for="vendor-bank-amount" style="margin-top: var(--s-4)">Amount transferred (NGN)</label>
         <input id="vendor-bank-amount" class="bw-input bw-mono" type="number" min="1000" max="10000000"
-               step="0.01" inputmode="decimal" v-model.number="amountNaira" aria-describedby="vendor-bank-amount-help" />
+               step="0.01" inputmode="decimal" v-model.number="amountNaira" aria-describedby="vendor-bank-amount-help"
+               style="font-size: var(--t-xl)" />
         <p id="vendor-bank-amount-help" class="bw-muted" style="font-size: var(--t-xs); margin-top: 6px">{{ amountHelp }}</p>
 
-        <label class="bw-label" for="vendor-bank-proof" style="margin-top: var(--s-4)">Upload proof</label>
+        <div class="bw-row" style="margin-top: var(--s-2); gap: var(--s-2); flex-wrap: wrap">
+          <button v-for="n in [100000, 250000, 500000, 1000000]" :key="n"
+                  type="button" class="bw-btn sm" :aria-pressed="amountNaira === n"
+                  @click="amountNaira = n">NGN {{ n.toLocaleString() }}</button>
+        </div>
+
+        <label class="bw-label" for="vendor-bank-proof" style="margin-top: var(--s-4)">Upload proof of transfer</label>
         <input id="vendor-bank-proof" class="bw-input bw-file-input" type="file"
                accept="application/pdf,image/jpeg,image/png,image/webp" aria-describedby="vendor-bank-proof-help"
                @change="selectProof" />
         <p id="vendor-bank-proof-help" class="bw-muted" style="font-size: var(--t-xs); margin-top: 6px">PDF, JPG, PNG, or WebP. Maximum 8MB.</p>
-        <p v-if="proofFile" class="bw-muted" style="font-size: var(--t-xs); margin-top: 6px">{{ proofFile.name }}</p>
+        <div v-if="proofFile" class="proof-file-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span class="file-name">{{ proofFile.name }}</span>
+          <span class="file-size">({{ (proofFile.size / 1024 / 1024).toFixed(2) }} MB)</span>
+        </div>
 
         <p v-if="error" class="bw-alert warn" role="alert" style="margin-top: var(--s-4)">{{ error }}</p>
         <p v-if="success" class="bw-alert success" role="status" aria-live="polite" style="margin-top: var(--s-4)">{{ success }}</p>
 
-        <button class="bw-btn primary" style="margin-top: var(--s-4); width: 100%; justify-content: center; height: 44px"
+        <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
                 @click="submitProof" :disabled="loading || !proofFile || !amountValid">
           {{ loading ? 'Submitting...' : 'Submit for approval' }}
         </button>
@@ -309,3 +395,151 @@ onMounted(async () => {
     </div>
   </AppShell>
 </template>
+
+<style scoped>
+.bank-details-box {
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-lg, 12px);
+  padding: var(--s-4, 16px);
+  margin-top: var(--s-2, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3, 12px);
+  position: relative;
+  overflow: hidden;
+}
+
+.bank-account-hero {
+  background: radial-gradient(120% 100% at 0% 0%, rgba(34, 197, 94, 0.12), transparent 70%), var(--surface-3, rgba(255, 255, 255, 0.04));
+  border: 1px solid oklch(70% 0.19 145 / 0.25);
+  border-radius: var(--r-md, 8px);
+  padding: var(--s-3, 12px) var(--s-4, 16px);
+}
+
+.account-number-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-number-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+}
+
+.account-number-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2, 8px);
+}
+
+.account-number-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--brand-on-surface, #4ade80);
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-md, 6px);
+  transition: all var(--dur-fast, 150ms) ease-out;
+}
+
+.bank-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-3, 12px);
+  padding: var(--s-1, 4px) 0;
+}
+
+@media (max-width: 480px) {
+  .bank-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bank-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-3, rgba(255, 255, 255, 0.02));
+  padding: 8px 12px;
+  border-radius: var(--r-sm, 6px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.bank-info-item.wide-item {
+  grid-column: span 2;
+}
+
+@media (max-width: 480px) {
+  .bank-info-item.wide-item {
+    grid-column: span 1;
+  }
+}
+
+.info-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-faint, rgba(255, 255, 255, 0.4));
+}
+
+.info-value {
+  font-size: var(--t-xs, 12px);
+  color: var(--text-primary, #ffffff);
+  word-break: break-word;
+}
+
+.narration-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim, rgba(255, 255, 255, 0.7));
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  padding: 8px 12px;
+  border-radius: var(--r-md, 6px);
+  line-height: 1.4;
+}
+
+.narration-notice svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--brand, #22c55e);
+}
+
+.proof-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--brand-on-surface, #4ade80);
+  padding: 6px 10px;
+  border-radius: var(--r-md, 6px);
+  font-size: var(--t-xs, 12px);
+  margin-top: 8px;
+}
+
+.proof-file-badge .file-name {
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proof-file-badge .file-size {
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+  font-size: 11px;
+}
+</style>

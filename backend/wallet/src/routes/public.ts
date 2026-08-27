@@ -6,8 +6,35 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { submitPublicApplication } from '../services/vendor-onboarding.js';
 import { listFaqCategories, listFaqs, voteFaq, incrementFaqView } from '../services/support.js';
+import { listStationDirectory } from '../services/token-engine.js';
+import { stationGeography } from '../config/station-geography.js';
 
 const route: FastifyPluginAsync = async (fastify) => {
+    fastify.get('/stations', async (_req, reply) => {
+        try {
+            const directory = await listStationDirectory();
+            const stations = directory
+                .filter((station) => station.status === 'active' && !/^(?:0001|STATION\s*0001)$/i.test(station.stationId.trim()))
+                .map((station) => ({
+                    stationId: station.stationId,
+                    name: station.name,
+                    status: station.status,
+                    geography: stationGeography(station.stationId, station.name),
+                }));
+            return {
+                stations,
+                updatedAt: new Date().toISOString(),
+                source: 'live_station_directory',
+            };
+        } catch (error) {
+            fastify.log.warn({ err: error }, 'Public station directory unavailable');
+            return reply.code(503).send({
+                error: 'stations_unavailable',
+                message: 'Live station coverage is temporarily unavailable.',
+            });
+        }
+    });
+
     // ── Public FAQ knowledge base ──────────────────────────────────────────
     fastify.get('/faqs/categories', async (req) => {
         const { audience } = req.query as { audience?: 'all' | 'customer' | 'vendor' };

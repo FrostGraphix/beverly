@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
+import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import {
     toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
     getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
@@ -14,6 +15,10 @@ const router = useRouter();
 const route = useRoute();
 const userMenuOpen = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
+
+async function persistLocale(locale: string) {
+    try { await api.put('/api/v1/preferences/locale', { locale }); } catch { /* local preference remains active */ }
+}
 
 // PWA install prompt
 const installPrompt    = ref<any>(null);
@@ -200,6 +205,11 @@ async function signOut() {
                 <small>{{ auth.customer?.email || auth.customer?.phone || 'customer wallet' }}</small>
               </span>
             </div>
+            <div class="bw-user-menu-language">
+              <span>Language</span>
+              <LanguageSwitcher compact @change="persistLocale" />
+            </div>
+            <div class="bw-user-menu-separator"></div>
             <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <path d="M20 21a8 8 0 0 0-16 0" />

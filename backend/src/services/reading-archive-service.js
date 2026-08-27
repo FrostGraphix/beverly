@@ -92,6 +92,8 @@ const PAGE_SIZE = 1000;
 // Signed download URLs are short-lived: the catalogue is browsable by any signed-in
 // user, but a leaked URL should not be a durable data exfil path.
 const SIGNED_URL_TTL_SECONDS = Number(process.env.ARCHIVE_SIGNED_URL_TTL || 300);
+const ARCHIVE_PAGE_SIZES = new Set([10, 20, 50, 100]);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Every column of daily_meter_readings except the surrogate `id` dropped in
@@ -748,6 +750,67 @@ function reportRow(row = {}, slugById = new Map()) {
   };
 }
 
+function normalizeListFilters(filters = {}) {
+  const page = Math.max(1, Math.trunc(Number(filters.page) || 1));
+  const requestedPageSize = Math.trunc(Number(filters.pageSize) || 10);
+  const pageSize = ARCHIVE_PAGE_SIZES.has(requestedPageSize) ? requestedPageSize : 10;
+  const year = filters.year === null || filters.year === undefined || filters.year === ""
+    ? null
+    : Math.trunc(Number(filters.year));
+  const month = filters.month === null || filters.month === undefined || filters.month === ""
+    ? null
+    : Math.trunc(Number(filters.month));
+  const reportType = String(filters.reportType || "").trim().toLowerCase();
+  const granularity = String(filters.granularity || "").trim().toLowerCase();
+  const stationId = String(filters.stationId || "").trim();
+  const oemId = String(filters.oemId || "").trim();
+
+  if (year !== null && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+    throw new Error("Archive year must be between 2000 and 2100");
+  }
+  if (month !== null && (!Number.isInteger(month) || month < 1 || month > 12)) {
+    throw new Error("Archive month must be between 1 and 12");
+  }
+  if (month !== null && year === null) throw new Error("Archive month requires a year");
+  if (reportType && !["readings", "payments"].includes(reportType)) throw new Error("Invalid archive report type");
+  if (granularity && !["monthly", "yearly"].includes(granularity)) throw new Error("Invalid archive granularity");
+  if (stationId.length > 128) throw new Error("Archive station id is too long");
+  if (oemId && !UUID_PATTERN.test(oemId)) throw new Error("Invalid archive OEM id");
+
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+    year,
+    month,
+    reportType,
+    granularity,
+    stationId,
+    oemId
+  };
+}
+
+function appendArchiveFilters(query, filters) {
+  if (filters.stationId) query.push(`station_id=eq.${encodeURIComponent(filters.stationId)}`);
+  if (filters.reportType) query.push(`report_type=eq.${encodeURIComponent(filters.reportType)}`);
+  if (filters.granularity) query.push(`granularity=eq.${encodeURIComponent(filters.granularity)}`);
+  if (filters.oemId) query.push(`oem_id=eq.${encodeURIComponent(filters.oemId)}`);
+  if (filters.year !== null) {
+    query.push(`period_start=gte.${filters.year}-01-01`);
+    query.push(`period_start=lte.${filters.year}-12-31`);
+  }
+  if (filters.month !== null) {
+    const month = String(filters.month).padStart(2, "0");
+    query.push(`period_start=eq.${filters.year}-${month}-01`);
+  }
+  return query;
+}
+
+function parseContentRangeTotal(contentRange, fallback = 0) {
+  const match = String(contentRange || "").match(/\/(\d+)$/);
+  return match ? Number(match[1]) : Number(fallback || 0);
+}
+
 /** id -> slug for every manufacturer, so the catalogue can label rows without a join. */
 async function oemSlugById() {
   const rows = await supabase.restRequest("/oem_manufacturers?select=id,slug");
@@ -755,37 +818,62 @@ async function oemSlugById() {
 }
 
 async function listReports(filters = {}) {
-  const query = [
+  const normalized = normalizeListFilters(filters);
+  const query = appendArchiveFilters([
     "select=*",
     "order=period_start.desc,station_id.asc",
-    `limit=${Math.max(1, Math.min(Number(filters.limit || 200), 1000))}`
-  ];
-  if (filters.stationId) query.push(`station_id=eq.${encodeURIComponent(filters.stationId)}`);
-  if (filters.reportType) query.push(`report_type=eq.${encodeURIComponent(filters.reportType)}`);
-  if (filters.granularity) query.push(`granularity=eq.${encodeURIComponent(filters.granularity)}`);
-  if (filters.oemId) query.push(`oem_id=eq.${encodeURIComponent(filters.oemId)}`);
-  if (filters.year) {
-    // Yearly rows carry period_start = Jan 1, so a year filter catches both grains.
-    query.push(`period_start=gte.${Number(filters.year)}-01-01`);
-    query.push(`period_start=lte.${Number(filters.year)}-12-31`);
-  }
-  if (filters.month && filters.year) {
-    const month = String(Number(filters.month)).padStart(2, "0");
-    query.push(`period_start=eq.${Number(filters.year)}-${month}-01`);
-  }
-  const [rows, slugs] = await Promise.all([
-    supabase.restRequest(`/archive_reports?${query.join("&")}`),
+    `limit=${normalized.pageSize}`,
+    `offset=${normalized.offset}`
+  ], normalized);
+  const [result, slugs] = await Promise.all([
+    supabase.restRequestWithResponse(`/archive_reports?${query.join("&")}`, { prefer: "count=exact" }),
     oemSlugById()
   ]);
+  const rows = Array.isArray(result.body) ? result.body : [];
   const reports = (Array.isArray(rows) ? rows : []).map((row) => reportRow(row, slugs));
-  return { reports, totalCount: reports.length, filtersApplied: filters };
+  const totalCount = parseContentRangeTotal(result.response.headers.get("content-range"), reports.length);
+  return {
+    reports,
+    totalCount,
+    page: normalized.page,
+    pageSize: normalized.pageSize,
+    pageCount: Math.max(1, Math.ceil(totalCount / normalized.pageSize)),
+    filtersApplied: normalized
+  };
 }
 
-async function reportsSummary() {
+async function summaryRowsFallback(filters) {
+  const rows = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const query = appendArchiveFilters([
+      "select=oem_id,station_id,report_type,granularity,period_start,row_count,byte_size",
+      "order=period_start.asc,station_id.asc",
+      `limit=${PAGE_SIZE}`,
+      `offset=${offset}`
+    ], filters);
+    const page = await supabase.restRequest(`/archive_reports?${query.join("&")}`);
+    const batch = Array.isArray(page) ? page : [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function reportsSummary(filters = {}) {
+  const normalized = normalizeListFilters({ ...filters, page: 1, pageSize: 10 });
+  try {
+    const summary = await supabase.restRequest("/rpc/archive_reports_summary", {
+      method: "POST",
+      retryable: true,
+      body: { p_station_id: normalized.stationId || null }
+    });
+    if (summary && !Array.isArray(summary)) return summary;
+  } catch (error) {
+    if (!/PGRST202|Could not find the function|schema cache/i.test(String(error?.message || error))) throw error;
+  }
+
   const [rows, slugs] = await Promise.all([
-    supabase.restRequest(
-      "/archive_reports?select=oem_id,station_id,report_type,granularity,period_start,row_count,byte_size"
-    ),
+    summaryRowsFallback(normalized),
     oemSlugById()
   ]);
   const list = Array.isArray(rows) ? rows : [];
@@ -795,6 +883,7 @@ async function reportsSummary() {
   const byOem = {};
   let bytes = 0;
   let sourceRows = 0;
+  let bundleRows = 0;
   let earliest = null;
   let latest = null;
 
@@ -806,7 +895,8 @@ async function reportsSummary() {
     byGranularity[row.granularity] = (byGranularity[row.granularity] || 0) + 1;
     byOem[oem] = (byOem[oem] || 0) + 1;
     bytes += Number(row.byte_size || 0);
-    sourceRows += Number(row.row_count || 0);
+    bundleRows += Number(row.row_count || 0);
+    if (row.granularity === "monthly") sourceRows += Number(row.row_count || 0);
     const period = String(row.period_start || "");
     if (period) {
       if (!earliest || period < earliest) earliest = period;
@@ -816,10 +906,10 @@ async function reportsSummary() {
 
   return {
     totalReports: list.length,
-    // Sum of rows across objects. Yearly bundles re-cover the same source rows as their
-    // monthly siblings, so this double-counts by design -- it is a measure of archived
-    // content, not of distinct source records.
+    // Monthly rows are the source-of-truth count. Yearly bundles duplicate those rows
+    // for download convenience and are exposed separately instead of inflating the KPI.
     totalRows: sourceRows,
+    totalBundleRows: bundleRows,
     totalSizeMb: Math.round((bytes / 1048576) * 100) / 100,
     // The point of the archive is that this number is charged against the 1 GB
     // Storage quota, NOT the 500 MB Postgres quota.
@@ -874,9 +964,13 @@ function archiveFilename(record, downloadedAt = new Date()) {
  * `Content-Disposition: attachment; filename=...`, so the browser saves the
  * self-describing name rather than the bare period.
  */
-async function signedDownloadUrl(reportId) {
+async function signedDownloadUrl(reportId, options = {}) {
+  const normalizedId = String(reportId || "").trim();
+  if (!UUID_PATTERN.test(normalizedId)) return { ok: false, reason: "Invalid archive report id" };
+  const stationScope = String(options.stationScope || "").trim();
+  const stationFilter = stationScope ? `&station_id=eq.${encodeURIComponent(stationScope)}` : "";
   const rows = await supabase.restRequest(
-    `/archive_reports?select=*&id=eq.${encodeURIComponent(reportId)}&limit=1`
+    `/archive_reports?select=*&id=eq.${encodeURIComponent(normalizedId)}${stationFilter}&limit=1`
   );
   const record = Array.isArray(rows) ? rows[0] : null;
   if (!record) return { ok: false, reason: "Archive report not found" };
@@ -912,9 +1006,11 @@ module.exports = {
   resolveOemForStation,
   archivePartition,
   listReports,
+  normalizeListFilters,
   newestEligibleMonth,
   objectPathFor,
   reportsSummary,
+  parseContentRangeTotal,
   runArchiveSweep,
   signedDownloadUrl,
   toCsv

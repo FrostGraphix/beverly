@@ -104,7 +104,8 @@ const referenceVisibleHashes = new Set([
 
 export function normalizeRoleId(roleId = "super-admin") {
   const value = String(roleId || "super-admin").trim().toLowerCase();
-  if (["admin", "administrator", "superadmin", "super_admin", "super-admin", "0", "1"].includes(value)) return "super-admin";
+  if (["superadmin", "super_admin", "super-admin", "0", "1"].includes(value)) return "super-admin";
+  if (["admin", "administrator"].includes(value)) return "admin";
   if (["operator", "operations", "operations-manager", "operation-manager"].includes(value)) return "operations-manager";
   if (["account", "accountant", "finance", "account-officer", "account_officer"].includes(value)) return "account";
   if (["finance-checker", "finance_checker", "checker"].includes(value)) return "finance-checker";
@@ -129,13 +130,18 @@ const permissionAliases = {
 };
 
 function matchesPermission(permissionString, candidate) {
-  return permissionString.toLowerCase().includes(String(candidate || "").toLowerCase());
+  const expected = String(candidate || "").trim().toLowerCase();
+  if (!expected) return false;
+  return String(permissionString || "")
+    .split(/[,;+\s]+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean)
+    .some((token) => token === expected || token.endsWith(`.${expected}`));
 }
 
 export function permissionAliasesForRoute(route = {}) {
   return [
     ...(permissionAliases[route.hash] || []),
-    String(route.group || "").replace(/\s+/g, ""),
     String(route.hash || "").split("/").pop() || ""
   ].filter(Boolean);
 }

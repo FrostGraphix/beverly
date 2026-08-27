@@ -30,7 +30,8 @@
     { "path": "/api/cron/refresh-hourly", "schedule": "0 12 * * *" },
     { "path": "/api/cron/refresh-daily", "schedule": "0 23 * * *" },
     { "path": "/api/cron/refresh-backfill", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/consumption-sync", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/archive-readings", "schedule": "0 1 * * *" }
   ],
   "headers": [
     {
@@ -73,6 +74,21 @@
     }
   ],
   "redirects": [
+    { "source": "/wallet", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet/", "permanent": false },
+    { "source": "/wallet/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet/:path*", "permanent": false },
+    { "source": "/wallet-admin", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-admin/", "permanent": false },
+    { "source": "/wallet-admin/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-admin/:path*", "permanent": false },
+    { "source": "/wallet-vendor", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-vendor/", "permanent": false },
+    { "source": "/wallet-vendor/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-vendor/:path*", "permanent": false },
+    { "source": "/wallet-customer", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-customer/", "permanent": false },
+    { "source": "/wallet-customer/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-customer/:path*", "permanent": false },
+    { "source": "/admin", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-admin/", "permanent": false },
+    { "source": "/admin/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-admin/:path*", "permanent": false },
+    { "source": "/vendor", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-vendor/", "permanent": false },
+    { "source": "/vendor/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-vendor/:path*", "permanent": false },
+    { "source": "/customer", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-customer/", "permanent": false },
+    { "source": "/customer/:path*", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet-customer/:path*", "permanent": false },
+    { "source": "/:path((?!api(?:/|$)|assets(?:/|$)|brand(?:/|$)|crm(?:/|$)|beverly(?:/|$)|pwa-|workbox-|sw\\.js$|registerSW\\.js$|push-sw\\.js$|manifest\\.webmanifest$|login-voice\\.mp3$).+)", "has": [{ "type": "host", "value": "beverly.acoblighting.com" }], "destination": "https://acob-beverly.vercel.app/wallet/", "permanent": false },
     { "source": "/wallet-admin", "destination": "/wallet-admin/", "permanent": true },
     { "source": "/wallet-vendor", "destination": "/wallet-vendor/", "permanent": true },
     { "source": "/wallet-customer", "destination": "/wallet-customer/", "permanent": true },

@@ -115,6 +115,42 @@ for (const config of [vercelJson, previewJson]) {
   );
 }
 for (const [source, destination] of [
+  ["/wallet", "https://acob-beverly.vercel.app/wallet/"],
+  ["/wallet/:path*", "https://acob-beverly.vercel.app/wallet/:path*"],
+  ["/wallet-admin", "https://acob-beverly.vercel.app/wallet-admin/"],
+  ["/wallet-admin/:path*", "https://acob-beverly.vercel.app/wallet-admin/:path*"],
+  ["/wallet-vendor", "https://acob-beverly.vercel.app/wallet-vendor/"],
+  ["/wallet-vendor/:path*", "https://acob-beverly.vercel.app/wallet-vendor/:path*"],
+  ["/wallet-customer", "https://acob-beverly.vercel.app/wallet-customer/"],
+  ["/wallet-customer/:path*", "https://acob-beverly.vercel.app/wallet-customer/:path*"],
+  ["/admin", "https://acob-beverly.vercel.app/wallet-admin/"],
+  ["/admin/:path*", "https://acob-beverly.vercel.app/wallet-admin/:path*"],
+  ["/vendor", "https://acob-beverly.vercel.app/wallet-vendor/"],
+  ["/vendor/:path*", "https://acob-beverly.vercel.app/wallet-vendor/:path*"],
+  ["/customer", "https://acob-beverly.vercel.app/wallet-customer/"],
+  ["/customer/:path*", "https://acob-beverly.vercel.app/wallet-customer/:path*"],
+]) {
+  assert(
+    vercelJson.redirects.some((entry) =>
+      entry.source === source &&
+      entry.destination === destination &&
+      entry.permanent === false &&
+      entry.has?.some((condition) => condition.type === "host" && condition.value === "beverly.acoblighting.com")
+    ),
+    `${source} on the CRM domain must temporarily redirect to the canonical wallet origin`
+  );
+}
+const unknownCustomDomainRedirect = vercelJson.redirects.find((entry) =>
+  entry.source === "/:path((?!api(?:/|$)|assets(?:/|$)|brand(?:/|$)|crm(?:/|$)|beverly(?:/|$)|pwa-|workbox-|sw\\.js$|registerSW\\.js$|push-sw\\.js$|manifest\\.webmanifest$|login-voice\\.mp3$).+)"
+);
+assert(unknownCustomDomainRedirect, "unknown custom-domain paths must redirect away from Beverly CRM");
+assert(unknownCustomDomainRedirect.destination === "https://acob-beverly.vercel.app/wallet/", "unknown paths must use the canonical wallet landing URL");
+assert(unknownCustomDomainRedirect.permanent === false, "unknown path redirects must remain temporary");
+assert(
+  unknownCustomDomainRedirect.has?.some((condition) => condition.type === "host" && condition.value === "beverly.acoblighting.com"),
+  "unknown-path isolation must only affect the Beverly custom domain"
+);
+for (const [source, destination] of [
   ["/health", "/api/wallet?__pathname=/health"],
   ["/ready", "/api/wallet?__pathname=/ready"],
   ["/api/v1/health", "/api/wallet?__pathname=/health"],

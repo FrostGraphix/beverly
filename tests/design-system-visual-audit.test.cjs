@@ -56,6 +56,9 @@ function apiBody(url) {
   if (url.includes("/user/info")) {
     return { code: 0, data: { data: [{ userId: "admin", userName: "ACB(admin)", roleId: "super-admin", remark: "super-admin" }], total: 1 } };
   }
+  if (url.includes("/system/oem/list")) {
+    return { code: 0, data: { oems: [{ id: "calinmeter", slug: "calinmeter", displayName: "Calinmeter", status: "active", isSeedDefault: true, capabilities: {} }] } };
+  }
   if (url.includes("/dashboard/readPanelGroup")) {
     return { code: 0, data: { totalAccountCount: 100, totalPurchaseTimes: 20, totalPurchaseUnit: 300, totalPurchaseMoney: 400 } };
   }
@@ -119,16 +122,31 @@ async function installApiMocks(page) {
 
 async function login(page) {
   await page.goto(`${appUrl}/#/login`, { waitUntil: "load" });
+  await page.evaluate(() => localStorage.setItem("beverly.currentOem", "calinmeter"));
   await page.fill('[data-testid="login-user-id"]', "admin");
   await page.fill('[data-testid="login-password"]', "admin");
   await page.click('[data-testid="login-submit"]');
+  await page.waitForSelector(".dashboard-editor-container, .oem-hub", { timeout: 10000 });
+  if (await page.locator(".oem-hub").isVisible().catch(() => false)) {
+    await page.locator(".oem-card__surface").first().click();
+  }
   await page.waitForSelector(".dashboard-editor-container", { timeout: 10000 });
+}
+
+async function enterOemWorkspace(page, targetHash) {
+  await page.waitForSelector(".oem-hub, #app-root", { state: "attached", timeout: 10000 });
+  if (!await page.locator(".oem-hub").isVisible().catch(() => false)) return;
+  await page.locator(".oem-card__surface").first().click();
+  if (targetHash !== "#/dashboard") {
+    await page.evaluate((hash) => { window.location.hash = hash; }, targetHash);
+  }
 }
 
 async function seedAuth(page) {
   await page.evaluate(() => {
     const now = Date.now();
     localStorage.setItem("beverly.session", JSON.stringify({ lastActiveAt: now, expiresAt: now + 30 * 60 * 1000 }));
+    localStorage.setItem("beverly.currentOem", "calinmeter");
     document.cookie = "userId=admin; path=/";
     document.cookie = "userName=ACB(admin); path=/";
     document.cookie = "roleId=super-admin; path=/";
@@ -176,6 +194,13 @@ async function assertPageHealth(page, expectedTheme) {
         .filter((input) => input.type !== "file")
         .filter((input) => !input.classList.contains("base-input"))
         .filter((input) => !input.closest(".base-checkbox")).length,
+      rawInputSamples: [...document.querySelectorAll("input")]
+        .filter((input) => input.type !== "hidden")
+        .filter((input) => input.type !== "file")
+        .filter((input) => !input.classList.contains("base-input"))
+        .filter((input) => !input.closest(".base-checkbox"))
+        .slice(0, 5)
+        .map((input) => `${input.type}.${input.className}:${input.getAttribute("aria-label") || input.placeholder || ""}`),
       baseControls: document.querySelectorAll(".base-button, .base-icon-button, .base-input, .base-select, .base-checkbox, .base-toggle").length
     };
   });
@@ -185,7 +210,7 @@ async function assertPageHealth(page, expectedTheme) {
   assert(!metrics.emptyBody, "Page rendered empty.");
   assert(metrics.focusedCount > 0, "No focusable controls found.");
   assert(metrics.rawButtons === 0, `Raw buttons found: ${metrics.rawButtons} ${metrics.rawButtonSamples.join(" | ")}`);
-  assert(metrics.rawInputs === 0, `Raw inputs found: ${metrics.rawInputs}`);
+  assert(metrics.rawInputs === 0, `Raw inputs found: ${metrics.rawInputs} ${metrics.rawInputSamples.join(" | ")}`);
   assert(metrics.baseControls > 0, "Base controls missing.");
   assert.strictEqual(theme, expectedTheme, `Theme mismatch: ${theme}`);
   await assertKeyboardHealth(page);
@@ -220,6 +245,7 @@ async function main() {
         for (const route of routes) {
           if (route.name !== "login") await seedAuth(page);
           await page.goto(`${appUrl}/${route.hash}`, { waitUntil: "domcontentloaded" });
+          if (route.name !== "login") await enterOemWorkspace(page, route.hash);
           try {
             await page.waitForSelector(route.ready, { state: "attached", timeout: 10000 });
           } catch (error) {
@@ -240,20 +266,16 @@ async function main() {
 
         await seedAuth(page);
         await page.goto(`${appUrl}/#/management/account`, { waitUntil: "domcontentloaded" });
+        await enterOemWorkspace(page, "#/management/account");
         await page.waitForSelector(".table-page", { timeout: 10000 });
-        await page.evaluate(() => {
-          const exportButton = [...document.querySelectorAll(".table-page .base-button")]
-            .find((button) => button.textContent.includes("Export"));
-          exportButton?.click();
-        });
-        await page.waitForSelector(".modal-backdrop", { timeout: 10000 });
+        await page.getByTestId("table-toolbar-action-export").click();
+        await page.waitForSelector(".export-range-panel", { timeout: 10000 });
         await assertPageHealth(page, theme);
-        const modalScreenshot = path.join(artifactDir, `${viewport.name}-${theme}-export-modal.png`);
+        const modalScreenshot = path.join(artifactDir, `${viewport.name}-${theme}-export-menu.png`);
         await page.screenshot({ path: modalScreenshot, fullPage: false });
         results.push(path.relative(root, modalScreenshot).replace(/\\/g, "/"));
         await page.keyboard.press("Escape");
-        await page.locator(".modal-close").click();
-        await page.waitForSelector(".modal-backdrop", { state: "detached", timeout: 10000 });
+        await page.waitForSelector(".export-range-panel", { state: "detached", timeout: 10000 });
       }
 
       assert.deepStrictEqual(errors, [], "Console errors found.");

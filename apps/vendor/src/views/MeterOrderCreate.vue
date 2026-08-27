@@ -24,6 +24,8 @@ const meterType = ref<'single_phase' | 'three_phase' | ''>('');
 const propertyAddress = ref('');
 const serviceArea = ref('');
 const contactPhone = ref('');
+const showConfirmation = ref(false);
+const confirmationAccepted = ref(false);
 
 const prices = ref<{ residential_minor: number; commercial_minor: number }>({
     residential_minor: 3_000_000,
@@ -107,6 +109,16 @@ async function submit() {
     } finally {
         loading.value = false;
     }
+}
+
+function reviewOrder() {
+    error.value = '';
+    if (!propertyAddress.value.trim() || !serviceArea.value.trim() || !contactPhone.value.trim()) {
+        error.value = 'Complete every field.';
+        return;
+    }
+    confirmationAccepted.value = false;
+    showConfirmation.value = true;
 }
 </script>
 
@@ -221,11 +233,54 @@ async function submit() {
           <div class="bw-review-row"><span class="bw-muted">Amount</span><strong>{{ priceLabel }}</strong></div>
         </div>
         <p v-if="error" class="bw-error">{{ error }}</p>
-        <button class="bw-btn primary" :disabled="loading" @click="submit">
-          {{ loading ? 'Creating…' : `Create order · ${priceLabel}` }}
+        <button class="bw-btn primary" :disabled="loading" @click="reviewOrder">
+          Review order · {{ priceLabel }}
         </button>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div v-if="showConfirmation" class="bw-modal-backdrop order-confirm-backdrop" @click.self="showConfirmation = false">
+        <section class="bw-modal order-confirm" role="dialog" aria-modal="true" aria-labelledby="order-confirm-title">
+          <div class="bw-modal-header">
+            <div>
+              <p class="bw-label confirm-kicker">Final confirmation</p>
+              <h2 id="order-confirm-title">Review meter order</h2>
+            </div>
+            <button type="button" class="bw-btn ghost sm" aria-label="Close confirmation" @click="showConfirmation = false">Close</button>
+          </div>
+          <div class="bw-modal-body confirm-body">
+            <div class="confirm-total">
+              <span>Wallet charge</span>
+              <strong>{{ priceLabel }}</strong>
+            </div>
+            <dl class="confirm-grid">
+              <div><dt>Customer</dt><dd>{{ selectedCustomer?.full_name || '—' }}</dd></div>
+              <div><dt>Customer contact</dt><dd>{{ selectedCustomer?.phone || selectedCustomer?.email || '—' }}</dd></div>
+              <div><dt>Property</dt><dd>{{ propertyCategory === 'commercial' ? 'Commercial' : 'Residential' }}</dd></div>
+              <div><dt>Meter phase</dt><dd>{{ meterType === 'three_phase' ? 'Three Phase' : 'Single Phase' }}</dd></div>
+              <div class="wide"><dt>Installation address</dt><dd>{{ propertyAddress }}</dd></div>
+              <div><dt>Service area</dt><dd>{{ serviceArea }}</dd></div>
+              <div><dt>Site contact</dt><dd>{{ contactPhone }}</dd></div>
+            </dl>
+            <div class="bw-alert warn cancel-policy">
+              Cancellation stays available for six hours. Approval ends eligibility immediately.
+            </div>
+            <label class="confirm-check">
+              <input v-model="confirmationAccepted" type="checkbox" />
+              <span>I verified these order details.</span>
+            </label>
+            <p v-if="error" class="bw-error">{{ error }}</p>
+          </div>
+          <div class="bw-modal-footer confirm-actions">
+            <button type="button" class="bw-btn ghost" :disabled="loading" @click="showConfirmation = false">Edit details</button>
+            <button type="button" class="bw-btn primary" :disabled="loading || !confirmationAccepted" @click="submit">
+              {{ loading ? 'Placing order…' : `Confirm and pay ${priceLabel}` }}
+            </button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </AppShell>
 </template>
 
@@ -241,4 +296,25 @@ async function submit() {
 .bw-back-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s-2); }
 .bw-text-btn { background:none; border:none; color:var(--fg-2); padding:0; cursor:pointer; }
 .bw-review-row { display:flex; justify-content:space-between; gap:var(--s-3); padding:6px 0; }
+.order-confirm-backdrop { z-index: 100000; }
+.order-confirm { width: min(620px, calc(100vw - 24px)); max-height: min(820px, calc(100dvh - 24px)); }
+.confirm-kicker { color: var(--brand); margin: 0 0 4px; }
+.confirm-body { display: grid; gap: var(--s-3); overflow-y: auto; }
+.confirm-total { display:flex; align-items:center; justify-content:space-between; padding:var(--s-4); border:1px solid color-mix(in srgb, var(--brand) 30%, var(--border)); border-radius:var(--r-lg); background:color-mix(in srgb, var(--brand) 8%, var(--surface)); }
+.confirm-total strong { color:var(--brand); font-family:var(--font-mono); font-size:var(--t-xl); }
+.confirm-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; margin:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--border); }
+.confirm-grid div { min-width:0; padding:var(--s-3); background:var(--surface-1); }
+.confirm-grid .wide { grid-column:1/-1; }
+.confirm-grid dt { color:var(--text-muted); font-size:var(--t-xs); text-transform:uppercase; }
+.confirm-grid dd { margin:4px 0 0; overflow-wrap:anywhere; font-weight:700; }
+.cancel-policy { margin:0; }
+.confirm-check { display:flex; align-items:flex-start; gap:var(--s-2); font-weight:700; cursor:pointer; }
+.confirm-check input { width:18px; height:18px; accent-color:var(--brand); }
+.confirm-actions { display:grid; grid-template-columns:auto minmax(0,1fr); }
+@media (max-width: 520px) {
+  .order-confirm { max-height:calc(100dvh - 12px); }
+  .confirm-grid { grid-template-columns:1fr; }
+  .confirm-grid .wide { grid-column:auto; }
+  .confirm-actions { grid-template-columns:1fr; }
+}
 </style>

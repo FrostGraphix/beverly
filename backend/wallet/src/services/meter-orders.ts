@@ -16,7 +16,8 @@ export type MeterOrderStatus =
     | 'assigned'
     | 'dispatched'
     | 'installed'
-    | 'cancelled';
+    | 'cancelled'
+    | 'rejected';
 
 export type MeterOrderSourceChannel = 'customer_portal' | 'vendor_portal' | 'admin_portal';
 export type MeterOrderActorType = 'customer' | 'vendor_user' | 'staff';
@@ -24,13 +25,44 @@ export type MeterOrderType = 'single_phase' | 'three_phase';
 export type PropertyCategory = 'residential' | 'commercial';
 
 const METER_ORDER_TRANSITIONS: Record<MeterOrderStatus, MeterOrderStatus[]> = {
-    pending_payment: ['paid', 'cancelled'],
-    paid: ['assigned', 'cancelled'],
+    pending_payment: ['paid', 'cancelled', 'rejected'],
+    paid: ['assigned', 'cancelled', 'rejected'],
     assigned: ['dispatched', 'cancelled'],
     dispatched: ['installed'],
     installed: [],
     cancelled: [],
+    rejected: [],
 };
+
+export function meterOrderRejectionEligibility(status: MeterOrderStatus): {
+    eligible: boolean;
+    refundRequired: boolean;
+} {
+    return {
+        eligible: status === 'pending_payment' || status === 'paid',
+        refundRequired: status === 'paid',
+    };
+}
+
+export async function rejectMeterOrder(input: {
+    orderId: string;
+    rejectedByUserId: string;
+    reason: string;
+}): Promise<MeterOrderRecord> {
+    const { data, error } = await adminClient.rpc('fn_reject_meter_order', {
+        p_order_id: input.orderId,
+        p_rejected_by_user_id: input.rejectedByUserId,
+        p_reason: input.reason.trim(),
+    });
+    if (error) {
+        const message = String(error.message ?? 'Could not reject meter order.');
+        if (message.includes('order_not_found')) throw new MeterOrderError('Meter order not found.', 'meter_order_not_found', 404);
+        if (message.includes('order_already_processed')) throw new MeterOrderError('Only unapproved orders can be rejected.', 'order_already_processed', 409);
+        if (message.includes('refund_wallet_missing')) throw new MeterOrderError('The refund wallet is unavailable. Rejection was not applied.', 'refund_wallet_missing', 409);
+        throw new MeterOrderError(message, 'meter_order_rejection_failed', 422);
+    }
+    return data as MeterOrderRecord;
+}
 
 export interface MeterOrderRecord {
     id: string;
@@ -55,6 +87,52 @@ export interface MeterOrderRecord {
     created_by_actor_id: string | null;
     created_at: string;
     updated_at: string;
+    cancelled_at?: string | null;
+    cancelled_by?: string | null;
+    cancellation_reason?: string | null;
+    reversal_ledger_entry_id?: string | null;
+    rejected_at?: string | null;
+    rejected_by?: string | null;
+    rejection_reason?: string | null;
+    rejection_refund_entry_id?: string | null;
+    rejection_refund_destination?: 'none' | 'vendor_wallet' | 'customer_wallet' | null;
+}
+
+export const VENDOR_METER_ORDER_CANCELLATION_HOURS = 6;
+
+export function vendorMeterOrderCancellationEligibility(
+    order: Pick<MeterOrderRecord, 'status' | 'sponsor_mode' | 'created_at'>,
+    now = new Date(),
+): { eligible: boolean; deadline: string; reason: string | null } {
+    const deadline = new Date(new Date(order.created_at).getTime() + VENDOR_METER_ORDER_CANCELLATION_HOURS * 60 * 60 * 1000);
+    let reason: string | null = null;
+    if (order.status === 'cancelled') reason = 'already_cancelled';
+    else if (order.status !== 'paid') reason = 'order_approved';
+    else if (order.sponsor_mode !== 'vendor_wallet') reason = 'not_vendor_sponsored';
+    else if (!Number.isFinite(deadline.getTime()) || now.getTime() > deadline.getTime()) reason = 'cancellation_window_expired';
+    return { eligible: reason === null, deadline: deadline.toISOString(), reason };
+}
+
+export async function cancelVendorMeterOrder(input: {
+    orderId: string;
+    vendorOrganizationId: string;
+    actorUserId: string;
+    reason: string;
+}): Promise<MeterOrderRecord> {
+    const { data, error } = await adminClient.rpc('fn_cancel_vendor_meter_order', {
+        p_order_id: input.orderId,
+        p_vendor_organization_id: input.vendorOrganizationId,
+        p_actor_user_id: input.actorUserId,
+        p_reason: input.reason.trim(),
+    });
+    if (error) {
+        const message = String(error.message ?? 'Could not cancel meter order.');
+        if (message.includes('window_expired')) throw new MeterOrderError('The six-hour cancellation window has ended.', 'cancellation_window_expired', 409);
+        if (message.includes('order_approved')) throw new MeterOrderError('Approved orders cannot be cancelled.', 'order_approved', 409);
+        if (message.includes('order_not_found')) throw new MeterOrderError('Meter order not found.', 'meter_order_not_found', 404);
+        throw new MeterOrderError(message, 'meter_order_cancellation_failed', 422);
+    }
+    return data as MeterOrderRecord;
 }
 
 export class MeterOrderError extends Error {

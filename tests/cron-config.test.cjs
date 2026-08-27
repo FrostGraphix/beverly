@@ -15,6 +15,7 @@ assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-hourly" && c
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-daily" && cron.schedule === "0 23 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/refresh-backfill" && cron.schedule === "0 18 * * *"));
 assert(vercel.crons.some((cron) => cron.path === "/api/cron/consumption-sync" && cron.schedule === "0 3 * * *"));
+assert(vercel.crons.some((cron) => cron.path === "/api/cron/archive-readings" && cron.schedule === "0 1 * * *"), "archive sweep must run nightly before retention");
 assert(api.includes("CRON_SECRET"), "cron secret check missing");
 assert(api.includes("runRefreshJob"), "refresh runner missing");
 assert(api.includes("writeDailyMeterRows"), "refresh runner must store daily meter rows");

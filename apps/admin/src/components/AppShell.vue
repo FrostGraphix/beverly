@@ -2,10 +2,12 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
-import { toggleTheme } from '@beverly/tokens';
+import { onNotificationCountChange, publishNotificationCount, toggleTheme } from '@beverly/tokens';
+import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import { adminPushNotifications } from '../lib/push-notifications';
 import { PORTAL_URLS } from '../lib/portals';
 import AcobotWidget from './acobot/AcobotWidget.vue';
+import { api } from '../lib/api';
 
 defineProps<{ title?: string }>();
 
@@ -17,6 +19,21 @@ const userMenuOpen = ref(false);
 const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 const navRef = ref<HTMLElement | null>(null);
+const unreadNotifications = ref(0);
+let stopNotificationCount: (() => void) | null = null;
+let notificationPoll: ReturnType<typeof setInterval> | null = null;
+
+async function loadUnreadNotifications() {
+    try {
+        const response = await api.get<{ unreadCount: number }>('/api/v1/admin/notifications?limit=1');
+        unreadNotifications.value = Math.max(0, Number(response.unreadCount) || 0);
+        publishNotificationCount(unreadNotifications.value);
+    } catch { /* session handling remains centralized */ }
+}
+
+async function persistLocale(locale: string) {
+    try { await api.put('/api/v1/preferences/locale', { locale }); } catch { /* local preference remains active */ }
+}
 
 function scrollToActiveLink() {
     void nextTick(() => {
@@ -296,9 +313,16 @@ async function signOut() {
 onMounted(() => {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     void adminPushNotifications.sync().catch(() => undefined);
+    stopNotificationCount = onNotificationCountChange((count) => { unreadNotifications.value = count; });
+    void loadUnreadNotifications();
+    notificationPoll = setInterval(() => void loadUnreadNotifications(), 30_000);
     scrollToActiveLink();
 });
-onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown));
+onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', handleDocumentPointerDown);
+    stopNotificationCount?.();
+    if (notificationPoll) clearInterval(notificationPoll);
+});
 </script>
 
 <template>
@@ -389,11 +413,12 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
         <span class="bw-spacer" />
 
         <!-- Notification bell -->
-        <RouterLink to="/notifications" class="bw-icon-btn" title="Notifications" aria-label="Notifications" style="border: none">
+        <RouterLink to="/notifications" class="bw-icon-btn notification-button" title="Notifications" :aria-label="unreadNotifications ? `${unreadNotifications} unread notifications` : 'Notifications'" style="border: none">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
+          <span v-if="unreadNotifications" class="notification-badge" aria-hidden="true">{{ unreadNotifications > 99 ? '99+' : unreadNotifications }}</span>
         </RouterLink>
 
         <RouterLink to="/support" class="bw-icon-btn" title="Support" aria-label="Support" style="border: none">
@@ -436,6 +461,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
                   <small>{{ displayName }} - {{ roleLabel }}</small>
                 </span>
               </div>
+              <div class="bw-user-menu-language">
+                <span>Language</span>
+                <LanguageSwitcher compact @change="persistLocale" />
+              </div>
+              <div class="bw-user-menu-separator"></div>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M20 21a8 8 0 0 0-16 0" />
@@ -509,6 +539,24 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocument
 <style scoped>
 .bw-main-col {
   position: relative;
+}
+
+.notification-button { position: relative; }
+.notification-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 2px solid var(--surface);
+  border-radius: var(--r-pill);
+  background: var(--danger);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 12px;
+  text-align: center;
 }
 
 .bw-main-col::before {

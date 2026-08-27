@@ -57,6 +57,8 @@ function transfer(overrides = {}) {
   const base = `http://127.0.0.1:${address.port}`;
   const browser = await chromium.launch({ headless: true, ...(fs.existsSync(edge) ? { executablePath: edge } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await context.route("https://fonts.gstatic.com/**", (route) => route.fulfill({ status: 204, body: "" }));
   await context.addInitScript(() => {
     localStorage.setItem("beverly.staff.access_token", "browser-test-token");
     localStorage.setItem("beverly.staff.user", JSON.stringify({ id: "staff-1", email: "dev@example.test", full_name: "Developer", role: "developer", profile_picture_url: null }));
@@ -109,6 +111,8 @@ function transfer(overrides = {}) {
   // Read-only failures, including stale MFA policy replies, must surface
   // locally. They must not erase a valid staff session or redirect to login.
   const failureContext = await browser.newContext();
+  await failureContext.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await failureContext.route("https://fonts.gstatic.com/**", (route) => route.fulfill({ status: 204, body: "" }));
   await failureContext.addInitScript(() => {
     localStorage.setItem("beverly.staff.access_token", "valid-session-token");
     localStorage.setItem("beverly.staff.user", JSON.stringify({ id: "staff-1", email: "dev@example.test", full_name: "Developer", role: "developer", profile_picture_url: null }));

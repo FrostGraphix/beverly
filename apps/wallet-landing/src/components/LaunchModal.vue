@@ -2,9 +2,11 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import IconSvg from './IconSvg.vue';
 import { PORTAL_CARDS } from '../content';
+import { useI18n } from '@beverly/tokens/i18n.js';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+const { t } = useI18n();
 
 function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && props.open) emit('close');
@@ -16,13 +18,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 <template>
   <transition name="lp-modal">
     <div v-if="open" class="lp-modal-backdrop" @click.self="emit('close')">
-      <div class="lp-modal" role="dialog" aria-modal="true" aria-label="Choose your portal">
-        <button class="lp-modal-close" type="button" aria-label="Close" @click="emit('close')">×</button>
+      <div class="lp-modal" role="dialog" aria-modal="true" :aria-label="t('landing.modal.label')">
+        <button class="lp-modal-close" type="button" :aria-label="t('common.closeMenu')" @click="emit('close')">×</button>
 
         <div class="lp-modal-head">
           <span class="lp-brand-mark lp-brand-mark--lg"><IconSvg name="bolt" /></span>
-          <h2>Where would you like to go?</h2>
-          <p>Pick the experience that fits you. You can always switch later.</p>
+          <h2>{{ t('landing.modal.title') }}</h2>
+          <p>{{ t('landing.modal.subtitle') }}</p>
         </div>
 
         <div class="lp-modal-grid">
@@ -35,17 +37,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
             <span class="lp-modal-choice-ic">
               <IconSvg :name="p.key === 'customer' ? 'user' : 'store'" />
             </span>
-            <strong>{{ p.key === 'customer' ? 'I buy electricity' : 'I sell electricity' }}</strong>
-            <span class="lp-modal-choice-sub">{{ p.eyebrow }}</span>
-            <span class="lp-modal-choice-go">{{ p.primaryLabel }} <IconSvg name="arrow" /></span>
+            <strong>{{ t(p.title) }}</strong>
+            <span class="lp-modal-choice-sub">{{ t(p.eyebrow) }}</span>
+            <span class="lp-modal-choice-go">{{ t(p.primaryLabel) }} <IconSvg name="arrow" /></span>
           </a>
         </div>
 
         <p class="lp-modal-foot">
-          Already have an account?
-          <a :href="PORTAL_CARDS[0].secondaryHref">Customer sign in</a>
+          {{ t('landing.modal.existing') }}
+          <a :href="PORTAL_CARDS[0].secondaryHref">{{ t('landing.modal.customerSignIn') }}</a>
           <span>·</span>
-          <a :href="PORTAL_CARDS[1].primaryHref">Vendor sign in</a>
+          <a :href="PORTAL_CARDS[1].primaryHref">{{ t('landing.modal.vendorSignIn') }}</a>
         </p>
       </div>
     </div>

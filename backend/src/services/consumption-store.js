@@ -694,15 +694,12 @@ async function readAggregatedDeltas({ stationIds = [], from, to, granularity = "
   }
 }
 
-async function readStationMeterReadRollups(stationId = "") {
-  const filters = [
-    "select=station_id,meters_with_latest,latest_odometer_kwh,latest_reading",
-    "order=station_id.asc",
-  ];
-  if (stationId) filters.splice(1, 0, `station_id=eq.${encodeURIComponent(stationId)}`);
+async function readStationMeterReadRollups(stationId = "", from = "", to = "") {
   try {
-    const { body } = await supabase.restRequestWithResponse(`/station_meter_read_rollups?${filters.join("&")}`, {
-      headers: { Range: "0-999" },
+    const { body } = await supabase.restRequestWithResponse("/rpc/get_station_meter_read_rollups_as_of", {
+      method: "POST",
+      retryable: true,
+      body: { p_from: from, p_to: to, p_station_id: stationId || null },
     });
     const map = new Map();
     for (const row of Array.isArray(body) ? body : []) {
@@ -715,7 +712,7 @@ async function readStationMeterReadRollups(stationId = "") {
     return map;
   } catch (err) {
     const msg = String(err?.message || err || "");
-    if (msg.includes("42P01") || msg.includes("relation") || msg.includes("does not exist")) return new Map();
+    if (/42P01|relation|does not exist|schema cache|get_station_meter_read_rollups_as_of/i.test(msg)) return new Map();
     throw err;
   }
 }
@@ -1091,7 +1088,7 @@ async function buildAnalyticsFromAggregates({
         meterCount,
         activeMeterCount: s.activeMeters.size,
         avgPerMeter:      meterCount ? round3(s.totalKwh / meterCount) : 0,
-        avgDailyKwh:      readingDays ? round3(s.totalKwh / readingDays) : 0,
+        avgDailyKwh:      windowDays ? round3(s.totalKwh / windowDays) : 0,
         readingDays,
         peakDay:          { date: null, kwh: 0 }, // not available from period aggregates
         share:            consumedKwh > 0 ? round3((s.totalKwh / consumedKwh) * 100) : 0,
@@ -1150,7 +1147,7 @@ async function buildAnalyticsFromAggregates({
     body: {
       code: 0, msg: "success", reason: "success",
       data: {
-        range: { from, to, granularity, priorFrom, priorTo, periodDays: windowDays },
+        range: { from, to, granularity, priorFrom, priorTo, periodDays: windowDays, stationId: filterStation || null },
         totals: {
           consumedKwh,
           priorKwh,
@@ -1159,8 +1156,10 @@ async function buildAnalyticsFromAggregates({
           customerCount:    allCustomers.size,
           activeMeterCount: activeMeters.size,
           avgPerMeter:      allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
-          avgDailyKwh:      distinctDays ? round3(consumedKwh / distinctDays) : 0,
+          avgDailyKwh:      windowDays ? round3(consumedKwh / windowDays) : 0,
           readingDays:      distinctDays,
+          readingPeriods:   distinctDays,
+          calendarDays:     windowDays,
           stationCount:     stations.length,
           sourceRows:       currentAgg.length,
           source:           "aggregated",
@@ -1199,6 +1198,24 @@ async function readStationAnalyticsSummary(params) {
   }
 }
 
+function previousComparableRange(from, to, granularity, windowDays) {
+  const priorTo = addDaysIso(from, -1);
+  if (granularity === "monthly" && supportsExactAggregateRange("monthly", from, to)) {
+    const start = new Date(`${from}T00:00:00Z`);
+    const end = new Date(`${to}T00:00:00Z`);
+    const monthCount = ((end.getUTCFullYear() - start.getUTCFullYear()) * 12)
+      + end.getUTCMonth() - start.getUTCMonth() + 1;
+    const priorStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - monthCount, 1));
+    return { priorFrom: priorStart.toISOString().slice(0, 10), priorTo };
+  }
+  if (granularity === "yearly" && supportsExactAggregateRange("yearly", from, to)) {
+    const startYear = Number(from.slice(0, 4));
+    const yearCount = Number(to.slice(0, 4)) - startYear + 1;
+    return { priorFrom: `${String(startYear - yearCount).padStart(4, "0")}-01-01`, priorTo };
+  }
+  return { priorFrom: addDaysIso(priorTo, -(windowDays - 1)), priorTo };
+}
+
 async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo, granularity, requestedGranularity, windowDays, stationId }) {
   const growth = (current, prior) => prior > 0 ? round3(((current - prior) / prior) * 100) : (current > 0 ? null : 0);
   const rollups = new Map((summary.rollups || []).map((row) => [normalizeStation(row.station_id), row]));
@@ -1228,7 +1245,7 @@ async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo
       customerCount: Number(row.customer_count) || meterCount,
       activeMeterCount: Number(row.active_meter_count) || 0,
       avgPerMeter: meterCount ? round3(totalKwh / meterCount) : 0,
-      avgDailyKwh: readingCount ? round3(totalKwh / readingCount) : 0,
+      avgDailyKwh: windowDays ? round3(totalKwh / windowDays) : 0,
       readingDays: readingCount,
       peakDay: { date: null, kwh: 0 },
       share: consumedKwh > 0 ? round3((totalKwh / consumedKwh) * 100) : 0,
@@ -1267,6 +1284,7 @@ async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo
     avgDailyKwh: Number(row.active_periods) ? round3(Number(row.total_kwh) / Number(row.active_periods)) : 0,
   }));
   const readingDays = labels.filter((label) => Number(byPeriod.get(label)) > 0).length;
+  const totalMeterCount = stations.reduce((sum, row) => sum + row.meterCount, 0);
 
   let seasonality = { labels: WEEKDAY_LABELS, values: new Array(7).fill(0) };
   if (granularity === "daily") {
@@ -1297,20 +1315,24 @@ async function buildAnalyticsFromSummary({ summary, from, to, priorFrom, priorTo
           from, to, priorFrom, priorTo, periodDays: windowDays, granularity,
           requestedGranularity,
           granularityCoarsened: granularity !== requestedGranularity,
+          stationId: stationId || null,
         },
         totals: {
           consumedKwh, priorKwh, growthPct: growth(consumedKwh, priorKwh),
-          meterCount: stations.reduce((sum, row) => sum + row.meterCount, 0),
+          meterCount: totalMeterCount,
           customerCount: Number(summary.customerCount) || stations.reduce((sum, row) => sum + row.customerCount, 0),
           activeMeterCount: stations.reduce((sum, row) => sum + row.activeMeterCount, 0),
           avgPerMeter: stations.reduce((sum, row) => sum + row.meterCount, 0)
             ? round3(consumedKwh / stations.reduce((sum, row) => sum + row.meterCount, 0)) : 0,
-          avgDailyKwh: readingDays ? round3(consumedKwh / readingDays) : 0,
-          readingDays, stationCount: stations.length,
+          avgDailyKwh: windowDays ? round3(consumedKwh / windowDays) : 0,
+          readingDays, readingPeriods: readingDays, calendarDays: windowDays, stationCount: stations.length,
           sourceRows: Number(summary.sourceRows) || 0,
           source: "aggregated",
           latestOdometerKwh: round3(latestOdometerKwh),
           metersWithLatest,
+          meterReadAsOf: to,
+          meterReadCoveragePct: totalMeterCount ? round3((metersWithLatest / totalMeterCount) * 100) : 0,
+          meterReadComplete: totalMeterCount > 0 && metersWithLatest === totalMeterCount,
         },
         tariffBreakdown: (summary.tariffBreakdown || []).map((row) => ({
           tariffId: row.tariff_id || "",
@@ -1360,10 +1382,8 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     1,
     Math.round((new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / dayMs) + 1
   );
-  const priorTo = addDaysIso(from, -1);
-  const priorFrom = addDaysIso(priorTo, -(windowDays - 1));
-
   const chartGranularity = effectiveGranularity(granularity, windowDays);
+  const { priorFrom, priorTo } = previousComparableRange(from, to, chartGranularity, windowDays);
   // Coarsen only when the selected date range exactly matches aggregate bucket
   // boundaries. Weekly/monthly aggregate rows represent whole buckets, so using
   // them for partial custom ranges would over-count outside the user's filter.
@@ -1398,7 +1418,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
 
   // If aggregates are available, build analytics from them (fast path).
   if (currentAgg !== null && currentAgg.length > 0) {
-    const meterReadRollups = await readStationMeterReadRollups(stationId);
+    const meterReadRollups = await readStationMeterReadRollups(stationId, from, to);
     const response = await buildAnalyticsFromAggregates({
       currentAgg, priorAgg: priorAgg || [],
       from, to, priorFrom, priorTo,
@@ -1427,6 +1447,11 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
     });
     data.totals.latestOdometerKwh = round3(latestOdometerKwh);
     data.totals.metersWithLatest = metersWithLatest;
+    data.totals.meterReadAsOf = to;
+    data.totals.meterReadCoveragePct = data.totals.meterCount
+      ? round3((metersWithLatest / data.totals.meterCount) * 100) : 0;
+    data.totals.meterReadComplete = data.totals.meterCount > 0
+      && metersWithLatest === data.totals.meterCount;
     data.totals.source = "aggregated";
     return response;
   }
@@ -1565,7 +1590,7 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
         meterCount,
         activeMeterCount: s.activeMeters.size,
         avgPerMeter: meterCount ? round3(s.totalKwh / meterCount) : 0,
-        avgDailyKwh: readingDays ? round3(s.totalKwh / readingDays) : 0,
+        avgDailyKwh: windowDays ? round3(s.totalKwh / windowDays) : 0,
         readingDays,
         peakDay,
         share: consumedKwh > 0 ? round3((s.totalKwh / consumedKwh) * 100) : 0,
@@ -1616,19 +1641,24 @@ async function readStationConsumptionAnalytics({ requestPayload: payload }) {
       msg: "success",
       reason: "success",
       data: {
-        range: { from, to, granularity: chartGranularity, requestedGranularity: granularity, granularityCoarsened, priorFrom, priorTo, periodDays: windowDays },
+        range: { from, to, granularity: chartGranularity, requestedGranularity: granularity, granularityCoarsened, priorFrom, priorTo, periodDays: windowDays, stationId: stationId || null },
         totals: {
           consumedKwh: round3(consumedKwh),
           latestOdometerKwh: round3(latestOdometerKwh),
           metersWithLatest: latestMeterReads.size,
+          meterReadAsOf: to,
+          meterReadCoveragePct: allMeters.size ? round3((latestMeterReads.size / allMeters.size) * 100) : 0,
+          meterReadComplete: allMeters.size > 0 && latestMeterReads.size === allMeters.size,
           priorKwh: round3(priorKwh),
           growthPct: growth(consumedKwh, priorKwh),
           meterCount: allMeters.size,
           customerCount,
           activeMeterCount: activeMeters.size,
           avgPerMeter: allMeters.size ? round3(consumedKwh / allMeters.size) : 0,
-          avgDailyKwh: distinctDays ? round3(consumedKwh / distinctDays) : 0,
+          avgDailyKwh: windowDays ? round3(consumedKwh / windowDays) : 0,
           readingDays: distinctDays,
+          readingPeriods: distinctDays,
+          calendarDays: windowDays,
           stationCount: stations.length,
           sourceRows: rows.length,
           source: "raw-fallback",

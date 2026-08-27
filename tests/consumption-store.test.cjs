@@ -23,6 +23,12 @@ const originalRestRequestWithResponse = supabase.restRequestWithResponse;
 
   supabase.restRequestWithResponse = async (pathname, options = {}) => {
     requests.push({ kind: "read", pathname, options });
+    if (pathname === "/rpc/get_station_meter_read_rollups_as_of") {
+      return {
+        response: { headers: { get: () => "" } },
+        body: [{ station_id: "TUNGA", latest_odometer_kwh: 115, meters_with_latest: 1, latest_reading: "2026-05-07" }]
+      };
+    }
     if (forceRpcAnalytics && pathname === "/rpc/get_station_consumption_analytics") {
       return {
         response: { headers: { get: () => "" } },
@@ -393,8 +399,12 @@ assert.strictEqual(partialMonthlyAnalytics.status, 200);
 assert.strictEqual(partialMonthlyAnalytics.body.data.range.granularity, "monthly");
 assert.deepStrictEqual(partialMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
 assert.strictEqual(partialMonthlyAnalytics.body.data.totals.consumedKwh, 20);
+assert.strictEqual(partialMonthlyAnalytics.body.data.totals.avgDailyKwh, 0.714, "average daily load must use all 28 calendar days, not two non-zero month buckets");
+assert.strictEqual(partialMonthlyAnalytics.body.data.totals.calendarDays, 28);
+assert.strictEqual(partialMonthlyAnalytics.body.data.totals.readingPeriods, 2);
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.day")));
 assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
+assert(requests.some((request) => request.pathname === "/rpc/get_station_meter_read_rollups_as_of" && request.options?.body?.p_to === "2026-06-21"));
 
 requests.length = 0;
 const exactMonthlyAnalytics = await store.readStationConsumptionAnalytics({
@@ -409,9 +419,27 @@ const exactMonthlyAnalytics = await store.readStationConsumptionAnalytics({
 assert.strictEqual(exactMonthlyAnalytics.status, 200);
 assert.deepStrictEqual(exactMonthlyAnalytics.body.data.temporal.labels, ["2026-05", "2026-06"]);
 assert.strictEqual(exactMonthlyAnalytics.body.data.totals.consumedKwh, 1700);
+assert.strictEqual(exactMonthlyAnalytics.body.data.totals.avgDailyKwh, 27.869, "average daily load must remain daily at monthly chart granularity");
+assert.strictEqual(exactMonthlyAnalytics.body.data.totals.calendarDays, 61);
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_type=eq.month")));
 assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-05-01")));
 assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-03-31")));
+
+requests.length = 0;
+const februaryAnalytics = await store.readStationConsumptionAnalytics({
+  requestPayload: {
+    stationId: "TUNGA",
+    FROM: "2026-02-01",
+    TO: "2026-02-28",
+    granularity: "monthly",
+    topMeters: 10
+  }
+});
+assert.strictEqual(februaryAnalytics.status, 200);
+assert.strictEqual(februaryAnalytics.body.data.range.priorFrom, "2026-01-01");
+assert.strictEqual(februaryAnalytics.body.data.range.priorTo, "2026-01-31");
+assert(requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-01-01")), "monthly growth must compare complete calendar months");
+assert(!requests.some((request) => request.kind === "read" && request.pathname.includes("period_start=gte.2026-01-04")));
 
 requests.length = 0;
 forceRawAnalytics = true;
@@ -442,6 +470,10 @@ assert.strictEqual(rpcAnalytics.status, 200);
 assert.strictEqual(rpcAnalytics.body._proxy.source, "supabase-station-analytics-rpc");
 assert.strictEqual(rpcAnalytics.body.data.totals.consumedKwh, 20);
 assert.strictEqual(rpcAnalytics.body.data.totals.customerCount, 1);
+assert.strictEqual(rpcAnalytics.body.data.totals.meterReadAsOf, "2026-05-07");
+assert.strictEqual(rpcAnalytics.body.data.totals.meterReadCoveragePct, 100);
+assert.strictEqual(rpcAnalytics.body.data.totals.meterReadComplete, true);
+assert.strictEqual(rpcAnalytics.body.data.range.stationId, "TUNGA");
 assert.deepStrictEqual(rpcAnalytics.body.data.valuation, { valueNgn: 7000, pricedKwh: 20, unpricedKwh: 0, totalKwh: 20, coveragePct: 100, complete: true, basis: "historical-snapshot" });
 assert.deepStrictEqual(rpcAnalytics.body.data.tariffBreakdown, [{ tariffId: "RESIDENTIAL", totalKwh: 20 }]);
 assert.strictEqual(rpcAnalytics.body.data.topMeters[0].tariffId, "RESIDENTIAL");

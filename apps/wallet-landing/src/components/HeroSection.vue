@@ -2,17 +2,19 @@
 import { ref, computed } from 'vue';
 import IconSvg from './IconSvg.vue';
 import { PORTALS, STATS } from '../content';
+import { useI18n } from '@beverly/tokens/i18n.js';
 
 defineEmits<{ (e: 'launch'): void }>();
 
 // Interactive Consumption Usage Modes
 const activeConsumptionMode = ref<'hourly' | 'daily' | 'live'>('hourly');
 const tokenCopied = ref(false);
+const { t } = useI18n();
 
 const consumptionModes = [
-  { id: 'hourly', label: 'Hourly', value: '68.4 kWh', sub: 'Peak load 3.2 kW', path: 'M0 32 L30 25 L60 28 L90 14 L120 18 L150 8 L180 12 L200 4' },
-  { id: 'daily',  label: 'Daily',  value: '412.8 kWh', sub: 'Avg 13.7 kWh/day', path: 'M0 28 L30 22 L60 16 L90 20 L120 10 L150 14 L180 6 L200 8' },
-  { id: 'live',   label: 'Live kW', value: '2.45 kW',   sub: '3 Phase active', path: 'M0 35 L30 30 L60 12 L90 26 L120 8 L150 22 L180 5 L200 12' },
+  { id: 'hourly', labelKey: 'landing.demo.hourly', value: '68.4 kWh', subKey: 'landing.demo.peakLoad', path: 'M0 32 L30 25 L60 28 L90 14 L120 18 L150 8 L180 12 L200 4' },
+  { id: 'daily',  labelKey: 'landing.demo.daily',  value: '412.8 kWh', subKey: 'landing.demo.averageDaily', path: 'M0 28 L30 22 L60 16 L90 20 L120 10 L150 14 L180 6 L200 8' },
+  { id: 'live',   labelKey: 'landing.demo.liveKw', value: '2.45 kW',   subKey: 'landing.demo.threePhase', path: 'M0 35 L30 30 L60 12 L90 26 L120 8 L150 22 L180 5 L200 12' },
 ] as const;
 
 const currentModeData = computed(() => {
@@ -62,38 +64,38 @@ function handleMouseLeave() {
     <div class="lp-hero-inner lp-hero-inner--showcase">
       <div class="lp-hero-copy lp-hero-copy--poster">
         <span class="lp-pill" v-reveal="150">
-          <span class="lp-pill-dot" /> Live across 5 Nasarawa sites
+          <span class="lp-pill-dot" /> {{ t('landing.hero.eyebrow') }}
         </span>
 
         <!-- Cinema clip-reveal title -->
-        <h1 class="lp-hero-title" aria-label="Smart power, partnered.">
+        <h1 class="lp-hero-title" :aria-label="`${t('landing.hero.titlePrimary')} ${t('landing.hero.titleAccent')}`">
           <span class="lp-title-clip">
-            <span class="lp-title-word lp-title-word--1">Smart power,</span>
+            <span class="lp-title-word lp-title-word--1">{{ t('landing.hero.titlePrimary') }}</span>
           </span>
           <span class="lp-title-clip lp-title-clip--grad">
             <span class="lp-title-word lp-title-word--2">
-              <span class="lp-grad lp-grad--live">partnered.</span>
+              <span class="lp-grad lp-grad--live">{{ t('landing.hero.titleAccent') }}</span>
             </span>
           </span>
         </h1>
 
         <p class="lp-hero-sub" v-reveal="380">
-          Your Smart Power Partner.
+          {{ t('landing.hero.subtitle') }}
         </p>
 
         <div class="lp-hero-cta" v-reveal="480">
           <button class="lp-btn lp-btn--primary lp-btn--lg" type="button" @click="$emit('launch')">
-            Get started free <IconSvg name="arrow" />
+            {{ t('landing.hero.customerCta') }} <IconSvg name="arrow" />
           </button>
           <a class="lp-btn lp-btn--glass lp-btn--lg" :href="PORTALS.vendor.login">
-            <IconSvg name="store" /> I'm a vendor
+            <IconSvg name="store" /> {{ t('landing.hero.vendorCta') }}
           </a>
         </div>
 
         <ul class="lp-hero-trust" v-reveal="600">
-          <li><IconSvg name="check" /> No setup fees</li>
-          <li><IconSvg name="check" /> Tokens in seconds</li>
-          <li><IconSvg name="check" /> Bank-grade security</li>
+          <li><IconSvg name="check" /> {{ t('landing.hero.trustOne') }}</li>
+          <li><IconSvg name="check" /> {{ t('landing.hero.trustTwo') }}</li>
+          <li><IconSvg name="check" /> {{ t('landing.hero.trustThree') }}</li>
         </ul>
       </div>
 
@@ -111,20 +113,20 @@ function handleMouseLeave() {
                   <span class="lp-bento-icon"><IconSvg name="bolt" /></span>
                   <span>Beverly Wallet</span>
                 </div>
-                <span class="lp-bento-badge"><span class="lp-pill-dot" /> Live</span>
+                <span class="lp-bento-badge"><span class="lp-pill-dot" /> {{ t('landing.demo.live') }}</span>
               </div>
               <div class="lp-bento-body">
-                <span class="lp-bento-label">Active balance</span>
+                <span class="lp-bento-label">{{ t('landing.demo.balance') }}</span>
                 <strong class="lp-bento-amount">₦24,500.00</strong>
-                <div class="lp-bento-sub">+₦5,000 top up completed</div>
+                <div class="lp-bento-sub">+₦5,000 · {{ t('landing.demo.funded') }}</div>
               </div>
             </div>
 
             <!-- Card 2: Instant 20-Digit STS Token Delivery -->
             <div class="lp-bento-card lp-bento-card--token lp-bento-float-2">
               <div class="lp-bento-head">
-                <span class="lp-bento-tag"><IconSvg name="check" /> Token Delivered</span>
-                <small><IconSvg name="clock" /> &lt;15s</small>
+                <span class="lp-bento-tag"><IconSvg name="check" /> {{ t('landing.demo.tokenReady') }}</span>
+                <small><IconSvg name="clock" /> {{ t('landing.demo.paymentConfirmed') }}</small>
               </div>
               <div class="lp-bento-token-code" aria-label="Token Code: 4829 1075 6634 2218 9051">
                 <span>4829</span>
@@ -140,9 +142,9 @@ function handleMouseLeave() {
                   @click="copyTokenCode"
                 >
                   <IconSvg :name="tokenCopied ? 'check' : 'copy'" />
-                  <span>{{ tokenCopied ? 'Copied to clipboard!' : 'Copy 20-digit token' }}</span>
+                  <span>{{ tokenCopied ? t('landing.demo.copied') : t('landing.demo.copyToken') }}</span>
                 </button>
-                <span class="lp-bento-receipt">Receipt saved</span>
+                <span class="lp-bento-receipt">{{ t('landing.demo.receiptSaved') }}</span>
               </div>
             </div>
 
@@ -150,7 +152,7 @@ function handleMouseLeave() {
             <div class="lp-bento-card lp-bento-card--meter lp-bento-float-3">
               <div class="lp-bento-meter-head">
                 <div>
-                  <span class="lp-bento-label">Connected Meter</span>
+                  <span class="lp-bento-label">{{ t('landing.demo.connectedMeter') }}</span>
                   <strong class="lp-bento-meter-id">4521 7790 233</strong>
                 </div>
                 <div class="lp-bento-mode-tabs" role="tablist">
@@ -161,17 +163,17 @@ function handleMouseLeave() {
                     :class="['lp-bento-tab', activeConsumptionMode === mode.id && 'lp-bento-tab--active']"
                     @click="activeConsumptionMode = mode.id"
                   >
-                    {{ mode.label }}
+                    {{ t(mode.labelKey) }}
                   </button>
                 </div>
               </div>
 
               <div class="lp-bento-consumption-active">
                 <div class="lp-bento-unit-display">
-                  <span class="lp-bento-label">Consumption usage</span>
+                  <span class="lp-bento-label">{{ t('landing.demo.consumption') }}</span>
                   <strong class="lp-bento-unit-val">{{ currentModeData.value }}</strong>
                 </div>
-                <span class="lp-bento-sub-metric">{{ currentModeData.sub }}</span>
+                <span class="lp-bento-sub-metric">{{ t(currentModeData.subKey) }}</span>
               </div>
 
               <div class="lp-bento-sparkline" aria-hidden="true">
@@ -202,7 +204,7 @@ function handleMouseLeave() {
     <div class="lp-stats" v-reveal>
       <div v-for="s in STATS" :key="s.label" class="lp-stat">
         <strong>{{ s.value }}</strong>
-        <span>{{ s.label }}</span>
+        <span>{{ t(s.label) }}</span>
       </div>
     </div>
   </section>

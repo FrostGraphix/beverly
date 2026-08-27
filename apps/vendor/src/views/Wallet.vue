@@ -4,6 +4,8 @@ import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { useWalletStore, type LedgerEntry } from '../stores/wallet';
 import { naira } from '../lib/format';
 import { downloadReceipt, ledgerReceipt, printReceipt, viewReceipt } from '../lib/receipts';
@@ -28,6 +30,14 @@ function printLedgerReceipt(entry: LedgerEntry) {
 
 function downloadLedgerReceipt(entry: LedgerEntry) {
     downloadReceipt(ledgerReceipt(entry));
+}
+
+function receiptActions(entry: LedgerEntry): ActionItem[] {
+    return [
+        { label: 'View receipt', icon: 'view', action: () => viewLedgerReceipt(entry) },
+        { label: 'Print receipt', icon: 'print', action: () => printLedgerReceipt(entry) },
+        { label: 'Download PDF', icon: 'download', action: () => downloadLedgerReceipt(entry) },
+    ];
 }
 
 function displayMemo(value: string | null) {
@@ -172,7 +182,7 @@ onMounted(async () => {
                 <th>Reference</th>
                 <th style="text-align:right">Amount</th>
                 <th style="text-align:right">Balance</th>
-                <th>Receipt</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -187,11 +197,7 @@ onMounted(async () => {
                 </td>
                 <td class="bw-money" style="text-align:right">{{ naira(e.balance_after_minor) }}</td>
                 <td>
-                  <div class="ledger-receipt-actions">
-                    <button type="button" class="bw-btn sm" @click="viewLedgerReceipt(e)">View</button>
-                    <button type="button" class="bw-btn sm" @click="printLedgerReceipt(e)">Print</button>
-                    <button type="button" class="bw-btn sm" @click="downloadLedgerReceipt(e)">Download</button>
-                  </div>
+                  <WalletRowActions :items="receiptActions(e)" :label="`Actions for ${e.entry_type.replace(/_/g, ' ')}`" />
                 </td>
               </tr>
               <tr v-if="!filteredLedger.length && !wallet.loading">
@@ -224,11 +230,7 @@ onMounted(async () => {
                 <span class="bw-tc-pair-val bw-muted">{{ displayMemo(e.memo) }}</span>
               </div>
             </div>
-            <div class="ledger-receipt-actions card-actions" aria-label="Ledger receipt actions">
-              <button type="button" class="bw-btn sm" @click="viewLedgerReceipt(e)">View receipt</button>
-              <button type="button" class="bw-btn sm" @click="printLedgerReceipt(e)">Print</button>
-              <button type="button" class="bw-btn sm" @click="downloadLedgerReceipt(e)">Download</button>
-            </div>
+            <div class="ledger-card-actions"><span class="bw-muted">Receipt actions</span><WalletRowActions :items="receiptActions(e)" :label="`Actions for ${e.entry_type.replace(/_/g, ' ')}`" align="right" /></div>
           </div>
           <div v-if="!filteredLedger.length && !wallet.loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">No entries matching filters.</div>
         </div>
@@ -328,6 +330,7 @@ onMounted(async () => {
   border-top: 1px dashed var(--border);
 }
 .ledger-receipt-actions.card-actions .bw-btn { justify-content: center; }
+.ledger-card-actions { display:flex; align-items:center; justify-content:space-between; padding-top:var(--s-2); border-top:1px dashed var(--border); }
 
 @media (max-width: 900px) {
   .wallet-stat-grid {

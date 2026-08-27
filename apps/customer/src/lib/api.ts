@@ -12,6 +12,7 @@ import {
     readCustomerTokenExpiresAt,
     storeCustomerToken,
 } from './auth-flow';
+import { getIntlLocale } from '@beverly/tokens/i18n.js';
 
 function normalizeBaseUrl(rawBase: unknown): string {
     const base = String(rawBase ?? '').trim().replace(/\/+$/, '');
@@ -164,6 +165,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const send = async () => {
             const headers: Record<string, string> = {
                 ...(init.headers as Record<string, string> ?? {}),
+                'Accept-Language': getIntlLocale(),
             };
             if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
             if (token) headers['Authorization'] = `Bearer ${token}`;

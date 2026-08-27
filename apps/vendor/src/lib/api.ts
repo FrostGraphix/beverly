@@ -1,3 +1,5 @@
+import { getIntlLocale } from '@beverly/tokens/i18n.js';
+
 function normalizeBaseUrl(rawBase: unknown): string {
     const base = String(rawBase ?? '').trim().replace(/\/+$/, '');
     if (!base) return '';
@@ -185,6 +187,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
         const send = async () => {
         const headers: Record<string, string> = {
             ...(init.headers as Record<string, string> ?? {}),
+            'Accept-Language': getIntlLocale(),
         };
         if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
         if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -227,6 +230,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
 export const api = {
     get:   <T>(path: string) => request<T>('GET', path),
     post:  <T>(path: string, body?: unknown, init?: RequestInit) => request<T>('POST', path, body, init),
+    put:   <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
     patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
     del:   <T>(path: string) => request<T>('DELETE', path),
 };

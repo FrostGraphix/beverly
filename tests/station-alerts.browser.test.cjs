@@ -44,6 +44,15 @@ async function main() {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("https://fonts.googleapis.com/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "text/css",
+    body: "",
+  }));
+  await page.route("https://fonts.gstatic.com/**", (route) => route.fulfill({
+    status: 204,
+    body: "",
+  }));
   await page.route("**/api/**", async (route) => {
     const url = route.request().url().toLowerCase();
     let data = { data: [], total: 0 };
@@ -112,7 +121,7 @@ async function main() {
 
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
-    await page.goto(base, { waitUntil: "load" });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.fill('[data-testid="login-user-id"]', "admin");
     await page.fill('[data-testid="login-password"]', "admin");
     await page.click('[data-testid="login-submit"]');

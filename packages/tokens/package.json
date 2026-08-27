@@ -30,13 +30,21 @@
     "WalletRowActions.vue.d.ts",
     "PwaUpdateToast.vue",
     "PwaUpdateToast.vue.d.ts",
+    "LanguageSwitcher.vue",
+    "LanguageSwitcher.vue.d.ts",
+    "i18n.js",
+    "i18n.d.ts",
     "push-notifications.ts",
     "index.js",
     "index.d.ts",
     "pwaInstall.js"
   ],
   "exports": {
-    ".": "./index.js",
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    },
     "./tokens.css": "./tokens.css",
     "./theme.css": "./theme.css",
     "./wallet.css": "./wallet.css",
@@ -79,6 +87,15 @@
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",
       "import": "./PwaUpdateToast.vue"
+    },
+    "./LanguageSwitcher.vue": {
+      "types": "./LanguageSwitcher.vue.d.ts",
+      "import": "./LanguageSwitcher.vue"
+    },
+    "./i18n.js": {
+      "types": "./i18n.d.ts",
+      "import": "./i18n.js",
+      "default": "./i18n.js"
     },
     "./push-notifications": {
       "types": "./push-notifications.ts",

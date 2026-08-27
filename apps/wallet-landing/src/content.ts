@@ -33,35 +33,35 @@ export interface PortalDef {
 export const PORTAL_CARDS: PortalDef[] = [
     {
         key: 'customer',
-        eyebrow: 'For households & businesses',
-        title: 'I want to buy electricity',
-        tagline: 'Your Smart Power Partner.',
+        eyebrow: 'landing.portal.customer.eyebrow',
+        title: 'landing.portal.customer.title',
+        tagline: 'landing.portal.tagline',
         bullets: [
-            { icon: 'bolt', text: 'Instant token delivery — paste into any meter' },
-            { icon: 'wallet', text: 'Fund a wallet once, buy in one tap' },
-            { icon: 'shield', text: 'Receipts & history saved automatically' },
-            { icon: 'download', text: 'Installable — add it to your home screen like an app' },
+            { icon: 'bolt', text: 'landing.portal.customer.bullet1' },
+            { icon: 'wallet', text: 'landing.portal.customer.bullet2' },
+            { icon: 'shield', text: 'landing.portal.customer.bullet3' },
+            { icon: 'download', text: 'landing.portal.installable' },
         ],
-        primaryLabel: 'Create free account',
+        primaryLabel: 'landing.portal.customer.primary',
         primaryHref: PORTALS.customer.signup,
-        secondaryLabel: 'Sign in',
+        secondaryLabel: 'common.signIn',
         secondaryHref: PORTALS.customer.login,
         accent: 'brand',
     },
     {
         key: 'vendor',
-        eyebrow: 'For agents & resellers',
-        title: 'I want to sell electricity',
-        tagline: 'Your Smart Power Partner.',
+        eyebrow: 'landing.portal.vendor.eyebrow',
+        title: 'landing.portal.vendor.title',
+        tagline: 'landing.portal.tagline',
         bullets: [
-            { icon: 'store', text: 'Vend to any customer, any disco, instantly' },
-            { icon: 'chart', text: 'Live float balance & daily statements' },
-            { icon: 'send', text: 'Remote-send tokens by SMS or print' },
-            { icon: 'download', text: 'Installable — add it to your home screen like an app' },
+            { icon: 'store', text: 'landing.portal.vendor.bullet1' },
+            { icon: 'chart', text: 'landing.portal.vendor.bullet2' },
+            { icon: 'send', text: 'landing.portal.vendor.bullet3' },
+            { icon: 'download', text: 'landing.portal.installable' },
         ],
-        primaryLabel: 'Open vendor portal',
+        primaryLabel: 'landing.hero.vendorCta',
         primaryHref: PORTALS.vendor.login,
-        secondaryLabel: 'Talk to sales',
+        secondaryLabel: 'landing.portal.vendor.secondary',
         secondaryHref: 'mailto:wallet@acoblighting.com?subject=Becoming%20a%20Beverly%20vendor',
         accent: 'violet',
     },
@@ -73,14 +73,11 @@ export interface Feature {
     body: string;
 }
 
-export const FEATURES: Feature[] = [
-    { icon: 'bolt', title: 'Tokens in seconds', body: 'Pay and receive your 20-digit token immediately — no queues, no agents, no waiting for a callback.' },
-    { icon: 'wallet', title: 'One wallet, every meter', body: 'Save your meters once. Fund your balance and buy power for home, shop, or family in a single tap.' },
-    { icon: 'shield', title: 'Bank-grade security', body: 'PCI-compliant payments, encrypted at rest, with MFA and session protection on every account.' },
-    { icon: 'receipt', title: 'Receipts that stay', body: 'Every purchase is stored with a downloadable receipt. Reconcile spend across months effortlessly.' },
-    { icon: 'chart', title: 'Real-time insight', body: 'See consumption trends, vending volume, and float health update live as money moves.' },
-    { icon: 'send', title: 'Remote delivery', body: "Vendors deliver tokens straight to a customer's phone by SMS, or print at the counter." },
-];
+export const FEATURES: Feature[] = Array.from({ length: 6 }, (_, index) => ({
+    icon: ['bolt', 'wallet', 'shield', 'receipt', 'chart', 'send'][index],
+    title: `landing.feature.${index + 1}.title`,
+    body: `landing.feature.${index + 1}.body`,
+}));
 
 export interface Step {
     n: string;
@@ -88,17 +85,13 @@ export interface Step {
     body: string;
 }
 
-export const CUSTOMER_STEPS: Step[] = [
-    { n: '01', title: 'Create your account', body: 'Sign up with your phone or email in under a minute. No paperwork to start.' },
-    { n: '02', title: 'Add your meter', body: 'Enter your meter number once. Beverly remembers it for every future top-up.' },
-    { n: '03', title: 'Buy & power up', body: "Pay with card or wallet balance and get your token instantly. Type it in and you're lit." },
-];
+export const CUSTOMER_STEPS: Step[] = Array.from({ length: 3 }, (_, index) => ({
+    n: `0${index + 1}`, title: `landing.how.customer.${index + 1}.title`, body: `landing.how.customer.${index + 1}.body`,
+}));
 
-export const VENDOR_STEPS: Step[] = [
-    { n: '01', title: 'Get onboarded', body: 'Our team activates your vendor account and float wallet, ready to trade.' },
-    { n: '02', title: 'Fund your float', body: 'Top up your float balance securely. Your buying power updates in real time.' },
-    { n: '03', title: 'Vend & settle', body: 'Sell to any customer on any disco. Settlement and statements are automatic.' },
-];
+export const VENDOR_STEPS: Step[] = Array.from({ length: 3 }, (_, index) => ({
+    n: `0${index + 1}`, title: `landing.how.vendor.${index + 1}.title`, body: `landing.how.vendor.${index + 1}.body`,
+}));
 
 export interface Stat {
     value: string;
@@ -106,10 +99,10 @@ export interface Stat {
 }
 
 export const STATS: Stat[] = [
-    { value: '72K+', label: 'Tokens vended' },
-    { value: '45K+', label: 'Active wallets' },
-    { value: '99.9%', label: 'Platform uptime' },
-    { value: '500+', label: 'Vendor agents' },
+    { value: 'Live', label: 'landing.stats.sites' },
+    { value: '4', label: 'landing.stats.languages' },
+    { value: '2', label: 'landing.stats.portals' },
+    { value: '1', label: 'landing.stats.wallet' },
 ];
 
 export interface Testimonial {
@@ -120,60 +113,14 @@ export interface Testimonial {
     rating: number;
 }
 
-export const TESTIMONIALS: Testimonial[] = [
-    {
-        name: 'Adaeze Okafor',
-        role: 'Household customer, Lagos',
-        avatar: 'AO',
-        body: 'I used to queue at the vendor shop every week. Now I top up my meter from bed at midnight. Token arrives in seconds — Beverly changed everything for me.',
-        rating: 5,
-    },
-    {
-        name: 'Emeka Nwosu',
-        role: 'Electricity vendor, Enugu',
-        avatar: 'EN',
-        body: 'My float balance is always visible. I can vend remotely and my customers get tokens on their phones instantly. My business has grown 3x since I joined Beverly.',
-        rating: 5,
-    },
-    {
-        name: 'Fatima Aliyu',
-        role: 'Shop owner, Abuja',
-        avatar: 'FA',
-        body: 'The receipt history is incredible for my bookkeeping. I track every unit I buy for my shop and home in one place. Customer service is responsive too.',
-        rating: 5,
-    },
-    {
-        name: 'Chukwudi Eze',
-        role: 'Vendor agent, Port Harcourt',
-        avatar: 'CE',
-        body: 'Real-time float balance and daily settlement reports — Beverly gives me the same tools as a big company. Easy to use, never had a failed transaction.',
-        rating: 5,
-    },
-    {
-        name: 'Ngozi Obi',
-        role: 'Customer, Rivers State',
-        avatar: 'NO',
-        body: 'Never had to worry about power at night again. Beverly remembers my meters, I just tap Buy and the token is there. Fast, reliable, and safe.',
-        rating: 5,
-    },
-    {
-        name: 'Ibrahim Suleiman',
-        role: 'Estate manager, Kano',
-        avatar: 'IS',
-        body: 'I manage 12 meters across two properties. Beverly lets me top them all up from one wallet. Massive time saver and the reports are perfect for audits.',
-        rating: 5,
-    },
-];
+export const TESTIMONIALS: Testimonial[] = [];
 
 export const PARTNER_LOGOS = [
-    { name: 'EKEDC', abbr: 'EKEDC' },
-    { name: 'IKEDC', abbr: 'IKEDC' },
-    { name: 'AEDC', abbr: 'AEDC' },
-    { name: 'PHEDC', abbr: 'PHEDC' },
-    { name: 'EEDC', abbr: 'EEDC' },
-    { name: 'KEDCO', abbr: 'KEDCO' },
-    { name: 'BEDC', abbr: 'BEDC' },
-    { name: 'KAEDCO', abbr: 'KAEDCO' },
+    { name: 'Musha', abbr: 'MUSHA' },
+    { name: 'Kyakale', abbr: 'KYAKALE' },
+    { name: 'Umaisha', abbr: 'UMAISHA' },
+    { name: 'Tunga', abbr: 'TUNGA' },
+    { name: 'Ogufa', abbr: 'OGUFA' },
 ];
 
 /* ── Distribution companies ── */
@@ -196,45 +143,6 @@ export interface Faq {
     a: string;
 }
 
-export const FAQS: Faq[] = [
-    {
-        q: "Is Beverly Wallet free to use?",
-        a: "Creating an account and storing your meters is completely free. You only pay for the electricity tokens you buy — no subscriptions, no hidden charges.",
-    },
-    {
-        q: "How fast do I get my token?",
-        a: "Tokens are delivered the moment your payment is confirmed — typically in under 15 seconds. Your token appears on screen and is saved to your receipts automatically.",
-    },
-    {
-        q: 'Which meters and sites are supported?',
-        a: 'Beverly works with prepaid meters across our five supported sites: Musha, Kyakale, Umaisha, Tunga, and Ogufa. Enter your meter number and we route it to the right site automatically.',
-    },
-    {
-        q: 'How do I become a vendor?',
-        a: 'Open the vendor portal to request access, or email wallet@acoblighting.com. Once onboarded you receive a float wallet and vendor credentials, and can start vending immediately.',
-    },
-    {
-        q: 'Is my money and data safe?',
-        a: 'Payments run through PCI-compliant providers, all data is encrypted at rest and in transit, and every account supports multi-factor authentication for extra protection.',
-    },
-    {
-        q: 'Can I save multiple meters?',
-        a: 'Yes — save as many meters as you need under one account. Name them (Home, Office, Shop) and top up any of them with a single tap whenever you need power.',
-    },
-    {
-        q: 'What happens if I enter the wrong meter number?',
-        a: 'Meter numbers are validated against the disco system before any token is generated. If a number is not found or invalid, the transaction is declined and you are not charged.',
-    },
-    {
-        q: 'How do vendors manage their float?',
-        a: 'Vendor float is funded via bank transfer or payment gateway. Your balance updates in real time and you can top it up, check balances, or download daily statements anytime from the vendor portal.',
-    },
-    {
-        q: 'Can tokens be delivered by SMS?',
-        a: 'Yes — vendors can send tokens directly to a customer\'s phone number by SMS, or print a receipt at the counter. Customers also see their token on screen the moment it is generated.',
-    },
-    {
-        q: 'What if my token does not work on the meter?',
-        a: 'Contact Beverly support with your transaction receipt and meter number. We will investigate with the energy backend and arrange a replacement or refund within one business day.',
-    },
-];
+export const FAQS: Faq[] = Array.from({ length: 10 }, (_, index) => ({
+    q: `landing.faq.${index + 1}.q`, a: `landing.faq.${index + 1}.a`,
+}));

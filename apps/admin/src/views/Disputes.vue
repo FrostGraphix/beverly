@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { api, naira, shortDate } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 
 type DisputeStatus = 'open' | 'under_review' | 'resolved' | 'rejected' | 'refund_issued';
 
@@ -58,6 +59,8 @@ const error = ref('');
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const statusFilter = ref<'' | DisputeStatus>('');
 const search = ref('');
+const currentPage = ref(1);
+const pageSize = ref(10);
 
 const selected = ref<DisputeRow | null>(null);
 const detail = ref<DisputeDetail | null>(null);
@@ -87,6 +90,10 @@ const summary = computed(() => ({
   resolved: disputes.value.filter((d) => d.status === 'resolved' || d.status === 'refund_issued').length,
   rejected: disputes.value.filter((d) => d.status === 'rejected').length,
 }));
+const pagedDisputes = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredDisputes.value.slice(start, start + pageSize.value);
+});
 
 const canSave = computed(() =>
   !saving.value && Boolean(newStatus.value || replyText.value.trim() || resolutionNote.value.trim()),
@@ -99,6 +106,7 @@ async function load() {
     const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
     const res = await api.get<{ disputes?: DisputeRow[] }>(`/api/v1/admin/disputes${params}`);
     disputes.value = res.disputes ?? [];
+    currentPage.value = 1;
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load disputes.';
   } finally {
@@ -199,22 +207,22 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
       </div>
     </transition>
 
-    <section class="dispute-stat-grid bw-mobile-kpi-grid" aria-label="Dispute summary">
-      <div class="dispute-stat">
-        <span class="stat-label">Active</span>
-        <strong>{{ summary.open }}</strong>
-        <span>open or review</span>
-      </div>
-      <div class="dispute-stat">
-        <span class="stat-label">Resolved</span>
-        <strong>{{ summary.resolved }}</strong>
-        <span>closed cleanly</span>
-      </div>
-      <div class="dispute-stat">
-        <span class="stat-label">Rejected</span>
-        <strong>{{ summary.rejected }}</strong>
-        <span>not approved</span>
-      </div>
+    <section class="bw-kpi-grid bw-mobile-kpi-grid dispute-stat-grid" aria-label="Dispute summary">
+      <article class="bw-kpi featured">
+        <span class="bw-kpi-label">Active</span>
+        <strong class="bw-kpi-value">{{ summary.open }}</strong>
+        <span class="bw-kpi-note">open or review</span>
+      </article>
+      <article class="bw-kpi info-tone">
+        <span class="bw-kpi-label">Resolved</span>
+        <strong class="bw-kpi-value">{{ summary.resolved }}</strong>
+        <span class="bw-kpi-note">closed cleanly</span>
+      </article>
+      <article class="bw-kpi danger-tone">
+        <span class="bw-kpi-label">Rejected</span>
+        <strong class="bw-kpi-value">{{ summary.rejected }}</strong>
+        <span class="bw-kpi-note">not approved</span>
+      </article>
     </section>
 
     <section class="bw-card dispute-controls">
@@ -257,7 +265,7 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
               </tr>
             </thead>
             <tbody>
-              <tr v-for="d in filteredDisputes" :key="d.id">
+              <tr v-for="d in pagedDisputes" :key="d.id">
                 <td class="bw-mono bw-text-sm">{{ refLabel(d) }}</td>
                 <td>
                   <strong class="row-main">{{ d.subject || 'No subject' }}</strong>
@@ -298,7 +306,7 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             <strong>No disputes found.</strong>
             <span>New cases will appear here.</span>
           </div>
-          <article v-for="d in filteredDisputes" :key="d.id" class="bw-tc dispute-card">
+          <article v-for="d in pagedDisputes" :key="d.id" class="bw-tc dispute-card">
             <div class="bw-tc-head">
               <div>
                 <span class="bw-mono bw-tc-ref">{{ refLabel(d) }}</span>
@@ -319,6 +327,12 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             </div>
           </article>
         </div>
+        <WalletTablePagination
+          v-model:page="currentPage"
+          v-model:pageSize="pageSize"
+          :total-items="filteredDisputes.length"
+          item-label="disputes"
+        />
       </template>
     </section>
 

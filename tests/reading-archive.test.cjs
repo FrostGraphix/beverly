@@ -18,6 +18,20 @@ process.env.ARCHIVE_GRACE_DAYS = "35";
 
 const archive = require("../backend/src/services/reading-archive-service");
 
+// ── 0. Catalogue pagination/filter validation ───────────────────────────────
+{
+  assert.deepStrictEqual(
+    archive.normalizeListFilters({ page: "2", pageSize: "50", year: "2026", month: "8", reportType: "payments", granularity: "yearly" }),
+    { page: 2, pageSize: 50, offset: 50, year: 2026, month: 8, reportType: "payments", granularity: "yearly", stationId: "", oemId: "" }
+  );
+  assert.strictEqual(archive.normalizeListFilters({ page: -4, pageSize: 25 }).page, 1);
+  assert.strictEqual(archive.normalizeListFilters({ page: -4, pageSize: 25 }).pageSize, 10, "unsupported page sizes must fail closed to 10");
+  assert.strictEqual(archive.parseContentRangeTotal("0-9/117", 10), 117);
+  assert.strictEqual(archive.parseContentRangeTotal("*/*", 7), 7);
+  assert.throws(() => archive.normalizeListFilters({ reportType: "secrets" }), /report type/i);
+  assert.throws(() => archive.normalizeListFilters({ month: 13 }), /month/i);
+}
+
 // ── 1. Archived column set ──────────────────────────────────────────────────
 {
   const columns = archive.ARCHIVE_COLUMNS;

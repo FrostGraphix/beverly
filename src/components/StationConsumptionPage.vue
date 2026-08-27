@@ -110,8 +110,8 @@
     </div>
 
     <!-- ════════════════════════════════════════════════ KPI CARDS ═══ -->
-    <div class="scc-kpis">
-      <div v-for="k in kpiCards" :key="k.label" class="scc-kpi" :class="k.accent && `scc-kpi--${k.accent}`">
+    <div class="scc-kpis" role="list" aria-label="Station consumption indicators">
+      <article v-for="k in kpiCards" :key="k.label" class="scc-kpi" :class="k.accent && `scc-kpi--${k.accent}`" role="listitem" :aria-label="`${k.label}: ${k.value}`">
         <div class="scc-kpi-head">
           <span class="scc-kpi-label">{{ k.label }}</span>
           <span v-if="k.icon" class="scc-kpi-icon" v-html="k.icon" />
@@ -120,7 +120,7 @@
         <small v-if="k.money" :class="['scc-kpi-money', k.moneyUnavailable && 'scc-kpi-money--unavailable']">{{ k.money }}</small>
         <small v-if="k.sub" :class="['scc-kpi-sub', k.tone && `scc-tone--${k.tone}`]">{{ k.sub }}</small>
         <div v-if="loading" class="scc-shimmer" />
-      </div>
+      </article>
     </div>
 
     <div v-if="data" class="scc-valuation" role="status" aria-live="polite">
@@ -607,16 +607,23 @@ export default {
       const top = this.data?.stations?.[0];
       const customerCount = Number(t?.customerCount) || 0;
       const stationCount = Number(t?.stationCount) || 0;
+      const meterCount = Number(t?.meterCount) || 0;
+      const metersWithLatest = Number(t?.metersWithLatest) || 0;
+      const hasMeterRead = t?.latestOdometerKwh !== null && t?.latestOdometerKwh !== undefined;
+      const meterReadAsOf = t?.meterReadAsOf || this.data?.range?.to || "unknown date";
+      const calendarDays = Number(t?.calendarDays || this.data?.range?.periodDays) || 0;
+      const readingPeriods = Number(t?.readingPeriods ?? t?.readingDays) || 0;
+      const money = (divisor = 1) => this.consumptionValue.complete ? this.moneyEquivalent(divisor) : "";
       return [
-        { label: "Meter Read Total",   value: t ? `${this.fmt(t.latestOdometerKwh)} kWh` : "—", sub: t ? `${this.fmt(t.metersWithLatest, 0)} latest meter reads` : "",       tone: "", accent: "primary" },
-        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—", money: t ? this.moneyEquivalent() : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? this.growthLabel(t.growthPct) + " vs prior" : "", tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
+        { label: "Meter Read Total",   value: t && hasMeterRead ? `${this.fmt(t.latestOdometerKwh)} kWh` : "Unavailable", sub: t ? `${this.fmt(metersWithLatest, 0)} of ${this.fmt(meterCount, 0)} meters · as of ${meterReadAsOf}` : "", tone: t?.meterReadComplete ? "" : "warning", accent: "primary" },
+        { label: "Delta Consumption",  value: t ? `${this.fmt(t.consumedKwh)} kWh` : "—", money: t ? money() : "", sub: t ? this.growthLabel(t.growthPct) + " vs prior period" : "", tone: t ? this.growthTone(t.growthPct) : "", accent: "" },
         { label: "Active Meters",      value: t ? this.fmt(t.activeMeterCount, 0) : "—",         sub: t ? `of ${this.fmt(t.meterCount, 0)} seen` : "",                        tone: "", accent: "" },
-        { label: "Avg / Customer",     value: t && customerCount ? `${this.fmt(t.consumedKwh / customerCount)} kWh` : "—", money: t && customerCount ? this.moneyEquivalent(customerCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: customerCount ? `${this.fmt(customerCount, 0)} customers` : "No customers", tone: "", accent: "" },
-        { label: "Avg / Station",      value: t && stationCount ? `${this.fmt(t.consumedKwh / stationCount)} kWh` : "—", money: t && stationCount ? this.moneyEquivalent(stationCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: stationCount ? `${this.fmt(stationCount, 0)} reporting stations` : "No stations", tone: "", accent: "" },
-        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—", money: t && t.meterCount ? this.moneyEquivalent(t.meterCount) : "", moneyUnavailable: !this.consumptionValue.complete, sub: "in period", tone: "", accent: "" },
-        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—", money: t && t.readingDays ? this.moneyEquivalent(t.readingDays) : "", moneyUnavailable: !this.consumptionValue.complete, sub: t ? `${t.readingDays} reading periods` : "", tone: "", accent: "" },
+        { label: "Avg / Customer",     value: t && customerCount ? `${this.fmt(t.consumedKwh / customerCount)} kWh` : "—", money: t && customerCount ? money(customerCount) : "", sub: customerCount ? `${this.fmt(customerCount, 0)} customers` : "No customers", tone: "", accent: "" },
+        { label: "Avg / Station",      value: t && stationCount ? `${this.fmt(t.consumedKwh / stationCount)} kWh` : "—", money: t && stationCount ? money(stationCount) : "", sub: stationCount ? `${this.fmt(stationCount, 0)} reporting stations` : "No stations", tone: "", accent: "" },
+        { label: "Avg / Meter",        value: t ? `${this.fmt(t.avgPerMeter)} kWh` : "—", money: t && meterCount ? money(meterCount) : "", sub: "in selected period", tone: "", accent: "" },
+        { label: "Avg Daily Load",     value: t ? `${this.fmt(t.avgDailyKwh)} kWh` : "—", money: t && calendarDays ? money(calendarDays) : "", sub: t ? `${calendarDays} calendar day${calendarDays === 1 ? "" : "s"}` : "", tone: "", accent: "" },
         { label: "Top Station",        value: top ? top.station : "—",                      sub: top ? `${top.share}% of total load` : "",                               tone: "", accent: "" },
-        { label: "Stations Reporting", value: t ? this.fmt(t.stationCount, 0) : "—",        sub: t ? `${t.readingDays} period${t.readingDays !== 1 ? "s" : ""} of data` : "", tone: "", accent: "" },
+        { label: "Stations Reporting", value: t ? this.fmt(t.stationCount, 0) : "—",        sub: t ? `${readingPeriods} load period${readingPeriods === 1 ? "" : "s"}` : "", tone: "", accent: "" },
       ];
     },
 
@@ -825,7 +832,7 @@ export default {
     },
 
     moneyEquivalent(divisor = 1) {
-      if (!this.consumptionValue.complete) return "Tariff value unavailable";
+      if (!this.consumptionValue.complete) return "";
       return `${this.fmtNgn(this.consumptionValue.valueNgn / Math.max(1, Number(divisor) || 1))} equivalent`;
     },
 
@@ -1324,7 +1331,7 @@ export default {
 .scc-kpi:hover { box-shadow: 0 3px 12px rgba(0,0,0,.08); }
 .scc-kpi--primary { border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
 .scc-kpi-head { display: flex; justify-content: space-between; align-items: center; }
-.scc-kpi-label { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+.scc-kpi-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
 .scc-kpi-value { font-size: 18px; font-weight: 800; color: var(--text-main); letter-spacing: -0.025em; line-height: 1.1; }
 .scc-kpi-money { font-size: 10.5px; color: var(--primary); font-weight: 800; letter-spacing: -.01em; }
 .scc-kpi-money--unavailable { color: var(--text-faint); font-weight: 600; }
@@ -1352,6 +1359,7 @@ export default {
 .scc-tone--down    { color: var(--danger,  #ef4444); }
 .scc-tone--neutral { color: var(--text-faint); }
 .scc-tone--dim     { color: var(--text-faint); }
+.scc-tone--warning { color: var(--warning, #b45309); }
 .scc-shimmer {
   position: absolute; inset: 0;
   background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--text-main) 9%, transparent) 50%, transparent 100%);
@@ -1806,7 +1814,7 @@ export default {
 @media (max-width: 400px) {
   .scc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scc-kpi { min-width: 0; }
-  .scc-kpi-value { font-size: 14px; overflow-wrap: anywhere; }
+  .scc-kpi-value { font-size: 16px; overflow-wrap: anywhere; }
   .scc-hero-actions .scc-hbtn:not(.scc-hbtn--primary) { display: none; }
   .scc-daterange { gap: 4px; }
   .scc-date-sep { font-size: 10px; }

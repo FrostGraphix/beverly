@@ -15,6 +15,7 @@ import {
 } from './token-engine.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet } from './wallets.js';
 import { logAction } from './audit.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 import { ledgerKey, hashIdempotency } from './idempotency.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { sendSms } from '../adapters/twilio.js';
@@ -833,6 +834,17 @@ export async function linkMeter(customerId: string, customerUserId: string, mete
         before: existing ? { status: existing.status } : undefined,
         after: { meterId, meterType, stationId: meter.stationId, status: 'pending', resubmitted: Boolean(existing) },
     });
+
+    await notifyOperationalStaff({
+        permission: 'wallet.meters.approve',
+        type: 'meter_approval',
+        title: existing ? 'Meter approval resubmitted' : 'Meter approval requested',
+        body: `${meterId} requires ownership review.`,
+        path: '/meter-approvals',
+        dedupeKey: `meter.link.${(data as { id: string }).id}.${existing ? 'resubmitted' : 'created'}`,
+        stationId: meter.stationId,
+        metadata: { customerMeterId: (data as { id: string }).id, meterId, customerId },
+    }).catch(() => undefined);
 
     return { ...(data as Record<string, unknown>), resubmitted: Boolean(existing) };
 }

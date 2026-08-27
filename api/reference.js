@@ -543,6 +543,24 @@ function stationFromPayload(payload) {
   return String(value || "").trim();
 }
 
+function archiveStationScope(request) {
+  const actor = request?.__auth || {};
+  const role = String(actor.roleId || "").trim().toLowerCase();
+  if (["super-admin", "admin", "administrator"].includes(role)) return "";
+  return String(actor.stationId || "").trim();
+}
+
+function stationAnalyticsRequestScope(request, payload = {}) {
+  const actor = request?.__auth || {};
+  const role = String(actor.roleId || "").trim().toLowerCase();
+  if (!role || ["super-admin", "admin", "administrator"].includes(role)) {
+    return { ...payload };
+  }
+  const stationId = String(actor.stationId || "").trim();
+  if (!stationId) return null;
+  return { ...payload, stationId, stationIds: [stationId] };
+}
+
 function protectedPath(pathname, method = "GET") {
   const lowerPath = String(pathname || "").toLowerCase();
   if (!lowerPath.startsWith("/api/")) return false;
@@ -2712,6 +2730,7 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       dryRun: String(query.dryRun || "") === "true",
       log: (message) => console.log(`[cron:archive-readings] ${message}`)
     });
+    if (!summary.ok) return { status: 503, body: summary };
     return localJobResponse(summary);
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/cron/governance-daily") {
@@ -2943,11 +2962,11 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ stations, count: stations.length });
   }
   if (pathname === "/api/local/consumption/station-analytics") {
+    const scopedPayload = stationAnalyticsRequestScope(request, requestData.parsedBody);
+    if (!scopedPayload) return authFailure(403, pathname, "Station assignment required");
+    if (!scopedPayload.stationId) scopedPayload.stationIds = await fetchLiveStationIds(request);
     return readStationConsumptionAnalytics({
-      requestPayload: {
-        ...requestData.parsedBody,
-        stationIds: await fetchLiveStationIds(request),
-      },
+      requestPayload: scopedPayload,
     });
   }
   if (pathname === "/api/local/consumption/meter-analysis") {
@@ -2961,7 +2980,9 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   // than streaming bytes through the function.
   if (pathname === "/api/local/archive/reports/summary") {
     try {
-      return localJobResponse(await archiveReportsSummary());
+      return localJobResponse(await archiveReportsSummary({
+        stationId: archiveStationScope(request) || null
+      }));
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
     }
@@ -2970,14 +2991,16 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     try {
       const query = cronQuery(request.url);
       const payload = requestData.parsedBody || {};
+      const stationScope = archiveStationScope(request);
       return localJobResponse(await listArchiveReports({
-        stationId: payload.stationId || query.stationId || null,
+        stationId: stationScope || payload.stationId || query.stationId || null,
         reportType: payload.reportType || query.reportType || null,
         granularity: payload.granularity || query.granularity || null,
         oemId: payload.oemId || query.oemId || null,
         year: payload.year || query.year || null,
         month: payload.month || query.month || null,
-        limit: payload.limit || query.limit || 200
+        page: payload.page || query.page || 1,
+        pageSize: payload.pageSize || query.pageSize || 10
       }));
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
@@ -2988,8 +3011,12 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const reportId = String((requestData.parsedBody || {}).id || query.id || "");
     if (!reportId) return { status: 400, body: { ok: false, error: "id is required" } };
     try {
-      const result = await archiveSignedDownloadUrl(reportId);
-      if (!result.ok) return { status: 404, body: result };
+      const result = await archiveSignedDownloadUrl(reportId, {
+        stationScope: archiveStationScope(request) || null
+      });
+      if (!result.ok) {
+        return { status: /invalid archive report id/i.test(String(result.reason || "")) ? 400 : 404, body: result };
+      }
       return localJobResponse(result);
     } catch (err) {
       return { status: 500, body: { ok: false, error: String(err?.message || err) } };
@@ -5633,6 +5660,7 @@ module.exports._test = {
   readCrmSession,
   crmSessionStatus,
   refreshTargets,
+  stationAnalyticsRequestScope,
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;

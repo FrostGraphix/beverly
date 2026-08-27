@@ -1,3 +1,5 @@
+import { getIntlLocale } from '@beverly/tokens/i18n.js';
+
 function normalizeBaseUrl(rawBase: unknown): string {
     const base = String(rawBase ?? '').trim().replace(/\/+$/, '');
     if (!base) return '';
@@ -96,6 +98,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
     const hasBody = body !== undefined;
     const headers: Record<string, string> = {
         ...(init.headers as Record<string, string> ?? {}),
+        'Accept-Language': getIntlLocale(),
     };
     if (hasBody) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
     const token = getToken();

@@ -7,6 +7,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyDisputeUpdate } from './notifications.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 
 export class SupportError extends Error {
     constructor(message: string, public code: string) {
@@ -176,6 +177,16 @@ export async function createTicket(input: {
         body: input.description,
     });
 
+    await notifyOperationalStaff({
+        permission: 'wallet.support.manage',
+        type: 'support_ticket',
+        title: 'New support ticket',
+        body: `${(data as any).reference}: ${input.subject}`,
+        path: `/support?tab=tickets&ticket=${ticketId}`,
+        dedupeKey: `support.ticket.${ticketId}`,
+        metadata: { ticketId, reference: (data as any).reference, priority: input.priority ?? 'normal' },
+    }).catch(() => undefined);
+
     return { id: ticketId, reference: (data as any).reference };
 }
 
@@ -187,14 +198,14 @@ export async function addTicketMessage(input: {
     body: string;
     isInternal?: boolean;
 }): Promise<void> {
-    const { error } = await adminClient.from('support_ticket_messages').insert({
+    const { data: message, error } = await adminClient.from('support_ticket_messages').insert({
         ticket_id: input.ticketId,
         sender_actor_type: input.senderActorType,
         sender_actor_id: input.senderActorId ?? null,
         sender_name: input.senderName ?? null,
         body: input.body,
         is_internal: input.isInternal ?? false,
-    });
+    }).select('id').single();
     if (error) throw new SupportError('Could not post message', 'db_error');
 
     if (!input.isInternal) {
@@ -216,6 +227,16 @@ export async function addTicketMessage(input: {
                     message: `Support replied to ${(t as any).reference}`,
                 }).catch(() => undefined);
             }
+        } else if (input.senderActorType === 'customer' || input.senderActorType === 'vendor') {
+            await notifyOperationalStaff({
+                permission: 'wallet.support.manage',
+                type: 'support_ticket_reply',
+                title: 'New support reply',
+                body: 'A customer or vendor replied.',
+                path: `/support?tab=tickets&ticket=${input.ticketId}`,
+                dedupeKey: `support.ticket.message.${(message as any).id}`,
+                metadata: { ticketId: input.ticketId, messageId: (message as any).id },
+            }).catch(() => undefined);
         }
     }
 }
@@ -359,6 +380,15 @@ export async function getOrCreateChatSession(input: {
         body: CHAT_GREETING,
         kind: 'bot',
     });
+    await notifyOperationalStaff({
+        permission: 'wallet.support.manage',
+        type: 'support_chat',
+        title: 'New support chat',
+        body: `${input.displayName ?? 'A customer'} started a chat.`,
+        path: `/support?tab=chat&session=${sessionId}`,
+        dedupeKey: `support.chat.${sessionId}`,
+        metadata: { sessionId },
+    }).catch(() => undefined);
     return { id: sessionId, created: true };
 }
 
@@ -370,14 +400,14 @@ export async function sendChatMessage(input: {
     body: string;
     kind?: string;
 }): Promise<void> {
-    const { error } = await adminClient.from('support_chat_messages').insert({
+    const { data: message, error } = await adminClient.from('support_chat_messages').insert({
         session_id: input.sessionId,
         sender_actor_type: input.senderActorType,
         sender_actor_id: input.senderActorId ?? null,
         sender_name: input.senderName ?? null,
         body: input.body,
         kind: input.kind ?? 'text',
-    });
+    }).select('id').single();
     if (error) throw new SupportError('Could not send message', 'db_error');
 
     // Maintain unread counters + waiting status.
@@ -398,6 +428,17 @@ export async function sendChatMessage(input: {
         patch.status = 'active';
     }
     await adminClient.from('support_chat_sessions').update(patch).eq('id', input.sessionId);
+    if (fromUser) {
+        await notifyOperationalStaff({
+            permission: 'wallet.support.manage',
+            type: 'support_chat_message',
+            title: 'New chat message',
+            body: `${input.senderName ?? 'A customer'} replied.`,
+            path: `/support?tab=chat&session=${input.sessionId}`,
+            dedupeKey: `support.chat.message.${(message as any).id}`,
+            metadata: { sessionId: input.sessionId, messageId: (message as any).id },
+        }).catch(() => undefined);
+    }
 }
 
 export async function getChatMessages(sessionId: string, opts?: { since?: string; viewer?: 'user' | 'staff' }) {

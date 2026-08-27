@@ -6,6 +6,23 @@ process.env.JWT_SECRET = "api-authz-session-test-secret-at-least-32-chars";
 const handler = require("../api/reference");
 const { _test } = handler;
 
+assert.deepStrictEqual(
+  _test.stationAnalyticsRequestScope(
+    { __auth: { roleId: "operations-manager", stationId: "UMAISHA" } },
+    { stationId: "", stationIds: ["TUNGA", "UMAISHA"] }
+  ),
+  { stationId: "UMAISHA", stationIds: ["UMAISHA"] },
+  "station-assigned staff must never expand an all-stations analytics request"
+);
+assert.strictEqual(
+  _test.stationAnalyticsRequestScope(
+    { __auth: { roleId: "operations-manager", stationId: "" } },
+    { stationId: "", stationIds: ["TUNGA"] }
+  ),
+  null,
+  "unassigned non-super-admin staff must fail closed"
+);
+
 function startServer(listener) {
   return new Promise((resolve) => {
     const server = http.createServer(listener);
