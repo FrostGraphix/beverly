@@ -16,6 +16,11 @@
         <strong class="bw-kpi-value">{{ summaryValue('approved') }}</strong>
         <span class="bw-kpi-note">credited requests</span>
       </article>
+      <article class="bw-kpi success-tone">
+        <span class="bw-kpi-label">Meter refunds</span>
+        <strong class="bw-kpi-value">{{ summaryValue('meter_rejection') }}</strong>
+        <span class="bw-kpi-note">rejected meter credits</span>
+      </article>
       <article class="bw-kpi danger-tone">
         <span class="bw-kpi-label">Rejected</span>
         <strong class="bw-kpi-value">{{ summaryValue('rejected') }}</strong>
@@ -28,16 +33,26 @@
       </article>
     </section>
 
+    <p class="refund-flow-note" role="note">
+      Automatic meter refunds appear after paid meter orders are rejected. Manual and dispute refunds remain approval-based.
+    </p>
+
     <div class="bw-filter-bar">
       <button type="button" class="bw-btn bw-btn-sm" :disabled="loading" @click.prevent="load">Refresh</button>
-      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportCsvRows">Export CSV</button>
-      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportPdfDoc">PDF</button>
-      <select v-model="statusFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by status" @change="load">
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportCsvRows">Export page</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportPdfDoc">PDF page</button>
+      <select v-model="statusFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by status" @change="reloadFirstPage">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
         <option value="approved">Approved</option>
         <option value="rejected">Rejected</option>
         <option value="expired">Expired</option>
+      </select>
+      <select v-model="sourceFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by source" @change="reloadFirstPage">
+        <option value="">All sources</option>
+        <option value="meter_order_rejection">Meter rejection</option>
+        <option value="dispute">Dispute</option>
+        <option value="manual">Manual</option>
       </select>
     </div>
 
@@ -57,6 +72,7 @@
             <tr>
               <th>Wallet</th>
               <th>Amount</th>
+              <th>Source</th>
               <th>Reason</th>
               <th>Requested By</th>
               <th>Status</th>
@@ -72,7 +88,11 @@
                 <span class="bw-mono bw-text-sm">{{ shortId(r.wallet_id) }}</span>
               </td>
               <td>{{ naira(r.amount_minor) }}</td>
-              <td>{{ r.reason?.replace(/_/g, ' ') || 'â€”' }}</td>
+              <td>
+                <span class="bw-badge bw-badge-neutral">{{ sourceLabel(r.source_type) }}</span>
+                <span v-if="r.source_id" class="refund-source-id bw-mono">{{ shortId(r.source_id) }}</span>
+              </td>
+              <td>{{ r.reason?.replace(/_/g, ' ') || '—' }}</td>
               <td class="bw-text-sm">{{ requesterLabel(r) }}</td>
               <td><span :class="statusClass(r.status)" class="bw-badge">{{ statusLabel(r.status) }}</span></td>
               <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
@@ -101,13 +121,13 @@
               <td v-else></td>
             </tr>
             <tr v-if="!refunds.length">
-              <td colspan="8" class="bw-empty">{{ emptyMessage }}</td>
+              <td colspan="9" class="bw-empty">{{ emptyMessage }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Mobile cards (â‰¤640px) -->
+      <!-- Mobile cards (≤640px) -->
       <div class="bw-t-cards">
         <div v-if="!refunds.length" class="bw-empty">{{ emptyMessage }}</div>
         <div v-for="r in pagedRefunds" :key="r.id" class="bw-tc">
@@ -117,6 +137,7 @@
           </div>
           <div class="bw-tc-mid">
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Wallet</span><span class="bw-tc-pair-val">{{ walletOwnerLabel(r) }} · {{ shortId(r.wallet_id) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Source</span><span class="bw-tc-pair-val">{{ sourceLabel(r.source_type) }}<template v-if="r.source_id"> · {{ shortId(r.source_id) }}</template></span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Reason</span><span class="bw-tc-pair-val">{{ r.reason?.replace(/_/g, ' ') }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Requested by</span><span class="bw-tc-pair-val">{{ requesterLabel(r) }}</span></div>
             <div class="bw-tc-pair"><span class="bw-tc-pair-label">Created</span><span class="bw-tc-pair-val">{{ fmtDate(r.created_at) }}</span></div>
@@ -134,8 +155,10 @@
       <WalletTablePagination
         v-model:page="currentPage"
         v-model:pageSize="pageSize"
-        :total-items="refunds.length"
+        :total-items="totalRefunds"
         item-label="refund requests"
+        :loading="loading"
+        @change="load"
       />
     </div>
 
@@ -151,7 +174,7 @@
       @confirm="submitApprove"
     >
       <div v-if="actionError" class="bw-error-banner" role="alert">{{ actionError }}</div>
-      <label class="bw-label">Amount to credit (â‚¦)</label>
+      <label class="bw-label">Amount to credit (₦)</label>
       <input
         class="bw-input"
         type="number"
@@ -198,6 +221,7 @@ import { printReceipt, refundReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
 
 type RefundStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+type RefundSource = 'manual' | 'dispute' | 'meter_order_rejection';
 interface RefundRecord {
   id: string;
   wallet_id: string;
@@ -209,6 +233,8 @@ interface RefundRecord {
   status: RefundStatus;
   created_at: string;
   processed_at?: string | null;
+  source_type?: RefundSource | null;
+  source_id?: string | null;
   wallets?: { owner_type?: string | null; owner_id?: string | null } | null;
 }
 interface RefundSummary {
@@ -217,6 +243,7 @@ interface RefundSummary {
   approved: number;
   rejected: number;
   expired: number;
+  meter_rejection: number;
 }
 
 const auth         = useStaffAuthStore();
@@ -225,16 +252,15 @@ const loading      = ref(false);
 const error        = ref('');
 const actionError  = ref('');
 const successMessage = ref('');
-const statusFilter = ref<RefundStatus | ''>('pending');
+const statusFilter = ref<RefundStatus | ''>('');
+const sourceFilter = ref<RefundSource | ''>('');
 const saving       = ref(false);
 const summaryLoaded = ref(false);
-const summary      = ref<RefundSummary>({ total: 0, pending: 0, approved: 0, rejected: 0, expired: 0 });
+const summary      = ref<RefundSummary>({ total: 0, pending: 0, approved: 0, rejected: 0, expired: 0, meter_rejection: 0 });
 const currentPage  = ref(1);
 const pageSize     = ref(10);
-const pagedRefunds = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return refunds.value.slice(start, start + pageSize.value);
-});
+const totalRefunds = ref(0);
+const pagedRefunds = computed(() => refunds.value);
 
 const approving    = ref<RefundRecord | null>(null);
 const rejecting    = ref<RefundRecord | null>(null);
@@ -245,21 +271,28 @@ const approveAmountValid = computed(() => {
   const minor = Math.round(parseFloat(approveAmountNaira.value || '0') * 100);
   return minor > 0 && minor <= approving.value.amount_minor;
 });
-const emptyMessage = computed(() => statusFilter.value
-  ? `No ${statusLabel(statusFilter.value).toLowerCase()} refund requests.`
-  : 'No refund requests yet.');
+const emptyMessage = computed(() => {
+  if (sourceFilter.value === 'meter_order_rejection') return 'No meter rejection refunds found.';
+  if (statusFilter.value) return `No ${statusLabel(statusFilter.value).toLowerCase()} refund requests.`;
+  return 'No refund requests yet.';
+});
 
 async function load() {
   loading.value = true;
   error.value   = '';
   try {
-    const params = statusFilter.value ? `?status=${statusFilter.value}` : '';
+    const params = new URLSearchParams();
+    if (statusFilter.value) params.set('status', statusFilter.value);
+    if (sourceFilter.value) params.set('source', sourceFilter.value);
+    params.set('page', String(currentPage.value));
+    params.set('page_size', String(pageSize.value));
+    const query = params.size ? `?${params.toString()}` : '';
     const [res, summaryRes] = await Promise.all([
-      api.get<{ refunds?: RefundRecord[] }>(`/api/v1/admin/refunds${params}`),
+      api.get<{ refunds?: RefundRecord[]; total?: number }>(`/api/v1/admin/refunds${query}`),
       api.get<{ summary?: RefundSummary }>('/api/v1/admin/refunds/summary'),
     ]);
     refunds.value = res.refunds ?? [];
-    currentPage.value = 1;
+    totalRefunds.value = res.total ?? refunds.value.length;
     summary.value = summaryRes.summary ?? summary.value;
     summaryLoaded.value = Boolean(summaryRes.summary);
   } catch (e: any) {
@@ -326,7 +359,7 @@ function statusClass(s: string) {
   }[s] ?? 'bw-badge-neutral';
 }
 
-function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : 'â€”'; }
+function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 
 function summaryValue(key: keyof RefundSummary) {
   return summaryLoaded.value ? summary.value[key] : '—';
@@ -349,7 +382,21 @@ function isOwnRequest(refund: RefundRecord) {
 }
 
 function requesterLabel(refund: RefundRecord) {
+  if (refund.source_type === 'meter_order_rejection') return 'Automatic';
   return isOwnRequest(refund) ? 'You' : shortId(refund.requested_by_user_id);
+}
+
+function reloadFirstPage() {
+  currentPage.value = 1;
+  return load();
+}
+
+function sourceLabel(source?: RefundSource | null) {
+  return {
+    meter_order_rejection: 'Meter rejection',
+    dispute: 'Dispute',
+    manual: 'Manual',
+  }[source ?? 'manual'];
 }
 
 function viewRefundReceipt(r: RefundRecord) { viewReceipt(refundReceipt(r)); }
@@ -360,7 +407,9 @@ function exportCsvRows() {
   exportCsv('refunds', refunds.value, [
     { key: 'id', header: 'Refund ID', value: (r) => r.id },
     { key: 'wallet_id', header: 'Wallet', value: (r) => r.wallet_id },
-    { key: 'amount', header: 'Amount (â‚¦)', value: (r) => (r.amount_minor ?? 0) / 100 },
+    { key: 'amount', header: 'Amount (₦)', value: (r) => (r.amount_minor ?? 0) / 100 },
+    { key: 'source', header: 'Source', value: (r) => sourceLabel(r.source_type) },
+    { key: 'source_id', header: 'Source Reference', value: (r) => r.source_id ?? '' },
     { key: 'reason', header: 'Reason', value: (r) => r.reason },
     { key: 'status', header: 'Status', value: (r) => statusLabel(r.status) },
     { key: 'requested_by', header: 'Requested By', value: (r) => r.requested_by_user_id ?? '' },
@@ -378,9 +427,9 @@ function exportPdfDoc() {
     ],
     tables: [{
       title: 'Refund requests',
-      columns: ['Wallet', 'Amount', 'Reason', 'Status', 'Created'],
+      columns: ['Wallet', 'Amount', 'Source', 'Reason', 'Status', 'Created'],
       rows: refunds.value.map((r) => [
-        r.wallet_id?.slice(0, 8) ?? 'â€”', naira(r.amount_minor), (r.reason ?? '').replace(/_/g, ' '), statusLabel(r.status), fmtDate(r.created_at),
+        r.wallet_id?.slice(0, 8) ?? '—', naira(r.amount_minor), sourceLabel(r.source_type), (r.reason ?? '').replace(/_/g, ' '), statusLabel(r.status), fmtDate(r.created_at),
       ]),
     }],
   });
@@ -392,14 +441,24 @@ onMounted(load);
 <style scoped>
 .bw-filter-bar { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .refund-kpis {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: var(--s-4);
+}
+.refund-flow-note {
+  background: var(--brand-glow);
+  border: 1px solid oklch(70% 0.19 145 / 0.2);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  font-size: var(--t-sm);
+  margin: 0 0 var(--s-4);
+  padding: var(--s-3) var(--s-4);
 }
 .bw-tc-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: var(--s-3) var(--s-4); border-top: 1px solid var(--border); }
 .refund-row-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 .refund-actions-col { min-width: 150px; }
 .receipt-actions { display: inline-flex; gap: 4px; white-space: nowrap; }
 .refund-owner { display: block; font-size: var(--t-sm); }
+.refund-source-id { display: block; font-size: var(--t-xs); margin-top: var(--s-1); }
 .refund-checker-note { display: block; color: var(--text-muted); font-size: var(--t-xs); margin-top: var(--s-2); }
 .refund-error { align-items: center; display: flex; justify-content: space-between; gap: var(--s-3); }
 .refund-success {

@@ -64,7 +64,7 @@ function main() {
   assert(refundApprovalRpc.includes("v_request.status <> 'pending'"), "Refund approval RPC must enforce pending status.");
   assert(refundApprovalRpc.includes("fn_post_ledger_entry"), "Refund approval RPC must write the ledger entry.");
   assert(refundApprovalRpc.includes("ledger_entry_id = v_entry.id"), "Refund approval RPC must persist ledger linkage.");
-  assert(refundsService.includes(".select('status, reason')"), "Refund rejection must preserve the original reason.");
+  assert(refundsService.includes("status, reason')"), "Refund rejection must preserve the original reason.");
   assert(refundsService.includes("state_transition_missing"), "Refund approval must fail loudly if state does not update after credit.");
   assert(scheduler.includes("status: 'expired'"), "Refund expiry job must transition stale pending refunds.");
   assert(refundExpiryMigration.includes("add value if not exists 'expired'"), "Refund enum must allow expired status.");

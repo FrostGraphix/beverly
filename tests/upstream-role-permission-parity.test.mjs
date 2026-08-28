@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import {
-  applyUpstreamRoutePermissions,
   normalizeRoleId,
   roleAllowsRoute,
   routeManifest,
@@ -16,7 +15,7 @@ const upstreamAdminPermissions = [
 ].join(",");
 
 const require = createRequire(import.meta.url);
-const { upstreamCapabilitiesFromRows } = require("../api/reference")._test;
+const { authorizeRequest, upstreamCapabilitiesFromRows } = require("../api/reference")._test;
 
 assert.deepEqual(
   upstreamCapabilitiesFromRows([{ userId: "admin", roleId: "admin", roleContent: upstreamAdminPermissions }], "admin"),
@@ -53,14 +52,34 @@ assert.equal(
   "Beverly super-admin keeps full station management",
 );
 
-const readOnlyStationRoute = applyUpstreamRoutePermissions(stationRoute, {
-  stationManagement: false,
-});
-assert.deepEqual(
-  readOnlyStationRoute.actions,
-  ["Sort", "Search", "Reset", "Export", "Cancel", "Confirm"],
-  "station mutations must disappear when upstream denies them",
-);
-assert.match(readOnlyStationRoute.readOnlyReason, /Management\.Station/);
+assert.ok(stationRoute.actions.includes("Add"), "Beverly super-admin keeps station creation available");
+assert.ok(stationRoute.actions.includes("Edit"), "Beverly super-admin keeps station editing available");
+
+const previousDemoAuth = process.env.DEMO_AUTH_ENABLED;
+const previousUpstreamUsername = process.env.UPSTREAM_USERNAME;
+process.env.DEMO_AUTH_ENABLED = "true";
+process.env.UPSTREAM_USERNAME = "";
+require("../api/reference")._test.resetContractCache();
+try {
+  const authorization = await authorizeRequest(
+    {
+      method: "POST",
+      headers: { authorization: "Bearer local-dev-token" },
+    },
+    "/api/station/create",
+    { parsedBody: { stationId: "TEST", name: "Test Station" } },
+  );
+  assert.equal(
+    authorization,
+    null,
+    "Beverly authorization must allow the upstream station endpoint to decide mutation access",
+  );
+} finally {
+  if (previousDemoAuth === undefined) delete process.env.DEMO_AUTH_ENABLED;
+  else process.env.DEMO_AUTH_ENABLED = previousDemoAuth;
+  if (previousUpstreamUsername === undefined) delete process.env.UPSTREAM_USERNAME;
+  else process.env.UPSTREAM_USERNAME = previousUpstreamUsername;
+  require("../api/reference")._test.resetContractCache();
+}
 
 console.log("upstream role permission parity passed");

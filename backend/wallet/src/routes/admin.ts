@@ -24,7 +24,7 @@ import {
     listTickets, getTicket, addTicketMessage, updateTicket, ticketStats,
     listChatSessions, getChatSession, getChatMessages, sendChatMessage, endChatSession, assignChatSession,
 } from '../services/support.js';
-import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, getRefundSummary } from '../services/refunds.js';
+import { listRefundRequests, createRefundRequest, approveRefund, rejectRefund, getRefundSummary, type RefundSource } from '../services/refunds.js';
 import { listSettlementBatches } from '../services/settlement.js';
 import { listReconciliationRuns, runDailyReconciliation } from '../services/reconciliation.js';
 import { listFlags, setFlag, createFlag } from '../services/feature-flags.js';
@@ -3431,11 +3431,23 @@ const route: FastifyPluginAsync = async (fastify) => {
     fastify.get('/refunds/summary', async () => ({ summary: await getRefundSummary() }));
 
     fastify.get('/refunds', async (req) => {
-        const { status } = req.query as { status?: string };
+        const query = z.object({
+            status: z.enum(['pending', 'approved', 'rejected', 'expired', 'requested', 'under_review']).optional(),
+            source: z.enum(['manual', 'dispute', 'meter_order_rejection']).optional(),
+            page: z.coerce.number().int().min(1).default(1),
+            page_size: z.coerce.number().int().refine((value) => [10, 20, 50, 100].includes(value), 'Unsupported page size.').default(10),
+        }).parse(req.query);
+        const { status, source } = query;
         const normalizedStatus = status === 'requested' || status === 'under_review'
             ? 'pending'
             : status;
-        return { refunds: await listRefundRequests({ status: normalizedStatus, limit: 200 }) };
+        const result = await listRefundRequests({
+            status: normalizedStatus,
+            source: source as RefundSource | undefined,
+            page: query.page,
+            pageSize: query.page_size,
+        });
+        return result;
     });
 
     fastify.post('/refunds', async (req, reply) => {
