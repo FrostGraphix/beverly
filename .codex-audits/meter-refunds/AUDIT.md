@@ -66,6 +66,7 @@ Health: reviewed and preserved.
 
 ## Evidence limits
 
-- Remote migration remains unapplied.
-- Production data stayed untouched.
-- Live records need deployment.
+- Remote migration is applied.
+- Production backfill is verified.
+- Runtime schema is verified.
+- Vercel deployment is ready.
