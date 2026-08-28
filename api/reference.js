@@ -685,6 +685,16 @@ async function authorizeRequest(request, pathname, requestData) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
+  if (/^\/api\/station\/(?:create|update|delete|import)$/i.test(lowerPath)) {
+    const upstreamCapabilities = await fetchUpstreamCapabilities(request);
+    if (!upstreamCapabilities.stationManagement) {
+      const reason = upstreamCapabilities.known
+        ? "Configured upstream account lacks Management.Station permission"
+        : "Upstream station permissions are unavailable";
+      return authFailure(403, pathname, `${reason}. No station change was sent.`);
+    }
+  }
+
   const route = await matchingRouteForRequest(pathname, request);
   if (route && access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
 
@@ -1503,6 +1513,48 @@ function stationStatus(value) {
   if (value === false || value === 0) return "disabled";
   const normalized = String(value ?? "active").trim().toLowerCase();
   return ["disabled", "inactive", "offline", "deleted"].includes(normalized) ? "disabled" : "active";
+}
+
+function upstreamCapabilitiesFromRows(rows, username = "") {
+  const expectedUser = String(username || "").trim().toLowerCase();
+  const list = Array.isArray(rows) ? rows : [];
+  const row = list.find((item) => String(item?.userId || item?.user_id || "").trim().toLowerCase() === expectedUser)
+    || (list.length === 1 ? list[0] : null);
+  if (!row) return { known: false, stationManagement: false, roleId: "" };
+  const roleId = String(row.roleId || row.role_id || row.role || "").trim().toLowerCase();
+  const permissions = String(row.roleContent || row.role_content || row.remark || "")
+    .split(/[,;+\s]+/)
+    .map((permission) => permission.trim().toLowerCase())
+    .filter(Boolean);
+  const stationManagement = ["super-admin", "superadmin", "super_admin"].includes(roleId)
+    || permissions.includes("all")
+    || permissions.includes("super-admin")
+    || permissions.includes("management.station");
+  return { known: true, stationManagement, roleId };
+}
+
+async function fetchUpstreamCapabilities(request) {
+  const requestedOemId = oemRegistry.requestedOemId(request);
+  const oemConfig = await oemRegistry.getOemScopedLiveConfig(requestedOemId).catch(() => null);
+  const configuredUsername = oemConfig?.encryptedUsername
+    ? oemRegistry.decryptSecret(oemConfig.encryptedUsername)
+    : process.env.UPSTREAM_USERNAME || "";
+  const username = String(configuredUsername || "").trim();
+  if (!username) return { known: false, stationManagement: false, roleId: "" };
+  const result = await proxyLive(
+    {
+      method: "POST",
+      url: "/api/user/read",
+      headers: { ...(request?.headers || {}) },
+      __timeoutMs: 15000,
+    },
+    "/api/user/read",
+    jsonRequestData({ userId: username, pageNumber: 1, pageSize: 5 }),
+  );
+  if (!result || result.status >= 400) {
+    return { known: false, stationManagement: false, roleId: "" };
+  }
+  return upstreamCapabilitiesFromRows(collectionRowsFromPayload(result.body), username);
 }
 
 async function fetchLiveStationDirectory(request) {
@@ -2895,6 +2947,12 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/storage-report") {
     return localJobResponse(await storageReport());
+  }
+  if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/upstream-permissions") {
+    return localJobResponse({
+      ...(await fetchUpstreamCapabilities(request)),
+      requiredStationPermission: "Management.Station",
+    });
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/system/governance-plan") {
     return localJobResponse(governancePlan());
@@ -5661,6 +5719,7 @@ module.exports._test = {
   crmSessionStatus,
   refreshTargets,
   stationAnalyticsRequestScope,
+  upstreamCapabilitiesFromRows,
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;

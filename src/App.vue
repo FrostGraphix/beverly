@@ -402,9 +402,9 @@ import PwaUpdateToast from "@beverly/tokens/PwaUpdateToast.vue";
 import LanguageSwitcher from "@beverly/tokens/LanguageSwitcher.vue";
 import { useOemStore } from "./stores/oem-store";
 import { warmAllOems } from "./services/oem-prefetch.mjs";
-import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getApi, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
-import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
+import { applyUpstreamRoutePermissions, findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 import { groupIcons, routeIconOverrides, routeIconPaths, sidebarSectionLabels } from "./data/shell-chrome.mjs";
 import { playLoginVoice } from "./utils/voice.js";
 
@@ -445,7 +445,8 @@ export default {
       settingsInitialTab: 'security',
       mediaQuery: null,
       sessionTimer: null,
-      lastSessionTouchAt: 0
+      lastSessionTouchAt: 0,
+      upstreamPermissions: { known: false, stationManagement: false }
     };
   },
   computed: {
@@ -488,7 +489,10 @@ export default {
       return raw;
     },
     route() {
-      return findRoute(this.hash, this.currentRoleId, this.currentOemCapabilities);
+      return applyUpstreamRoutePermissions(
+        findRoute(this.hash, this.currentRoleId, this.currentOemCapabilities),
+        this.upstreamPermissions,
+      );
     },
     activePageTitle() {
       if (this.profileOpen) return "Profile";
@@ -766,6 +770,7 @@ export default {
         }
         this.syncProfileIdentity();
         this.oemStore.restoreSelection();
+        await this.refreshUpstreamPermissions();
         // All authenticated users work inside an OEM-scoped workspace; load the registry
         // so the sidebar can gate routes by the current OEM's capabilities (and so the Hub is warm).
         if (this.isRoleReady && !this.isLogin) {
@@ -858,14 +863,28 @@ export default {
       window.location.hash = "#/dashboard";
       await this.loadUser();
     },
-    handleOemSelected() {
+    async handleOemSelected() {
       playLoginVoice();
+      await this.refreshUpstreamPermissions();
       this.hash = "#/dashboard";
       window.location.hash = "#/dashboard";
     },
     switchOem() {
       this.userDropdownOpen = false;
+      this.upstreamPermissions = { known: false, stationManagement: false };
       this.oemStore.clearSelection();
+    },
+    async refreshUpstreamPermissions() {
+      try {
+        const response = await getApi("/api/system/upstream-permissions", {}, { silent: true });
+        const data = response?.data || response?.result || {};
+        this.upstreamPermissions = {
+          known: data.known === true,
+          stationManagement: data.stationManagement === true,
+        };
+      } catch {
+        this.upstreamPermissions = { known: false, stationManagement: false };
+      }
     },
     syncProfileIdentity() {
       const profile = loadProfileState(this.currentUserName);

@@ -213,6 +213,18 @@ export function routeCapabilityAllowed(route, capabilities = null) {
   return Boolean(capabilities[key]);
 }
 
+const upstreamMutationActions = new Set(["Add", "Edit", "Delete", "Import"]);
+
+export function applyUpstreamRoutePermissions(route, permissions = null) {
+  if (!route || route.hash !== "#/admin/station") return route;
+  if (permissions?.stationManagement === true) return route;
+  return {
+    ...route,
+    actions: (route.actions || []).filter((action) => !upstreamMutationActions.has(action)),
+    readOnlyReason: "Read-only. The configured upstream account needs Management.Station permission.",
+  };
+}
+
 export function visibleRoutes(roleId = "super-admin", capabilities = null) {
   return routeManifest.filter((route) => routeAllowed(route, roleId) && routeCapabilityAllowed(route, capabilities));
 }
