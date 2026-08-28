@@ -103,9 +103,6 @@
 
         <div class="auth-row">
           <BaseCheckbox v-model="rememberUsername" class="auth-remember">Remember me</BaseCheckbox>
-          <BaseButton class="auth-link" variant="ghost" size="sm" type="button" @click="forgotPassword">
-            Forgot password?
-          </BaseButton>
         </div>
 
         <BaseButton
@@ -293,12 +290,6 @@ export default {
       this.$nextTick(() => {
         const first = this.$el.querySelector(".auth-field--invalid input");
         if (first) first.focus();
-      });
-    },
-    forgotPassword() {
-      this.error = "Contact your Beverly administrator.";
-      this.errorReference = recordClientError("login-help-requested", new Error(this.error), {
-        userId: this.form.userId || "unknown"
       });
     },
     onMfaVerified() {
