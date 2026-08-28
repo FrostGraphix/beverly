@@ -547,6 +547,11 @@ export function purchaseReceipt(row: any): ReceiptModel {
 }
 
 export function refundReceipt(row: any): ReceiptModel {
+    const source = row.source_type === 'meter_order_rejection'
+        ? 'Meter order rejection'
+        : row.source_type === 'dispute'
+            ? 'Dispute'
+            : 'Manual';
     return {
         title: row.status === 'approved' ? 'Refund Receipt' : 'Refund Request Record',
         receiptId: id(row.id),
@@ -556,6 +561,8 @@ export function refundReceipt(row: any): ReceiptModel {
         subject: 'Refund Amount',
         fields: [
             field('Wallet ID', row.wallet_id),
+            field('Source', source),
+            field('Source Reference', row.source_id),
             field('Purchase Order', row.purchase_order_id),
             field('Requested By', row.requested_by_user_id),
             field('Approved By', row.approved_by_user_id),

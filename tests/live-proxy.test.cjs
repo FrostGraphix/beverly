@@ -178,6 +178,12 @@ async function main() {
         return;
       }
 
+      if (req.url.startsWith("/api/station/create")) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ code: 0, reason: "success", result: { created: true } }));
+        return;
+      }
+
       if (req.url.startsWith("/API/File/Upload")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ code: 0, reason: "upload success", result: { uploaded: true } }));
@@ -332,6 +338,21 @@ async function main() {
       });
       assert.strictEqual(accountCreate.status, 200);
       assert.strictEqual(accountCreate.body._proxy.source, "live");
+
+      const stationCreate = await request(proxyPort, "POST", "/api/station/create", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer local-dev-token"
+        },
+        body: Buffer.from(JSON.stringify({ stationId: "TEST", name: "Test Station" }))
+      });
+      assert.strictEqual(stationCreate.status, 200, JSON.stringify(stationCreate.body));
+      assert.strictEqual(stationCreate.body._proxy.source, "live");
+      assert.strictEqual(
+        upstreamRequests.filter((entry) => entry.url.startsWith("/api/station/create")).length,
+        1,
+        "station authorization must come from the upstream mutation response"
+      );
 
       const uploadBoundary = "----acob-boundary";
       const uploadBody = Buffer.from(`--${uploadBoundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"sample.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--${uploadBoundary}--\r\n`);

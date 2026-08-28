@@ -28,6 +28,8 @@ const {
   listSgcTokenRules,
   listOemManufacturers,
   listOemStationMappings,
+  upsertOemStationMapping,
+  deleteOemStationMapping,
   getOemManufacturer,
   upsertOemManufacturer,
   deleteOemManufacturer,
@@ -685,15 +687,7 @@ async function authorizeRequest(request, pathname, requestData) {
     return normalizedRole === "super-admin" ? null : authFailure(403, pathname, "Super admin required");
   }
 
-  if (/^\/api\/station\/(?:create|update|delete|import)$/i.test(lowerPath)) {
-    const upstreamCapabilities = await fetchUpstreamCapabilities(request);
-    if (!upstreamCapabilities.stationManagement) {
-      const reason = upstreamCapabilities.known
-        ? "Configured upstream account lacks Management.Station permission"
-        : "Upstream station permissions are unavailable";
-      return authFailure(403, pathname, `${reason}. No station change was sent.`);
-    }
-  }
+
 
   const route = await matchingRouteForRequest(pathname, request);
   if (route && access.roleAllowsRoute(route, resolvedActor.roleId, resolvedActor.remark)) return null;
@@ -1120,7 +1114,9 @@ function sanitizeLiveRequestData(pathname, requestData) {
         ? sanitizeReadPayload(requestData?.parsedBody, accountKeyMap, { maxPageSize: 500 })
         : /\/api\/RemoteMeterTask\/Get(?:Reading|Control|Token)Task$/i.test(normalizedPath)
           ? sanitizeReadPayload(requestData?.parsedBody, {}, { requireLang: true })
-          : requestData?.parsedBody;
+          : /\/api\/station\/(?:create|update|delete|import)$/i.test(normalizedPath) && requestData?.parsedBody && !Array.isArray(requestData.parsedBody)
+            ? [requestData.parsedBody]
+            : requestData?.parsedBody;
   if (payload === requestData?.parsedBody) return requestData;
   const rawBody = Buffer.from(JSON.stringify(payload));
   return {
@@ -4722,6 +4718,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
       };
     }
   }
+
+
 }
 
 async function runRefreshJob(scope) {
@@ -5074,6 +5072,30 @@ async function proxyLive(request, pathname, requestData) {
         if (/^\/api\/meter\/(create|update|delete)$/i.test(candidate)) {
           invalidateMeterStatsCache();
           invalidateAccountTotalCache();
+        }
+        if (/^\/api\/station\/(?:create|update)$/i.test(candidate) && liveResult.ok) {
+          try {
+            const item = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] : requestData?.parsedBody;
+            const rawId = String(item?.stationId || item?.station_id || item?.id || '').trim().toUpperCase();
+            if (rawId) {
+              const oemId = oemConfig?.id || requestedOemId || 'calinmeter';
+              await upsertOemStationMapping({ oemId, stationId: rawId, communityLabel: String(item?.name || item?.stationName || rawId).trim() });
+            }
+          } catch (syncErr) {
+            console.warn('[station-live-sync-warn]', syncErr instanceof Error ? syncErr.message : String(syncErr));
+          }
+        }
+        if (/^\/api\/station\/delete$/i.test(candidate) && liveResult.ok) {
+          try {
+            const item = Array.isArray(requestData?.parsedBody) ? requestData.parsedBody[0] : requestData?.parsedBody;
+            const rawId = String(item?.stationId || item?.station_id || item?.id || '').trim().toUpperCase();
+            if (rawId) {
+              const oemId = oemConfig?.id || requestedOemId || 'calinmeter';
+              await deleteOemStationMapping(oemId, rawId);
+            }
+          } catch (syncErr) {
+            console.warn('[station-live-delete-warn]', syncErr instanceof Error ? syncErr.message : String(syncErr));
+          }
         }
         if (isGuardedWriteRequest(candidate, request.method, requestData)) {
           logWriteEvent("request", { pathname: candidate, payload: requestData.parsedBody });
@@ -5573,6 +5595,29 @@ async function handler(request, response) {
       }
     }
 
+    // --- MERGE LOCAL STATION MAPPINGS INTO /api/station/read RESPONSE ---
+    // Stations registered via the Beverly station intercept (oem_station_mappings)
+    // are merged into the upstream station/read response so they appear in the
+    // admin station table even when the upstream never received the create call.
+    if (/^\/api\/station\/read$/i.test(pathname) && result?.body?.result?.data) {
+      try {
+        const oemIdForMerge = await getOemManufacturer('calinmeter').then(o => o && o.id ? o.id : 'calinmeter').catch(() => 'calinmeter');
+        const localMappings = await listOemStationMappings(oemIdForMerge, 'calinmeter').catch(() => []);
+        if (localMappings.length > 0) {
+          const upstreamIds = new Set((result.body.result.data || []).map(s => String(s.stationId || s.id || '').trim().toUpperCase()));
+          const toInject = localMappings
+            .filter(m => !upstreamIds.has(String(m.stationId || '').trim().toUpperCase()))
+            .map(m => ({ stationId: m.stationId, name: m.communityLabel || m.stationId, createId: 'Beverly', createDate: m.createdAt || '', updateId: 'Beverly', updateDate: m.createdAt || '', remark: 'Beverly local' }));
+          if (toInject.length > 0) {
+            result.body.result.data = [...result.body.result.data, ...toInject];
+            if (typeof result.body.result.total === 'number') result.body.result.total += toInject.length;
+          }
+        }
+      } catch (mergeErr) {
+        console.warn('[station-read-merge]', mergeErr instanceof Error ? mergeErr.message : String(mergeErr));
+      }
+    }
+
     if (result?.status >= 400 && canUseSampleFallback(pathname)) {
       const sample = sampleReadResponse(pathname, requestData);
       if (sample) {
@@ -5720,6 +5765,7 @@ module.exports._test = {
   refreshTargets,
   stationAnalyticsRequestScope,
   upstreamCapabilitiesFromRows,
+  authorizeRequest,
   runRefreshJob,
   resetContractCache() {
     contractAliasMap = null;

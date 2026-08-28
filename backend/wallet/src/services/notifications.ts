@@ -31,6 +31,7 @@ export type NotificationType =
     | 'admin_announcement'
     | 'low_balance'
     | 'payment_failed'
+    | 'refund_update'
     | 'meter_order_update'
     | 'meter_link_update';
 
@@ -65,8 +66,8 @@ const PREF_DEFAULTS: Required<PreferencesShape> = {
     // (sendTokenSmsToCustomer) already delivers the actual token code via SMS.
     // The notification service handles in-app + email for this event.
     sms:    { token_purchased: false, wallet_funded: true,  login_otp: true, admin_announcement: false },
-    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, meter_order_update: true, meter_link_update: true },
-    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
+    email:  { token_purchased: false, wallet_funded: true,  promotions: false, admin_announcement: false, kyc_update: true, dispute_update: true, payment_failed: true, refund_update: true, meter_order_update: true, meter_link_update: true },
+    in_app: { token_purchased: true,  wallet_funded: true,  kyc_update: true, dispute_update: true, low_balance: true, payment_failed: true, refund_update: true, meter_order_update: true, meter_link_update: true, admin_announcement: true },
 };
 
 export interface NotificationJobData {
@@ -335,6 +336,21 @@ export function notifyPaymentFailed(customerId: string, opts: {
         title: 'Payment failed',
         body:  `Your ${amount} payment could not be processed. ${opts.reason ?? 'Please try again or contact support.'}`,
         metadata: { amountMinor: opts.amountMinor, reason: opts.reason },
+    });
+}
+
+export function notifyRefundUpdate(customerId: string, opts: {
+    refundRequestId: string; status: 'approved' | 'rejected'; amountMinor: number; reason?: string;
+}): Promise<void> {
+    const amount = `₦${(opts.amountMinor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+    const approved = opts.status === 'approved';
+    return sendNotification(customerId, {
+        type: 'refund_update',
+        title: approved ? 'Refund approved' : 'Refund declined',
+        body: approved
+            ? `${amount} has been credited to your Beverly wallet.`
+            : `Your ${amount} refund request was declined.${opts.reason ? ` ${opts.reason}` : ''}`,
+        metadata: { refundRequestId: opts.refundRequestId, status: opts.status, amountMinor: opts.amountMinor, reason: opts.reason ?? null, path: '/wallet' },
     });
 }
 
