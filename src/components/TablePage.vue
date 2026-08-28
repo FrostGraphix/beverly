@@ -10,6 +10,10 @@
         <span>Showing cached / offline data — live connection unavailable.</span>
         <BaseButton variant="ghost" size="sm" class="stale-refresh-link" @click="load">Refresh</BaseButton>
       </div>
+      <div v-if="route.readOnlyReason" class="table-stale-banner" role="status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H5v12h14V10h-2V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z"/></svg>
+        <span>{{ route.readOnlyReason }}</span>
+      </div>
       <section v-if="managementStatCards.length || statsLoading" class="management-stat-grid" aria-label="Management summary">
         <!-- skeleton placeholders shown while stats are loading -->
         <template v-if="statsLoading && !managementStatCards.length">
