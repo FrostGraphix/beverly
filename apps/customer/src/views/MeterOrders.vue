@@ -19,6 +19,9 @@ interface MeterOrder {
     notes: string | null;
     created_at: string;
     updated_at: string;
+    rejection_reason?: string | null;
+    rejection_refund_destination?: 'none' | 'vendor_wallet' | 'customer_wallet' | null;
+    rejected_at?: string | null;
 }
 
 const route = useRoute();
@@ -41,6 +44,7 @@ const STATUS_LABEL: Record<string, string> = {
     dispatched:      'Technician En Route',
     installed:       'Installed',
     cancelled:       'Cancelled',
+    rejected:        'Rejected',
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -50,6 +54,7 @@ const STATUS_BADGE: Record<string, string> = {
     dispatched:      'info',
     installed:       'success',
     cancelled:       'danger',
+    rejected:        'danger',
 };
 
 function fmt(minor: number) { return `₦${(minor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`; }
@@ -174,6 +179,16 @@ onMounted(async () => {
           </div>
         </div>
 
+        <div v-if="order.status === 'rejected'" class="rejection-recovery" role="status">
+          <strong>Rejection reason</strong>
+          <p>{{ order.rejection_reason || 'No reason was recorded. Contact support for details.' }}</p>
+          <p class="rejection-refund">{{ order.rejection_refund_destination === 'customer_wallet' ? 'The amount was credited to your Beverly wallet.' : order.rejection_refund_destination === 'vendor_wallet' ? 'The sponsoring vendor wallet was refunded.' : 'No payment was captured for this order.' }}</p>
+          <div class="rejection-actions">
+            <RouterLink to="/buy-meter" class="bw-btn small primary" style="text-decoration:none">Correct and order again</RouterLink>
+            <RouterLink to="/help" class="bw-btn small" style="text-decoration:none">Contact support</RouterLink>
+          </div>
+        </div>
+
         <button
           v-if="order.status === 'pending_payment'"
           class="bw-btn small primary"
@@ -228,4 +243,9 @@ onMounted(async () => {
 .bw-order-details { display: flex; flex-direction: column; gap: var(--s-1); }
 .bw-detail-row { display: flex; justify-content: space-between; gap: var(--s-3); font-size: var(--t-sm); }
 .bw-detail-row span:last-child { text-align: right; }
+.rejection-recovery { display:grid; gap:6px; margin-top:var(--s-3); padding:var(--s-3); border:1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius:var(--r-md); background:color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.rejection-recovery strong { color:var(--danger); }
+.rejection-recovery p { margin:0; font-size:var(--t-sm); line-height:1.45; }
+.rejection-refund { color:var(--text-2); }
+.rejection-actions { display:flex; flex-wrap:wrap; gap:var(--s-2); margin-top:var(--s-2); }
 </style>

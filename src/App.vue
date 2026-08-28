@@ -27,7 +27,7 @@
         </div>
         <div class="sidebar-find" @click="focusSidebarFilter">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-          <input
+          <BaseInput
             ref="sidebarSearchInput"
             v-model="sidebarQuery"
             type="search"
@@ -142,6 +142,7 @@
                 <span>Search</span>
                 <kbd>Ctrl K</kbd>
               </BaseButton>
+              <LanguageSwitcher compact />
               <StationAlertsBell v-if="!showOemHub" />
               <div class="bw-account-menu" ref="accountMenuWrap">
                 <BaseButton
@@ -366,6 +367,7 @@ import SettingsPage from "./components/SettingsPage.vue";
 import ToastNotification from "./components/ToastNotification.vue";
 import BaseButton from "./components/base/BaseButton.vue";
 import BaseIconButton from "./components/base/BaseIconButton.vue";
+import BaseInput from "./components/base/BaseInput.vue";
 import DisputesPage from "./components/wallet/DisputesPage.vue";
 import RefundsPage from "./components/wallet/RefundsPage.vue";
 import SettlementPage from "./components/wallet/SettlementPage.vue";
@@ -397,6 +399,7 @@ import StationAlertsBell from "./components/StationAlertsBell.vue";
 import OemHubPage from "./components/oem-hub/OemHubPage.vue";
 import BeverlyLoader from "@beverly/tokens/BeverlyLoader.vue";
 import PwaUpdateToast from "@beverly/tokens/PwaUpdateToast.vue";
+import LanguageSwitcher from "@beverly/tokens/LanguageSwitcher.vue";
 import { useOemStore } from "./stores/oem-store";
 import { warmAllOems } from "./services/oem-prefetch.mjs";
 import { clearSessionCookies, currentUserInfo, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
@@ -415,7 +418,7 @@ function normalizeThemeChoice(theme) {
 
 export default {
   name: "App",
-  components: { AcobotWidget, AbnormalAlarmPage, ArchiveReportsPage, AutomationCommandPage, BaseButton, BaseIconButton, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
+  components: { AcobotWidget, AbnormalAlarmPage, ArchiveReportsPage, AutomationCommandPage, BaseButton, BaseIconButton, BaseInput, BeverlyLoader, ConsumptionStatisticsPage, DashboardPage, DailyDataMeterPage, DisputesPage, LanguageSwitcher, LoginPage, MeterKeyChangePage, OemHubPage, OnboardingStudioPage, ProfilePage, PwaUpdateToast, ReconciliationPage, RefundsPage, ReportsPage, SettingsPage, SettlementPage, StationAlertsBell, StationConsumptionPage, TablePage, ToastNotification, VendingMonitorPage, WalletFundingPage },
   data() {
     return {
       hash: window.location.hash || "#/login?redirect=%2Fdashboard",
@@ -556,6 +559,7 @@ export default {
     currentRoleName() {
       const labels = {
         "super-admin": "Super Admin",
+        admin: "Administrator",
         "operations-manager": "Operations Manager",
         account: "Account Officer",
         vendor: "Vendor",
@@ -748,6 +752,7 @@ export default {
           if (meJson.data.userId) setCookie("userId", meJson.data.userId);
           if (meJson.data.userName) setCookie("userName", meJson.data.userName);
           if (meJson.data.roleId) setCookie("roleId", meJson.data.roleId);
+          if (meJson.data.remark) setCookie("userRemark", meJson.data.remark);
         } else {
           // /api/auth/me responded but with unexpected shape — fall back to currentUserInfo.
           const response = await currentUserInfo();
@@ -829,11 +834,8 @@ export default {
         return;
       }
       if (!nextHash.startsWith("#/login") && !this.routeExists(nextHash)) {
-        const configured = String(import.meta.env?.VITE_LANDING_URL || "").trim();
-        const landingUrl = configured || (import.meta.env?.DEV
-          ? `${window.location.protocol}//${window.location.hostname}:5176/`
-          : `${window.location.origin}/wallet/`);
-        window.location.assign(landingUrl);
+        const fallback = visibleRoutes(this.currentRoleId, this.currentOemCapabilities)[0];
+        window.location.hash = fallback?.hash || "#/login";
         return;
       }
       this.hash = nextHash.startsWith("#/login") ? nextHash : nextHash;

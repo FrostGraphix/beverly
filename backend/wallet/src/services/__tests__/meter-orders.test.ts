@@ -20,11 +20,51 @@ import {
     getMeterPrices,
     updateMeterPrices,
     meterOrderAmountMinor,
+    vendorMeterOrderCancellationEligibility,
+    meterOrderRejectionEligibility,
 } from '../meter-orders.js';
 
 describe('meter order safeguards', () => {
     beforeEach(() => {
         mocks.rpc.mockReset();
+    });
+
+    it('allows vendor cancellation before six hours', () => {
+        const result = vendorMeterOrderCancellationEligibility({
+            status: 'paid',
+            sponsor_mode: 'vendor_wallet',
+            created_at: '2026-08-25T00:00:00.000Z',
+        }, new Date('2026-08-25T05:59:59.000Z'));
+        expect(result.eligible).toBe(true);
+        expect(result.deadline).toBe('2026-08-25T06:00:00.000Z');
+    });
+
+    it('rejects cancellation after six hours', () => {
+        const result = vendorMeterOrderCancellationEligibility({
+            status: 'paid',
+            sponsor_mode: 'vendor_wallet',
+            created_at: '2026-08-25T00:00:00.000Z',
+        }, new Date('2026-08-25T06:00:00.001Z'));
+        expect(result).toMatchObject({ eligible: false, reason: 'cancellation_window_expired' });
+    });
+
+    it('rejects cancellation after approval', () => {
+        const result = vendorMeterOrderCancellationEligibility({
+            status: 'assigned',
+            sponsor_mode: 'vendor_wallet',
+            created_at: '2026-08-25T00:00:00.000Z',
+        }, new Date('2026-08-25T01:00:00.000Z'));
+        expect(result).toMatchObject({ eligible: false, reason: 'order_approved' });
+    });
+
+    it('allows rejection before fulfillment approval', () => {
+        expect(meterOrderRejectionEligibility('pending_payment')).toEqual({ eligible: true, refundRequired: false });
+        expect(meterOrderRejectionEligibility('paid')).toEqual({ eligible: true, refundRequired: true });
+    });
+
+    it('blocks rejection after fulfillment approval', () => {
+        expect(meterOrderRejectionEligibility('assigned')).toEqual({ eligible: false, refundRequired: false });
+        expect(meterOrderRejectionEligibility('installed')).toEqual({ eligible: false, refundRequired: false });
     });
 
     it('builds deterministic channel references', () => {

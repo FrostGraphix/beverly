@@ -28,6 +28,13 @@ export interface LedgerEntry {
     reference_id: string | null;
     memo: string | null;
     created_at: string;
+    meter_order?: {
+        id: string; ordered_by_name: string; ordered_by_email?: string | null; vendor_name: string;
+        customer_id: string; customer_name: string; customer_phone?: string | null; customer_email?: string | null;
+        meter_type: string; property_category: string; property_address: string; service_area: string;
+        contact_phone: string; status: string; sponsor_mode: string; created_at: string;
+        rejection_reason?: string | null; rejection_refund_destination?: string | null; rejected_at?: string | null;
+    };
 }
 
 interface State {

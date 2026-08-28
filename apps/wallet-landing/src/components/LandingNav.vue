@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { toggleTheme } from '@beverly/tokens';
+import { useI18n } from '@beverly/tokens/i18n.js';
+import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import IconSvg from './IconSvg.vue';
 import { PORTALS } from '../content';
 
@@ -10,12 +12,13 @@ const scrolled = ref(false);
 const menuOpen = ref(false);
 const isDark = ref(true);
 const activeSection = ref('');
+const { t } = useI18n();
 
 const NAV_LINKS = [
-    { id: 'how',      label: 'How it works' },
-    { id: 'features', label: 'Features' },
-    { id: 'portals',  label: 'Portals' },
-    { id: 'faq',      label: 'FAQ' },
+    { id: 'how',      labelKey: 'landing.nav.how' },
+    { id: 'features', labelKey: 'landing.nav.features' },
+    { id: 'portals',  labelKey: 'landing.nav.portals' },
+    { id: 'faq',      labelKey: 'landing.nav.faq' },
 ] as const;
 
 function onScroll() {
@@ -70,7 +73,7 @@ onBeforeUnmount(() => {
         <span class="lp-brand-text">Beverly<em>Wallet</em></span>
       </a>
 
-      <nav class="lp-nav-links" aria-label="Page sections">
+      <nav class="lp-nav-links" :aria-label="t('landing.nav.sections')">
         <button
           v-for="link in NAV_LINKS"
           :key="link.id"
@@ -78,26 +81,27 @@ onBeforeUnmount(() => {
           :class="['lp-nav-link', activeSection === link.id && 'lp-nav-link--active']"
           @click="go(link.id)"
         >
-          {{ link.label }}
+          {{ t(link.labelKey) }}
         </button>
       </nav>
 
       <div class="lp-nav-actions">
+        <LanguageSwitcher compact />
         <button
           class="lp-icon-toggle"
           type="button"
-          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          :aria-label="isDark ? t('landing.nav.lightMode') : t('landing.nav.darkMode')"
           @click="onTheme"
         >
           <IconSvg :name="isDark ? 'sun' : 'moon'" />
         </button>
         <button class="lp-btn lp-btn--primary lp-nav-cta" type="button" @click="emit('launch')">
-          Get started <IconSvg name="arrow" />
+          {{ t('common.getStarted') }} <IconSvg name="arrow" />
         </button>
         <button
           class="lp-burger"
           type="button"
-          :aria-label="menuOpen ? 'Close menu' : 'Open menu'"
+          :aria-label="menuOpen ? t('common.closeMenu') : t('common.openMenu')"
           :aria-expanded="menuOpen"
           @click="menuOpen = !menuOpen"
         >
@@ -114,10 +118,10 @@ onBeforeUnmount(() => {
           type="button"
           @click="go(link.id)"
         >
-          {{ link.label }}
+          {{ t(link.labelKey) }}
         </button>
         <button class="lp-btn lp-btn--primary" type="button" @click="menuOpen = false; emit('launch')">
-          Get started <IconSvg name="arrow" />
+          {{ t('common.getStarted') }} <IconSvg name="arrow" />
         </button>
       </div>
     </transition>

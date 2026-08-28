@@ -46,13 +46,25 @@ create index if not exists meters_oem_idx on public.meters(oem_id);
 -- =============================================================================
 
 alter table public.customers drop constraint if exists customers_upstream_id_key;
-alter table public.customers add constraint customers_oem_upstream_id_key unique (oem_id, upstream_id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'customers_oem_upstream_id_key' and conrelid = 'public.customers'::regclass) then
+    alter table public.customers add constraint customers_oem_upstream_id_key unique (oem_id, upstream_id);
+  end if;
+end $$;
 
 alter table public.accounts drop constraint if exists accounts_upstream_id_key;
-alter table public.accounts add constraint accounts_oem_upstream_id_key unique (oem_id, upstream_id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'accounts_oem_upstream_id_key' and conrelid = 'public.accounts'::regclass) then
+    alter table public.accounts add constraint accounts_oem_upstream_id_key unique (oem_id, upstream_id);
+  end if;
+end $$;
 
 alter table public.meters drop constraint if exists meters_upstream_id_key;
-alter table public.meters add constraint meters_oem_upstream_id_key unique (oem_id, upstream_id);
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'meters_oem_upstream_id_key' and conrelid = 'public.meters'::regclass) then
+    alter table public.meters add constraint meters_oem_upstream_id_key unique (oem_id, upstream_id);
+  end if;
+end $$;
 
 -- =============================================================================
 -- 3. RLS: drop the permissive `qual = true` policies (Phase F5 in the storage
@@ -70,6 +82,10 @@ drop policy if exists "authenticated_read_meters" on public.meters;
 --    v_customer_360 (itself a live view over meters/customers/accounts), so it
 --    needs to be refreshed after the dimension sync runs, not just once.
 -- =============================================================================
+
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'refresh-customer-site-rollups';
 
 select cron.schedule(
   'refresh-customer-site-rollups',

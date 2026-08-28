@@ -358,6 +358,27 @@ export function purchaseReceipt(row: any): ReceiptModel {
 
 export function ledgerReceipt(entry: any): ReceiptModel {
   const direction = entry.direction === 'credit' ? 'Credit' : 'Debit';
+  const order = entry.meter_order;
+  const orderFields = order ? [
+    field('Order ID', order.id, { wide: true }),
+    field('Ordered By', order.ordered_by_name),
+    field('Vendor Business', order.vendor_name),
+    field('Operator Email', order.ordered_by_email),
+    field('Customer', order.customer_name),
+    field('Customer ID', order.customer_id),
+    field('Customer Phone', order.customer_phone),
+    field('Customer Email', order.customer_email),
+    field('Meter Phase', clean(order.meter_type).replace(/_/g, ' ')),
+    field('Property Type', clean(order.property_category).replace(/_/g, ' ')),
+    field('Installation Address', order.property_address, { wide: true }),
+    field('Service Area', order.service_area),
+    field('Site Contact', order.contact_phone),
+    field('Order Status', clean(order.status).replace(/_/g, ' ')),
+    field('Payment Source', clean(order.sponsor_mode).replace(/_/g, ' ')),
+    field('Rejection Reason', order.rejection_reason, { wide: true }),
+    field('Refund Destination', clean(order.rejection_refund_destination).replace(/_/g, ' ')),
+    field('Rejected At', order.rejected_at ? date(order.rejected_at) : ''),
+  ] : [];
   return {
     title: 'Wallet Ledger Receipt',
     receiptId: clean(entry.id, 'PENDING').toUpperCase(),
@@ -372,6 +393,7 @@ export function ledgerReceipt(entry: any): ReceiptModel {
       field('Balance After', money(entry.balance_after_minor)),
       field('Reference Type', clean(entry.reference_type).replace(/_/g, ' ')),
       field('Reference', entry.reference_id),
+      ...orderFields,
       field('Memo', clean(entry.memo).replace(/\uFFFD+/g, ' • '), { wide: true }),
       field('Created', date(entry.created_at), { wide: true }),
     ],

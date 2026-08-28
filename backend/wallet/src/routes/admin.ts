@@ -34,7 +34,7 @@ import { listDeletionRequests, reviewDeletionRequest } from '../services/data-pr
 import { activateProfilePicture, assertProfilePictureSop, PROFILE_PICTURE_BUCKET, toProfilePicturePath } from '../services/profile-picture.js';
 import { runMalwareScan } from '../services/file-scan.js';
 import { PAYMENT_SUCCEEDED_STATUSES } from '../services/payment-status.js';
-import { createAdminMeterOrder, assertMeterOrderTransition, getMeterPrices, updateMeterPrices } from '../services/meter-orders.js';
+import { createAdminMeterOrder, assertMeterOrderTransition, getMeterPrices, rejectMeterOrder, updateMeterPrices } from '../services/meter-orders.js';
 import { revokePortalSession } from '../services/portal-session.js';
 import { pushConfig, removePushSubscription, savePushSubscription, sendWebPush } from '../services/push-notifications.js';
 import adminVendorAnalyticsRoutes from './admin-vendor-analytics.js';
@@ -351,6 +351,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /meter-orders/customer-search': 'wallet.vendors.manage',
     'GET /meter-orders/:id': 'wallet.vendors.review',
     'POST /meter-orders': 'wallet.vendors.manage',
+    'POST /meter-orders/:id/reject': 'wallet.vendors.manage',
     'PATCH /meter-orders/:id': 'wallet.vendors.manage',
     'GET /customer-meters': 'wallet.meters.approve',
     'POST /customer-meters/:id/approve': 'wallet.meters.approve',
@@ -2859,6 +2860,7 @@ const route: FastifyPluginAsync = async (fastify) => {
             installed: count('installed'),
             installed_today: installedToday,
             cancelled: count('cancelled'),
+            rejected: count('rejected'),
             by_source: bySource,
         };
     });
@@ -2898,10 +2900,66 @@ const route: FastifyPluginAsync = async (fastify) => {
         return data;
     });
 
+    fastify.post('/meter-orders/:id/reject', async (req, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+        const { reason } = z.object({ reason: z.string().trim().min(10).max(500) }).parse(req.body ?? {});
+        const assignedStations = staffStations(req);
+        if (!requireStationScope(reply, assignedStations)) return reply;
+        let scopeQuery = adminClient
+            .from('meter_purchase_orders')
+            .select('id')
+            .eq('id', id);
+        scopeQuery = scopeStations(scopeQuery, assignedStations);
+        const { data: scopedOrder, error: scopeError } = await scopeQuery.maybeSingle();
+        if (scopeError) {
+            return reply.code(503).send({ error: 'meter_order_lookup_failed', message: 'Could not verify this meter order.' });
+        }
+        if (!scopedOrder) return reply.code(404).send({ error: 'not_found' });
+        try {
+            const order = await rejectMeterOrder({ orderId: id, rejectedByUserId: req.actor!.userId, reason });
+            await logAction({
+                actorUserId: req.actor!.userId,
+                actorType: 'staff',
+                actorRole: req.actor!.role,
+                action: 'meter_order.rejected',
+                targetType: 'meter_order',
+                targetId: id,
+                metadata: {
+                    reason,
+                    refund_destination: order.rejection_refund_destination ?? 'none',
+                    refund_entry_id: order.rejection_refund_entry_id ?? null,
+                },
+            });
+            const { notifyMeterOrderUpdate } = await import('../services/notifications.js');
+            await notifyMeterOrderUpdate(order.customer_id, {
+                orderId: id,
+                status: 'rejected',
+                reason,
+                refundDestination: order.rejection_refund_destination ?? 'none',
+            }).catch(() => undefined);
+            if (order.vendor_organization_id) {
+                await adminClient.from('notifications').insert({
+                    customer_id: null,
+                    recipient_type: 'vendor',
+                    recipient_id: order.vendor_organization_id,
+                    vendor_organization_id: order.vendor_organization_id,
+                    type: 'meter_order_update',
+                    title: 'Meter order rejected',
+                    body: `The meter order for ${order.customer_name_snapshot ?? 'your customer'} was rejected. ${reason}`,
+                    metadata: { orderId: id, status: 'rejected', reason, refundDestination: order.rejection_refund_destination ?? 'none', path: '/meter-orders' },
+                    read: false,
+                }).then(() => undefined, () => undefined);
+            }
+            return order;
+        } catch (error: any) {
+            return reply.code(error?.status ?? 422).send({ error: error?.code ?? 'meter_order_rejection_failed', message: error?.message ?? 'Could not reject meter order.' });
+        }
+    });
+
     fastify.patch('/meter-orders/:id', async (req, reply) => {
         const id = (req.params as { id: string }).id;
         const schema = z.object({
-            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled']).optional(),
+            status: z.enum(['paid', 'assigned', 'dispatched', 'installed', 'cancelled', 'rejected']).optional(),
             technician_name: z.string().optional(),
             notes: z.string().optional(),
         }).refine((value) => value.status || value.technician_name !== undefined || value.notes !== undefined, {

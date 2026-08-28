@@ -2,24 +2,27 @@
 import { computed, ref } from 'vue';
 import IconSvg from './IconSvg.vue';
 import { CUSTOMER_STEPS, VENDOR_STEPS, PORTALS } from '../content';
+import { useI18n } from '@beverly/tokens/i18n.js';
+
+const { t } = useI18n();
 
 const mode = ref<'customer' | 'vendor'>('customer');
 const steps = computed(() => (mode.value === 'customer' ? CUSTOMER_STEPS : VENDOR_STEPS));
 const cta = computed(() =>
     mode.value === 'customer'
-        ? { label: 'Start buying', href: PORTALS.customer.signup }
-        : { label: 'Become a vendor', href: PORTALS.vendor.login },
+        ? { label: t('landing.how.customerCta'), href: PORTALS.customer.signup }
+        : { label: t('landing.how.vendorCta'), href: PORTALS.vendor.login },
 );
 </script>
 
 <template>
   <section id="how" class="lp-section lp-how">
     <div class="lp-section-head" v-reveal>
-      <span class="lp-eyebrow">How it works</span>
-      <h2 class="lp-section-title">Up and running in three steps.</h2>
+      <span class="lp-eyebrow">{{ t('landing.nav.how') }}</span>
+      <h2 class="lp-section-title">{{ t('landing.how.title') }}</h2>
     </div>
 
-    <div class="lp-toggle" v-reveal role="tablist" aria-label="Audience">
+    <div class="lp-toggle" v-reveal role="tablist" :aria-label="t('landing.how.audience')">
       <button
         id="tab-customer"
         :class="['lp-toggle-btn', mode === 'customer' && 'lp-toggle-btn--on']"
@@ -29,7 +32,7 @@ const cta = computed(() =>
         aria-controls="tabpanel-steps"
         @click="mode = 'customer'"
       >
-        <IconSvg name="user" /> For customers
+        <IconSvg name="user" /> {{ t('landing.how.customers') }}
       </button>
       <button
         id="tab-vendor"
@@ -40,7 +43,7 @@ const cta = computed(() =>
         aria-controls="tabpanel-steps"
         @click="mode = 'vendor'"
       >
-        <IconSvg name="store" /> For vendors
+        <IconSvg name="store" /> {{ t('landing.how.vendors') }}
       </button>
     </div>
 
@@ -54,8 +57,8 @@ const cta = computed(() =>
         <article v-for="(s, i) in steps" :key="s.n" class="lp-step" v-reveal="i * 90">
           <span class="lp-step-n">{{ s.n }}</span>
           <div class="lp-step-body">
-            <h3>{{ s.title }}</h3>
-            <p>{{ s.body }}</p>
+            <h3>{{ t(s.title) }}</h3>
+            <p>{{ t(s.body) }}</p>
           </div>
           <span v-if="i < steps.length - 1" class="lp-step-arrow" aria-hidden="true"><IconSvg name="arrow" /></span>
         </article>

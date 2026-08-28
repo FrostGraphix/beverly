@@ -12,6 +12,7 @@ import { postEntry, type LedgerEntry } from './ledger.js';
 import { assertWalletCanTransact, findWalletByOwner, getOrCreateWallet, type Wallet } from './wallets.js';
 import { initializeTransaction } from '../adapters/paystack.js';
 import { logAction } from './audit.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 import crypto from 'node:crypto';
 
 const PROOF_BUCKET = 'uploads';
@@ -329,6 +330,22 @@ export async function initiateBankProofFunding(input: InitiateBankProofInput): P
         targetId: (data as FundingRequest).id,
         after: { amountMinor: input.amountMinor, reference: (data as FundingRequest).funding_reference },
     });
+
+    const { data: vendor } = await adminClient
+        .from('vendor_organizations')
+        .select('operating_stations')
+        .eq('id', input.vendorOrganizationId)
+        .maybeSingle();
+    await notifyOperationalStaff({
+        permission: 'wallet.funding.view',
+        type: 'funding_approval',
+        title: 'Funding approval requested',
+        body: `${(data as FundingRequest).funding_reference ?? 'Bank funding'} requires review.`,
+        path: '/funding',
+        dedupeKey: `funding.requested.${(data as FundingRequest).id}`,
+        stationIds: (vendor as any)?.operating_stations ?? [],
+        metadata: { fundingRequestId: (data as FundingRequest).id, amountMinor: input.amountMinor },
+    }).catch(() => undefined);
 
     return data as FundingRequest;
 }

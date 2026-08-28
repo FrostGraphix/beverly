@@ -1637,6 +1637,8 @@ img, svg { display: block; }
 }
 
 @media (max-width: 760px) {
+  .lp-hero-copy { order: -1; }
+  .lp-hero-art { order: initial; }
   :root { --lp-gutter: 18px; }
   .lp-orb { display: none; }
   .lp-nav-inner { height: 64px; gap: 12px; }
@@ -2925,5 +2927,10 @@ img, svg { display: block; }
     justify-self: center;
     margin-top: 10px;
   }
+}
+
+@media (max-width: 720px) {
+  .lp-hero-copy { order: -1; }
+  .lp-hero-art { order: initial; }
 }
 

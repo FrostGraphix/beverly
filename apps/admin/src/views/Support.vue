@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
@@ -7,6 +8,7 @@ import { api } from '../lib/api';
 
 type Tab = 'tickets' | 'chat' | 'faq';
 const tab = ref<Tab>('tickets');
+const route = useRoute();
 
 // ════════════════════════════════════════════════ Tickets
 interface Ticket { id: string; reference: string; subject: string; status: string; category: string; priority: string; requester_actor_type: string; requester_name?: string; assigned_to_user_id?: string; last_message_at: string; created_at: string }
@@ -62,10 +64,21 @@ const chatStatusFilter = ref('');
 const selSession = ref<ChatSession | null>(null);
 const chatMessages = ref<any[]>([]);
 const chatDraft = ref('');
+const chatSending = ref(false);
 const chatLastTs = ref('');
 let chatPoll: ReturnType<typeof setInterval> | null = null;
 let sessionsPoll: ReturnType<typeof setInterval> | null = null;
 const chatScroller = ref<HTMLElement | null>(null);
+let chatFetchInFlight = false;
+
+function mergeChatMessages(current: any[], incoming: any[]): any[] {
+    const byId = new Map(current.map((message) => [message.id, message]));
+    for (const message of incoming) byId.set(message.id, message);
+    return [...byId.values()].sort((a, b) => {
+        const byTime = String(a.created_at).localeCompare(String(b.created_at));
+        return byTime || String(a.id).localeCompare(String(b.id));
+    });
+}
 
 async function loadSessions() {
     try {
@@ -81,25 +94,26 @@ async function openSession(s: ChatSession) {
     chatPoll = setInterval(() => fetchChat(false), 4000);
 }
 async function fetchChat(initial: boolean) {
-    if (!selSession.value) return;
+    if (!selSession.value || chatFetchInFlight) return;
+    chatFetchInFlight = true;
     try {
         const q = chatLastTs.value && !initial ? `?since=${encodeURIComponent(chatLastTs.value)}` : '';
         const res = await api.get<{ messages: any[] }>(`/api/v1/admin/support/chat/${selSession.value.id}/messages${q}`);
         const incoming = res.messages ?? [];
-        if (initial) chatMessages.value = incoming;
-        else if (incoming.length) chatMessages.value.push(...incoming);
+        chatMessages.value = initial ? mergeChatMessages([], incoming) : mergeChatMessages(chatMessages.value, incoming);
         if (chatMessages.value.length) chatLastTs.value = chatMessages.value[chatMessages.value.length - 1].created_at;
         scrollChat();
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } finally { chatFetchInFlight = false; }
 }
 async function sendChat() {
-    if (!selSession.value || !chatDraft.value.trim()) return;
+    if (!selSession.value || !chatDraft.value.trim() || chatSending.value) return;
     const body = chatDraft.value.trim();
-    chatDraft.value = '';
+    chatSending.value = true;
     try {
         await api.post(`/api/v1/admin/support/chat/${selSession.value.id}/messages`, { body });
+        if (chatDraft.value.trim() === body) chatDraft.value = '';
         await fetchChat(false);
-    } catch { /* ignore */ }
+    } catch { /* preserve the draft */ } finally { chatSending.value = false; }
 }
 async function endChat() {
     if (!selSession.value) return;
@@ -181,8 +195,16 @@ function priorityBadge(p: string) {
 function fmt(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
 function pretty(s: string) { return s.replace(/_/g, ' '); }
 
-onMounted(() => {
-    loadTickets(); loadSessions(); loadFaqAdmin();
+onMounted(async () => {
+    await Promise.all([loadTickets(), loadSessions(), loadFaqAdmin()]);
+    if (route.query.tab === 'chat') tab.value = 'chat';
+    if (route.query.tab === 'tickets') tab.value = 'tickets';
+    const ticketId = typeof route.query.ticket === 'string' ? route.query.ticket : '';
+    const sessionId = typeof route.query.session === 'string' ? route.query.session : '';
+    const requestedTicket = tickets.value.find((ticket) => ticket.id === ticketId);
+    const requestedSession = sessions.value.find((session) => session.id === sessionId);
+    if (requestedTicket) await openTicket(requestedTicket);
+    if (requestedSession) await openSession(requestedSession);
     sessionsPoll = setInterval(() => { if (tab.value === 'chat') loadSessions(); }, 6000);
 });
 onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll) clearInterval(sessionsPoll); });
@@ -351,8 +373,8 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
               </div>
             </div>
             <footer class="sup-chat-foot">
-              <input v-model="chatDraft" class="bw-input" placeholder="Type a reply…" @keyup.enter="sendChat" />
-              <button class="bw-btn bw-btn-primary" :disabled="!chatDraft.trim()" @click="sendChat">Send</button>
+              <input v-model="chatDraft" class="bw-input" placeholder="Type a reply…" :disabled="chatSending" @keyup.enter="sendChat" />
+              <button class="bw-btn bw-btn-primary" :disabled="!chatDraft.trim() || chatSending" @click="sendChat">{{ chatSending ? 'Sending…' : 'Send' }}</button>
             </footer>
           </template>
           <div v-else class="sup-chat-empty">Select a conversation to start replying.</div>

@@ -339,19 +339,20 @@ export function notifyPaymentFailed(customerId: string, opts: {
 }
 
 export function notifyMeterOrderUpdate(customerId: string, opts: {
-    orderId: string; status: string; technicianName?: string | null;
+    orderId: string; status: string; technicianName?: string | null; reason?: string; refundDestination?: string;
 }): Promise<void> {
     const messages: Record<string, string> = {
         assigned:   `A technician${opts.technicianName ? ` (${opts.technicianName})` : ''} has been assigned to your meter order.`,
         dispatched: `Your technician is en route. Please ensure access to the installation site.`,
         installed:  `Your meter has been installed. Welcome to Beverly!`,
         cancelled:  `Your meter order has been cancelled. Contact support if this is unexpected.`,
+        rejected:   `Your meter order was rejected. ${opts.reason ?? 'Review the order details or contact support.'} ${opts.refundDestination === 'vendor_wallet' ? 'The vendor wallet was refunded.' : opts.refundDestination === 'customer_wallet' ? 'The amount was credited to your Beverly wallet.' : 'No payment was captured.'}`,
     };
     return sendNotification(customerId, {
         type:  'meter_order_update',
         title: 'Meter order update',
         body:  messages[opts.status] ?? `Your meter order status has changed to ${opts.status}.`,
-        metadata: { orderId: opts.orderId, status: opts.status },
+        metadata: { orderId: opts.orderId, status: opts.status, reason: opts.reason ?? null, refundDestination: opts.refundDestination ?? null, path: '/meter-orders' },
     });
 }
 

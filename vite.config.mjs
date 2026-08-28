@@ -44,6 +44,19 @@ function reloadReferenceHandler(reason) {
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET
   || (process.env.API_PORT ? `http://127.0.0.1:${process.env.API_PORT}` : "http://127.0.0.1:9310");
 
+// The CRM service worker owns the root scope. These routes belong to the
+// separately built wallet applications and must always reach Vercel routing.
+const WALLET_NAVIGATION_DENYLIST = [
+  /^\/wallet(?:\/|$)/,
+  /^\/wallet-(?:admin|vendor|customer)(?:\/|$)/,
+  /^\/(?:admin|vendor|customer)(?:\/|$)/,
+];
+
+const CRM_NAVIGATION_ALLOWLIST = [
+  /^\/$/,
+  /^\/(?:crm|beverly)(?:\/|$)/,
+];
+
 function serveRawDocs() {
   return {
     name: "serve-raw-docs",
@@ -222,7 +235,8 @@ export default defineConfig({
     embeddedReferenceApi(),
     vue(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
+      injectRegister: "script-defer",
       includeAssets: ["brand/beverly-mark.png"],
       manifest: {
         name: "Beverly CRM",
@@ -240,6 +254,10 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
+        navigateFallbackAllowlist: CRM_NAVIGATION_ALLOWLIST,
+        navigateFallbackDenylist: WALLET_NAVIGATION_DENYLIST,
+        skipWaiting: true,
+        clientsClaim: true,
         importScripts: ["push-sw.js"],
         runtimeCaching: [{
           urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,

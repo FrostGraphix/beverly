@@ -7,6 +7,7 @@ declare module '*.vue' {
 }
 
 declare module '@beverly/tokens' {
+    export function initLocale(): 'en' | 'yo' | 'ha' | 'ig';
     export function setTheme(name: string): void;
     export function initTheme(defaultName?: string): void;
     export function toggleTheme(): void;

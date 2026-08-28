@@ -28,6 +28,14 @@ assert.match(vendorDashboard, /dashboardLoading/, 'vendor dashboard needs an ini
 assert.match(customerDashboard, /aria-label="Loading dashboard"/, 'customer dashboard needs an initial loading state');
 assert.match(adminVite, /VitePWA/, 'wallet admin must build a PWA');
 assert.match(crmVite, /VitePWA/, 'CRM must build a PWA');
+assert.match(crmVite, /registerType:\s*["']autoUpdate["']/, 'CRM service worker updates must activate automatically');
+assert.match(crmVite, /injectRegister:\s*["']script-defer["']/, 'CRM must register service-worker updates explicitly');
+assert.match(crmVite, /navigateFallbackDenylist:\s*WALLET_NAVIGATION_DENYLIST/, 'CRM service worker must exclude wallet navigations');
+assert.match(crmVite, /navigateFallbackAllowlist:\s*CRM_NAVIGATION_ALLOWLIST/, 'CRM service worker must intercept only known CRM paths');
+assert(crmVite.includes('/^\\/$/'), 'CRM service worker must allow the CRM root route');
+assert(crmVite.includes('/^\\/(?:crm|beverly)(?:\\/|$)/'), 'CRM service worker must allow explicit CRM aliases');
+assert.match(crmVite, /\^\\\/wallet\(\?:\\\/\|\$\)/, 'CRM service worker must exclude the wallet landing route');
+assert.match(crmVite, /wallet-\(\?:admin\|vendor\|customer\)/, 'CRM service worker must exclude every wallet portal route');
 
 for (const file of [
   'apps/admin/public/pwa-192.png',

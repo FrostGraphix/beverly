@@ -81,6 +81,7 @@ function row() {
 function apiBody(url) {
   const value = url.toLowerCase();
   if (value.includes("/user/login")) return { code: 0, data: { token: "smoke-token", userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
+  if (value.includes("/auth/me")) return { code: 0, data: { userId: "admin", userName: "ACB(admin)", roleId: "super-admin" } };
   if (value.includes("/user/read")) return { code: 0, data: { data: [{ ...row(), userId: "admin", name: "ACB(admin)" }], total: 1 } };
   if (value.includes("/role/read")) return { code: 0, data: { data: [{ id: "super-admin", name: "Super Admin", remark: "ALL" }], total: 1 } };
   if (value.includes("/station/read")) return { code: 0, data: { data: [{ id: "KYAKALE", name: "Kyakale", stationId: "KYAKALE" }], total: 1 } };
@@ -101,6 +102,12 @@ function apiBody(url) {
 async function installApiMocks(page) {
   await page.route("**/*", async (route) => {
     const url = route.request().url();
+    if (url.startsWith("https://fonts.googleapis.com/")) {
+      return route.fulfill({ status: 200, contentType: "text/css", body: "" });
+    }
+    if (url.startsWith("https://fonts.gstatic.com/")) {
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (!url.toLowerCase().includes("/api/")) return route.continue();
     return route.fulfill({
       status: 200,

@@ -8,6 +8,7 @@ import {
 } from '@beverly/tokens';
 import { PORTAL_URLS } from '../lib/portals';
 import { api } from '../lib/api';
+import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
 import { syncDeviceNotifications } from '../lib/push-notifications';
 import ChatWidget from './ChatWidget.vue';
 defineProps<{ title?: string }>();
@@ -21,6 +22,10 @@ const signingOut = ref(false);
 const accountMenuWrap = ref<HTMLElement | null>(null);
 const navRef = ref<HTMLElement | null>(null);
 const unreadCount = ref(0);
+
+async function persistLocale(locale: string) {
+    try { await api.put('/api/v1/preferences/locale', { locale }); } catch { /* local preference remains active */ }
+}
 let bellPoll: ReturnType<typeof setInterval> | null = null;
 
 function scrollToActiveLink() {
@@ -358,6 +363,11 @@ onBeforeUnmount(() => {
                   <small>{{ auth.user?.email || auth.user?.role || 'vendor portal' }}</small>
                 </span>
               </div>
+              <div class="bw-user-menu-language">
+                <span>Language</span>
+                <LanguageSwitcher compact @change="persistLocale" />
+              </div>
+              <div class="bw-user-menu-separator"></div>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openProfile">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M20 21a8 8 0 0 0-16 0" />

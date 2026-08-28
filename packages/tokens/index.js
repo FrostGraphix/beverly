@@ -177,3 +177,4 @@ export function pageRange(page, total, pageSize = DEFAULT_PAGE_SIZE) {
 }
 
 export * from './pwaInstall.js';
+export * from './i18n.js';

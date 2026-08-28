@@ -586,6 +586,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.bw-user-menu-language {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+}
+
+.bw-user-menu-language > span {
+  color: var(--text-muted);
+  font-size: var(--t-xs);
+  font-weight: 700;
+}
+
+.bw-user-menu-language .bw-language-switcher {
+  margin-left: auto;
+}
 .bw-user-menu-item {
   width: 100%;
   min-height: 40px;

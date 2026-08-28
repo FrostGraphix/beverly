@@ -17,6 +17,8 @@ import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { exportCsv, type Column } from '../lib/export';
 import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 
 interface VendorOrg {
     legal_name?: string | null;
@@ -60,6 +62,7 @@ const statusFilter  = ref<'all' | 'approved' | 'pending' | 'rejected'>('all');
 const channelFilter = ref<'all' | 'bank_transfer' | 'paystack' | 'manual'>('all');
 const fromDate      = ref('');
 const toDate        = ref('');
+const showFilters   = ref(false);
 
 // ── data ─────────────────────────────────────────────────────────
 const items     = ref<FundingRow[]>([]);
@@ -68,6 +71,17 @@ const loading   = ref(false);
 const loadingMore = ref(false);
 const nextCursor  = ref<string | null>(null);
 const banner    = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const activeFilterCount = computed(() => [
+    statusFilter.value !== 'all',
+    channelFilter.value !== 'all',
+    Boolean(fromDate.value),
+    Boolean(toDate.value),
+].filter(Boolean).length);
 
 // ── helpers ───────────────────────────────────────────────────────
 function vendorName(f: FundingRow) {
@@ -117,6 +131,10 @@ function buildUrl(cursor?: string | null) {
 const displayItems = computed(() => {
     return items.value;
 });
+const paginatedItems = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return displayItems.value.slice(start, start + pageSize.value);
+});
 
 async function load() {
     loading.value = true;
@@ -124,6 +142,7 @@ async function load() {
     items.value = [];
     nextCursor.value = null;
     summary.value = null;
+    currentPage.value = 1;
     try {
         const r = await api.get<HistoryResponse>(buildUrl());
         items.value   = r.funding ?? [];
@@ -183,7 +202,6 @@ function printFundingReceipt(f: FundingRow) {
 
 <template>
   <AppShell title="Funding History">
-    <div class="fh-table-always">
 
     <!-- Banner -->
     <transition name="banner">
@@ -217,58 +235,81 @@ function printFundingReceipt(f: FundingRow) {
       </div>
     </div>
 
-    <!-- Toolbar -->
-    <div class="fh-toolbar">
-      <!-- Status tabs -->
-      <div class="bw-segmented">
-        <button
-          v-for="s in (['all','approved','pending','rejected'] as const)"
-          :key="s"
-          :class="['bw-seg', statusFilter === s ? 'active' : '']"
-          @click="statusFilter = s"
-        >{{ s }}</button>
-      </div>
-
-      <span class="bw-spacer" />
-
-      <!-- Channel filter -->
-      <select class="fh-select" v-model="channelFilter" aria-label="Channel">
-        <option value="all">All channels</option>
-        <option value="bank_transfer">Bank transfer</option>
-        <option value="paystack">Paystack</option>
-        <option value="manual">Manual</option>
-      </select>
-
-      <!-- Date range -->
-      <div class="fh-date-range">
-        <input type="date" class="fh-input" v-model="fromDate" placeholder="From" aria-label="From date" />
-        <span class="fh-date-sep">–</span>
-        <input type="date" class="fh-input" v-model="toDate"   placeholder="To"   aria-label="To date" />
-      </div>
-
-      <!-- Actions -->
-      <div class="fh-action-row">
-        <button class="bw-btn sm" :disabled="loading" @click="load">
-          {{ loading ? 'Loading…' : 'Refresh' }}
-        </button>
-        <button class="bw-btn sm" :disabled="!displayItems.length" @click="doExport">
-          Export CSV
-        </button>
-        <RouterLink class="bw-btn sm primary fh-queue-link" :to="{ name: 'funding' }">
-          Approval Queue
-        </RouterLink>
-      </div>
-    </div>
-
     <!-- Table -->
     <div class="bw-card" style="padding: 0">
-      <div class="fh-count-bar">
-        <span class="bw-muted" style="font-size: var(--t-xs)">
-          {{ loading ? 'Loading…' : `${displayItems.length} records${nextCursor ? '+' : ''}` }}
-        </span>
+      <div class="bw-table-head-bar">
+        <div class="bw-table-heading">
+          <div class="bw-table-title-row">
+            <div class="bw-card-title">Funding history</div>
+            <span class="bw-table-count">{{ loading ? 'Loading…' : `${displayItems.length}${nextCursor ? '+' : ''}` }}</span>
+          </div>
+          <div class="bw-card-sub">Approved, pending, and rejected funding requests</div>
+        </div>
+        <div class="bw-table-actions">
+          <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Funding history display view" />
+          <button
+            type="button"
+            class="bw-btn sm recent-filter-button"
+            :class="{ active: showFilters || activeFilterCount > 0 }"
+            :aria-expanded="showFilters"
+            aria-controls="funding-history-filter-panel"
+            @click="showFilters = !showFilters"
+          >
+            Filter <span v-if="activeFilterCount" class="recent-filter-count">{{ activeFilterCount }}</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Desktop -->
+      <section
+        v-if="showFilters"
+        id="funding-history-filter-panel"
+        class="recent-filter-panel fh-filter-panel"
+        aria-label="Funding history filters"
+      >
+        <div class="recent-filter-grid">
+          <div class="filter-group full-width">
+            <span class="filter-label">Status</span>
+            <div class="bw-segmented">
+              <button
+                v-for="s in (['all','approved','pending','rejected'] as const)"
+                :key="s"
+                type="button"
+                :class="['bw-seg', statusFilter === s ? 'active' : '']"
+                @click="statusFilter = s"
+              >{{ s }}</button>
+            </div>
+          </div>
+          <label class="filter-group">
+            <span class="filter-label">Channel</span>
+            <select class="fh-select" v-model="channelFilter" aria-label="Channel">
+              <option value="all">All channels</option>
+              <option value="bank_transfer">Bank transfer</option>
+              <option value="paystack">Paystack</option>
+              <option value="manual">Manual</option>
+            </select>
+          </label>
+          <div class="filter-group fh-date-filter">
+            <span class="filter-label">Date range</span>
+            <div class="fh-date-range">
+              <input type="date" class="fh-input" v-model="fromDate" aria-label="From date" />
+              <span class="fh-date-sep">–</span>
+              <input type="date" class="fh-input" v-model="toDate" aria-label="To date" />
+            </div>
+          </div>
+          <div class="filter-group full-width">
+            <span class="filter-label">Actions</span>
+            <div class="fh-action-row">
+              <button class="bw-btn sm" :disabled="loading" @click="load">
+                {{ loading ? 'Loading…' : 'Refresh' }}
+              </button>
+              <button class="bw-btn sm" :disabled="!displayItems.length" @click="doExport">Export CSV</button>
+              <RouterLink class="bw-btn sm primary fh-queue-link" :to="{ name: 'funding' }">Approval Queue</RouterLink>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="bw-data-region" :data-view="viewMode">
       <div class="bw-t-wrap">
         <table class="bw-table fh-table">
           <thead>
@@ -284,7 +325,7 @@ function printFundingReceipt(f: FundingRow) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="f in displayItems" :key="f.id">
+            <tr v-for="f in paginatedItems" :key="f.id">
               <td class="bw-mono bw-muted" style="font-size:var(--t-xs); white-space:nowrap">
                 {{ shortDate(f.created_at) }}
               </td>
@@ -324,7 +365,7 @@ function printFundingReceipt(f: FundingRow) {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards fh-cards">
-        <div v-for="f in displayItems" :key="f.id" class="fh-card">
+        <div v-for="f in paginatedItems" :key="f.id" class="fh-card">
           <div class="fh-card-top">
             <div>
               <div class="fh-card-amount">{{ naira(f.amount_minor) }}</div>
@@ -365,6 +406,15 @@ function printFundingReceipt(f: FundingRow) {
           No funding records.
         </div>
       </div>
+      </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="displayItems.length"
+        item-label="funding records"
+        :loading="loading"
+      />
 
       <!-- Load more -->
       <div v-if="nextCursor" class="fh-load-more">
@@ -372,8 +422,6 @@ function printFundingReceipt(f: FundingRow) {
           {{ loadingMore ? 'Loading…' : 'Load more' }}
         </button>
       </div>
-    </div>
-
     </div>
   </AppShell>
 </template>
@@ -417,11 +465,6 @@ function printFundingReceipt(f: FundingRow) {
 .fh-kpi-value.danger { color: var(--danger); }
 .fh-kpi-sub { font-size: var(--t-xs); color: var(--text-muted); }
 
-/* Toolbar */
-.fh-toolbar {
-  display: flex; flex-wrap: wrap; align-items: center;
-  gap: var(--s-2); margin-bottom: var(--s-3);
-}
 .fh-select {
   background: var(--glass-bg-strong); border: 1px solid var(--glass-border);
   border-radius: var(--r-md); padding: 6px 10px;
@@ -439,12 +482,6 @@ function printFundingReceipt(f: FundingRow) {
   width: 130px;
 }
 .fh-date-sep { color: var(--text-muted); font-size: var(--t-sm); }
-
-/* Count bar */
-.fh-count-bar {
-  padding: var(--s-2) var(--s-4);
-  border-bottom: 1px solid var(--border);
-}
 
 /* Table */
 .fh-table .fh-sub  { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
@@ -469,17 +506,12 @@ function printFundingReceipt(f: FundingRow) {
 /* Load more */
 .fh-load-more { display: flex; justify-content: center; padding: var(--s-4); border-top: 1px solid var(--border); }
 
-/* Force table layout on all breakpoints for this page */
-.fh-table-always .bw-table { display: table; }
-.fh-table-always .bw-t-cards { display: none; }
-
 /* Responsive KPI row */
 @media (max-width: 768px) {
   .fh-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 480px) {
   .fh-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fh-toolbar { flex-direction: column; align-items: stretch; }
   .fh-date-range { flex-direction: row; width: 100%; }
   .fh-date-sep { flex: 0 0 auto; }
   .fh-action-row { width: 100%; }

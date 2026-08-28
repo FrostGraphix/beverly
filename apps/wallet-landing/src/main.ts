@@ -1,7 +1,7 @@
 import { createApp } from 'vue';
 import type { Directive } from 'vue';
 import App from './App.vue';
-import { initTheme } from '@beverly/tokens';
+import { initLocale, initTheme } from '@beverly/tokens';
 
 import '@beverly/tokens/tokens.css';
 import '@beverly/tokens/theme.css';
@@ -9,6 +9,7 @@ import '@beverly/tokens/wallet.css';
 import './styles/landing.css';
 
 initTheme('dark');
+initLocale();
 
 /** v-reveal — fade/slide elements in as they enter the viewport. */
 const reveal: Directive<HTMLElement, number | undefined> = {

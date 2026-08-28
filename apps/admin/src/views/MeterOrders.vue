@@ -47,7 +47,7 @@ interface MeterOrder {
     service_area: string;
     contact_phone: string;
     amount_minor: number;
-    status: 'pending_payment' | 'paid' | 'assigned' | 'dispatched' | 'installed' | 'cancelled';
+    status: 'pending_payment' | 'paid' | 'assigned' | 'dispatched' | 'installed' | 'cancelled' | 'rejected';
     payment_reference: string;
     technician_name: string | null;
     notes: string | null;
@@ -57,6 +57,9 @@ interface MeterOrder {
     sponsor_mode?: 'manual_paid' | 'vendor_wallet';
     customers?: CustomerUser | null;
     vendor_organizations?: VendorOrg | null;
+    rejection_reason?: string | null;
+    rejection_refund_destination?: 'none' | 'vendor_wallet' | 'customer_wallet' | null;
+    rejected_at?: string | null;
 }
 
 interface Stats {
@@ -66,6 +69,7 @@ interface Stats {
     installed: number;
     installed_today: number;
     cancelled: number;
+    rejected: number;
     by_source?: Record<string, number>;
 }
 
@@ -89,6 +93,7 @@ const STATUS_OPTS = [
     { value: 'dispatched',      label: 'Dispatched' },
     { value: 'installed',       label: 'Installed' },
     { value: 'cancelled',       label: 'Cancelled' },
+    { value: 'rejected',        label: 'Rejected' },
 ];
 
 // ── status helpers ────────────────────────────────────────────────
@@ -99,6 +104,7 @@ const STATUS_BADGE: Record<string, string> = {
     dispatched:      'info',
     installed:       'success',
     cancelled:       'danger',
+    rejected:        'danger',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -108,6 +114,7 @@ const STATUS_LABEL: Record<string, string> = {
     dispatched:      'En Route',
     installed:       'Installed',
     cancelled:       'Cancelled',
+    rejected:        'Rejected',
 };
 
 /** The natural next status in the workflow */
@@ -123,6 +130,7 @@ const STATUS_ALLOWED: Record<string, string[]> = {
     dispatched: ['installed'],
     installed: [],
     cancelled: [],
+    rejected: [],
 };
 
 function customerName(o: MeterOrder) {
@@ -194,7 +202,7 @@ onMounted(refresh);
 // ── advance / cancel modal ─────────────────────────────────────────
 const actionOpen    = ref(false);
 const actionOrder   = ref<MeterOrder | null>(null);
-const actionVerb    = ref<'advance' | 'cancel'>('advance');
+const actionVerb    = ref<'advance' | 'cancel' | 'reject'>('advance');
 const actionStatus  = ref('');
 const techName      = ref('');
 const actionNotes   = ref('');
@@ -203,6 +211,7 @@ const actionError   = ref('');
 
 const actionTitle = computed(() => {
     if (!actionOrder.value) return '';
+    if (actionVerb.value === 'reject') return 'Reject meter order';
     if (actionVerb.value === 'cancel') return 'Cancel order';
     return `Mark as ${STATUS_LABEL[actionStatus.value] ?? actionStatus.value}`;
 });
@@ -210,6 +219,12 @@ const actionTitle = computed(() => {
 const actionDesc = computed(() => {
     if (!actionOrder.value) return '';
     const o = actionOrder.value;
+    if (actionVerb.value === 'reject') {
+        const refund = o.status === 'paid'
+            ? o.sponsor_mode === 'vendor_wallet' ? 'The vendor wallet receives an immediate refund.' : 'The customer Beverly wallet receives an immediate credit.'
+            : 'No payment was captured.';
+        return `Reject the ${meterTypeLabel(o.meter_type)} order for ${customerName(o)}? ${refund}`;
+    }
     if (actionVerb.value === 'cancel') {
         return `Cancel the ${meterTypeLabel(o.meter_type)} meter order for ${customerName(o)} at ${o.property_address}? This cannot be undone.`;
     }
@@ -245,6 +260,17 @@ function askCancel(o: MeterOrder) {
     actionOpen.value   = true;
 }
 
+function askReject(o: MeterOrder) {
+    if (!canManageMeterOrders.value) return;
+    actionOrder.value = o;
+    actionVerb.value = 'reject';
+    actionStatus.value = 'rejected';
+    techName.value = '';
+    actionNotes.value = '';
+    actionError.value = '';
+    actionOpen.value = true;
+}
+
 function askCustomStatus(o: MeterOrder) {
     if (!canManageMeterOrders.value) return;
     actionOrder.value  = o;
@@ -264,15 +290,17 @@ async function doAction() {
     if (techName.value.trim())    body.technician_name = techName.value.trim();
     if (actionNotes.value.trim()) body.notes = actionNotes.value.trim();
     try {
-        const updated = await api.patch<MeterOrder>(
-            `/api/v1/admin/meter-orders/${actionOrder.value.id}`, body
-        );
+        const updated = actionVerb.value === 'reject'
+            ? await api.post<MeterOrder>(`/api/v1/admin/meter-orders/${actionOrder.value.id}/reject`, { reason: actionNotes.value.trim() })
+            : await api.patch<MeterOrder>(`/api/v1/admin/meter-orders/${actionOrder.value.id}`, body);
         const idx = orders.value.findIndex((o) => o.id === actionOrder.value!.id);
         if (idx >= 0) orders.value[idx] = updated;
         banner.value = {
             tone: 'success',
             text: actionVerb.value === 'cancel'
                 ? `Order for ${customerName(actionOrder.value)} cancelled.`
+                : actionVerb.value === 'reject'
+                    ? `Order rejected. Refund handling completed.`
                 : `Order marked ${STATUS_LABEL[actionStatus.value]} successfully.`,
         };
         actionOpen.value = false;
@@ -284,7 +312,9 @@ async function doAction() {
 
 // Disable confirm when cancel but no notes
 const actionDisabled = computed(() =>
-    actionVerb.value === 'cancel' && actionNotes.value.trim().length < 3
+    actionVerb.value === 'reject'
+        ? actionNotes.value.trim().length < 10
+        : actionVerb.value === 'cancel' && actionNotes.value.trim().length < 3
 );
 
 function buildMeterOrderRowActions(o: MeterOrder): ActionItem[] {
@@ -294,6 +324,14 @@ function buildMeterOrderRowActions(o: MeterOrder): ActionItem[] {
             label: `Advance to ${STATUS_LABEL[STATUS_NEXT[o.status]]}`,
             icon: 'approve',
             action: () => askAdvance(o),
+        });
+    }
+    if (['pending_payment', 'paid'].includes(o.status)) {
+        actions.push({
+            label: 'Reject Order',
+            icon: 'reject',
+            tone: 'danger',
+            action: () => askReject(o),
         });
     }
     actions.push({
@@ -377,6 +415,10 @@ function doExport() {
         <span class="mo-kpi-label">Cancelled</span>
         <span class="mo-kpi-value">{{ stats?.cancelled ?? '—' }}</span>
       </div>
+      <div class="mo-kpi danger">
+        <span class="mo-kpi-label">Rejected</span>
+        <span class="mo-kpi-value">{{ stats?.rejected ?? '—' }}</span>
+      </div>
     </div>
 
     <!-- Toolbar -->
@@ -453,6 +495,7 @@ function doExport() {
                 <span :class="['bw-badge', STATUS_BADGE[o.status] ?? 'neutral']">
                   {{ STATUS_LABEL[o.status] ?? o.status }}
                 </span>
+                <div v-if="o.status === 'rejected' && o.rejection_reason" class="mo-rejection-note">{{ o.rejection_reason }}</div>
               </td>
               <td class="bw-muted bw-mono" style="font-size: var(--t-xs); white-space: nowrap">
                 {{ shortDate(o.created_at) }}
@@ -509,6 +552,11 @@ function doExport() {
             <span class="mo-card-lbl">Technician</span>
             <span>{{ o.technician_name }}</span>
           </div>
+          <div v-if="o.status === 'rejected'" class="mo-rejected-card" role="status">
+            <strong>Rejection reason</strong>
+            <span>{{ o.rejection_reason || 'No reason recorded.' }}</span>
+            <span>{{ o.rejection_refund_destination === 'vendor_wallet' ? 'Vendor wallet refunded.' : o.rejection_refund_destination === 'customer_wallet' ? 'Customer wallet credited.' : 'No payment captured.' }}</span>
+          </div>
 
           <div v-if="canManageMeterOrders" class="mo-card-acts">
             <WalletRowActions
@@ -544,9 +592,9 @@ function doExport() {
       v-model:open="actionOpen"
       :title="actionTitle"
       :description="actionDesc"
-      :confirm-label="actionVerb === 'cancel' ? 'Cancel order' : 'Confirm'"
+      :confirm-label="actionVerb === 'reject' ? 'Reject and refund' : actionVerb === 'cancel' ? 'Cancel order' : 'Confirm'"
       :cancel-label="'Back'"
-      :tone="actionVerb === 'cancel' ? 'danger' : 'brand'"
+      :tone="['cancel', 'reject'].includes(actionVerb) ? 'danger' : 'brand'"
       :loading="actionBusy"
       :disable-confirm="actionDisabled"
       @confirm="doAction"
@@ -572,17 +620,17 @@ function doExport() {
       <!-- Notes -->
       <div class="mo-cd-field">
         <label class="mo-cd-label">
-          Notes <span v-if="actionVerb === 'cancel'" style="color: var(--danger)">* (required)</span>
+          {{ actionVerb === 'reject' ? 'Rejection reason' : 'Notes' }} <span v-if="['cancel', 'reject'].includes(actionVerb)" style="color: var(--danger)">* (required)</span>
           <span v-else class="bw-muted">(optional)</span>
         </label>
         <textarea
           v-model="actionNotes"
           class="bw-input"
           rows="2"
-          :placeholder="actionVerb === 'cancel' ? 'Reason for cancellation…' : 'Any notes for this update…'"
+          :placeholder="actionVerb === 'reject' ? 'Explain why this order cannot proceed…' : actionVerb === 'cancel' ? 'Reason for cancellation…' : 'Any notes for this update…'"
         />
-        <p v-if="actionVerb === 'cancel'" class="mo-cd-hint">
-          Visible in the audit log. Minimum 3 characters.
+        <p v-if="['cancel', 'reject'].includes(actionVerb)" class="mo-cd-hint">
+          Visible to affected users. Minimum {{ actionVerb === 'reject' ? 10 : 3 }} characters.
         </p>
       </div>
 
@@ -677,6 +725,7 @@ function doExport() {
 .mo-customer-name { font-weight: 600; font-size: var(--t-sm); }
 .mo-customer-sub  { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
 .mo-address { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--t-sm); }
+.mo-rejection-note { max-width:180px; margin-top:4px; color:var(--danger); font-size:var(--t-xs); line-height:1.35; }
 .mo-row-acts { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: nowrap; }
 
 /* Mobile cards */
@@ -694,6 +743,8 @@ function doExport() {
 .mo-card-val { text-align: right; max-width: 55%; word-break: break-word; }
 .mo-card-acts { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
 .mo-card-acts .bw-btn { min-height: 36px; }
+.mo-rejected-card { display:grid; gap:4px; margin-top:var(--s-3); padding:var(--s-3); border:1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius:var(--r-md); background:color-mix(in srgb, var(--danger) 8%, var(--surface)); font-size:var(--t-xs); }
+.mo-rejected-card strong { color:var(--danger); }
 .mo-empty { text-align: center; padding: var(--s-8); font-size: var(--t-sm); }
 
 /* Load more */

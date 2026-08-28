@@ -7,6 +7,7 @@
  */
 import { adminClient } from '../db/supabase.js';
 import { notifyDisputeUpdate } from './notifications.js';
+import { notifyOperationalStaff } from './operational-notifications.js';
 
 export class DisputeError extends Error {
     constructor(message: string, public code: string) {
@@ -39,6 +40,21 @@ export async function raiseDispute(input: {
         .single();
 
     if (error || !data) throw new DisputeError('Could not create dispute', 'db_error');
+    let stationId: string | null = null;
+    if (input.purchaseOrderId) {
+        const { data: purchase } = await adminClient.from('purchase_orders').select('station_id').eq('id', input.purchaseOrderId).maybeSingle();
+        stationId = (purchase as any)?.station_id ?? null;
+    }
+    await notifyOperationalStaff({
+        permission: 'wallet.disputes.manage',
+        type: 'dispute_created',
+        title: 'New dispute opened',
+        body: `${(data as any).reference}: ${input.subject}`,
+        path: '/disputes',
+        dedupeKey: `dispute.created.${(data as any).id}`,
+        stationId,
+        metadata: { disputeId: (data as any).id, reference: (data as any).reference },
+    }).catch(() => undefined);
     return { id: (data as any).id, reference: (data as any).reference };
 }
 
@@ -48,16 +64,27 @@ export async function addMessage(input: {
     senderActorId: string;
     body: string;
 }): Promise<void> {
-    const { error } = await adminClient.from('dispute_messages').insert({
+    const { data: message, error } = await adminClient.from('dispute_messages').insert({
         dispute_id:       input.disputeId,
         sender_actor_type: input.senderActorType,
         sender_actor_id:  input.senderActorId,
         body:             input.body,
-    });
+    }).select('id').single();
     if (error) throw new DisputeError('Could not post message', 'db_error');
 
     // Bump updated_at on parent dispute
     await adminClient.from('disputes').update({ updated_at: new Date().toISOString() }).eq('id', input.disputeId);
+    if (input.senderActorType !== 'staff') {
+        await notifyOperationalStaff({
+            permission: 'wallet.disputes.manage',
+            type: 'dispute_message',
+            title: 'New dispute message',
+            body: 'A customer or vendor replied.',
+            path: '/disputes',
+            dedupeKey: `dispute.message.${(message as any).id}`,
+            metadata: { disputeId: input.disputeId, messageId: (message as any).id },
+        }).catch(() => undefined);
+    }
 }
 
 export async function updateDisputeStatus(input: {

@@ -2,6 +2,8 @@
 import { ref } from 'vue';
 import IconSvg from './IconSvg.vue';
 import { FAQS, PORTALS } from '../content';
+import { useI18n } from '@beverly/tokens/i18n.js';
+const { t } = useI18n();
 
 const open = ref<number>(0);
 function toggle(i: number) {
@@ -12,8 +14,8 @@ function toggle(i: number) {
 <template>
   <section id="faq" class="lp-section lp-faq">
     <div class="lp-section-head" v-reveal>
-      <span class="lp-eyebrow">Questions</span>
-      <h2 class="lp-section-title">Frequently asked.</h2>
+      <span class="lp-eyebrow">{{ t('landing.faq.eyebrow') }}</span>
+      <h2 class="lp-section-title">{{ t('landing.faq.title') }}</h2>
     </div>
 
     <div class="lp-faq-list">
@@ -24,20 +26,20 @@ function toggle(i: number) {
         v-reveal="i * 50"
       >
         <button class="lp-faq-q" type="button" :aria-expanded="open === i" @click="toggle(i)">
-          <span>{{ f.q }}</span>
+          <span>{{ t(f.q) }}</span>
           <span class="lp-faq-icon"><IconSvg name="arrow" /></span>
         </button>
         <div class="lp-faq-a">
-          <p>{{ f.a }}</p>
+          <p>{{ t(f.a) }}</p>
         </div>
       </div>
     </div>
 
     <div class="lp-faq-foot" v-reveal>
-      <p>Can’t find what you’re looking for? Our Help Center has more articles, and live chat is one tap away inside the app.</p>
+      <p>{{ t('landing.faq.footnote') }}</p>
       <div class="lp-faq-foot-actions">
-        <a class="lp-btn lp-btn--primary" :href="PORTALS.customer.home">Visit the Help Center <IconSvg name="arrow" /></a>
-        <a class="lp-btn lp-btn--ghost" :href="PORTALS.vendor.home">Vendor support</a>
+        <a class="lp-btn lp-btn--primary" :href="`${PORTALS.customer.home}help`">{{ t('landing.faq.help') }} <IconSvg name="arrow" /></a>
+        <a class="lp-btn lp-btn--ghost" :href="`${PORTALS.vendor.home}help`">{{ t('landing.faq.vendorSupport') }}</a>
       </div>
     </div>
   </section>

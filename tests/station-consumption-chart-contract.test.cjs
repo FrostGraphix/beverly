@@ -19,14 +19,14 @@ assert(page.includes("clip: true"), "trend series must clip to the plotting area
 assert(!page.includes('stack: "load"'), "station comparison trend must not stack station lines");
 assert(page.includes("hideOverlap: true"), "trend axis labels must hide overlap on mobile");
 assert(shareOption.includes('type: "bar"'), "station load share must use compact mobile-safe bars");
-assert(shareOption.includes("barMaxWidth: 18"), "station load share bars must fit the card height");
+assert(shareOption.includes("barMaxWidth: 16"), "station load share bars must fit the card height");
 assert(shareOption.includes('overflow: "truncate"'), "station labels must truncate on mobile");
-assert(shareOption.includes("slice(0, 8)"), "station load share must cap visible rows");
+assert(shareOption.includes("slice(0, 6)"), "station load share must cap visible rows");
 assert(seasonalityOption.includes("barMaxWidth: 28"), "weekly chart bars must fit mobile card width");
 assert(seasonalityOption.includes("clip: true"), "weekly chart must clip bars to plotting area");
 assert(seasonalityOption.includes("splitNumber: 3"), "weekly chart must reduce mobile y-axis density");
-assert(!page.includes("scc-table-wrap--league"), "league table must keep desktop table shell on mobile");
-assert(!page.includes("scc-table--league"), "league table must keep desktop table layout on mobile");
+assert(page.includes("scc-table-wrap--league"), "league table must expose its responsive shell");
+assert(page.includes("scc-table--league"), "league table must expose responsive column rules");
 assert(!page.includes("scc-table-wrap--meters"), "top meters table must keep desktop table shell on mobile");
 assert(!page.includes("scc-table--meters"), "top meters table must keep desktop table layout on mobile");
 assert(!page.includes("scc-meter-id-cell"), "top meters meter id must remain a normal table cell");

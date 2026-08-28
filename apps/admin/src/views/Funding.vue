@@ -13,13 +13,14 @@
  *   • Maker-checker is enforced server-side; UI explains the rule and shows
  *     the submitter so the reviewer can see they are not approving their own.
  */
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
@@ -284,11 +285,28 @@ function buildFundingApprovalRowActions(f: FundingRequest): ActionItem[] {
 
 const currentPage = ref(1);
 const pageSize = ref(10);
+const searchQuery = ref('');
+const channelFilter = ref<'all' | FundingRequest['channel']>('all');
+const viewMode = ref<'list' | 'table'>(
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
+);
+
+const filteredItems = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+    return items.value.filter((item) => {
+        const matchesChannel = channelFilter.value === 'all' || item.channel === channelFilter.value;
+        const matchesSearch = !query || [vendorName(item), vendorEmail(item), item.status, item.channel]
+            .some((value) => String(value).toLowerCase().includes(query));
+        return matchesChannel && matchesSearch;
+    });
+});
 
 const paginatedItems = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
-    return items.value.slice(start, start + pageSize.value);
+    return filteredItems.value.slice(start, start + pageSize.value);
 });
+
+watch([searchQuery, channelFilter], () => { currentPage.value = 1; });
 
 onMounted(() => {
     void load();
@@ -403,7 +421,18 @@ onMounted(() => {
         </button>
       </div>
 
-      <!-- Desktop table -->
+      <div class="bw-filter-bar funding-filters" role="search" aria-label="Funding queue filters">
+        <input v-model="searchQuery" class="bw-input bw-input-sm" type="search" placeholder="Search funding requests" aria-label="Search funding requests" />
+        <select v-model="channelFilter" class="bw-select bw-select-sm" aria-label="Filter funding channel">
+          <option value="all">All channels</option>
+          <option value="bank_transfer">Bank transfer</option>
+          <option value="paystack">Paystack</option>
+          <option value="manual">Manual</option>
+        </select>
+        <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Funding queue display view" />
+      </div>
+
+      <div class="bw-data-region" :data-view="viewMode">
       <div class="bw-t-wrap">
         <table class="bw-table fund-table">
           <thead>
@@ -448,7 +477,7 @@ onMounted(() => {
                 />
               </td>
             </tr>
-            <tr v-if="!items.length && !loading">
+            <tr v-if="!filteredItems.length && !loading">
               <td :colspan="canApproveFunding ? 8 : 7" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</td>
             </tr>
           </tbody>
@@ -485,13 +514,14 @@ onMounted(() => {
             </MobileActionMenu>
           </div>
         </div>
-        <div v-if="!items.length && !loading" class="bw-muted empty-card">Queue clear.</div>
+        <div v-if="!filteredItems.length && !loading" class="bw-muted empty-card">Queue clear.</div>
+      </div>
       </div>
 
       <WalletTablePagination
         v-model:page="currentPage"
         v-model:pageSize="pageSize"
-        :total-items="items.length"
+        :total-items="filteredItems.length"
         item-label="funding requests"
       />
     </div>
@@ -658,6 +688,10 @@ onMounted(() => {
 }
 
 @media (max-width: 720px) {
+  .funding-money {
+    font-size: clamp(1rem, 4.4vw, 1.25rem) !important;
+    letter-spacing: -0.04em;
+  }
   .fund-table .actions-col {
     min-width: 72px;
     position: sticky;

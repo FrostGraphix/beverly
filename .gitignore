@@ -19,6 +19,7 @@ tmp-*.log
 tmp-*.err.log
 .codex-*.log
 replica-screenshots/diffs/
+.playwright-cli/
 
 .vercel
 .env*

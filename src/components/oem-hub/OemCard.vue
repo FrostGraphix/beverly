@@ -1,8 +1,7 @@
 <template>
   <article class="oem-card" :class="{ 'oem-card--seed': oem.isSeedDefault }">
     <div class="oem-card__menu" :class="{ 'oem-card__menu--open': menuOpen }" ref="menu">
-      <button
-        type="button"
+      <BaseIconButton
         class="oem-card__menu-trigger"
         aria-haspopup="menu"
         :aria-expanded="menuOpen ? 'true' : 'false'"
@@ -14,16 +13,16 @@
           <circle cx="12" cy="12" r="1.6" />
           <circle cx="12" cy="19" r="1.6" />
         </svg>
-      </button>
+      </BaseIconButton>
       <ul v-if="menuOpen" class="oem-card__menu-panel" role="menu" @click.stop>
         <li role="none">
-          <button type="button" role="menuitem" @click="emitAndClose('edit')">Edit name/details</button>
+          <BaseButton role="menuitem" variant="quiet" @click="emitAndClose('edit')">Edit name/details</BaseButton>
         </li>
         <li role="none">
-          <button type="button" role="menuitem" @click="emitAndClose('settings')">Settings</button>
+          <BaseButton role="menuitem" variant="quiet" @click="emitAndClose('settings')">Settings</BaseButton>
         </li>
         <li role="none">
-          <button type="button" role="menuitem" class="oem-card__menu-danger" @click="emitAndClose('delete')">Delete</button>
+          <BaseButton role="menuitem" class="oem-card__menu-danger" variant="quiet" @click="emitAndClose('delete')">Delete</BaseButton>
         </li>
       </ul>
     </div>
@@ -86,9 +85,12 @@
 
 <script>
 import { CAPABILITY_DEFINITIONS } from "./oem-capabilities.mjs";
+import BaseButton from "../base/BaseButton.vue";
+import BaseIconButton from "../base/BaseIconButton.vue";
 
 export default {
   name: "OemCard",
+  components: { BaseButton, BaseIconButton },
   props: {
     oem: {
       type: Object,

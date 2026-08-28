@@ -1,9 +1,9 @@
 <template>
   <div class="beverly-ai-widget-wrapper">
     <!-- Responsive Floating Trigger Button with Bot Head & Orbital Antenna -->
-    <button
-      type="button"
+    <BaseButton
       class="beverly-ai-trigger-btn"
+      variant="ghost"
       :class="{ active: isOpen }"
       @click="toggleWidget"
       title="Beverly AI Operations Assistant"
@@ -23,7 +23,7 @@
         </svg>
       </span>
       <span class="beverly-ai-trigger-label">Beverly AI</span>
-    </button>
+    </BaseButton>
 
     <!-- Floating Liquid Glass Modal -->
     <div v-if="isOpen" class="beverly-ai-modal" :class="{ minimized: isMinimized }" role="dialog" aria-label="Beverly AI Command Console">
@@ -210,9 +210,11 @@
 <script>
 import { apiClient } from "../../services/api";
 import { currentUserInfo } from "../../services/api";
+import BaseButton from "../base/BaseButton.vue";
 
 export default {
   name: "AcobotWidget",
+  components: { BaseButton },
   data() {
     return {
       isOpen: false,

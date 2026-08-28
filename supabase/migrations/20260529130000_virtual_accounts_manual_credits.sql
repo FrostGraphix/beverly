@@ -34,7 +34,7 @@ create index if not exists virtual_accounts_owner_idx
 
 create trigger virtual_accounts_updated_at
   before update on public.virtual_accounts
-  for each row execute function public.update_updated_at_column();
+  for each row execute function public.set_updated_at();
 
 alter table public.virtual_accounts enable row level security;
 
@@ -74,7 +74,7 @@ create index if not exists manual_credit_requests_status_idx
 
 create trigger manual_credit_requests_updated_at
   before update on public.manual_credit_requests
-  for each row execute function public.update_updated_at_column();
+  for each row execute function public.set_updated_at();
 
 alter table public.manual_credit_requests enable row level security;
 
