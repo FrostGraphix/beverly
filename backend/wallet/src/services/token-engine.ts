@@ -676,7 +676,7 @@ export interface GenerateTokenResult {
 
 export function buildCreditTokenPayload(input: GenerateTokenInput, opts: { isPreview?: boolean; isS2?: boolean } = {}) {
     const amount = Math.round((input.amountMinor / 100) * 100) / 100;
-    const operatorName = input.operatorName || input.vendorName || input.customerName || 'Beverly Vend';
+    const operatorName = input.operatorName || input.vendorName || input.customerName || 'Beverly';
     return {
         customerId: input.customerId,
         meterId: input.meterId,

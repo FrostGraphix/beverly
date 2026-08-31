@@ -131,6 +131,38 @@ function meterTypeLabel(isThreePhase?: boolean | null) {
 
 function describeApiError(e: unknown, fallback: string) {
     if (e instanceof ApiError) {
+        if (e.code === 'vend_meter_lookup_unavailable') {
+            return {
+                title: 'Live meter verification unavailable',
+                message: e.message,
+                action: 'No wallet debit or dispatch was attempted. Retry shortly, then contact support if it repeats.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'vend_pricing_unavailable') {
+            return {
+                title: 'Vending price unavailable',
+                message: e.message,
+                action: 'No wallet debit or dispatch was attempted. Retry shortly, then contact support if it repeats.',
+                code: e.code,
+            };
+        }
+        if (e.code === 'remote_send_service_unavailable') {
+            return {
+                title: 'Remote delivery unavailable',
+                message: e.message,
+                action: 'The generated token remains valid. Enter it manually, or retry remote send shortly.',
+                code: e.code,
+            };
+        }
+        if (['wallet_backend_not_configured', 'wallet_backend_unavailable'].includes(String(e.code))) {
+            return {
+                title: 'Wallet service unavailable',
+                message: e.message,
+                action: 'No wallet debit or dispatch was attempted. Contact Beverly support before retrying.',
+                code: e.code,
+            };
+        }
         if (e.code === 'meter_lookup_unavailable' || e.status === 503) {
             return {
                 title: 'Live lookup unavailable',

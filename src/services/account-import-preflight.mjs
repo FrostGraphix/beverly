@@ -2,6 +2,13 @@ import { postApi } from "./api.js";
 
 const indexPageSize = 500;
 const maxIndexPages = 60;
+const importTimeoutMs = 15 * 60 * 1000;
+const customerReadbackDelaysMs = [2_000, 5_000, 10_000];
+
+function wait(ms) {
+  if (!ms) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function collectionRows(response) {
   const payload = response?.result || response?.data || {};
@@ -12,10 +19,15 @@ function collectionRows(response) {
 
 async function loadIndex(path, keyField, api) {
   const index = new Map();
+  const keyFields = Array.isArray(keyField) ? keyField : [keyField];
   for (let pageNumber = 1; pageNumber <= maxIndexPages; pageNumber += 1) {
-    const rows = collectionRows(await api.postApi(path, { pageNumber, pageSize: indexPageSize }));
+    const rows = collectionRows(await api.postApi(
+      path,
+      { pageNumber, pageSize: indexPageSize },
+      { timeout: importTimeoutMs }
+    ));
     for (const row of rows) {
-      const key = String(row?.[keyField] || "").trim();
+      const key = String(keyFields.map((field) => row?.[field]).find(Boolean) || "").trim();
       if (key && !index.has(key)) index.set(key, row);
     }
     if (rows.length < indexPageSize) break;
@@ -71,10 +83,10 @@ export function accountPreflightIssue(row, customer, meter) {
 }
 
 export async function preflightAccountImport(rows = [], api = { postApi }) {
-  if (!rows.length) return { rows: [], blocking: [], warnings: [], fixes: [], ready: [] };
+  if (!rows.length) return { rows: [], blocking: [], warnings: [], fixes: [], ready: [], missingCustomers: [], missingMeters: [] };
   const [customers, meters] = await Promise.all([
-    loadIndex("/api/customer/read", "customerId", api),
-    loadIndex("/api/meter/read", "meterId", api)
+    loadIndex("/api/customer/read", ["customerId", "id"], api),
+    loadIndex("/api/meter/read", ["meterId", "id"], api)
   ]);
   const evaluated = rows.map((row, index) => {
     const customer = customers.get(String(row.customerId || "").trim()) || null;
@@ -89,13 +101,77 @@ export async function preflightAccountImport(rows = [], api = { postApi }) {
       issue
     };
   });
+  const missingCustomers = [];
+  const seenMissingCustomers = new Set();
+  for (const entry of evaluated) {
+    if (entry.issue?.kind !== "missing-customer" || !entry.meter) continue;
+    const customerId = String(entry.row.customerId || "").trim();
+    if (!customerId || seenMissingCustomers.has(customerId)) continue;
+    seenMissingCustomers.add(customerId);
+    missingCustomers.push({
+      customerId,
+      customerName: String(entry.row.customerName || "").trim(),
+      stationId: String(entry.row.stationId || "").trim(),
+      phone: "",
+      address: "",
+      remark: "Imported with account CSV"
+    });
+  }
+  const missingMeters = evaluated
+    .filter((entry) => !entry.meter)
+    .map((entry) => ({
+      line: entry.line,
+      meterId: String(entry.row.meterId || "").trim(),
+      customerId: String(entry.row.customerId || "").trim()
+    }));
   return {
     rows: evaluated,
     blocking: evaluated.filter((entry) => entry.issue?.blocking),
     warnings: evaluated.filter((entry) => entry.issue && !entry.issue.blocking),
     fixes: evaluated.filter((entry) => entry.issue?.fix).map((entry) => ({ ...entry.issue.fix, line: entry.line })),
-    ready: evaluated.filter((entry) => !entry.issue?.blocking).map((entry) => entry.row)
+    ready: evaluated.filter((entry) => !entry.issue?.blocking).map((entry) => entry.row),
+    missingCustomers,
+    missingMeters
   };
+}
+
+export async function provisionMissingCustomers(report = {}, api = { postApi }) {
+  const customers = Array.isArray(report.missingCustomers) ? report.missingCustomers : [];
+  if (!customers.length) return { attempted: 0, created: 0 };
+  const incomplete = customers.find((customer) => (
+    !String(customer.customerId || "").trim()
+    || !String(customer.customerName || "").trim()
+    || !String(customer.stationId || "").trim()
+  ));
+  if (incomplete) {
+    throw new Error("Every missing customer needs an ID, name and station before provisioning.");
+  }
+  const response = await api.postApi("/api/customer/import", customers, {
+    timeout: importTimeoutMs,
+    headers: {
+      "X-Route-Hash": "#/management/customer",
+      "X-Route-Action": "Import"
+    }
+  });
+  const code = Number(response?.code);
+  if (Number.isFinite(code) && code !== 0 && code !== 200) {
+    throw new Error(String(response?.reason || response?.msg || `Customer import failed with code ${code}`));
+  }
+  return { attempted: customers.length, created: customers.length };
+}
+
+export async function provisionAndRecheckAccountImport(rows = [], report = {}, api = { postApi }, options = {}) {
+  const provisioned = await provisionMissingCustomers(report, api);
+  let refreshedReport = await preflightAccountImport(rows, api);
+  const delays = Array.isArray(options.readbackDelaysMs)
+    ? options.readbackDelaysMs
+    : customerReadbackDelaysMs;
+  for (const delayMs of delays) {
+    if (!refreshedReport.missingCustomers.length) break;
+    await wait(delayMs);
+    refreshedReport = await preflightAccountImport(rows, api);
+  }
+  return { provisioned, report: refreshedReport };
 }
 
 // Opt-in repair: moves a meter to the station its customer belongs to. This is a

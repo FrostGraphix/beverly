@@ -1,0 +1,145 @@
+[
+  {
+    "meterId": "47005314285",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "OLAREWAJU ABIODUN CHIEF"
+  },
+  {
+    "meterId": "47005314469",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "AJIMI ODUSOLA"
+  },
+  {
+    "meterId": "47005319437",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "LYDIA ADEKANYI"
+  },
+  {
+    "meterId": "47005319783",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "ADEBAYO ABIODUN"
+  },
+  {
+    "meterId": "47005320452",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "NO NAME"
+  },
+  {
+    "meterId": "47005326828",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "KAYODE ADEBAYO"
+  },
+  {
+    "meterId": "47005326862",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "SHOP"
+  },
+  {
+    "meterId": "47005335507",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "SHOLA OWOLABI"
+  },
+  {
+    "meterId": "47005339566",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "HON. FABIYI OLATUNJI"
+  },
+  {
+    "meterId": "47005342042",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "MICHEAL AKIEH"
+  },
+  {
+    "meterId": "47005353172",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "PASTOR ABOYEJI OLATINJI"
+  },
+  {
+    "meterId": "47005361163",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "NO NAME"
+  },
+  {
+    "meterId": "47005361178",
+    "type": 0,
+    "isThreePhase": 0,
+    "communicationWay": 1,
+    "protocolVersion": "2.2",
+    "stationId": "MILE 9 & 10",
+    "lat": 0,
+    "lng": 0,
+    "remark": "ESTER ADEBAYO"
+  }
+]

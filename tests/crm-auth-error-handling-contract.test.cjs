@@ -32,6 +32,8 @@ function testAppVueErrorHandling() {
   // Verify loadUser differentiates 401/403 session rejection from transient errors
   assert.match(appVue, /const status = Number\(error\?\.status \|\| error\?\.response\?\.status\)/, "App.vue loadUser must inspect error status");
   assert.match(appVue, /if \(status === 401 \|\| status === 403 \|\| !readSessionState\(\)\)/, "App.vue loadUser must only purge session on 401/403 or missing session state");
+  assert.match(appVue, /await refreshSession\(\)/, "App.vue must refresh an expired access token before purging the session");
+  assert.match(appVue, /fetch\("\/api\/auth\/me", \{ credentials: "include" \}\)/, "App.vue must retry server identity after refresh");
 }
 
 function main() {

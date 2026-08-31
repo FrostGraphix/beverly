@@ -41,32 +41,6 @@ const {
 } = require("../backend/src/services/storage-adapter");
 const oemRegistry = require("../backend/src/services/oem-registry-service");
 
-// --- LOCAL USERS STORE ---
-// Holds users created via the CRM UI that don't exist on Calinmeter upstream.
-// These are merged into every /api/user/read response so they always appear
-// in the user management table, even though Calinmeter blocks user creation.
-const localUsersStore = new Map();
-// Seed Beverly as a permanent gateway user with Unlimited Quota
-localUsersStore.set("beverly", {
-  userId: "Beverly",
-  fullName: "Beverly CRM Gateway",
-  nickName: "Beverly",
-  email: "admin@acoblighting.com",
-  roleId: "admin",
-  roleName: "admin",
-  stationId: "ADMIN",
-  status: true,
-  quota: 0,
-  remainingQuota: -1,
-  totalQuota: 0,
-  phone: "",
-  address: "Beverly HQ",
-  company: "ACOB",
-  createId: "system",
-  createDate: "2026-01-01 00:00:00",
-  updateDate: "2026-01-01 00:00:00",
-  remark: "Beverly CRM upstream gateway account (Unlimited Quota)"
-});
 const { resetForTests } = require("../backend/src/services/local-database");
 const {
   authEnabled: supabaseAuthEnabled,
@@ -4137,7 +4111,32 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     const tariffNairaPerKwh = 55;
     const vat = calculateVendingVatBreakdown(amtMinor);
     const unitsKwh = Number(((vat.energyAmountMinor / 100) / tariffNairaPerKwh).toFixed(4));
-    const accountRows = await fetchLiveAccountPage(request, { meterId }, 1);
+    let accountRows;
+    try {
+      accountRows = await fetchLiveAccountPage(request, { meterId }, 1);
+    } catch (error) {
+      console.error("[vendor-vend-preview]", error instanceof Error ? error.message : String(error));
+      return {
+        status: 503,
+        body: {
+          error: "vend_meter_lookup_unavailable",
+          message: "Live meter verification is temporarily unavailable. No wallet debit or vend was attempted.",
+          retryable: true,
+          details: { noVendAttempted: true, stage: "meter_lookup", recommendedAction: "retry_or_contact_support" }
+        }
+      };
+    }
+    if (!Array.isArray(accountRows)) {
+      return {
+        status: 503,
+        body: {
+          error: "vend_meter_lookup_unavailable",
+          message: "Live meter verification is temporarily unavailable. No wallet debit or vend was attempted.",
+          retryable: true,
+          details: { noVendAttempted: true, stage: "meter_lookup", recommendedAction: "retry_or_contact_support" }
+        }
+      };
+    }
     const account = accountRows?.find((row) => String(row?.meterId || row?.meter_id || "").trim() === meterId);
     if (!account) return { status: 404, body: { code: 404, msg: "Meter not found", reason: "meter_not_found" } };
     const stationId = String(account.stationId || account.station_id || "").trim();
@@ -4647,79 +4646,6 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     return localJobResponse({ saved: true, kind: "print", storage: artifact });
   }
 
-  // --- USER MANAGEMENT INTERCEPT ---
-  if (pathname === "/api/user/create" || pathname === "/api/user/update" || pathname === "/api/user/delete") {
-    try {
-      const item = Array.isArray(payload) ? payload[0] : payload;
-      const uId = String(item.userId || item.username || "").trim();
-      if (pathname === "/api/user/create" && uId) {
-        // Persist to local store so it shows in /api/user/read merges
-        localUsersStore.set(uId.toLowerCase(), {
-          userId: uId,
-          fullName: item.fullName || item.nickName || uId,
-          nickName: item.nickName || item.fullName || uId,
-          email: item.email || item.loginEmail || "",
-          roleId: item.roleId || item.role || "admin",
-          roleName: item.roleName || item.roleId || item.role || "admin",
-          stationId: item.stationId || "ADMIN",
-          status: item.status !== false,
-          quota: 0,
-          remainingQuota: -1,
-          totalQuota: 0,
-          phone: item.phone || "",
-          address: item.address || "",
-          company: item.company || "ACOB",
-          createId: "system",
-          createDate: new Date().toISOString().replace("T", " ").slice(0, 19),
-          updateDate: new Date().toISOString().replace("T", " ").slice(0, 19),
-          remark: item.remark || ""
-        });
-      } else if (pathname === "/api/user/delete" && uId) {
-        localUsersStore.delete(uId.toLowerCase());
-      } else if (pathname === "/api/user/update" && uId) {
-        const existing = localUsersStore.get(uId.toLowerCase()) || {};
-        localUsersStore.set(uId.toLowerCase(), { ...existing, ...item, updateDate: new Date().toISOString().replace("T", " ").slice(0, 19) });
-      }
-      if (supabaseAuthEnabled()) {
-        try {
-          if (pathname === "/api/user/create") {
-            await createAuthUser(item);
-          } else if (pathname === "/api/user/update") {
-            await updateAuthUser(uId, item);
-          } else if (pathname === "/api/user/delete") {
-            await deleteAuthUser(uId);
-          }
-        } catch (authErr) {
-          console.warn("[user-manage-auth-sync-warn]", authErr.message);
-        }
-      }
-      const data = Array.isArray(payload) ? payload : [payload];
-      return {
-        status: 200,
-        body: {
-          code: 0,
-          reason: "success",
-          msg: "success",
-          result: data,
-          data: data
-        }
-      };
-    } catch (err) {
-      console.error("[user-manage-error]", err);
-      return {
-        status: 400,
-        body: {
-          code: 400,
-          msg: "User operation failed: " + err.message,
-          reason: "User operation failed: " + err.message,
-          data: null,
-          result: null
-        }
-      };
-    }
-  }
-
-
 }
 
 async function runRefreshJob(scope) {
@@ -5143,6 +5069,17 @@ async function proxyLive(request, pathname, requestData) {
 async function proxyCanonicalWallet(request, pathname, requestData) {
   const env = getEnv();
   if (!env.walletApiBaseUrl) {
+    if (process.env.VERCEL_ENV === "production") {
+      return {
+        status: 503,
+        body: {
+          error: "wallet_backend_not_configured",
+          message: "The wallet service is not configured for this deployment. No wallet debit or vend was attempted.",
+          retryable: false,
+          details: { noVendAttempted: true, recommendedAction: "contact_support" }
+        }
+      };
+    }
     return null;
   }
   if (isCanonicalFinancialMutation(pathname, request.method) && !env.canonicalWalletWritesEnabled) {
@@ -5320,8 +5257,9 @@ async function handler(request, response) {
       }
       const actor = await authUserFromAccessToken(cookieToken).catch(() => null);
       if (!actor) {
-        clearCrmSessionCookies(response);
-        response.status(401).json({ code: 401, msg: "Session expired", reason: "Session expired", data: null, result: null });
+        // Preserve bev_refresh and the signed session window. The client can
+        // exchange a normally-expired access token, then retry this request.
+        response.status(401).json({ code: 401, msg: "Access token expired", reason: "Access token expired", data: null, result: null });
         return;
       }
       response.status(200).json({
@@ -5576,22 +5514,6 @@ async function handler(request, response) {
         }).catch((error) => {
           console.error("[consumption-store-write]", error instanceof Error ? error.message : String(error));
         });
-      }
-    }
-
-    // --- MERGE LOCAL USERS INTO /api/user/read RESPONSE ---
-    // Users created via CRM UI are stored in localUsersStore. Since Calinmeter
-    // blocks API user creation (403), we inject them here so they always appear
-    // in the user management table.
-    if ((pathname === "/api/user/read" || pathname === "/API/user/read") && result?.body?.result?.data) {
-      const existingList = result.body.result.data || [];
-      const existingIds = new Set(existingList.map(u => String(u.userId || "").trim().toLowerCase()));
-      const localList = Array.from(localUsersStore.values()).filter(u => !existingIds.has(String(u.userId || "").trim().toLowerCase()));
-      if (localList.length > 0) {
-        result.body.result.data = [...localList, ...existingList];
-        if (typeof result.body.result.total === "number") {
-          result.body.result.total += localList.length;
-        }
       }
     }
 

@@ -43,17 +43,17 @@ test('admin refunds show meter rejection credits by default', () => {
   const page = read('apps/admin/src/views/Refunds.vue');
 
   assert.match(page, /const statusFilter = ref<RefundStatus \| ''>\(''\)/);
-  assert.match(page, /Filter refunds by source/);
-  assert.match(page, /Meter rejection/);
+  assert.match(page, /filterSource|Filter refunds by source/i);
+  assert.match(page, /meterRejection|Meter rejection/i);
   assert.match(page, /source_type/);
-  assert.match(page, /Meter refunds/);
+  assert.match(page, /meterRefunds|Meter refunds/i);
 });
 
 test('meter rejection refund records keep source traceability', () => {
   const page = read('apps/admin/src/views/Refunds.vue');
   const receipts = read('apps/admin/src/lib/receipts.ts');
 
-  assert.match(page, /Automatic meter refunds/);
+  assert.match(page, /automaticNote|Automatic meter refunds/i);
   assert.match(receipts, /field\('Source',/);
   assert.match(receipts, /field\('Source Reference',/);
 });

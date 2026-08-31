@@ -14,13 +14,15 @@ import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from '../config/env.js';
 
+const isNonProductionRuntime = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+
 export const queuesEnabled = process.env.WALLET_SERVERLESS !== 'true'
-    && (env.NODE_ENV !== 'development' || process.env.ENABLE_REDIS_QUEUES === 'true');
+    && (!isNonProductionRuntime || process.env.ENABLE_REDIS_QUEUES === 'true');
 
 function disabledQueue(name: string): Queue {
     return {
         async add() {
-            throw new Error(`Redis queue "${name}" is disabled in development. Set ENABLE_REDIS_QUEUES=true to enable it.`);
+            throw new Error(`Redis queue "${name}" is disabled outside production. Set ENABLE_REDIS_QUEUES=true to enable it.`);
         },
         async close() {},
     } as unknown as Queue;
@@ -30,7 +32,7 @@ const connection = queuesEnabled
     ? new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null })
     : ({
         async ping() {
-            throw new Error('Redis queues are disabled in development.');
+            throw new Error('Redis queues are disabled outside production.');
         },
         async quit() {},
     } as unknown as IORedis);

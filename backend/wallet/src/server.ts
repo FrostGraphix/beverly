@@ -52,7 +52,11 @@ export async function build() {
             if (isCorsOriginAllowed(origin)) {
                 cb(null, true);
             } else {
-                cb(new Error('CORS not allowed'), false);
+                const error = Object.assign(new Error('Request origin is not allowed.'), {
+                    statusCode: 403,
+                    code: 'cors_origin_denied',
+                });
+                cb(error, false);
             }
         },
         credentials: true,

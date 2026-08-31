@@ -510,7 +510,7 @@ export function purchaseReceipt(row: any): ReceiptModel {
     const name = row.vended_by_name || row.vended_by || row.operator_name || row.created_by_name || row.actor_name;
     const business = row.trading_name || row.legal_name || row.business_name || row.vendor_business || row.vendor_name;
 
-    let vendedBy = 'Authorized System Actor';
+    let vendedBy = 'Beverly';
     if (name && business && String(name).trim() !== String(business).trim()) {
         vendedBy = `${name} — ${business}`;
     } else if (name || business) {

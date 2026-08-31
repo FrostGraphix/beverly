@@ -4,12 +4,14 @@ import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../lib/api';
 import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
+import { useI18n } from '@beverly/tokens/i18n.js';
 import {
     toggleTheme, isInstallDismissed, dismissInstallPrompt, isIosInstallable, isStandalone,
     getDeferredInstallPrompt, onInstallPromptChange, triggerInstallPrompt, onNotificationCountChange,
 } from '@beverly/tokens';
 
 defineProps<{ title?: string; hideTabbar?: boolean }>();
+const { t } = useI18n();
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
@@ -206,7 +208,7 @@ async function signOut() {
               </span>
             </div>
             <div class="bw-user-menu-language">
-              <span>Language</span>
+              <span>{{ t('common.language') }}</span>
               <LanguageSwitcher compact @change="persistLocale" />
             </div>
             <div class="bw-user-menu-separator"></div>
@@ -215,14 +217,14 @@ async function signOut() {
                 <path d="M20 21a8 8 0 0 0-16 0" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
-              <span>Profile</span>
+              <span>{{ t('common.profile') }}</span>
             </button>
             <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSecurity">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
-              <span>Security &amp; 2FA</span>
+              <span>{{ t('common.securityAnd2fa') }}</span>
             </button>
             <button type="button" class="bw-user-menu-item" role="menuitem" @click="openHelp">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -230,14 +232,14 @@ async function signOut() {
                 <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4" />
                 <path d="M12 17h.01" />
               </svg>
-              <span>Help</span>
+              <span>{{ t('common.help') }}</span>
             </button>
             <button type="button" class="bw-user-menu-item" role="menuitem" @click="toggleTheme">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8" />
                 <path d="M6 19c3-5 7-8 13-8" />
               </svg>
-              <span>Theme</span>
+              <span>{{ t('common.theme') }}</span>
             </button>            <div class="bw-user-menu-separator"></div>
             <button type="button" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="signOut">
               <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -245,7 +247,7 @@ async function signOut() {
                 <path d="m16 17 5-5-5-5" />
                 <path d="M21 12H9" />
               </svg>
-              <span>Sign Out</span>
+              <span>{{ t('common.signOut') }}</span>
             </button>
           </div>
         </transition>

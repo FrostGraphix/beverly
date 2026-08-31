@@ -4,12 +4,14 @@ import { RouterLink, useRouter, useRoute } from 'vue-router';
 import { useStaffAuthStore } from '../stores/auth';
 import { onNotificationCountChange, publishNotificationCount, toggleTheme } from '@beverly/tokens';
 import LanguageSwitcher from '@beverly/tokens/LanguageSwitcher.vue';
+import { useI18n } from '@beverly/tokens/i18n.js';
 import { adminPushNotifications } from '../lib/push-notifications';
 import { PORTAL_URLS } from '../lib/portals';
 import AcobotWidget from './acobot/AcobotWidget.vue';
 import { api } from '../lib/api';
 
 defineProps<{ title?: string }>();
+const { t } = useI18n();
 
 const auth = useStaffAuthStore();
 const router = useRouter();
@@ -462,7 +464,7 @@ onBeforeUnmount(() => {
                 </span>
               </div>
               <div class="bw-user-menu-language">
-                <span>Language</span>
+                <span>{{ t('common.language') }}</span>
                 <LanguageSwitcher compact @change="persistLocale" />
               </div>
               <div class="bw-user-menu-separator"></div>
@@ -471,41 +473,41 @@ onBeforeUnmount(() => {
                   <path d="M20 21a8 8 0 0 0-16 0" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                <span>Profile</span>
+                <span>{{ t('common.profile') }}</span>
               </button>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSecurity">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <rect x="3" y="11" width="18" height="11" rx="2" />
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
-                <span>Security &amp; 2FA</span>
+                <span>{{ t('common.securityAnd2fa') }}</span>
               </button>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="openSettings">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z" />
                   <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z" />
                 </svg>
-                <span>Settings</span>
+                <span>{{ t('common.settings') }}</span>
               </button>
               <button type="button" class="bw-user-menu-item" role="menuitem" @click="toggleTheme">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                   <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8" />
                   <path d="M6 19c3-5 7-8 13-8" />
                 </svg>
-                <span>Theme</span>
+                <span>{{ t('common.theme') }}</span>
               </button>
               <div class="bw-user-menu-separator"></div>
               <a :href="PORTAL_URLS.vendor" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Open Vendor Portal">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                <span>Vendor Portal</span>
+                <span>{{ t('common.vendorPortal') }}</span>
               </a>
               <a :href="PORTAL_URLS.customer" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Open Customer Portal">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                <span>Customer Portal</span>
+                <span>{{ t('common.customerPortal') }}</span>
               </a>
               <a :href="PORTAL_URLS.landing" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu" title="Public Wallet Landing">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                <span>Wallet Landing</span>
+                <span>{{ t('common.walletLanding') }}</span>
               </a>
               <div v-if="isCrmEligible" class="bw-user-menu-separator"></div>
               <a v-if="isCrmEligible" :href="CRM_URL" class="bw-user-menu-item" role="menuitem" @click="closeUserMenu">
@@ -513,7 +515,7 @@ onBeforeUnmount(() => {
                   <path d="M19 12H5" />
                   <path d="m12 19-7-7 7-7" />
                 </svg>
-                <span>Back to CRM</span>
+                <span>{{ t('common.backToCrm') }}</span>
               </a>
               <button type="button" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="signOut">
                 <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -521,7 +523,7 @@ onBeforeUnmount(() => {
                   <path d="m16 17 5-5-5-5" />
                   <path d="M21 12H9" />
                 </svg>
-                <span>Sign Out</span>
+                <span>{{ t('common.signOut') }}</span>
               </button>
             </div>
           </transition>

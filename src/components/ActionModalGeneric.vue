@@ -144,6 +144,11 @@
             Move {{ preflightFixes.length }} meter(s) to their customer's station first (live change to the meter record)
           </BaseCheckbox>
         </label>
+        <label v-if="preflightMissingCustomers.length" class="preflight-fix">
+          <BaseCheckbox v-model="createMissingCustomers">
+            Create {{ preflightMissingCustomers.length }} missing customer(s) upstream first, then validate and import their accounts
+          </BaseCheckbox>
+        </label>
         <div class="preflight-actions">
           <BaseButton size="sm" variant="ghost" type="button" @click="downloadPreflightReport">Download report</BaseButton>
         </div>
@@ -179,7 +184,7 @@ import BaseInput from "./base/BaseInput.vue";
 import BaseModalShell from "./base/BaseModalShell.vue";
 import BaseSelect from "./base/BaseSelect.vue";
 import { buildErrorReport, buildImportPreview, downloadTextFile, exportCsvText, exportExcelXml, importErrorMessage, parseImportFile, validateImportRows } from "../services/import-export.mjs";
-import { alignMeterStations, preflightAccountImport, preflightReportCsv, preflightSummary } from "../services/account-import-preflight.mjs";
+import { alignMeterStations, preflightAccountImport, preflightReportCsv, preflightSummary, provisionAndRecheckAccountImport } from "../services/account-import-preflight.mjs";
 import { logExportJob } from "../services/local-jobs.mjs";
 import { columnKey, tableSiteOptions } from "../services/table-service";
 import { actionEndpoint, submitRouteAction } from "../services/action-service.mjs";
@@ -218,6 +223,7 @@ export default {
       preflight: null,
       preflightRunning: false,
       applyMeterStationFix: false,
+      createMissingCustomers: false,
       selectedFile: null,
       uploadPreview: "",
       stations: [],
@@ -286,6 +292,7 @@ export default {
     isAccountRoute() { return String(this.route?.hash || "").includes("management/account"); },
     preflightBlocking() { return this.preflight?.blocking || []; },
     preflightFixes() { return this.preflight?.fixes || []; },
+    preflightMissingCustomers() { return this.preflight?.missingCustomers || []; },
     preflightSummaryText() { return preflightSummary(this.preflight || {}); },
     rolePermissions() { return ROLE_PERMISSIONS; },
     permissionsSelected() {
@@ -404,6 +411,7 @@ export default {
       this.importErrors = validated.errors;
       this.preflight = null;
       this.applyMeterStationFix = false;
+      this.createMissingCustomers = false;
       if (this.importErrors.length) {
         const report = buildErrorReport(this.importErrors);
         downloadTextFile(`${this.route.title}-import-errors.csv`, report, "text/csv;charset=utf-8");
@@ -472,6 +480,10 @@ export default {
         }
         let importRows = this.importRows;
         if (this.action === "Import" && this.isAccountRoute) {
+          if (this.createMissingCustomers && this.preflightMissingCustomers.length) {
+            const workflow = await provisionAndRecheckAccountImport(this.importRows, this.preflight);
+            this.preflight = workflow.report;
+          }
           if (this.applyMeterStationFix && this.preflightFixes.length) {
             const fixResults = await alignMeterStations(this.preflightFixes);
             const failedFixes = fixResults.filter((fix) => !fix.ok);
