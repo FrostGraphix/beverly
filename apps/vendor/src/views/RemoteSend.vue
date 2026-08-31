@@ -3,6 +3,8 @@ import { ref, computed, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import StatusPopup from '../components/StatusPopup.vue';
+import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
 import { api, ApiError } from '../lib/api';
 import { naira, kwh } from '../lib/format';
 import { downloadReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -18,6 +20,12 @@ const authOpen = ref(false);
 const authorization = ref('');
 const authError = ref('');
 const copied = ref(false);
+const remoteTrackerOpen = ref(false);
+const resultPopup = ref<{ tone: 'success' | 'danger' | 'info'; title: string; message: string } | null>(null);
+
+function showResultPopup(tone: 'success' | 'danger' | 'info', title: string, message: string) {
+    resultPopup.value = { tone, title, message };
+}
 const router = useRouter();
 const route = useRoute();
 
@@ -262,6 +270,42 @@ function confirm() {
     authOpen.value = true;
 }
 
+async function fetchRemoteSendStatus(endpoint: string) {
+    try {
+        return await api.get<any>(endpoint);
+    } catch (err: any) {
+        const data = err?.details || err?.data || err?.response?.data;
+        if (data && typeof data === 'object') {
+            return {
+                status: 'failed',
+                deliveryState: data.delivery_state || data.deliveryState || 'remote_send_failed_needs_manual_entry',
+                remark: data.message || data.remark || data.error || err.message || 'Remote send failed',
+                purchaseOrder: data.purchaseOrder,
+                remoteTaskId: data.remoteTaskId || data.remote_task_id,
+            };
+        }
+        try {
+            return await api.post<any>(endpoint, {});
+        } catch (postErr: any) {
+            const postData = postErr?.details || postErr?.data || postErr?.response?.data;
+            if (postData && typeof postData === 'object') {
+                return {
+                    status: 'failed',
+                    deliveryState: postData.delivery_state || postData.deliveryState || 'remote_send_failed_needs_manual_entry',
+                    remark: postData.message || postData.remark || postData.error || postErr.message || 'Remote send failed',
+                    purchaseOrder: postData.purchaseOrder,
+                    remoteTaskId: postData.remoteTaskId || postData.remote_task_id,
+                };
+            }
+            return {
+                status: 'failed',
+                deliveryState: 'remote_send_failed_needs_manual_entry',
+                remark: postErr?.message || err?.message || 'Remote send failed',
+            };
+        }
+    }
+}
+
 async function submitAuthorization() {
     if (!meter.value || !preview.value || !/^\d{4}$/.test(authorization.value)) return;
     if (isLocked.value) {
@@ -293,6 +337,14 @@ async function submitAuthorization() {
         authOpen.value = false;
         step.value = 'success';
         schedulePoll(0);
+        showResultPopup(
+            'success',
+            'Token generated successfully',
+            `Credit token is ready for meter ${meter.value?.meterId || ''}. Remote send dispatching...`,
+        );
+        window.setTimeout(() => {
+            remoteTrackerOpen.value = true;
+        }, 500);
     } catch (e: any) {
         if (e instanceof ApiError && e.code === 'vend_credential_required') {
             authOpen.value = false;
@@ -307,7 +359,15 @@ async function submitAuthorization() {
                 : 'Invalid vendor authorization.';
             return;
         }
-        error.value = describeApiError(e, e?.message ?? 'Remote send failed');
+        const errDetails = describeApiError(e, e?.message ?? 'Remote send failed');
+        error.value = errDetails;
+        authOpen.value = false;
+        authorization.value = '';
+        showResultPopup(
+            'danger',
+            errDetails.title || 'Vend Failed',
+            `${errDetails.message}${errDetails.action ? ' ' + errDetails.action : ''}`,
+        );
     } finally {
         loading.value = false;
     }
@@ -534,5 +594,28 @@ function downloadResultReceipt() {
         This protects remote token dispatch and confirms the wallet debit.
       </p>
     </ConfirmDialog>
+
+    <StatusPopup
+      :open="Boolean(resultPopup)"
+      :tone="resultPopup?.tone ?? 'info'"
+      :title="resultPopup?.title ?? ''"
+      :message="resultPopup?.message ?? ''"
+      @update:open="(v) => { if (!v) resultPopup = null; }"
+    />
+
+    <RemoteSendTrackerModal
+      v-model:open="remoteTrackerOpen"
+      :order-id="result?.purchaseOrder?.id"
+      :meter-id="result?.purchaseOrder?.meter_id ?? meter?.meterId"
+      :token="result?.token"
+      :amount-minor="result?.purchaseOrder?.amount_minor ?? preview?.amountMinor"
+      :units-kwh="result?.units"
+      :customer-name="meter?.customerName"
+      :delivery-state="result?.purchaseOrder?.delivery_state"
+      :remote-task-id="result?.purchaseOrder?.remote_task_id"
+      :api-endpoint="result?.purchaseOrder?.id ? `/api/v1/vendor/vend/${result.purchaseOrder.id}/remote-send` : null"
+      :fetcher="fetchRemoteSendStatus"
+      @updated="(res: any) => { if (res.purchaseOrder && result) result.purchaseOrder = { ...result.purchaseOrder, ...res.purchaseOrder }; }"
+    />
   </AppShell>
 </template>

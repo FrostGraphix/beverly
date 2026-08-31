@@ -4,7 +4,7 @@
  * ConfirmDialog (which asks for a decision). Auto-dismisses after a
  * few seconds; always closable by hand.
  */
-import { ref, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 
 const props = withDefaults(defineProps<{
     open: boolean;
@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{
     autoCloseMs?: number;
 }>(), {
     message: '',
-    autoCloseMs: 5000,
+    autoCloseMs: -1, // resolved per tone below
 });
 
 const emit = defineEmits<{
@@ -24,6 +24,16 @@ const emit = defineEmits<{
 let timer: ReturnType<typeof setTimeout> | null = null;
 const progressKey = ref(0);
 
+const TONE_AUTO_CLOSE: Record<string, number> = {
+    success: 5000,
+    info: 6000,
+    danger: 10000,
+};
+
+const effectiveAutoCloseMs = computed(() =>
+    props.autoCloseMs !== -1 ? props.autoCloseMs : (TONE_AUTO_CLOSE[props.tone] ?? 5000),
+);
+
 function close() {
     if (timer) { clearTimeout(timer); timer = null; }
     emit('update:open', false);
@@ -31,9 +41,9 @@ function close() {
 
 watch(() => props.open, (isOpen) => {
     if (timer) { clearTimeout(timer); timer = null; }
-    if (isOpen && props.autoCloseMs > 0) {
+    if (isOpen && effectiveAutoCloseMs.value > 0) {
         progressKey.value += 1;
-        timer = setTimeout(close, props.autoCloseMs);
+        timer = setTimeout(close, effectiveAutoCloseMs.value);
     }
 }, { immediate: true });
 
@@ -68,7 +78,7 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer); });
           <button type="button" class="sp-close" aria-label="Dismiss" @click="close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
-          <span v-if="autoCloseMs > 0" :key="progressKey" class="sp-progress" :style="{ animationDuration: `${autoCloseMs}ms` }" />
+          <span v-if="effectiveAutoCloseMs > 0" :key="progressKey" class="sp-progress" :style="{ animationDuration: `${effectiveAutoCloseMs}ms` }" />
         </div>
       </div>
     </Transition>
@@ -79,7 +89,7 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer); });
 .sp-scrim {
   position: fixed;
   inset: 0;
-  z-index: 9500;
+  z-index: 10050;
   display: grid;
   place-items: start center;
   padding-top: min(14vh, 120px);

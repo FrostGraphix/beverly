@@ -501,6 +501,14 @@ async function submitAuthorization() {
         authorization.value = '';
         authOpen.value = false;
         step.value = 'success';
+        showResultPopup(
+            'success',
+            'Token generated successfully',
+            `Credit token is ready for meter ${meter.value?.meterId || ''}. Remote send dispatching...`,
+        );
+        window.setTimeout(() => {
+            remoteTrackerOpen.value = true;
+        }, 500);
     } catch (e: any) {
         if (e instanceof ApiError && e.code === 'vend_credential_required') {
             authOpen.value = false;
@@ -519,7 +527,15 @@ async function submitAuthorization() {
             // A definitive server response means this vend will not retry-succeed with the same key.
             clearPendingVend();
         }
-        error.value = describeApiError(e, e?.message ?? 'Vending failed');
+        const errDetails = describeApiError(e, e?.message ?? 'Vending failed');
+        error.value = errDetails;
+        authOpen.value = false;
+        authorization.value = '';
+        showResultPopup(
+            'danger',
+            errDetails.title || 'Vend Failed',
+            `${errDetails.message}${errDetails.action ? ' ' + errDetails.action : ''}`,
+        );
     } finally {
         loading.value = false;
     }

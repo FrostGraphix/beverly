@@ -179,6 +179,9 @@ async function purchase() {
             message: 'Receipt is ready. Copy, download, view, or remote send now.',
         };
         step.value   = 4;
+        window.setTimeout(() => {
+            remoteTrackerOpen.value = true;
+        }, 500);
     } catch (e: any) {
         error.value = describeApiError(e, e?.message ?? 'Purchase failed. Try again.');
     } finally { loading.value = false; }
@@ -202,6 +205,9 @@ async function submitStepUp() {
             message: 'Receipt is ready. Copy, download, view, or remote send now.',
         };
         step.value   = 4;
+        window.setTimeout(() => {
+            remoteTrackerOpen.value = true;
+        }, 500);
     } catch (e: any) {
         stepUpError.value = e?.message ?? 'Incorrect code. Try again.';
     } finally { stepUpLoading.value = false; }
