@@ -139,10 +139,9 @@
             <div class="right-menu">
               <BaseButton variant="quiet" class="toolbar-search" aria-label="Search Beverly" aria-keyshortcuts="Control+K Meta+K" @click="openGlobalSearch">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-                <span>Search</span>
+                <span>{{ translate('common.search') }}</span>
                 <kbd>Ctrl K</kbd>
               </BaseButton>
-              <LanguageSwitcher compact />
               <StationAlertsBell v-if="!showOemHub" />
               <div class="bw-account-menu" ref="accountMenuWrap">
                 <BaseButton
@@ -184,19 +183,24 @@
                       <small>{{ displayUserName }} - {{ currentRoleName }}</small>
                     </span>
                   </div>
+                  <div class="bw-user-menu-language">
+                    <span>{{ translate('common.language') }}</span>
+                    <LanguageSwitcher compact />
+                  </div>
+                  <div class="bw-user-menu-separator"></div>
                   <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openProfile">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M20 21a8 8 0 0 0-16 0"></path>
                       <circle cx="12" cy="7" r="4"></circle>
                     </svg>
-                    <span>Profile</span>
+                    <span>{{ translate('common.profile') }}</span>
                   </BaseButton>
                   <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openSettings">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                       <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"></path>
                       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .92V20a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-.92 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.92-1H4a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 .92-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.92V4a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 .92 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.36.43.69.92 1H20a2 2 0 1 1 0 4h-.09c-.49.31-.79.64-.51 1z"></path>
                     </svg>
-                    <span>Settings</span>
+                    <span>{{ translate('common.settings') }}</span>
                   </BaseButton>
                   <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="switchOem">
                     <svg class="bw-user-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -205,7 +209,7 @@
                       <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
                       <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
                     </svg>
-                    <span>Switch OEM</span>
+                    <span>{{ translate('common.switchOem') }}</span>
                   </BaseButton>
                   <div class="user-theme-submenu">
                     <BaseButton
@@ -219,7 +223,7 @@
                         <path d="M12 21C7 16 5 11 6 5c6-1 11 1 13 6-4 1-7 4-9 8"></path>
                         <path d="M6 19c3-5 7-8 13-8"></path>
                       </svg>
-                      <span>Theme</span>
+                      <span>{{ translate('common.theme') }}</span>
                       <svg class="bw-user-menu-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path d="m9 18 6-6-6-6"></path>
                       </svg>
@@ -244,7 +248,7 @@
                       <circle cx="11" cy="11" r="7"></circle>
                       <path d="m21 21-4.3-4.3"></path>
                     </svg>
-                    <span>Global search</span>
+                    <span>{{ translate('common.globalSearch') }}</span>
                     <kbd>Ctrl K</kbd>
                   </BaseButton>
                   <BaseButton variant="quiet" class="bw-user-menu-item" role="menuitem" @click="openFullscreenFromMenu">
@@ -254,7 +258,7 @@
                       <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
                       <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
                     </svg>
-                    <span>Fullscreen</span>
+                    <span>{{ translate('common.fullscreen') }}</span>
                   </BaseButton>
                   <div class="bw-user-menu-separator"></div>
                   <BaseButton variant="quiet" class="bw-user-menu-item bw-user-menu-item--danger" role="menuitem" @click="handleSignOut">
@@ -263,7 +267,7 @@
                       <path d="m16 17 5-5-5-5"></path>
                       <path d="M21 12H9"></path>
                     </svg>
-                    <span>Sign Out</span>
+                    <span>{{ translate('common.signOut') }}</span>
                   </BaseButton>
                 </div>
               </transition>
@@ -400,9 +404,10 @@ import OemHubPage from "./components/oem-hub/OemHubPage.vue";
 import BeverlyLoader from "@beverly/tokens/BeverlyLoader.vue";
 import PwaUpdateToast from "@beverly/tokens/PwaUpdateToast.vue";
 import LanguageSwitcher from "@beverly/tokens/LanguageSwitcher.vue";
+import { translate } from "@beverly/tokens/i18n.js";
 import { useOemStore } from "./stores/oem-store";
 import { warmAllOems } from "./services/oem-prefetch.mjs";
-import { clearSessionCookies, currentUserInfo, getApi, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
+import { clearSessionCookies, currentUserInfo, getApi, getCookie, isSessionExpired, readSessionState, refreshLiveWriteStatus, refreshSession, runOneTimeStorageCleanup, setCookie, setRuntimeLiveWritesAllowed, touchSession } from "./services/api";
 import { loadProfileState } from "./services/profile-store.mjs";
 import { findRoute, normalizeHash, routeGroups, visibleRoutes } from "./data/route-manifest";
 import { groupIcons, routeIconOverrides, routeIconPaths, sidebarSectionLabels } from "./data/shell-chrome.mjs";
@@ -627,6 +632,7 @@ export default {
     this.stopSidebarResize();
   },
   methods: {
+    translate,
     scrollToActiveLink() {
       this.$nextTick(() => {
         const el = this.$el?.querySelector?.('.sidebar-menu .sidebar-item.active, .sidebar-menu [aria-current="page"]');
@@ -734,9 +740,17 @@ export default {
       try {
         // Primary: use /api/auth/me which validates the HttpOnly bev_token cookie server-side.
         // Falls back to currentUserInfo() if /api/auth/me is not yet available (during cutover).
-        const meRes = await fetch("/api/auth/me", { credentials: "include" });
+        let meRes = await fetch("/api/auth/me", { credentials: "include" });
         if (meRes.status === 401) {
-          // No valid session — clear local state and redirect.
+          // Supabase access tokens are short-lived. Refresh once before treating
+          // this as a terminal session failure, preserving valid refresh cookies.
+          const refreshedToken = await refreshSession();
+          if (refreshedToken) {
+            meRes = await fetch("/api/auth/me", { credentials: "include" });
+          }
+        }
+        if (meRes.status === 401) {
+          // Refresh failed or the server rejected the session window.
           clearSessionCookies();
           this.currentRoleId = null;
           this.currentUserName = null;

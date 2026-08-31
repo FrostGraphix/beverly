@@ -1,67 +1,67 @@
 <template>
-  <AppShell title="Refunds">
-    <section class="bw-kpi-grid bw-mobile-kpi-grid refund-kpis" aria-label="Refund summary" :aria-busy="loading && !summaryLoaded">
+  <AppShell :title="t('refunds.title')">
+    <section class="bw-kpi-grid bw-mobile-kpi-grid refund-kpis" :aria-label="t('refunds.summary')" :aria-busy="loading && !summaryLoaded">
       <article class="bw-kpi featured refund-kpi-total">
-        <span class="bw-kpi-label">Total requests</span>
+        <span class="bw-kpi-label">{{ t('refunds.totalRequests') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('total') }}</strong>
-        <span class="bw-kpi-note">all refund requests</span>
+        <span class="bw-kpi-note">{{ t('refunds.allRefundRequests') }}</span>
       </article>
       <article class="bw-kpi warn-tone">
-        <span class="bw-kpi-label">Pending</span>
+        <span class="bw-kpi-label">{{ t('refunds.pending') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('pending') }}</strong>
-        <span class="bw-kpi-note">awaiting approval</span>
+        <span class="bw-kpi-note">{{ t('refunds.awaitingApproval') }}</span>
       </article>
       <article class="bw-kpi info-tone">
-        <span class="bw-kpi-label">Approved</span>
+        <span class="bw-kpi-label">{{ t('refunds.approved') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('approved') }}</strong>
-        <span class="bw-kpi-note">credited requests</span>
+        <span class="bw-kpi-note">{{ t('refunds.creditedRequests') }}</span>
       </article>
       <article class="bw-kpi success-tone">
-        <span class="bw-kpi-label">Meter refunds</span>
+        <span class="bw-kpi-label">{{ t('refunds.meterRefunds') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('meter_rejection') }}</strong>
-        <span class="bw-kpi-note">rejected meter credits</span>
+        <span class="bw-kpi-note">{{ t('refunds.rejectedMeterCredits') }}</span>
       </article>
       <article class="bw-kpi danger-tone">
-        <span class="bw-kpi-label">Rejected</span>
+        <span class="bw-kpi-label">{{ t('refunds.rejected') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('rejected') }}</strong>
-        <span class="bw-kpi-note">declined requests</span>
+        <span class="bw-kpi-note">{{ t('refunds.declinedRequests') }}</span>
       </article>
       <article class="bw-kpi">
-        <span class="bw-kpi-label">Expired</span>
+        <span class="bw-kpi-label">{{ t('refunds.expired') }}</span>
         <strong class="bw-kpi-value">{{ summaryValue('expired') }}</strong>
-        <span class="bw-kpi-note">review window elapsed</span>
+        <span class="bw-kpi-note">{{ t('refunds.reviewWindowElapsed') }}</span>
       </article>
     </section>
 
     <p class="refund-flow-note" role="note">
-      Automatic meter refunds appear after paid meter orders are rejected. Manual and dispute refunds remain approval-based.
+      {{ t('refunds.automaticNote') }}
     </p>
 
     <div class="bw-filter-bar">
-      <button type="button" class="bw-btn bw-btn-sm" :disabled="loading" @click.prevent="load">Refresh</button>
-      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportCsvRows">Export page</button>
-      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportPdfDoc">PDF page</button>
-      <select v-model="statusFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by status" @change="reloadFirstPage">
-        <option value="">All statuses</option>
-        <option value="pending">Pending</option>
-        <option value="approved">Approved</option>
-        <option value="rejected">Rejected</option>
-        <option value="expired">Expired</option>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="loading" @click.prevent="load">{{ t('refunds.refresh') }}</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportCsvRows">{{ t('refunds.exportPage') }}</button>
+      <button type="button" class="bw-btn bw-btn-sm" :disabled="!refunds.length" @click.prevent="exportPdfDoc">{{ t('refunds.pdfPage') }}</button>
+      <select v-model="statusFilter" class="bw-select bw-select-sm" :aria-label="t('refunds.filterStatus')" @change="reloadFirstPage">
+        <option value="">{{ t('refunds.allStatuses') }}</option>
+        <option value="pending">{{ t('refunds.pending') }}</option>
+        <option value="approved">{{ t('refunds.approved') }}</option>
+        <option value="rejected">{{ t('refunds.rejected') }}</option>
+        <option value="expired">{{ t('refunds.expired') }}</option>
       </select>
-      <select v-model="sourceFilter" class="bw-select bw-select-sm" aria-label="Filter refunds by source" @change="reloadFirstPage">
-        <option value="">All sources</option>
-        <option value="meter_order_rejection">Meter rejection</option>
-        <option value="dispute">Dispute</option>
-        <option value="manual">Manual</option>
+      <select v-model="sourceFilter" class="bw-select bw-select-sm" :aria-label="t('refunds.filterSource')" @change="reloadFirstPage">
+        <option value="">{{ t('refunds.allSources') }}</option>
+        <option value="meter_order_rejection">{{ t('refunds.meterRejection') }}</option>
+        <option value="dispute">{{ t('refunds.dispute') }}</option>
+        <option value="manual">{{ t('refunds.manual') }}</option>
       </select>
     </div>
 
-    <div v-if="loading" class="bw-card" aria-label="Loading refunds">
+    <div v-if="loading" class="bw-card" :aria-label="t('refunds.loading')">
       <div v-for="n in 5" :key="n" class="bw-skeleton" style="margin: var(--s-2)"></div>
     </div>
     <div v-else-if="error" class="bw-error-banner refund-error" role="alert">
       <span>{{ error }}</span>
-      <button class="bw-btn bw-btn-sm" @click="load">Try again</button>
+      <button class="bw-btn bw-btn-sm" @click="load">{{ t('refunds.tryAgain') }}</button>
     </div>
 
     <div v-else>
@@ -70,14 +70,14 @@
         <table class="bw-table">
           <thead>
             <tr>
-              <th>Wallet</th>
-              <th>Amount</th>
-              <th>Source</th>
-              <th>Reason</th>
-              <th>Requested By</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Record</th>
+              <th>{{ t('refunds.wallet') }}</th>
+              <th>{{ t('refunds.amount') }}</th>
+              <th>{{ t('refunds.source') }}</th>
+              <th>{{ t('refunds.reason') }}</th>
+              <th>{{ t('refunds.requestedBy') }}</th>
+              <th>{{ t('refunds.status') }}</th>
+              <th>{{ t('refunds.created') }}</th>
+              <th>{{ t('refunds.record') }}</th>
               <th class="refund-actions-col"></th>
             </tr>
           </thead>
@@ -98,8 +98,8 @@
               <td class="bw-text-sm">{{ fmtDate(r.created_at) }}</td>
               <td>
                 <div class="receipt-actions">
-                  <button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">View record</button>
-                  <button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">Print record</button>
+                  <button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">{{ t('refunds.viewRecord') }}</button>
+                  <button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">{{ t('refunds.printRecord') }}</button>
                 </div>
               </td>
               <td v-if="r.status === 'pending'" class="bw-action-cell refund-actions-col">
@@ -109,14 +109,14 @@
                     :disabled="isOwnRequest(r)"
                     :title="isOwnRequest(r) ? 'A different finance checker must approve this request.' : undefined"
                     @click="openApprove(r)"
-                  >Approve</button>
-                  <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">Reject</button>
+                  >{{ t('refunds.approve') }}</button>
+                  <button class="bw-btn bw-btn-danger bw-btn-sm" @click="openReject(r)">{{ t('refunds.reject') }}</button>
                 </div>
                 <MobileActionMenu label="Refund actions">
-                  <button class="mobile-action-item primary" :disabled="isOwnRequest(r)" @click="openApprove(r)">Approve</button>
-                  <button class="mobile-action-item danger" @click="openReject(r)">Reject</button>
+                  <button class="mobile-action-item primary" :disabled="isOwnRequest(r)" @click="openApprove(r)">{{ t('refunds.approve') }}</button>
+                  <button class="mobile-action-item danger" @click="openReject(r)">{{ t('refunds.reject') }}</button>
                 </MobileActionMenu>
-                <span v-if="isOwnRequest(r)" class="refund-checker-note">Second approver required</span>
+                <span v-if="isOwnRequest(r)" class="refund-checker-note">{{ t('refunds.secondApprover') }}</span>
               </td>
               <td v-else></td>
             </tr>
@@ -136,19 +136,19 @@
             <span :class="statusClass(r.status)" class="bw-badge">{{ statusLabel(r.status) }}</span>
           </div>
           <div class="bw-tc-mid">
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Wallet</span><span class="bw-tc-pair-val">{{ walletOwnerLabel(r) }} · {{ shortId(r.wallet_id) }}</span></div>
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Source</span><span class="bw-tc-pair-val">{{ sourceLabel(r.source_type) }}<template v-if="r.source_id"> · {{ shortId(r.source_id) }}</template></span></div>
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Reason</span><span class="bw-tc-pair-val">{{ r.reason?.replace(/_/g, ' ') }}</span></div>
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Requested by</span><span class="bw-tc-pair-val">{{ requesterLabel(r) }}</span></div>
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Created</span><span class="bw-tc-pair-val">{{ fmtDate(r.created_at) }}</span></div>
-            <div class="bw-tc-pair"><span class="bw-tc-pair-label">Record</span><span class="receipt-actions"><button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">View</button><button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">Print</button></span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.wallet') }}</span><span class="bw-tc-pair-val">{{ walletOwnerLabel(r) }} · {{ shortId(r.wallet_id) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.source') }}</span><span class="bw-tc-pair-val">{{ sourceLabel(r.source_type) }}<template v-if="r.source_id"> · {{ shortId(r.source_id) }}</template></span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.reason') }}</span><span class="bw-tc-pair-val">{{ r.reason?.replace(/_/g, ' ') }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.requestedBy') }}</span><span class="bw-tc-pair-val">{{ requesterLabel(r) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.created') }}</span><span class="bw-tc-pair-val">{{ fmtDate(r.created_at) }}</span></div>
+            <div class="bw-tc-pair"><span class="bw-tc-pair-label">{{ t('refunds.record') }}</span><span class="receipt-actions"><button class="bw-btn bw-btn-sm" @click="viewRefundReceipt(r)">{{ t('refunds.view') }}</button><button class="bw-btn bw-btn-sm" @click="printRefundReceipt(r)">{{ t('refunds.print') }}</button></span></div>
           </div>
           <div v-if="r.status === 'pending'" class="bw-tc-foot">
             <MobileActionMenu label="Refund actions">
-              <button class="mobile-action-item primary" :disabled="isOwnRequest(r)" @click="openApprove(r)">Approve</button>
-              <button class="mobile-action-item danger" @click="openReject(r)">Reject</button>
+              <button class="mobile-action-item primary" :disabled="isOwnRequest(r)" @click="openApprove(r)">{{ t('refunds.approve') }}</button>
+              <button class="mobile-action-item danger" @click="openReject(r)">{{ t('refunds.reject') }}</button>
             </MobileActionMenu>
-            <span v-if="isOwnRequest(r)" class="refund-checker-note">Second approver required</span>
+            <span v-if="isOwnRequest(r)" class="refund-checker-note">{{ t('refunds.secondApprover') }}</span>
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@
         v-model:page="currentPage"
         v-model:pageSize="pageSize"
         :total-items="totalRefunds"
-        item-label="refund requests"
+        :item-label="t('refunds.requests')"
         :loading="loading"
         @change="load"
       />
@@ -174,7 +174,7 @@
       @confirm="submitApprove"
     >
       <div v-if="actionError" class="bw-error-banner" role="alert">{{ actionError }}</div>
-      <label class="bw-label">Amount to credit (₦)</label>
+      <label class="bw-label">{{ t('refunds.amountToCredit') }}</label>
       <input
         class="bw-input"
         type="number"
@@ -203,7 +203,7 @@
       @confirm="submitReject"
     >
       <div v-if="actionError" class="bw-error-banner" role="alert">{{ actionError }}</div>
-      <label class="bw-label">Reason *</label>
+      <label class="bw-label">{{ t('refunds.reasonRequired') }}</label>
       <textarea v-model="rejectReason" class="bw-textarea" rows="3" placeholder="Reason for rejection..."></textarea>
     </ConfirmDialog>
   </AppShell>
@@ -219,6 +219,7 @@ import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import { exportCsv, printPdf } from '../lib/export';
 import { printReceipt, refundReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
+import { getIntlLocale, useI18n } from '@beverly/tokens/i18n.js';
 
 type RefundStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 type RefundSource = 'manual' | 'dispute' | 'meter_order_rejection';
@@ -247,6 +248,7 @@ interface RefundSummary {
 }
 
 const auth         = useStaffAuthStore();
+const { t }        = useI18n();
 const refunds      = ref<RefundRecord[]>([]);
 const loading      = ref(false);
 const error        = ref('');
@@ -272,9 +274,9 @@ const approveAmountValid = computed(() => {
   return minor > 0 && minor <= approving.value.amount_minor;
 });
 const emptyMessage = computed(() => {
-  if (sourceFilter.value === 'meter_order_rejection') return 'No meter rejection refunds found.';
-  if (statusFilter.value) return `No ${statusLabel(statusFilter.value).toLowerCase()} refund requests.`;
-  return 'No refund requests yet.';
+  if (sourceFilter.value === 'meter_order_rejection') return t('refunds.noMeterRefunds');
+  if (statusFilter.value) return t('refunds.noStatusRefunds', { status: statusLabel(statusFilter.value).toLocaleLowerCase(getIntlLocale()) });
+  return t('refunds.noRefunds');
 });
 
 async function load() {
@@ -349,7 +351,7 @@ async function submitReject() {
 
 function statusLabel(s: string) {
   return {
-    pending: 'Pending', approved: 'Approved', rejected: 'Rejected', expired: 'Expired',
+    pending: t('refunds.pending'), approved: t('refunds.approved'), rejected: t('refunds.rejected'), expired: t('refunds.expired'),
   }[s] ?? s;
 }
 
@@ -359,7 +361,7 @@ function statusClass(s: string) {
   }[s] ?? 'bw-badge-neutral';
 }
 
-function fmtDate(s: string) { return s ? new Date(s).toLocaleString() : '—'; }
+function fmtDate(s: string) { return s ? new Date(s).toLocaleString(getIntlLocale()) : '—'; }
 
 function summaryValue(key: keyof RefundSummary) {
   return summaryLoaded.value ? summary.value[key] : '—';
@@ -393,9 +395,9 @@ function reloadFirstPage() {
 
 function sourceLabel(source?: RefundSource | null) {
   return {
-    meter_order_rejection: 'Meter rejection',
-    dispute: 'Dispute',
-    manual: 'Manual',
+    meter_order_rejection: t('refunds.meterRejection'),
+    dispute: t('refunds.dispute'),
+    manual: t('refunds.manual'),
   }[source ?? 'manual'];
 }
 

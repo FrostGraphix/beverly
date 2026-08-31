@@ -30,6 +30,13 @@ assert.deepStrictEqual(api.readSessionState(), state);
 assert.strictEqual(api.isSessionExpired(now), false);
 assert.strictEqual(api.isSessionExpired(state.expiresAt), true);
 
+assert.strictEqual(api.isTerminalSessionFailure("Session idle timeout"), true);
+assert.strictEqual(api.isTerminalSessionFailure("Session absolute timeout"), true);
+assert.strictEqual(api.isTerminalSessionFailure("Reauthentication required"), true);
+assert.strictEqual(api.isTerminalSessionFailure("Invalid session"), false);
+assert.strictEqual(api.isTerminalSessionFailure("Session expired"), false);
+assert.strictEqual(api.isTerminalSessionFailure("Access token expired"), false);
+
 const nearAbsoluteTimeout = now + api.sessionAbsoluteTimeoutMs() - 1_000;
 const touched = api.writeSessionState(nearAbsoluteTimeout);
 assert.strictEqual(touched.startedAt, now);

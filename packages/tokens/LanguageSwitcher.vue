@@ -1,9 +1,11 @@
 <script setup>
+import { computed } from 'vue';
 import { useI18n } from './i18n.js';
 
 defineProps({ compact: { type: Boolean, default: false } });
 const emit = defineEmits(['change']);
-const { locale, locales, setLocale, t } = useI18n();
+const { locale, getLanguageOptions, setLocale, t } = useI18n();
+const languageOptions = computed(() => getLanguageOptions(locale.value));
 
 function changeLocale(event) {
   const next = setLocale(event.target.value);
@@ -19,8 +21,8 @@ function changeLocale(event) {
     </svg>
     <span v-if="!compact">{{ t('common.language') }}</span>
     <select :value="locale" :aria-label="t('common.chooseLanguage')" @change="changeLocale">
-      <option v-for="item in locales" :key="item.code" :value="item.code">
-        {{ compact ? item.code.toUpperCase() : item.nativeLabel }}
+      <option v-for="item in languageOptions" :key="item.code" :value="item.code">
+        {{ item.displayLabel }}
       </option>
     </select>
   </label>
@@ -51,8 +53,8 @@ function changeLocale(event) {
   cursor: pointer;
 }
 .bw-language-switcher select:focus-visible { outline: 2px solid var(--brand, #31c857); outline-offset: 3px; }
-.bw-language-switcher--compact { min-width: 68px; justify-content: center; }
-.bw-language-switcher--compact select { width: 2.8rem; }
+.bw-language-switcher--compact { min-width: min(100%, 7.25rem); max-width: 11.5rem; justify-content: center; }
+.bw-language-switcher--compact select { width: 100%; min-width: 0; text-overflow: ellipsis; }
 @media (max-width: 520px) {
   .bw-language-switcher:not(.bw-language-switcher--compact) > span { display: none; }
 }

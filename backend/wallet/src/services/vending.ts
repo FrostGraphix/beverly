@@ -325,10 +325,42 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
         } catch (e: any) {
             // token engine or capture failed → release hold and mark failed
             if (token) {
-                await markPendingReview(po.id, e.code ?? 'post_token_failed', e.message, {
+                const failureCode = e.code ?? 'post_token_failed';
+                const failureMessage = e.message ?? 'Token generated, but wallet reconciliation remains pending.';
+                await markPendingReview(po.id, failureCode, failureMessage, {
                     token,
                     deliveryState: 'token_generated_needs_reconciliation',
                 });
+                po = {
+                    ...po,
+                    token,
+                    receipt_id: receiptId,
+                    status: 'delivery_pending_review',
+                    delivery_state: 'token_generated_needs_reconciliation',
+                    failure_reason: `${failureCode}: ${failureMessage}`.slice(0, 500),
+                };
+                await logAction({
+                    actorUserId: input.vendorUserId,
+                    actorType: 'vendor_user',
+                    action: 'vending.token_generated_needs_reconciliation',
+                    targetType: 'purchase_order',
+                    targetId: po.id,
+                    after: {
+                        meterId: meter.meterId,
+                        amountMinor: preview.grossAmountMinor,
+                        units: preview.units,
+                        status: po.status,
+                        failureCode,
+                    },
+                });
+                return {
+                    purchaseOrder: po,
+                    token,
+                    units: preview.units,
+                    remoteTaskId,
+                    receiptId,
+                    ledgerEntryId,
+                };
             } else {
                 try { await releaseHold(hold.id); } catch { /* noop */ }
                 await markFailed(po.id, e.code ?? 'token_engine_failed', e.message);

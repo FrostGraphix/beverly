@@ -122,6 +122,10 @@ export function isSessionExpired(now = currentTimestamp()) {
   return now >= session.expiresAt;
 }
 
+export function isTerminalSessionFailure(message) {
+  return /session idle timeout|session absolute timeout|server session required|reauthentication required|session establishment failed/i.test(String(message || ""));
+}
+
 apiClient.interceptors.request.use((config) => {
   // Touch session on every request — extends idle timeout regardless of cookie visibility.
   // After Phase 7, bev_token is HttpOnly so getCookie("token") returns "".
@@ -141,7 +145,7 @@ apiClient.interceptors.response.use(
     const status = Number(error?.response?.status);
     const original = error?.config || {};
     const isRefreshCall = String(original.url || "").includes("/auth/refresh");
-    const isTerminalSession = /invalid session|session idle timeout|session absolute timeout|server session required|reauthentication required|session expired/i.test(String(apiMessage || ""));
+    const isTerminalSession = isTerminalSessionFailure(apiMessage);
 
     if (original.skipAuthRedirect) {
       // Isolated or background calls (e.g. OEM pre-warming) capture errors locally without destroying user session.

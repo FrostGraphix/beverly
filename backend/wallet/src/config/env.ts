@@ -237,10 +237,26 @@ export const env = {
     ENERGY_BEARER_TOKEN: parsed.data.UPSTREAM_BEARER_TOKEN || parsed.data.ENERGY_BEARER_TOKEN,
 };
 
-export const corsOrigins = env.CORS_ORIGINS
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+export function buildCorsOrigins(explicit: string, applicationUrls: string[]): string[] {
+    const explicitOrigins = explicit
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+    const applicationOrigins = applicationUrls
+        .map((value) => {
+            try { return new URL(value).origin; }
+            catch { return ''; }
+        })
+        .filter(Boolean);
+    return [...new Set([...explicitOrigins, ...applicationOrigins])];
+}
+
+export const corsOrigins = buildCorsOrigins(env.CORS_ORIGINS, [
+    env.CUSTOMER_APP_URL,
+    env.VENDOR_APP_URL,
+    env.VENDOR_PORTAL_URL,
+    env.STAFF_PORTAL_URL,
+]);
 
 export const isProd = env.NODE_ENV === 'production';
 export const isDev = env.NODE_ENV === 'development';

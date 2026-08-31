@@ -15,7 +15,7 @@ const step = ref<Step>('meter');
 const meterId = ref('');
 const amountNaira = ref(2000);
 const loading = ref(false);
-const error = ref<{ title: string; message: string; action?: string; code?: string } | null>(null);
+const error = ref<{ title: string; message: string; action?: string; code?: string; reference?: string } | null>(null);
 const notice = ref<{ tone: 'success' | 'info' | 'danger'; title: string; message: string; code?: string } | null>(null);
 const remoteSending = ref(false);
 const remoteTrackerOpen = ref(false);
@@ -239,6 +239,9 @@ function isMeterOfflineError(code: unknown, message: unknown) {
 
 function describeApiError(e: unknown, fallback: string) {
     if (e instanceof ApiError) {
+        const reference = typeof (e.details as any)?.correlationId === 'string'
+            ? (e.details as any).correlationId
+            : undefined;
         if (isMeterOfflineError(e.code, e.message)) {
             return {
                 title: 'Meter currently offline',
@@ -309,6 +312,42 @@ function describeApiError(e: unknown, fallback: string) {
                 message: e.message,
                 action: 'The token is still valid. Enter it manually while admin fixes the meter binding.',
                 code: e.code,
+            };
+        }
+        if (e.code === 'remote_send_service_unavailable') {
+            return {
+                title: 'Remote delivery unavailable',
+                message: e.message,
+                action: 'Your generated token remains valid. Enter it manually, or retry remote send shortly.',
+                code: e.code,
+                reference,
+            };
+        }
+        if (['wallet_backend_not_configured', 'wallet_backend_unavailable'].includes(String(e.code))) {
+            return {
+                title: 'Wallet service unavailable',
+                message: e.message,
+                action: 'No wallet debit or vend was attempted. Contact Beverly support before retrying.',
+                code: e.code,
+                reference,
+            };
+        }
+        if (e.code === 'vend_meter_lookup_unavailable') {
+            return {
+                title: 'Live meter verification unavailable',
+                message: e.message,
+                action: 'No wallet debit or vend was attempted. Retry shortly, then share the support reference if it repeats.',
+                code: e.code,
+                reference,
+            };
+        }
+        if (e.code === 'vend_pricing_unavailable') {
+            return {
+                title: 'Vending price unavailable',
+                message: e.message,
+                action: 'No wallet debit or vend was attempted. Retry shortly, then share the support reference if it repeats.',
+                code: e.code,
+                reference,
             };
         }
         if (e.code === 'meter_lookup_unavailable' || e.status === 503) {
@@ -445,11 +484,20 @@ async function submitAuthorization() {
         result.value = r;
         registerSuccessfulAttempt();
         clearPendingVend();
-        notice.value = {
-            tone: 'success',
-            title: 'Token generated successfully',
-            message: 'Receipt is ready. Copy, download, view, or remote send now.',
-        };
+        const needsReconciliation = r.purchaseOrder?.status === 'delivery_pending_review'
+            || r.purchaseOrder?.delivery_state === 'token_generated_needs_reconciliation';
+        notice.value = needsReconciliation
+            ? {
+                tone: 'info',
+                title: 'Token generated; reconciliation pending',
+                message: 'The token is valid and remains available. Beverly operations will reconcile the wallet automatically.',
+                code: 'token_generated_needs_reconciliation',
+            }
+            : {
+                tone: 'success',
+                title: 'Token generated successfully',
+                message: 'Receipt is ready. Copy, download, view, or remote send now.',
+            };
         authorization.value = '';
         authOpen.value = false;
         step.value = 'success';
@@ -636,6 +684,7 @@ async function remoteSendGeneratedToken() {
           <span>{{ error.message }}</span>
           <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+          <small v-if="error.reference" class="bw-mono">Support reference: {{ error.reference }}</small>
         </div>
         <button type="submit" class="bw-btn primary" style="margin-top: var(--s-4); width: 100%; justify-content: center; height: 44px"
                 :disabled="loading || !meterIdValid" :aria-busy="loading">
@@ -674,6 +723,7 @@ async function remoteSendGeneratedToken() {
           <span>{{ error.message }}</span>
           <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+          <small v-if="error.reference" class="bw-mono">Support reference: {{ error.reference }}</small>
         </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
                 @click="loadPreview" :disabled="loading || amountNaira < 100">
@@ -708,6 +758,7 @@ async function remoteSendGeneratedToken() {
           <span>{{ error.message }}</span>
           <small v-if="error.action" class="bw-muted">{{ error.action }}</small>
           <small v-if="error.code" class="bw-mono">Code: {{ error.code }}</small>
+          <small v-if="error.reference" class="bw-mono">Support reference: {{ error.reference }}</small>
         </div>
         <button class="bw-btn primary" style="margin-top: var(--s-5); width: 100%; justify-content: center; height: 44px"
                 @click="confirm" :disabled="loading || !canVend || vendingConfigurationBlocked">

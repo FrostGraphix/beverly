@@ -167,6 +167,53 @@ function sendTokenEngineError(reply: FastifyReply, error: TokenEngineError) {
     });
 }
 
+function sendVendPreviewUnavailable(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    stage: 'meter_lookup' | 'pricing',
+    cause: unknown,
+) {
+    const error = stage === 'meter_lookup'
+        ? 'vend_meter_lookup_unavailable'
+        : 'vend_pricing_unavailable';
+    const message = stage === 'meter_lookup'
+        ? 'Live meter verification is temporarily unavailable. No wallet debit or vend was attempted.'
+        : 'Current vending pricing is temporarily unavailable. No wallet debit or vend was attempted.';
+    req.log.error({ err: cause, stage, meterId: (req.body as any)?.meterId }, 'Vendor vending preview failed');
+    return reply.code(503).send({
+        error,
+        message,
+        retryable: true,
+        correlationId: req.id,
+        details: {
+            noVendAttempted: true,
+            stage,
+            recommendedAction: 'retry_or_contact_support',
+            correlationId: req.id,
+        },
+    });
+}
+
+function sendRemoteSendUnavailable(req: FastifyRequest, reply: FastifyReply, cause: unknown) {
+    const message = 'Remote delivery is temporarily unavailable. The token remains valid for manual meter entry.';
+    req.log.error({ err: cause, purchaseOrderId: (req.params as any)?.purchaseOrderId }, 'Vendor remote send failed unexpectedly');
+    return reply.code(503).send({
+        error: 'remote_send_service_unavailable',
+        message,
+        status: 'failed',
+        deliveryState: 'remote_send_failed_needs_manual_entry',
+        delivery_state: 'remote_send_failed_needs_manual_entry',
+        remark: message,
+        retryable: true,
+        correlationId: req.id,
+        details: {
+            tokenRemainsValid: true,
+            recommendedAction: 'enter_token_manually_or_retry_remote_send',
+            correlationId: req.id,
+        },
+    });
+}
+
 function profileCode(prefix: string, id: string | null | undefined): string | null {
     if (!id) return null;
     return `${prefix}-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
@@ -1094,21 +1141,29 @@ const route: FastifyPluginAsync = async (fastify) => {
             amountMinor: z.number().int().min(10000),
         });
         const body = schema.parse(req.body);
+        let meter;
         try {
             assertEnergyVendReady();
-            const meter = await lookupMeter(body.meterId);
+            meter = await lookupMeter(body.meterId);
+        } catch (e: any) {
+            if (e instanceof TokenEngineError) return sendTokenEngineError(reply, e);
+            return sendVendPreviewUnavailable(req, reply, 'meter_lookup', e);
+        }
+        try {
             assertStationVendAllowed(req.actor!.stationId, meter.stationId);
-            const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
-            return { meter, preview };
         } catch (e: any) {
             if (e instanceof StationVendScopeError) {
                 const status = e.code === 'meter_station_unavailable' ? 422 : 403;
                 return reply.code(status).send({ error: e.code, message: e.message });
             }
-            if (e instanceof TokenEngineError) {
-                return sendTokenEngineError(reply, e);
-            }
-            throw e;
+            return sendVendPreviewUnavailable(req, reply, 'meter_lookup', e);
+        }
+        try {
+            const preview = await previewPurchaseWithPolicy(body.amountMinor, meter.tariffId);
+            return { meter, preview };
+        } catch (e: any) {
+            if (e instanceof TokenEngineError) return sendTokenEngineError(reply, e);
+            return sendVendPreviewUnavailable(req, reply, 'pricing', e);
         }
     });
 
@@ -1242,7 +1297,17 @@ const route: FastifyPluginAsync = async (fastify) => {
                         },
                     };
                 }
-                throw error;
+                req.log.error({ err: error, purchaseOrderId: purchase.purchaseOrder.id }, 'Vendor remote send failed unexpectedly');
+                return {
+                    ...purchase,
+                    remoteSend: {
+                        status: 'failed' as const,
+                        deliveryState: 'remote_send_failed_needs_manual_entry',
+                        remark: 'Remote delivery is temporarily unavailable. The token remains valid for manual meter entry.',
+                        code: 'remote_send_service_unavailable',
+                        retryable: true,
+                    },
+                };
             }
         } catch (error) {
             if (error instanceof VendingError) {
@@ -1282,7 +1347,7 @@ const route: FastifyPluginAsync = async (fastify) => {
                     remark: error.message,
                 });
             }
-            throw error;
+            return sendRemoteSendUnavailable(req, reply, error);
         }
     };
 

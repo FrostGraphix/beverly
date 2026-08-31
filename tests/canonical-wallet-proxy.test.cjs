@@ -65,6 +65,15 @@ async function main() {
   const wallet = await startServer((req, res) => {
     forwarded += 1;
     res.setHeader("Content-Type", "application/json");
+    if (req.url.includes("/remote-send")) {
+      res.statusCode = 503;
+      res.end(JSON.stringify({
+        error: "remote_send_service_unavailable",
+        message: "Remote delivery is temporarily unavailable. The token remains valid for manual meter entry.",
+        details: { tokenRemainsValid: true },
+      }));
+      return;
+    }
     res.end(JSON.stringify({
       path: req.url,
       method: req.method,
@@ -97,6 +106,17 @@ async function main() {
     assert.strictEqual(read.body.path, "/api/v1/vendor/wallet");
     assert.strictEqual(read.body.authorization, "Bearer test-token");
 
+    const remoteFailure = await request(
+      facadePort,
+      "POST",
+      "/api/v1/vendor/vend/11111111-1111-4111-8111-111111111111/remote-send",
+      {},
+      { Authorization: "Bearer test-token" },
+    );
+    assert.strictEqual(remoteFailure.status, 503);
+    assert.strictEqual(remoteFailure.body.error, "remote_send_service_unavailable");
+    assert.strictEqual(remoteFailure.body.details.tokenRemainsValid, true);
+
     const webhook = await request(facadePort, "POST", "/api/v1/webhook/paystack", { event: "charge.success" }, {
       "x-paystack-signature": "signed-payload",
     });
@@ -105,7 +125,7 @@ async function main() {
     const blocked = await request(facadePort, "POST", "/api/v1/vendor/vend", { amountMinor: 10000 });
     assert.strictEqual(blocked.status, 503);
     assert.strictEqual(blocked.body.error, "money_writes_disabled");
-    assert.strictEqual(forwarded, 1);
+    assert.strictEqual(forwarded, 2);
 
     process.env.ALLOW_LIVE_WRITES = "true";
     process.env.APPROVED_LIVE_WRITES = "true";
@@ -119,7 +139,14 @@ async function main() {
     process.env.VERCEL_ENV = "preview";
     const previewBlocked = await request(facadePort, "POST", "/api/v1/vendor/vend", { amountMinor: 10000 });
     assert.strictEqual(previewBlocked.status, 503);
-    assert.strictEqual(forwarded, 2);
+    assert.strictEqual(forwarded, 3);
+
+    delete process.env.WALLET_API_BASE_URL;
+    process.env.VERCEL_ENV = "production";
+    const unconfigured = await request(facadePort, "POST", "/api/v1/vendor/vend/preview", { meterId: "47005376315", amountMinor: 10600 });
+    assert.strictEqual(unconfigured.status, 503);
+    assert.strictEqual(unconfigured.body.error, "wallet_backend_not_configured");
+    assert.strictEqual(unconfigured.body.details.noVendAttempted, true);
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       const envKey = key === "walletApi" ? "WALLET_API_BASE_URL"

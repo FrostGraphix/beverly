@@ -313,7 +313,7 @@ export default {
         title: this.exportTitle,
         filename: `${this.exportFilename}-${new Date().toISOString().slice(0, 10)}.pdf`,
         period: `${dateRange.start.slice(0, 10)} to ${dateRange.end.slice(0, 10)}${this.stationFilterEnabled ? ` | ${this.selectedStationLabel}` : ""}`,
-        generatedBy: "Beverly CRM Admin",
+        generatedBy: "Beverly",
         kpis: this.kpis,
         chartData: this.reportData.chartData || [],
         columns: this.reportColumns,

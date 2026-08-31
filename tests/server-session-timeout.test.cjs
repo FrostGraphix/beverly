@@ -9,6 +9,15 @@ process.env.SESSION_ABSOLUTE_TIMEOUT_MS = "28800000";
 
 const handler = require("../api/reference");
 const { _test } = handler;
+const referenceSource = require("node:fs").readFileSync(require.resolve("../api/reference"), "utf8");
+
+const authMeBranch = referenceSource.match(/if \(lowerPathForSession === "\/api\/auth\/me"[\s\S]*?\/\/ --- end HttpOnly session endpoints ---/)?.[0] || "";
+assert.match(authMeBranch, /msg: "Access token expired"/);
+assert.doesNotMatch(
+  authMeBranch.match(/if \(!actor\) \{[\s\S]*?\n\s*\}/)?.[0] || "",
+  /clearCrmSessionCookies/,
+  "an expired access token must preserve the refresh cookie"
+);
 
 const token = "verified-access-token";
 const startedAt = 1_700_000_000_000;

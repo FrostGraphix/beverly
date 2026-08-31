@@ -62,6 +62,7 @@ const IMPORT_SYSTEM_FIELDS = new Set(["createDate", "updateDate"]);
 const IMPORT_EMPTY_FIELD_DEFAULTS = {
   "/api/account/import": new Set(["remark"])
 };
+const IMPORT_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 
 function importPayload(endpoint, importRows = []) {
   const aliases = IMPORT_FIELD_ALIASES[endpoint] || {};
@@ -223,7 +224,10 @@ export async function submitRouteAction(route, action, form, options = {}) {
   const response = uploadMode
     ? await api.uploadApi(endpoint, formDataPayload(route, action, form, selectedFile), { headers: requestHeaders(route, action) })
     : endpoint
-      ? await api.postApi(endpoint, payload, { headers: requestHeaders(route, action) })
+      ? await api.postApi(endpoint, payload, {
+          headers: requestHeaders(route, action),
+          ...(action === "Import" ? { timeout: IMPORT_REQUEST_TIMEOUT_MS } : {})
+        })
       : { data: {} };
   const responseCode = Number(response?.code);
   // 202 means the proxy could not reach upstream and queued the rows locally.
