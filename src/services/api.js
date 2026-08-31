@@ -63,7 +63,6 @@ const sessionCookieKeys = [
 function normalizeApiPath(path) {
   const normalized = String(path || "");
   if (normalized === "/api/item/readItemList") return "/api/item/read";
-  if (normalized === "/api/user/info") return "/api/user/read";
   return normalized;
 }
 
@@ -288,22 +287,30 @@ export async function refreshSession() {
 function pickUserRow(response) {
   if (Array.isArray(response?.result?.data) && response.result.data.length) return response.result.data[0];
   if (Array.isArray(response?.data?.data) && response.data.data.length) return response.data.data[0];
+  if (response?.result && typeof response.result === "object" && !Array.isArray(response.result)) return response.result;
+  if (response?.data && typeof response.data === "object" && !Array.isArray(response.data)) return response.data;
   return null;
 }
 
 function normalizeSessionData(source = {}, fallback = {}) {
   const roleId = source.roleId || source.roleKey || fallback.roleId || null;
-  const userName = source.userName || source.name || source.nickName || fallback.userName || fallback.name || fallback.userId || null;
+  const userName = source.userName || source.name || source.fullName || source.nickName || fallback.userName || fallback.name || fallback.userId || null;
   const userId = source.userId || fallback.userId || fallback.loginId || null;
   const remark = source.remark || source.roleContent || fallback.remark || fallback.roleContent || "";
   const email = source.email || source.loginEmail || fallback.email || "";
+  const phone = source.phone || fallback.phone || "";
+  const stationId = source.stationId || fallback.stationId || "";
+  const remainingQuota = source.remainingQuota !== undefined ? source.remainingQuota : fallback.remainingQuota;
   return {
     userId,
     userName,
     name: userName,
     roleId,
     remark,
-    email
+    email,
+    phone,
+    stationId,
+    remainingQuota
   };
 }
 
@@ -314,6 +321,7 @@ function writeSessionCookies(session) {
   if (normalized.roleId) setCookie("roleId", normalized.roleId);
   if (normalized.remark) setCookie("userRemark", normalized.remark);
   if (normalized.email) setCookie("userEmail", normalized.email);
+  if (normalized.phone) setCookie("userPhone", normalized.phone);
 }
 
 function checkStationMutation(path = "") {

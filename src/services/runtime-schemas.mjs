@@ -55,10 +55,14 @@ export function validateCurrentUserResponse(value) {
     data: {
       ...data,
       userId: optionalString(data.userId),
-      userName: optionalString(data.userName || data.name),
-      name: optionalString(data.name || data.userName),
+      userName: optionalString(data.userName || data.name || data.fullName || data.nickName),
+      name: optionalString(data.name || data.userName || data.fullName || data.nickName),
       roleId: optionalString(data.roleId),
-      remark: optionalString(data.remark)
+      remark: optionalString(data.remark),
+      email: optionalString(data.email),
+      phone: optionalString(data.phone),
+      stationId: optionalString(data.stationId),
+      remainingQuota: data.remainingQuota
     }
   };
 }

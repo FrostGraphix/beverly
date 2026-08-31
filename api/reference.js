@@ -651,8 +651,8 @@ async function authorizeRequest(request, pathname, requestData) {
     return authFailure(403, pathname, "Station scope violation");
   }
 
-  if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword") return null;
-  if ((lowerPath === "/api/user/read" || lowerPath === "/api/user/info") && String(payload.userId || "").trim()) {
+  if (lowerPath === "/api/user/profile" || lowerPath === "/api/user/changepassword" || lowerPath === "/api/user/info") return null;
+  if (lowerPath === "/api/user/read" && String(payload.userId || "").trim()) {
     const targetUserId = String(payload.userId || "").trim().toLowerCase();
     if (normalizedRole === "super-admin" || targetUserId === String(resolvedActor.userId || "").trim().toLowerCase()) return null;
   }
@@ -1080,7 +1080,13 @@ function sanitizeLiveRequestData(pathname, requestData) {
     createdate: "createDate",
     updatedate: "updateDate"
   };
-  const payload = /\/api\/DailyDataMeter\/(?:read|readMore|readMonthly)$/i.test(normalizedPath)
+  const payload = /\/api\/dashboard\/readLineChart$/i.test(normalizedPath)
+    ? {
+        type: typeof requestData?.parsedBody?.type === "number" ? requestData.parsedBody.type : 3,
+        days: typeof requestData?.parsedBody?.days === "number" ? requestData.parsedBody.days : 30,
+        ...(requestData?.parsedBody?.stationId ? { stationId: requestData.parsedBody.stationId } : {})
+      }
+    : /\/api\/DailyDataMeter\/(?:read|readMore|readMonthly)$/i.test(normalizedPath)
     ? sanitizeDailyMeterReadPayload(requestData?.parsedBody)
     : /\/api\/customer\/read$/i.test(normalizedPath)
       ? sanitizeReadPayload(requestData?.parsedBody, customerKeyMap)
@@ -2960,7 +2966,8 @@ async function dispatchLocalDatabaseAction(request, pathname, requestData) {
     }
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/hourly") {
-    return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname);
+    return syntheticSampleResponse("/api/DailyDataMeter/readHourly", requestData, pathname)
+      || localJobResponse({ total: 0, data: [] });
   }
   if ((request.method || "GET").toUpperCase() === "GET" && pathname === "/api/dashboard/gprs") {
     return syntheticSampleResponse("/API/GPRSOnlineStatus/Read", requestData, pathname)
