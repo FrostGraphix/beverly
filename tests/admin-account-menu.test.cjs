@@ -9,8 +9,16 @@ const shell = fs.readFileSync(path.join(root, "apps/admin/src/components/AppShel
 const router = fs.readFileSync(path.join(root, "apps/admin/src/router/index.ts"), "utf8");
 const tokens = fs.readFileSync(path.join(root, "packages/tokens/wallet.css"), "utf8");
 
-for (const label of ["Profile", "Settings", "Back to CRM", "Sign Out"]) {
-  assert.match(shell, new RegExp(`>${label}<`), `admin account menu should include ${label}`);
+for (const [label, key] of [
+  ["Profile", "common.profile"],
+  ["Settings", "common.settings"],
+  ["Back to CRM", "common.backToCrm"],
+  ["Sign Out", "common.signOut"]
+]) {
+  assert(
+    new RegExp(`>${label}<`).test(shell) || new RegExp(`t\\(['"]${key}['"]\\)`).test(shell),
+    `admin account menu should include ${label}`
+  );
 }
 
 assert.match(shell, /class="bw-user-dropdown"/, "admin shell should render the account dropdown");
