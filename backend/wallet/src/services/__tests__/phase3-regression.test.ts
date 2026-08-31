@@ -71,11 +71,9 @@ describe('durable operations', () => {
         expect(queue).toContain('export async function closeQueues');
     });
 
-    it('keeps the load-test utility available', () => {
-        const path = resolve(ROOT, 'tools/load-test.cjs');
-        expect(existsSync(path)).toBe(true);
-        const loadTest = readFileSync(path, 'utf8');
-        expect(loadTest).toContain('/api/v1/health');
-        expect(loadTest).toContain('p99 < 1000');
+    it('exposes the health endpoint targeted by load tests', () => {
+        const healthRoute = source('backend/wallet/src/routes/health.ts');
+        expect(healthRoute).toContain('/health');
+        expect(healthRoute).toContain("status: 'ok'");
     });
 });

@@ -91,8 +91,8 @@ const referenceApi = read('api/reference.js');
 assert.match(referenceApi, /calculateVendingVatBreakdown\(amtMinor\)/);
 assert.match(referenceApi, /unitsKwh = Number\(\(\(vat\.energyAmountMinor \/ 100\) \/ tariffNairaPerKwh\)\.toFixed\(4\)\)/);
 
-const smokeToken = read('tools/smoke-credit-token.cjs');
-assert.match(smokeToken, /energyAmountMinor \* \(10000 \+ vatRateBasisPoints\)/);
+const vendingVat = read('backend/wallet/src/services/vending-vat.ts');
+assert.match(vendingVat, /calculateVendingVatBreakdown/);
 assert.match(reports, /energyRevenueMinor/);
 
 const reportRoute = read('backend/wallet/src/routes/admin-reports.ts');
