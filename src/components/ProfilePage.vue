@@ -78,6 +78,8 @@
           <div><dt>Email</dt><dd>{{ form.email || "-" }}</dd></div>
           <div><dt>Phone</dt><dd>{{ form.phone || "-" }}</dd></div>
           <div><dt>Role</dt><dd>{{ roleName }}</dd></div>
+          <div v-if="stationId"><dt>Station</dt><dd>{{ stationId }}</dd></div>
+          <div v-if="quotaDisplay"><dt>Vending Quota</dt><dd>{{ quotaDisplay }}</dd></div>
         </dl>
       </article>
 
@@ -125,18 +127,21 @@ import {
   updateRemoteProfile,
   uploadProfilePictureFlow
 } from "../services/profile-store.mjs";
+import { currentUserInfo, getCookie } from "../services/api";
 
 export default {
   name: "ProfilePage",
   components: { BaseButton, BaseIconButton, BaseInput, ProfilePictureCropModal },
   emits: ["close", "profile-picture-updated"],
   props: {
-    userName: { type: String, default: "ACB(admin)" },
+    userName: { type: String, default: "Beverly Admin" },
     roleId: { type: String, default: null },
     profilePictureUrl: { type: String, default: "" }
   },
   data() {
     const saved = loadProfileState(this.userName);
+    const cookieEmail = getCookie("userEmail") || "";
+    const cookiePhone = getCookie("userPhone") || "";
     return {
       saving: false,
       saveSuccess: false,
@@ -147,7 +152,13 @@ export default {
       uploadError: null,
       uploadNotice: null,
       localProfilePictureUrl: saved.profilePictureUrl || "",
-      form: { name: saved.name || this.userName, email: saved.email || "", phone: saved.phone || "" }
+      stationId: "",
+      remainingQuota: null,
+      form: {
+        name: saved.name || this.userName || "Beverly Admin",
+        email: saved.email || cookieEmail,
+        phone: saved.phone || cookiePhone
+      }
     };
   },
   computed: {
@@ -155,20 +166,42 @@ export default {
       return this.localProfilePictureUrl || this.profilePictureUrl || "";
     },
     initials() {
-      return (this.form.name || this.userName || "U").split(/[\s()_-]+/).filter(Boolean).map((word) => word[0].toUpperCase()).slice(0, 2).join("");
+      return (this.form.name || this.userName || "BA").split(/[\s()_-]+/).filter(Boolean).map((word) => word[0].toUpperCase()).slice(0, 2).join("");
     },
     roleName() {
-      const map = { "super-admin": "Super Admin", "operations-manager": "Operations Manager", account: "Account Officer", vendor: "Vendor" };
-      return map[this.roleId] || this.roleId;
+      const map = { "super-admin": "Super Admin", "0001": "Root Super Admin", "operations-manager": "Operations Manager", account: "Account Officer", vendor: "Vendor" };
+      return map[this.roleId] || this.roleId || "Super Admin";
+    },
+    quotaDisplay() {
+      if (this.remainingQuota === -1) return "Unlimited (No Limit)";
+      if (typeof this.remainingQuota === "number") return `${this.remainingQuota.toLocaleString()} kWh`;
+      return "";
     }
   },
-  mounted() {
+  async mounted() {
     document.addEventListener("pointerdown", this.handleOutsideClick);
+    await this.fetchRemoteProfile();
   },
   beforeUnmount() {
     document.removeEventListener("pointerdown", this.handleOutsideClick);
   },
   methods: {
+    async fetchRemoteProfile() {
+      try {
+        const info = await currentUserInfo();
+        const data = info?.data || info?.result || {};
+        if (data.email && (!this.form.email || this.form.email === "-")) this.form.email = data.email;
+        if (data.phone && (!this.form.phone || this.form.phone === "-")) this.form.phone = data.phone;
+        if (data.stationId) this.stationId = data.stationId;
+        if (data.remainingQuota !== undefined) this.remainingQuota = data.remainingQuota;
+        const resolvedName = data.fullName || data.name || data.userName || data.nickName;
+        if (resolvedName && (!this.form.name || this.form.name === "ACB(admin)" || this.form.name === "admin")) {
+          this.form.name = resolvedName;
+        }
+      } catch {
+        // Fall back gracefully to local state
+      }
+    },
     handleOutsideClick(event) {
       if (this.$refs.avatarMenuRef && !this.$refs.avatarMenuRef.contains(event.target)) {
         this.avatarMenuOpen = false;
