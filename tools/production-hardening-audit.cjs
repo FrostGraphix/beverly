@@ -47,7 +47,6 @@ function runAudit(writeArtifact = true) {
   const profilePage = read("src/components/ProfilePage.vue");
   const apiService = read("src/services/api.js");
   const supabaseService = read("backend/src/services/supabase-service.js");
-  const seedMeterAggregates = read("tools/seed-meter-aggregates.mjs");
   const receiptTools = read("src/services/receipt-tools.mjs");
   const receiptPdf = read("api/receipt-pdf.js");
   const mfaSetup = read("src/components/MfaSetupFlow.vue");
@@ -126,10 +125,10 @@ function runAudit(writeArtifact = true) {
     ),
     check(
       "service-credentials-env-only",
-      seedMeterAggregates.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
-        !/eyJ[A-Za-z0-9_-]{20,}\./.test(seedMeterAggregates),
+      supabaseService.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
+        !/eyJ[A-Za-z0-9_-]{20,}\./.test(supabaseService),
       "Service credentials are loaded from environment variables.",
-      ["tools/seed-meter-aggregates.mjs", ".env.example"]
+      ["backend/src/services/supabase-service.js", ".env.example"]
     ),
     check(
       "receipt-export-self-contained",
