@@ -82,9 +82,14 @@ async function syncUpgradedAdmin() {
     const existingCreds = await restRequest('/oem_credentials?select=*');
     for (const cred of existingCreds) {
       if (cred.oem_id === CALIN_OEM_ID || cred.oem_id === CALIN_PROD_OEM_ID) {
-        await restRequest(`/oem_credentials?oem_id=eq.${cred.oem_id}`, 'PATCH', {
-          encrypted_bearer_token: encrypted,
-          updated_at: new Date().toISOString()
+        await restRequest(`/oem_credentials?oem_id=eq.${cred.oem_id}`, {
+          method: "PATCH",
+          prefer: "return=representation",
+          body: {
+            encrypted_bearer_token: encrypted,
+            updated_at: new Date().toISOString(),
+            updated_by: "sync-upgraded-admin"
+          }
         });
         console.log(`✅ Supabase oem_credentials updated for oem_id: ${cred.oem_id}`);
       }
