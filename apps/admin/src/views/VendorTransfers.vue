@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import { api, ApiError, naira, shortDate } from '../lib/api';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface VendorOption {
   vendorId: string;
@@ -51,6 +53,15 @@ const transferring = ref(false);
 const confirmOpen = ref(false);
 const feedback = ref<{ tone: 'success' | 'error'; title: string; what: string; next: string } | null>(null);
 const requestKey = ref(crypto.randomUUID());
+const transferExportColumns: WalletExportColumn<Transfer>[] = [
+  { key: 'created_at', header: 'Created', value: (transfer) => shortDate(transfer.created_at) },
+  { key: 'source_vendor_name', header: 'Source Vendor', value: (transfer) => transfer.source_vendor_name },
+  { key: 'destination_vendor_name', header: 'Destination Vendor', value: (transfer) => transfer.destination_vendor_name },
+  { key: 'amount_minor', header: 'Amount', value: (transfer) => naira(transfer.amount_minor) },
+  { key: 'reason', header: 'Reason', value: (transfer) => transfer.reason },
+  { key: 'status', header: 'Status', value: (transfer) => transfer.status },
+  { key: 'idempotency_key', header: 'Request Key', value: (transfer) => transfer.idempotency_key },
+];
 let previewTimer: number | undefined;
 let searchTimer: number | undefined;
 
@@ -178,7 +189,17 @@ onMounted(() => void Promise.all([loadVendors(), loadHistory()]));
         <h1>Transfer vendor balance</h1>
         <p>Move available value between two active vendor wallets. The debit and credit are recorded together.</p>
       </div>
-      <button class="bw-btn" type="button" @click="resetForm">Start another transfer</button>
+      <div class="bw-row" style="gap: var(--s-2)">
+        <WalletExportMenu
+          :rows="history"
+          :columns="transferExportColumns"
+          filename="beverly-admin-vendor-transfers"
+          title="Vendor Transfer History"
+          subtitle="Controlled wallet movements"
+          :loading="loadingHistory"
+        />
+        <button class="bw-btn" type="button" @click="resetForm">Start another transfer</button>
+      </div>
     </header>
 
     <section v-if="feedback" :class="['experience-message', feedback.tone]" :role="feedback.tone === 'error' ? 'alert' : 'status'" aria-live="polite">

@@ -6,6 +6,8 @@ import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface Application {
     id: string;
@@ -29,6 +31,16 @@ const deleteOpen = ref(false);
 const deleteTarget = ref<Application | null>(null);
 const error = ref('');
 const status = ref<'submitted' | 'contacted' | 'rejected' | 'converted'>('submitted');
+const applicationExportColumns: WalletExportColumn<Application>[] = [
+    { key: 'created_at', header: 'Submitted', value: (item) => shortDate(item.created_at) },
+    { key: 'legal_name', header: 'Business', value: (item) => item.legal_name },
+    { key: 'contact_name', header: 'Contact', value: (item) => item.contact_name },
+    { key: 'contact_email', header: 'Email', value: (item) => item.contact_email },
+    { key: 'contact_phone', header: 'Phone', value: (item) => item.contact_phone },
+    { key: 'business_type', header: 'Type', value: (item) => item.business_type || '' },
+    { key: 'operating_stations', header: 'Stations', value: (item) => item.operating_stations?.join('; ') || '' },
+    { key: 'status', header: 'Status', value: (item) => item.status },
+];
 
 async function load() {
     loading.value = true;
@@ -85,6 +97,14 @@ onMounted(load);
       <div class="bw-table-head-bar">
         <h2 class="bw-h2" style="margin: 0">Public interest submissions</h2>
         <span class="bw-spacer"></span>
+        <WalletExportMenu
+          :rows="apps"
+          :columns="applicationExportColumns"
+          filename="beverly-admin-vendor-applications"
+          title="Vendor Applications"
+          :subtitle="`${status} applications`"
+          :loading="loading"
+        />
         <div class="bw-row" style="gap: 2px">
           <button
             v-for="s in (['submitted','contacted','rejected','converted'] as const)"

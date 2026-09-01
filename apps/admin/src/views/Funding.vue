@@ -22,6 +22,8 @@ import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, naira, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 import { fundingReceipt, printReceipt, viewReceipt } from '../lib/receipts';
@@ -301,6 +303,16 @@ const filteredItems = computed(() => {
     });
 });
 
+const fundingExportColumns: WalletExportColumn<FundingRequest>[] = [
+    { key: 'created_at', header: 'Submitted', value: (item) => shortDate(item.created_at) },
+    { key: 'vendor', header: 'Vendor', value: (item) => vendorName(item) },
+    { key: 'email', header: 'Email', value: (item) => vendorEmail(item) },
+    { key: 'channel', header: 'Channel', value: (item) => item.channel.replace(/_/g, ' ') },
+    { key: 'amount_minor', header: 'Amount', value: (item) => naira(item.amount_minor) },
+    { key: 'status', header: 'Status', value: (item) => item.status },
+    { key: 'submitted_by', header: 'Submitted By', value: (item) => item.submitted_by },
+];
+
 const paginatedItems = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
     return filteredItems.value.slice(start, start + pageSize.value);
@@ -422,6 +434,14 @@ onMounted(() => {
       </div>
 
       <div class="bw-filter-bar funding-filters" role="search" aria-label="Funding queue filters">
+        <WalletExportMenu
+          :rows="filteredItems"
+          :columns="fundingExportColumns"
+          filename="beverly-admin-funding-queue"
+          title="Funding Approval Queue"
+          subtitle="Filtered pending requests"
+          :loading="loading"
+        />
         <input v-model="searchQuery" class="bw-input bw-input-sm" type="search" placeholder="Search funding requests" aria-label="Search funding requests" />
         <select v-model="channelFilter" class="bw-select bw-select-sm" aria-label="Filter funding channel">
           <option value="all">All channels</option>

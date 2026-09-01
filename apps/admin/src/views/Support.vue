@@ -5,6 +5,8 @@ import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api } from '../lib/api';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 type Tab = 'tickets' | 'chat' | 'faq';
 const tab = ref<Tab>('tickets');
@@ -22,6 +24,15 @@ const ticketDetail = ref<any>(null);
 const staffReply = ref('');
 const internalNote = ref(false);
 const busy = ref(false);
+const ticketExportColumns: WalletExportColumn<Ticket>[] = [
+    { key: 'reference', header: 'Reference', value: (ticket) => ticket.reference },
+    { key: 'subject', header: 'Subject', value: (ticket) => ticket.subject },
+    { key: 'requester', header: 'From', value: (ticket) => ticket.requester_name || ticket.requester_actor_type },
+    { key: 'category', header: 'Category', value: (ticket) => ticket.category },
+    { key: 'priority', header: 'Priority', value: (ticket) => ticket.priority },
+    { key: 'status', header: 'Status', value: (ticket) => pretty(ticket.status) },
+    { key: 'updated', header: 'Updated', value: (ticket) => fmt(ticket.last_message_at) },
+];
 
 async function loadTickets() {
     try {
@@ -66,6 +77,13 @@ const chatMessages = ref<any[]>([]);
 const chatDraft = ref('');
 const chatSending = ref(false);
 const chatLastTs = ref('');
+const chatExportColumns: WalletExportColumn<ChatSession>[] = [
+    { key: 'display_name', header: 'Requester', value: (session) => session.display_name || session.requester_actor_type },
+    { key: 'subject', header: 'Subject', value: (session) => session.subject || '' },
+    { key: 'status', header: 'Status', value: (session) => pretty(session.status) },
+    { key: 'unread_for_staff', header: 'Unread', value: (session) => session.unread_for_staff },
+    { key: 'last_message_at', header: 'Updated', value: (session) => fmt(session.last_message_at) },
+];
 let chatPoll: ReturnType<typeof setInterval> | null = null;
 let sessionsPoll: ReturnType<typeof setInterval> | null = null;
 const chatScroller = ref<HTMLElement | null>(null);
@@ -133,6 +151,15 @@ const faqForm = ref<any>({ id: '', category_id: '', question: '', answer: '', au
 const deleteFaqOpen = ref(false);
 const deleteFaqTarget = ref<Faq | null>(null);
 const deleteFaqBusy = ref(false);
+const faqExportColumns: WalletExportColumn<Faq>[] = [
+    { key: 'question', header: 'Question', value: (faq) => faq.question },
+    { key: 'category', header: 'Category', value: (faq) => categoryName(faq.category_id) },
+    { key: 'audience', header: 'Audience', value: (faq) => faq.audience },
+    { key: 'view_count', header: 'Views', value: (faq) => faq.view_count },
+    { key: 'helpful_count', header: 'Helpful', value: (faq) => faq.helpful_count },
+    { key: 'not_helpful_count', header: 'Not Helpful', value: (faq) => faq.not_helpful_count },
+    { key: 'published', header: 'Status', value: (faq) => faq.published ? 'Published' : 'Draft' },
+];
 
 async function loadFaqAdmin() {
     try {
@@ -246,6 +273,13 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
       </div>
 
       <div class="bw-filter-bar support-filter">
+        <WalletExportMenu
+          :rows="tickets"
+          :columns="ticketExportColumns"
+          filename="beverly-admin-support-tickets"
+          title="Support Tickets"
+          subtitle="Current filtered ticket queue"
+        />
         <select v-model="ticketStatus" class="bw-select bw-select-sm" @change="loadTickets">
           <option value="">All statuses</option>
           <option value="open">Open</option><option value="pending">Pending</option>
@@ -331,6 +365,13 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
       <div class="sup-chat">
         <aside class="sup-chat-list">
           <div class="bw-filter-bar" style="padding: var(--s-2)">
+            <WalletExportMenu
+              :rows="sessions"
+              :columns="chatExportColumns"
+              filename="beverly-admin-chat-sessions"
+              title="Support Chat Sessions"
+              subtitle="Current chat queue"
+            />
             <select v-model="chatStatusFilter" class="bw-select bw-select-sm" @change="loadSessions">
               <option value="">All</option><option value="waiting">Waiting</option>
               <option value="active">Active</option><option value="ended">Ended</option>
@@ -385,6 +426,13 @@ onBeforeUnmount(() => { if (chatPoll) clearInterval(chatPoll); if (sessionsPoll)
     <!-- ═══ FAQ ═══ -->
     <template v-else>
       <div class="bw-filter-bar support-filter">
+        <WalletExportMenu
+          :rows="faqs"
+          :columns="faqExportColumns"
+          filename="beverly-admin-faqs"
+          title="FAQ Knowledge Base"
+          subtitle="Current FAQ results"
+        />
         <input v-model="faqSearch" class="bw-input bw-input-sm" placeholder="Search FAQs…" @keyup.enter="loadFaqAdmin" />
         <button class="bw-btn bw-btn-ghost bw-btn-sm" @click="loadFaqAdmin">Search</button>
         <button class="bw-btn bw-btn-primary bw-btn-sm" style="margin-left:auto" @click="newFaq">+ New FAQ</button>

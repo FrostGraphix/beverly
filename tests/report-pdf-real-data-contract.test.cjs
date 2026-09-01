@@ -11,7 +11,7 @@ const adminRoute = read("backend/wallet/src/routes/admin.ts") + read("backend/wa
 const reportsView = read("apps/admin/src/views/Reports.vue");
 const reportPdf = read("apps/admin/src/lib/report-pdf.ts");
 
-assert.match(adminRoute, /from\('funding_requests'\)\.select\('amount_minor, channel, status, created_at'\)/);
+assert.match(adminRoute, /from\('funding_requests'\)\.select\('amount_minor, channel, status, created_at, vendor_organization_id'\)/);
 assert.match(adminRoute, /fundingByChannel/);
 assert.match(adminRoute, /disputesByStatus/);
 assert.match(adminRoute, /refundsByStatus/);

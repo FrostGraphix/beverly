@@ -6,6 +6,8 @@ import { naira } from '../lib/format';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 // A customer sees only their own meters. The backend resolves that set from
 // registered meters UNION meters they have bought tokens for, so a meter paid
@@ -72,6 +74,14 @@ const showMeterColumn = computed(() => !selectedMeter.value && meters.value.leng
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 const page = ref(1);
 const pagedRows = computed(() => paginate(rows.value, page.value, PAGE_SIZE));
+const consumptionExportColumns: WalletExportColumn<AggRow>[] = [
+    { key: 'period_start', header: 'Period', value: (row) => periodLabel(row) },
+    { key: 'meter_id', header: 'Meter', value: (row) => row.meter_id || selectedMeter.value || '' },
+    { key: 'kwh_total', header: 'Energy Used', value: (row) => fmtKwh(row.kwh_total) },
+    { key: 'energy_value_minor', header: 'Energy Value', value: (row) => naira(row.energy_value_minor || 0) },
+    { key: 'amount_minor_total', header: 'Amount Spent', value: (row) => naira(row.amount_minor_total) },
+    { key: 'reading_count', header: 'Readings', value: (row) => row.reading_count },
+];
 // Changing period or meter produces a different list; staying on page 7 of the
 // old one would show an empty table.
 watch([period, selectedMeter], () => { page.value = 1; });
@@ -124,6 +134,14 @@ onMounted(load);
           <p class="sub">Energy used on your meters.</p>
         </div>
         <div class="controls">
+          <WalletExportMenu
+            :rows="rows"
+            :columns="consumptionExportColumns"
+            filename="beverly-customer-consumption"
+            title="Customer Consumption"
+            :subtitle="`${periodLabel({ period_start: new Date().toISOString().slice(0, 10), period_type: period } as AggRow)} view`"
+            :loading="loading"
+          />
           <select v-model="period" aria-label="Period" class="select">
             <option v-for="option in PERIODS" :key="option.value" :value="option.value">{{ option.label }}</option>
           </select>

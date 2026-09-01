@@ -5,6 +5,8 @@ import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, ApiError } from '../lib/api';
 
 interface MeterOrder {
@@ -55,6 +57,16 @@ function amount(minor: number) {
 function dateLabel(iso: string) {
     return new Date(iso).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+const orderExportColumns: WalletExportColumn<MeterOrder>[] = [
+    { key: 'created_at', header: 'Created', value: (order) => dateLabel(order.created_at) },
+    { key: 'customer_name_snapshot', header: 'Customer', value: (order) => order.customer_name_snapshot || '' },
+    { key: 'meter_type', header: 'Meter Type', value: (order) => order.meter_type.replace(/_/g, ' ') },
+    { key: 'property_address', header: 'Address', value: (order) => order.property_address },
+    { key: 'service_area', header: 'Service Area', value: (order) => order.service_area },
+    { key: 'amount_minor', header: 'Amount', value: (order) => amount(order.amount_minor) },
+    { key: 'status', header: 'Status', value: (order) => order.status.replace(/_/g, ' ') },
+];
 
 async function load() {
     loading.value = true;
@@ -142,6 +154,14 @@ onMounted(load);
             <div class="bw-card-sub">Meter inventory purchasing and tracking orders</div>
           </div>
           <div class="bw-table-actions">
+            <WalletExportMenu
+              :rows="orders"
+              :columns="orderExportColumns"
+              filename="beverly-vendor-meter-orders"
+              title="Vendor Meter Orders"
+              subtitle="Customer meter installation requests"
+              :loading="loading"
+            />
             <button class="bw-btn sm" :disabled="loading" @click="load">{{ loading ? 'Loading…' : 'Refresh' }}</button>
             <WalletDataViewSwitch v-model="viewMode" label="Meter order display view" />
           </div>

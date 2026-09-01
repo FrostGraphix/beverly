@@ -400,6 +400,7 @@ const ADMIN_ROUTE_PERMISSIONS: Record<string, string> = {
     'GET /audit/summary': 'wallet.audit.view',
     'GET /reports/overview': 'wallet.dashboard.view',
     'GET /reports/export.csv': 'wallet.dashboard.view',
+    'GET /reports/power-bi.csv': 'wallet.dashboard.view',
     'GET /feature-flags': 'wallet.flags.manage',
     'POST /feature-flags': 'wallet.flags.manage',
     'PATCH /feature-flags/:key': 'wallet.flags.manage',

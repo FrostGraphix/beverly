@@ -6,6 +6,8 @@ import { useStaffAuthStore } from '../stores/auth';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface FundingRequest { id: string; amount_minor: number; status: string; created_at: string; actor_id?: string | null; reference?: string | null; }
 interface FundingHistoryRow {
@@ -251,6 +253,17 @@ const filteredRecentTransactions = computed(() =>
         return matchesType && matchesActor && matchesStation && matchesDate && matchesQuery;
     }),
 );
+const recentExportColumns: WalletExportColumn<any>[] = [
+    { key: 'createdAt', header: 'When', value: (row) => shortDate(row.createdAt) },
+    { key: 'reference', header: 'Reference', value: (row) => row.reference },
+    { key: 'type', header: 'Type', value: (row) => row.type },
+    { key: 'vendor', header: 'Vendor', value: (row) => row.vendor },
+    { key: 'customerMeter', header: 'Customer / Meter', value: (row) => row.customerMeter },
+    { key: 'station', header: 'Station', value: (row) => row.station },
+    { key: 'amountMinor', header: 'Amount', value: (row) => naira(row.amountMinor) },
+    { key: 'units', header: 'Units', value: (row) => row.units },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+];
 
 const totalRecentPages = computed(() =>
     Math.ceil(filteredRecentTransactions.value.length / recentPageSize.value) || 1,
@@ -897,6 +910,14 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           <div class="bw-card-sub">Latest vending and wallet activity</div>
         </div>
         <div class="recent-actions">
+          <WalletExportMenu
+            :rows="filteredRecentTransactions"
+            :columns="recentExportColumns"
+            filename="beverly-admin-recent-transactions"
+            title="Recent Wallet Transactions"
+            subtitle="Filtered vending and funding activity"
+            :loading="loading"
+          />
           <WalletDataViewSwitch
             v-model="recentViewMode"
             :modes="['grid', 'table']"

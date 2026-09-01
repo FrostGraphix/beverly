@@ -4,6 +4,8 @@ import AppShell from '../components/AppShell.vue';
 import VendorOnboardingChecklist from '../components/VendorOnboardingChecklist.vue';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { useVendorAuthStore } from '../stores/auth';
 import { useWalletStore } from '../stores/wallet';
 import { naira } from '../lib/format';
@@ -76,6 +78,13 @@ const activeRecentFilterCount = computed(() => [
 const filterCount = (filter: typeof activityFilter.value) => {
     return recentLedger.value.filter((entry) => matchesFilter(entry, filter)).length;
 };
+const recentExportColumns: WalletExportColumn<typeof wallet.ledger[number]>[] = [
+    { key: 'created_at', header: 'When', value: (entry) => new Date(entry.created_at).toLocaleString('en-NG') },
+    { key: 'entry_type', header: 'Type', value: (entry) => entry.entry_type },
+    { key: 'memo', header: 'Memo', value: (entry) => entry.memo },
+    { key: 'amount_minor', header: 'Amount', value: (entry) => naira(entry.amount_minor) },
+    { key: 'balance_after_minor', header: 'Balance', value: (entry) => naira(entry.balance_after_minor) },
+];
 </script>
 
 <template>
@@ -254,6 +263,14 @@ const filterCount = (filter: typeof activityFilter.value) => {
           <div class="bw-card-sub">Latest 10 wallet movements</div>
         </div>
         <div class="recent-actions">
+          <WalletExportMenu
+            :rows="filteredLedger"
+            :columns="recentExportColumns"
+            filename="beverly-vendor-recent-activity"
+            title="Vendor Recent Activity"
+            subtitle="Filtered wallet movements"
+            :loading="dashboardLoading"
+          />
           <WalletDataViewSwitch
             v-model="viewMode"
             :modes="['grid', 'table']"

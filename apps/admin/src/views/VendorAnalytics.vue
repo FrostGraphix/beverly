@@ -28,6 +28,8 @@ import { onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import { api, naira, shortDate } from '../lib/api';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 const router = useRouter();
 
@@ -61,6 +63,17 @@ const leaderboard = computed(() => {
         return 0;
     });
 });
+const leaderboardExportColumns: WalletExportColumn<any>[] = [
+    { key: 'rank', header: 'Rank', value: (vendor) => vendor.rank },
+    { key: 'legal_name', header: 'Vendor', value: (vendor) => vendor.trading_name || vendor.legal_name },
+    { key: 'status', header: 'Status', value: (vendor) => vendor.status },
+    { key: 'risk_level', header: 'Risk', value: (vendor) => vendor.risk_level },
+    { key: 'vend_volume_minor', header: 'Vending Volume', value: (vendor) => naira(vendor.vend_volume_minor) },
+    { key: 'vend_count', header: 'Transactions', value: (vendor) => vendor.vend_count },
+    { key: 'funding_minor', header: 'Funding', value: (vendor) => naira(vendor.funding_minor) },
+    { key: 'avg_tx_minor', header: 'Average Transaction', value: (vendor) => naira(vendor.avg_tx_minor) },
+    { key: 'last_active_at', header: 'Last Active', value: (vendor) => shortDate(vendor.last_active_at) },
+];
 
 // ─ Data fetch ─────────────────────────────────────────────────
 async function load() {
@@ -122,6 +135,14 @@ onMounted(load);
         <span class="va-crumb">Analytics</span>
       </div>
       <div class="va-period-pills">
+        <WalletExportMenu
+          :rows="leaderboard"
+          :columns="leaderboardExportColumns"
+          filename="beverly-admin-vendor-analytics"
+          title="Vendor Analytics"
+          :subtitle="`${period} leaderboard`"
+          :loading="loading"
+        />
         <button
           v-for="p in (['7d','30d','90d','all'] as const)"
           :key="p"

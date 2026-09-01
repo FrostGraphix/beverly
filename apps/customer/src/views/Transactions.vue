@@ -7,6 +7,8 @@ import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
 import RemoteSendTrackerModal from '@beverly/tokens/RemoteSendTrackerModal.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
@@ -150,6 +152,15 @@ const currentPage = ref(1);
 
 const filtered = () => filterPurchases(purchases.value);
 
+const transactionExportColumns: WalletExportColumn<any>[] = [
+    { key: 'created_at', header: 'When', value: (purchase) => shortDate(purchase.created_at) },
+    { key: 'meter_id', header: 'Meter', value: (purchase) => purchase.meter_id },
+    { key: 'amount_minor', header: 'Amount', value: (purchase) => naira(purchase.amount_minor) },
+    { key: 'units_kwh', header: 'Units', value: (purchase) => kwh(purchase.units_kwh) },
+    { key: 'status', header: 'Status', value: (purchase) => statusLabel(purchase) },
+    { key: 'token', header: 'Token', value: (purchase) => purchase.token || '' },
+];
+
 const paginatedPurchases = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
     return filtered().slice(start, start + pageSize.value);
@@ -246,6 +257,14 @@ function printPurchaseReceipt(p: any) {
           <div class="bw-card-sub">Electricity vending purchases and token receipts</div>
         </div>
         <div class="recent-actions">
+          <WalletExportMenu
+            :rows="filtered()"
+            :columns="transactionExportColumns"
+            filename="beverly-customer-transactions"
+            title="Customer Transactions"
+            subtitle="Filtered electricity purchases"
+            :loading="loading"
+          />
           <WalletDataViewSwitch v-model="viewMode" label="Transaction display view" />
           <button
             class="bw-btn sm recent-filter-button"

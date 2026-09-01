@@ -8,6 +8,8 @@ import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, shortDate, ApiError } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
 
@@ -39,6 +41,16 @@ const viewMode = ref<'list' | 'table'>(
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'list' : 'table',
 );
 const banner = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+const vendorExportColumns: WalletExportColumn<Vendor>[] = [
+    { key: 'created_at', header: 'Created', value: (vendor) => shortDate(vendor.created_at) },
+    { key: 'legal_name', header: 'Legal Name', value: (vendor) => vendor.legal_name },
+    { key: 'trading_name', header: 'Trading Name', value: (vendor) => vendor.trading_name || '' },
+    { key: 'contact_email', header: 'Email', value: (vendor) => vendor.contact_email },
+    { key: 'contact_phone', header: 'Phone', value: (vendor) => vendor.contact_phone },
+    { key: 'risk_level', header: 'Risk', value: (vendor) => vendor.risk_level },
+    { key: 'status', header: 'Status', value: (vendor) => vendor.status },
+];
 
 // ─ Action modal ──────────────────────────────────────────────
 const modalOpen = ref(false);
@@ -228,6 +240,14 @@ onMounted(() => {
           <div class="bw-card-sub">Manage registered vendor partners and access</div>
         </div>
         <div class="bw-table-actions">
+          <WalletExportMenu
+            :rows="vendors"
+            :columns="vendorExportColumns"
+            filename="beverly-admin-vendors"
+            title="Vendor Organizations"
+            subtitle="Filtered vendor registry"
+            :loading="loading"
+          />
           <input class="bw-input search-input" v-model="q" placeholder="Search vendors…" @keyup.enter="load" />
           <select class="bw-select status-select" v-model="status" @change="load">
             <option value="">All status</option>

@@ -4,14 +4,16 @@
 
 1. Staff opens `/wallet-admin/reports`.
 2. Staff chooses a report family.
-3. Staff sets a report period.
-4. The screen requests report overview data.
-5. KPI cards render current values.
-6. Trend data renders charts.
-7. The assigned template shapes output.
-8. Generate PDF compiles pages.
-9. Browser downloads the PDF.
-10. CSV remains available.
+3. Staff chooses ownership scope.
+4. Staff chooses entity grouping.
+5. Staff optionally filters SiteID.
+6. Staff sets reporting dates.
+7. The screen requests report data.
+8. KPI cards render totals.
+9. Entity rows render separately.
+10. Daily CSV remains available.
+11. Power BI CSV stays tabular.
+12. PDF includes entity performance.
 
 ## Template registry
 
@@ -56,6 +58,40 @@
 - Data stays within browser memory.
 - PDF contains current response data.
 - CSV streams from the backend.
+- Entity groups use database aggregation.
+- Vendor groups split SiteIDs.
+- Customer groups split SiteIDs.
+- Staff scopes restrict SiteIDs.
+- Power BI exports raw minors.
+- Power BI exports NGN values.
+
+## Entity breakdowns
+
+| Grouping | Entity source | Site behavior |
+| --- | --- | --- |
+| SiteID | Purchase station | One row each |
+| Vendor | Vendor organization | Split per SiteID |
+| Customer | Purchase customer | Split per SiteID |
+
+Customer grouping includes channels.
+
+- Direct counts stay separate.
+- Vendor-assisted counts stay separate.
+- Revenue uses delivered purchases.
+- Success uses processed purchases.
+- Names use stored identities.
+- Missing names retain identifiers.
+
+## Power BI contract
+
+- Endpoint uses authenticated CSV.
+- Schema version stays explicit.
+- Currency remains NGN.
+- Amount scale remains one-hundred.
+- Minor values remain exact.
+- Naira values remain decimal.
+- Dates use ISO formatting.
+- Generated timestamps use UTC.
 
 ## Extension points
 

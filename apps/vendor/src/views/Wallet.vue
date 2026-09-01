@@ -6,6 +6,8 @@ import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { useWalletStore, type LedgerEntry } from '../stores/wallet';
 import { naira } from '../lib/format';
 import { downloadReceipt, ledgerReceipt, printReceipt, viewReceipt } from '../lib/receipts';
@@ -80,6 +82,15 @@ const filterCount = (filter: typeof activityFilter.value) => {
     return wallet.ledger.filter((entry) => matchesFilter(entry, filter)).length;
 };
 
+const ledgerExportColumns: WalletExportColumn<LedgerEntry>[] = [
+    { key: 'created_at', header: 'When', value: (entry) => new Date(entry.created_at).toLocaleString('en-NG') },
+    { key: 'entry_type', header: 'Type', value: (entry) => entry.entry_type },
+    { key: 'memo', header: 'Memo', value: (entry) => displayMemo(entry.memo) },
+    { key: 'reference_id', header: 'Reference', value: (entry) => entry.reference_id || entry.id },
+    { key: 'amount_minor', header: 'Amount', value: (entry) => naira(entry.amount_minor) },
+    { key: 'balance_after_minor', header: 'Balance', value: (entry) => naira(entry.balance_after_minor) },
+];
+
 onMounted(async () => {
     await wallet.fetchSummary();
     await wallet.fetchLedger(100);
@@ -123,6 +134,14 @@ onMounted(async () => {
             <div class="bw-card-sub">Vendor wallet ledger movements and transactions</div>
           </div>
           <div class="recent-actions">
+            <WalletExportMenu
+              :rows="filteredLedger"
+              :columns="ledgerExportColumns"
+              filename="beverly-vendor-wallet-ledger"
+              title="Vendor Wallet Ledger"
+              subtitle="Filtered ledger entries"
+              :loading="wallet.loading"
+            />
             <WalletDataViewSwitch v-model="viewMode" label="Ledger display view" />
             <button
               class="bw-btn sm recent-filter-button"

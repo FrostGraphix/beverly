@@ -6,11 +6,21 @@ import { downloadAuthedCsv } from '../lib/export';
 import { downloadReportPdf, type ReportFamily } from '../lib/report-pdf';
 
 type ReportAudience = 'all' | 'vendor' | 'customer';
+type ReportGrouping = 'site' | 'vendor' | 'customer';
 interface DailyPoint { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; newCustomers: number; newVendors: number; refundMinor: number; auditLogsCount?: number; securityEventsCount?: number; }
 interface CountRow { key: string; count: number; pct: number; }
 interface MoneyRow { key: string; minor: number; pct: number; }
+interface StationOption { stationId: string; name: string; }
+interface EntityPerformanceRow {
+    siteId: string; groupType: ReportGrouping; entityId: string; entityName: string;
+    purchaseCount: number; deliveredCount: number; failedCount: number; customerCount: number;
+    directPurchaseCount: number; vendorPurchaseCount: number; revenueMinor: number;
+    energyRevenueMinor: number; vatMinor: number; unitsKwh: number; averagePurchaseMinor: number;
+    successRate: number; firstPurchaseAt: string | null; lastPurchaseAt: string | null;
+}
 interface ReportOverview {
     audience: ReportAudience;
+    scope: { siteId: string | null; groupBy: ReportGrouping };
     range: { since: string; until: string; days: number };
     kpis: {
         revenueMinor: number; energyRevenueMinor: number; vatMinor: number; feeMinor: number; purchaseCount: number; deliveredCount: number;
@@ -37,6 +47,7 @@ interface ReportOverview {
         settlementByStatus?: Record<string, number>;
         ledgerByEntryType?: Record<string, number>;
         reconciliationByStatus?: Record<string, number>;
+        entityPerformance: EntityPerformanceRow[];
     };
     sources?: Record<string, number>;
 }
@@ -57,6 +68,12 @@ const until = ref('');
 const metric = ref<'revenueMinor' | 'purchaseCount' | 'fundingMinor' | 'newCustomers'>('revenueMinor');
 const selectedFamily = ref<ReportFamily>('financial');
 const audience = ref<ReportAudience>('all');
+const groupBy = ref<ReportGrouping>('site');
+const siteId = ref('');
+const stations = ref<StationOption[]>([]);
+const breakdownSearch = ref('');
+const breakdownPage = ref(1);
+const BREAKDOWN_PAGE_SIZE = 25;
 let loadSequence = 0;
 
 const AUDIENCES: { key: ReportAudience; label: string; description: string }[] = [
@@ -65,6 +82,13 @@ const AUDIENCES: { key: ReportAudience; label: string; description: string }[] =
     { key: 'customer', label: 'Customers', description: 'Customer-owned activity' },
 ];
 const audienceLabel = computed(() => AUDIENCES.find((item) => item.key === audience.value)?.label ?? 'Combined');
+
+const GROUPINGS: { key: ReportGrouping; label: string; description: string }[] = [
+    { key: 'site', label: 'SiteID', description: 'One row per site' },
+    { key: 'vendor', label: 'Vendor', description: 'Vendors split by SiteID' },
+    { key: 'customer', label: 'Customer', description: 'Customers split by SiteID' },
+];
+const groupingLabel = computed(() => GROUPINGS.find((item) => item.key === groupBy.value)?.label ?? 'SiteID');
 
 const REPORT_TEMPLATES: { id: ReportFamily; title: string; description: string; metric: typeof metric.value; icon: string }[] = [
     { id: 'financial', title: 'Financial report', description: 'Revenue, funding, settlements', metric: 'revenueMinor', icon: '01' },
@@ -117,8 +141,13 @@ async function load() {
         if (until.value) q.set('until', until.value);
         q.set('audience', audience.value);
         q.set('family', selectedFamily.value);
+        q.set('group_by', groupBy.value);
+        if (siteId.value) q.set('site_id', siteId.value);
         const nextReport = await api.get<ReportOverview>(`/api/v1/admin/reports/overview?${q.toString()}`);
-        if (requestId === loadSequence) report.value = nextReport;
+        if (requestId === loadSequence) {
+            report.value = nextReport;
+            breakdownPage.value = 1;
+        }
     } catch (e: any) {
         if (requestId === loadSequence) error.value = e?.message ?? 'Failed to load reports.';
     } finally {
@@ -129,11 +158,49 @@ async function load() {
 function selectAudience(next: ReportAudience) {
     if (audience.value === next) return;
     audience.value = next;
+    if (next === 'customer' && groupBy.value === 'vendor') groupBy.value = 'customer';
     void load();
+}
+
+function selectGrouping(next: ReportGrouping) {
+    if (groupBy.value === next) return;
+    groupBy.value = next;
+    if (next === 'vendor' && audience.value === 'customer') audience.value = 'vendor';
+    breakdownSearch.value = '';
+    breakdownPage.value = 1;
+    void load();
+}
+
+function selectSite() {
+    breakdownPage.value = 1;
+    void load();
+}
+
+async function loadStations() {
+    try {
+        const response = await api.get<{ stations: StationOption[] }>('/api/v1/admin/stations');
+        stations.value = (response.stations ?? [])
+            .map((station) => ({ stationId: String(station.stationId), name: String(station.name || station.stationId) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+        stations.value = [];
+    }
 }
 
 const k = computed(() => report.value?.kpis);
 const daily = computed(() => report.value?.series.daily ?? []);
+const entityRows = computed(() => report.value?.breakdowns.entityPerformance ?? []);
+const filteredEntityRows = computed(() => {
+    const query = breakdownSearch.value.trim().toLowerCase();
+    if (!query) return entityRows.value;
+    return entityRows.value.filter((row) => [row.siteId, row.entityId, row.entityName]
+        .some((value) => String(value).toLowerCase().includes(query)));
+});
+const breakdownPages = computed(() => Math.max(1, Math.ceil(filteredEntityRows.value.length / BREAKDOWN_PAGE_SIZE)));
+const pagedEntityRows = computed(() => {
+    const start = (breakdownPage.value - 1) * BREAKDOWN_PAGE_SIZE;
+    return filteredEntityRows.value.slice(start, start + BREAKDOWN_PAGE_SIZE);
+});
 
 function fmtMoney(minor: number) { return naira(minor); }
 function fmtNum(n: number) { return Number(n ?? 0).toLocaleString('en-NG'); }
@@ -221,8 +288,20 @@ async function exportCsv() {
     if (until.value) q.set('until', until.value);
     q.set('audience', audience.value);
     q.set('family', selectedFamily.value);
+    q.set('group_by', groupBy.value);
     try { await downloadAuthedCsv(`/api/v1/admin/reports/export.csv?${q.toString()}`, 'beverly-report'); }
     catch (e: any) { error.value = e?.message ?? 'CSV export failed.'; }
+}
+
+async function exportPowerBi() {
+    const q = new URLSearchParams();
+    if (since.value) q.set('since', since.value);
+    if (until.value) q.set('until', until.value);
+    q.set('audience', audience.value);
+    q.set('group_by', groupBy.value);
+    if (siteId.value) q.set('site_id', siteId.value);
+    try { await downloadAuthedCsv(`/api/v1/admin/reports/power-bi.csv?${q.toString()}`, 'beverly-power-bi'); }
+    catch (e: any) { error.value = e?.message ?? 'Power BI export failed.'; }
 }
 
 function exportPdf() {
@@ -270,6 +349,8 @@ function exportPdf() {
         statusRows: statusRows.value,
         actorRows: actorRows.value,
         stations: report.value.breakdowns.topStations,
+        entityBreakdowns: report.value.breakdowns.entityPerformance,
+        groupBy: groupBy.value,
         insights: reportInsights(kp),
         money: naira,
         auditBreakdown,
@@ -302,7 +383,10 @@ function selectTemplate(id: ReportFamily) {
     void load();
 }
 
-onMounted(() => applyPreset(30, '30d'));
+onMounted(() => {
+    void loadStations();
+    applyPreset(30, '30d');
+});
 </script>
 
 <template>
@@ -348,9 +432,35 @@ onMounted(() => applyPreset(30, '30d'));
         <span>{{ item.description }}</span>
       </button>
     </section>
+    <p class="rp-step-label">Step 3 · Group performance</p>
+    <section class="rp-segmentation" aria-label="Performance grouping">
+      <div class="rp-groupings">
+        <button
+          v-for="item in GROUPINGS"
+          :key="item.key"
+          :class="['rp-audience', groupBy === item.key && 'selected']"
+          :aria-pressed="groupBy === item.key"
+          :disabled="loading"
+          @click="selectGrouping(item.key)"
+        >
+          <strong>{{ item.label }}</strong>
+          <span>{{ item.description }}</span>
+        </button>
+      </div>
+      <label class="rp-site-filter">
+        <span>SiteID filter</span>
+        <select v-model="siteId" class="bw-input" :disabled="loading" @change="selectSite">
+          <option value="">All permitted sites</option>
+          <option v-for="station in stations" :key="station.stationId" :value="station.stationId">
+            {{ station.name }} · {{ station.stationId }}
+          </option>
+        </select>
+      </label>
+      <p class="rp-scope-note">Grouping changes the detailed table. Ownership filters sales channels.</p>
+    </section>
 <!-- Controls -->
     <div class="rp-controls" :aria-busy="loading">
-      <p class="rp-step-label">Step 3 · Confirm reporting period</p>
+      <p class="rp-step-label">Step 4 · Confirm reporting period</p>
       <div class="rp-presets">
         <button
           v-for="p in PRESETS" :key="p.key"
@@ -359,12 +469,13 @@ onMounted(() => applyPreset(30, '30d'));
         >{{ p.label }}</button>
       </div>
       <div class="rp-range">
-        <input v-model="since" type="date" class="bw-input bw-input-sm" />
+        <input v-model="since" type="date" class="bw-input bw-input-sm" aria-label="Report start date" />
         <span class="rp-range-sep">-</span>
-        <input v-model="until" type="date" class="bw-input bw-input-sm" />
+        <input v-model="until" type="date" class="bw-input bw-input-sm" aria-label="Report end date" />
         <div class="rp-actions">
           <button class="bw-btn bw-btn-sm bw-btn-ghost" :disabled="loading" @click="applyCustom">Apply dates</button>
-          <button class="bw-btn bw-btn-sm" :disabled="!report || loading" @click="exportCsv">Export CSV</button>
+          <button class="bw-btn bw-btn-sm" :disabled="!report || loading" @click="exportCsv">Daily CSV</button>
+          <button class="bw-btn bw-btn-sm" :disabled="!report || loading || !entityRows.length" @click="exportPowerBi">Power BI CSV</button>
           <button class="bw-btn bw-btn-sm rp-generate" :disabled="!report || loading" @click="exportPdf">Export PDF</button>
         </div>
       </div>
@@ -476,6 +587,67 @@ onMounted(() => applyPreset(30, '30d'));
       </svg>
     </section>
 
+    <section class="bw-card rp-entity-card" aria-labelledby="entity-performance-heading">
+      <div class="rp-entity-head">
+        <div>
+          <p class="bw-label" style="color: var(--brand)">Performance breakdown</p>
+          <h2 id="entity-performance-heading" class="bw-h2">{{ groupingLabel }} performance by SiteID</h2>
+          <p>{{ fmtNum(filteredEntityRows.length) }} grouped rows. Monetary values use NGN minor units internally.</p>
+        </div>
+        <label class="rp-breakdown-search">
+          <span>Search breakdown</span>
+          <input v-model="breakdownSearch" class="bw-input" type="search" placeholder="SiteID, name, or identifier" @input="breakdownPage = 1" />
+        </label>
+      </div>
+      <div v-if="loading" class="rp-table-skeleton" aria-label="Loading performance breakdown"></div>
+      <div v-else-if="!filteredEntityRows.length" class="bw-empty">
+        <span>No matching performance rows.</span>
+        <button v-if="breakdownSearch" class="bw-btn bw-btn-sm" @click="breakdownSearch = ''">Clear search</button>
+      </div>
+      <div v-else class="rp-table-wrap">
+        <table class="bw-table rp-entity-table">
+          <caption class="sr-only">{{ groupingLabel }} purchase performance grouped within each SiteID.</caption>
+          <thead>
+            <tr>
+              <th>SiteID</th>
+              <th>{{ groupingLabel }}</th>
+              <th v-if="groupBy !== 'site'">Identifier</th>
+              <th>Purchases</th>
+              <th>Delivered</th>
+              <th>Success</th>
+              <th v-if="groupBy === 'vendor'">Customers</th>
+              <th v-if="groupBy === 'customer'">Direct</th>
+              <th v-if="groupBy === 'customer'">Vendor-assisted</th>
+              <th>Revenue</th>
+              <th>Average</th>
+              <th>Units</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in pagedEntityRows" :key="`${row.siteId}:${row.groupType}:${row.entityId}`">
+              <td class="bw-mono bw-text-sm">{{ row.siteId }}</td>
+              <td>{{ row.entityName }}</td>
+              <td v-if="groupBy !== 'site'" class="bw-mono bw-text-sm">{{ row.entityId }}</td>
+              <td>{{ fmtNum(row.purchaseCount) }}</td>
+              <td>{{ fmtNum(row.deliveredCount) }}</td>
+              <td>{{ row.successRate.toFixed(2) }}%</td>
+              <td v-if="groupBy === 'vendor'">{{ fmtNum(row.customerCount) }}</td>
+              <td v-if="groupBy === 'customer'">{{ fmtNum(row.directPurchaseCount) }}</td>
+              <td v-if="groupBy === 'customer'">{{ fmtNum(row.vendorPurchaseCount) }}</td>
+              <td>{{ fmtMoney(row.revenueMinor) }}</td>
+              <td>{{ fmtMoney(row.averagePurchaseMinor) }}</td>
+              <td>{{ row.unitsKwh.toLocaleString('en-NG', { maximumFractionDigits: 2 }) }} kWh</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <nav v-if="breakdownPages > 1" class="rp-pagination" aria-label="Performance breakdown pages">
+        <button class="bw-btn bw-btn-sm bw-btn-ghost" :disabled="breakdownPage === 1" @click="breakdownPage--">Previous</button>
+        <span>Page {{ breakdownPage }} of {{ breakdownPages }}</span>
+        <button class="bw-btn bw-btn-sm bw-btn-ghost" :disabled="breakdownPage === breakdownPages" @click="breakdownPage++">Next</button>
+      </nav>
+    </section>
+
     <!-- Breakdowns -->
     <div class="rp-breakdowns">
       <section class="bw-card">
@@ -550,6 +722,10 @@ onMounted(() => applyPreset(30, '30d'));
 .rp-intro { display:flex; justify-content:space-between; gap:var(--s-4); align-items:flex-end; padding:var(--s-5); margin-bottom:var(--s-4); border:1px solid oklch(from var(--brand) l c h / .28); border-radius:var(--r-lg, 14px); background:linear-gradient(118deg, oklch(from var(--brand) l c h / .16), var(--surface, #0d1117) 56%); }
 .rp-step-label { margin: 0; color: var(--text-muted); font-size: var(--t-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .rp-audiences { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s-3); margin:var(--s-2) 0 var(--s-4); }
+.rp-segmentation { display:grid; grid-template-columns:minmax(0, 2fr) minmax(220px, 1fr); gap:var(--s-3); margin:var(--s-2) 0 var(--s-4); padding:var(--s-3); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); }
+.rp-groupings { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s-3); }
+.rp-site-filter, .rp-breakdown-search { display:grid; gap:6px; color:var(--text-muted); font-size:var(--t-xs); font-weight:700; }
+.rp-scope-note { grid-column:1 / -1; margin:0; color:var(--text-muted); font-size:var(--t-xs); }
 .rp-audience { display:grid; gap:3px; padding:var(--s-3) var(--s-4); text-align:left; color:var(--text); font:inherit; cursor:pointer; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
 .rp-audience span { color:var(--text-muted); font-size:var(--t-xs); }
 .rp-audience.selected { border-color:var(--brand); background:oklch(from var(--brand) l c h / .12); box-shadow:0 0 0 1px oklch(from var(--brand) l c h / .18); }
@@ -633,6 +809,17 @@ onMounted(() => applyPreset(30, '30d'));
 .rp-grid-label { fill: var(--text-faint, #64748b); font-size: 10px; font-family: var(--font-mono, monospace); }
 .rp-axis-label { fill: var(--text-muted, #94a3b8); font-size: 10px; }
 
+.rp-entity-card { margin-bottom:var(--s-4); }
+.rp-entity-head { display:flex; align-items:end; justify-content:space-between; gap:var(--s-4); margin-bottom:var(--s-4); }
+.rp-entity-head p { margin:4px 0 0; color:var(--text-muted); font-size:var(--t-xs); }
+.rp-breakdown-search { min-width:min(320px, 100%); }
+.rp-table-wrap { overflow:auto; border:1px solid var(--border); border-radius:var(--r-md); }
+.rp-entity-table { min-width:1040px; }
+.rp-entity-table th { white-space:nowrap; }
+.rp-table-skeleton { min-height:240px; border-radius:var(--r-md); background:linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size:200% 100%; animation:rp-shimmer 1.4s ease-in-out infinite; }
+.rp-pagination { display:flex; align-items:center; justify-content:flex-end; gap:var(--s-3); margin-top:var(--s-3); color:var(--text-muted); font-size:var(--t-sm); }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
 .rp-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--s-4); }
 .rp-bar-row { display: grid; grid-template-columns: 90px 1fr auto; align-items: center; gap: 10px; margin: 10px 0; }
 .rp-bar-key { font-size: var(--t-sm); text-transform: capitalize; color: var(--text-dim, #cbd5e1); }
@@ -652,6 +839,7 @@ onMounted(() => applyPreset(30, '30d'));
   }
   .rp-kpi--hero { grid-column: span 1; }
   .rp-controls { padding: var(--s-3); }
+  .rp-segmentation { grid-template-columns:1fr; }
   .rp-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .rp-chip { padding-inline: 8px; }
   .rp-range {
@@ -660,15 +848,18 @@ onMounted(() => applyPreset(30, '30d'));
   .rp-actions {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .rp-actions .bw-btn {
     justify-content: center;
   }
+  .rp-entity-head { display:grid; align-items:stretch; }
+  .rp-breakdown-search { min-width:0; }
 }
 
 @media (max-width: 440px) {
   .rp-audiences { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rp-groupings { grid-template-columns:1fr; }
   .rp-audience { justify-items:center; padding-inline:var(--s-2); text-align:center; }
   .rp-audience span { display:none; }
   .rp-templates { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }

@@ -2,6 +2,14 @@
   <AppShell title="NDPR / Privacy">
 
     <div class="bw-filter-bar">
+      <WalletExportMenu
+        :rows="requests"
+        :columns="privacyExportColumns"
+        filename="beverly-admin-privacy-requests"
+        title="Privacy Requests"
+        subtitle="Current filtered deletion requests"
+        :loading="loading"
+      />
       <select v-model="statusFilter" class="bw-select bw-select-sm" @change="load">
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
@@ -114,8 +122,17 @@ import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 const requests     = ref<any[]>([]);
+const privacyExportColumns: WalletExportColumn<any>[] = [
+  { key: 'customer', header: 'Customer', value: (request) => request.customers?.users?.full_name || '' },
+  { key: 'reason', header: 'Reason', value: (request) => request.reason || '' },
+  { key: 'status', header: 'Status', value: (request) => request.status },
+  { key: 'requested_at', header: 'Requested', value: (request) => fmtDate(request.requested_at) },
+  { key: 'scheduled_for', header: 'Scheduled For', value: (request) => fmtDate(request.scheduled_for) },
+];
 const loading      = ref(false);
 const error        = ref('');
 const statusFilter = ref('pending');

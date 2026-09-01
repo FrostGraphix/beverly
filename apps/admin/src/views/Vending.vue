@@ -4,6 +4,8 @@ import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, naira, shortDate } from '../lib/api';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
@@ -63,6 +65,18 @@ const retryingId = ref<string | null>(null);
 const recoveryNotice = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
 const canRetryRecovery = computed(() => auth.hasPermission('wallet.funding.approve'));
 const activeFilterCount = computed(() => [q.value.trim(), status.value, station.value, meterType.value].filter(Boolean).length);
+const vendingExportColumns: WalletExportColumn<Purchase>[] = [
+    { key: 'created_at', header: 'When', value: (purchase) => shortDate(purchase.created_at) },
+    { key: 'customer_name', header: 'Customer', value: (purchase) => purchase.customer_name || '' },
+    { key: 'meter_id', header: 'Meter', value: (purchase) => purchase.meter_id },
+    { key: 'meter_type', header: 'Phase', value: (purchase) => meterTypeLabel(purchase.meter_type) },
+    { key: 'station_id', header: 'Station', value: (purchase) => purchase.station_id || '' },
+    { key: 'purchase_mode', header: 'Mode', value: (purchase) => purchase.purchase_mode },
+    { key: 'amount_minor', header: 'Amount', value: (purchase) => naira(purchase.amount_minor) },
+    { key: 'vat_amount_minor', header: 'VAT', value: (purchase) => naira(purchase.vat_amount_minor || 0) },
+    { key: 'status', header: 'Status', value: (purchase) => statusLabel(purchase) },
+    { key: 'token', header: 'Token', value: (purchase) => purchase.token || '' },
+];
 const PAGE = 100;
 const POLL_INTERVAL_MS = 5_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -345,6 +359,14 @@ onUnmounted(() => {
       <div class="vending-layout-bar">
         <span>Purchase results</span>
         <div class="vending-toolbar-actions">
+          <WalletExportMenu
+            :rows="items"
+            :columns="vendingExportColumns"
+            filename="beverly-admin-vending"
+            title="Vending Monitor"
+            subtitle="Filtered purchase results"
+            :loading="loading"
+          />
           <button
             type="button"
             class="bw-btn sm vending-filter-button"

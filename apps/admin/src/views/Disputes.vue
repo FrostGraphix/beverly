@@ -4,6 +4,8 @@ import { api, naira, shortDate } from '../lib/api';
 import AppShell from '../components/AppShell.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 type DisputeStatus = 'open' | 'under_review' | 'resolved' | 'rejected' | 'refund_issued';
 
@@ -94,6 +96,17 @@ const pagedDisputes = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredDisputes.value.slice(start, start + pageSize.value);
 });
+
+const disputeExportColumns: WalletExportColumn<DisputeRow>[] = [
+  { key: 'created_at', header: 'Created', value: (dispute) => shortDate(dispute.created_at) },
+  { key: 'reference', header: 'Reference', value: (dispute) => dispute.reference || '' },
+  { key: 'subject', header: 'Subject', value: (dispute) => dispute.subject || '' },
+  { key: 'customer', header: 'Customer', value: (dispute) => actorName(dispute) },
+  { key: 'vendor', header: 'Vendor', value: (dispute) => orgName(dispute) },
+  { key: 'meter', header: 'Meter', value: (dispute) => dispute.purchase_order?.meter_id || '' },
+  { key: 'amount', header: 'Purchase Amount', value: (dispute) => naira(dispute.purchase_order?.amount_minor || 0) },
+  { key: 'status', header: 'Status', value: (dispute) => dispute.status.replace(/_/g, ' ') },
+];
 
 const canSave = computed(() =>
   !saving.value && Boolean(newStatus.value || replyText.value.trim() || resolutionNote.value.trim()),
@@ -244,6 +257,16 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
             <span v-else class="bw-table-count">{{ filteredDisputes.length }}</span>
           </div>
           <div class="bw-card-sub">Customer and vendor transaction dispute cases</div>
+        </div>
+        <div class="bw-table-actions">
+          <WalletExportMenu
+            :rows="filteredDisputes"
+            :columns="disputeExportColumns"
+            filename="beverly-admin-disputes"
+            title="Wallet Disputes"
+            subtitle="Filtered customer and vendor cases"
+            :loading="loading"
+          />
         </div>
       </div>
 

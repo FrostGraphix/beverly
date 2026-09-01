@@ -7,6 +7,8 @@ import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 import WalletGreeting from '@beverly/tokens/WalletGreeting.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 const auth    = useAuthStore();
 const wallet  = ref<any>(null);
@@ -60,6 +62,13 @@ const activeRecentFilterCount = computed(() => [
 const filterCount = (filter: typeof activityFilter.value) => {
     return ledger.value.filter((entry) => matchesFilter(entry, filter)).length;
 };
+
+const ledgerExportColumns: WalletExportColumn<any>[] = [
+    { key: 'created_at', header: 'When', value: (entry) => shortDate(entry.created_at) },
+    { key: 'entry_type', header: 'Type', value: (entry) => entry.entry_type },
+    { key: 'memo', header: 'Memo', value: (entry) => entry.memo },
+    { key: 'amount_minor', header: 'Amount', value: (entry) => naira(entry.amount_minor) },
+];
 </script>
 
 <template>
@@ -114,6 +123,14 @@ const filterCount = (filter: typeof activityFilter.value) => {
           <div class="bw-card-sub">Latest wallet movements</div>
         </div>
         <div class="recent-actions">
+          <WalletExportMenu
+            :rows="filteredLedger"
+            :columns="ledgerExportColumns"
+            filename="beverly-customer-recent-activity"
+            title="Customer Recent Activity"
+            subtitle="Filtered wallet movements"
+            :loading="loading"
+          />
           <WalletDataViewSwitch
             v-model="viewMode"
             :modes="['grid', 'table']"

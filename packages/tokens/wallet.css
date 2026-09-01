@@ -937,6 +937,50 @@
   box-shadow: 0 0 0 3px var(--brand-glow), 0 0 0 5px var(--brand);
 }
 
+.bw-export-menu { position: relative; display: inline-flex; }
+.bw-export-trigger { min-width: 78px; }
+.bw-export-panel {
+  position: absolute;
+  z-index: 120;
+  inset-block-start: calc(100% + var(--s-2));
+  inset-inline-end: 0;
+  width: min(250px, calc(100vw - 32px));
+  padding: var(--s-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-xl);
+}
+.bw-export-panel button {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: var(--s-3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+.bw-export-panel button:hover,
+.bw-export-panel button:focus-visible { background: var(--surface-2); outline: none; }
+.bw-export-panel button:focus-visible { box-shadow: inset 0 0 0 2px var(--brand); }
+.bw-export-panel button span,
+.bw-export-count { color: var(--text-muted); font-size: var(--t-xs); }
+.bw-export-count { padding: var(--s-2) var(--s-3) var(--s-1); border-top: 1px solid var(--border); }
+.bw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Segmented control */
 .bw-segmented {
   display: inline-flex;
