@@ -6,6 +6,8 @@ import { api } from '../lib/api';
 import { naira } from '../lib/format';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
 import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface AggRow {
   scope: string;
@@ -83,6 +85,16 @@ function periodLabel(row: AggRow): string {
 const fmtKwh = (value: number) =>
   `${Number(value ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
 
+const consumptionExportColumns: WalletExportColumn<AggRow>[] = [
+  { key: 'period_start', header: 'Period', value: (row) => periodLabel(row) },
+  { key: 'meter_id', header: 'Meter', value: (row) => row.meter_id || row.scope_id },
+  { key: 'customer_name', header: 'Customer', value: (row) => row.customer_name || '' },
+  { key: 'kwh_total', header: 'Consumption', value: (row) => fmtKwh(row.kwh_total) },
+  { key: 'energy_value_minor', header: 'Energy Value', value: (row) => naira(row.energy_value_minor || 0) },
+  { key: 'amount_minor_total', header: 'Wallet Sales', value: (row) => naira(row.amount_minor_total) },
+  { key: 'reading_count', header: 'Readings', value: (row) => row.reading_count },
+];
+
 async function load() {
   const requestId = ++loadRequestId;
   error.value = '';
@@ -148,6 +160,14 @@ onMounted(load);
         </div>
 
         <div class="controls">
+          <WalletExportMenu
+            :rows="rows"
+            :columns="consumptionExportColumns"
+            filename="beverly-vendor-consumption"
+            title="Vendor Consumption"
+            :subtitle="`${periodLabelText} consumption view`"
+            :loading="loading"
+          />
           <div class="seg" role="tablist" aria-label="View">
             <button
               v-for="option in (['site', 'meters'] as View[])"

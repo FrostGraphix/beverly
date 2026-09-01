@@ -4,6 +4,8 @@ import AppShell from '../components/AppShell.vue';
 import { api, naira } from '../lib/api';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
 import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -309,6 +311,18 @@ const cumulSorted = computed(
 const cumulPaged = computed(() => pageSlice(cumulSorted.value, cumulPage.value));
 
 const stationPeriodRows = computed(() => (selectedStn.value ? rowsForStation(selectedStn.value) : []));
+const consumptionExportRows = computed(() => drillMeter.value
+    ? meterRows.value
+    : (selectedStn.value ? stationPeriodRows.value : cumulSorted.value));
+const consumptionExportColumns: WalletExportColumn<AggRow>[] = [
+    { key: 'period_start', header: 'Period', value: (row) => periodLabel(row) },
+    { key: 'scope_id', header: 'Scope', value: (row) => row.meter_id || stnName(row.scope_id) },
+    { key: 'customer_name', header: 'Customer', value: (row) => row.customer_name || '' },
+    { key: 'kwh_total', header: 'Meter Usage', value: (row) => fmtKwh(row.kwh_total) },
+    { key: 'reading_count', header: 'Readings', value: (row) => readingCount(row) },
+    { key: 'energy_value_minor', header: 'Energy Value', value: (row) => naira(energyValue(row)) },
+    { key: 'amount_minor_total', header: 'Wallet Spend', value: (row) => naira(row.amount_minor_total) },
+];
 const stationPeriodPaged = computed(() => pageSlice(stationPeriodRows.value, stationPage.value));
 
 const uniqueMetersPaged = computed(() => pageSlice(uniqueMeters.value, meterPage.value));
@@ -348,6 +362,14 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
         </p>
       </div>
       <div style="display:flex; gap: var(--s-2); align-items:center; flex-wrap:wrap">
+        <WalletExportMenu
+          :rows="consumptionExportRows"
+          :columns="consumptionExportColumns"
+          filename="beverly-admin-consumption"
+          title="Consumption Analytics"
+          subtitle="Current analytics scope"
+          :loading="loading || meterLoading"
+        />
         <!-- Period tabs -->
         <div class="bw-seg" aria-label="Aggregation period">
           <button

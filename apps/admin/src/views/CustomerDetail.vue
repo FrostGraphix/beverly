@@ -15,6 +15,8 @@
 import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
@@ -124,6 +126,43 @@ const overviewFields = computed(() => detail.value ? [
     { label: 'Joined', value: new Date(detail.value.customer.created_at).toLocaleString() },
 ] : []);
 
+const detailExportRows = computed<any[]>(() => {
+  if (tab.value === 'overview') return overviewFields.value;
+  if (tab.value === 'wallet') return wallet.value?.entries ?? [];
+  if (tab.value === 'purchases') return purchases.value;
+  if (tab.value === 'funding') return funding.value;
+  return [];
+});
+const detailExportColumns = computed<WalletExportColumn<any>[]>(() => {
+  if (tab.value === 'overview') return [
+    { key: 'label', header: 'Field', value: (row) => row.label },
+    { key: 'value', header: 'Value', value: (row) => row.value },
+  ];
+  if (tab.value === 'wallet') return [
+    { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+    { key: 'entry_type', header: 'Type', value: (row) => row.entry_type?.replace(/_/g, ' ') },
+    { key: 'direction', header: 'Direction', value: (row) => row.direction },
+    { key: 'amount_minor', header: 'Amount', value: (row) => naira(row.amount_minor) },
+    { key: 'balance_after_minor', header: 'Balance', value: (row) => naira(row.balance_after_minor) },
+  ];
+  if (tab.value === 'purchases') return [
+    { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+    { key: 'meter_id', header: 'Meter', value: (row) => row.meter_id },
+    { key: 'station_id', header: 'Station', value: (row) => row.station_id || '' },
+    { key: 'amount_minor', header: 'Paid', value: (row) => naira(row.amount_minor) },
+    { key: 'energy_amount_minor', header: 'Energy', value: (row) => naira(row.energy_amount_minor ?? row.amount_minor) },
+    { key: 'vat_amount_minor', header: 'VAT', value: (row) => naira(row.vat_amount_minor ?? 0) },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+  ];
+  return [
+    { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+    { key: 'gateway_reference', header: 'Reference', value: (row) => row.gateway_reference },
+    { key: 'gateway', header: 'Gateway', value: (row) => row.gateway },
+    { key: 'amount_minor', header: 'Amount', value: (row) => naira(row.amount_minor) },
+    { key: 'status', header: 'Status', value: (row) => row.status },
+  ];
+});
+
 onMounted(loadDetail);
 </script>
 
@@ -201,6 +240,14 @@ onMounted(loadDetail);
                 :class="['tab', { active: tab === t }]" @click="switchTab(t)">
           {{ t }}
         </button>
+        <WalletExportMenu
+          :rows="detailExportRows"
+          :columns="detailExportColumns"
+          :filename="`beverly-admin-customer-${tab}`"
+          :title="`Customer ${tab}`"
+          :subtitle="detail?.full_name || detail?.email || 'Customer record'"
+          :loading="loading || tabLoading"
+        />
       </div>
 
       <!-- Overview -->

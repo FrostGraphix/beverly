@@ -5,6 +5,8 @@ import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira, kwh, shortDate } from '../lib/format';
 import { downloadReceipt, printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
@@ -53,6 +55,18 @@ const paginatedReceipts = computed(() => {
 
 const total = computed(() => receipts.value.reduce((sum, r) => sum + r.amount_minor, 0));
 const totalVat = computed(() => receipts.value.reduce((sum, r) => sum + Number(r.vat_amount_minor ?? 0), 0));
+
+const receiptExportColumns: WalletExportColumn<Receipt>[] = [
+  { key: 'created_at', header: 'When', value: (receipt) => shortDate(receipt.created_at) },
+  { key: 'receipt_number', header: 'Receipt', value: (receipt) => receipt.receipt_number },
+  { key: 'customer_name', header: 'Customer', value: (receipt) => receipt.customer_name || '' },
+  { key: 'meter_id', header: 'Meter', value: (receipt) => receipt.meter_id },
+  { key: 'amount_minor', header: 'Paid', value: (receipt) => naira(receipt.amount_minor) },
+  { key: 'vat_amount_minor', header: 'VAT', value: (receipt) => naira(receipt.vat_amount_minor || 0) },
+  { key: 'units_kwh', header: 'Units', value: (receipt) => kwh(receipt.units_kwh || 0) },
+  { key: 'status', header: 'Status', value: (receipt) => receipt.status },
+  { key: 'token', header: 'Token', value: (receipt) => receipt.token || '' },
+];
 
 async function load() {
   loading.value = true;
@@ -173,6 +187,14 @@ onMounted(load);
             <div class="bw-card-sub">Vendor vending tokens, receipts, and customer details</div>
           </div>
           <div class="bw-table-actions">
+            <WalletExportMenu
+              :rows="filtered"
+              :columns="receiptExportColumns"
+              filename="beverly-vendor-receipts"
+              title="Vendor Token Receipts"
+              subtitle="Filtered customer receipts"
+              :loading="loading"
+            />
             <input v-model="search" class="bw-input" placeholder="Search customer / meter / token…" style="width: 240px" />
             <button class="bw-btn sm" :disabled="loading" @click="load">
               {{ loading ? 'Refreshing...' : 'Refresh' }}

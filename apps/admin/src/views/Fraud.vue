@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, ApiError, naira, shortDate } from '../lib/api';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface Signal {
     id: string;
@@ -31,6 +33,17 @@ const assessments = ref<Assessment[]>([]);
 const loading      = ref(true);
 const filterResolved = ref('false');
 const filterMinScore = ref('50');
+
+const fraudExportColumns: WalletExportColumn<Assessment>[] = [
+    { key: 'created_at', header: 'Created', value: (item) => shortDate(item.created_at) },
+    { key: 'customer', header: 'Customer', value: (item) => item.customers?.users?.full_name || item.customer_id },
+    { key: 'meter_id', header: 'Meter', value: (item) => item.meter_id },
+    { key: 'amount_minor', header: 'Amount', value: (item) => naira(item.amount_minor) },
+    { key: 'score', header: 'Score', value: (item) => item.score },
+    { key: 'action', header: 'Action', value: (item) => item.action.replace(/_/g, ' ') },
+    { key: 'signals', header: 'Signals', value: (item) => item.fraud_signals.map((signal) => signal.signal_type).join('; ') },
+    { key: 'resolved', header: 'Resolved', value: (item) => item.resolved ? 'Yes' : 'No' },
+];
 
 const ACTION_BADGE: Record<string, string> = {
     allow:   'bw-badge green',
@@ -91,6 +104,14 @@ onMounted(load);
 <template>
   <AppShell title="Fraud Review">
     <div class="bw-page-actions">
+      <WalletExportMenu
+        :rows="assessments"
+        :columns="fraudExportColumns"
+        filename="beverly-admin-fraud-assessments"
+        title="Fraud Assessments"
+        subtitle="Current risk review results"
+        :loading="loading"
+      />
       <button type="button" class="bw-icon-btn" @click.prevent="load" title="Refresh">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
       </button>

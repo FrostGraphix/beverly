@@ -10,6 +10,11 @@ export type ReportPdfInput = {
     statusRows: { key: string; count: number; pct: number }[];
     actorRows: { key: string; minor: number; pct: number }[];
     stations: { station_id: string; count: number; revenueMinor: number }[];
+    groupBy: 'site' | 'vendor' | 'customer';
+    entityBreakdowns: {
+        siteId: string; entityId: string; entityName: string; purchaseCount: number;
+        deliveredCount: number; revenueMinor: number; successRate: number;
+    }[];
     insights: string[];
     money: (minor: number) => string;
     auditBreakdown?: { action: string; count: number; pct: number }[];
@@ -30,6 +35,7 @@ const C = {
 function esc(value: unknown): string { return String(value ?? '').replace(/[\\()]/g, '\\$&').replace(/[^\x20-\x7E]/g, ' '); }
 function dateStamp(): string { return new Date().toISOString().slice(0, 10); }
 function number(value: number): string { return Number(value || 0).toLocaleString('en-NG'); }
+function short(value: string, max = 28): string { return value.length > max ? `${value.slice(0, max - 3)}...` : value; }
 
 class Pdf {
     private pages: string[][] = [];
@@ -196,11 +202,19 @@ function tablePage(pdf: Pdf, input: ReportPdfInput) {
         });
     } else {
         pdf.heading(input.title, 'Performance matrix');
-        const rows = input.stations.slice(0, 12); const headerY = 690;
-        pdf.text(32, 716, 'Top stations', 12, C.ink, true);
-        ['Station', 'Successful vends', 'Revenue'].forEach((h, i) => pdf.text([42, 285, 438][i], headerY, h.toUpperCase(), 8, C.muted, true));
+        const rows = input.entityBreakdowns.slice(0, 12); const headerY = 690;
+        const entityLabel = input.groupBy === 'vendor' ? 'Vendor' : input.groupBy === 'customer' ? 'Customer' : 'SiteID';
+        pdf.text(32, 716, `${entityLabel} performance by SiteID`, 12, C.ink, true);
+        ['SiteID', entityLabel, 'Purchases', 'Revenue'].forEach((h, i) => pdf.text([42, 150, 378, 465][i], headerY, h.toUpperCase(), 8, C.muted, true));
         pdf.line(32, 680, 563, 680);
-        rows.forEach((row, i) => { const y = 658 - i * 29; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.paper); pdf.text(42, y, row.station_id, 9); pdf.text(285, y, number(row.count), 9); pdf.text(438, y, input.money(row.revenueMinor), 9, C.blue, true); });
+        rows.forEach((row, i) => {
+            const y = 658 - i * 29;
+            if (i % 2 === 0) pdf.rect(32, y - 9, 531, 25, C.paper);
+            pdf.text(42, y, short(row.siteId, 15), 8);
+            pdf.text(150, y, short(row.entityName), 8);
+            pdf.text(378, y, number(row.purchaseCount), 8);
+            pdf.text(465, y, input.money(row.revenueMinor), 8, C.blue, true);
+        });
         const statsY = 285;
         const section = input.family === 'disputes'
             ? { title: 'Disputes by status', rows: (input.disputeRows || []).map((r) => ({ label: r.key, value: `${number(r.count)} cases`, pct: r.pct })) }

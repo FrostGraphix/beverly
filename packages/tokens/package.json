@@ -28,6 +28,10 @@
     "WalletTableSkeleton.vue.d.ts",
     "WalletRowActions.vue",
     "WalletRowActions.vue.d.ts",
+    "WalletExportMenu.vue",
+    "WalletExportMenu.vue.d.ts",
+    "wallet-export.js",
+    "wallet-export.d.ts",
     "PwaUpdateToast.vue",
     "PwaUpdateToast.vue.d.ts",
     "LanguageSwitcher.vue",
@@ -83,6 +87,14 @@
     "./WalletRowActions.vue": {
       "types": "./WalletRowActions.vue.d.ts",
       "import": "./WalletRowActions.vue"
+    },
+    "./WalletExportMenu.vue": {
+      "types": "./WalletExportMenu.vue.d.ts",
+      "import": "./WalletExportMenu.vue"
+    },
+    "./wallet-export": {
+      "types": "./wallet-export.d.ts",
+      "import": "./wallet-export.js"
     },
     "./PwaUpdateToast.vue": {
       "types": "./PwaUpdateToast.vue.d.ts",

@@ -3,6 +3,8 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api, ApiError } from '../lib/api';
 
 interface MeterOrder {
@@ -36,6 +38,16 @@ const paginatedOrders = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
     return orders.value.slice(start, start + pageSize.value);
 });
+
+const orderExportColumns: WalletExportColumn<MeterOrder>[] = [
+    { key: 'created_at', header: 'Created', value: (order) => fmtDate(order.created_at) },
+    { key: 'meter_type', header: 'Meter Type', value: (order) => order.meter_type.replace(/_/g, ' ') },
+    { key: 'property_address', header: 'Address', value: (order) => order.property_address },
+    { key: 'service_area', header: 'Service Area', value: (order) => order.service_area },
+    { key: 'amount_minor', header: 'Amount', value: (order) => (order.amount_minor / 100).toLocaleString('en-NG', { style: 'currency', currency: 'NGN' }) },
+    { key: 'status', header: 'Status', value: (order) => STATUS_LABEL[order.status] || order.status },
+    { key: 'payment_reference', header: 'Payment Reference', value: (order) => order.payment_reference },
+];
 
 const STATUS_LABEL: Record<string, string> = {
     pending_payment: 'Awaiting Payment',
@@ -120,7 +132,17 @@ onMounted(async () => {
         <p class="bw-page-title">Meter Orders</p>
         <p class="bw-page-sub">Track your meter installation requests</p>
       </div>
-      <RouterLink to="/buy-meter" class="bw-btn small primary" style="text-decoration:none">+ New order</RouterLink>
+      <div class="bw-row" style="gap: var(--s-2)">
+        <WalletExportMenu
+          :rows="orders"
+          :columns="orderExportColumns"
+          filename="beverly-customer-meter-orders"
+          title="Customer Meter Orders"
+          subtitle="Meter installation requests"
+          :loading="loading"
+        />
+        <RouterLink to="/buy-meter" class="bw-btn small primary" style="text-decoration:none">+ New order</RouterLink>
+      </div>
     </div>
 
     <!-- Notice banner after payment verification -->

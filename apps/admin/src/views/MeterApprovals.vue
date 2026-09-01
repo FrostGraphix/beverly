@@ -84,6 +84,14 @@
             <div class="bw-card-sub">Review claims or remove an existing wallet association</div>
           </div>
           <div class="bw-table-actions">
+            <WalletExportMenu
+              :rows="meters"
+              :columns="meterExportColumns"
+              filename="beverly-admin-meter-approvals"
+              title="Customer Meter Links"
+              subtitle="Current filtered approval queue"
+              :loading="loading"
+            />
             <WalletDataViewSwitch v-model="viewMode" :modes="['list', 'table']" label="Meter link display view" />
           </div>
         </header>
@@ -277,6 +285,8 @@ import ConfirmDialog from '../components/ConfirmDialog.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 type MeterStatus = 'pending' | 'approved' | 'rejected';
 type MeterStatusFilter = MeterStatus | 'all';
@@ -346,6 +356,16 @@ const pageStart = computed(() => total.value ? offset.value + 1 : 0);
 const pageEnd = computed(() => Math.min(offset.value + pageSize, total.value));
 const allCount = computed(() => counts.value.pending + counts.value.approved + counts.value.rejected);
 const hasActiveFilters = computed(() => statusFilter.value !== 'all' || Boolean(searchInput.value.trim()));
+const meterExportColumns: WalletExportColumn<CustomerMeterRecord>[] = [
+  { key: 'created_at', header: 'Submitted', value: (meter) => new Date(meter.created_at).toLocaleString('en-NG') },
+  { key: 'customer', header: 'Customer', value: (meter) => meter.customers?.full_name || '' },
+  { key: 'contact', header: 'Contact', value: (meter) => meter.customers?.phone || meter.customers?.email || '' },
+  { key: 'meter_id', header: 'Meter', value: (meter) => meter.meter_id },
+  { key: 'meter_name', header: 'Registered Name', value: (meter) => meter.meter_name || '' },
+  { key: 'meter_type', header: 'Phase', value: (meter) => meter.meter_type?.replace(/_/g, ' ') || '' },
+  { key: 'station_id', header: 'Station', value: (meter) => meter.station_id || '' },
+  { key: 'status', header: 'Status', value: (meter) => statusLabel(meter.status) },
+];
 
 async function load() {
   const sequence = ++requestSequence;

@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import MessageSuccessHover from '../components/MessageSuccessHover.vue';
 import { api, shortDate } from '../lib/api';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 type AudienceKey = 'customers' | 'vendors';
 
@@ -43,6 +45,14 @@ const message = ref('');
 const recipients = ref<Recipient[]>([]);
 const selectedKeys = ref<string[]>([]);
 const history = ref<Announcement[]>([]);
+const announcementExportColumns: WalletExportColumn<Announcement>[] = [
+    { key: 'created_at', header: 'Sent', value: (item) => shortDate(item.created_at) },
+    { key: 'title', header: 'Title', value: (item) => item.title },
+    { key: 'body', header: 'Message', value: (item) => item.body },
+    { key: 'audience', header: 'Audience', value: (item) => item.audience },
+    { key: 'target_mode', header: 'Target Mode', value: (item) => item.target_mode },
+    { key: 'recipient_count', header: 'Recipients', value: (item) => item.recipient_count },
+];
 const loadingRecipients = ref(false);
 const loadingHistory = ref(false);
 const sending = ref(false);
@@ -328,6 +338,14 @@ onBeforeUnmount(() => {
           <h2>Message history</h2>
           <p>{{ loadingHistory ? 'Loading...' : `${history.length} recent sends` }}</p>
         </div>
+        <WalletExportMenu
+          :rows="history"
+          :columns="announcementExportColumns"
+          filename="beverly-admin-announcements"
+          title="Announcement History"
+          subtitle="Recent wallet communications"
+          :loading="loadingHistory"
+        />
       </div>
       <div v-if="history.length" class="an-history-slider" aria-label="Message history slider">
         <article v-for="item in history" :key="item.id" class="an-history-slide">

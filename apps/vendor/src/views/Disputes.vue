@@ -1,6 +1,14 @@
 <template>
   <AppShell title="Disputes">
     <div class="bw-page-actions">
+      <WalletExportMenu
+        :rows="disputes"
+        :columns="disputeExportColumns"
+        filename="beverly-vendor-disputes"
+        title="Vendor Disputes"
+        subtitle="Wallet and vending cases"
+        :loading="loading"
+      />
       <button class="bw-btn bw-btn-primary" @click="showNew = true">+ Raise Dispute</button>
     </div>
 
@@ -145,6 +153,8 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira } from '../lib/format';
 
@@ -159,6 +169,14 @@ const detail   = ref<any>(null);
 const replyText = ref('');
 
 const form = ref({ disputeType: 'other', description: '', purchase_order_id: '' });
+
+const disputeExportColumns: WalletExportColumn<any>[] = [
+  { key: 'created_at', header: 'Created', value: (dispute) => fmtDate(dispute.created_at) },
+  { key: 'reference', header: 'Reference', value: (dispute) => dispute.reference },
+  { key: 'subject', header: 'Subject', value: (dispute) => dispute.subject },
+  { key: 'meter_type', header: 'Phase', value: (dispute) => dispute.purchase_order ? meterTypeLabel(dispute.purchase_order.meter_type) : '' },
+  { key: 'status', header: 'Status', value: (dispute) => statusLabel(dispute.status) },
+];
 
 async function load() {
   loading.value = true;

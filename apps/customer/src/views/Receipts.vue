@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { kwh, naira, shortDate } from '../lib/format';
 import { printReceipt as printReceiptWindow, purchaseReceipt, viewReceipt as viewReceiptWindow } from '../lib/receipts';
@@ -51,6 +53,17 @@ const paginatedReceipts = computed(() => {
 
 const total = computed(() => receipts.value.reduce((sum, receipt) => sum + (receipt.amount_minor ?? 0), 0));
 const totalVat = computed(() => receipts.value.reduce((sum, receipt) => sum + Number(receipt.vat_amount_minor ?? 0), 0));
+
+const receiptExportColumns: WalletExportColumn<Receipt>[] = [
+    { key: 'created_at', header: 'When', value: (receipt) => shortDate(receipt.created_at) },
+    { key: 'receipt_number', header: 'Receipt', value: (receipt) => receipt.receipt_number },
+    { key: 'meter_id', header: 'Meter', value: (receipt) => receipt.meter_id || '' },
+    { key: 'amount_minor', header: 'Paid', value: (receipt) => naira(receipt.amount_minor || 0) },
+    { key: 'vat_amount_minor', header: 'VAT', value: (receipt) => naira(receipt.vat_amount_minor || 0) },
+    { key: 'units_kwh', header: 'Units', value: (receipt) => kwh(receipt.units_kwh || 0) },
+    { key: 'status', header: 'Status', value: (receipt) => receipt.status },
+    { key: 'token', header: 'Token', value: (receipt) => receipt.token || '' },
+];
 
 async function load() {
     loading.value = true;
@@ -170,6 +183,14 @@ onMounted(load);
             <div class="bw-card-sub">Electricity tokens, VAT breakdowns, and receipt details</div>
           </div>
           <div class="bw-table-actions">
+            <WalletExportMenu
+              :rows="filtered"
+              :columns="receiptExportColumns"
+              filename="beverly-customer-receipts"
+              title="Customer Token Receipts"
+              subtitle="Filtered electricity receipts"
+              :loading="loading"
+            />
             <input v-model="search" class="bw-input" placeholder="Search receipt / meter / token…" style="width: 240px" />
             <button class="bw-btn sm" :disabled="loading" @click="load">
               {{ loading ? 'Refreshing...' : 'Refresh' }}

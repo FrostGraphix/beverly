@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 
 interface Meter {
@@ -50,6 +52,14 @@ const prices = ref<{ residential_minor: number; commercial_minor: number }>({
     residential_minor: 3_000_000,
     commercial_minor: 15_000_000,
 });
+
+const meterExportColumns: WalletExportColumn<Meter>[] = [
+    { key: 'meter_id', header: 'Meter', value: (meter) => meter.meter_id },
+    { key: 'nickname', header: 'Nickname', value: (meter) => meter.nickname || '' },
+    { key: 'meter_type', header: 'Meter Type', value: (meter) => meterTypeLabel(meter.meter_type) },
+    { key: 'station_id', header: 'Station', value: (meter) => meter.station_id || '' },
+    { key: 'status', header: 'Status', value: (meter) => statusLabel(meter.status) || 'Approved' },
+];
 
 async function loadPrices() {
     try {
@@ -129,6 +139,14 @@ function formatHistoryDate(value: string) {
         <p class="bw-page-sub">{{ meters.length }} linked</p>
       </div>
       <div class="bw-row" style="gap:8px">
+        <WalletExportMenu
+          :rows="meters"
+          :columns="meterExportColumns"
+          filename="beverly-customer-meters"
+          title="Customer Meters"
+          subtitle="Linked prepaid meters"
+          :loading="loading"
+        />
         <router-link to="/consumption" class="bw-btn" style="text-decoration:none; white-space:nowrap">
           Consumption
         </router-link>

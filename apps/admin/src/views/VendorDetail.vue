@@ -16,6 +16,8 @@
 import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, naira, shortDate, ApiError } from '../lib/api';
@@ -132,6 +134,46 @@ const staff        = ref<any[]>([]);
 const analytics    = ref<any>(null);
 const analyticsPeriod = ref<'7d'|'30d'|'90d'|'all'>('30d');
 const tabLoading   = ref(false);
+
+const detailExportRows = computed<any[]>(() => {
+    if (tab.value === 'wallet') return wallet.value?.entries ?? [];
+    if (tab.value === 'transactions') return transactions.value;
+    if (tab.value === 'funding') return funding.value;
+    if (tab.value === 'staff') return staff.value;
+    return [];
+});
+const detailExportColumns = computed<WalletExportColumn<any>[]>(() => {
+    if (tab.value === 'wallet') return [
+        { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+        { key: 'entry_type', header: 'Type', value: (row) => (row.entry_type ?? row.type ?? '').replace(/_/g, ' ') },
+        { key: 'direction', header: 'Direction', value: (row) => row.direction },
+        { key: 'amount_minor', header: 'Amount', value: (row) => naira(row.amount_minor) },
+        { key: 'balance_after_minor', header: 'Balance', value: (row) => naira(row.balance_after_minor) },
+    ];
+    if (tab.value === 'transactions') return [
+        { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+        { key: 'meter_id', header: 'Meter', value: (row) => row.meter_id ?? row.meter_number ?? '' },
+        { key: 'station_id', header: 'Station', value: (row) => row.station_id ?? row.station ?? '' },
+        { key: 'amount_minor', header: 'Paid', value: (row) => naira(row.amount_minor ?? row.amount) },
+        { key: 'energy_amount_minor', header: 'Energy', value: (row) => naira(row.energy_amount_minor ?? row.amount_minor ?? row.amount) },
+        { key: 'vat_amount_minor', header: 'VAT', value: (row) => naira(row.vat_amount_minor ?? 0) },
+        { key: 'status', header: 'Status', value: (row) => row.status },
+    ];
+    if (tab.value === 'funding') return [
+        { key: 'created_at', header: 'When', value: (row) => shortDate(row.created_at) },
+        { key: 'reference', header: 'Reference', value: (row) => row.gateway_reference ?? row.reference ?? '' },
+        { key: 'gateway', header: 'Gateway', value: (row) => row.gateway ?? row.channel ?? '' },
+        { key: 'amount_minor', header: 'Amount', value: (row) => naira(row.amount_minor ?? row.amount) },
+        { key: 'status', header: 'Status', value: (row) => row.status },
+    ];
+    return [
+        { key: 'full_name', header: 'Name', value: (row) => row.full_name ?? row.name ?? '' },
+        { key: 'email', header: 'Email', value: (row) => row.email ?? row.username ?? '' },
+        { key: 'role', header: 'Role', value: (row) => row.role ?? row.role_key ?? 'vendor' },
+        { key: 'status', header: 'Status', value: (row) => row.status ?? 'active' },
+        { key: 'created_at', header: 'Joined', value: (row) => shortDate(row.created_at) },
+    ];
+});
 
 async function loadDetail() {
     loading.value = true;
@@ -425,6 +467,14 @@ onMounted(loadDetail);
           :class="['tab', { active: tab === t }]"
           @click="switchTab(t)"
         >{{ t }}</button>
+        <WalletExportMenu
+          :rows="detailExportRows"
+          :columns="detailExportColumns"
+          :filename="`beverly-admin-vendor-${tab}`"
+          :title="`Vendor ${tab}`"
+          :subtitle="detail?.trading_name || detail?.legal_name || 'Vendor record'"
+          :loading="loading || tabLoading"
+        />
       </div>
 
       <!-- ── Overview ────────────────────────────────────────── -->

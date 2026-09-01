@@ -7,6 +7,8 @@ import { onMounted, ref, computed } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import WalletTableSkeleton from '@beverly/tokens/WalletTableSkeleton.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 
@@ -59,6 +61,14 @@ const totalFunded = computed(() =>
     items.value.filter((f) => isSuccessfulStatus(f.status)).reduce((s, f) => s + f.amount_minor, 0),
 );
 
+const fundingExportColumns: WalletExportColumn<Funding>[] = [
+    { key: 'created_at', header: 'When', value: (item) => shortDate(item.created_at) },
+    { key: 'gateway_reference', header: 'Reference', value: (item) => item.gateway_reference },
+    { key: 'gateway', header: 'Channel', value: (item) => item.gateway },
+    { key: 'amount_minor', header: 'Amount', value: (item) => naira(item.amount_minor) },
+    { key: 'status', header: 'Status', value: (item) => item.status },
+];
+
 function statusBadge(s: string) {
     return ({ succeeded: 'success', success: 'success', initiated: 'warn', pending: 'warn', failed: 'danger', abandoned: 'neutral' } as Record<string, string>)[s] ?? 'neutral';
 }
@@ -79,6 +89,14 @@ onMounted(() => load());
           <div class="bw-card-sub">{{ naira(totalFunded) }} funded all-time</div>
         </div>
         <div class="bw-table-actions">
+          <WalletExportMenu
+            :rows="filtered"
+            :columns="fundingExportColumns"
+            filename="beverly-customer-funding-history"
+            title="Customer Funding History"
+            subtitle="Filtered wallet top-ups"
+            :loading="loading"
+          />
           <div class="bw-segmented">
             <button v-for="f in (['all','success','pending','failed'] as const)" :key="f"
                     :class="['bw-seg', filter === f ? 'active' : '']"

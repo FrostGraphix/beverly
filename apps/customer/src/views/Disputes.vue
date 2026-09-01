@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
+import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 import { api } from '../lib/api';
 import { naira, shortDate } from '../lib/format';
 
@@ -46,6 +48,14 @@ const visibleDisputes = computed(() => {
   if (statusFilter.value === 'all') return disputes.value;
   return disputes.value.filter((d) => d.status === statusFilter.value);
 });
+
+const disputeExportColumns: WalletExportColumn<any>[] = [
+  { key: 'created_at', header: 'Created', value: (dispute) => shortDate(dispute.created_at) },
+  { key: 'reference', header: 'Reference', value: (dispute) => dispute.reference },
+  { key: 'subject', header: 'Subject', value: (dispute) => dispute.subject },
+  { key: 'issue_type', header: 'Issue Type', value: (dispute) => issueLabel(dispute.issue_type) },
+  { key: 'status', header: 'Status', value: (dispute) => statusLabel(dispute.status) },
+];
 
 const stats = computed(() => ({
   open: disputes.value.filter((d) => ['open', 'under_review'].includes(d.status)).length,
@@ -260,7 +270,17 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
           <h1>My Disputes</h1>
           <p>Track refunds, token issues, and meter purchase problems.</p>
         </div>
-        <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openNew()">+ Raise</button>
+        <div class="bw-row" style="gap: var(--s-2)">
+          <WalletExportMenu
+            :rows="visibleDisputes"
+            :columns="disputeExportColumns"
+            filename="beverly-customer-disputes"
+            title="Customer Disputes"
+            subtitle="Filtered wallet support cases"
+            :loading="loading"
+          />
+          <button class="bw-btn bw-btn-primary bw-btn-sm" @click="openNew()">+ Raise</button>
+        </div>
       </header>
 
       <div class="dispute-stats">
