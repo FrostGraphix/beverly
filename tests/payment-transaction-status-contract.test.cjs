@@ -10,6 +10,7 @@ const fulfillment = read("backend/wallet/src/services/payment-transactions.ts");
 const adminRoutes = [
   read("backend/wallet/src/routes/admin.ts"),
   read("backend/wallet/src/routes/admin-payment-recovery.ts"),
+  read("backend/wallet/src/routes/admin-reports.ts"),
 ].join("\n");
 const paymentWebhooks = read("backend/wallet/src/services/payment-webhooks.ts");
 const admin = read("backend/wallet/src/routes/admin.ts");
@@ -44,7 +45,7 @@ assert.match(fulfillment, /paystack_amount_mismatch/);
 assert.match(fulfillment, /payment_reference_mismatch/);
 assert.match(fulfillment, /payment_currency_mismatch/);
 
-const adminSucceededFilters = admin.match(/\.in\('status', Array\.from\(PAYMENT_SUCCEEDED_STATUSES\)\)/g) ?? [];
+const adminSucceededFilters = adminRoutes.match(/\.in\('status', Array\.from\(PAYMENT_SUCCEEDED_STATUSES\)\)/g) ?? [];
 assert.equal(adminSucceededFilters.length, 3, "admin funding aggregates must count canonical and legacy success states");
 
 assert.match(scheduler, /\.select\('\*'\)/);
