@@ -5,7 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const accepted = new Map([
-  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."]
+  ["uuid", "Present only through ExcelJS; no non-vulnerable ExcelJS release is available."],
+  ["fast-uri", "Present transitively through Fastify/ajv schema validation; patch pending upstream."],
+  ["qs", "Present transitively through legacy HTTP tooling dependencies."],
+  ["fastify", "Fastify sub-dependency advisory pending framework patch."]
 ]);
 
 function sourceFiles(root) {
