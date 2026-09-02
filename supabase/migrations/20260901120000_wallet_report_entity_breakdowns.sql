@@ -13,7 +13,9 @@ create or replace function public.wallet_report_purchase_breakdown(
   p_group_by text default 'site',
   p_audience text default 'all',
   p_site_id text default null,
-  p_station_ids text[] default null
+  p_station_ids text[] default null,
+  p_transaction_status text default 'all',
+  p_entity_id text default null
 )
 returns table (
   site_id text,
@@ -60,9 +62,20 @@ as $$
       and (p_audience = 'all' or po.actor_type = p_audience)
       and (p_site_id is null or upper(po.station_id) = upper(p_site_id))
       and (p_station_ids is null or upper(po.station_id) = any(p_station_ids))
+      and (
+        p_transaction_status = 'all'
+        or (p_transaction_status = 'successful' and po.status = 'delivered')
+        or (p_transaction_status = 'failed' and po.status = 'failed')
+      )
       and (p_group_by <> 'vendor' or po.actor_type = 'vendor')
       and (p_group_by <> 'customer' or coalesce(nullif(po.customer_id, ''),
         case when po.actor_type = 'customer' then po.actor_id::text end) is not null)
+      and (
+        p_entity_id is null
+        or (p_group_by = 'vendor' and po.actor_id::text = p_entity_id)
+        or (p_group_by = 'customer' and coalesce(nullif(po.customer_id, ''),
+          case when po.actor_type = 'customer' then po.actor_id::text end) = p_entity_id)
+      )
   ), grouped as (
     select
       f.site_id,
@@ -129,9 +142,9 @@ as $$
 $$;
 
 revoke all on function public.wallet_report_purchase_breakdown(
-  timestamptz, timestamptz, text, text, text, text[]
+  timestamptz, timestamptz, text, text, text, text[], text, text
 ) from public, anon, authenticated;
 
 grant execute on function public.wallet_report_purchase_breakdown(
-  timestamptz, timestamptz, text, text, text, text[]
+  timestamptz, timestamptz, text, text, text, text[], text, text
 ) to service_role;

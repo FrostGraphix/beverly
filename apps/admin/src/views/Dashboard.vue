@@ -19,8 +19,7 @@ interface FundingHistoryRow {
     vendor_organization_id?: string | null;
     vendor_organizations?: { legal_name?: string | null; trading_name?: string | null } | null;
 }
-interface Application    { id: string; legal_name: string; created_at: string; }
-interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; delivery_state?: string | null; failure_reason?: string | null; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; actor_type?: string | null; reference?: string | null; created_at: string; }
+interface Purchase        { id: string; amount_minor: number; energy_amount_minor?: number | null; vat_amount_minor?: number | null; units_kwh?: number | null; status: string; delivery_state?: string | null; failure_reason?: string | null; meter_id?: string; station_id?: string | null; customer_name?: string | null; purchase_mode?: string | null; actor_type?: string | null; reference?: string | null; created_at: string; vended_by_name?: string | null; vendor_business_name?: string | null; }
 interface WalletSummary {
     walletCount: number;
     totalFloatMinor: number;
@@ -35,6 +34,10 @@ interface WalletSummary {
 }
 
 interface PurchasesSummary {
+    totalCount: number;
+    totalValueMinor: number;
+    successCount: number;
+    failedCount: number;
     todayCount: number;
     todayValueMinor: number;
     todayDeliveredCount: number;
@@ -59,7 +62,6 @@ interface PurchasesSummary {
 const funding = ref<FundingRequest[]>([]);
 const fundingHistory = ref<FundingHistoryRow[]>([]);
 const auth = useStaffAuthStore();
-const apps    = ref<Application[]>([]);
 const vending = ref<Purchase[]>([]);
 const walletSummary = ref<WalletSummary>({ walletCount: 0, totalFloatMinor: 0, byStatus: {} });
 const purchasesSummary = ref<PurchasesSummary | null>(null);
@@ -77,7 +79,9 @@ const statVendorFailedCount = ref(0);
 const statCustomerSuccessCount = ref(0);
 const statCustomerSuccessValueMinor = ref(0);
 const statCustomerFailedCount = ref(0);
-const statApplications = ref(0);
+const statAllVends = ref(0);
+const statAllSuccessfulVends = ref(0);
+const statAllFailedVends = ref(0);
 const statTotalWalletFloatMinor = ref(0);
 const statVendorFloatMinor = ref(0);
 const statCustomerFloatMinor = ref(0);
@@ -172,6 +176,8 @@ const recentActivityRows = computed(() => {
             kind,
             typeTone: typeTone(kind),
             vendor: p.purchase_mode ? p.purchase_mode.replace(/_/g, ' ') : 'Vending',
+            vendorName: p.vended_by_name || (isVendorPurchase(p) ? 'Vendor operator' : 'Customer self-vend'),
+            vendorBusiness: p.vendor_business_name || (isVendorPurchase(p) ? 'Business unavailable' : 'Customer purchase'),
             customerName: p.customer_name || 'Unknown customer',
             meterId: p.meter_id || '',
             actorType: p.actor_type || 'customer',
@@ -200,6 +206,8 @@ const recentActivityRows = computed(() => {
             kind: 'funding' as const,
             typeTone: 'info',
             vendor: vendorName,
+            vendorName,
+            vendorBusiness: vendorName,
             customerName: vendorName,
             meterId: '',
             actorType: 'vendor' as const,
@@ -258,6 +266,8 @@ const recentExportColumns: WalletExportColumn<any>[] = [
     { key: 'reference', header: 'Reference', value: (row) => row.reference },
     { key: 'type', header: 'Type', value: (row) => row.type },
     { key: 'vendor', header: 'Vendor', value: (row) => row.vendor },
+    { key: 'vendorName', header: 'Vendor Name', value: (row) => row.vendorName },
+    { key: 'vendorBusiness', header: 'Vendor Business', value: (row) => row.vendorBusiness },
     { key: 'customerMeter', header: 'Customer / Meter', value: (row) => row.customerMeter },
     { key: 'station', header: 'Station', value: (row) => row.station },
     { key: 'amountMinor', header: 'Amount', value: (row) => naira(row.amountMinor) },
@@ -356,7 +366,9 @@ function syncAnimatedStats() {
     animateStat(statCustomerSuccessValueMinor, cSuccessVal);
     animateStat(statCustomerFailedCount, cFailedCnt);
 
-    animateStat(statApplications, apps.value.length);
+    animateStat(statAllVends, purchasesSummary.value?.totalCount ?? vending.value.length);
+    animateStat(statAllSuccessfulVends, purchasesSummary.value?.successCount ?? vending.value.filter((p) => ['delivered', 'completed'].includes(p.status)).length);
+    animateStat(statAllFailedVends, purchasesSummary.value?.failedCount ?? vending.value.filter((p) => p.status === 'failed').length);
     animateStat(statTotalWalletFloatMinor, totalWalletFloatMinor.value);
     animateStat(statVendorFloatMinor, vendorFloatMinor.value);
     animateStat(statCustomerFloatMinor, customerFloatMinor.value);
@@ -423,10 +435,9 @@ function adminAutoRefreshEnabled() {
 async function fetchAll() {
     const errors: string[] = [];
     
-    const [fundingRes, fundingHistRes, appsRes, vendingRes, walletRes, stationsRes, purchasesSummaryRes] = await Promise.allSettled([
+    const [fundingRes, fundingHistRes, vendingRes, walletRes, stationsRes, purchasesSummaryRes] = await Promise.allSettled([
         api.get<{ funding: FundingRequest[] }>('/api/v1/admin/funding/pending'),
         api.get<{ funding: FundingHistoryRow[] }>('/api/v1/admin/funding/history?limit=50'),
-        api.get<{ applications: Application[] }>('/api/v1/admin/vendor-applications'),
         api.get<{ purchases: Purchase[] }>('/api/v1/admin/vending'),
         api.get<WalletSummary>('/api/v1/admin/wallets/summary'),
         api.get<{ stations: any[] }>('/api/v1/admin/stations'),
@@ -437,9 +448,6 @@ async function fetchAll() {
     else errors.push('Funding queue unavailable');
 
     if (fundingHistRes.status === 'fulfilled') fundingHistory.value = fundingHistRes.value.funding;
-
-    if (appsRes.status === 'fulfilled') apps.value = appsRes.value.applications;
-    else errors.push('Applications feed unavailable');
 
     if (vendingRes.status === 'fulfilled') vending.value = vendingRes.value.purchases;
     else errors.push('Vending feed unavailable');
@@ -630,23 +638,20 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
       </router-link>
 
-      <!-- 5: Applications -->
-      <div :class="['bw-kpi', apps.length > 0 ? 'info-tone' : '']">
+      <!-- 5: Overall vending -->
+      <router-link to="/purchases" class="bw-kpi bw-kpi-link" style="text-decoration:none; color:inherit" aria-label="Open all purchases">
         <div class="bw-kpi-row">
-          <span class="bw-kpi-label">Applications</span>
+          <span class="bw-kpi-label">All Vends</span>
           <div class="bw-kpi-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="9"/></svg>
           </div>
         </div>
-        <div class="bw-kpi-value" :style="{ color: apps.length > 0 ? 'var(--info)' : 'var(--text-dim)' }">
-          {{ statApplications }}
-        </div>
+        <div class="bw-kpi-value" style="color: var(--info)">{{ statAllVends }}</div>
         <div class="bw-kpi-foot">
-          <span :class="['bw-delta', apps.length > 0 ? 'flat' : 'flat']" style="background: oklch(72% 0.13 220 / 0.12); color: var(--info)">
-            awaiting review
-          </span>
+          <span class="bw-delta up">{{ statAllSuccessfulVends }} successful</span>
+          <span :class="['bw-kpi-note', statAllFailedVends > 0 ? 'danger-text' : '']">· {{ statAllFailedVends }} failed</span>
         </div>
-      </div>
+      </router-link>
 
       <!-- 6: Total wallet float -->
       <router-link
@@ -735,7 +740,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         </div>
       </div>
     </div>
-    <div v-else class="bw-row-2">
+    <div v-else class="dashboard-queue-row">
 
       <!-- Funding queue -->
       <div class="bw-card flush">
@@ -770,43 +775,6 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
           <router-link v-if="auth.hasPermission('wallet.funding.view')" to="/funding" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
             Open queue
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </router-link>
-        </div>
-      </div>
-
-      <!-- Applications queue -->
-      <div class="bw-card flush">
-        <div class="bw-table-head-bar">
-          <div class="bw-table-heading">
-            <div class="bw-table-title-row">
-              <div class="bw-card-title">Vendor applications</div>
-              <span v-if="apps.length" class="bw-table-count">{{ apps.length }}</span>
-              <span v-else class="bw-badge success">Clear</span>
-            </div>
-            <div class="bw-card-sub">New vendor interest forms</div>
-          </div>
-        </div>
-
-        <div v-if="!apps.length && !loading" class="bw-muted" style="text-align:center; padding: var(--s-6); font-size: var(--t-sm)">
-          No new applications.
-        </div>
-
-        <div class="bw-queue" style="padding: var(--s-4) var(--s-5); gap: var(--s-2)">
-          <div v-for="a in apps.slice(0, 6)" :key="a.id" class="bw-q-row info">
-            <div class="bw-avatar indigo" style="width:38px; height:38px; border-radius: var(--r-md); font-size: 12px; flex-shrink:0">
-              {{ a.legal_name.slice(0, 2).toUpperCase() }}
-            </div>
-            <div class="bw-q-body">
-              <div class="bw-q-title">{{ a.legal_name }}</div>
-              <div class="bw-q-sub">{{ shortDate(a.created_at) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border)">
-          <router-link v-if="auth.hasPermission('wallet.vendors.review')" to="/applications" class="bw-btn" style="text-decoration:none; width:100%; justify-content:center">
-            Review all
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </router-link>
         </div>
@@ -1017,6 +985,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
           <thead>
             <tr>
               <th>Order</th>
+              <th>Vended By</th>
               <th>Customer / Meter</th>
               <th>Station</th>
               <th>Type</th>
@@ -1045,6 +1014,10 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
             <tr v-for="p in recentTransactions" :key="`recent-${p.id}`">
               <td class="bw-row-id">{{ p.reference }}</td>
               <td>
+                <div style="font-weight:600">{{ p.vendorName }}</div>
+                <div class="bw-muted" style="font-size: var(--t-xs)">{{ p.vendorBusiness }}</div>
+              </td>
+              <td>
                 <div style="font-weight:600">{{ p.customerName }}</div>
                 <div class="bw-mono bw-muted" style="font-size: var(--t-xs)">
                   {{ p.meterId || '—' }}
@@ -1069,7 +1042,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
               </td>
             </tr>
             <tr v-if="!recentTransactions.length && !loading">
-              <td colspan="8" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions match filters.</td>
+              <td colspan="9" class="bw-muted" style="text-align:center; padding: var(--s-5)">No transactions match filters.</td>
             </tr>
           </tbody>
         </table>
@@ -1095,7 +1068,8 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
         <div v-for="p in recentTransactions" :key="`recent-card-${p.id}`" class="bw-tc">
           <div class="bw-tc-top">
             <div>
-              <div class="bw-tc-vendor">{{ p.customerName }}</div>
+              <div class="bw-tc-vendor">{{ p.vendorName }}</div>
+              <div class="bw-tc-id">{{ p.vendorBusiness }}</div>
               <div class="bw-tc-id">{{ p.reference }} · {{ shortDate(p.createdAt) }}</div>
             </div>
             <div class="bw-tc-amt bw-money">{{ naira(p.amountMinor) }}</div>
@@ -1160,6 +1134,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 </template>
 
 <style scoped>
+.dashboard-queue-row { display: grid; grid-template-columns: 1fr; gap: var(--s-4); }
 .dashboard-greeting {
   margin-bottom: calc(var(--s-3) * -1);
 }

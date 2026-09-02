@@ -7,7 +7,7 @@
 import { env } from '../config/env.js';
 import { adminClient } from '../db/supabase.js';
 import { isFlagEnabled } from './feature-flags.js';
-import { sendEmail, sendBatch } from '../adapters/resend.js';
+import { isResendConfigured, sendEmail, sendBatch } from '../adapters/resend.js';
 import {
     staffInvitationEmail, roleAssignmentEmail, stationAssignmentEmail, adminAnnouncementEmail,
 } from '../emails/templates.js';
@@ -78,17 +78,28 @@ export async function notifyStationAssignment(opts: {
 export async function notifyAdminAnnouncement(
     recipients: Array<{ email?: string | null; name: string }>,
     body: { title: string; body: string },
-    onError: (error: unknown) => void,
-): Promise<void> {
-    try {
-        if (!(await flagEnabled('notifications.email.admin_announcement'))) return;
-        const emailable = recipients.filter((r) => r.email);
-        const messages = emailable.map((r) => {
-            const content = adminAnnouncementEmail({ name: r.name, title: body.title, body: body.body });
-            return { to: r.email as string, subject: content.subject, html: content.html, text: content.text, tag: 'admin-announcement' };
-        });
-        if (messages.length) await sendBatch(messages);
-    } catch (emailError) {
-        onError(emailError);
+    idempotencyKey: string,
+): Promise<{ sent: number; recipients: number; messages: Array<{ email: string; messageId: string }> }> {
+    if (!(await flagEnabled('notifications.email.admin_announcement'))) {
+        throw new Error('Announcement email delivery is disabled.');
     }
+    if (!isResendConfigured()) {
+        throw new Error('Resend email delivery is not configured.');
+    }
+    const uniqueRecipients = new Map<string, { email: string; name: string }>();
+    for (const recipient of recipients) {
+        const email = recipient.email?.trim().toLowerCase();
+        if (email && !uniqueRecipients.has(email)) uniqueRecipients.set(email, { email, name: recipient.name });
+    }
+    const messages = Array.from(uniqueRecipients.values()).map((recipient) => {
+        const content = adminAnnouncementEmail({ name: recipient.name, title: body.title, body: body.body });
+        return { to: recipient.email, subject: content.subject, html: content.html, text: content.text, tag: 'admin-announcement' };
+    });
+    if (!messages.length) throw new Error('No reachable email recipients were found.');
+    const results = await sendBatch(messages, idempotencyKey);
+    return {
+        sent: results.length,
+        recipients: messages.length,
+        messages: results.map((result, index) => ({ email: messages[index].to, messageId: result.messageId })),
+    };
 }

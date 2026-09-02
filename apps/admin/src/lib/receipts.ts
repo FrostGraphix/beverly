@@ -508,9 +508,9 @@ export function resolveTariffDetails(row: any): { tariffName: string; tariffPric
 
 export function purchaseReceipt(row: any): ReceiptModel {
     const name = row.vended_by_name || row.vended_by || row.operator_name || row.created_by_name || row.actor_name;
-    const business = row.trading_name || row.legal_name || row.business_name || row.vendor_business || row.vendor_name;
+    const business = row.vendor_business_name || row.trading_name || row.legal_name || row.business_name || row.vendor_business || row.vendor_name;
 
-    let vendedBy = 'Beverly';
+    let vendedBy = row.actor_type === 'customer' ? 'Customer Self-Vend' : 'Vendor operator';
     if (name && business && String(name).trim() !== String(business).trim()) {
         vendedBy = `${name} — ${business}`;
     } else if (name || business) {
@@ -532,15 +532,17 @@ export function purchaseReceipt(row: any): ReceiptModel {
             field('Vended By', vendedBy, { wide: true }),
             field('Meter ID', row.meter_id),
             field('Meter Type', row.meter_type || 'Prepaid Single Phase'),
-            field('Station', row.station_id || row.station_name || 'TUNGA'),
+            field('Station', row.station_id || row.station_name),
             field('Tariff', tariffName),
             field('Tariff Price', tariffPrice),
             field('Payment', row.payment_method || (row.purchase_mode === 'remote_send' ? 'Wallet & Wireless Remote' : 'Wallet Balance')),
-            field('Purchase Way', row.purchase_way || (row.purchase_mode === 'remote_send' ? 'Wireless Remote Send' : 'System Administration Vending')),
+            field('Purchase Way', row.purchase_way || (row.purchase_mode === 'remote_send'
+                ? row.actor_type === 'vendor' ? 'Vendor Portal Remote Send' : 'Customer Portal Remote Send'
+                : row.actor_type === 'vendor' ? 'Vendor Portal Vending' : 'Customer Portal Self-Vend')),
             field('Energy Value', row.energy_amount_minor != null ? money(row.energy_amount_minor) : ''),
             field(`VAT (${Number(row.vat_rate_basis_points ?? 0) / 100}%)`, row.vat_amount_minor != null ? money(row.vat_amount_minor) : ''),
             field('Units', row.units_kwh != null ? `${Number(row.units_kwh).toFixed(4)} kWh` : ''),
-            field('Wallet', row.wallet_id),
+            field('Wallet', row.wallet_name || row.vendor_business_name || row.customer_name),
             field('Failure Reason', row.failure_reason, { wide: true }),
         ],
     };

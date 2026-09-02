@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "report-lineage-reconciliation",
+      "title": "Report lineage reconciliation",
+      "queries": [
+        {
+          "id": "transaction-report-validation",
+          "source": {
+            "label": "Beverly wallet database",
+            "tables": ["purchase_orders", "wallet_report_purchase_breakdown"],
+            "metricDefinitions": [
+              {
+                "name": "Transactions",
+                "definition": "Transactions count distinct purchase orders inside the selected reporting period.",
+                "calculationSummary": "Count distinct purchase identifiers from 5 June through 2 September 2026."
+              },
+              {
+                "name": "Delivered revenue",
+                "definition": "Delivered revenue sums purchase amounts whose final status is delivered.",
+                "calculationSummary": "Sum delivered purchase amounts inside the selected reporting period."
+              },
+              {
+                "name": "Vendor breakdown",
+                "definition": "Vendor breakdown groups vendor purchases using their reporting identity and site.",
+                "calculationSummary": "Compare raw grouped purchases against the reporting function output."
+              }
+            ],
+            "filters": [
+              "Audience: Combined",
+              "Status: All transactions",
+              "Grouping: Vendor",
+              "Sites: All",
+              "Vendors: All"
+            ],
+            "caveats": [
+              "Browser-managed downloads did not expose completion events to the automation channel."
+            ],
+            "executedAt": "2026-09-02T18:40:00+01:00",
+            "evidenceFlow": [
+              {
+                "kind": "validation",
+                "title": "Uniqueness",
+                "body": "All 736 source rows had distinct purchase identifiers."
+              },
+              {
+                "kind": "validation",
+                "title": "Completeness",
+                "body": "No status, amount, station, or actor fields were missing."
+              },
+              {
+                "kind": "validation",
+                "title": "Daily reconciliation",
+                "body": "Daily totals summed to the same 736 transactions."
+              },
+              {
+                "kind": "validation",
+                "title": "Vendor reconciliation",
+                "body": "Raw vendor totals matched the reporting function exactly."
+              },
+              {
+                "kind": "validation",
+                "title": "Schema readiness",
+                "body": "All ten required announcement delivery columns were present."
+              }
+            ]
+          },
+          "reportingPeriod": "5 June–2 September 2026",
+          "capturedAt": "2026-09-02T18:40:00+01:00",
+          "preview": {
+            "kind": "aggregate",
+            "note": "Independent aggregate checks against the live reporting pipeline.",
+            "totalRows": 4
+          },
+          "columns": [
+            {"field": "check", "label": "Check"},
+            {"field": "raw", "label": "Raw result"},
+            {"field": "reported", "label": "Reported result"}
+          ],
+          "rows": [
+            {"check": "Transactions", "raw": 736, "reported": 736},
+            {"check": "Delivered", "raw": 488, "reported": 488},
+            {"check": "Failed", "raw": 121, "reported": 121},
+            {"check": "Delivered revenue", "raw": "₦910,206.00", "reported": "₦910,206.00"}
+          ]
+        }
+      ]
+    }
+  ]
+}

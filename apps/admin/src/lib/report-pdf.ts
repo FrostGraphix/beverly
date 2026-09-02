@@ -6,7 +6,7 @@ export type ReportPdfInput = {
     period: string;
     generatedBy: string;
     kpis: { label: string; value: string; note: string }[];
-    series: { date: string; revenueMinor: number; purchaseCount: number; fundingMinor: number; refundMinor: number; newCustomers: number; auditLogsCount?: number; securityEventsCount?: number }[];
+    series: { date: string; revenueMinor: number; energyRevenueMinor: number; vatMinor: number; purchaseCount: number; fundingMinor: number; refundMinor: number; newCustomers: number; newVendors: number; auditLogsCount?: number; securityEventsCount?: number }[];
     statusRows: { key: string; count: number; pct: number }[];
     actorRows: { key: string; minor: number; pct: number }[];
     stations: { station_id: string; count: number; revenueMinor: number }[];
@@ -28,9 +28,46 @@ export type ReportPdfInput = {
 };
 
 const C = {
-    ink: [18, 24, 38], muted: [91, 105, 135], green: [20, 132, 88], leaf: [112, 171, 107], mist: [238, 243, 249], line: [207, 216, 230], white: [255, 255, 255], danger: [199, 57, 57],
-    panel: [15, 23, 42], paper: [248, 250, 252], blue: [37, 99, 235], cyan: [8, 145, 178], orange: [234, 88, 12], amber: [217, 119, 6], purple: [124, 58, 237],
+    ink: [20, 31, 38], muted: [94, 112, 122], green: [34, 197, 94], leaf: [74, 222, 128], mist: [240, 245, 242], line: [210, 222, 215], white: [255, 255, 255], danger: [220, 63, 63],
+    panel: [9, 20, 26], paper: [248, 251, 249], blue: [34, 197, 94], cyan: [45, 180, 106], orange: [132, 204, 22], amber: [234, 179, 8], purple: [22, 163, 74],
 };
+
+type PdfJpeg = { bytes: Uint8Array; width: number; height: number };
+
+function encode(value: string): Uint8Array { return new TextEncoder().encode(value); }
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) { output.set(part, offset); offset += part.length; }
+    return output;
+}
+
+async function loadBrandLogo(): Promise<PdfJpeg | null> {
+    try {
+        const response = await fetch('/brand/beverly-lockup-light.png');
+        if (!response.ok) return null;
+        const bitmap = await createImageBitmap(await response.blob());
+        const maxWidth = 720;
+        const scale = Math.min(1, maxWidth / bitmap.width);
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+        context.fillStyle = '#09141a';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close();
+        const binary = atob(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+        return { bytes, width, height };
+    } catch {
+        return null;
+    }
+}
 
 function esc(value: unknown): string { return String(value ?? '').replace(/[\\()]/g, '\\$&').replace(/[^\x20-\x7E]/g, ' '); }
 function dateStamp(): string { return new Date().toISOString().slice(0, 10); }
@@ -41,7 +78,7 @@ class Pdf {
     private pages: string[][] = [];
     private page: string[] = [];
     private y = 0;
-    constructor() { this.newPage(); }
+    constructor(private readonly logo: PdfJpeg | null = null) { this.newPage(); }
     private rgb(c: number[]) { return `${c.map((x) => (x / 255).toFixed(3)).join(' ')} rg`; }
     private stroke(c: number[]) { return `${c.map((x) => (x / 255).toFixed(3)).join(' ')} RG`; }
     newPage() { if (this.page.length) this.pages.push(this.page); this.page = []; this.y = 802; }
@@ -62,13 +99,21 @@ class Pdf {
         if (!points.length) return;
         this.page.push(`${this.rgb(color)} ${points.map(([x, y], i) => `${i ? `${x} ${y} l` : `${x} ${y} m`}`).join(' ')} h f`);
     }
+    brandLogo(x: number, y: number, maxWidth: number, maxHeight: number) {
+        if (!this.logo) return false;
+        const scale = Math.min(maxWidth / this.logo.width, maxHeight / this.logo.height);
+        const width = this.logo.width * scale;
+        const height = this.logo.height * scale;
+        this.page.push(`q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Logo Do Q`);
+        return true;
+    }
     heading(title: string, kicker: string) {
         this.rect(0, 770, 595, 72, C.panel);
         this.rect(0, 770, 10, 72, C.blue);
         this.rect(10, 770, 4, 72, C.orange);
         this.text(32, 812, kicker.toUpperCase(), 8, C.cyan, true);
         this.text(32, 787, title, 20, C.white, true);
-        this.text(456, 787, 'BEVERLY BI', 9, C.white, true);
+        if (!this.brandLogo(446, 785, 112, 34)) this.text(456, 787, 'BEVERLY', 9, C.white, true);
         this.y = 742;
     }
     finish(filename: string) {
@@ -82,18 +127,41 @@ class Pdf {
                 `BT /F1 7 Tf ${this.rgb(C.muted)} 1 0 0 1 510 17 Tm (${i} / ${totalPages - 1}) Tj ET`
             );
         }
-        const body = this.pages.map((p, i) => `${p.join('\n')}\n`).join('');
-        const objects: string[] = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Count ${this.pages.length} /Kids [${this.pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ')}] >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'];
+        const imageId = this.logo ? 5 : null;
+        const firstPageId = this.logo ? 6 : 5;
+        const objects: Uint8Array[] = [
+            encode('<< /Type /Catalog /Pages 2 0 R >>'),
+            encode(`<< /Type /Pages /Count ${this.pages.length} /Kids [${this.pages.map((_, i) => `${firstPageId + i * 2} 0 R`).join(' ')}] >>`),
+            encode('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'),
+            encode('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>'),
+        ];
+        if (this.logo) {
+            objects.push(concatBytes([
+                encode(`<< /Type /XObject /Subtype /Image /Width ${this.logo.width} /Height ${this.logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${this.logo.bytes.length} >>\nstream\n`),
+                this.logo.bytes,
+                encode('\nendstream'),
+            ]));
+        }
         this.pages.forEach((p, i) => {
-            const contentId = 6 + i * 2;
-            objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentId} 0 R >>`);
-            objects.push(`<< /Length ${p.join('\n').length + 1} >>\nstream\n${p.join('\n')}\nendstream`);
+            const pageId = firstPageId + i * 2;
+            const contentId = pageId + 1;
+            const xObject = imageId ? ` /XObject << /Logo ${imageId} 0 R >>` : '';
+            const content = encode(`${p.join('\n')}\n`);
+            objects.push(encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xObject} >> /Contents ${contentId} 0 R >>`));
+            objects.push(concatBytes([encode(`<< /Length ${content.length} >>\nstream\n`), content, encode('endstream')]));
         });
-        let pdf = '%PDF-1.4\n'; const offsets = [0];
-        objects.forEach((obj, i) => { offsets.push(pdf.length); pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`; });
-        const start = pdf.length;
-        pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((o) => `${String(o).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
-        const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+        const parts: Uint8Array[] = [encode('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
+        const offsets = [0];
+        let byteLength = parts[0].length;
+        objects.forEach((object, index) => {
+            offsets.push(byteLength);
+            const wrapped = concatBytes([encode(`${index + 1} 0 obj\n`), object, encode('\nendobj\n')]);
+            parts.push(wrapped);
+            byteLength += wrapped.length;
+        });
+        const start = byteLength;
+        parts.push(encode(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`));
+        const url = URL.createObjectURL(new Blob(parts as BlobPart[], { type: 'application/pdf' }));
         const link = document.createElement('a'); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 }
@@ -144,11 +212,12 @@ function overviewPage(pdf: Pdf, input: ReportPdfInput) {
         pdf.text(x + 12, y + 54, k.label.toUpperCase(), 7, C.muted, true); pdf.text(x + 12, y + 33, k.value, 15, C.ink, true); pdf.text(x + 12, y + 16, k.note, 7, C.muted);
     });
     
-    if (input.family === 'audit') {
-        chart(pdf, input.series, 'auditLogsCount', 'Audit activity by day');
-    } else {
-        chart(pdf, input.series, input.family === 'transactions' ? 'purchaseCount' : 'revenueMinor', input.family === 'transactions' ? 'Transaction volume by day' : 'Revenue performance by day');
-    }
+    const trend: [keyof ReportPdfInput['series'][number], string] = input.family === 'audit' ? ['auditLogsCount', 'Audit activity by day']
+        : input.family === 'transactions' ? ['purchaseCount', 'Transaction volume by day']
+            : input.family === 'vendors-wallets' ? ['fundingMinor', 'Successful funding by day']
+                : input.family === 'disputes' ? ['refundMinor', 'Approved refunds by day']
+                    : ['revenueMinor', 'Delivered revenue by day'];
+    chart(pdf, input.series, trend[0], trend[1]);
     pdf.text(32, 220, 'Dashboard note', 11, C.ink, true);
     pdf.text(32, 202, 'Figures reflect approved operational records.', 9, C.muted);
 }
@@ -156,19 +225,20 @@ function overviewPage(pdf: Pdf, input: ReportPdfInput) {
 function coverPage(pdf: Pdf, input: ReportPdfInput) {
     pdf.rect(0, 0, 595, 842, C.panel); pdf.rect(0, 0, 16, 842, C.blue); pdf.rect(16, 0, 6, 842, C.orange); pdf.rect(32, 118, 531, 1, C.cyan);
     pdf.rect(420, 614, 118, 82, C.blue); pdf.rect(452, 566, 86, 34, C.orange); pdf.rect(384, 532, 154, 20, C.green);
-    pdf.text(48, 748, 'BEVERLY ANALYTICS', 10, C.cyan, true); pdf.text(48, 684, input.title, 34, C.white, true); pdf.text(48, 648, 'Operational BI report', 15, C.white);
+    if (!pdf.brandLogo(48, 730, 148, 46)) pdf.text(48, 748, 'BEVERLY', 10, C.cyan, true); pdf.text(48, 684, input.title, 34, C.white, true); pdf.text(48, 648, 'Operational BI report', 15, C.white);
     pdf.text(48, 568, input.period, 11, C.white); pdf.text(48, 540, `Generated ${dateStamp()}`, 9, C.leaf);
     pdf.text(48, 146, 'Prepared for internal decision-making.', 10, C.white); pdf.text(48, 130, `Source: ${input.generatedBy}`, 8, C.cyan);
 }
 
 function insightsPage(pdf: Pdf, input: ReportPdfInput) {
     pdf.newPage(); pdf.heading(input.title, 'Observability board');
-    if (input.family === 'audit') {
-        chart(pdf, input.series, 'securityEventsCount', 'Security alerts activity');
-    } else {
+    if (input.family === 'audit') chart(pdf, input.series, 'securityEventsCount', 'Security events by day');
+    else if (input.family === 'transactions' || input.family === 'general') {
         lineChart(pdf, input.series);
-    }
-    pieChart(pdf, input.statusRows);
+        pieChart(pdf, input.statusRows);
+    } else if (input.family === 'vendors-wallets') chart(pdf, input.series, 'fundingMinor', 'Successful funding by day');
+    else if (input.family === 'disputes') chart(pdf, input.series, 'refundMinor', 'Approved refunds by day');
+    else chart(pdf, input.series, 'revenueMinor', 'Delivered revenue by day');
     pdf.text(32, 215, 'Decision notes', 12, C.ink, true);
     input.insights.slice(0, 4).forEach((insight, index) => { const y = 186 - index * 30; pdf.rect(32, y - 3, 8, 8, [C.blue, C.orange, C.green, C.purple][index]); pdf.text(52, y - 1, insight, 8, C.ink); });
     pdf.text(32, 58, 'Review exceptions before settlement approval.', 8, C.muted);
@@ -200,6 +270,12 @@ function tablePage(pdf: Pdf, input: ReportPdfInput) {
             pdf.rect(195, y - 4, Math.max(2, 235 * r.pct / 100), 8, r.severity === 'critical' || r.severity === 'high' ? C.danger : C.blue);
             pdf.text(448, y, `${number(r.count)} alerts`, 9, C.ink, true);
         });
+    } else if (input.family === 'disputes') {
+        pdf.heading(input.title, 'Case outcomes');
+        pdf.text(32, 716, 'Disputes by status', 12, C.ink, true);
+        (input.disputeRows || []).slice(0, 8).forEach((r, i) => meterRow(pdf, 682 - i * 34, r.key, `${number(r.count)} cases`, r.pct));
+        pdf.text(32, 370, 'Refund requests by status', 12, C.ink, true);
+        (input.refundRows || []).slice(0, 8).forEach((r, i) => meterRow(pdf, 336 - i * 34, r.key, `${number(r.count)} requests`, r.pct));
     } else {
         pdf.heading(input.title, 'Performance matrix');
         const rows = input.entityBreakdowns.slice(0, 12); const headerY = 690;
@@ -216,9 +292,7 @@ function tablePage(pdf: Pdf, input: ReportPdfInput) {
             pdf.text(465, y, input.money(row.revenueMinor), 8, C.blue, true);
         });
         const statsY = 285;
-        const section = input.family === 'disputes'
-            ? { title: 'Disputes by status', rows: (input.disputeRows || []).map((r) => ({ label: r.key, value: `${number(r.count)} cases`, pct: r.pct })) }
-            : input.family === 'vendors-wallets'
+        const section = input.family === 'vendors-wallets'
                 ? { title: 'Funding by channel', rows: (input.fundingRows || []).map((r) => ({ label: r.key, value: input.money(r.minor), pct: r.pct })) }
                 : input.family === 'financial'
                     ? { title: 'Settlement states', rows: (input.settlementRows || []).map((r) => ({ label: r.key, value: `${number(r.count)} batches`, pct: r.pct })) }
@@ -243,6 +317,22 @@ function dataPage(pdf: Pdf, input: ReportPdfInput) {
                 pdf.text(xs[j], y, String(v), 8, j === 2 && security > 0 ? C.danger : C.ink, j === 2 && security > 0);
             });
         });
+    } else if (input.family === 'financial') {
+        const heads = ['Date', 'Revenue', 'Energy', 'VAT', 'Funding', 'Refunds']; const xs = [32, 112, 210, 302, 380, 472];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.revenueMinor), input.money(r.energyRevenueMinor), input.money(r.vatMinor), input.money(r.fundingMinor), input.money(r.refundMinor)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.green : C.ink, j === 1)); });
+    } else if (input.family === 'transactions') {
+        const heads = ['Date', 'Transactions', 'Revenue']; const xs = [32, 220, 405];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, number(r.purchaseCount), input.money(r.revenueMinor)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 2 ? C.green : C.ink, j === 2)); });
+    } else if (input.family === 'vendors-wallets') {
+        const heads = ['Date', 'Funding', 'Revenue', 'New vendors']; const xs = [32, 175, 320, 470];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.fundingMinor), input.money(r.revenueMinor), number(r.newVendors)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.green : C.ink, j === 1)); });
+    } else if (input.family === 'disputes') {
+        const heads = ['Date', 'Approved refunds', 'Purchases']; const xs = [32, 200, 430];
+        heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
+        input.series.slice(-18).forEach((r, i) => { const y = 662 - i * 27; if (i % 2 === 0) pdf.rect(32, y - 9, 531, 23, C.mist); [r.date, input.money(r.refundMinor), number(r.purchaseCount)].forEach((v, j) => pdf.text(xs[j], y, v, 8, j === 1 ? C.danger : C.ink, j === 1)); });
     } else {
         const heads = ['Date', 'Revenue', 'Purchases', 'Funding', 'Refunds', 'New customers']; const xs = [32, 112, 215, 292, 385, 475];
         heads.forEach((h, i) => pdf.text(xs[i], 692, h.toUpperCase(), 7, C.muted, true)); pdf.line(32, 682, 563, 682);
@@ -263,7 +353,7 @@ function sourcesPage(pdf: Pdf, input: ReportPdfInput) {
     pdf.text(32, 82, 'No estimated fields are used in this PDF.', 9, C.muted);
 }
 
-export function downloadReportPdf(input: ReportPdfInput) {
-    const pdf = new Pdf(); coverPage(pdf, input); pdf.newPage(); overviewPage(pdf, input); insightsPage(pdf, input); tablePage(pdf, input); dataPage(pdf, input); sourcesPage(pdf, input);
+export async function downloadReportPdf(input: ReportPdfInput) {
+    const pdf = new Pdf(await loadBrandLogo()); coverPage(pdf, input); pdf.newPage(); overviewPage(pdf, input); insightsPage(pdf, input); tablePage(pdf, input); dataPage(pdf, input); sourcesPage(pdf, input);
     pdf.finish(`beverly-${input.family}-report-${dateStamp()}.pdf`);
 }

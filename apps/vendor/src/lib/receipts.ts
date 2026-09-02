@@ -292,7 +292,7 @@ function resolveVendedBy(row: any): string {
     return row.vended_by;
   }
   const name = row.vended_by_name || row.operator_name || row.created_by_name || row.actor_name;
-  const business = row.trading_name || row.legal_name || row.business_name || row.vendor_business || row.vendor_name || row.organization_name;
+  const business = row.vendor_business_name || row.trading_name || row.legal_name || row.business_name || row.vendor_business || row.vendor_name || row.organization_name;
   const station = row.station_id || row.station_name || row.station || row.site || '';
 
   if (name && business && String(name).trim() !== String(business).trim()) {
@@ -344,7 +344,7 @@ export function purchaseReceipt(row: any): ReceiptModel {
       field('Vended By', vendedBy, { wide: true }),
       field('Meter ID', row.meter_id),
       field('Meter Type', row.meter_type || 'Prepaid Single Phase'),
-      field('Station', row.station_id || row.station_name || 'TUNGA'),
+      field('Station', row.station_id || row.station_name),
       field('Tariff', tariffName),
       field('Tariff Price', tariffPrice),
       field('Payment', row.payment_method || (row.mode === 'remote_send' ? 'Wallet & Wireless Remote' : 'Wallet Balance')),

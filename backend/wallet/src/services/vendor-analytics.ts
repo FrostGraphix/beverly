@@ -210,3 +210,58 @@ export async function getVendorAnalytics(
 
     return buildVendorAnalytics({ period, vendors, orders, funding, wallets, balances });
 }
+
+export async function getSingleVendorAnalytics(vendorId: string, period: VendorAnalyticsPeriod) {
+    const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : null;
+    const since = days ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
+    const orders = await fetchAllRows<any>(() => {
+        let query = adminClient.from('purchase_orders')
+            .select('id, station_id, meter_id, amount_minor, units_kwh, purchase_mode, status, created_at')
+            .eq('actor_type', 'vendor').eq('actor_id', vendorId)
+            .order('created_at', { ascending: true });
+        if (since) query = query.gte('created_at', since);
+        return query;
+    });
+    const delivered = orders.filter((row) => row.status === 'delivered');
+    const failed = orders.filter((row) => row.status === 'failed');
+    const totalAmount = delivered.reduce((sum, row) => sum + Number(row.amount_minor ?? 0), 0);
+    const totalUnits = delivered.reduce((sum, row) => sum + Number(row.units_kwh ?? 0), 0);
+    const dailyMap = new Map<string, { date: string; count: number; delivered: number; failed: number; amount_minor: number }>();
+    const modeMap = new Map<string, { count: number; amount_minor: number }>();
+    const stationMap = new Map<string, { station_id: string; count: number; amount_minor: number }>();
+    const meterMap = new Map<string, { meter_id: string; count: number; amount_minor: number }>();
+    for (const order of orders) {
+        const date = String(order.created_at).slice(0, 10);
+        const daily = dailyMap.get(date) ?? { date, count: 0, delivered: 0, failed: 0, amount_minor: 0 };
+        daily.count += 1;
+        if (order.status === 'delivered') { daily.delivered += 1; daily.amount_minor += Number(order.amount_minor ?? 0); }
+        if (order.status === 'failed') daily.failed += 1;
+        dailyMap.set(date, daily);
+        const mode = String(order.purchase_mode ?? 'wallet');
+        const modeRow = modeMap.get(mode) ?? { count: 0, amount_minor: 0 };
+        modeRow.count += 1; if (order.status === 'delivered') modeRow.amount_minor += Number(order.amount_minor ?? 0); modeMap.set(mode, modeRow);
+        const stationId = String(order.station_id ?? 'UNKNOWN');
+        const stationRow = stationMap.get(stationId) ?? { station_id: stationId, count: 0, amount_minor: 0 };
+        stationRow.count += 1; if (order.status === 'delivered') stationRow.amount_minor += Number(order.amount_minor ?? 0); stationMap.set(stationId, stationRow);
+        const meterId = String(order.meter_id ?? 'UNKNOWN');
+        const meterRow = meterMap.get(meterId) ?? { meter_id: meterId, count: 0, amount_minor: 0 };
+        meterRow.count += 1; if (order.status === 'delivered') meterRow.amount_minor += Number(order.amount_minor ?? 0); meterMap.set(meterId, meterRow);
+    }
+    return {
+        period,
+        generated_at: new Date().toISOString(),
+        summary: {
+            total: orders.length,
+            delivered: delivered.length,
+            failed: failed.length,
+            total_amount_minor: totalAmount,
+            avg_amount_minor: delivered.length ? Math.round(totalAmount / delivered.length) : 0,
+            total_units_kwh: totalUnits,
+            success_rate: delivered.length + failed.length ? Math.round((delivered.length * 10_000) / (delivered.length + failed.length)) / 100 : 0,
+        },
+        daily: [...dailyMap.values()],
+        by_mode: Object.fromEntries(modeMap),
+        top_stations: [...stationMap.values()].sort((a, b) => b.amount_minor - a.amount_minor).slice(0, 10),
+        top_meters: [...meterMap.values()].sort((a, b) => b.amount_minor - a.amount_minor).slice(0, 10),
+    };
+}

@@ -279,7 +279,7 @@ async function vendorPurchaseImpl(input: VendorPurchaseInput): Promise<VendorPur
             ledgerEntryId = ledgerEntry.id;
 
             const [{ data: vendorUser }, { data: vendorOrg }] = await Promise.all([
-                Promise.resolve(adminClient.from('vendor_users').select('full_name').eq('id', input.vendorUserId).maybeSingle()).catch(() => ({ data: null })),
+                Promise.resolve(adminClient.from('vendor_users').select('full_name').eq('auth_user_id', input.vendorUserId).maybeSingle()).catch(() => ({ data: null })),
                 Promise.resolve(adminClient.from('vendor_organizations').select('legal_name, trading_name, station_id').eq('id', input.vendorOrganizationId).maybeSingle()).catch(() => ({ data: null })),
             ]);
 

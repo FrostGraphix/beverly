@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppShell from '../components/AppShell.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import MobileActionMenu from '../components/MobileActionMenu.vue';
 import { api, shortDate } from '../lib/api';
 import { useStaffAuthStore } from '../stores/auth';
-import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
 
 interface Application {
@@ -31,6 +33,21 @@ const deleteOpen = ref(false);
 const deleteTarget = ref<Application | null>(null);
 const error = ref('');
 const status = ref<'submitted' | 'contacted' | 'rejected' | 'converted'>('submitted');
+const search = ref('');
+const viewMode = ref<'table' | 'list'>('table');
+const currentPage = ref(1);
+const pageSize = ref(10);
+const updatingId = ref<string | null>(null);
+const filteredApps = computed(() => {
+    const query = search.value.trim().toLowerCase();
+    if (!query) return apps.value;
+    return apps.value.filter((item) => [item.legal_name, item.contact_name, item.contact_email, item.contact_phone, item.business_type, ...(item.operating_stations ?? [])]
+        .some((value) => String(value ?? '').toLowerCase().includes(query)));
+});
+const paginatedApps = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return filteredApps.value.slice(start, start + pageSize.value);
+});
 const applicationExportColumns: WalletExportColumn<Application>[] = [
     { key: 'created_at', header: 'Submitted', value: (item) => shortDate(item.created_at) },
     { key: 'legal_name', header: 'Business', value: (item) => item.legal_name },
@@ -88,23 +105,43 @@ async function deleteApplication() {
     }
 }
 
+async function updateApplicationStatus(app: Application, next: Application['status']) {
+    updatingId.value = app.id;
+    error.value = '';
+    try {
+        await api.patch(`/api/v1/admin/vendor-applications/${encodeURIComponent(app.id)}/status`, { status: next });
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : 'Could not update application.';
+    } finally { updatingId.value = null; }
+}
+
 onMounted(load);
 </script>
 
 <template>
   <AppShell title="Vendor Applications">
-    <div class="bw-card" style="padding: 0">
+    <div class="bw-card applications-card" :data-view="viewMode" style="padding: 0">
       <div class="bw-table-head-bar">
-        <h2 class="bw-h2" style="margin: 0">Public interest submissions</h2>
-        <span class="bw-spacer"></span>
-        <WalletExportMenu
-          :rows="apps"
+        <div><h2 class="bw-h2" style="margin: 0">Public interest submissions</h2><p class="bw-muted app-subtitle">Review, contact, convert, export.</p></div>
+        <div class="applications-toolbar">
+        <WalletExportWizard
+          :rows="filteredApps"
           :columns="applicationExportColumns"
           filename="beverly-admin-vendor-applications"
           title="Vendor Applications"
           :subtitle="`${status} applications`"
           :loading="loading"
+          :status-options="[{ value: 'submitted', label: 'Submitted' }, { value: 'contacted', label: 'Contacted' }, { value: 'rejected', label: 'Rejected' }, { value: 'converted', label: 'Converted' }]"
+          :initial-status="status"
+          :date-value="(row: Application) => row.created_at"
+          :status-value="(row: Application) => row.status"
         />
+        <WalletDataViewSwitch v-model="viewMode" label="Application display view" />
+        </div>
+      </div>
+      <div class="applications-filters">
+        <input v-model="search" class="bw-input" placeholder="Search business or contact" aria-label="Search applications" @input="currentPage = 1" />
         <div class="bw-row" style="gap: 2px">
           <button
             v-for="s in (['submitted','contacted','rejected','converted'] as const)"
@@ -134,7 +171,7 @@ onMounted(load);
             </tr>
           </thead>
           <tbody>
-            <tr v-for="a in apps" :key="a.id">
+            <tr v-for="a in paginatedApps" :key="a.id">
               <td class="bw-mono bw-muted">{{ shortDate(a.created_at) }}</td>
               <td><strong>{{ a.legal_name }}</strong></td>
               <td>
@@ -145,13 +182,17 @@ onMounted(load);
               <td>{{ a.operating_stations?.join(', ') || '—' }}</td>
               <td class="actions-col">
                 <div class="app-actions">
-                  <button v-if="status === 'submitted'" class="bw-btn sm primary" @click="convertToVendor(a)">Approve</button>
+                  <button v-if="status === 'submitted'" class="bw-btn sm" :disabled="updatingId === a.id" @click="updateApplicationStatus(a, 'contacted')">Contacted</button>
+                  <button v-if="status === 'submitted' || status === 'contacted'" class="bw-btn sm primary" @click="convertToVendor(a)">Convert</button>
+                  <button v-if="status !== 'rejected' && status !== 'converted'" class="bw-btn sm danger" :disabled="updatingId === a.id" @click="updateApplicationStatus(a, 'rejected')">Reject</button>
                   <button v-if="auth.hasPermission('wallet.vendors.manage')" class="bw-btn sm danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
                     {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
                   </button>
                 </div>
                 <MobileActionMenu label="Application actions">
-                  <button v-if="status === 'submitted'" class="mobile-action-item primary" @click="convertToVendor(a)">Approve</button>
+                  <button v-if="status === 'submitted'" class="mobile-action-item" @click="updateApplicationStatus(a, 'contacted')">Mark contacted</button>
+                  <button v-if="status === 'submitted' || status === 'contacted'" class="mobile-action-item primary" @click="convertToVendor(a)">Convert</button>
+                  <button v-if="status !== 'rejected' && status !== 'converted'" class="mobile-action-item danger" @click="updateApplicationStatus(a, 'rejected')">Reject</button>
                   <button v-if="auth.hasPermission('wallet.vendors.manage')" class="mobile-action-item danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
                     {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
                   </button>
@@ -165,7 +206,7 @@ onMounted(load);
         </table>
       </div>
       <div class="bw-t-cards">
-        <div v-for="a in apps" :key="`app-card-${a.id}`" class="bw-tc">
+        <div v-for="a in paginatedApps" :key="`app-card-${a.id}`" class="bw-tc">
           <div class="bw-tc-top">
             <div>
               <div class="bw-tc-vendor">{{ a.legal_name }}</div>
@@ -185,7 +226,9 @@ onMounted(load);
             </div>
           </div>
           <div class="bw-row" style="gap: 6px; margin-top: 4px;">
-            <button v-if="status === 'submitted'" class="bw-btn sm primary" @click="convertToVendor(a)">Approve</button>
+            <button v-if="status === 'submitted'" class="bw-btn sm" @click="updateApplicationStatus(a, 'contacted')">Contacted</button>
+            <button v-if="status === 'submitted' || status === 'contacted'" class="bw-btn sm primary" @click="convertToVendor(a)">Convert</button>
+            <button v-if="status !== 'rejected' && status !== 'converted'" class="bw-btn sm danger" @click="updateApplicationStatus(a, 'rejected')">Reject</button>
             <button v-if="auth.hasPermission('wallet.vendors.manage')" class="bw-btn sm danger" :disabled="deletingId === a.id" @click="askDeleteApplication(a)">
               {{ deletingId === a.id ? 'Deleting...' : 'Delete' }}
             </button>
@@ -193,6 +236,7 @@ onMounted(load);
         </div>
         <div v-if="!apps.length && !loading" class="bw-muted" style="text-align: center; padding: var(--s-6)">Queue clear.</div>
       </div>
+      <WalletTablePagination v-model:page="currentPage" v-model:pageSize="pageSize" :total-items="filteredApps.length" item-label="applications" :loading="loading" />
     </div>
 
     <ConfirmDialog
@@ -219,8 +263,16 @@ onMounted(load);
   gap: var(--s-2);
   justify-content: flex-end;
 }
+.app-subtitle { margin:4px 0 0; font-size:var(--t-xs); }
+.applications-toolbar, .applications-filters { display:flex; align-items:center; gap:var(--s-2); flex-wrap:wrap; }
+.applications-filters { justify-content:space-between; padding:var(--s-3) var(--s-4); border-bottom:1px solid var(--border); background:var(--surface-2); }
+.applications-filters .bw-input { width:min(320px, 100%); }
 
 @media (max-width: 720px) {
+  .applications-toolbar { width:100%; justify-content:space-between; }
+  .applications-filters { align-items:stretch; }
+  .applications-filters .bw-input, .applications-filters .bw-row { width:100%; }
+  .applications-filters .bw-row { overflow-x:auto; flex-wrap:nowrap; padding-bottom:3px; }
   .actions-col {
     min-width: 72px;
     position: sticky;

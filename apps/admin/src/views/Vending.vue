@@ -4,8 +4,10 @@ import AppShell from '../components/AppShell.vue';
 import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import WalletRowActions from '@beverly/tokens/WalletRowActions.vue';
 import type { ActionItem } from '@beverly/tokens/WalletRowActions.vue';
-import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
+import WalletExportWizard from '@beverly/tokens/WalletExportWizard.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
+import type { WalletExportSelection } from '@beverly/tokens/wallet-export-wizard';
 import { api, naira, shortDate } from '../lib/api';
 import { printReceipt, purchaseReceipt, viewReceipt } from '../lib/receipts';
 import { useStaffAuthStore } from '../stores/auth';
@@ -28,6 +30,12 @@ interface Purchase {
     created_at: string;
     failure_reason: string | null;
     token?: string | null;
+    actor_type?: string;
+    vended_by?: string | null;
+    vended_by_name?: string | null;
+    vendor_business_name?: string | null;
+    wallet_name?: string | null;
+    purchase_way?: string | null;
 }
 
 interface Station { stationId: string; name: string; }
@@ -59,6 +67,12 @@ const error      = ref('');
 const nextCursor = ref<string | null>(null);
 const loadingMore = ref(false);
 const cardView = ref<'table' | 'list'>('table');
+const currentPage = ref(1);
+const pageSize = ref(10);
+const paginatedItems = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return items.value.slice(start, start + pageSize.value);
+});
 const recoveryItems = ref<RecoveryPayment[]>([]);
 const recoveryLoading = ref(false);
 const retryingId = ref<string | null>(null);
@@ -67,16 +81,33 @@ const canRetryRecovery = computed(() => auth.hasPermission('wallet.funding.appro
 const activeFilterCount = computed(() => [q.value.trim(), status.value, station.value, meterType.value].filter(Boolean).length);
 const vendingExportColumns: WalletExportColumn<Purchase>[] = [
     { key: 'created_at', header: 'When', value: (purchase) => shortDate(purchase.created_at) },
+    { key: 'vended_by', header: 'Vendor Name', value: (purchase) => purchase.vended_by_name || purchase.vended_by || '' },
+    { key: 'vendor_business_name', header: 'Vendor Business', value: (purchase) => purchase.vendor_business_name || '' },
     { key: 'customer_name', header: 'Customer', value: (purchase) => purchase.customer_name || '' },
     { key: 'meter_id', header: 'Meter', value: (purchase) => purchase.meter_id },
     { key: 'meter_type', header: 'Phase', value: (purchase) => meterTypeLabel(purchase.meter_type) },
     { key: 'station_id', header: 'Station', value: (purchase) => purchase.station_id || '' },
     { key: 'purchase_mode', header: 'Mode', value: (purchase) => purchase.purchase_mode },
+    { key: 'purchase_way', header: 'Purchase Way', value: (purchase) => purchase.purchase_way || purchase.purchase_mode },
+    { key: 'wallet_name', header: 'Wallet', value: (purchase) => purchase.wallet_name || '' },
     { key: 'amount_minor', header: 'Amount', value: (purchase) => naira(purchase.amount_minor) },
     { key: 'vat_amount_minor', header: 'VAT', value: (purchase) => naira(purchase.vat_amount_minor || 0) },
     { key: 'status', header: 'Status', value: (purchase) => statusLabel(purchase) },
     { key: 'token', header: 'Token', value: (purchase) => purchase.token || '' },
 ];
+const vendingStatusOptions = [
+    { value: 'delivered', label: 'Successful transactions' },
+    { value: 'failed', label: 'Failed transactions' },
+    { value: 'dispatching', label: 'Dispatching' },
+    { value: 'hold_active', label: 'Hold active' },
+    { value: 'delivery_pending_review', label: 'Pending review' },
+    { value: 'reversed', label: 'Reversed' },
+];
+const vendingActorOptions = computed(() => {
+    const seen = new Map<string, string>();
+    for (const item of items.value) if (item.actor_id) seen.set(item.actor_id, item.vended_by || item.customer_name || item.actor_id);
+    return [...seen].map(([value, label]) => ({ value, label }));
+});
 const PAGE = 100;
 const POLL_INTERVAL_MS = 5_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -134,6 +165,7 @@ async function load() {
     loading.value = true;
     error.value = '';
     nextCursor.value = null;
+    currentPage.value = 1;
     try {
         const r = await api.get<{ purchases: Purchase[]; nextCursor: string | null }>(
             `/api/v1/admin/purchases?${buildParams()}`
@@ -170,6 +202,26 @@ function clearFilters() {
     station.value = '';
     meterType.value = '';
     void load();
+}
+
+async function resolveVendingExportRows(selection: WalletExportSelection): Promise<Purchase[]> {
+    const result: Purchase[] = [];
+    let next: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+        const params = new URLSearchParams();
+        params.set('limit', '500');
+        if (selection.status) params.set('status', selection.status);
+        if (selection.station) params.set('station', selection.station);
+        if (selection.actor) params.set('actorId', selection.actor);
+        if (selection.since) params.set('since', new Date(`${selection.since}T00:00:00`).toISOString());
+        if (selection.until) params.set('until', new Date(`${selection.until}T23:59:59.999`).toISOString());
+        if (next) params.set('cursor', next);
+        const response = await api.get<{ purchases: Purchase[]; nextCursor: string | null }>(`/api/v1/admin/purchases?${params}`);
+        result.push(...(response.purchases ?? []));
+        next = response.nextCursor;
+        if (!next) break;
+    }
+    return result;
 }
 
 async function loadRecovery(isSilent = false) {
@@ -359,13 +411,23 @@ onUnmounted(() => {
       <div class="vending-layout-bar">
         <span>Purchase results</span>
         <div class="vending-toolbar-actions">
-          <WalletExportMenu
+          <WalletExportWizard
             :rows="items"
             :columns="vendingExportColumns"
             filename="beverly-admin-vending"
             title="Vending Monitor"
-            subtitle="Filtered purchase results"
+            subtitle="Choose exact vending contents."
             :loading="loading"
+            :status-options="vendingStatusOptions"
+            :station-options="stations.map(item => ({ value: item.stationId, label: `${item.name || item.stationId} · ${item.stationId}` }))"
+            :actor-options="vendingActorOptions"
+            :initial-status="status"
+            :initial-station="station"
+            :date-value="(row: Purchase) => row.created_at"
+            :status-value="(row: Purchase) => row.status"
+            :station-value="(row: Purchase) => row.station_id"
+            :actor-value="(row: Purchase) => row.actor_id"
+            :resolve-rows="resolveVendingExportRows"
           />
           <button
             type="button"
@@ -416,7 +478,7 @@ onUnmounted(() => {
           <thead>
             <tr>
               <th>When</th>
-              <th>Vendor</th>
+              <th>Vended By</th>
               <th>Customer</th>
               <th>Meter</th>
               <th>Phase</th>
@@ -434,9 +496,9 @@ onUnmounted(() => {
                 <div class="bw-spinner" style="margin: auto" />
               </td>
             </tr>
-            <tr v-for="p in items" :key="p.id">
+            <tr v-for="p in paginatedItems" :key="p.id">
               <td class="bw-mono bw-muted" style="font-size: var(--t-xs); white-space:nowrap">{{ shortDate(p.created_at) }}</td>
-              <td class="bw-mono" style="font-size: var(--t-xs)">#{{ p.actor_id.slice(0, 8) }}</td>
+              <td><div>{{ p.vended_by_name || (p.actor_type === 'customer' ? p.customer_name : '—') }}</div><span class="bw-muted" style="font-size:10px">{{ p.vendor_business_name || (p.actor_type === 'customer' ? 'Customer self-vend' : '—') }}</span></td>
               <td>{{ p.customer_name || '—' }}</td>
               <td class="bw-mono">{{ p.meter_id }}</td>
               <td>
@@ -468,11 +530,12 @@ onUnmounted(() => {
 
       <!-- Mobile cards -->
       <div class="bw-t-cards">
-        <div v-for="p in items" :key="p.id" class="bw-tc">
+        <div v-for="p in paginatedItems" :key="p.id" class="bw-tc">
           <div class="bw-tc-top">
             <div>
-              <div class="bw-tc-vendor bw-mono">{{ p.meter_id }}</div>
-              <div class="bw-tc-id bw-mono">#{{ p.actor_id.slice(0, 8) }} · {{ shortDate(p.created_at) }}</div>
+              <div class="bw-tc-vendor">{{ p.vended_by_name || (p.actor_type === 'customer' ? p.customer_name : 'Vendor operator') }}</div>
+              <div class="bw-tc-id">{{ p.vendor_business_name || (p.actor_type === 'customer' ? 'Customer self-vend' : '—') }}</div>
+              <div class="bw-tc-id bw-mono">{{ p.meter_id }} · {{ shortDate(p.created_at) }}</div>
             </div>
             <div class="bw-tc-amt bw-money">{{ naira(p.amount_minor) }}</div>
             <div class="bw-muted" style="font-size: var(--t-xs)">VAT {{ naira(p.vat_amount_minor ?? 0) }}</div>
@@ -509,6 +572,14 @@ onUnmounted(() => {
           No purchases match your filters.
         </div>
       </div>
+
+      <WalletTablePagination
+        v-model:page="currentPage"
+        v-model:pageSize="pageSize"
+        :total-items="items.length"
+        item-label="purchases"
+        :loading="loading"
+      />
 
       <!-- Load more -->
       <div v-if="nextCursor" style="padding: var(--s-3) var(--s-5); border-top: 1px solid var(--border); display:flex; justify-content:center">
@@ -624,7 +695,20 @@ onUnmounted(() => {
     overflow: hidden;
   }
 
-  .vending-layout-bar { align-items: center; }
+  .vending-layout-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    padding: var(--s-3);
+  }
+  .vending-toolbar-actions {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px minmax(124px, auto);
+  }
+  .vending-toolbar-actions > * { min-width: 0; }
+  .vending-toolbar-actions :deep(.bw-btn) { min-height: 42px; }
   .vending-filter-panel { grid-template-columns: 1fr; }
   .vending-filter-button span:not(.filter-count) { display: none; }
 

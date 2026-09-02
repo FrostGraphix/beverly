@@ -1030,6 +1030,12 @@ const route: FastifyPluginAsync = async (fastify) => {
 
     // ── funding: initiate Paystack ──
     fastify.post('/funding/paystack', { preHandler: fastify.requireVendor() }, async (req, reply) => {
+        if (!env.PAYSTACK_PAYMENTS_ENABLED) {
+            return reply.code(503).send({
+                error: 'paystack_temporarily_unavailable',
+                message: 'Paystack is temporarily unavailable. Kindly use bank transfer.',
+            });
+        }
         const orgId = req.actor!.vendorOrganizationId!;
         const idempotencyKey = requireIdempotencyKey(req, reply);
         if (!idempotencyKey) return;

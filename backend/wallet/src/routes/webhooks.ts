@@ -14,6 +14,29 @@ import { verifyWebhookSignature } from '../adapters/paystack.js';
 import { processPaystackChargeSuccess } from '../services/payment-webhooks.js';
 import { encryptSecret } from '../services/totp.js';
 import { logAction } from '../services/audit.js';
+import { env } from '../config/env.js';
+
+function verifyResendSignature(raw: string, headers: Record<string, string | string[] | undefined>): boolean {
+    const secret = env.RESEND_WEBHOOK_SECRET?.trim();
+    const id = String(headers['svix-id'] ?? '');
+    const timestamp = String(headers['svix-timestamp'] ?? '');
+    const signatureHeader = String(headers['svix-signature'] ?? '');
+    if (!secret || !id || !timestamp || !signatureHeader) return false;
+    const timestampSeconds = Number(timestamp);
+    if (!Number.isFinite(timestampSeconds) || Math.abs(Date.now() / 1000 - timestampSeconds) > 300) return false;
+    try {
+        const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+        const expected = crypto.createHmac('sha256', key).update(`${id}.${timestamp}.${raw}`).digest();
+        return signatureHeader.split(' ').some((entry) => {
+            const [version, encoded] = entry.split(',');
+            if (version !== 'v1' || !encoded) return false;
+            const supplied = Buffer.from(encoded, 'base64');
+            return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+        });
+    } catch {
+        return false;
+    }
+}
 
 const route: FastifyPluginAsync = async (fastify) => {
     // Need raw body for signature verification.
@@ -93,14 +116,62 @@ const route: FastifyPluginAsync = async (fastify) => {
         }
     });
 
-    fastify.post('/resend', async (req) => {
-        const payload = req.body as { type?: string; data?: any };
+    fastify.post('/resend', async (req, reply) => {
+        const payload = req.body as { type?: string; data?: any; __raw?: string };
+        const raw = payload.__raw ?? '';
+        if (!verifyResendSignature(raw, req.headers)) {
+            return reply.code(401).send({ error: 'bad_signature' });
+        }
         const eventType = payload.type ?? 'unknown';
         const emailData = payload.data ?? {};
+        const messageId = String(emailData.email_id ?? emailData.id ?? '');
         const recipient = Array.isArray(emailData.to) ? emailData.to.join(',') : (emailData.to ?? 'unknown');
         const subject = emailData.subject ?? 'N/A';
 
-        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.delivery_delayed') {
+        const statusByEvent: Record<string, string> = {
+            'email.sent': 'sent',
+            'email.delivered': 'delivered',
+            'email.delivery_delayed': 'delayed',
+            'email.bounced': 'failed',
+            'email.complained': 'failed',
+            'email.suppressed': 'failed',
+        };
+        const deliveryStatus = statusByEvent[eventType];
+        if (messageId && deliveryStatus) {
+            const now = new Date().toISOString();
+            const update: Record<string, unknown> = { email_status: deliveryStatus };
+            if (deliveryStatus === 'delivered') update.email_delivered_at = now;
+            if (deliveryStatus === 'failed') update.email_failed_at = now;
+            const { data: updated, error: updateError } = await adminClient
+                .from('admin_announcement_deliveries')
+                .update(update)
+                .eq('email_message_id', messageId)
+                .select('announcement_id');
+            if (updateError) throw updateError;
+            const announcementId = updated?.[0]?.announcement_id;
+            if (announcementId) {
+                const { data: deliveryRows, error: deliveryError } = await adminClient
+                    .from('admin_announcement_deliveries')
+                    .select('email_message_id,email_status')
+                    .eq('announcement_id', announcementId)
+                    .not('email_message_id', 'is', null)
+                    .limit(10_000);
+                if (deliveryError) throw deliveryError;
+                const states = new Map<string, string>();
+                for (const row of deliveryRows ?? []) states.set(row.email_message_id, row.email_status);
+                const failed = Array.from(states.values()).filter((status) => status === 'failed').length;
+                const sent = states.size - failed;
+                const status = failed === 0 ? 'sent' : sent === 0 ? 'failed' : 'partial';
+                const { error: summaryError } = await adminClient.from('admin_announcements').update({
+                    email_sent_count: sent,
+                    email_failed_count: failed,
+                    delivery_status: status,
+                }).eq('id', announcementId);
+                if (summaryError) throw summaryError;
+            }
+        }
+
+        if (eventType === 'email.bounced' || eventType === 'email.complained' || eventType === 'email.suppressed' || eventType === 'email.delivery_delayed') {
             await logAction({
                 actorUserId: 'system',
                 actorType: 'system',

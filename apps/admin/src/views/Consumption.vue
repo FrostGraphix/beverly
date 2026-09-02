@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api, naira } from '../lib/api';
 import WalletPagination from '@beverly/tokens/WalletPagination.vue';
+import WalletTablePagination from '@beverly/tokens/WalletTablePagination.vue';
+import WalletDataViewSwitch from '@beverly/tokens/WalletDataViewSwitch.vue';
 import { DEFAULT_PAGE_SIZE, paginate } from '@beverly/tokens';
 import WalletExportMenu from '@beverly/tokens/WalletExportMenu.vue';
 import type { WalletExportColumn } from '@beverly/tokens/wallet-export';
@@ -45,6 +47,9 @@ const PERIODS: { label: string; value: Period }[] = [
 const period        = ref<Period>('month');
 const selectedStn   = ref('');      // '' = cumulative
 const drillMeter    = ref('');      // '' = no drill-down open
+const stationView   = ref<'table' | 'list'>('table');
+const stationSummaryPage = ref(1);
+const stationSummaryPageSize = ref(10);
 
 const stations      = ref<Station[]>([]);
 const stationRows   = ref<AggRow[]>([]);  // station-level table rows
@@ -230,6 +235,10 @@ const uniqueStations = computed(() => {
     for (const id of stationPeriods.value.keys()) if (id) ids.add(id);
     return [...ids].sort();
 });
+const stationSummaryPaged = computed(() => {
+    const start = (stationSummaryPage.value - 1) * stationSummaryPageSize.value;
+    return uniqueStations.value.slice(start, start + stationSummaryPageSize.value);
+});
 
 // Totals for each station (all periods summed — used for summary card)
 const stationTotals = computed(() => {
@@ -343,6 +352,7 @@ watch(selectedStn, () => {
     drillMeter.value = '';
     loadMeterBreakdown();
 });
+watch(uniqueStations, () => { stationSummaryPage.value = 1; });
 
 // ── Mount ─────────────────────────────────────────────────────────────────────
 
@@ -436,10 +446,13 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
       <div class="bw-card" style="padding:0; margin-bottom: var(--s-4)">
         <div style="padding: var(--s-3) var(--s-4); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap: var(--s-2)">
           <p style="font-weight:600; margin:0">By station · {{ period }}</p>
-          <select class="bw-select" v-model="selectedStn" aria-label="Filter by station" style="min-width:180px">
-            <option value="">— All stations —</option>
-            <option v-for="sid in uniqueStations" :key="sid" :value="sid">{{ stnName(sid) }}</option>
-          </select>
+          <div class="consumption-station-controls">
+            <select class="bw-select" v-model="selectedStn" aria-label="Filter by station" style="min-width:180px">
+              <option value="">— All stations —</option>
+              <option v-for="sid in uniqueStations" :key="sid" :value="sid">{{ stnName(sid) }}</option>
+            </select>
+            <WalletDataViewSwitch v-model="stationView" label="Station display view" />
+          </div>
         </div>
 
         <div v-if="!uniqueStations.length" class="bw-muted" style="text-align:center; padding: var(--s-8)">
@@ -447,9 +460,9 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
         </div>
 
         <!-- Station summary cards -->
-        <div v-else style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap: var(--s-3); padding: var(--s-4)">
+        <div v-else-if="stationView === 'list'" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap: var(--s-3); padding: var(--s-4)">
           <button
-            v-for="sid in uniqueStations"
+            v-for="sid in stationSummaryPaged"
             :key="sid"
             :class="['bw-stat-card', { selected: selectedStn === sid }]"
             type="button"
@@ -469,6 +482,41 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
             </div>
           </button>
         </div>
+
+        <div v-else class="bw-t-wrap consumption-station-table">
+          <table class="bw-table">
+            <thead>
+              <tr>
+                <th>Station</th>
+                <th style="text-align:right">Meter Usage</th>
+                <th style="text-align:right">Readings</th>
+                <th style="text-align:right">Energy Value</th>
+                <th style="text-align:right">Wallet Spend</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="sid in stationSummaryPaged" :key="sid" :class="{ 'consumption-station-selected': selectedStn === sid }">
+                <td>
+                  <button class="consumption-station-link" type="button" :aria-pressed="selectedStn === sid" @click="selectedStn = selectedStn === sid ? '' : sid">
+                    <strong>{{ stnName(sid) }}</strong>
+                    <span class="bw-mono bw-muted">{{ sid }}</span>
+                  </button>
+                </td>
+                <td class="bw-money" style="text-align:right; font-weight:700; color:var(--brand)">{{ fmtKwh(stationTotals[sid]?.kwh ?? 0) }}</td>
+                <td style="text-align:right">{{ (stationTotals[sid]?.readings ?? 0).toLocaleString('en-NG') }}</td>
+                <td class="bw-money" style="text-align:right">{{ naira(stationTotals[sid]?.value ?? 0) }}</td>
+                <td class="bw-money" style="text-align:right">{{ naira(stationTotals[sid]?.amount ?? 0) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <WalletTablePagination
+          v-model:page="stationSummaryPage"
+          v-model:pageSize="stationSummaryPageSize"
+          :total-items="uniqueStations.length"
+          item-label="stations"
+        />
 
         <!-- Period table for selected station -->
         <div v-if="selectedStn" style="border-top:1px solid var(--border)">
@@ -599,6 +647,12 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
 .bw-seg-btn { padding: 4px 12px; font-size: var(--t-xs); background:transparent; border:none; cursor:pointer; color: var(--text-muted); font-weight:500; }
 .bw-seg-btn.active { background: var(--brand); color:#fff; }
 .bw-seg-btn:disabled { cursor:not-allowed; opacity:.65; }
+.consumption-station-controls { display:flex; align-items:center; gap:var(--s-2); flex-wrap:wrap; }
+.consumption-station-table { border-bottom:1px solid var(--border); }
+.consumption-station-link { display:grid; gap:2px; padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+.consumption-station-link:hover strong { color:var(--brand); }
+.consumption-station-link:focus-visible { outline:2px solid var(--brand); outline-offset:3px; border-radius:4px; }
+.consumption-station-selected { background:color-mix(in srgb, var(--brand) 8%, transparent); }
 
 /* Station summary card */
 .bw-stat-card {
@@ -634,5 +688,9 @@ onMounted(() => Promise.all([loadStations(), loadData()]));
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+@media (max-width: 640px) {
+  .consumption-station-controls { width:100%; }
+  .consumption-station-controls .bw-select { flex:1; min-width:0 !important; }
 }
 </style>
